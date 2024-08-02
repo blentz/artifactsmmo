@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "artifactsmmo"
+version = "0.0.1"
+description = "Playing the Artifacts MMO"
+authors = ["Brett Lentz <brett.lentz@gmail.com>"]
+license = "GNU Affero General Public License v3.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+openapi-python-generator = "^0.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
