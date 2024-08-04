@@ -1,0 +1,4 @@
+{
+    "privy.autocomplete.model": "deepseek-coder-v2:latest",
+    "privy.customModel": "deepseek-coder-v2:latest"
+}

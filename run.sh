@@ -2,4 +2,4 @@
 
 export access_token=$(cat TOKEN)
 
-python src/main.py
+/usr/bin/env python3 src/main.py

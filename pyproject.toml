@@ -7,7 +7,7 @@ license = "GNU Affero General Public License v3.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.7,<4"
 openapi-python-generator = "^0.5.0"
 
 [build-system]

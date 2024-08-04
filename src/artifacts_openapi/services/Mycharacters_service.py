@@ -27,6 +27,7 @@ def action_move_my__name__action_move_post(
         response = client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
 
     if response.status_code != 200:
+        print(response.json())
         raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
 
     return (
