@@ -7,7 +7,9 @@ from ..api_config import APIConfig, HTTPException
 from ..models import *
 
 
-def get_status__get(api_config_override: Optional[APIConfig] = None) -> StatusResponseSchema:
+def get_status__get(
+    api_config_override: Optional[APIConfig] = None,
+) -> StatusResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
     base_path = api_config.base_path
@@ -19,7 +21,9 @@ def get_status__get(api_config_override: Optional[APIConfig] = None) -> StatusRe
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
     with httpx.Client(base_url=base_path, verify=api_config.verify) as client:
         response = client.request(
@@ -30,6 +34,12 @@ def get_status__get(api_config_override: Optional[APIConfig] = None) -> StatusRe
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return StatusResponseSchema(**response.json()) if response.json() is not None else StatusResponseSchema()
+    return (
+        StatusResponseSchema(**response.json())
+        if response.json() is not None
+        else StatusResponseSchema()
+    )

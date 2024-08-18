@@ -7,7 +7,9 @@ from ..api_config import APIConfig, HTTPException
 from ..models import *
 
 
-async def generate_token_token__post(api_config_override: Optional[APIConfig] = None) -> TokenResponseSchema:
+async def generate_token_token__post(
+    api_config_override: Optional[APIConfig] = None,
+) -> TokenResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
     base_path = api_config.base_path
@@ -19,9 +21,13 @@ async def generate_token_token__post(api_config_override: Optional[APIConfig] = 
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "post",
             httpx.URL(path),
@@ -30,6 +36,12 @@ async def generate_token_token__post(api_config_override: Optional[APIConfig] = 
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return TokenResponseSchema(**response.json()) if response.json() is not None else TokenResponseSchema()
+    return (
+        TokenResponseSchema(**response.json())
+        if response.json() is not None
+        else TokenResponseSchema()
+    )

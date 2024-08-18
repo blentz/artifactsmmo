@@ -21,13 +21,25 @@ async def action_move_my__name__action_move_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
     return (
         CharacterMovementResponseSchema(**response.json())
@@ -50,15 +62,31 @@ async def action_equip_item_my__name__action_equip_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return EquipmentResponseSchema(**response.json()) if response.json() is not None else EquipmentResponseSchema()
+    return (
+        EquipmentResponseSchema(**response.json())
+        if response.json() is not None
+        else EquipmentResponseSchema()
+    )
 
 
 async def action_unequip_item_my__name__action_unequip_post(
@@ -75,15 +103,31 @@ async def action_unequip_item_my__name__action_unequip_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return EquipmentResponseSchema(**response.json()) if response.json() is not None else EquipmentResponseSchema()
+    return (
+        EquipmentResponseSchema(**response.json())
+        if response.json() is not None
+        else EquipmentResponseSchema()
+    )
 
 
 async def action_fight_my__name__action_fight_post(
@@ -100,9 +144,13 @@ async def action_fight_my__name__action_fight_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "post",
             httpx.URL(path),
@@ -111,7 +159,9 @@ async def action_fight_my__name__action_fight_post(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
     return (
         CharacterFightResponseSchema(**response.json())
@@ -134,9 +184,13 @@ async def action_gathering_my__name__action_gathering_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "post",
             httpx.URL(path),
@@ -145,9 +199,15 @@ async def action_gathering_my__name__action_gathering_post(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return SkillResponseSchema(**response.json()) if response.json() is not None else SkillResponseSchema()
+    return (
+        SkillResponseSchema(**response.json())
+        if response.json() is not None
+        else SkillResponseSchema()
+    )
 
 
 async def action_crafting_my__name__action_crafting_post(
@@ -164,15 +224,31 @@ async def action_crafting_my__name__action_crafting_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return SkillResponseSchema(**response.json()) if response.json() is not None else SkillResponseSchema()
+    return (
+        SkillResponseSchema(**response.json())
+        if response.json() is not None
+        else SkillResponseSchema()
+    )
 
 
 async def action_deposit_bank_my__name__action_bank_deposit_post(
@@ -189,13 +265,25 @@ async def action_deposit_bank_my__name__action_bank_deposit_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
     return (
         ActionItemBankResponseSchema(**response.json())
@@ -205,7 +293,9 @@ async def action_deposit_bank_my__name__action_bank_deposit_post(
 
 
 async def action_deposit_bank_gold_my__name__action_bank_deposit_gold_post(
-    name: str, data: DepositWithdrawGoldSchema, api_config_override: Optional[APIConfig] = None
+    name: str,
+    data: DepositWithdrawGoldSchema,
+    api_config_override: Optional[APIConfig] = None,
 ) -> GoldResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
@@ -218,15 +308,31 @@ async def action_deposit_bank_gold_my__name__action_bank_deposit_gold_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return GoldResponseSchema(**response.json()) if response.json() is not None else GoldResponseSchema()
+    return (
+        GoldResponseSchema(**response.json())
+        if response.json() is not None
+        else GoldResponseSchema()
+    )
 
 
 async def action_recycling_my__name__action_recycling_post(
@@ -243,15 +349,31 @@ async def action_recycling_my__name__action_recycling_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return RecyclingResponseSchema(**response.json()) if response.json() is not None else RecyclingResponseSchema()
+    return (
+        RecyclingResponseSchema(**response.json())
+        if response.json() is not None
+        else RecyclingResponseSchema()
+    )
 
 
 async def action_withdraw_bank_my__name__action_bank_withdraw_post(
@@ -268,13 +390,25 @@ async def action_withdraw_bank_my__name__action_bank_withdraw_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
     return (
         ActionItemBankResponseSchema(**response.json())
@@ -284,7 +418,9 @@ async def action_withdraw_bank_my__name__action_bank_withdraw_post(
 
 
 async def action_withdraw_bank_gold_my__name__action_bank_withdraw_gold_post(
-    name: str, data: DepositWithdrawGoldSchema, api_config_override: Optional[APIConfig] = None
+    name: str,
+    data: DepositWithdrawGoldSchema,
+    api_config_override: Optional[APIConfig] = None,
 ) -> GoldResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
@@ -297,19 +433,37 @@ async def action_withdraw_bank_gold_my__name__action_bank_withdraw_gold_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return GoldResponseSchema(**response.json()) if response.json() is not None else GoldResponseSchema()
+    return (
+        GoldResponseSchema(**response.json())
+        if response.json() is not None
+        else GoldResponseSchema()
+    )
 
 
 async def action_ge_buy_item_my__name__action_ge_buy_post(
-    name: str, data: GETransactionItemSchema, api_config_override: Optional[APIConfig] = None
+    name: str,
+    data: GETransactionItemSchema,
+    api_config_override: Optional[APIConfig] = None,
 ) -> GETransactionResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
@@ -322,21 +476,37 @@ async def action_ge_buy_item_my__name__action_ge_buy_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
     return (
-        GETransactionResponseSchema(**response.json()) if response.json() is not None else GETransactionResponseSchema()
+        GETransactionResponseSchema(**response.json())
+        if response.json() is not None
+        else GETransactionResponseSchema()
     )
 
 
 async def action_ge_sell_item_my__name__action_ge_sell_post(
-    name: str, data: GETransactionItemSchema, api_config_override: Optional[APIConfig] = None
+    name: str,
+    data: GETransactionItemSchema,
+    api_config_override: Optional[APIConfig] = None,
 ) -> GETransactionResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
@@ -349,16 +519,30 @@ async def action_ge_sell_item_my__name__action_ge_sell_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
+        response = await client.request(
+            "post",
+            httpx.URL(path),
+            headers=headers,
+            params=query_params,
+            json=data.dict(),
+        )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
     return (
-        GETransactionResponseSchema(**response.json()) if response.json() is not None else GETransactionResponseSchema()
+        GETransactionResponseSchema(**response.json())
+        if response.json() is not None
+        else GETransactionResponseSchema()
     )
 
 
@@ -376,9 +560,13 @@ async def action_accept_new_task_my__name__action_task_new_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "post",
             httpx.URL(path),
@@ -387,9 +575,15 @@ async def action_accept_new_task_my__name__action_task_new_post(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return TaskResponseSchema(**response.json()) if response.json() is not None else TaskResponseSchema()
+    return (
+        TaskResponseSchema(**response.json())
+        if response.json() is not None
+        else TaskResponseSchema()
+    )
 
 
 async def action_complete_task_my__name__action_task_complete_post(
@@ -406,9 +600,13 @@ async def action_complete_task_my__name__action_task_complete_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "post",
             httpx.URL(path),
@@ -417,9 +615,15 @@ async def action_complete_task_my__name__action_task_complete_post(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return TaskRewardResponseSchema(**response.json()) if response.json() is not None else TaskRewardResponseSchema()
+    return (
+        TaskRewardResponseSchema(**response.json())
+        if response.json() is not None
+        else TaskRewardResponseSchema()
+    )
 
 
 async def action_task_exchange_my__name__action_task_exchange_post(
@@ -436,9 +640,13 @@ async def action_task_exchange_my__name__action_task_exchange_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "post",
             httpx.URL(path),
@@ -447,9 +655,15 @@ async def action_task_exchange_my__name__action_task_exchange_post(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return TaskRewardResponseSchema(**response.json()) if response.json() is not None else TaskRewardResponseSchema()
+    return (
+        TaskRewardResponseSchema(**response.json())
+        if response.json() is not None
+        else TaskRewardResponseSchema()
+    )
 
 
 async def action_delete_item_my__name__action_delete_post(
@@ -466,49 +680,37 @@ async def action_delete_item_my__name__action_delete_post(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
-
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
-        response = await client.request("post", httpx.URL(path), headers=headers, params=query_params, json=data.dict())
-
-    if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
-
-    return DeleteItemResponseSchema(**response.json()) if response.json() is not None else DeleteItemResponseSchema()
-
-
-async def get_character_logs_my__name__logs_get(
-    name: str, page: Optional[int] = None, size: Optional[int] = None, api_config_override: Optional[APIConfig] = None
-) -> DataPage_LogSchema_:
-    api_config = api_config_override if api_config_override else APIConfig()
-
-    base_path = api_config.base_path
-    path = f"/my/{name}/logs"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Authorization": f"Bearer { api_config.get_access_token() }",
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
     }
-    query_params: Dict[str, Any] = {"page": page, "size": size}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
-
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
-            "get",
+            "post",
             httpx.URL(path),
             headers=headers,
             params=query_params,
+            json=data.dict(),
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return DataPage_LogSchema_(**response.json()) if response.json() is not None else DataPage_LogSchema_()
+    return (
+        DeleteItemResponseSchema(**response.json())
+        if response.json() is not None
+        else DeleteItemResponseSchema()
+    )
 
 
 async def get_all_characters_logs_my_logs_get(
-    page: Optional[int] = None, size: Optional[int] = None, api_config_override: Optional[APIConfig] = None
+    page: Optional[int] = None,
+    size: Optional[int] = None,
+    api_config_override: Optional[APIConfig] = None,
 ) -> DataPage_LogSchema_:
     api_config = api_config_override if api_config_override else APIConfig()
 
@@ -521,9 +723,13 @@ async def get_all_characters_logs_my_logs_get(
     }
     query_params: Dict[str, Any] = {"page": page, "size": size}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "get",
             httpx.URL(path),
@@ -532,9 +738,15 @@ async def get_all_characters_logs_my_logs_get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return DataPage_LogSchema_(**response.json()) if response.json() is not None else DataPage_LogSchema_()
+    return (
+        DataPage_LogSchema_(**response.json())
+        if response.json() is not None
+        else DataPage_LogSchema_()
+    )
 
 
 async def get_my_characters_my_characters_get(
@@ -551,9 +763,13 @@ async def get_my_characters_my_characters_get(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "get",
             httpx.URL(path),
@@ -562,6 +778,12 @@ async def get_my_characters_my_characters_get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return MyCharactersListSchema(**response.json()) if response.json() is not None else MyCharactersListSchema()
+    return (
+        MyCharactersListSchema(**response.json())
+        if response.json() is not None
+        else MyCharactersListSchema()
+    )

@@ -13,9 +13,7 @@ class CooldownSchema(BaseModel):
 
     remaining_seconds: int = Field(alias="remaining_seconds")
 
-    totalSeconds: int = Field(alias="totalSeconds")
-
-    remainingSeconds: int = Field(alias="remainingSeconds")
+    started_at: str = Field(alias="started_at")
 
     expiration: str = Field(alias="expiration")
 

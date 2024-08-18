@@ -24,6 +24,8 @@ class ItemSchema(BaseModel):
 
     description: str = Field(alias="description")
 
-    effects: Optional[List[Optional[ItemEffectSchema]]] = Field(alias="effects", default=None)
+    effects: Optional[List[Optional[ItemEffectSchema]]] = Field(
+        alias="effects", default=None
+    )
 
     craft: Optional[Union[CraftSchema, None]] = Field(alias="craft", default=None)

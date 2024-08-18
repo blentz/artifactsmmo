@@ -1,0 +1,140 @@
+data: null
+world:
+  planners:
+  - actions_list:
+      conditions:
+        cook:
+          has_food: false
+          hungry: true
+          in_kitchen: true
+        eat:
+          has_food: true
+          hungry: true
+          in_kitchen: false
+        go_to_bed:
+          hungry: false
+          in_bed: false
+        go_to_kitchen:
+          in_kitchen: false
+        leave_kitchen:
+          in_kitchen: true
+        order_pizza:
+          has_food: false
+          hungry: true
+        sleep:
+          in_bed: true
+          tired: true
+      reactions:
+        cook:
+          has_food: true
+        eat:
+          hungry: false
+        go_to_bed:
+          in_bed: true
+        go_to_kitchen:
+          in_kitchen: true
+        leave_kitchen:
+          in_kitchen: false
+        order_pizza:
+          has_food: true
+        sleep:
+          tired: false
+      weights:
+        cook: 1
+        eat: 1
+        go_to_bed: 1
+        go_to_kitchen: 2
+        leave_kitchen: 1
+        order_pizza: 5
+        sleep: 1
+    goal_state:
+      has_food: -1
+      hungry: -1
+      in_bed: -1
+      in_kitchen: -1
+      tired: false
+    start_state:
+      has_food: false
+      hungry: true
+      in_bed: false
+      in_kitchen: false
+      tired: true
+    values:
+      has_food: -1
+      hungry: -1
+      in_bed: -1
+      in_kitchen: -1
+      tired: -1
+  plans:
+  - - f: 7
+      g: 2
+      h: 5
+      id: 9
+      name: go_to_kitchen
+      p_id: 1
+      state:
+        has_food: false
+        hungry: true
+        in_bed: false
+        in_kitchen: true
+        tired: true
+    - f: 8
+      g: 3
+      h: 5
+      id: 11
+      name: cook
+      p_id: 9
+      state:
+        has_food: true
+        hungry: true
+        in_bed: false
+        in_kitchen: true
+        tired: true
+    - f: 9
+      g: 4
+      h: 5
+      id: 14
+      name: leave_kitchen
+      p_id: 11
+      state:
+        has_food: true
+        hungry: true
+        in_bed: false
+        in_kitchen: false
+        tired: true
+    - f: 10
+      g: 5
+      h: 5
+      id: 17
+      name: eat
+      p_id: 14
+      state:
+        has_food: true
+        hungry: false
+        in_bed: false
+        in_kitchen: false
+        tired: true
+    - f: 11
+      g: 6
+      h: 5
+      id: 21
+      name: go_to_bed
+      p_id: 17
+      state:
+        has_food: true
+        hungry: false
+        in_bed: true
+        in_kitchen: false
+        tired: true
+    - f: 11
+      g: 7
+      h: 4
+      id: 24
+      name: sleep
+      p_id: 21
+      state:
+        has_food: true
+        hungry: false
+        in_bed: true
+        in_kitchen: false
+        tired: false

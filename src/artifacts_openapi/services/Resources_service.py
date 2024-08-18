@@ -34,7 +34,9 @@ def get_all_resources_resources__get(
         "size": size,
     }
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
     with httpx.Client(base_url=base_path, verify=api_config.verify) as client:
         response = client.request(
@@ -45,12 +47,18 @@ def get_all_resources_resources__get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return DataPage_ResourceSchema_(**response.json()) if response.json() is not None else DataPage_ResourceSchema_()
+    return (
+        DataPage_ResourceSchema_(**response.json())
+        if response.json() is not None
+        else DataPage_ResourceSchema_()
+    )
 
 
-def get_resources_resources__code__get(
+def get_resource_resources__code__get(
     code: str, api_config_override: Optional[APIConfig] = None
 ) -> ResourceResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
@@ -64,7 +72,9 @@ def get_resources_resources__code__get(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
     with httpx.Client(base_url=base_path, verify=api_config.verify) as client:
         response = client.request(
@@ -75,6 +85,12 @@ def get_resources_resources__code__get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return ResourceResponseSchema(**response.json()) if response.json() is not None else ResourceResponseSchema()
+    return (
+        ResourceResponseSchema(**response.json())
+        if response.json() is not None
+        else ResourceResponseSchema()
+    )

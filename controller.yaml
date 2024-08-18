@@ -1,0 +1,60 @@
+data:
+  sensors: {}
+planners:
+- actions_list:
+    # method_name
+    eat:
+      # method_parameters
+      conditions:
+        hungry: True
+        has_food: True
+        in_kitchen: False
+      # method_response
+      reactions:
+        hungry: False
+    cook:
+      conditions:
+        hungry: True
+        has_food: False
+        in_kitchen: True
+      reactions:
+        has_food: True
+    sleep:
+      conditions:
+        tired: True
+        in_bed: True
+      reactions:
+        tired: False
+    go_to_bed:
+      conditions:
+        hungry: False
+        in_bed: False
+      reactions:
+        in_bed: True
+    go_to_kitchen:
+      conditions:
+        in_kitchen: False
+      reactions:
+        in_kitchen: True
+    leave_kitchen:
+      conditions:
+        in_kitchen: True
+      reactions:
+        in_kitchen: False
+    order_pizza:
+      conditions:
+        has_food: False
+        hungry: True
+      reactions:
+        has_food: True
+  actions_weights:
+    go_to_kitchen: 2
+    order_pizza: 5
+  goal_state:
+    tired: False
+  start_state:
+    hungry: True
+    has_food: False
+    in_kitchen: False
+    tired: True
+    in_bed: False

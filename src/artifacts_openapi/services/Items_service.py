@@ -38,7 +38,9 @@ def get_all_items_items__get(
         "size": size,
     }
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
     with httpx.Client(base_url=base_path, verify=api_config.verify) as client:
         response = client.request(
@@ -49,12 +51,20 @@ def get_all_items_items__get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return DataPage_ItemSchema_(**response.json()) if response.json() is not None else DataPage_ItemSchema_()
+    return (
+        DataPage_ItemSchema_(**response.json())
+        if response.json() is not None
+        else DataPage_ItemSchema_()
+    )
 
 
-def get_item_items__code__get(code: str, api_config_override: Optional[APIConfig] = None) -> ItemResponseSchema:
+def get_item_items__code__get(
+    code: str, api_config_override: Optional[APIConfig] = None
+) -> ItemResponseSchema:
     api_config = api_config_override if api_config_override else APIConfig()
 
     base_path = api_config.base_path
@@ -66,7 +76,9 @@ def get_item_items__code__get(code: str, api_config_override: Optional[APIConfig
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
     with httpx.Client(base_url=base_path, verify=api_config.verify) as client:
         response = client.request(
@@ -77,6 +89,12 @@ def get_item_items__code__get(code: str, api_config_override: Optional[APIConfig
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return ItemResponseSchema(**response.json()) if response.json() is not None else ItemResponseSchema()
+    return (
+        ItemResponseSchema(**response.json())
+        if response.json() is not None
+        else ItemResponseSchema()
+    )

@@ -13,11 +13,15 @@ class StatusSchema(BaseModel):
 
     status: str = Field(alias="status")
 
-    version: str = Field(alias="version")
+    version: Optional[str] = Field(alias="version", default=None)
 
     characters_online: Optional[int] = Field(alias="characters_online", default=None)
 
-    announcements: Optional[List[Optional[AnnouncementSchema]]] = Field(alias="announcements", default=None)
+    server_time: Optional[str] = Field(alias="server_time", default=None)
+
+    announcements: Optional[List[Optional[AnnouncementSchema]]] = Field(
+        alias="announcements", default=None
+    )
 
     last_wipe: str = Field(alias="last_wipe")
 

@@ -11,10 +11,12 @@ class CraftSchema(BaseModel):
 
     """
 
-    skill: Optional[Union[str, None]] = Field(alias="skill", default=None)
+    skill: Optional[str] = Field(alias="skill", default=None)
 
-    level: Optional[Union[int, None]] = Field(alias="level", default=None)
+    level: Optional[int] = Field(alias="level", default=None)
 
-    items: Optional[List[Optional[SimpleItemSchema]]] = Field(alias="items", default=None)
+    items: Optional[List[Optional[SimpleItemSchema]]] = Field(
+        alias="items", default=None
+    )
 
-    quantity: Optional[Union[int, None]] = Field(alias="quantity", default=None)
+    quantity: Optional[int] = Field(alias="quantity", default=None)

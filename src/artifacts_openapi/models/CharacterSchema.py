@@ -107,7 +107,9 @@ class CharacterSchema(BaseModel):
 
     cooldown: int = Field(alias="cooldown")
 
-    cooldown_expiration: Optional[Union[str, None]] = Field(alias="cooldown_expiration", default=None)
+    cooldown_expiration: Optional[str] = Field(
+        alias="cooldown_expiration", default=None
+    )
 
     weapon_slot: str = Field(alias="weapon_slot")
 
@@ -151,84 +153,6 @@ class CharacterSchema(BaseModel):
 
     inventory_max_items: int = Field(alias="inventory_max_items")
 
-    inventory: Optional[List[Optional[InventorySlot]]] = Field(alias="inventory", default=None)
-
-    inventory_slot1: str = Field(alias="inventory_slot1")
-
-    inventory_slot1_quantity: int = Field(alias="inventory_slot1_quantity")
-
-    inventory_slot2: str = Field(alias="inventory_slot2")
-
-    inventory_slot2_quantity: int = Field(alias="inventory_slot2_quantity")
-
-    inventory_slot3: str = Field(alias="inventory_slot3")
-
-    inventory_slot3_quantity: int = Field(alias="inventory_slot3_quantity")
-
-    inventory_slot4: str = Field(alias="inventory_slot4")
-
-    inventory_slot4_quantity: int = Field(alias="inventory_slot4_quantity")
-
-    inventory_slot5: str = Field(alias="inventory_slot5")
-
-    inventory_slot5_quantity: int = Field(alias="inventory_slot5_quantity")
-
-    inventory_slot6: str = Field(alias="inventory_slot6")
-
-    inventory_slot6_quantity: int = Field(alias="inventory_slot6_quantity")
-
-    inventory_slot7: str = Field(alias="inventory_slot7")
-
-    inventory_slot7_quantity: int = Field(alias="inventory_slot7_quantity")
-
-    inventory_slot8: str = Field(alias="inventory_slot8")
-
-    inventory_slot8_quantity: int = Field(alias="inventory_slot8_quantity")
-
-    inventory_slot9: str = Field(alias="inventory_slot9")
-
-    inventory_slot9_quantity: int = Field(alias="inventory_slot9_quantity")
-
-    inventory_slot10: str = Field(alias="inventory_slot10")
-
-    inventory_slot10_quantity: int = Field(alias="inventory_slot10_quantity")
-
-    inventory_slot11: str = Field(alias="inventory_slot11")
-
-    inventory_slot11_quantity: int = Field(alias="inventory_slot11_quantity")
-
-    inventory_slot12: str = Field(alias="inventory_slot12")
-
-    inventory_slot12_quantity: int = Field(alias="inventory_slot12_quantity")
-
-    inventory_slot13: str = Field(alias="inventory_slot13")
-
-    inventory_slot13_quantity: int = Field(alias="inventory_slot13_quantity")
-
-    inventory_slot14: str = Field(alias="inventory_slot14")
-
-    inventory_slot14_quantity: int = Field(alias="inventory_slot14_quantity")
-
-    inventory_slot15: str = Field(alias="inventory_slot15")
-
-    inventory_slot15_quantity: int = Field(alias="inventory_slot15_quantity")
-
-    inventory_slot16: str = Field(alias="inventory_slot16")
-
-    inventory_slot16_quantity: int = Field(alias="inventory_slot16_quantity")
-
-    inventory_slot17: str = Field(alias="inventory_slot17")
-
-    inventory_slot17_quantity: int = Field(alias="inventory_slot17_quantity")
-
-    inventory_slot18: str = Field(alias="inventory_slot18")
-
-    inventory_slot18_quantity: int = Field(alias="inventory_slot18_quantity")
-
-    inventory_slot19: str = Field(alias="inventory_slot19")
-
-    inventory_slot19_quantity: int = Field(alias="inventory_slot19_quantity")
-
-    inventory_slot20: str = Field(alias="inventory_slot20")
-
-    inventory_slot20_quantity: int = Field(alias="inventory_slot20_quantity")
+    inventory: Optional[List[Optional[InventorySlot]]] = Field(
+        alias="inventory", default=None
+    )

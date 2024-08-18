@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from .CharacterSchema import CharacterSchema
 from .CooldownSchema import CooldownSchema
-from .DestinationResponseSchema import DestinationResponseSchema
+from .MapSchema import MapSchema
 
 
 class CharacterMovementDataSchema(BaseModel):
@@ -15,6 +15,6 @@ class CharacterMovementDataSchema(BaseModel):
 
     cooldown: CooldownSchema = Field(alias="cooldown")
 
-    destination: DestinationResponseSchema = Field(alias="destination")
+    destination: MapSchema = Field(alias="destination")
 
     character: CharacterSchema = Field(alias="character")

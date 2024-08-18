@@ -30,9 +30,13 @@ async def get_all_maps_maps__get(
         "size": size,
     }
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "get",
             httpx.URL(path),
@@ -41,9 +45,15 @@ async def get_all_maps_maps__get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return DataPage_MapSchema_(**response.json()) if response.json() is not None else DataPage_MapSchema_()
+    return (
+        DataPage_MapSchema_(**response.json())
+        if response.json() is not None
+        else DataPage_MapSchema_()
+    )
 
 
 async def get_map_maps__x___y__get(
@@ -60,9 +70,13 @@ async def get_map_maps__x___y__get(
     }
     query_params: Dict[str, Any] = {}
 
-    query_params = {key: value for (key, value) in query_params.items() if value is not None}
+    query_params = {
+        key: value for (key, value) in query_params.items() if value is not None
+    }
 
-    async with httpx.AsyncClient(base_url=base_path, verify=api_config.verify) as client:
+    async with httpx.AsyncClient(
+        base_url=base_path, verify=api_config.verify
+    ) as client:
         response = await client.request(
             "get",
             httpx.URL(path),
@@ -71,6 +85,12 @@ async def get_map_maps__x___y__get(
         )
 
     if response.status_code != 200:
-        raise HTTPException(response.status_code, f" failed with status code: {response.status_code}")
+        raise HTTPException(
+            response.status_code, f" failed with status code: {response.status_code}"
+        )
 
-    return MapResponseSchema(**response.json()) if response.json() is not None else MapResponseSchema()
+    return (
+        MapResponseSchema(**response.json())
+        if response.json() is not None
+        else MapResponseSchema()
+    )
