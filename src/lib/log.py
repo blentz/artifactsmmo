@@ -7,14 +7,15 @@ import asyncio
 
 LOGGER_TASK: asyncio.Task = None
 
+LOG_LEVEL = logging.DEBUG
 
 # helper coroutine to setup and manage the logger
 async def init_logger():
-    log: Logger = logging.getLogger()
-    que: Queue = Queue()
+    log = logging.getLogger()
+    que = Queue()
     log.addHandler(QueueHandler(que))
-    log.setLevel(logging.DEBUG)
-    listener: QueueListener = QueueListener(que, StreamHandler())
+    log.setLevel(LOG_LEVEL)
+    listener = QueueListener(que, StreamHandler())
     try:
         listener.start()
         logging.debug("Logger started")

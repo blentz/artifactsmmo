@@ -1,36 +1,46 @@
 #!/usr/bin/env python3
-
-
-from lib.log import safely_start_logger
-from lib.controller import GameController
+""" main entrypoint """
 
 import asyncio
 import logging
+import os
+
+from artifactsmmo_api_client.client import AuthenticatedClient, Client
+
+from game.globals import BASEURL
+from lib.httpstatus import extend_http_status
+from lib.log import safely_start_logger
+from lib.test import test_me
 
 MAX_THREADS = 1
-
-CHARACTER_NAME = "wakko"
-
+RAISE_ON_UNEXPECTED_STATUS = True
 
 async def task():
-    logging.info("SimpleCharacterAI started")
-    controller = GameController(character=CHARACTER_NAME)
-    logging.info("SimpleCharacterAI finished")
+    """ async task """
+    logging.info("task started")
+    token = os.environ.get("TOKEN")
+    client = None
+    if token:
+        client = AuthenticatedClient(base_url=BASEURL, token=token,
+                                     raise_on_unexpected_status=RAISE_ON_UNEXPECTED_STATUS)
+    else:
+        logging.warning("TOKEN not in ENV. Client NOT authenticated!")
+        client = Client(base_url=BASEURL, raise_on_unexpected_status=RAISE_ON_UNEXPECTED_STATUS)
+    test_me(client=client)
+    logging.info("task finished")
 
-
-# main coroutine
 async def main():
+    """ main coroutine """
     await safely_start_logger()
-    logging.info("Execution starting...")
+    logging.info("Execution starting.")
+
+    extend_http_status() # patch ArtifactsMMO custom codes into http.HTTPStatus
 
     async with asyncio.TaskGroup() as group:
-        for i in range(MAX_THREADS):
+        for _ in range(MAX_THREADS):
             _ = group.create_task(task())
 
-    # log a message
     logging.info("Execution complete.")
 
-
 if "__main__" in __name__:
-    # start the event loop
     asyncio.run(main())

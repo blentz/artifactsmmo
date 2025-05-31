@@ -7,8 +7,10 @@ license = "GNU Affero General Public License v3.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
+aenum = ">= 3.1.0"
+artifactsmmo-api-client = { path = "./artifactsmmo-api-client" }
+openapi-python-client = ">=0.24.0"
 python = ">=3.10,<4"
-openapi-python-generator = "^0.5.0"
 pyyaml = ">=6.0"
 
 [build-system]
