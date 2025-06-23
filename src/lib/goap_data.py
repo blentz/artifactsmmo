@@ -3,8 +3,8 @@ import os.path
 
 from yaml import safe_load, safe_dump, SafeDumper
 
-from .goap import Planner, Action_List, World
-from .yaml_data import YamlData
+from src.lib.goap import Planner, Action_List, World
+from src.lib.yaml_data import YamlData
 
 
 def represent_world(dumper, data):
@@ -27,12 +27,15 @@ SafeDumper.add_representer(Action_List, represent_actions_list)
 class GoapData(YamlData):
     """Goal-Oriented YAML data."""
 
-    planners = []
-    actions = None
+    def __init__(self, filename="goap_data.yaml"):
+        # Ensure these attributes are initialized properly before calling super()
+        object.__setattr__(self, 'planners', [])
+        object.__setattr__(self, 'actions', None)
+        super().__init__(filename=filename)
 
     def __repr__(self):
-        out = 'GoapData({}): { "actions": {}, "data": {}, "planners": {}, }'
-        return out.format(self.filename, self.actions, self.data, self.planners)
+        out = 'GoapData({}): data={}, planners={}'
+        return out.format(self.filename, self.data or {}, len(self.planners))
 
     def __iter__(self):
         yield "data", self.data
@@ -85,11 +88,15 @@ class GoapData(YamlData):
             self.planners.append(planner)
 
     def load(self):
-        data = YamlData.load(self)
-        self._load_planners(data.get("planners", {}))
-        self.data = data.get("data", {})
+        # Clear existing planners to avoid duplication on reload
+        self.planners = []
+        data = YamlData.load(self) or {}
+        if isinstance(data, dict):
+            self._load_planners(data.get("planners", {}))
+            self.data = data.get("data", {})
+        else:
+            self.data = {}
 
     def save(self, **kwargs):
         """public interface for saving data to disk"""
         super().save(**{"planners": self.planners, **kwargs})
-

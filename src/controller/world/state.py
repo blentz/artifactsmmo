@@ -1,7 +1,7 @@
-from lib.goap import World
-from lib.goap_data import GoapData
+from src.lib.goap import World
+from src.lib.goap_data import GoapData
 
-from game.globals import DATA_PREFIX
+from src.game.globals import DATA_PREFIX
 
 
 class WorldState(GoapData):

@@ -15,7 +15,8 @@ class YamlData:
     def __init__(self, filename="data.yaml"):
         self._log = logging.getLogger()
         self.filename = filename
-        self.data = self.load()
+        self.data = {} if self.data is None else self.data
+        self.data.update(self.load() or {})
         self._log.debug(f"YamlData({self.filename}): {self.data}")
 
     def __repr__(self):
@@ -50,9 +51,13 @@ class YamlData:
         """public interface for loading data from disk"""
         return self._load_yaml(self.filename)
 
-    def save(self, **kwargs):
+    def save(self, planners=None, **kwargs):
         """public interface for saving data to disk"""
-        if not self.data or "data" not in self.data:
-            self._save_yaml({"data": self.data, **kwargs})
-        else:
-            self._save_yaml({**self.data, **kwargs})
+        data = {"data": self.data}
+        if planners is not None:
+            data["planners"] = planners
+
+        # Add any other kwargs
+        data.update(kwargs)
+
+        self._save_yaml(data)

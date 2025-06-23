@@ -1,8 +1,8 @@
 from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_x_y
 from artifactsmmo_api_client.models.map_schema import MapSchema
 
-from lib.yaml_data import YamlData
-from game.globals import DATA_PREFIX
+from src.lib.yaml_data import YamlData
+from src.game.globals import DATA_PREFIX
 
 
 class MapState(YamlData):

@@ -1,5 +1,5 @@
-from lib.yaml_data import YamlData
-from game.globals import DATA_PREFIX
+from src.lib.yaml_data import YamlData
+from src.game.globals import DATA_PREFIX
 
 
 class CharacterState(YamlData):
