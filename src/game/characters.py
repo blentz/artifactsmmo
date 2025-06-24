@@ -12,7 +12,7 @@ from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
 from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
 
-from game.character.state import CharacterState
+from src.game.character.state import CharacterState
 
 class Characters:
     """ Character class """

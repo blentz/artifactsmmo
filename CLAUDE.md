@@ -20,7 +20,7 @@ This is the **artifactsmmo AI player** project. This project is an AI player use
 - `pylint` - Run Pylint
 
 ### Execution
-- `run.sh` - Run application. Must only be used after all unit tests pass with no errors.
+- `run.sh` - Run application. This command can only be used after all unit tests pass with no errors.
 
 ## Architecture
 
@@ -63,4 +63,4 @@ This is the **artifactsmmo AI player** project. This project is an AI player use
 - Tests should validate functional correctness based on APIs presented by client library.
 - There should be at least one test for every code path.
 - Do not create any demo files.
-
+- Do not change imports to fix tests without explicit user approval.

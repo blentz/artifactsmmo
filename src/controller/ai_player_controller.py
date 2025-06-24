@@ -12,6 +12,8 @@ from src.lib.goap import World, Planner, Action_List
 from src.controller.world.state import WorldState
 from src.controller.actions.move import MoveAction
 from src.controller.actions.map_lookup import MapLookupAction
+from src.controller.actions.find_slime import FindSlimeAction
+from src.controller.actions.attack import AttackAction
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 
@@ -181,11 +183,11 @@ class AIPlayerController:
     def _execute_action(self, action_name: str, action_data: Dict) -> bool:
         """
         Execute a specific action based on its name.
-        
+
         Args:
             action_name: Name of the action to execute
             action_data: Action data from the plan
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -198,16 +200,45 @@ class AIPlayerController:
             # extract coordinates from the plan or current state
             if self.character_state and hasattr(self.character_state, 'name'):
                 char_name = self.character_state.name
-                # Placeholder coordinates - would need actual target from plan
-                move_action = MoveAction(char_name, 0, 1)
+                # Extract coordinates from action data or use placeholder
+                target_x = action_data.get('x', 0)
+                target_y = action_data.get('y', 1)
+                move_action = MoveAction(char_name, target_x, target_y)
                 response = move_action.execute(self.client)
                 return response is not None
                 
         elif action_name == 'map_lookup':
             # For map lookup, we'd determine which coordinates to look up
-            map_action = MapLookupAction(0, 0)  # Placeholder coordinates
+            lookup_x = action_data.get('x', 0)
+            lookup_y = action_data.get('y', 0)
+            map_action = MapLookupAction(lookup_x, lookup_y)
             response = map_action.execute(self.client)
             return response is not None
+            
+        elif action_name == 'find_slime':
+            # Execute find and move to slime action
+            search_radius = action_data.get('search_radius', 10)
+            return self.find_and_move_to_nearest_slime(search_radius)
+            
+        elif action_name == 'attack':
+            # Execute attack action
+            if self.character_state and hasattr(self.character_state, 'name'):
+                char_name = self.character_state.name
+                attack_action = AttackAction(char_name)
+                response = attack_action.execute(self.client)
+                
+                # Update character state if attack was successful
+                if response and hasattr(response, 'data') and hasattr(response.data, 'character'):
+                    new_char_data = response.data.character
+                    self.character_state.data['level'] = new_char_data.level
+                    self.character_state.data['xp'] = new_char_data.xp
+                    self.character_state.data['hp'] = new_char_data.hp
+                    self.character_state.save()
+                    
+                    self.logger.info(f"Attack completed. Character level: {new_char_data.level}, "
+                                   f"XP: {new_char_data.xp}, HP: {new_char_data.hp}")
+                
+                return response is not None
             
         else:
             self.logger.warning(f"Unknown action: {action_name}")
@@ -294,12 +325,12 @@ class AIPlayerController:
                            actions_config: Dict[str, Dict]) -> Optional[List[Dict]]:
         """
         Calculate the best plan for the given scenario using the World system.
-        
+
         Args:
             start_state: The starting state as a dictionary
             goal_state: The desired goal state as a dictionary
             actions_config: Configuration for available actions
-            
+
         Returns:
             The best plan as a list of action dictionaries, or None if no plan found
         """
@@ -314,3 +345,167 @@ class AIPlayerController:
         else:
             self.logger.warning("No plans found")
             return None
+
+    def find_and_move_to_nearest_slime(self, search_radius: int = 10) -> bool:
+        """
+        Find the nearest slime location and move the character there.
+
+        Args:
+            search_radius: The maximum radius to search for slimes (default: 10)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.client:
+            self.logger.error("Cannot find slime without API client")
+            return False
+
+        if not self.character_state:
+            self.logger.error("Cannot find slime without character state")
+            return False
+
+        try:
+            # Get current character position
+            char_data = self.character_state.data
+            current_x = char_data.get('x', 0)
+            current_y = char_data.get('y', 0)
+            char_name = self.character_state.name
+
+            self.logger.info(f"Searching for slimes near character at ({current_x}, {current_y})")
+
+            # Create and execute find slime action
+            find_slime_action = FindSlimeAction(
+                character_x=current_x,
+                character_y=current_y,
+                search_radius=search_radius
+            )
+
+            slime_result = find_slime_action.execute(self.client)
+
+            if not slime_result:
+                self.logger.warning("No slimes found within search radius")
+                return False
+
+            slime_location = slime_result['location']
+            slime_x, slime_y = slime_location
+            distance = slime_result['distance']
+
+            self.logger.info(f"Found slime at ({slime_x}, {slime_y}), distance: {distance:.2f}")
+
+            # Move character to slime location
+            move_action = MoveAction(char_name, slime_x, slime_y)
+            move_response = move_action.execute(self.client)
+
+            if move_response:
+                self.logger.info(f"Successfully moved character to slime location ({slime_x}, {slime_y})")
+                
+                # Update character state with new position
+                self.character_state.data['x'] = slime_x
+                self.character_state.data['y'] = slime_y
+                self.character_state.save()
+                
+                return True
+            else:
+                self.logger.error("Failed to move character to slime location")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Error finding and moving to slime: {e}")
+            return False
+
+    def hunt_slimes_until_level_2(self, search_radius: int = 10, max_attempts: int = 100) -> bool:
+        """
+        Hunt slimes until the character reaches level 2.
+
+        Args:
+            search_radius: The maximum radius to search for slimes (default: 10)
+            max_attempts: Maximum number of attempts to prevent infinite loops (default: 100)
+
+        Returns:
+            True if character reached level 2, False otherwise
+        """
+        if not self.client:
+            self.logger.error("Cannot hunt slimes without API client")
+            return False
+
+        if not self.character_state:
+            self.logger.error("Cannot hunt slimes without character state")
+            return False
+
+        try:
+            current_level = self.character_state.data.get('level', 1)
+            self.logger.info(f"Starting slime hunt. Current level: {current_level}")
+
+            if current_level >= 2:
+                self.logger.info("Character is already level 2 or higher!")
+                return True
+
+            char_name = self.character_state.name
+            attempts = 0
+
+            while current_level < 2 and attempts < max_attempts:
+                attempts += 1
+                self.logger.info(f"Hunt attempt {attempts}/{max_attempts}")
+
+                # Step 1: Find and move to nearest slime
+                if not self.find_and_move_to_nearest_slime(search_radius):
+                    self.logger.warning(f"Failed to find slime on attempt {attempts}")
+                    continue
+
+                # Step 2: Attack the slime
+                attack_action = AttackAction(char_name)
+                attack_response = attack_action.execute(self.client)
+
+                if attack_response and hasattr(attack_response, 'data'):
+                    attack_data = attack_response.data
+                    
+                    # Update character state with new stats
+                    if hasattr(attack_data, 'character'):
+                        new_char_data = attack_data.character
+                        self.character_state.data['level'] = new_char_data.level
+                        self.character_state.data['xp'] = new_char_data.xp
+                        self.character_state.data['hp'] = new_char_data.hp
+                        self.character_state.data['x'] = new_char_data.x
+                        self.character_state.data['y'] = new_char_data.y
+                        self.character_state.save()
+
+                        current_level = new_char_data.level
+                        
+                        # Log fight details
+                        if hasattr(attack_data, 'fight'):
+                            fight_data = attack_data.fight
+                            self.logger.info(f"Fight completed! Level: {new_char_data.level}, "
+                                           f"XP: {new_char_data.xp}, HP: {new_char_data.hp}")
+                            
+                            if hasattr(fight_data, 'result'):
+                                self.logger.info(f"Fight result: {fight_data.result}")
+                            
+                            if hasattr(fight_data, 'xp') and fight_data.xp > 0:
+                                self.logger.info(f"XP gained: {fight_data.xp}")
+
+                        # Check if we reached level 2
+                        if current_level >= 2:
+                            self.logger.info(f"SUCCESS! Character reached level {current_level}!")
+                            return True
+                    else:
+                        self.logger.warning("Attack response missing character data")
+                else:
+                    self.logger.warning(f"Attack failed on attempt {attempts}")
+
+                # Wait a moment between attacks (respect cooldowns)
+                if hasattr(attack_response, 'data') and hasattr(attack_response.data, 'cooldown'):
+                    cooldown_data = attack_response.data.cooldown
+                    if hasattr(cooldown_data, 'remaining_seconds') and cooldown_data.remaining_seconds > 0:
+                        self.logger.info(f"Waiting {cooldown_data.remaining_seconds} seconds for cooldown...")
+                        import time
+                        time.sleep(cooldown_data.remaining_seconds + 1)  # Add 1 second buffer
+
+            if attempts >= max_attempts:
+                self.logger.error(f"Failed to reach level 2 after {max_attempts} attempts")
+                return False
+
+            return current_level >= 2
+
+        except Exception as e:
+            self.logger.error(f"Error during slime hunting: {e}")
+            return False

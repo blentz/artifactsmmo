@@ -2,4 +2,8 @@
 
 export TOKEN=$(cat TOKEN)
 
-/usr/bin/env python3 src/main.py
+# Activate the virtual environment
+source $(which virtualenvwrapper.sh)
+workon artifactsmmo
+
+/usr/bin/env python3 -m src.main
