@@ -425,6 +425,159 @@ class TestAIPlayerController(unittest.TestCase):
         # Verify
         self.assertIsNone(result)
 
+    def test_get_current_world_state(self):
+        """Test getting current world state."""
+        # Set up character state
+        character_state = Mock()
+        character_state.data = {
+            'x': 5, 'y': 10, 'level': 2, 'hp': 80, 'max_hp': 100, 'xp': 150
+        }
+        self.controller.set_character_state(character_state)
+        
+        # Set up world state data
+        self.controller.world_state.data = {
+            'monsters_available': True,
+            'at_target_location': False,
+            'monster_present': True
+        }
+        
+        state = self.controller.get_current_world_state()
+        
+        # Check character state values
+        self.assertEqual(state['character_x'], 5)
+        self.assertEqual(state['character_y'], 10)
+        self.assertEqual(state['character_level'], 2)
+        self.assertEqual(state['character_hp'], 80)
+        self.assertEqual(state['character_safe'], True)  # HP > 20
+        self.assertEqual(state['can_attack'], True)  # HP > 10
+        
+        # Check world state values
+        self.assertEqual(state['monsters_available'], True)
+        self.assertEqual(state['at_target_location'], False)
+        self.assertEqual(state['monster_present'], True)
+
+    @patch('src.controller.ai_player_controller.ActionsData')
+    def test_load_actions_from_config(self, mock_actions_data_class):
+        """Test loading action configurations from YAML."""
+        # Mock the ActionsData instance and its get_actions method
+        mock_actions_data = mock_actions_data_class.return_value
+        mock_actions_data.get_actions.return_value = {
+            'move': {
+                'conditions': {'can_move': True, 'at_target_location': False},
+                'reactions': {'at_target_location': True},
+                'weight': 1.0
+            },
+            'find_monsters': {
+                'conditions': {'need_combat': True, 'monsters_available': False},
+                'reactions': {'monsters_available': True, 'monster_present': True},
+                'weight': 2.0
+            },
+            'attack': {
+                'conditions': {'monster_present': True, 'can_attack': True, 'character_safe': True},
+                'reactions': {'monster_present': False},
+                'weight': 3.0
+            },
+            'rest': {
+                'conditions': {'character_alive': True, 'character_safe': False, 'needs_rest': True},
+                'reactions': {'character_safe': True, 'needs_rest': False},
+                'weight': 1.5
+            }
+        }
+        
+        actions = self.controller.load_actions_from_config()
+        
+        # Check that actions are loaded from YAML
+        self.assertIn('move', actions)
+        self.assertIn('find_monsters', actions)
+        self.assertIn('attack', actions)
+        self.assertIn('rest', actions)
+        
+        # Check action structure
+        move_action = actions['move']
+        self.assertIn('conditions', move_action)
+        self.assertIn('reactions', move_action)
+        self.assertIn('weight', move_action)
+        
+        # Check specific conditions
+        self.assertTrue(move_action['conditions']['can_move'])
+        self.assertFalse(move_action['conditions']['at_target_location'])
+        
+        # Verify ActionsData was called with default path
+        mock_actions_data_class.assert_called_with("data/default_actions.yaml")
+
+    def test_hunt_until_level_goal_already_achieved(self):
+        """Test hunt_until_level when goal is already achieved."""
+        # Set up character state with target level already reached
+        character_state = Mock()
+        character_state.data = {
+            'x': 0, 'y': 0, 'level': 3, 'hp': 100, 'max_hp': 100, 'xp': 300
+        }
+        self.controller.set_character_state(character_state)
+        self.controller.set_client(Mock())
+        
+        # Set up world state
+        self.controller.world_state.data = {}
+        
+        result = self.controller.hunt_until_level(2)  # Target level 2, already at level 3
+        
+        self.assertTrue(result)  # Should succeed immediately
+
+    def test_get_current_world_state_with_rest_conditions(self):
+        """Test world state includes rest-related conditions."""
+        # Set up character state with low HP (10% - below attack threshold)
+        character_state = Mock()
+        character_state.data = {
+            'x': 5, 'y': 10, 'level': 2, 'hp': 10, 'max_hp': 100, 'xp': 150
+        }
+        self.controller.set_character_state(character_state)
+        
+        # Set up world state data
+        self.controller.world_state.data = {}
+        
+        state = self.controller.get_current_world_state()
+        
+        # Check rest-related state values with very low HP (10%)
+        self.assertFalse(state['character_safe'])  # HP < 30%
+        self.assertTrue(state['needs_rest'])       # HP < 30%
+        self.assertFalse(state['can_attack'])      # HP < 15% threshold
+
+    def test_get_current_world_state_with_safe_hp(self):
+        """Test world state with safe HP levels."""
+        # Set up character state with safe HP
+        character_state = Mock()
+        character_state.data = {
+            'x': 5, 'y': 10, 'level': 2, 'hp': 80, 'max_hp': 100, 'xp': 150
+        }
+        self.controller.set_character_state(character_state)
+        
+        # Set up world state data
+        self.controller.world_state.data = {}
+        
+        state = self.controller.get_current_world_state()
+        
+        # Check rest-related state values with safe HP (80%)
+        self.assertTrue(state['character_safe'])   # HP >= 30%
+        self.assertFalse(state['needs_rest'])      # HP >= 30%
+        self.assertTrue(state['can_attack'])       # HP >= 15% threshold
+
+    @patch('src.controller.ai_player_controller.RestAction')
+    def test_execute_action_rest(self, mock_rest_action_class):
+        """Test executing a rest action."""
+        # Setup
+        mock_rest_action = Mock()
+        mock_rest_action.execute.return_value = {"success": True}
+        mock_rest_action_class.return_value = mock_rest_action
+        
+        self.controller.set_character_state(self.mock_character_state)
+        
+        # Execute
+        result = self.controller._execute_action("rest", {"name": "rest"})
+        
+        # Verify
+        self.assertTrue(result)
+        mock_rest_action_class.assert_called_once_with("test_character")
+        mock_rest_action.execute.assert_called_once_with(self.mock_client, character_state=self.mock_character_state)
+
 
 if __name__ == '__main__':
     unittest.main()

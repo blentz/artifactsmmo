@@ -1,0 +1,181 @@
+data:
+  -1,-1:
+    content: null
+    name: Forest
+    skin: forest_2
+    x: -1
+    y: -1
+  -1,-2:
+    content: null
+    name: Forest
+    skin: forest_2
+    x: -1
+    y: -2
+  -1,0:
+    content:
+      code: ash_tree
+      type: resource
+    name: Forest
+    skin: forest_ashtree2
+    x: -1
+    y: 0
+  -1,1:
+    content: null
+    name: Forest
+    skin: forest_1
+    x: -1
+    y: 1
+  -1,2:
+    content: null
+    name: Forest
+    skin: forest_2
+    x: -1
+    y: 2
+  -2,-1:
+    content: null
+    name: Forest
+    skin: forest_2
+    x: -2
+    y: -1
+  -2,-2:
+    content: null
+    name: Forest
+    skin: forest_1
+    x: -2
+    y: -2
+  -2,0:
+    content: null
+    name: Forest
+    skin: forest_3
+    x: -2
+    y: 0
+  -2,1:
+    content:
+      code: wolf
+      type: monster
+    name: Forest
+    skin: forest_wolf1
+    x: -2
+    y: 1
+  -2,2:
+    content: null
+    name: Forest
+    skin: forest_3
+    x: -2
+    y: 2
+  0,-1:
+    content:
+      code: green_slime
+      type: monster
+    name: Forest
+    skin: forest_greenslime2
+    x: 0
+    y: -1
+  0,-2:
+    content:
+      code: blue_slime
+      type: monster
+    name: Forest
+    skin: forest_blueslime1
+    x: 0
+    y: -2
+  0,0:
+    content: null
+    name: Spawn
+    skin: spawn
+    x: 0
+    y: 0
+  0,1:
+    content:
+      code: chicken
+      type: monster
+    name: City
+    skin: forest_chicken1
+    x: 0
+    y: 1
+  0,2:
+    content:
+      code: cow
+      type: monster
+    name: City
+    skin: forest_cow1
+    x: 0
+    y: 2
+  1,-1:
+    content:
+      code: red_slime
+      type: monster
+    name: Forest
+    skin: forest_redslime1
+    x: 1
+    y: -1
+  1,-2:
+    content:
+      code: yellow_slime
+      type: monster
+    name: Forest
+    skin: forest_yellowslime1
+    x: 1
+    y: -2
+  1,0:
+    content: null
+    name: Forest
+    skin: forest_3
+    x: 1
+    y: 0
+  1,1:
+    content:
+      code: cooking
+      type: workshop
+    name: City
+    skin: forest_cs1
+    x: 1
+    y: 1
+  1,2:
+    content:
+      code: monsters
+      type: tasks_master
+    name: City
+    skin: forest_village3
+    x: 1
+    y: 2
+  2,-1:
+    content:
+      code: blue_slime
+      type: monster
+    name: Forest
+    skin: forest_blueslime2
+    x: 2
+    y: -1
+  2,-2:
+    content:
+      code: red_slime
+      type: monster
+    name: Forest
+    skin: forest_redslime2
+    x: 2
+    y: -2
+  2,0:
+    content:
+      code: copper_rocks
+      type: resource
+    name: Forest
+    skin: forest_copperore1
+    x: 2
+    y: 0
+  2,1:
+    content:
+      code: weaponcrafting
+      type: workshop
+    name: City
+    skin: forest_wcstation1
+    x: 2
+    y: 1
+  2,2:
+    content:
+      code: sunflower_field
+      type: resource
+    name: City
+    skin: forest_village1
+    x: 2
+    y: 2

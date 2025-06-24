@@ -1,0 +1,74 @@
+# GOAP Action Configuration
+# This file defines the available actions for the AI player's Goal-Oriented Action Planning system
+
+actions:
+  move:
+    conditions:
+      can_move: true
+      at_target_location: false
+    reactions:
+      at_target_location: true
+    weight: 1.0
+    description: "Move character to a target location"
+    
+  find_monsters:
+    conditions:
+      need_combat: true
+      monsters_available: false
+    reactions:
+      monsters_available: true
+      monster_present: true
+    weight: 2.0
+    description: "Find nearby monsters suitable for combat"
+    
+  attack:
+    conditions:
+      monster_present: true
+      can_attack: true
+      character_safe: true
+    reactions:
+      monster_present: false
+    weight: 3.0
+    description: "Attack a monster in combat"
+    
+  rest:
+    conditions:
+      character_alive: true
+      character_safe: false
+      needs_rest: true
+    reactions:
+      character_safe: true
+      needs_rest: false
+    weight: 1.5
+    description: "Rest to recover HP when critically low"
+
+# Goal configurations for common scenarios
+goal_templates:
+  level_up:
+    description: "Reach a target level through monster hunting and XP collection"
+    goal_state:
+      character_level: 2        # Target level (can be overridden)
+      character_safe: true      # Must stay safe
+      character_alive: true     # Must survive
+    strategy:
+      priority_actions: ["rest", "find_monsters", "attack"]  # Rest first when needed
+      xp_target: 150           # XP needed for level 2
+      min_safe_hp_percent: 30  # Rest when HP < 30%
+      hunt_radius: 15          # Search radius for monsters
+    
+  survive:
+    description: "Maintain character safety and health"
+    goal_state:
+      character_alive: true
+      character_safe: true
+      needs_rest: false
+      
+  hunt_and_explore:
+    description: "Actively hunt monsters across the map for XP"
+    goal_state:
+      has_hunted_monsters: true
+      character_safe: true
+      character_alive: true
+    strategy:
+      hunt_radius: 20
+      min_safe_hp_percent: 25

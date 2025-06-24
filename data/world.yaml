@@ -1,0 +1,7 @@
+data:
+  at_target_location: true
+  monster_present: false
+planners: []
+world:
+  planners: []
+  plans: []
