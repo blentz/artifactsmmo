@@ -1,7 +1,7 @@
 """ RestAction module """
 
 from artifactsmmo_api_client.api.my_characters.action_rest_my_name import sync as rest_character_api
-import logging
+from .base import ActionBase
 
 # Import to support testing with character state
 try:
@@ -10,25 +10,35 @@ except ImportError:
     # Handle import for testing scenarios
     CharacterState = None
 
-logger = logging.getLogger(__name__)
 
-
-class RestAction:
+class RestAction(ActionBase):
     """ Rest action for recovering HP when character is critically low """
-    conditions = {}
-    reactions = {}
-    weights = {}
-
-    g = None  # goal; involved in plan costs
+    
+    # GOAP parameters - can be overridden by configuration
+    conditions = {
+        'character_alive': True,
+        'needs_rest': True,
+        'character_safe': False  # Need rest when not safe (low HP)
+    }
+    reactions = {
+        'character_safe': True,
+        'needs_rest': False,
+        'can_attack': True
+    }
+    weights = {'rest': 1.5}  # Medium priority - important for survival
 
     def __init__(self, char_name):
+        super().__init__()
         self.char_name = char_name
         self.critical_hp_threshold = 20  # Rest when HP is below this level
         self.safe_hp_threshold = 50      # Target HP level after resting
 
-    def execute(self, client, character_state=None):
+    def execute(self, client, character_state=None, **kwargs):
         """ Execute the rest action - recover HP by resting """
-        logger.info(f"Executing rest action with character: {self.char_name}")
+        if not self.validate_execution_context(client):
+            return self.get_error_response("No API client provided")
+            
+        self.log_execution_start(char_name=self.char_name)
         
         # Check if rest is needed if character state is provided
         if character_state is not None:
@@ -36,39 +46,52 @@ class RestAction:
             character_max_hp = character_state.data.get('max_hp', 100)
             
             if not self.should_rest(character_hp, character_max_hp):
-                logger.info(f"Rest not needed: HP ({character_hp}/{character_max_hp}) is sufficient")
-                return None
+                info_response = self.get_success_response(
+                    message=f"Rest not needed: HP ({character_hp}/{character_max_hp}) is sufficient",
+                    character_hp=character_hp,
+                    character_max_hp=character_max_hp,
+                    skipped=True
+                )
+                self.log_execution_result(info_response)
+                return info_response
         
-        response = rest_character_api(
-            name=self.char_name,
-            client=client
-        )
-        
-        # Log detailed rest results
-        if response and hasattr(response, 'data'):
-            rest_data = response.data
+        try:
+            response = rest_character_api(
+                name=self.char_name,
+                client=client
+            )
             
-            # Log character stats after rest
-            if hasattr(rest_data, 'character'):
-                char = rest_data.character
-                logger.info(f"Post-rest stats: HP: {char.hp}/{char.max_hp}")
+            # Log detailed rest results
+            if response and hasattr(response, 'data'):
+                rest_data = response.data
                 
-                # Check if HP is now at safe levels
-                hp_percentage = (char.hp / char.max_hp) * 100 if char.max_hp > 0 else 0
-                if hp_percentage >= 80:
-                    logger.info(f"Character HP restored to safe levels ({hp_percentage:.1f}%)")
-                elif hp_percentage >= 50:
-                    logger.info(f"Character HP partially restored ({hp_percentage:.1f}%)")
-                else:
-                    logger.warning(f"Character HP still low after rest ({hp_percentage:.1f}%)")
+                # Log character stats after rest
+                if hasattr(rest_data, 'character'):
+                    char = rest_data.character
+                    self.logger.info(f"Post-rest stats: HP: {char.hp}/{char.max_hp}")
+                    
+                    # Check if HP is now at safe levels
+                    hp_percentage = (char.hp / char.max_hp) * 100 if char.max_hp > 0 else 0
+                    if hp_percentage >= 80:
+                        self.logger.info(f"Character HP restored to safe levels ({hp_percentage:.1f}%)")
+                    elif hp_percentage >= 50:
+                        self.logger.info(f"Character HP partially restored ({hp_percentage:.1f}%)")
+                    else:
+                        self.logger.warning(f"Character HP still low after rest ({hp_percentage:.1f}%)")
+                
+                # Log rest duration if available
+                if hasattr(rest_data, 'cooldown'):
+                    cooldown_data = rest_data.cooldown
+                    if hasattr(cooldown_data, 'total_seconds'):
+                        self.logger.info(f"Rest duration: {cooldown_data.total_seconds} seconds")
             
-            # Log rest duration if available
-            if hasattr(rest_data, 'cooldown'):
-                cooldown_data = rest_data.cooldown
-                if hasattr(cooldown_data, 'total_seconds'):
-                    logger.info(f"Rest duration: {cooldown_data.total_seconds} seconds")
-        
-        return response
+            self.log_execution_result(response)
+            return response
+            
+        except Exception as e:
+            error_response = self.get_error_response(f"Rest failed: {str(e)}")
+            self.log_execution_result(error_response)
+            return error_response
 
     def should_rest(self, character_hp, character_max_hp=100):
         """ Check if character should rest based on current HP """
@@ -79,7 +102,7 @@ class RestAction:
         
         # Rest if HP is below critical threshold
         if hp_percentage < (self.critical_hp_threshold / character_max_hp) * 100:
-            logger.info(f"Rest needed: HP ({character_hp}/{character_max_hp}) is critically low")
+            self.logger.info(f"Rest needed: HP ({character_hp}/{character_max_hp}) is critically low")
             return True
         
         return False

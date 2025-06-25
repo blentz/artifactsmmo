@@ -39,8 +39,81 @@ actions:
     reactions:
       character_safe: true
       needs_rest: false
+      can_attack: true
     weight: 1.5
     description: "Rest to recover HP when critically low"
+    
+  hunt:
+    conditions:
+      character_alive: true
+      can_attack: true
+      character_safe: true
+      need_combat: true
+    reactions:
+      character_safe: true
+      character_alive: true
+    weight: 2.5
+    description: "Hunt monsters to gain XP and progress toward leveling"
+    
+  gather_resources:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_resources: true
+      at_resource_location: true
+    reactions:
+      has_resources: true
+      inventory_updated: true
+    weight: 2.0
+    description: "Gather resources from the current location"
+    
+  find_resources:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_resources: true
+      at_resource_location: false
+    reactions:
+      at_resource_location: true
+      resource_location_known: true
+    weight: 2.0
+    description: "Find nearby resource locations for gathering"
+    
+  craft_item:
+    conditions:
+      character_alive: true
+      character_safe: true
+      has_materials: true
+      at_workshop: true
+      need_equipment: true
+    reactions:
+      has_equipment: true
+      inventory_updated: true
+    weight: 3.0
+    description: "Craft items at a workshop using available materials"
+    
+  find_workshop:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_equipment: true
+      at_workshop: false
+    reactions:
+      at_workshop: true
+      workshop_location_known: true
+    weight: 1.5
+    description: "Find a workshop location for crafting"
+    
+  lookup_item_info:
+    conditions:
+      character_alive: true
+      need_equipment: true
+      equipment_info_unknown: true
+    reactions:
+      equipment_info_known: true
+      craft_plan_available: true
+    weight: 1.0
+    description: "Look up item information and crafting recipes"
 
 # Goal configurations for common scenarios
 goal_templates:
@@ -72,3 +145,27 @@ goal_templates:
     strategy:
       hunt_radius: 20
       min_safe_hp_percent: 25
+      
+  get_better_equipment:
+    description: "Craft better equipment to improve combat effectiveness"
+    goal_state:
+      has_equipment: true
+      character_safe: true
+      character_alive: true
+    strategy:
+      priority_actions: ["lookup_item_info", "find_resources", "gather_resources", "find_workshop", "craft_item"]
+      equipment_types: ["weapon", "armor"]
+      max_search_radius: 25
+      target_level_range: 3  # Look for equipment within 3 levels
+      
+  gather_crafting_materials:
+    description: "Collect resources needed for crafting"
+    goal_state:
+      has_resources: true
+      character_safe: true
+      character_alive: true
+    strategy:
+      priority_actions: ["find_resources", "gather_resources"]
+      resource_types: ["copper", "ash_wood", "iron"]  # Common materials
+      search_radius: 15
+      min_safe_hp_percent: 40

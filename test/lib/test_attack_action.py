@@ -69,7 +69,10 @@ class TestAttackAction(unittest.TestCase):
         
         # Verify the API was NOT called (HP is unsafe)
         mock_fight_api.assert_not_called()
-        self.assertIsNone(response)
+        self.assertIsNotNone(response)
+        self.assertFalse(response['success'])
+        self.assertIn('Attack cancelled', response['error'])
+        self.assertEqual(response['character_hp'], 1)
 
     def test_can_safely_attack_with_sufficient_hp(self):
         # Test HP safety check with sufficient HP

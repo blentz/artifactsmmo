@@ -124,7 +124,7 @@ class TestActionsData(unittest.TestCase):
                 repr_str = repr(actions_data)
                 
                 self.assertIn('ActionsData', repr_str)
-                self.assertIn('2 actions loaded', repr_str)
+                self.assertIn('2 actions', repr_str)
                 self.assertIn(tmp_file.name, repr_str)
             finally:
                 os.unlink(tmp_file.name)

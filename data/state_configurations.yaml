@@ -1,0 +1,142 @@
+# State Class Configurations for YAML-driven object instantiation
+# This file defines how state classes are created and configured
+
+state_classes:
+  # Character state management
+  character_state:
+    class_path: "src.game.character.state.CharacterState"
+    constructor_params:
+      filename: "character.yaml"  # Will be overridden with actual character name
+    instance_params:
+      auto_save: true
+    singleton: false
+    dependencies: []
+  
+  # Map state management
+  map_state:
+    class_path: "src.game.map.state.MapState"
+    constructor_params:
+      filename: "map.yaml"
+    instance_params:
+      auto_save: true
+    singleton: true  # Single map state for the game
+    dependencies: []
+  
+  # World state for GOAP
+  world_state:
+    class_path: "src.controller.world.state.WorldState"
+    constructor_params:
+      name: "world"
+    instance_params: {}
+    singleton: true  # Single world state
+    dependencies: []
+  
+  # Knowledge base for learning
+  knowledge_base:
+    class_path: "src.controller.knowledge.base.KnowledgeBase"
+    constructor_params:
+      filename: "knowledge.yaml"
+    instance_params:
+      auto_save: true
+    singleton: true  # Single knowledge base
+    dependencies: []
+  
+  # AI Player configuration
+  ai_player_config:
+    class_path: "src.lib.yaml_data.YamlData"
+    constructor_params:
+      filename: "ai_player.yaml"
+    instance_params: {}
+    singleton: true
+    dependencies: []
+
+# Default state configurations for different scenarios
+state_templates:
+  fresh_character:
+    description: "Configuration for a new character"
+    states:
+      character_state:
+        initial_data:
+          level: 1
+          xp: 0
+          hp: 100
+          max_hp: 100
+          x: 0
+          y: 1
+          gold: 0
+          inventory: {}
+      
+      world_state:
+        initial_data:
+          monsters_available: false
+          at_target_location: false
+          monster_present: false
+          has_hunted_monsters: false
+          character_alive: true
+          character_safe: true
+          can_move: true
+          can_attack: true
+          needs_rest: false
+  
+  experienced_character:
+    description: "Configuration for an existing character"
+    states:
+      character_state:
+        preserve_existing: true  # Don't overwrite existing data
+      
+      knowledge_base:
+        initial_data:
+          discovered_locations: {}
+          monster_encounters: {}
+          combat_analysis: {}
+          resource_locations: {}
+
+# State initialization rules
+initialization:
+  # Order of state creation (dependencies first)
+  creation_order:
+    - ai_player_config
+    - map_state
+    - world_state
+    - knowledge_base
+    - character_state
+  
+  # Auto-initialization settings
+  auto_create_missing: true
+  preserve_existing_data: true
+  backup_before_reload: false
+  
+  # Validation rules
+  validation:
+    required_states:
+      - character_state
+      - world_state
+    
+    state_checks:
+      character_state:
+        required_fields: ["level", "hp", "x", "y"]
+        type_checks:
+          level: int
+          hp: int
+          x: int
+          y: int
+      
+      world_state:
+        required_fields: ["character_alive", "character_safe"]
+        type_checks:
+          character_alive: bool
+          character_safe: bool
+
+# Dynamic state loading patterns
+dynamic_loading:
+  # Character-specific states
+  character_based:
+    pattern: "character_{character_name}_state"
+    class_path: "src.game.character.state.CharacterState"
+    filename_template: "{character_name}.yaml"
+  
+  # Map-specific states
+  map_based:
+    pattern: "map_{map_name}_state"
+    class_path: "src.game.map.state.MapState" 
+    filename_template: "map_{map_name}.yaml"

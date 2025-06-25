@@ -1,0 +1,91 @@
+# Action Configuration for Metaprogramming
+# This file defines how actions are instantiated and executed dynamically
+
+action_configurations:
+  # Built-in actions using default factory registration
+  move:
+    type: "builtin"  # Uses default factory setup
+    description: "Move character to a target location"
+    
+  attack:
+    type: "builtin"
+    description: "Attack a monster in combat"
+    
+  rest:
+    type: "builtin"  
+    description: "Rest to recover HP when critically low"
+    
+  map_lookup:
+    type: "builtin"
+    description: "Look up map information at coordinates"
+    
+  find_monsters:
+    type: "builtin"
+    description: "Find nearby monsters suitable for combat"
+
+  # Custom/extensible actions using YAML configuration
+  hunt:
+    type: "composite"
+    description: "Hunt monsters using intelligent search and attack"
+    sequence:
+      - action: "find_monsters"
+        params:
+          search_radius: 15
+          use_intelligent_search: true
+      - action: "attack"
+        conditions:
+          monster_found: true
+        
+  # Future extensible actions could be defined here
+  # gather_resources:
+  #   type: "yaml_defined"
+  #   class_path: "src.controller.actions.gather.GatherResourcesAction"
+  #   constructor_params:
+  #     char_name: "character_name"
+  #     resource_type: "resource_type"
+  #     quantity: "quantity"
+  #   preprocessors:
+  #     resource_type: "src.lib.utils.normalize_resource_name"
+  #   postprocessors:
+  #     response: "src.lib.utils.format_gather_response"
+
+# Default parameter mappings for common patterns
+parameter_mappings:
+  character_context:
+    character_name: "character_state.name"
+    character_x: "character_state.data.x"
+    character_y: "character_state.data.y" 
+    character_level: "character_state.data.level"
+    character_hp: "character_state.data.hp"
+    
+  action_defaults:
+    search_radius: 10
+    level_range: 2
+    use_intelligent_search: true
+    
+# Composite action definitions
+composite_actions:
+  hunt:
+    description: "Complete hunting workflow"
+    steps:
+      - name: "find_target"
+        action: "find_monsters"
+        required: true
+        params:
+          search_radius: "${action_data.search_radius:15}"
+          use_intelligent_search: true
+          
+      - name: "engage_target"  
+        action: "attack"
+        required: true
+        conditions:
+          monster_found: true
+        on_failure: "abort"
+        
+      - name: "recover_if_needed"
+        action: "rest"
+        required: false
+        conditions:
+          hp_low: true
+        params:
+          force_rest: false

@@ -1,7 +1,7 @@
 """ AttackAction module """
 
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name import sync as fight_character_api
-import logging
+from .base import ActionBase
 
 # Import to support testing with character state
 try:
@@ -10,68 +10,90 @@ except ImportError:
     # Handle import for testing scenarios
     CharacterState = None
 
-logger = logging.getLogger(__name__)
 
-
-class AttackAction:
+class AttackAction(ActionBase):
     """ Attack action for fighting monsters with XP tracking and HP safety """
-    conditions = {}
-    reactions = {}
-    weights = {}
-
-    g = None  # goal; involved in plan costs
+    
+    # GOAP parameters - can be overridden by configuration  
+    conditions = {
+        'monster_present': True,
+        'can_attack': True,
+        'character_safe': True,
+        'character_alive': True
+    }
+    reactions = {
+        'monster_present': False,  # Monster defeated or fled
+        'has_hunted_monsters': True
+    }
+    weights = {'attack': 3.0}  # Higher weight since it's a goal action
 
     def __init__(self, char_name):
+        super().__init__()
         self.char_name = char_name
         self.min_hp_threshold = 1  # Stop attacking if HP would drop to this level or below
 
-    def execute(self, client, character_state=None):
+    def execute(self, client, character_state=None, **kwargs):
         """ Execute the attack action - fight the monster at current location """
-        logger.info(f"Executing attack with character: {self.char_name}")
+        if not self.validate_execution_context(client):
+            return self.get_error_response("No API client provided")
+            
+        self.log_execution_start(char_name=self.char_name)
         
         # Perform HP safety check if character state is provided
         if character_state is not None:
             character_hp = character_state.data.get('hp', 0)
             if not self.can_safely_attack(character_hp):
-                logger.warning(f"Attack cancelled: HP ({character_hp}) is too low for safe combat")
-                return None
+                error_response = self.get_error_response(
+                    f"Attack cancelled: HP ({character_hp}) is too low for safe combat",
+                    character_hp=character_hp,
+                    min_hp_threshold=self.min_hp_threshold
+                )
+                self.log_execution_result(error_response)
+                return error_response
         
-        response = fight_character_api(
-            name=self.char_name,
-            client=client
-        )
-        
-        # Log detailed attack results for tracking
-        if response and hasattr(response, 'data'):
-            attack_data = response.data
+        try:
+            response = fight_character_api(
+                name=self.char_name,
+                client=client
+            )
             
-            # Log character stats after attack
-            if hasattr(attack_data, 'character'):
-                char = attack_data.character
-                logger.info(f"Post-attack stats: HP: {char.hp}/{char.max_hp}, XP: {char.xp}")
+            # Log detailed attack results for tracking
+            if response and hasattr(response, 'data'):
+                attack_data = response.data
                 
-                # Check if HP is critically low
-                try:
-                    if char.hp <= self.min_hp_threshold:
-                        logger.warning(f"WARNING: Character HP critically low ({char.hp})")
-                except (TypeError, AttributeError):
-                    # Handle case where char.hp is a mock or not a number
-                    logger.debug("Unable to compare HP for low HP warning")
-            
-            # Log fight results
-            if hasattr(attack_data, 'fight'):
-                fight = attack_data.fight
-                if hasattr(fight, 'result'):
-                    logger.info(f"Fight result: {fight.result}")
-                if hasattr(fight, 'xp'):
+                # Log character stats after attack
+                if hasattr(attack_data, 'character'):
+                    char = attack_data.character
+                    self.logger.info(f"Post-attack stats: HP: {char.hp}/{char.max_hp}, XP: {char.xp}")
+                    
+                    # Check if HP is critically low
                     try:
-                        if fight.xp > 0:
-                            logger.info(f"XP gained from fight: {fight.xp}")
+                        if char.hp <= self.min_hp_threshold:
+                            self.logger.warning(f"WARNING: Character HP critically low ({char.hp})")
                     except (TypeError, AttributeError):
-                        # Handle case where fight.xp is a mock or not a number
-                        logger.debug("Unable to compare XP for logging")
-        
-        return response
+                        # Handle case where char.hp is a mock or not a number
+                        self.logger.debug("Unable to compare HP for low HP warning")
+                
+                # Log fight results
+                if hasattr(attack_data, 'fight'):
+                    fight = attack_data.fight
+                    if hasattr(fight, 'result'):
+                        self.logger.info(f"Fight result: {fight.result}")
+                    if hasattr(fight, 'xp'):
+                        try:
+                            if fight.xp > 0:
+                                self.logger.info(f"XP gained from fight: {fight.xp}")
+                        except (TypeError, AttributeError):
+                            # Handle case where fight.xp is a mock or not a number
+                            self.logger.debug("Unable to compare XP for logging")
+            
+            self.log_execution_result(response)
+            return response
+            
+        except Exception as e:
+            error_response = self.get_error_response(f"Attack failed: {str(e)}")
+            self.log_execution_result(error_response)
+            return error_response
 
     def can_safely_attack(self, character_hp, estimated_enemy_damage=0):
         """ Check if it's safe to attack given current HP and estimated enemy damage """

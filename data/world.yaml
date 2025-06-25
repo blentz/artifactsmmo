@@ -1,6 +1,8 @@
 data:
-  at_target_location: true
+  at_target_location: false
+  has_hunted_monsters: false
   monster_present: false
+  monsters_available: false
 planners: []
 world:
   planners: []

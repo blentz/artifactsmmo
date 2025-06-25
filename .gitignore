@@ -70,3 +70,4 @@ cython_debug/
 TOKEN
 .gitconfig
 .vscode
+.claude

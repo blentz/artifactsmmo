@@ -123,9 +123,12 @@ class TestRestAction(unittest.TestCase):
         # Execute action
         result = self.rest_action.execute(mock_client, character_state=mock_character_state)
         
-        # Verify API was NOT called and None was returned
+        # Verify API was NOT called and success response with skipped=True was returned
         mock_rest_api.assert_not_called()
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertTrue(result['success'])
+        self.assertTrue(result.get('skipped', False))
+        self.assertIn('Rest not needed', result.get('message', ''))
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_with_character_state_low_hp(self, mock_rest_api):
@@ -176,11 +179,32 @@ class TestRestAction(unittest.TestCase):
         self.assertEqual(result, mock_response)
 
     def test_rest_action_class_attributes(self):
-        """Test RestAction class has expected attributes."""
-        self.assertEqual(RestAction.conditions, {})
-        self.assertEqual(RestAction.reactions, {})
-        self.assertEqual(RestAction.weights, {})
+        """Test RestAction class has expected GOAP attributes."""
+        # Check that GOAP attributes exist and have meaningful values
+        self.assertIsInstance(RestAction.conditions, dict)
+        self.assertIsInstance(RestAction.reactions, dict)
+        self.assertIsInstance(RestAction.weights, dict)
         self.assertIsNone(RestAction.g)
+        
+        # Check specific GOAP conditions
+        self.assertIn('character_alive', RestAction.conditions)
+        self.assertIn('needs_rest', RestAction.conditions)
+        self.assertIn('character_safe', RestAction.conditions)
+        self.assertTrue(RestAction.conditions['character_alive'])
+        self.assertTrue(RestAction.conditions['needs_rest'])
+        self.assertFalse(RestAction.conditions['character_safe'])
+        
+        # Check specific GOAP reactions
+        self.assertIn('character_safe', RestAction.reactions)
+        self.assertIn('needs_rest', RestAction.reactions)
+        self.assertIn('can_attack', RestAction.reactions)
+        self.assertTrue(RestAction.reactions['character_safe'])
+        self.assertFalse(RestAction.reactions['needs_rest'])
+        self.assertTrue(RestAction.reactions['can_attack'])
+        
+        # Check weight
+        self.assertIn('rest', RestAction.weights)
+        self.assertEqual(RestAction.weights['rest'], 1.5)
 
 
 if __name__ == '__main__':

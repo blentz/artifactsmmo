@@ -77,7 +77,9 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = action.execute(client=self.client)
         
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No monsters data available from API')
         mock_get_monsters.assert_called_once_with(client=self.client, size=100)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
@@ -93,7 +95,9 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = action.execute(client=self.client)
         
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No suitable monsters found matching criteria')
 
     @patch('src.controller.actions.find_monsters.get_map_api')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
@@ -122,7 +126,9 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = action.execute(client=self.client)
         
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No monsters found within radius 2')
 
     @patch('src.controller.actions.find_monsters.get_map_api')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
@@ -360,8 +366,10 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = action.execute(client=self.client)
         
-        # Should handle exception gracefully and return None
-        self.assertIsNone(result)
+        # Should handle exception gracefully and return error response
+        self.assertIsNotNone(result)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No monsters found within radius 2')
 
     @patch('src.controller.actions.find_monsters.get_map_api')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
@@ -483,7 +491,9 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = action.execute(client=self.client)
         
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No suitable monsters found matching criteria')
         # Map API should not be called if no target codes
         mock_get_map.assert_not_called()
 
@@ -564,8 +574,10 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = action.execute(client=self.client)
         
-        # Should return None when no monsters match level criteria
-        self.assertIsNone(result)
+        # Should return error response when no monsters match level criteria
+        self.assertIsNotNone(result)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No suitable monsters found matching criteria')
         # Map API should not be called if no target codes
         mock_get_map.assert_not_called()
 

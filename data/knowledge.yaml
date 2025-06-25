@@ -1,0 +1,227 @@
+data:
+  character_insights:
+    combat_performance: {}
+    exploration_patterns: {}
+    level_progression: {}
+  combat_insights: {}
+  learning_stats:
+    last_learning_session: '2025-06-24T21:04:28.423177'
+    learning_version: '1.0'
+    total_combats: 14
+    unique_monsters_fought: 2
+  monsters:
+    attacked_monster:
+      code: attacked_monster
+      combat_results:
+      - character_hp_after: 75
+        character_hp_before: 75
+        character_level: 5
+        damage_dealt: null
+        damage_taken: null
+        result: win
+        timestamp: '2025-06-24T21:04:28.311877'
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: 5
+      first_discovered: '2025-06-24T21:04:28.311868'
+      locations: []
+      name: attacked_monster
+    easy_monster:
+      code: easy_monster
+      combat_results:
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.338191'
+        xp_gained: 0
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.406443'
+        xp_gained: 0
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.409570'
+        xp_gained: 0
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.412778'
+        xp_gained: 0
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.416056'
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: 20
+      estimated_hp: null
+      estimated_level: 5
+      first_discovered: '2025-06-24T21:04:28.338187'
+      locations: []
+      name: easy_monster
+    found_monster:
+      code: found_monster
+      combat_results: []
+      encounter_count: 1
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-24T21:04:28.392044'
+      last_seen: '2025-06-24T21:04:28.392048'
+      name: Found Monster
+    green_slime:
+      code: green_slime
+      combat_results:
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.317889'
+        xp_gained: 0
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.322234'
+        xp_gained: 0
+      - character_hp_after: 70
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 30
+        result: win
+        timestamp: '2025-06-24T21:04:28.357228'
+        xp_gained: 0
+      encounter_count: 1
+      estimated_damage: 23
+      estimated_hp: null
+      estimated_level: 5
+      first_discovered: '2025-06-24T21:04:28.317884'
+      last_seen: '2025-06-24T21:04:28.369055'
+      locations: []
+      name: green_slime
+    hard_monster:
+      code: hard_monster
+      combat_results:
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: loss
+        timestamp: '2025-06-24T21:04:28.419478'
+        xp_gained: 0
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: loss
+        timestamp: '2025-06-24T21:04:28.423174'
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: 20
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-24T21:04:28.419475'
+      locations: []
+      name: hard_monster
+    monster1:
+      code: monster1
+      combat_results:
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: win
+        timestamp: '2025-06-24T21:04:28.326567'
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: 20
+      estimated_hp: null
+      estimated_level: 5
+      first_discovered: '2025-06-24T21:04:28.326563'
+      locations: []
+      name: monster1
+    monster2:
+      code: monster2
+      combat_results:
+      - character_hp_after: 80
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 20
+        result: loss
+        timestamp: '2025-06-24T21:04:28.328262'
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: 20
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-24T21:04:28.328258'
+      locations: []
+      name: monster2
+    red_dragon:
+      code: red_dragon
+      combat_results:
+      - character_hp_after: 20
+        character_hp_before: 100
+        character_level: 5
+        damage_dealt: null
+        damage_taken: 80
+        result: loss
+        timestamp: '2025-06-24T21:04:28.350805'
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: 80
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-24T21:04:28.350796'
+      locations: []
+      name: red_dragon
+    test_monster:
+      code: test_monster
+      combat_results: []
+      encounter_count: 1
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-24T21:04:28.383965'
+      last_seen: '2025-06-24T21:04:28.383969'
+      name: Test Monster
+  resources:
+    copper_rock:
+      best_locations: []
+      code: copper_rock
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-24T21:04:28.376327'
+      harvest_attempts: 0
+      last_seen: '2025-06-24T21:04:28.376331'
+      name: Copper Rock
+      successful_harvests: 0
+planners: []

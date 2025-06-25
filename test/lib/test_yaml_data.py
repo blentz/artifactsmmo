@@ -80,5 +80,43 @@ class TestYamlData(unittest.TestCase):
         call_args = mock_safe_dump.call_args[0][0]
         self.assertEqual(call_args, expected_data)
 
+    @patch('os.path.exists')
+    def test_repr(self, mock_exists):
+        """Test __repr__ method."""
+        mock_exists.return_value = False
+        yaml_data = YamlData(filename=self.filename)
+        yaml_data.data = {'test': 'data'}
+        
+        result = repr(yaml_data)
+        expected = f"YamlData({self.filename}): {{'test': 'data'}}"
+        self.assertEqual(result, expected)
+
+    @patch('os.path.exists')
+    def test_iter(self, mock_exists):
+        """Test __iter__ method."""
+        mock_exists.return_value = False
+        yaml_data = YamlData(filename=self.filename)
+        yaml_data.data = {'test': 'data'}
+        
+        # Convert iterator to list to test
+        result = list(yaml_data)
+        expected = [("data", {'test': 'data'})]
+        self.assertEqual(result, expected)
+
+    @patch('os.path.exists')
+    def test_getitem(self, mock_exists):
+        """Test __getitem__ method."""
+        mock_exists.return_value = False
+        yaml_data = YamlData(filename=self.filename)
+        yaml_data.data = {'test_key': 'test_value', 'another_key': 123}
+        
+        # Test getting items
+        self.assertEqual(yaml_data['test_key'], 'test_value')
+        self.assertEqual(yaml_data['another_key'], 123)
+        
+        # Test KeyError for non-existent key
+        with self.assertRaises(KeyError):
+            _ = yaml_data['nonexistent_key']
+
 if __name__ == '__main__':
     unittest.main()

@@ -39,6 +39,7 @@ actions:
     reactions:
       character_safe: true
       needs_rest: false
+      can_attack: true
     weight: 1.5
     description: "Rest to recover HP when critically low"
 

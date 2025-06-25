@@ -2,35 +2,58 @@
 AI Player Controller
 
 This module implements the main controller class for the AI player that integrates
-with the GOAP (Goal-Oriented Action Planning) system.
+with the GOAP (Goal-Oriented Action Planning) system using metaprogramming for
+YAML-driven action execution.
 """
 
 import logging
+import time
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from src.lib.goap import World, Planner, Action_List
 from src.lib.actions_data import ActionsData
-from src.controller.world.state import WorldState
+from src.lib.state_loader import StateManagerMixin
+
+# Metaprogramming components
+from .action_executor import ActionExecutor, ActionResult
+
+# Import action classes only for GOAP class defaults (no direct instantiation)
 from src.controller.actions.move import MoveAction
 from src.controller.actions.map_lookup import MapLookupAction
 from src.controller.actions.find_monsters import FindMonstersAction
 from src.controller.actions.attack import AttackAction
 from src.controller.actions.rest import RestAction
+
+# State classes for type hints and learning method access
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 
 
-class AIPlayerController:
+class AIPlayerController(StateManagerMixin):
     """
     Main controller class for the AI player that coordinates GOAP planning
-    and execution with game state management.
+    and execution with game state management using YAML-driven metaprogramming.
     """
     
     def __init__(self, client=None):
-        """Initialize the AI player controller."""
+        """Initialize the AI player controller with full metaprogramming integration."""
+        super().__init__()
+        
         self.logger = logging.getLogger(__name__)
         self.client = client
-        self.world_state = WorldState()
+        
+        # Initialize metaprogramming components
+        self.action_executor = ActionExecutor()
+        
+        # Initialize YAML-driven state management
+        self.initialize_state_management()
+        
+        # Create managed states using YAML configuration
+        self.world_state = self.create_managed_state('world_state', 'world_state')
+        self.knowledge_base = self.create_managed_state('knowledge_base', 'knowledge_base')
+        
+        # Character and map states are created when needed
         self.character_state: Optional[CharacterState] = None
         self.map_state: Optional[MapState] = None
         
@@ -92,11 +115,15 @@ class AIPlayerController:
         # Create action list
         action_list = Action_List()
         
-        # Add actions from configuration
+        # Add actions from configuration, with support for class-defined defaults
         for action_name, config in actions_config.items():
-            conditions = config.get('conditions', {})
-            reactions = config.get('reactions', {})
-            weight = config.get('weight', 1.0)
+            # Get action class defaults if available
+            action_class_defaults = self._get_action_class_defaults(action_name)
+            
+            # Merge config with class defaults (config takes precedence)
+            conditions = {**action_class_defaults.get('conditions', {}), **config.get('conditions', {})}
+            reactions = {**action_class_defaults.get('reactions', {}), **config.get('reactions', {})}
+            weight = config.get('weight', action_class_defaults.get('weight', 1.0))
             
             action_list.add_condition(action_name, **conditions)
             action_list.add_reaction(action_name, **reactions)
@@ -104,6 +131,46 @@ class AIPlayerController:
             
         planner.set_action_list(action_list)
         return planner
+        
+    def _get_action_class_defaults(self, action_name: str) -> Dict[str, Any]:
+        """
+        Get default GOAP parameters from action class definitions.
+        
+        Args:
+            action_name: Name of the action to get defaults for
+            
+        Returns:
+            Dictionary with default conditions, reactions, and weight
+        """
+        # Map action names to their corresponding classes
+        action_class_map = {
+            'move': MoveAction,
+            'attack': AttackAction,
+            'rest': RestAction,
+            'map_lookup': MapLookupAction,
+            'find_monsters': FindMonstersAction,
+            'hunt': None,  # hunt is a composite action, no specific class
+        }
+        
+        action_class = action_class_map.get(action_name)
+        if not action_class:
+            return {}
+            
+        # Get class attributes
+        defaults = {}
+        if hasattr(action_class, 'conditions') and action_class.conditions:
+            defaults['conditions'] = action_class.conditions.copy()
+        if hasattr(action_class, 'reactions') and action_class.reactions:
+            defaults['reactions'] = action_class.reactions.copy()
+        if hasattr(action_class, 'weights') and action_class.weights:
+            # If weights is a dict, get the weight for this action
+            if isinstance(action_class.weights, dict) and action_name in action_class.weights:
+                defaults['weight'] = action_class.weights[action_name]
+            # If weights is a single value (unlikely but possible)
+            elif isinstance(action_class.weights, (int, float)):
+                defaults['weight'] = action_class.weights
+        
+        return defaults
         
     def plan_goal(self, start_state: Dict[str, Any], goal_state: Dict[str, Any], 
                   actions_config: Dict[str, Dict]) -> bool:
@@ -143,6 +210,42 @@ class AIPlayerController:
             self.logger.error(f"Error during planning: {e}")
             return False
             
+    def check_and_wait_for_cooldown(self) -> bool:
+        """
+        Check if character is in cooldown and wait if necessary.
+        
+        Returns:
+            True if ready to act, False if should abort
+        """
+        if not self.character_state:
+            return True
+            
+        try:
+            cooldown_expiration = self.character_state.data.get('cooldown_expiration')
+            if not cooldown_expiration:
+                return True
+                
+            # Parse the cooldown expiration time
+            if isinstance(cooldown_expiration, str):
+                expiration_time = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
+            else:
+                return True
+                
+            current_time = datetime.now(timezone.utc)
+            
+            if current_time < expiration_time:
+                wait_seconds = (expiration_time - current_time).total_seconds()
+                if wait_seconds > 0:
+                    self.logger.info(f"Character in cooldown, waiting {wait_seconds:.1f} seconds...")
+                    time.sleep(min(wait_seconds + 1, 30))  # Cap wait time at 30 seconds
+                    return True
+                    
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking cooldown: {e}")
+            return True
+
     def execute_next_action(self) -> bool:
         """
         Execute the next action in the current plan.
@@ -164,6 +267,12 @@ class AIPlayerController:
         
         self.logger.info(f"Executing action {self.current_action_index + 1}/{len(self.current_plan)}: {action_name}")
         
+        # Check for cooldown before executing action
+        if not self.check_and_wait_for_cooldown():
+            self.logger.error("Cooldown check failed")
+            self.is_executing = False
+            return False
+        
         try:
             # Create and execute the appropriate action
             success = self._execute_action(action_name, action_data)
@@ -184,7 +293,7 @@ class AIPlayerController:
             
     def _execute_action(self, action_name: str, action_data: Dict) -> bool:
         """
-        Execute a specific action based on its name.
+        Execute a specific action using YAML-driven metaprogramming approach.
 
         Args:
             action_name: Name of the action to execute
@@ -193,66 +302,67 @@ class AIPlayerController:
         Returns:
             True if successful, False otherwise
         """
-        response = None
-        success = False
-        
         try:
-            if action_name == 'move':
-                if self.character_state and hasattr(self.character_state, 'name'):
-                    char_name = self.character_state.name
-                    target_x = action_data.get('x', 0)
-                    target_y = action_data.get('y', 1)
-                    move_action = MoveAction(char_name, target_x, target_y)
-                    response = move_action.execute(self.client)
-                    success = response is not None
-                    
-            elif action_name == 'map_lookup':
-                lookup_x = action_data.get('x', 0)
-                lookup_y = action_data.get('y', 0)
-                map_action = MapLookupAction(lookup_x, lookup_y)
-                response = map_action.execute(self.client)
-                success = response is not None
-                
-            elif action_name == 'find_monsters':
-                search_radius = action_data.get('search_radius', 10)
-                monster_types = action_data.get('monster_types', None)
-                success = self.find_and_move_to_level_appropriate_monster(search_radius)
-                # Create a mock response for state update
-                response = {'found_monster': success} if success else None
-                
-            elif action_name == 'attack':
-                if self.character_state and hasattr(self.character_state, 'name'):
-                    char_name = self.character_state.name
-                    attack_action = AttackAction(char_name)
-                    response = attack_action.execute(self.client, character_state=self.character_state)
-                    success = response is not None
-                    
-                    if success:
-                        self.logger.info(f"Attack action completed successfully")
-                        
-            elif action_name == 'rest':
-                if self.character_state and hasattr(self.character_state, 'name'):
-                    char_name = self.character_state.name
-                    rest_action = RestAction(char_name)
-                    response = rest_action.execute(self.client, character_state=self.character_state)
-                    success = response is not None
-                    
-                    if success:
-                        self.logger.info(f"Rest action completed successfully")
-                
-            else:
-                self.logger.warning(f"Unknown action: {action_name}")
-                return False
+            # Prepare execution context
+            context = self._build_execution_context(action_data)
             
-            # Update world state based on the action response
-            if success:
-                self.update_world_state_from_response(action_name, response)
-                
-            return success
+            # Execute action through the metaprogramming executor
+            result: ActionResult = self.action_executor.execute_action(
+                action_name, action_data, self.client, context
+            )
+            
+            # Log execution result
+            if result.success:
+                self.logger.info(f"Action {action_name} executed successfully")
+                if result.execution_time:
+                    self.logger.debug(f"Execution time: {result.execution_time:.3f}s")
+            else:
+                self.logger.error(f"Action {action_name} failed: {result.error_message}")
+            
+            return result.success
             
         except Exception as e:
             self.logger.error(f"Error executing action {action_name}: {e}")
             return False
+    
+    def _build_execution_context(self, action_data: Dict) -> Dict[str, Any]:
+        """
+        Build execution context for action execution.
+        
+        Args:
+            action_data: Action data from the plan
+            
+        Returns:
+            Context dictionary with controller state and character info
+        """
+        context = {
+            'controller': self,
+            'character_state': self.character_state,
+            'world_state': self.world_state,
+            'map_state': self.map_state,
+            'knowledge_base': self.knowledge_base,
+        }
+        
+        # Add character information if available
+        if self.character_state and hasattr(self.character_state, 'name'):
+            context.update({
+                'character_name': self.character_state.name,
+                'character_x': self.character_state.data.get('x', 0),
+                'character_y': self.character_state.data.get('y', 0),
+                'character_level': self.character_state.data.get('level', 1),
+                'pre_combat_hp': self.character_state.data.get('hp', 0),
+            })
+        
+        return context
+    
+    def get_available_actions(self) -> List[str]:
+        """Get list of available actions from the metaprogramming executor."""
+        return self.action_executor.get_available_actions()
+    
+    def reload_action_configurations(self) -> None:
+        """Reload action and state configurations from YAML."""
+        self.action_executor.reload_configuration()
+        self.reload_state_configurations()
             
     def execute_plan(self) -> bool:
         """
@@ -577,7 +687,7 @@ class AIPlayerController:
 
     def hunt_until_level(self, target_level: int, config_file: str = None) -> bool:
         """
-        GOAP-based leveling method to replace hardcoded hunt_slimes_until_level_2.
+        GOAP-based leveling method 
         
         Args:
             target_level: The level to reach
@@ -645,12 +755,11 @@ class AIPlayerController:
             self.logger.warning(f"Could not load goal template: {e}")
             hunt_radius = 15
         
-        # Create comprehensive goal state for level up
+        # Create comprehensive goal state for level up - focus on actual level achievement
         goal_state = {
-            'character_level': target_level,
+            'character_level': target_level,  # Must reach the target level
             'character_safe': True,
-            'character_alive': True,
-            'has_hunted_monsters': True  # Ensure we've actively hunted
+            'character_alive': True
         }
         
         # Track progress
@@ -660,14 +769,73 @@ class AIPlayerController:
         self.logger.info(f"📊 Initial state: Level {current_level}, XP {initial_xp}, HP {initial_hp}")
         self.logger.info(f"🎯 Goal state: Level {target_level}, Safe=True, Alive=True, Hunted=True")
         
-        # Reset hunting status for this goal
+        # Reset hunting status and clean world state for this goal
         if hasattr(self.world_state, 'data'):
-            self.world_state.data['has_hunted_monsters'] = False
+            self.world_state.data.update({
+                'has_hunted_monsters': False,
+                'monsters_available': False,
+                'monster_present': False,
+                'at_target_location': False
+            })
             self.world_state.save()
         
         # Use GOAP to achieve the goal with extended iterations for complex hunting
-        max_iterations = 100  # Allow more iterations for comprehensive hunting
-        success = self.achieve_goal_with_goap(goal_state, config_file, max_iterations)
+        max_iterations = 10  # Limit iterations to prevent infinite loops
+        
+        # Track if we've made progress toward the level goal
+        hunt_iterations = 0
+        max_hunt_iterations = 20  # Allow more iterations to reach level goal
+        
+        while hunt_iterations < max_hunt_iterations:
+            hunt_iterations += 1
+            current_level = self.character_state.data.get('level', 1)
+            current_xp = self.character_state.data.get('xp', 0)
+            current_hp = self.character_state.data.get('hp', 0)
+            
+            self.logger.info(f"🔄 Hunting cycle {hunt_iterations}/{max_hunt_iterations}")
+            self.logger.info(f"📊 Current: Level {current_level}, XP {current_xp}, HP {current_hp}")
+            
+            # Check if we've reached the target level
+            if current_level >= target_level:
+                self.logger.info(f"🎉 Target level {target_level} reached!")
+                success = True
+                break
+            
+            # Reset world state for fresh hunting cycle
+            if hasattr(self.world_state, 'data'):
+                self.world_state.data.update({
+                    'monsters_available': False,
+                    'monster_present': False,
+                    'at_target_location': False
+                })
+                self.world_state.save()
+            
+            # Create a hunting goal that requires finding and attacking monsters
+            hunting_goal = {
+                'monsters_available': True,
+                'character_safe': True,
+                'character_alive': True
+            }
+            
+            # Execute one round of hunting with limited iterations
+            self.logger.info("🎯 Executing hunting cycle...")
+            hunt_success = self.achieve_goal_with_goap(hunting_goal, config_file, 3)
+            
+            # Check progress after hunting cycle
+            new_xp = self.character_state.data.get('xp', 0)
+            new_level = self.character_state.data.get('level', 1)
+            
+            if new_level >= target_level:
+                self.logger.info(f"🎉 Level up achieved! {current_level} → {new_level}")
+                success = True
+                break
+            elif new_xp > current_xp:
+                xp_gained = new_xp - current_xp
+                self.logger.info(f"📈 XP gained this cycle: +{xp_gained} (total: {new_xp}/{self.character_state.data.get('max_xp', 150)})")
+            else:
+                self.logger.warning(f"⚠️  No XP progress in cycle {hunt_iterations}")
+                
+        success = self.character_state.data.get('level', 1) >= target_level
         
         # Report final results
         final_xp = self.character_state.data.get('xp', 0)
@@ -759,4 +927,278 @@ class AIPlayerController:
         except Exception as e:
             self.logger.error(f"Error finding and moving to level-appropriate monster: {e}")
             return False
+
+    # Learning and Knowledge Methods
+
+    def learn_from_map_exploration(self, x: int, y: int, map_response) -> None:
+        """
+        Learn from exploring a map location (integrates with MapState).
+        
+        Args:
+            x: X coordinate explored
+            y: Y coordinate explored  
+            map_response: Response from map API call
+        """
+        try:
+            if hasattr(map_response, 'data') and map_response.data:
+                map_data = map_response.data.to_dict() if hasattr(map_response.data, 'to_dict') else map_response.data
+                
+                # Ensure map_state exists and let it handle location storage
+                if not self.map_state:
+                    from src.game.map.state import MapState
+                    self.map_state = MapState(self.client)
+                
+                # MapState will handle the location caching automatically when scan() is called
+                # We just need to learn from the content if it exists
+                content = map_data.get('content')
+                if content:
+                    content_type = content.get('type_', 'unknown')
+                    content_code = content.get('code', 'unknown')
+                    
+                    # Learn from content discovery
+                    self.knowledge_base.learn_from_content_discovery(
+                        content_type, content_code, x, y, content
+                    )
+                    self.knowledge_base.save()
+                    
+                    self.logger.info(f"🧠 Learned: {content_type} '{content_code}' at ({x}, {y})")
+                else:
+                    self.logger.debug(f"🧠 Explored empty location ({x}, {y})")
+                    
+        except Exception as e:
+            self.logger.warning(f"Failed to learn from map exploration at ({x}, {y}): {e}")
+
+    def learn_from_combat(self, monster_code: str, result: str, pre_combat_hp: int = None) -> None:
+        """
+        Learn from combat experience.
+        
+        Args:
+            monster_code: Code of the monster fought
+            result: Combat result ('win', 'loss', 'flee')
+            pre_combat_hp: Character HP before combat
+        """
+        try:
+            if not self.character_state:
+                return
+                
+            character_data = self.character_state.data.copy()
+            if pre_combat_hp is not None:
+                character_data['hp_before'] = pre_combat_hp
+                
+            self.knowledge_base.record_combat_result(monster_code, result, character_data)
+            self.knowledge_base.save()
+            
+            # Log learning insights
+            success_rate = self.knowledge_base.get_monster_combat_success_rate(
+                monster_code, character_data.get('level', 1)
+            )
+            
+            if success_rate >= 0:
+                self.logger.info(f"🧠 Combat learning: {monster_code} success rate at level {character_data.get('level', 1)}: {success_rate:.1%}")
+            else:
+                self.logger.info(f"🧠 First combat data recorded for {monster_code}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to learn from combat with {monster_code}: {e}")
+
+    def find_known_monsters_nearby(self, max_distance: int = 15, character_level: int = None, 
+                                 level_range: int = 2) -> Optional[List[Dict]]:
+        """
+        Find known monster locations near the character using learned knowledge and MapState.
+        
+        Args:
+            max_distance: Maximum distance to search
+            character_level: Character level for level filtering
+            level_range: Acceptable level range for monsters
+            
+        Returns:
+            List of monster location info dictionaries or None
+        """
+        if not self.character_state:
+            return None
+            
+        try:
+            current_x = self.character_state.data.get('x', 0)
+            current_y = self.character_state.data.get('y', 0)
+            char_level = character_level or self.character_state.data.get('level', 1)
+            
+            # Use integrated knowledge base with MapState
+            suitable_monsters = self.knowledge_base.find_suitable_monsters(
+                map_state=self.map_state,
+                character_level=char_level,
+                level_range=level_range,
+                max_distance=max_distance,
+                current_x=current_x,
+                current_y=current_y
+            )
+            
+            return suitable_monsters if suitable_monsters else None
+            
+        except Exception as e:
+            self.logger.warning(f"Error finding known monsters nearby: {e}")
+            return None
+
+    def intelligent_monster_search(self, search_radius: int = 15) -> bool:
+        """
+        Intelligent monster search that combines learned knowledge with exploration.
+        
+        This method first checks for known monster locations, then falls back to
+        systematic exploration if no known locations are available.
+        
+        Args:
+            search_radius: Maximum radius to search
+            
+        Returns:
+            True if monster was found and character moved to it, False otherwise
+        """
+        if not self.character_state:
+            return False
+            
+        try:
+            char_level = self.character_state.data.get('level', 1)
+            
+            # First, try to use known monster locations
+            known_monsters = self.find_known_monsters_nearby(
+                max_distance=search_radius, character_level=char_level
+            )
+            
+            if known_monsters:
+                # Try the most promising known location first
+                best_monster = known_monsters[0]
+                target_x, target_y = best_monster['location']
+                monster_code = best_monster['monster_code']
+                success_rate = best_monster.get('success_rate', -1)
+                
+                self.logger.info(f"🧠 Using learned knowledge: Moving to known {monster_code} at ({target_x}, {target_y})")
+                if success_rate >= 0:
+                    self.logger.info(f"🧠 Expected success rate: {success_rate:.1%}")
+                
+                # Move to the known location
+                if self.character_state and hasattr(self.character_state, 'name'):
+                    char_name = self.character_state.name
+                    move_action = MoveAction(char_name, target_x, target_y)
+                    move_response = move_action.execute(self.client)
+                    
+                    if move_response:
+                        # Learn from this exploration
+                        self.learn_from_map_exploration(target_x, target_y, move_response)
+                        
+                        # Update character position
+                        self.character_state.data['x'] = target_x
+                        self.character_state.data['y'] = target_y
+                        self.character_state.save()
+                        
+                        self.logger.info(f"🧠 Successfully moved to known monster location")
+                        return True
+            
+            # Fallback to regular monster finding if no known locations work
+            self.logger.info("🧠 No suitable known monsters, falling back to exploration")
+            return self.find_and_move_to_level_appropriate_monster(search_radius)
+            
+        except Exception as e:
+            self.logger.error(f"Error in intelligent monster search: {e}")
+            return False
+
+    def get_learning_insights(self) -> Dict:
+        """
+        Get insights and statistics about what the AI has learned.
+        
+        Returns:
+            Dictionary containing learning statistics and insights
+        """
+        try:
+            summary = self.knowledge_base.get_knowledge_summary(self.map_state)
+            learning_stats = self.knowledge_base.get_learning_stats()
+            
+            insights = {
+                'knowledge_summary': summary,
+                'learning_stats': learning_stats,
+                'recommendations': []
+            }
+            
+            # Add some intelligent recommendations based on learned data
+            if summary['monsters_discovered'] == 0:
+                insights['recommendations'].append("Explore more areas to discover monsters for combat")
+            elif summary['monsters_discovered'] < 3:
+                insights['recommendations'].append("Continue exploring to find more monster varieties")
+                
+            if summary['total_locations_discovered'] < 20:
+                insights['recommendations'].append("Expand exploration radius to learn about more locations")
+                
+            return insights
+            
+        except Exception as e:
+            self.logger.warning(f"Error getting learning insights: {e}")
+            return {'error': str(e)}
+
+    def optimize_with_knowledge(self, goal_type: str = None) -> Dict[str, Any]:
+        """
+        Use learned knowledge to optimize planning and decision making.
+        
+        Args:
+            goal_type: Type of goal to optimize for ('combat', 'exploration', 'resources')
+            
+        Returns:
+            Dictionary with optimization suggestions
+        """
+        try:
+            if not self.character_state:
+                return {'error': 'No character state available'}
+                
+            char_level = self.character_state.data.get('level', 1)
+            current_x = self.character_state.data.get('x', 0)
+            current_y = self.character_state.data.get('y', 0)
+            
+            optimizations = {
+                'goal_type': goal_type,
+                'character_level': char_level,
+                'current_position': (current_x, current_y),
+                'suggestions': []
+            }
+            
+            if goal_type == 'combat' or goal_type is None:
+                # Combat optimization
+                known_monsters = self.find_known_monsters_nearby(
+                    max_distance=20, character_level=char_level
+                )
+                
+                if known_monsters:
+                    # Find monsters with good success rates
+                    good_targets = [m for m in known_monsters if m.get('success_rate', 0) > 0.7]
+                    if good_targets:
+                        best_target = good_targets[0]
+                        optimizations['suggestions'].append({
+                            'type': 'combat_target',
+                            'description': f"High success rate target: {best_target['monster_code']} at {best_target['location']}",
+                            'success_rate': best_target['success_rate'],
+                            'location': best_target['location']
+                        })
+                    
+                    # Warn about dangerous monsters
+                    dangerous = [m for m in known_monsters if m.get('success_rate', 1) < 0.3]
+                    if dangerous:
+                        optimizations['suggestions'].append({
+                            'type': 'combat_warning',
+                            'description': f"Avoid dangerous monsters: {[m['monster_code'] for m in dangerous[:3]]}",
+                            'dangerous_monsters': dangerous[:3]
+                        })
+            
+            if goal_type == 'exploration' or goal_type is None:
+                # Exploration optimization using MapState
+                total_locations = 0
+                if self.map_state and hasattr(self.map_state, 'data'):
+                    total_locations = len(self.map_state.data)
+                    
+                if total_locations < 50:
+                    optimizations['suggestions'].append({
+                        'type': 'exploration',
+                        'description': f"Explore more areas (visited {total_locations} locations so far)",
+                        'recommended_action': 'systematic_exploration'
+                    })
+                    
+            return optimizations
+            
+        except Exception as e:
+            self.logger.warning(f"Error optimizing with knowledge: {e}")
+            return {'error': str(e)}
 
