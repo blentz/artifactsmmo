@@ -74,15 +74,27 @@ class AttackAction(ActionBase):
                         # Handle case where char.hp is a mock or not a number
                         self.logger.debug("Unable to compare HP for low HP warning")
                 
-                # Log fight results
+                # Log fight results with monster name
                 if hasattr(attack_data, 'fight'):
                     fight = attack_data.fight
+                    monster_name = 'unknown monster'
+                    
+                    # Extract monster name for better logging
+                    if hasattr(fight, 'monster'):
+                        monster = fight.monster
+                        if hasattr(monster, 'code'):
+                            monster_name = monster.code
+                        elif hasattr(monster, 'name'):
+                            monster_name = monster.name
+                        elif isinstance(monster, dict):
+                            monster_name = monster.get('code') or monster.get('name', 'unknown monster')
+                    
                     if hasattr(fight, 'result'):
-                        self.logger.info(f"Fight result: {fight.result}")
+                        self.logger.info(f"⚔️ Combat vs {monster_name}: {fight.result}")
                     if hasattr(fight, 'xp'):
                         try:
                             if fight.xp > 0:
-                                self.logger.info(f"XP gained from fight: {fight.xp}")
+                                self.logger.info(f"💰 XP gained from {monster_name}: {fight.xp}")
                         except (TypeError, AttributeError):
                             # Handle case where fight.xp is a mock or not a number
                             self.logger.debug("Unable to compare XP for logging")
@@ -91,9 +103,19 @@ class AttackAction(ActionBase):
             return response
             
         except Exception as e:
-            error_response = self.get_error_response(f"Attack failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            error_str = str(e)
+            
+            # Check if this is a cooldown error (status 499)
+            if "499" in error_str and "cooldown" in error_str.lower():
+                # This is a cooldown error - should be treated as a temporary failure
+                error_response = self.get_error_response(f"Attack failed: {error_str}")
+                self.log_execution_result(error_response)
+                return error_response
+            else:
+                # Other errors
+                error_response = self.get_error_response(f"Attack failed: {error_str}")
+                self.log_execution_result(error_response)
+                return error_response
 
     def can_safely_attack(self, character_hp, estimated_enemy_damage=0):
         """ Check if it's safe to attack given current HP and estimated enemy damage """

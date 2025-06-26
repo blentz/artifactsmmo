@@ -30,10 +30,15 @@ class ActionFactory:
     Supports YAML-driven action execution without hardcoded if-elif blocks.
     """
     
-    def __init__(self):
+    def __init__(self, config_data=None):
         self.logger = logging.getLogger(__name__)
         self._action_registry: Dict[str, ActionExecutorConfig] = {}
+        self._config_data = config_data
         self._setup_default_actions()
+        
+        # Load additional action classes from YAML if available
+        if self._config_data:
+            self._load_action_classes_from_yaml()
     
     def _setup_default_actions(self) -> None:
         """Set up the default action mappings with their parameter configurations."""
@@ -42,6 +47,7 @@ class ActionFactory:
         from .actions.rest import RestAction
         from .actions.map_lookup import MapLookupAction
         from .actions.find_monsters import FindMonstersAction
+        from .actions.wait import WaitAction
         
         # Register default actions with their parameter mappings
         self.register_action('move', ActionExecutorConfig(
@@ -86,6 +92,39 @@ class ActionFactory:
                 'level_range': 'level_range'
             }
         ))
+        
+        self.register_action('wait', ActionExecutorConfig(
+            action_class=WaitAction,
+            constructor_params={
+                'wait_duration': 'wait_duration'
+            }
+        ))
+    
+    def _load_action_classes_from_yaml(self) -> None:
+        """Load action class mappings from YAML configuration."""
+        try:
+            if not self._config_data or not hasattr(self._config_data, 'data'):
+                return
+                
+            action_classes = self._config_data.data.get('action_classes', {})
+            
+            for action_name, class_path in action_classes.items():
+                # Only register if not already registered (avoid overriding defaults)
+                if action_name not in self._action_registry:
+                    try:
+                        action_class = self._import_action_class(class_path)
+                        # Use a basic configuration for YAML-loaded classes
+                        config = ActionExecutorConfig(
+                            action_class=action_class,
+                            constructor_params={}  # Will be determined dynamically
+                        )
+                        self.register_action(action_name, config)
+                        self.logger.debug(f"Loaded action class from YAML: {action_name} -> {class_path}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to load action class {action_name} from {class_path}: {e}")
+                        
+        except Exception as e:
+            self.logger.error(f"Error loading action classes from YAML: {e}")
     
     def register_action(self, action_name: str, config: ActionExecutorConfig) -> None:
         """
@@ -247,7 +286,15 @@ class ActionFactory:
                 for processor in config.postprocessors.values():
                     response = processor(response)
             
-            success = response is not None
+            # Check if response indicates success or failure
+            if response is None:
+                success = False
+            elif isinstance(response, dict) and 'success' in response:
+                success = response['success']
+            else:
+                # For API responses that don't have a 'success' field, consider them successful
+                success = True
+            
             return success, response
             
         except Exception as e:

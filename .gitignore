@@ -1,4 +1,5 @@
 artifactsmmo-api-client/
+data/characters/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -71,3 +72,4 @@ TOKEN
 .gitconfig
 .vscode
 .claude
+session.log

@@ -1,6 +1,15 @@
 # Action Configuration for Metaprogramming
 # This file defines how actions are instantiated and executed dynamically
 
+# Action class registry - replaces hardcoded action_class_map
+action_classes:
+  move: "src.controller.actions.move.MoveAction"
+  attack: "src.controller.actions.attack.AttackAction"  
+  rest: "src.controller.actions.rest.RestAction"
+  map_lookup: "src.controller.actions.map_lookup.MapLookupAction"
+  find_monsters: "src.controller.actions.find_monsters.FindMonstersAction"
+  wait: "src.controller.actions.wait.WaitAction"
+
 action_configurations:
   # Built-in actions using default factory registration
   move:
@@ -89,3 +98,56 @@ composite_actions:
           hp_low: true
         params:
           force_rest: false
+
+  find_and_move_to_monster:
+    description: "Find level-appropriate monster and move to its location"
+    steps:
+      - name: "search_monsters"
+        action: "find_monsters"
+        required: true
+        params:
+          search_radius: "${action_data.search_radius:10}"
+          level_range: "${action_data.level_range:2}"
+          character_level: "${context.character_level}"
+          character_x: "${context.character_x}"
+          character_y: "${context.character_y}"
+          
+      - name: "move_to_monster"
+        action: "move"
+        required: true
+        conditions:
+          monster_found: true
+        params:
+          char_name: "${context.character_name}"
+          x: "${action_data.monster_x}"
+          y: "${action_data.monster_y}"
+        on_failure: "abort"
+
+  intelligent_monster_search:
+    description: "Search for monsters using learned knowledge with exploration fallback"
+    steps:
+      - name: "check_known_monsters"
+        action: "find_monsters"
+        required: false
+        params:
+          use_knowledge_base: true
+          search_radius: "${action_data.search_radius:15}"
+          character_level: "${context.character_level}"
+          
+      - name: "move_to_known_location"
+        action: "move"
+        required: false
+        conditions:
+          known_monster_found: true
+        params:
+          char_name: "${context.character_name}"
+          x: "${action_data.target_x}"
+          y: "${action_data.target_y}"
+          
+      - name: "fallback_exploration"
+        action: "find_and_move_to_monster"
+        required: true
+        conditions:
+          known_monster_found: false
+        params:
+          search_radius: "${action_data.search_radius:15}"

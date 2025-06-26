@@ -7,7 +7,7 @@ import asyncio
 
 LOGGER_TASK: asyncio.Task = None
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 
 # helper coroutine to setup and manage the logger
 async def init_logger():

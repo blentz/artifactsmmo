@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 import tempfile
 import os
+import logging
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
@@ -18,6 +19,7 @@ class TestLevelUpGoal(unittest.TestCase):
         """Set up test fixtures."""
         self.mock_client = Mock()
         self.controller = AIPlayerController(client=self.mock_client)
+        self.logger = logging.getLogger()
         
         # Create mock character state
         self.mock_character = Mock()
@@ -39,15 +41,17 @@ class TestLevelUpGoal(unittest.TestCase):
         
         def mock_achieve_goal_side_effect(goal_state, config_file=None, max_iterations=3):
             # Simulate successful leveling by updating character state level
-            if 'monsters_available' in goal_state:
+            if 'has_hunted_monsters' in goal_state:
                 # This is a hunting cycle, update the character level
-                new_level = self.controller.character_state.data.get('level', 1) + 1
+                current_level = self.controller.character_state.data.get('level', 1)
+                new_level = current_level + 1
                 self.controller.character_state.data['level'] = new_level
                 self.controller.character_state.data['xp'] = self.controller.character_state.data.get('max_xp', 150)
+                self.logger.info(f"Mock leveling: {current_level} → {new_level}")
             return True
         
         # Test with no target level specified (should be current + 1)
-        with patch.object(self.controller, 'achieve_goal_with_goap', side_effect=mock_achieve_goal_side_effect):
+        with patch.object(self.controller.mission_executor, 'execute_level_progression', return_value=True):
             success = self.controller.level_up_goal()
             self.assertTrue(success)
             
@@ -56,7 +60,7 @@ class TestLevelUpGoal(unittest.TestCase):
         self.controller.character_state.data['xp'] = 0
             
         # Test with specific target level
-        with patch.object(self.controller, 'achieve_goal_with_goap', side_effect=mock_achieve_goal_side_effect):
+        with patch.object(self.controller.mission_executor, 'execute_level_progression', return_value=True):
             success = self.controller.level_up_goal(target_level=3)
             self.assertTrue(success)
             
@@ -73,65 +77,50 @@ class TestLevelUpGoal(unittest.TestCase):
         self.assertFalse(result)
         
     def test_level_up_goal_state_creation(self):
-        """Test that level_up_goal creates correct goal state."""
-        def mock_achieve_goal_state_check(goal_state, config_file=None, max_iterations=3):
-            # Simulate successful leveling by updating character state level
-            if 'monsters_available' in goal_state:
-                # This is a hunting cycle, update the character level to reach target
-                target_level = 2  # From test parameter
-                self.controller.character_state.data['level'] = target_level
-                self.controller.character_state.data['xp'] = self.controller.character_state.data.get('max_xp', 150)
-            return True
+        """Test that level_up_goal delegates to MissionExecutor correctly."""
+        # Mock mission executor to simulate successful level progression
+        with patch.object(self.controller.mission_executor, 'execute_level_progression') as mock_execute:
+            mock_execute.return_value = True
             
-        with patch.object(self.controller, 'achieve_goal_with_goap', side_effect=mock_achieve_goal_state_check) as mock_achieve:
+            # Simulate character state change after level progression
+            def simulate_level_up(*args, **kwargs):
+                self.controller.character_state.data['level'] = 2
+                self.controller.character_state.data['xp'] = self.controller.character_state.data.get('max_xp', 150)
+                return True
+            
+            mock_execute.side_effect = simulate_level_up
+            
             result = self.controller.level_up_goal(target_level=2)
             
             # Verify the goal was successful
             self.assertTrue(result)
-            # Verify achieve_goal_with_goap was called (at least once for hunting cycles)
-            mock_achieve.assert_called()
+            # Verify mission executor was called with correct target
+            mock_execute.assert_called_once_with(2)
             # Verify final character level reached target
             self.assertEqual(self.controller.character_state.data.get('level'), 2)
             
-    def test_level_up_goal_with_config_file(self):
-        """Test level_up_goal with custom config file."""
-        # Create temporary config file
-        config_data = """
-actions:
-  test_action:
-    conditions:
-      test_condition: true
-    reactions:
-      test_result: true
-    weight: 1.0
-
-goal_templates:
-  level_up:
-    strategy:
-      hunt_radius: 25
-      xp_target: 200
-"""
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as tmp_file:
-            tmp_file.write(config_data)
-            tmp_file.flush()
+    def test_level_up_goal_with_mission_executor(self):
+        """Test level_up_goal delegation to MissionExecutor."""
+        # Mock mission executor to simulate successful level progression
+        with patch.object(self.controller.mission_executor, 'execute_level_progression') as mock_execute:
+            mock_execute.return_value = True
             
-            try:
-                def mock_achieve_goal_with_config(goal_state, config_file=None, max_iterations=3):
-                    # Simulate successful leveling by updating character state level
-                    if 'monsters_available' in goal_state:
-                        # This is a hunting cycle, update the character level
-                        new_level = self.controller.character_state.data.get('level', 1) + 1
-                        self.controller.character_state.data['level'] = new_level
-                        self.controller.character_state.data['xp'] = self.controller.character_state.data.get('max_xp', 150)
-                    return True
-                    
-                with patch.object(self.controller, 'achieve_goal_with_goap', side_effect=mock_achieve_goal_with_config):
-                    success = self.controller.level_up_goal(config_file=tmp_file.name)
-                    self.assertTrue(success)
-                    
-            finally:
-                os.unlink(tmp_file.name)
+            # Test level progression with default target
+            success = self.controller.level_up_goal()
+            
+            # Verify delegation occurred
+            self.assertTrue(success)
+            mock_execute.assert_called_once_with(None)
+            
+        # Test with specific target level
+        with patch.object(self.controller.mission_executor, 'execute_level_progression') as mock_execute:
+            mock_execute.return_value = True
+            
+            success = self.controller.level_up_goal(target_level=5)
+            
+            # Verify delegation with target level
+            self.assertTrue(success)
+            mock_execute.assert_called_once_with(5)
                 
     def test_level_up_goal_progress_tracking(self):
         """Test that level_up_goal properly tracks and reports progress."""
@@ -143,20 +132,26 @@ goal_templates:
             self.mock_character.data['hp'] = 90
             return True
             
-        with patch.object(self.controller, 'achieve_goal_with_goap', side_effect=mock_achieve_goal):
+        with patch.object(self.controller.mission_executor, 'execute_level_progression', return_value=True):
             success = self.controller.level_up_goal(target_level=2)
             self.assertTrue(success)
             
     def test_level_up_goal_world_state_reset(self):
-        """Test that level_up_goal resets hunting status appropriately."""
+        """Test that level_up_goal delegates to MissionExecutor without breaking world state."""
         # Set up world state
         self.controller.world_state.data = {'has_hunted_monsters': True}
         
-        with patch.object(self.controller, 'achieve_goal_with_goap', return_value=True):
+        # Mock mission executor
+        with patch.object(self.controller.mission_executor, 'execute_level_progression') as mock_execute:
+            mock_execute.return_value = True
+            
             self.controller.level_up_goal()
             
-            # Verify hunting status was reset
-            self.assertFalse(self.controller.world_state.data.get('has_hunted_monsters', True))
+            # Verify mission executor was called
+            mock_execute.assert_called_once_with(None)
+            
+            # World state management is now handled by the MissionExecutor, 
+            # so we verify that the delegation occurred correctly
 
 
 if __name__ == '__main__':

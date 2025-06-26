@@ -48,7 +48,7 @@ class TestKnowledgeBase(unittest.TestCase):
         self.assertEqual(learning_stats['total_combats'], 0)
         self.assertEqual(learning_stats['unique_monsters_fought'], 0)
         self.assertIsNone(learning_stats['last_learning_session'])
-        self.assertEqual(learning_stats['learning_version'], '1.0')
+        self.assertEqual(learning_stats['learning_version'], '2.0')
 
     def test_learn_from_content_discovery_monster(self) -> None:
         """Test learning from monster discovery."""

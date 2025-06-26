@@ -45,7 +45,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
                 },
                 'knowledge_base': {
                     'class_path': 'src.controller.knowledge.base.KnowledgeBase',
-                    'constructor_params': {'filename': 'knowledge.yaml'},
+                    'constructor_params': {'filename': os.path.join(self.temp_dir, 'test_knowledge.yaml')},
                     'singleton': True
                 }
             }
@@ -168,10 +168,10 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
             mock_executor_instance.execute_action.return_value = mock_result
             
             # Execute action
-            result = controller._execute_action('move', {'x': 5, 'y': 10})
+            success, result_data = controller._execute_action('move', {'x': 5, 'y': 10})
             
             # Verify failure handling
-            self.assertFalse(result)
+            self.assertFalse(success)
     
     @patch('src.controller.action_executor.ActionExecutor')
     @patch('src.lib.state_loader.StateConfigLoader')
@@ -283,11 +283,12 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
             
             controller = AIPlayerController(self.mock_client)
             
-            # Verify GOAP integration methods still exist
-            self.assertTrue(hasattr(controller, 'create_planner'))
-            self.assertTrue(hasattr(controller, '_get_action_class_defaults'))
-            self.assertTrue(hasattr(controller, 'plan_goal'))
+            # Verify GOAP integration is now delegated to managers
+            self.assertTrue(hasattr(controller, 'goap_execution_manager'))
             self.assertTrue(hasattr(controller, 'execute_plan'))
+            # GOAP methods moved to GOAPExecutionManager
+            self.assertTrue(hasattr(controller.goap_execution_manager, 'create_world_with_planner'))
+            self.assertTrue(hasattr(controller.goap_execution_manager, 'create_plan'))
     
     @patch('src.controller.action_executor.ActionExecutor')
     @patch('src.lib.state_loader.StateConfigLoader')

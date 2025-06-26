@@ -1,0 +1,290 @@
+# GOAP Goal Templates Configuration
+# This file defines reusable goal templates that drive AI behavior through configurable objectives
+
+goal_templates:
+  # Core character progression goals
+  level_up:
+    description: "Advance character to next level through combat and experience gain"
+    objective_type: "progression"
+    target_state:
+      character_level: "${current_level + 1}"
+      character_safe: true
+      character_alive: true
+      has_hunted_monsters: true
+    strategy:
+      max_iterations: 20
+      hunt_radius: 15
+      xp_target: 150
+      safety_priority: true
+      rest_threshold: 30  # HP percentage
+      attack_threshold: 15  # HP percentage
+    success_conditions:
+      - type: "character_level"
+        operator: ">="
+        value: "${target_level}"
+      - type: "character_alive"
+        operator: "=="
+        value: true
+    failure_conditions:
+      - type: "max_iterations_exceeded"
+        value: "${strategy.max_iterations}"
+      - type: "character_dead"
+        operator: "=="
+        value: false
+        
+  reach_level:
+    description: "Reach a specific character level"
+    objective_type: "progression"
+    target_state:
+      character_level: "${target_level}"
+      character_safe: true
+      character_alive: true
+    strategy:
+      max_iterations: 50
+      hunt_radius: 20
+      adaptive_search: true
+      safety_priority: true
+    parameters:
+      required: ["target_level"]
+      optional: ["hunt_radius", "max_iterations"]
+      
+  # Combat and hunting goals
+  hunt_monsters:
+    description: "Hunt monsters for experience and loot"
+    objective_type: "combat"
+    target_state:
+      has_hunted_monsters: true
+      monster_defeated: true
+      character_safe: true
+    strategy:
+      search_radius: 15
+      max_search_attempts: 10
+      level_range: 2
+      prioritize_known_monsters: true
+    success_conditions:
+      - type: "has_hunted_monsters"
+        operator: "=="
+        value: true
+        
+  safe_exploration:
+    description: "Explore the map while maintaining character safety"
+    objective_type: "exploration"
+    target_state:
+      map_explored: true
+      character_safe: true
+      character_alive: true
+    strategy:
+      exploration_radius: 25
+      max_exploration_time: 300  # seconds
+      retreat_on_danger: true
+      
+  # Resource and crafting goals  
+  gather_resources:
+    description: "Collect specific resources from the environment"
+    objective_type: "resource_gathering"
+    target_state:
+      has_target_resource: true
+      inventory_space_available: true
+      character_safe: true
+    strategy:
+      search_radius: 20
+      resource_priority: ["ore", "wood", "food"]
+      max_gather_attempts: 15
+    parameters:
+      required: ["resource_type"]
+      optional: ["quantity", "search_radius"]
+      
+  # Survival and maintenance goals
+  recover_health:
+    description: "Restore character health to safe levels"
+    objective_type: "survival"
+    target_state:
+      character_safe: true
+      needs_rest: false
+      can_attack: true
+    strategy:
+      rest_priority: "immediate"
+      safe_location_required: true
+      min_hp_percentage: 50
+    success_conditions:
+      - type: "character_safe"
+        operator: "=="
+        value: true
+      - type: "hp_percentage"
+        operator: ">="
+        value: "${strategy.min_hp_percentage}"
+        
+  wait_for_cooldown:
+    description: "Wait for character cooldown to expire"
+    objective_type: "timing"
+    target_state:
+      is_on_cooldown: false
+      can_move: true
+      can_attack: true
+    strategy:
+      max_wait_duration: 65  # seconds
+      periodic_status_check: true
+      check_interval: 5  # seconds
+      
+# Goal selection rules - determines which goals to pursue based on current state
+goal_selection_rules:
+  # Emergency priorities (highest priority)
+  emergency:
+    - condition:
+        character_alive: false
+      goal: "revive_character"
+      priority: 100
+      
+    - condition:
+        hp_percentage: "<15"
+        is_on_cooldown: false
+      goal: "recover_health"
+      priority: 90
+      
+  # Maintenance priorities (medium-high priority)
+  maintenance:
+    - condition:
+        is_on_cooldown: true
+      goal: "wait_for_cooldown"
+      priority: 80
+      
+    - condition:
+        needs_rest: true
+        character_safe: false
+      goal: "recover_health"
+      priority: 70
+      
+  # Progression priorities (medium priority)
+  progression:
+    - condition:
+        need_combat: true
+        character_safe: true
+        can_attack: true
+      goal: "hunt_monsters"
+      priority: 60
+      
+    - condition:
+        needs_xp: true
+        character_level: "<10"
+      goal: "level_up"
+      priority: 50
+      
+  # Exploration priorities (lower priority)
+  exploration:
+    - condition:
+        character_safe: true
+        need_exploration: true
+      goal: "safe_exploration"
+      priority: 30
+      
+    - condition:
+        need_resources: true
+        character_safe: true
+      goal: "gather_resources"
+      priority: 25
+
+# State calculation rules - replaces hardcoded state computation
+state_calculation_rules:
+  # Character health and safety
+  character_safe:
+    formula: "hp_percentage >= ${thresholds.safe_hp_percentage}"
+    
+  needs_rest:
+    formula: "hp_percentage < ${thresholds.rest_hp_percentage} and not is_on_cooldown"
+    
+  can_attack:
+    formula: "hp_percentage >= ${thresholds.attack_hp_percentage} and not is_on_cooldown"
+    
+  # Character progression  
+  need_combat:
+    formula: "character_level < ${thresholds.combat_level_threshold}"
+    
+  needs_xp:
+    formula: "xp_percentage < 100"
+    
+  close_to_levelup:
+    formula: "xp_percentage >= ${thresholds.levelup_xp_percentage}"
+    
+  # Resource and equipment states
+  need_resources:
+    formula: "character_level < ${thresholds.resource_level_threshold}"
+    
+  need_equipment:
+    formula: "character_level < ${thresholds.equipment_level_threshold}"
+    
+  # Movement and actions
+  can_move:
+    formula: "character_hp > 0 and not is_on_cooldown"
+    
+  # Cooldown status (computed from API data)
+  is_on_cooldown:
+    type: "computed"
+    method: "check_cooldown_expiration"
+    
+# Configuration thresholds - replaces hardcoded magic numbers
+thresholds:
+  # Health and safety thresholds (percentages)
+  safe_hp_percentage: 30
+  rest_hp_percentage: 30
+  attack_hp_percentage: 15
+  levelup_xp_percentage: 80
+  
+  # Character progression thresholds
+  combat_level_threshold: 10
+  resource_level_threshold: 5
+  equipment_level_threshold: 3
+  
+  # Search and exploration parameters
+  default_search_radius: 15
+  max_search_radius: 25
+  level_matching_range: 2
+  
+  # Timing and iteration limits
+  max_goap_iterations: 10
+  max_hunt_cycles: 20
+  default_wait_duration: 65
+  cache_duration_minutes: 5
+  
+  # Cooldown management thresholds
+  cooldown_detection_threshold: 0.5  # Minimum seconds to consider significant
+  max_cooldown_wait: 65  # Maximum seconds to wait for cooldown
+  min_cooldown_wait: 0.5  # Minimum wait time
+  character_refresh_cache_duration: 5.0  # Seconds between character state refreshes
+  
+  # Learning management thresholds
+  min_monsters_for_recommendations: 3  # Minimum monsters before recommending exploration
+  min_locations_for_exploration: 20  # Minimum locations before suggesting more exploration
+  good_success_rate_threshold: 0.7  # Threshold for considering a monster "safe"
+  dangerous_success_rate_threshold: 0.3  # Threshold for warning about dangerous monsters
+  optimization_distance_radius: 20  # Radius for optimization suggestions
+  
+# Content classification rules - replaces hardcoded categorization logic
+content_classification:
+  monster:
+    required_attributes: []  # Don't require specific attributes for pattern matching
+    optional_attributes: ["level", "hp", "attack", "defense", "speed"]
+    type_patterns: ["monster", "creature", "beast"]
+    name_patterns: [".*slime.*", ".*goblin.*", ".*wolf.*", ".*orc.*", ".*cyclops.*"]
+    
+  resource:
+    required_attributes: []  # Don't require specific attributes for pattern matching
+    optional_attributes: ["skill", "level", "experience"]
+    type_patterns: ["resource", "deposit", "node"]
+    name_patterns: [".*_rocks", ".*_tree", ".*_fishing_spot", ".*_field"]
+    
+  npc:
+    required_attributes: []
+    optional_attributes: ["services", "dialogue", "trades"]
+    type_patterns: ["npc", "merchant", "trainer"]
+    
+  workshop:
+    required_attributes: []
+    optional_attributes: ["craft_skill", "recipes", "level"]
+    type_patterns: ["workshop", "crafting"]
+    name_patterns: [".*crafting", ".*smithy", ".*workshop"]
+    
+  facility:
+    required_attributes: []
+    optional_attributes: ["services"]
+    type_patterns: ["bank", "exchange", "market"]
+    name_patterns: ["bank", "grand_exchange", "market"]

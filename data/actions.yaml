@@ -15,9 +15,11 @@ actions:
     conditions:
       need_combat: true
       monsters_available: false
+      can_attack: true
     reactions:
       monsters_available: true
       monster_present: true
+      at_target_location: false
     weight: 2.0
     description: "Find nearby monsters suitable for combat"
     
@@ -26,8 +28,12 @@ actions:
       monster_present: true
       can_attack: true
       character_safe: true
+      at_target_location: true
     reactions:
       monster_present: false
+      has_hunted_monsters: true
+      monster_defeated: true
+      character_safe: true
     weight: 3.0
     description: "Attack a monster in combat"
     
@@ -42,6 +48,17 @@ actions:
       can_attack: true
     weight: 1.5
     description: "Rest to recover HP when critically low"
+    
+  wait:
+    conditions:
+      character_alive: true
+      is_on_cooldown: true
+    reactions:
+      is_on_cooldown: false
+      can_move: true
+      can_attack: true
+    weight: 0.1
+    description: "Wait for cooldown to expire before taking other actions"
     
   hunt:
     conditions:
@@ -114,20 +131,70 @@ actions:
       craft_plan_available: true
     weight: 1.0
     description: "Look up item information and crafting recipes"
+    
+  equip_item:
+    conditions:
+      character_alive: true
+      character_safe: true
+      has_equipment: true
+      inventory_updated: true
+    reactions:
+      equipment_equipped: true
+      character_stats_improved: true
+    weight: 1.0
+    description: "Equip an item from inventory to an equipment slot"
+    
+  unequip_item:
+    conditions:
+      character_alive: true
+      character_safe: true
+      equipment_equipped: true
+    reactions:
+      inventory_updated: true
+      equipment_equipped: false
+    weight: 1.0
+    description: "Unequip an item from an equipment slot to inventory"
+    
+  explore_map:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_combat: true
+      monsters_available: false
+    reactions:
+      map_explored: true
+      exploration_data_available: true
+    weight: 2.5
+    description: "Explore the map to find monsters, resources, and strategic locations"
+    
+  analyze_resources:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_equipment: true
+      map_explored: true
+    reactions:
+      equipment_analysis_available: true
+      crafting_opportunities_known: true
+    weight: 2.0
+    description: "Analyze nearby resources for equipment crafting opportunities"
 
 # Goal configurations for common scenarios
 goal_templates:
   level_up:
-    description: "Reach a target level through monster hunting and XP collection"
+    description: "Reach a target level through monster hunting, exploration, and equipment upgrades"
     goal_state:
       character_level: 2        # Target level (can be overridden)
       character_safe: true      # Must stay safe
       character_alive: true     # Must survive
     strategy:
-      priority_actions: ["rest", "find_monsters", "attack"]  # Rest first when needed
+      priority_actions: ["wait", "rest", "find_monsters", "attack", "explore_map", "analyze_resources", "gather_resources", "craft_item", "equip_item"]
       xp_target: 150           # XP needed for level 2
       min_safe_hp_percent: 30  # Rest when HP < 30%
-      hunt_radius: 15          # Search radius for monsters
+      hunt_radius: 15          # Initial search radius for monsters
+      max_hunt_radius: 30      # Maximum search radius with exponential expansion
+      exploration_radius: 15   # Radius for map exploration
+      use_exponential_search: true  # Enable exponential search radius expansion
     
   survive:
     description: "Maintain character safety and health"
@@ -147,16 +214,19 @@ goal_templates:
       min_safe_hp_percent: 25
       
   get_better_equipment:
-    description: "Craft better equipment to improve combat effectiveness"
+    description: "Craft better equipment to improve combat effectiveness through strategic resource analysis"
     goal_state:
       has_equipment: true
       character_safe: true
       character_alive: true
+      equipment_equipped: true
     strategy:
-      priority_actions: ["lookup_item_info", "find_resources", "gather_resources", "find_workshop", "craft_item"]
+      priority_actions: ["wait", "analyze_resources", "explore_map", "lookup_item_info", "find_resources", "gather_resources", "find_workshop", "craft_item", "equip_item"]
       equipment_types: ["weapon", "armor"]
       max_search_radius: 25
+      exploration_radius: 20
       target_level_range: 3  # Look for equipment within 3 levels
+      use_exponential_search: true
       
   gather_crafting_materials:
     description: "Collect resources needed for crafting"
@@ -165,7 +235,7 @@ goal_templates:
       character_safe: true
       character_alive: true
     strategy:
-      priority_actions: ["find_resources", "gather_resources"]
+      priority_actions: ["wait", "find_resources", "gather_resources"]
       resource_types: ["copper", "ash_wood", "iron"]  # Common materials
       search_radius: 15
       min_safe_hp_percent: 40

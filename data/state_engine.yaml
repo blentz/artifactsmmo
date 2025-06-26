@@ -1,0 +1,166 @@
+# State Calculation Engine Configuration
+# This file defines rules for dynamic state calculation and response processing
+
+# State calculation rules - replaces hardcoded state computation logic
+state_calculation:
+  # Character health and safety states
+  character_safe:
+    formula: "hp_percentage >= ${thresholds.safe_hp_percentage}"
+    
+  needs_rest:
+    formula: "hp_percentage < ${thresholds.rest_hp_percentage} and not is_on_cooldown"
+    
+  can_attack:
+    formula: "hp_percentage >= ${thresholds.attack_hp_percentage} and not is_on_cooldown"
+    
+  can_move:
+    formula: "character_hp > 0 and not is_on_cooldown"
+    
+  # Character progression states  
+  need_combat:
+    formula: "character_level < ${thresholds.combat_level_threshold}"
+    
+  needs_xp:
+    formula: "xp_percentage < 100"
+    
+  close_to_levelup:
+    formula: "xp_percentage >= ${thresholds.levelup_xp_percentage}"
+    
+  # Resource and equipment states
+  need_resources:
+    formula: "character_level < ${thresholds.resource_level_threshold}"
+    
+  need_equipment:
+    formula: "character_level < ${thresholds.equipment_level_threshold}"
+    
+  has_equipment:
+    formula: "character_level >= ${thresholds.equipment_level_threshold}"
+    
+  equipment_equipped:
+    formula: "character_level >= 2"
+    
+  character_stats_improved:
+    formula: "character_level >= 2"
+    
+# Computed states that require complex logic
+computed_states:
+  is_on_cooldown:
+    type: "cooldown_check"
+    
+  character_alive:
+    type: "formula"
+    formula: "character_hp > 0"
+
+# Response processing rules - replaces hardcoded update_world_state_from_response logic
+response_handlers:
+  move:
+    at_target_location:
+      type: "static"
+      value: true
+    character_x:
+      type: "response_field"
+      field: "data.character.x"
+    character_y:
+      type: "response_field"
+      field: "data.character.y"
+    monster_present:
+      type: "conditional"
+      condition:
+        type: "state_check"
+        state_key: "monsters_available"
+        value: false
+      true_value: false
+      false_value: true  # Keep monster_present if monsters are available
+      
+  find_monsters:
+    monsters_available:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: false
+      false_value: true
+    monster_present:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: false
+      false_value: true
+    at_target_location:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: true
+      false_value: false  # Need to move to monster location
+      
+  attack:
+    monster_present:
+      type: "static"
+      value: false
+    has_hunted_monsters:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "data.fight.result"
+        value: "win"
+      true_value: true
+      false_value: true  # Mark as hunted regardless of result
+    monsters_available:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "data.fight.result"
+        value: "win"
+      true_value: false
+      false_value: false
+    monster_defeated:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "data.fight.result"
+        value: "win"
+      true_value: true
+      false_value: false
+      
+  rest:
+    character_safe:
+      type: "computation"
+      method: "calculate_hp_safety"
+    needs_rest:
+      type: "computation"
+      method: "calculate_rest_need"
+      
+  wait:
+    is_on_cooldown:
+      type: "static"
+      value: false
+    can_move:
+      type: "static"
+      value: true
+    can_attack:
+      type: "static"
+      value: true
+
+# World state update patterns
+world_state_updates:
+  # Common update patterns that can be reused
+  movement_update:
+    at_target_location: true
+    
+  combat_victory:
+    monster_present: false
+    monster_defeated: true
+    has_hunted_monsters: true
+    
+  combat_defeat:
+    monster_present: false
+    has_hunted_monsters: true
+    
+  rest_recovery:
+    character_safe: true
+    needs_rest: false

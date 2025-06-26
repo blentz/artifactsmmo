@@ -11,9 +11,11 @@ from src.game.globals import BASEURL
 from src.lib.httpstatus import extend_http_status
 from src.lib.log import safely_start_logger
 from src.controller.ai_player_controller import AIPlayerController
+from src.controller.goal_manager import GOAPGoalManager
 from src.game.account import Account
 from src.game.characters import Characters
 from src.game.character.state import CharacterState
+from src.game.map.state import MapState
 
 MAX_THREADS = 1
 RAISE_ON_UNEXPECTED_STATUS = True
@@ -29,9 +31,11 @@ async def task():
     else:
         logging.warning("TOKEN not in ENV. Client NOT authenticated!")
         client = Client(base_url=BASEURL, raise_on_unexpected_status=RAISE_ON_UNEXPECTED_STATUS)
-    # Initialize AI Player Controller
-    controller = AIPlayerController(client=client)
-    logging.info("AI Player Controller created successfully")
+    
+    # Initialize goal-driven AI system
+    goal_manager = GOAPGoalManager()
+    controller = AIPlayerController(client=client, goal_manager=goal_manager)
+    logging.info("Goal-driven AI Player Controller created successfully")
 
     # Set up account and characters
     account = Account(name="wakko666", client=client)
@@ -44,6 +48,12 @@ async def task():
         game_character = characters[0]
         controller.set_character_state(game_character)
         logging.info(f"Using character: {game_character.name} at position ({game_character.data.get('x', 0)}, {game_character.data.get('y', 0)})")
+        
+        # Create and set map state for persistence
+        map_state = MapState(client=client, name="map")
+        map_state.set_learning_callback(controller.learn_from_map_exploration)
+        controller.set_map_state(map_state)
+        logging.info("Map state initialized for data persistence with learning callbacks")
     else:
         logging.error("No characters found for the account")
         return
@@ -54,19 +64,18 @@ async def task():
     initial_hp = game_character.data.get('hp', 0)
     
     logging.info(f"Initial character stats - Level: {initial_level}, XP: {initial_xp}, HP: {initial_hp}")
-    logging.info("🚀 Starting AI LEVEL UP GOAL mission...")
+    logging.info("🚀 Starting goal-driven AI mission...")
     
-    # Define the goal: use the comprehensive level_up goal
+    # GOAP-driven goal execution - let the AI select and pursue goals autonomously
     target_level = 2
-    actions_config_file = "data/actions.yaml"
     
-    logging.info(f"🎯 Mission: Execute level_up goal to reach level {target_level}")
-    logging.info("🧠 Strategy: GOAP-based monster hunting with intelligent rest management")
+    logging.info(f"🎯 Mission: Autonomous goal-driven progression to level {target_level}")
+    logging.info("🧠 Strategy: YAML-configured GOAP planning with intelligent goal selection")
     
-    # Use the new level_up_goal method for comprehensive hunting strategy
-    success = controller.level_up_goal(target_level, actions_config_file)
+    # Execute goal-driven mission using GOAP planning
+    success = controller.execute_autonomous_mission({'target_level': target_level})
     
-    # Additional summary (level_up_goal already provides detailed reporting)
+    # Report final results
     final_xp = controller.character_state.data.get('xp', 0)
     final_level = controller.character_state.data.get('level', 1)
     final_hp = controller.character_state.data.get('hp', 0)
@@ -80,16 +89,16 @@ async def task():
     logging.info(f"❤️  Final HP: {final_hp}")
     
     if success and level_gained > 0:
-        logging.info("🎉 MISSION ACCOMPLISHED: Level up goal achieved!")
+        logging.info("🎉 MISSION ACCOMPLISHED: Target level achieved!")
     elif success:
-        logging.info("✅ MISSION COMPLETED: Goal state reached!")
+        logging.info("✅ MISSION COMPLETED: Goal-driven execution successful!")
     else:
-        logging.warning("⚠️  MISSION INCOMPLETE: Could not achieve level up goal")
+        logging.warning("⚠️  MISSION INCOMPLETE: Goal-driven execution did not reach target")
         
     if xp_gained > 0:
-        logging.info("⚡ AI successfully gained XP through intelligent monster hunting!")
+        logging.info("⚡ AI successfully gained XP through autonomous goal-driven planning!")
     else:
-        logging.warning("❌ No XP gained - character may need manual intervention")
+        logging.warning("❌ No XP gained - review goal selection and action execution")
     
     logging.info("task finished")
 

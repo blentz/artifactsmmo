@@ -9,7 +9,7 @@ class CharacterState(YamlData):
     data = {}
 
     def __init__(self, data, name="character"):
-        YamlData.__init__(self, filename=f"{DATA_PREFIX}/{name}.yaml")
+        YamlData.__init__(self, filename=f"{DATA_PREFIX}/characters/{name}.yaml")
         self.name = name
         self.data = data
         self.save()

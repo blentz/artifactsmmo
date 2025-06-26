@@ -25,8 +25,10 @@ class KnowledgeBase(GoapData):
     Uses the same persistence system as WorldState but adds learned knowledge.
     """
     
-    def __init__(self, filename=f"{DATA_PREFIX}/knowledge.yaml"):
+    def __init__(self, filename="knowledge.yaml"):
         """Initialize the knowledge base with GOAP data structure."""
+        if "/" not in filename:
+            filename = f"{DATA_PREFIX}/{filename}"
         super().__init__(filename)
         self.logger = logging.getLogger(__name__)
         
@@ -46,6 +48,18 @@ class KnowledgeBase(GoapData):
             # Resource learning - extends MapState with harvest experience
             'resources': {},          # {resource_code: {harvest_attempts, yields, skill_requirements}}
             
+            # NPC learning - character interactions and services
+            'npcs': {},               # {npc_code: {services, dialogue_options, trade_info}}
+            
+            # Workshop learning - crafting locations and recipes
+            'workshops': {},          # {workshop_code: {available_recipes, skill_requirements, efficiency}}
+            
+            # Facility learning - banks, exchanges, and service locations
+            'facilities': {},         # {facility_code: {services, usage_patterns, efficiency}}
+            
+            # Item learning - discovered items and their properties
+            'items': {},              # {item_code: {properties, sources, uses, market_data}}
+            
             # Character progression insights
             'character_insights': {
                 'level_progression': {},  # {level: {xp_sources, time_taken, strategies_used}}
@@ -57,8 +71,12 @@ class KnowledgeBase(GoapData):
             'learning_stats': {
                 'total_combats': 0,
                 'unique_monsters_fought': 0,
+                'unique_npcs_met': 0,
+                'unique_workshops_found': 0,
+                'unique_facilities_found': 0,
+                'unique_items_discovered': 0,
                 'last_learning_session': None,
-                'learning_version': '1.0'
+                'learning_version': '2.0'  # Updated for new content types
             }
         }
         
@@ -72,16 +90,29 @@ class KnowledgeBase(GoapData):
         Learn from discovering content at a location (integrates with MapState).
         
         Args:
-            content_type: Type of content ('monster', 'resource', etc.)
+            content_type: Type of content ('monster', 'resource', 'npc', 'workshop', 'facility', 'item')
             content_code: Code/identifier of the content
             x: X coordinate
             y: Y coordinate  
             content_data: Additional content data from API
         """
+        content_data = content_data or {}
+        
         if content_type == 'monster':
-            self._learn_monster_discovery(content_code, x, y, content_data or {})
+            self._learn_monster_discovery(content_code, x, y, content_data)
         elif content_type == 'resource':
-            self._learn_resource_discovery(content_code, x, y, content_data or {})
+            self._learn_resource_discovery(content_code, x, y, content_data)
+        elif content_type == 'npc':
+            self._learn_npc_discovery(content_code, x, y, content_data)
+        elif content_type == 'workshop':
+            self._learn_workshop_discovery(content_code, x, y, content_data)
+        elif content_type == 'facility':
+            self._learn_facility_discovery(content_code, x, y, content_data)
+        elif content_type == 'item':
+            self._learn_item_discovery(content_code, x, y, content_data)
+        else:
+            # Log unknown content type for future implementation
+            self.logger.warning(f"Unknown content type '{content_type}' for '{content_code}' - not learning")
             
     def _learn_monster_discovery(self, monster_code: str, x: int, y: int, content_data: Dict) -> None:
         """Learn from discovering a monster (does not duplicate MapState location tracking)."""
@@ -383,3 +414,93 @@ class KnowledgeBase(GoapData):
                 nearest_location = (x, y, distance)
                 
         return nearest_location
+    
+    def _learn_npc_discovery(self, npc_code: str, x: int, y: int, content_data: Dict) -> None:
+        """Learn from discovering an NPC."""
+        if npc_code not in self.data['npcs']:
+            self.data['npcs'][npc_code] = {
+                'code': npc_code,
+                'name': content_data.get('name', npc_code),
+                'type': content_data.get('type_', 'unknown'),
+                'description': content_data.get('description', ''),
+                'first_discovered': datetime.now().isoformat(),
+                'interaction_count': 0,
+                'services': content_data.get('services', []),
+                'dialogue_options': [],
+                'trade_history': []
+            }
+            self.data['learning_stats']['unique_npcs_met'] += 1
+            
+        npc_info = self.data['npcs'][npc_code]
+        npc_info['last_seen'] = datetime.now().isoformat()
+        npc_info['encounter_count'] = npc_info.get('encounter_count', 0) + 1
+    
+    def _learn_workshop_discovery(self, workshop_code: str, x: int, y: int, content_data: Dict) -> None:
+        """Learn from discovering a workshop/crafting location."""
+        if workshop_code not in self.data['workshops']:
+            self.data['workshops'][workshop_code] = {
+                'code': workshop_code,
+                'name': content_data.get('name', workshop_code),
+                'craft_skill': content_data.get('skill', content_data.get('craft_skill', 'unknown')),
+                'first_discovered': datetime.now().isoformat(),
+                'usage_count': 0,
+                'available_recipes': content_data.get('recipes', []),
+                'skill_requirements': content_data.get('level', 1),
+                'efficiency_ratings': {},
+                'best_times': []  # When it's least busy
+            }
+            self.data['learning_stats']['unique_workshops_found'] += 1
+            
+        workshop_info = self.data['workshops'][workshop_code]
+        workshop_info['last_seen'] = datetime.now().isoformat()
+        workshop_info['encounter_count'] = workshop_info.get('encounter_count', 0) + 1
+    
+    def _learn_facility_discovery(self, facility_code: str, x: int, y: int, content_data: Dict) -> None:
+        """Learn from discovering a facility (bank, exchange, etc.)."""
+        if facility_code not in self.data['facilities']:
+            self.data['facilities'][facility_code] = {
+                'code': facility_code,
+                'name': content_data.get('name', facility_code),
+                'facility_type': content_data.get('type_', 'unknown'),
+                'first_discovered': datetime.now().isoformat(),
+                'usage_count': 0,
+                'services': content_data.get('services', []),
+                'efficiency_ratings': {},
+                'usage_patterns': {
+                    'peak_hours': [],
+                    'avg_wait_time': 0
+                }
+            }
+            self.data['learning_stats']['unique_facilities_found'] += 1
+            
+        facility_info = self.data['facilities'][facility_code]
+        facility_info['last_seen'] = datetime.now().isoformat()
+        facility_info['encounter_count'] = facility_info.get('encounter_count', 0) + 1
+    
+    def _learn_item_discovery(self, item_code: str, x: int, y: int, content_data: Dict) -> None:
+        """Learn from discovering an item."""
+        if item_code not in self.data['items']:
+            self.data['items'][item_code] = {
+                'code': item_code,
+                'name': content_data.get('name', item_code),
+                'item_type': content_data.get('type_', 'unknown'),
+                'subtype': content_data.get('subtype', ''),
+                'first_discovered': datetime.now().isoformat(),
+                'discovery_count': 0,
+                'tradeable': content_data.get('tradeable', False),
+                'description': content_data.get('description', ''),
+                'effects': content_data.get('effects', []),
+                'sources': [],  # Where it can be obtained
+                'uses': [],     # What it's used for
+                'market_data': {
+                    'min_price': None,
+                    'max_price': None,
+                    'avg_price': None,
+                    'price_history': []
+                }
+            }
+            self.data['learning_stats']['unique_items_discovered'] += 1
+            
+        item_info = self.data['items'][item_code]
+        item_info['last_seen'] = datetime.now().isoformat()
+        item_info['discovery_count'] += 1

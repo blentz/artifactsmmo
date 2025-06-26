@@ -16,7 +16,13 @@ class YamlData:
         self._log = logging.getLogger()
         self.filename = filename
         self.data = {} if self.data is None else self.data
-        self.data.update(self.load() or {})
+        
+        # Load the YAML and extract just the 'data' portion if it exists
+        loaded = self.load() or {}
+        if 'data' in loaded:
+            self.data.update(loaded['data'])
+        else:
+            self.data.update(loaded)
         self._log.debug(f"YamlData({self.filename}): {self.data}")
 
     def __repr__(self):

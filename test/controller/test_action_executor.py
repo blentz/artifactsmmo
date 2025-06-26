@@ -223,6 +223,10 @@ class TestActionExecutor(unittest.TestCase):
         mock_response = Mock()
         mock_response.data.fight.monster = {'code': 'chicken'}
         mock_response.data.fight.result = 'win'
+        mock_response.data.fight.xp = 25
+        mock_response.data.fight.gold = 10
+        mock_response.data.fight.drops = []
+        mock_response.data.fight.turns = 3
         
         context = {
             'controller': mock_controller,
@@ -230,7 +234,20 @@ class TestActionExecutor(unittest.TestCase):
         }
         
         self.executor._handle_learning_callbacks('attack', mock_response, context)
-        mock_controller.learn_from_combat.assert_called_once_with('chicken', 'win', 80)
+        
+        # Verify the call was made with the correct parameters including fight_data dict
+        args, kwargs = mock_controller.learn_from_combat.call_args
+        self.assertEqual(args[0], 'chicken')  # monster_code
+        self.assertEqual(args[1], 'win')      # result
+        self.assertEqual(args[2], 80)         # pre_combat_hp
+        
+        # Check that fight_data dict was passed and contains expected keys
+        fight_data = args[3]
+        self.assertIsInstance(fight_data, dict)
+        self.assertIn('xp', fight_data)
+        self.assertIn('gold', fight_data)
+        self.assertIn('drops', fight_data)
+        self.assertIn('turns', fight_data)
     
     def test_update_state(self) -> None:
         """Test state update handling."""

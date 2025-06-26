@@ -47,13 +47,13 @@ class ActionExecutor:
     
     def __init__(self, config_path: str = None):
         self.logger = logging.getLogger(__name__)
-        self.factory = ActionFactory()
         
         # Load configuration
         if config_path is None:
             config_path = Path(__file__).parent.parent.parent / "data" / "action_configurations.yaml"
         
         self.config_data = YamlData(str(config_path))
+        self.factory = ActionFactory(self.config_data)
         self._load_configurations()
         
         # Special handling for composite actions and learning
@@ -307,14 +307,64 @@ class ActionExecutor:
                     controller.learn_from_map_exploration(char.x, char.y, response)
             
             elif action_name == 'attack' and hasattr(controller, 'learn_from_combat'):
-                if hasattr(response, 'data') and hasattr(response.data, 'fight'):
-                    fight_data = response.data.fight
-                    monster_code = getattr(fight_data, 'monster', {}).get('code', 'unknown')
-                    result = getattr(fight_data, 'result', 'unknown')
+                self.logger.debug(f"🔍 Processing attack learning for response: {type(response)}")
+                
+                if hasattr(response, 'data'):
+                    # Try multiple ways to access fight data
+                    fight_data = None
+                    monster_code = 'unknown'
+                    result = 'unknown'
+                    
+                    # Check for fight data in response.data.fight
+                    if hasattr(response.data, 'fight'):
+                        fight_data = response.data.fight
+                        self.logger.debug(f"🔍 Found fight data: {fight_data}")
+                        
+                        # Extract monster info
+                        if hasattr(fight_data, 'monster'):
+                            monster = fight_data.monster
+                            if hasattr(monster, 'code'):
+                                monster_code = monster.code
+                            elif isinstance(monster, dict):
+                                monster_code = monster.get('code', 'unknown')
+                        
+                        # Extract result
+                        if hasattr(fight_data, 'result'):
+                            result = fight_data.result
+                    
+                    # Alternative: Check response.data directly for fight info
+                    elif hasattr(response.data, 'character'):
+                        # Sometimes the response structure might be different
+                        char_data = response.data.character
+                        self.logger.debug(f"🔍 Character data available: {type(char_data)}")
+                    
                     pre_combat_hp = context.get('pre_combat_hp', 0)
                     
-                    if monster_code != 'unknown':
-                        controller.learn_from_combat(monster_code, result, pre_combat_hp)
+                    self.logger.debug(f"🔍 Combat data - Monster: {monster_code}, Result: {result}, Pre-HP: {pre_combat_hp}")
+                    
+                    if monster_code != 'unknown' and result != 'unknown':
+                        self.logger.info(f"⚔️ Learning from combat: {monster_code} - {result}")
+                        
+                        # Convert fight_data to dict for knowledge base
+                        fight_dict = None
+                        if fight_data:
+                            fight_dict = {}
+                            # Extract key combat data from fight_data object
+                            if hasattr(fight_data, 'xp'):
+                                fight_dict['xp'] = fight_data.xp
+                            if hasattr(fight_data, 'gold'):
+                                fight_dict['gold'] = fight_data.gold
+                            if hasattr(fight_data, 'drops'):
+                                fight_dict['drops'] = fight_data.drops
+                            if hasattr(fight_data, 'turns'):
+                                fight_dict['turns'] = fight_data.turns
+                        
+                        controller.learn_from_combat(monster_code, result, pre_combat_hp, fight_dict)
+                    else:
+                        self.logger.warning(f"⚠️ Incomplete combat data: monster={monster_code}, result={result}")
+                else:
+                    self.logger.warning(f"⚠️ No response data available for attack learning")
+            
         
         except Exception as e:
             self.logger.warning(f"Learning callback failed for {action_name}: {e}")

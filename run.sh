@@ -6,4 +6,4 @@ export TOKEN=$(cat TOKEN)
 source $(which virtualenvwrapper.sh)
 workon artifactsmmo
 
-/usr/bin/env python3 -m src.main
+/usr/bin/env python3 -m src.main 2>&1 | tee session.log

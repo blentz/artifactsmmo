@@ -15,9 +15,11 @@ actions:
     conditions:
       need_combat: true
       monsters_available: false
+      can_attack: true
     reactions:
       monsters_available: true
       monster_present: true
+      at_target_location: false
     weight: 2.0
     description: "Find nearby monsters suitable for combat"
     
@@ -28,6 +30,9 @@ actions:
       character_safe: true
     reactions:
       monster_present: false
+      has_hunted_monsters: true
+      monster_defeated: true
+      character_safe: true
     weight: 3.0
     description: "Attack a monster in combat"
     
@@ -42,6 +47,17 @@ actions:
       can_attack: true
     weight: 1.5
     description: "Rest to recover HP when critically low"
+    
+  wait:
+    conditions:
+      character_alive: true
+      is_on_cooldown: true
+    reactions:
+      is_on_cooldown: false
+      can_move: true
+      can_attack: true
+    weight: 0.1
+    description: "Wait for cooldown to expire before taking other actions"
 
 # Goal configurations for common scenarios
 goal_templates:
