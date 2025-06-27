@@ -50,6 +50,16 @@ class AttackAction(ActionBase):
                 )
                 self.log_execution_result(error_response)
                 return error_response
+            
+            # Check combat viability using knowledge base
+            combat_viable = self.check_combat_viability(character_state, **kwargs)
+            if not combat_viable:
+                error_response = self.get_error_response(
+                    "Attack cancelled: Poor win rate against this monster suggests combat is not viable",
+                    reason="poor_win_rate"
+                )
+                self.log_execution_result(error_response)
+                return error_response
         
         try:
             response = fight_character_api(
@@ -116,6 +126,86 @@ class AttackAction(ActionBase):
                 error_response = self.get_error_response(f"Attack failed: {error_str}")
                 self.log_execution_result(error_response)
                 return error_response
+
+    def check_combat_viability(self, character_state, **kwargs):
+        """
+        Check if combat is viable based on learned win/loss ratios.
+        Returns False if the monster has consistently poor results.
+        """
+        try:
+            # Get current location and monster information
+            character_x = character_state.data.get('x', 0)
+            character_y = character_state.data.get('y', 0)
+            character_level = character_state.data.get('level', 1)
+            
+            # Try to get knowledge base from context or map_state
+            knowledge_base = None
+            context = kwargs.get('context', {})
+            
+            # Look for knowledge base in various places
+            if 'knowledge_base' in context:
+                knowledge_base = context['knowledge_base']
+            elif 'map_state' in context and hasattr(context['map_state'], 'knowledge_base'):
+                knowledge_base = context['map_state'].knowledge_base
+            elif hasattr(self, 'knowledge_base'):
+                knowledge_base = self.knowledge_base
+            
+            if not knowledge_base:
+                # If no knowledge base available, allow combat (default behavior)
+                self.logger.debug("No knowledge base available for combat viability check")
+                return True
+            
+            # Get monster at current location from knowledge base or map state
+            monster_code = None
+            map_state = context.get('map_state')
+            if map_state and hasattr(map_state, 'get_content'):
+                location_content = map_state.get_content(character_x, character_y)
+                if location_content and location_content.get('type') == 'monster':
+                    monster_code = location_content.get('code')
+            
+            if not monster_code:
+                # Try to get monster from learning data
+                if hasattr(knowledge_base, 'data') and 'monsters' in knowledge_base.data:
+                    for code, monster_data in knowledge_base.data['monsters'].items():
+                        locations = monster_data.get('locations', [])
+                        for loc in locations:
+                            if loc.get('x') == character_x and loc.get('y') == character_y:
+                                monster_code = code
+                                break
+                        if monster_code:
+                            break
+            
+            if not monster_code:
+                # If we can't identify the monster, allow combat (default behavior)
+                self.logger.debug(f"Unable to identify monster at ({character_x}, {character_y})")
+                return True
+            
+            # Check combat history for this monster
+            if hasattr(knowledge_base, 'data') and 'monsters' in knowledge_base.data:
+                monster_data = knowledge_base.data['monsters'].get(monster_code, {})
+                combat_results = monster_data.get('combat_results', [])
+                
+                if len(combat_results) >= 3:  # Only check if we have sufficient data
+                    wins = sum(1 for result in combat_results if result.get('result') == 'win')
+                    total_combats = len(combat_results)
+                    win_rate = wins / total_combats
+                    
+                    # If win rate is very poor (less than 10%), consider combat not viable
+                    if win_rate < 0.1:
+                        self.logger.warning(f"⚠️ Combat not viable: {monster_code} win rate {win_rate:.1%} ({wins}/{total_combats})")
+                        self.logger.info(f"💡 Suggestion: Seek better equipment or weaker monsters")
+                        return False
+                    
+                    self.logger.debug(f"Combat viable: {monster_code} win rate {win_rate:.1%} ({wins}/{total_combats})")
+                else:
+                    self.logger.debug(f"Insufficient combat data for {monster_code} ({len(combat_results)} combats)")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking combat viability: {e}")
+            # On error, default to allowing combat
+            return True
 
     def can_safely_attack(self, character_hp, estimated_enemy_damage=0):
         """ Check if it's safe to attack given current HP and estimated enemy damage """

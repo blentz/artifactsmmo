@@ -67,10 +67,11 @@ async def task():
     logging.info("🚀 Starting goal-driven AI mission...")
     
     # GOAP-driven goal execution - let the AI select and pursue goals autonomously
-    target_level = 2
+    target_level = 40  # Maximum character level
     
-    logging.info(f"🎯 Mission: Autonomous goal-driven progression to level {target_level}")
+    logging.info(f"🎯 Mission: Autonomous goal-driven progression to MAXIMUM LEVEL {target_level}")
     logging.info("🧠 Strategy: YAML-configured GOAP planning with intelligent goal selection")
+    logging.info("🎖️  Ultimate Goal: Reach max character level and all skill max levels!")
     
     # Execute goal-driven mission using GOAP planning
     success = controller.execute_autonomous_mission({'target_level': target_level})

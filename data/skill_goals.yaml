@@ -304,3 +304,169 @@ skill_thresholds:
       low_level: 500
       mid_level: 1000
       high_level: 2000
+
+# Maximum Level Goals - Ultimate skill progression objectives
+max_level_goals:
+  # Combat skill maximum level
+  max_combat:
+    description: "Reach maximum combat level through sustained monster hunting"
+    skill_type: "combat"
+    target_level: 30  # Assumed max level for skills
+    target_state:
+      combat_level: 30
+      character_alive: true
+      character_safe: true
+      has_hunted_monsters: true
+    strategy:
+      max_iterations: 500  # Very high for long-term goal
+      hunt_radius: 30
+      progressive_difficulty: true
+      adaptive_monster_selection: true
+      safety_priority: true
+      level_scaling: true
+    requirements:
+      character_alive: true
+      has_weapon: true
+    
+  # Gathering skill maximum levels
+  max_woodcutting:
+    description: "Reach maximum woodcutting level through tree harvesting"
+    skill_type: "woodcutting"
+    target_level: 30
+    target_state:
+      woodcutting_level: 30
+      character_alive: true
+      has_resources: true
+    strategy:
+      max_iterations: 300
+      progressive_trees: true
+      efficiency_optimization: true
+      resource_management: true
+    requirements:
+      has_axe: true
+      character_alive: true
+      
+  max_mining:
+    description: "Reach maximum mining level through ore extraction"
+    skill_type: "mining"
+    target_level: 30
+    target_state:
+      mining_level: 30
+      character_alive: true
+      has_resources: true
+    strategy:
+      max_iterations: 300
+      progressive_ores: true
+      efficiency_optimization: true
+      resource_management: true
+    requirements:
+      has_pickaxe: true
+      character_alive: true
+      
+  max_fishing:
+    description: "Reach maximum fishing level through aquatic harvesting"
+    skill_type: "fishing"
+    target_level: 30
+    target_state:
+      fishing_level: 30
+      character_alive: true
+      has_resources: true
+    strategy:
+      max_iterations: 300
+      progressive_fishing_spots: true
+      efficiency_optimization: true
+      resource_management: true
+    requirements:
+      has_fishing_rod: true
+      character_alive: true
+      
+  # Crafting skill maximum levels
+  max_weaponcrafting:
+    description: "Reach maximum weaponcrafting level through weapon creation"
+    skill_type: "weaponcrafting"
+    target_level: 30
+    target_state:
+      weaponcrafting_level: 30
+      character_alive: true
+      has_equipment: true
+    strategy:
+      max_iterations: 400
+      progressive_recipes: true
+      material_optimization: true
+      workshop_efficiency: true
+    requirements:
+      has_materials: true
+      at_workshop: "weaponcrafting"
+      character_alive: true
+      
+  max_gearcrafting:
+    description: "Reach maximum gearcrafting level through armor creation"
+    skill_type: "gearcrafting"
+    target_level: 30
+    target_state:
+      gearcrafting_level: 30
+      character_alive: true
+      has_equipment: true
+    strategy:
+      max_iterations: 400
+      progressive_recipes: true
+      material_optimization: true
+      workshop_efficiency: true
+    requirements:
+      has_materials: true
+      at_workshop: "gearcrafting"
+      character_alive: true
+      
+  max_jewelrycrafting:
+    description: "Reach maximum jewelrycrafting level through jewelry creation"
+    skill_type: "jewelrycrafting"
+    target_level: 30
+    target_state:
+      jewelrycrafting_level: 30
+      character_alive: true
+      has_equipment: true
+    strategy:
+      max_iterations: 400
+      progressive_recipes: true
+      material_optimization: true
+      workshop_efficiency: true
+    requirements:
+      has_materials: true
+      at_workshop: "jewelrycrafting"
+      character_alive: true
+      
+  max_cooking:
+    description: "Reach maximum cooking level through food preparation"
+    skill_type: "cooking"
+    target_level: 30
+    target_state:
+      cooking_level: 30
+      character_alive: true
+      has_equipment: true
+    strategy:
+      max_iterations: 400
+      progressive_recipes: true
+      ingredient_optimization: true
+      workshop_efficiency: true
+    requirements:
+      has_ingredients: true
+      at_workshop: "cooking"
+      character_alive: true
+      
+  max_alchemy:
+    description: "Reach maximum alchemy level through potion brewing"
+    skill_type: "alchemy"
+    target_level: 30
+    target_state:
+      alchemy_level: 30
+      character_alive: true
+      has_equipment: true
+    strategy:
+      max_iterations: 400
+      progressive_recipes: true
+      reagent_optimization: true
+      workshop_efficiency: true
+    requirements:
+      has_reagents: true
+      at_workshop: "alchemy"
+      character_alive: true

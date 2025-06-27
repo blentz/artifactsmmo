@@ -6,6 +6,62 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the **artifactsmmo AI player** project. This project is an AI player used for operating a character in a role-playing game played through an API. This is a python v3.13 project.
 
+## Project Principles
+
+- Backward compatibility is not a priority and should not be factored into your solutions.
+
+## Multi-Goal Thinking & Equipment Progression Architecture
+
+The AI player uses a sophisticated multi-goal coordination system that prioritizes equipment upgrades through comprehensive crafting workflows. Key architectural patterns:
+
+### Goal Prioritization Strategy
+- **Equipment goals have higher priority than combat goals for low-level characters (levels 1-5)**
+- Priority ranges: Equipment (70-78) > Combat (50-60) > Exploration (25-42)
+- Bootstrap goal (priority 78) coordinates multiple objectives for new characters
+- Goal selection is driven by character state conditions and level-appropriate thresholds
+
+### Multi-Step Equipment Progression Pipeline
+The system implements a complete crafting workflow: **Discovery → Resource Gathering → Crafting → Equipment → Combat Validation**
+
+1. **Discovery Phase**: Find workshops and resource locations (`discover_workshops` goal)
+2. **Resource Gathering Phase**: Collect materials like copper, ash_wood (`gather_crafting_materials`)
+3. **Crafting Phase**: Create equipment at workshops (`upgrade_weapon`, `upgrade_armor`)
+4. **Equipment Phase**: Equip new gear for stat improvements
+5. **Combat Validation**: Test effectiveness through monster hunting
+
+### Equipment-Focused State Variables
+Key computed states for equipment progression:
+- `need_workshop_discovery` - Triggers workshop finding for level 2+ characters
+- `need_weapon_upgrade` - Triggers when weapon is 1+ levels behind character
+- `need_armor_upgrade` - Triggers when armor coverage is insufficient
+- `workshops_discovered` - Tracks available crafting facilities
+- `has_crafting_materials` - Monitors resource inventory for crafting
+
+### State Engine Integration Patterns
+- **StateCalculationEngine integration**: Add computed state variables to world state calculation
+- **Preserve existing functionality**: Don't override critical calculations like cooldown detection
+- **Integration pattern**: Apply state engine AFTER base calculations, with selective overrides
+```python
+# Preserve existing cooldown calculation when integrating state engine
+current_cooldown_state = state.get('is_on_cooldown')
+computed_state = self.state_engine.calculate_derived_state(state, self.thresholds)
+if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
+    computed_state['is_on_cooldown'] = current_cooldown_state
+```
+
+### Composite Action Workflows
+- **Equipment workflows**: Chain discovery → gathering → crafting → equipping
+- **Dependency tracking**: Each step has prerequisites and fallback strategies
+- **Material requirements**: Level-appropriate resources (copper+ash_wood for level 2)
+- **Multi-step thinking**: Actions coordinate toward long-term equipment objectives
+
+### Critical Testing & Validation Requirements
+**ALWAYS verify changes with both unit tests AND real API execution:**
+1. Run full test suite: `python -m unittest` (all 480+ tests must pass)
+2. Run real application: `./run.sh` (minimum 15-30 seconds to observe behavior)
+3. Verify goal selection, GOAP planning, action execution, and learning system
+4. Check data persistence to YAML files (world.yaml, knowledge.yaml, map.yaml)
+
 ## Development Commands
 
 ### Build & Development
@@ -28,6 +84,7 @@ This is the **artifactsmmo AI player** project. This project is an AI player use
 
 ### Additional Command-Line Utilities
 - `jq` - JSON query tool
+
 
 ## Architecture
 
@@ -94,7 +151,7 @@ This is the **artifactsmmo AI player** project. This project is an AI player use
 
 3. **Factory Pattern**: ActionFactory creates action instances dynamically from configuration
 
-4. **Strategy Pattern**: ActionExecutor handles different action types (simple, composite, special) 
+4. **Strategy Pattern**: ActionExecutor handles different action types (simple, composite, special)
 
 5. **Dependency Injection**: StateLoader manages object creation with YAML-defined dependencies
 
@@ -176,7 +233,7 @@ Game Data → ActionExecutor → learn_from_* methods → save() to files
 
 **DO** create new actions by:
 1. Adding action class in `src/controller/actions/` with GOAP parameters
-2. Registering in `data/action_configurations.yaml` 
+2. Registering in `data/action_configurations.yaml`
 3. Writing tests for the action class
 
 Example new action registration:
@@ -201,7 +258,7 @@ composite_actions:
         params:
           resource_type: "${action_data.resource_type}"
       - name: "gather"
-        action: "gather_resources" 
+        action: "gather_resources"
         required: true
         conditions:
           resource_found: true
@@ -282,7 +339,7 @@ def test_move_action(self, mock_move_action):
 
 **DO** test through ActionExecutor:
 ```python
-# CORRECT - Metaprogramming approach  
+# CORRECT - Metaprogramming approach
 @patch('src.controller.ai_player_controller.ActionExecutor')
 def test_move_action(self, mock_executor_class):
     mock_executor_instance = Mock()
@@ -309,7 +366,7 @@ knowledge_base = KnowledgeBase(filename=self.temp_file.name)
 
 **Production data files** that must stay clean:
 - `data/world.yaml` - GOAP state persistence
-- `data/map.yaml` - Map exploration data  
+- `data/map.yaml` - Map exploration data
 - `data/knowledge.yaml` - Learning and combat data
 
 These files should only contain real game data from API responses, never test data.
@@ -320,7 +377,7 @@ These files should only contain real game data from API responses, never test da
 
 **CRITICAL BUG PATTERNS** that have been identified and fixed:
 
-#### 1. Cooldown Handling 
+#### 1. Cooldown Handling
 
 **Problem**: Actions continuing despite active cooldowns causing 499 API errors
 ```
@@ -340,7 +397,7 @@ These files should only contain real game data from API responses, never test da
 # WRONG - Missing fight_data parameter
 knowledge_base.record_combat_result(monster_code, result, character_data)
 
-# CORRECT - Include fight_data for detailed recording  
+# CORRECT - Include fight_data for detailed recording
 knowledge_base.record_combat_result(monster_code, result, character_data, fight_data)
 ```
 
@@ -439,7 +496,7 @@ cat data/knowledge.yaml | grep -A5 "combat_results"
 
 **Common fix validation failures:**
 - Tests pass but runtime fails → Check action parameter mappings and context passing
-- Runtime works but data not persisting → Verify learning callbacks and save() calls  
+- Runtime works but data not persisting → Verify learning callbacks and save() calls
 - Cooldowns still causing issues → Check character state refresh timing
 - Combat data missing specific fields → Verify fight_data extraction and conversion
 
@@ -451,7 +508,7 @@ cat data/knowledge.yaml | grep -A5 "combat_results"
 2. **"Unknown action" errors**: Verify action is registered in `action_configurations.yaml`
 3. **Tests bypassing metaprogramming**: Ensure tests use ActionExecutor, not direct action mocking
 4. **GOAP integration issues**: Check action class has proper `conditions`, `reactions`, and `weights`
-5. **Data persistence not working**: 
+5. **Data persistence not working**:
    - Check that learning callbacks are set: `map_state.set_learning_callback()`
    - Verify YAML data structure loading: check for nested `data:` keys
    - Confirm files are being created in `data/` directory, not test directories
@@ -482,3 +539,4 @@ cat data/knowledge.yaml | grep -A5 "combat_results"
 - Verify combat data recording: `grep "combat_results" data/knowledge.yaml`
 - Monitor action context: `controller.action_context` for preserved coordinates
 - Check cache behavior: Look for "Cache hit/miss" messages in map exploration
+

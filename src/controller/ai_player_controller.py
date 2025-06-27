@@ -74,7 +74,7 @@ class AIPlayerController(StateManagerMixin):
         self.map_state: Optional[MapState] = None
         
         # Initialize learning manager after states are available
-        self.learning_manager = LearningManager(self.knowledge_base, self.map_state)
+        self.learning_manager = LearningManager(self.knowledge_base, self.map_state, self.client)
         
         # Current plan and execution state
         self.current_plan: List[Dict] = []
@@ -370,18 +370,19 @@ class AIPlayerController(StateManagerMixin):
             'knowledge_base': self.knowledge_base,
         }
         
-        # Add character information if available
+        # Include action context data (results from previous actions) first
+        context.update(self.action_context)
+        
+        # Add character information if available (this should override action context for freshness)
         if self.character_state and hasattr(self.character_state, 'name'):
-            context.update({
+            character_data = {
                 'character_name': self.character_state.name,
                 'character_x': self.character_state.data.get('x', 0),
                 'character_y': self.character_state.data.get('y', 0),
                 'character_level': self.character_state.data.get('level', 1),
                 'pre_combat_hp': self.character_state.data.get('hp', 0),
-            })
-        
-        # Include action context data (results from previous actions)
-        context.update(self.action_context)
+            }
+            context.update(character_data)
         
         return context
     
@@ -713,9 +714,18 @@ class AIPlayerController(StateManagerMixin):
                     
         except Exception as e:
             self.logger.warning(f"Failed to learn from map exploration at ({x}, {y}): {e}")
+            # If it's a serialization error, try to clean up the knowledge base
+            if 'cannot represent an object' in str(e) or 'DropSchema' in str(e):
+                self.logger.info("Detected DropSchema serialization error - cleaning knowledge base")
+                try:
+                    self.knowledge_base._sanitize_data()
+                    self.knowledge_base.save()
+                    self.logger.info("Knowledge base cleaned and saved successfully")
+                except Exception as cleanup_error:
+                    self.logger.error(f"Failed to clean knowledge base: {cleanup_error}")
     
 
-    def learn_from_combat(self, monster_code: str, result: str, pre_combat_hp: int = None, fight_data: Dict = None) -> None:
+    def learn_from_combat(self, monster_code: str, result: str, pre_combat_hp: int = None, fight_data: Dict = None, combat_context: Dict = None) -> None:
         """
         Learn from combat experience.
         
@@ -724,14 +734,39 @@ class AIPlayerController(StateManagerMixin):
             result: Combat result ('win', 'loss', 'flee')
             pre_combat_hp: Character HP before combat
             fight_data: Additional fight information (XP, gold, drops, turns)
+            combat_context: Additional combat context (pre_combat_hp, post_combat_hp)
         """
         try:
             if not self.character_state:
                 return
                 
             character_data = self.character_state.data.copy()
-            if pre_combat_hp is not None:
+            
+            # Use post-combat HP from context if available (more accurate than character_state)
+            if combat_context and 'post_combat_hp' in combat_context and combat_context['post_combat_hp'] is not None:
+                character_data['hp'] = combat_context['post_combat_hp']
+                self.logger.debug(f"🔍 Using post-combat HP from context: {combat_context['post_combat_hp']}")
+            
+            # Handle pre-combat HP properly - try to calculate actual pre-combat HP
+            if pre_combat_hp is not None and pre_combat_hp > 0:
                 character_data['hp_before'] = pre_combat_hp
+            else:
+                # If no pre-combat HP provided, try to estimate from current state
+                current_hp = character_data.get('hp', 0)
+                max_hp = character_data.get('max_hp', 125)
+                
+                # If character is at full health now but we know there was a fight,
+                # they likely rested between combat and learning
+                if current_hp == max_hp and result == 'loss':
+                    # For loss, estimate pre-combat HP was full before taking damage
+                    # We can estimate damage from fight data or use a reasonable default
+                    estimated_damage = 50  # Default damage estimate for failed fights
+                    if fight_data and fight_data.get('turns', 0) > 0:
+                        # Estimate based on turns - more turns = more damage
+                        estimated_damage = min(max_hp - 10, fight_data.get('turns', 1) * 5)
+                    character_data['hp_before'] = max_hp
+                else:
+                    character_data['hp_before'] = current_hp
                 
             # Record combat result with fight data
             self.knowledge_base.record_combat_result(monster_code, result, character_data, fight_data)
@@ -757,6 +792,15 @@ class AIPlayerController(StateManagerMixin):
                 
         except Exception as e:
             self.logger.warning(f"Failed to learn from combat with {monster_code}: {e}")
+            # If it's a serialization error, try to clean up the knowledge base
+            if 'cannot represent an object' in str(e) or 'DropSchema' in str(e):
+                self.logger.info("Detected DropSchema serialization error - cleaning knowledge base")
+                try:
+                    self.knowledge_base._sanitize_data()
+                    self.knowledge_base.save()
+                    self.logger.info("Knowledge base cleaned and saved successfully")
+                except Exception as cleanup_error:
+                    self.logger.error(f"Failed to clean knowledge base: {cleanup_error}")
 
     def find_known_monsters_nearby(self, max_distance: int = 15, character_level: int = None, 
                                  level_range: int = 2) -> Optional[List[Dict]]:

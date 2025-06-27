@@ -12,6 +12,7 @@ from pathlib import Path
 
 from src.lib.yaml_data import YamlData
 from src.game.globals import DATA_PREFIX
+from src.controller.state_engine import StateCalculationEngine
 
 
 class GOAPGoalManager:
@@ -32,6 +33,9 @@ class GOAPGoalManager:
         
         self.config_data = YamlData(config_file)
         self._load_configuration()
+        
+        # Initialize state calculation engine for computed states
+        self.state_engine = StateCalculationEngine()
         
     def _load_configuration(self) -> None:
         """Load goal templates and rules from YAML configuration."""
@@ -104,10 +108,21 @@ class GOAPGoalManager:
             'xp_percentage': xp_percentage,
             'is_on_cooldown': is_on_cooldown,
             
+            # Skill levels for crafting viability checks
+            'mining_level': char_data.get('mining_level', 1),
+            'woodcutting_level': char_data.get('woodcutting_level', 1),
+            'fishing_level': char_data.get('fishing_level', 1),
+            'weaponcrafting_level': char_data.get('weaponcrafting_level', 1),
+            'gearcrafting_level': char_data.get('gearcrafting_level', 1),
+            'jewelrycrafting_level': char_data.get('jewelrycrafting_level', 1),
+            'cooking_level': char_data.get('cooking_level', 1),
+            'alchemy_level': char_data.get('alchemy_level', 1),
+            
             # Default state flags (may be overridden by rules)
             'has_hunted_monsters': False,
             'monsters_available': False,
             'monster_present': False,
+            'monster_defeated': False,  # Required by GOAP actions
             'at_target_location': False,
             'has_resources': False,
             'has_materials': False,
@@ -121,17 +136,39 @@ class GOAPGoalManager:
             'equipment_info_known': current_level >= 3,
             'craft_plan_available': False,
             'inventory_updated': False,
-            'equipment_equipped': current_level >= 2,
-            'character_stats_improved': current_level >= 2,
+            'equipment_equipped': False,  # Should be computed based on actual equipment
+            'character_stats_improved': False,  # Should be computed based on equipment improvements
             'map_explored': False,
             'exploration_data_available': False,
             'equipment_analysis_available': False,
             'crafting_opportunities_known': False,
+            'workshops_discovered': False,  # Required by crafting goals
+            'has_crafting_materials': False,  # Required by crafting goals
+            'materials_sufficient': False,  # Required by crafting goals
+            'need_crafting_materials': current_level >= 2,  # Need materials for crafting at level 2+
+            'recipe_known': False,  # Will be set by lookup_item_info action
+            'resource_found': False,  # Will be set by find_resources action
+            'has_better_weapon': False,  # Required by upgrade goals
+            'has_better_armor': False,  # Required by upgrade goals
+            'has_complete_equipment_set': False,  # Required by equipment goals
+            'all_slots_equipped': False,  # Required by equipment goals
+            'need_workshop_discovery': current_level >= 2,  # Need workshops at level 2+
+            'need_combat': current_level < 40,  # Need combat XP until max level
+            'need_equipment': current_level < 10,  # Need better equipment at low levels
+            'need_resources': current_level < 15,  # Need resources for crafting
         }
         
         # Apply configuration-driven state calculation rules
         calculated_state = self._apply_state_calculation_rules(base_state)
         state.update(calculated_state)
+        
+        # Apply state engine computed states (preserve existing cooldown calculation)
+        current_cooldown_state = state.get('is_on_cooldown')
+        computed_state = self.state_engine.calculate_derived_state(state, self.thresholds)
+        # Don't override existing cooldown calculation with state engine
+        if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
+            computed_state['is_on_cooldown'] = current_cooldown_state
+        state.update(computed_state)
         
         return state
     
@@ -293,6 +330,9 @@ class GOAPGoalManager:
         """
         Select the most appropriate goal based on current state and priority rules.
         
+        Uses probabilistic selection for XP-gaining goals (combat and crafting) to ensure
+        balanced progression between both activities.
+        
         Args:
             current_state: Current world state
             available_goals: Optional list to restrict goal selection
@@ -303,12 +343,186 @@ class GOAPGoalManager:
         if available_goals is None:
             available_goals = list(self.goal_templates.keys())
         
+        # First check emergency and maintenance goals (non-probabilistic)
+        emergency_goal = self._select_emergency_goal(current_state, available_goals)
+        if emergency_goal:
+            return emergency_goal
+        
+        # Then try probabilistic XP goal selection for balanced progression
+        xp_goal = self._select_xp_goal_probabilistically(current_state, available_goals)
+        if xp_goal:
+            return xp_goal
+        
+        # Fallback to standard priority-based selection for other goals
+        return self._select_standard_goal(current_state, available_goals)
+    
+    def _select_emergency_goal(self, current_state: Dict[str, Any], 
+                              available_goals: List[str]) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """Select emergency and maintenance goals with highest priority."""
+        emergency_categories = ['emergency', 'maintenance']
+        
+        for category_name in emergency_categories:
+            if category_name not in self.goal_selection_rules:
+                continue
+                
+            for rule in self.goal_selection_rules[category_name]:
+                if self._check_goal_condition(rule.get('condition', {}), current_state):
+                    goal_name = rule.get('goal')
+                    if goal_name in available_goals:
+                        goal_config = self.goal_templates.get(goal_name)
+                        if goal_config:
+                            priority = rule.get('priority', 0)
+                            self.logger.info(f"🚨 Selected emergency goal '{goal_name}' (priority {priority}) "
+                                           f"from category '{category_name}'")
+                            return (goal_name, goal_config)
+        return None
+    
+    def _select_xp_goal_probabilistically(self, current_state: Dict[str, Any], 
+                                         available_goals: List[str]) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """
+        Select XP-gaining goals probabilistically based on GOAP weights.
+        
+        Balances combat and crafting activities unless limited by conditions:
+        - Crafting skill advancement limited by current character level
+        - No viable monsters available for combat
+        """
+        import random
+        
+        # Check if character is safe and can perform XP activities
+        if not current_state.get('character_safe', False) or not current_state.get('character_alive', False):
+            return None
+        
+        # Identify XP-gaining goals with their weights and viability
+        xp_goals = []
+        
+        # Combat goals
+        combat_goals = ['hunt_monsters']
+        for goal_name in combat_goals:
+            if goal_name in available_goals and self._is_combat_viable(current_state):
+                # Balanced weight for equal probability with crafting
+                weight = 2.5
+                xp_goals.append((goal_name, weight, 'combat'))
+        
+        # Crafting goals - check each crafting skill
+        crafting_skills = ['weaponcrafting', 'gearcrafting', 'jewelrycrafting', 'cooking', 'alchemy']
+        viable_crafting_skills = []
+        for skill in crafting_skills:
+            if self._is_crafting_skill_viable(skill, current_state):
+                viable_crafting_skills.append(skill)
+        
+        # Add crafting goals with weight adjusted for balance
+        # Total crafting weight should equal combat weight for 50/50 balance
+        if viable_crafting_skills:
+            # Distribute weight evenly among viable crafting skills
+            crafting_weight_per_skill = 2.5 / len(viable_crafting_skills)
+            
+            for skill in viable_crafting_skills:
+                skill_goal_name = f"skill_{skill}_progression"
+                xp_goals.append((skill_goal_name, crafting_weight_per_skill, 'crafting'))
+        
+        if not xp_goals:
+            return None
+        
+        # Calculate total weight for probabilistic selection
+        total_weight = sum(weight for _, weight, _ in xp_goals)
+        
+        # Weighted random selection
+        random_value = random.uniform(0, total_weight)
+        cumulative_weight = 0
+        
+        for goal_name, weight, goal_type in xp_goals:
+            cumulative_weight += weight
+            if random_value <= cumulative_weight:
+                # For crafting skills, use existing goal templates or create dynamic goal
+                if goal_type == 'crafting':
+                    # Use existing crafting-related goals from goal_templates
+                    crafting_goal_mappings = {
+                        'skill_weaponcrafting_progression': 'upgrade_weapon',
+                        'skill_gearcrafting_progression': 'upgrade_armor', 
+                        'skill_jewelrycrafting_progression': 'complete_equipment_set',
+                        'skill_cooking_progression': 'gather_crafting_materials',
+                        'skill_alchemy_progression': 'gather_crafting_materials'
+                    }
+                    mapped_goal = crafting_goal_mappings.get(goal_name, 'gather_crafting_materials')
+                    goal_config = self.goal_templates.get(mapped_goal)
+                    if goal_config:
+                        self.logger.info(f"🎯 Probabilistically selected crafting goal '{mapped_goal}' "
+                                       f"(weight {weight}, type {goal_type})")
+                        return (mapped_goal, goal_config)
+                else:
+                    # Combat goal
+                    goal_config = self.goal_templates.get(goal_name)
+                    if goal_config:
+                        self.logger.info(f"⚔️ Probabilistically selected combat goal '{goal_name}' "
+                                       f"(weight {weight}, type {goal_type})")
+                        return (goal_name, goal_config)
+        
+        return None
+    
+    def _is_combat_viable(self, current_state: Dict[str, Any]) -> bool:
+        """Check if combat is viable based on character state and monster availability."""
+        # Basic combat requirements
+        if not current_state.get('can_attack', False):
+            return False
+        
+        if current_state.get('is_on_cooldown', False):
+            return False
+        
+        character_level = current_state.get('character_level', 1)
+        if character_level < 1:  # Safety check
+            return False
+        
+        # Enhanced viability check: look for viable monsters in knowledge base
+        # If we have learned about monsters with poor success rates, combat may not be viable
+        # This integrates with the knowledge base to make informed decisions
+        
+        # For now, combat is generally viable unless we have evidence it's not
+        # The knowledge base contains combat results that can inform this decision
+        
+        # Future enhancement: Access knowledge base here to check:
+        # - Are there any known monsters with reasonable success rates?
+        # - Have we learned about monsters that are too dangerous?
+        # - Do we need to upgrade equipment before combat becomes viable again?
+        
+        return True
+    
+    def _is_crafting_skill_viable(self, skill: str, current_state: Dict[str, Any]) -> bool:
+        """
+        Check if crafting skill advancement is viable.
+        
+        Crafting skills are limited by character level - can't advance crafting skills
+        beyond current character level.
+        """
+        character_level = current_state.get('character_level', 1)
+        
+        # Get current skill level from character state
+        skill_level_key = f'{skill}_level'
+        current_skill_level = current_state.get(skill_level_key, 1)
+        
+        # Can't advance crafting skills beyond character level
+        if current_skill_level >= character_level:
+            return False
+        
+        # Check if we have basic requirements for crafting
+        # For most crafting skills, we need to be at workshops and have materials
+        # This is a simplified check - could be enhanced with more specific requirements
+        
+        return True
+    
+    def _select_standard_goal(self, current_state: Dict[str, Any], 
+                             available_goals: List[str]) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """Standard priority-based goal selection for non-XP goals."""
         best_goal = None
         best_priority = -1
         
-        # Check each rule category in priority order
-        for category_name, rules in self.goal_selection_rules.items():
-            for rule in rules:
+        # Check progression and equipment categories
+        standard_categories = ['progression', 'equipment', 'exploration']
+        
+        for category_name in standard_categories:
+            if category_name not in self.goal_selection_rules:
+                continue
+                
+            for rule in self.goal_selection_rules[category_name]:
                 if self._check_goal_condition(rule.get('condition', {}), current_state):
                     goal_name = rule.get('goal')
                     priority = rule.get('priority', 0)
@@ -320,11 +534,11 @@ class GOAPGoalManager:
                             best_priority = priority
                             
                             # Log goal selection reasoning
-                            self.logger.info(f"🎯 Selected goal '{goal_name}' (priority {priority}) "
+                            self.logger.info(f"🎯 Selected standard goal '{goal_name}' (priority {priority}) "
                                            f"from category '{category_name}'")
                             break
             
-            # If we found a goal in this category, use it (categories are in priority order)
+            # If we found a goal in this category, use it
             if best_goal:
                 break
         

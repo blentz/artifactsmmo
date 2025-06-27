@@ -90,7 +90,7 @@ class KnowledgeBase(GoapData):
         Learn from discovering content at a location (integrates with MapState).
         
         Args:
-            content_type: Type of content ('monster', 'resource', 'npc', 'workshop', 'facility', 'item')
+            content_type: Type of content ('monster', 'resource', 'npc', 'workshop', 'skill_station', 'facility', 'item')
             content_code: Code/identifier of the content
             x: X coordinate
             y: Y coordinate  
@@ -105,6 +105,9 @@ class KnowledgeBase(GoapData):
         elif content_type == 'npc':
             self._learn_npc_discovery(content_code, x, y, content_data)
         elif content_type == 'workshop':
+            self._learn_workshop_discovery(content_code, x, y, content_data)
+        elif content_type == 'skill_station':
+            # Treat skill_station as a specialized workshop
             self._learn_workshop_discovery(content_code, x, y, content_data)
         elif content_type == 'facility':
             self._learn_facility_discovery(content_code, x, y, content_data)
@@ -194,9 +197,36 @@ class KnowledgeBase(GoapData):
             combat_record['damage_taken'] = hp_before - hp_after
             
         if fight_data:
+            # Convert DropSchema objects to serializable dictionaries
+            drops_data = []
+            drops = fight_data.get('drops')
+            if drops is not None:
+                for drop in drops:
+                    if drop is None:
+                        continue  # Skip None entries
+                    elif hasattr(drop, '__dict__') and hasattr(drop, 'code'):
+                        # Convert DropSchema object to dict, filtering out non-serializable fields
+                        drop_dict = {
+                            'code': getattr(drop, 'code', None),
+                            'quantity': getattr(drop, 'quantity', 0)
+                        }
+                        drops_data.append(drop_dict)
+                    elif isinstance(drop, dict):
+                        # Already a dict, just keep essential fields
+                        drops_data.append({
+                            'code': drop.get('code'),
+                            'quantity': drop.get('quantity', 0)
+                        })
+                    elif isinstance(drop, str):
+                        # Legacy string format - keep for backward compatibility
+                        drops_data.append(drop)
+                    else:
+                        # Unknown format, try to store as-is
+                        drops_data.append(drop)
+            
             combat_record.update({
                 'turns': fight_data.get('turns', 0),
-                'drops': fight_data.get('drops', []),
+                'drops': drops_data,
                 'gold_gained': fight_data.get('gold', 0)
             })
             
@@ -504,3 +534,205 @@ class KnowledgeBase(GoapData):
         item_info = self.data['items'][item_code]
         item_info['last_seen'] = datetime.now().isoformat()
         item_info['discovery_count'] += 1
+    
+    def learn_resource_capabilities(self, resource_code: str, drops: List[Dict]) -> None:
+        """
+        Learn about resource drop capabilities from API data.
+        
+        Args:
+            resource_code: Resource code (e.g., "ash_tree")
+            drops: List of drop data from capability analyzer
+        """
+        if 'resource_capabilities' not in self.data:
+            self.data['resource_capabilities'] = {}
+        
+        self.data['resource_capabilities'][resource_code] = {
+            'resource_code': resource_code,
+            'drops': drops,
+            'last_analyzed': datetime.now().isoformat()
+        }
+        
+        self.logger.info(f"💾 Learned resource capabilities: {resource_code} → {len(drops)} drops")
+        self.save()
+    
+    def learn_item_capabilities(self, item_code: str, capabilities: Dict) -> None:
+        """
+        Learn about item capabilities including effects and crafting requirements.
+        
+        Args:
+            item_code: Item code (e.g., "wooden_staff")
+            capabilities: Item capability data from analyzer
+        """
+        if 'item_capabilities' not in self.data:
+            self.data['item_capabilities'] = {}
+        
+        self.data['item_capabilities'][item_code] = {
+            **capabilities,
+            'last_analyzed': datetime.now().isoformat()
+        }
+        
+        self.logger.info(f"💾 Learned item capabilities: {item_code}")
+        self.save()
+    
+    def learn_upgrade_chain(self, resource_code: str, target_item_code: str, chain_analysis: Dict) -> None:
+        """
+        Learn about viable upgrade chains for multi-step planning.
+        
+        Args:
+            resource_code: Starting resource
+            target_item_code: Target item
+            chain_analysis: Complete chain analysis data
+        """
+        if 'upgrade_chains' not in self.data:
+            self.data['upgrade_chains'] = {}
+        
+        chain_key = f"{resource_code}→{target_item_code}"
+        self.data['upgrade_chains'][chain_key] = {
+            'resource': resource_code,
+            'target': target_item_code,
+            'analysis': chain_analysis,
+            'last_analyzed': datetime.now().isoformat()
+        }
+        
+        self.logger.info(f"💾 Learned upgrade chain: {chain_key}")
+        self.save()
+    
+    def learn_weapon_comparison(self, current_weapon: str, potential_upgrade: str, comparison: Dict) -> None:
+        """
+        Learn about weapon upgrade comparisons for decision making.
+        
+        Args:
+            current_weapon: Current weapon code
+            potential_upgrade: Potential upgrade weapon code
+            comparison: Comparison analysis data
+        """
+        if 'weapon_comparisons' not in self.data:
+            self.data['weapon_comparisons'] = {}
+        
+        comparison_key = f"{current_weapon}→{potential_upgrade}"
+        self.data['weapon_comparisons'][comparison_key] = {
+            'current': current_weapon,
+            'upgrade': potential_upgrade,
+            'comparison': comparison,
+            'last_analyzed': datetime.now().isoformat()
+        }
+        
+        self.logger.info(f"💾 Learned weapon comparison: {comparison_key}")
+        self.save()
+    
+    def get_known_upgrade_chains(self, resource_code: str = None, target_item: str = None) -> List[Dict]:
+        """
+        Get known upgrade chains, optionally filtered by resource or target.
+        
+        Args:
+            resource_code: Filter by starting resource
+            target_item: Filter by target item
+            
+        Returns:
+            List of known upgrade chain data
+        """
+        if 'upgrade_chains' not in self.data:
+            return []
+        
+        chains = []
+        for chain_key, chain_data in self.data['upgrade_chains'].items():
+            if resource_code and chain_data['resource'] != resource_code:
+                continue
+            if target_item and chain_data['target'] != target_item:
+                continue
+            chains.append(chain_data)
+        
+        return chains
+    
+    def get_weapon_upgrade_recommendation(self, current_weapon: str) -> Optional[Dict]:
+        """
+        Get learned weapon upgrade recommendations for current weapon.
+        
+        Args:
+            current_weapon: Current weapon code
+            
+        Returns:
+            Best upgrade recommendation or None
+        """
+        if 'weapon_comparisons' not in self.data:
+            return None
+        
+        best_upgrade = None
+        best_improvement = 0
+        
+        for comparison_key, comparison_data in self.data['weapon_comparisons'].items():
+            if comparison_data['current'] == current_weapon:
+                comparison = comparison_data['comparison']
+                if comparison.get('recommendUpgrade', False):
+                    improvement = comparison.get('attack_improvement', 0)
+                    if improvement > best_improvement:
+                        best_improvement = improvement
+                        best_upgrade = comparison_data
+        
+        return best_upgrade
+
+    def save(self) -> None:
+        """
+        Override save method to sanitize DropSchema objects before saving.
+        """
+        try:
+            # Sanitize the data before saving to remove any DropSchema objects
+            self._sanitize_data()
+            super().save()
+        except Exception as e:
+            self.logger.error(f"Failed to save knowledge base: {e}")
+            raise
+
+    def _sanitize_data(self) -> None:
+        """
+        Recursively sanitize data to convert any DropSchema objects to dictionaries.
+        """
+        self.data = self._sanitize_object(self.data)
+
+    def _sanitize_object(self, obj):
+        """
+        Recursively sanitize an object to remove DropSchema instances and other non-serializable objects.
+        """
+        if obj is None:
+            return obj
+        elif hasattr(obj, '__class__'):
+            class_name = str(obj.__class__)
+            # Check for any API client objects that can't be serialized
+            if any(schema in class_name for schema in ['DropSchema', 'Schema', 'Response']):
+                if 'DropSchema' in class_name:
+                    # Convert DropSchema to dict
+                    return {
+                        'code': getattr(obj, 'code', None),
+                        'quantity': getattr(obj, 'quantity', 0)
+                    }
+                else:
+                    # For other schemas, try to extract basic attributes or skip
+                    try:
+                        if hasattr(obj, 'to_dict'):
+                            return obj.to_dict()
+                        elif hasattr(obj, '__dict__'):
+                            # Extract only basic attributes
+                            basic_attrs = {}
+                            for attr, value in obj.__dict__.items():
+                                if not attr.startswith('_') and isinstance(value, (str, int, float, bool, type(None))):
+                                    basic_attrs[attr] = value
+                            return basic_attrs if basic_attrs else None
+                        else:
+                            return None
+                    except Exception:
+                        return None
+        
+        if isinstance(obj, dict):
+            sanitized = {}
+            for key, value in obj.items():
+                sanitized_value = self._sanitize_object(value)
+                if sanitized_value is not None or value is None:
+                    sanitized[key] = sanitized_value
+            return sanitized
+        elif isinstance(obj, list):
+            return [self._sanitize_object(item) for item in obj if self._sanitize_object(item) is not None or item is None]
+        elif isinstance(obj, tuple):
+            sanitized_items = [self._sanitize_object(item) for item in obj if self._sanitize_object(item) is not None or item is None]
+            return tuple(sanitized_items)
+        else:
+            return obj

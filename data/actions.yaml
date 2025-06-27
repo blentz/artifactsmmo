@@ -93,6 +93,7 @@ actions:
     reactions:
       at_resource_location: true
       resource_location_known: true
+      resource_found: true
     weight: 2.0
     description: "Find nearby resource locations for gathering"
     
@@ -109,17 +110,6 @@ actions:
     weight: 3.0
     description: "Craft items at a workshop using available materials"
     
-  find_workshop:
-    conditions:
-      character_alive: true
-      character_safe: true
-      need_equipment: true
-      at_workshop: false
-    reactions:
-      at_workshop: true
-      workshop_location_known: true
-    weight: 1.5
-    description: "Find a workshop location for crafting"
     
   lookup_item_info:
     conditions:
@@ -129,6 +119,7 @@ actions:
     reactions:
       equipment_info_known: true
       craft_plan_available: true
+      recipe_known: true
     weight: 1.0
     description: "Look up item information and crafting recipes"
     
@@ -141,6 +132,8 @@ actions:
     reactions:
       equipment_equipped: true
       character_stats_improved: true
+      has_complete_equipment_set: true
+      all_slots_equipped: true
     weight: 1.0
     description: "Equip an item from inventory to an equipment slot"
     
@@ -178,6 +171,60 @@ actions:
       crafting_opportunities_known: true
     weight: 2.0
     description: "Analyze nearby resources for equipment crafting opportunities"
+    
+  # Equipment progression actions
+  find_workshops:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_workshop_discovery: true
+      at_workshop: false
+    reactions:
+      workshops_discovered: true
+      at_workshop: false
+      workshop_location_known: true
+    weight: 2.5
+    description: "Find and catalog available crafting workshops"
+    
+  move_to_workshop:
+    conditions:
+      character_alive: true
+      character_safe: true
+      workshop_location_known: true
+      at_workshop: false
+      can_move: true
+    reactions:
+      at_workshop: true
+      at_target_location: true
+    weight: 1.5
+    description: "Move to a known workshop location for crafting"
+    
+  move_to_resource:
+    conditions:
+      character_alive: true
+      character_safe: true
+      resource_location_known: true
+      at_resource_location: false
+      can_move: true
+    reactions:
+      at_resource_location: true
+      at_target_location: true
+    weight: 1.5
+    description: "Move to a known resource location for gathering"
+    
+  # Missing crafting-related actions that are implemented but not in GOAP
+  gather_crafting_materials:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_crafting_materials: true
+      workshops_discovered: true
+    reactions:
+      has_crafting_materials: true
+      materials_sufficient: true
+      inventory_updated: true
+    weight: 2.5
+    description: "Collect resources needed for equipment crafting"
 
 # Goal configurations for common scenarios
 goal_templates:
@@ -221,7 +268,7 @@ goal_templates:
       character_alive: true
       equipment_equipped: true
     strategy:
-      priority_actions: ["wait", "analyze_resources", "explore_map", "lookup_item_info", "find_resources", "gather_resources", "find_workshop", "craft_item", "equip_item"]
+      priority_actions: ["wait", "analyze_resources", "explore_map", "lookup_item_info", "find_resources", "gather_resources", "craft_item", "equip_item"]
       equipment_types: ["weapon", "armor"]
       max_search_radius: 25
       exploration_radius: 20

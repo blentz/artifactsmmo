@@ -9,6 +9,17 @@ action_classes:
   map_lookup: "src.controller.actions.map_lookup.MapLookupAction"
   find_monsters: "src.controller.actions.find_monsters.FindMonstersAction"
   wait: "src.controller.actions.wait.WaitAction"
+  gather_resources: "src.controller.actions.gather_resources.GatherResourcesAction"
+  find_resources: "src.controller.actions.find_resources.FindResourcesAction"
+  craft_item: "src.controller.actions.craft_item.CraftItemAction"
+  lookup_item_info: "src.controller.actions.lookup_item_info.LookupItemInfoAction"
+  equip_item: "src.controller.actions.equip_item.EquipItemAction"
+  unequip_item: "src.controller.actions.unequip_item.UnequipItemAction"
+  explore_map: "src.controller.actions.explore_map.ExploreMapAction"
+  analyze_resources: "src.controller.actions.analyze_resources.AnalyzeResourcesAction"
+  find_workshops: "src.controller.actions.find_workshops.FindWorkshopsAction"
+  move_to_workshop: "src.controller.actions.move_to_workshop.MoveToWorkshopAction"
+  move_to_resource: "src.controller.actions.move_to_resource.MoveToResourceAction"
 
 action_configurations:
   # Built-in actions using default factory registration
@@ -31,6 +42,67 @@ action_configurations:
   find_monsters:
     type: "builtin"
     description: "Find nearby monsters suitable for combat"
+    
+  wait:
+    type: "builtin"
+    description: "Wait for cooldown to expire"
+    
+  gather_resources:
+    type: "builtin"
+    description: "Gather resources from the environment"
+    
+  find_resources:
+    type: "builtin"
+    description: "Find resource locations on the map"
+    
+  craft_item:
+    type: "builtin"
+    description: "Craft items at workshops using materials"
+    
+  lookup_item_info:
+    type: "builtin"
+    description: "Look up item information and crafting recipes"
+    
+  equip_item:
+    type: "builtin"
+    description: "Equip an item from inventory"
+    
+  unequip_item:
+    type: "builtin"
+    description: "Unequip an item to inventory"
+    
+  explore_map:
+    type: "builtin"
+    description: "Explore the map to discover content"
+    
+  analyze_resources:
+    type: "builtin"
+    description: "Analyze nearby resources for crafting opportunities"
+    
+  bootstrap_equipment_workflow:
+    type: "composite"
+    description: "Complete equipment bootstrap workflow for new characters"
+    
+  basic_weapon_upgrade:
+    type: "composite"
+    description: "Basic weapon upgrade workflow for level 2-3 characters"
+    
+  # Equipment progression action configurations
+  find_workshops:
+    type: "builtin"
+    description: "Find and catalog crafting workshops using find_resources action"
+          
+  move_to_workshop:
+    type: "builtin"
+    description: "Move character to a known workshop location"
+          
+  move_to_resource:
+    type: "builtin"
+    description: "Move character to a known resource location"
+    
+  gather_crafting_materials:
+    type: "composite"
+    description: "Gather materials needed for equipment crafting"
 
   # Custom/extensible actions using YAML configuration
   hunt:
@@ -151,3 +223,259 @@ composite_actions:
           known_monster_found: false
         params:
           search_radius: "${action_data.search_radius:15}"
+          
+  # Equipment progression composite workflows
+  upgrade_weapon_workflow:
+    type: "composite"
+    description: "Complete weapon upgrade workflow: analyze, gather, craft, equip"
+    steps:
+      - name: "analyze_equipment_needs"
+        action: "analyze_resources"
+        required: true
+        params:
+          search_radius: "${action_data.search_radius:25}"
+          equipment_type: "weapon"
+          character_level: "${context.character_level}"
+          
+      - name: "discover_workshops"
+        action: "find_workshops"
+        required: true
+        conditions:
+          workshops_needed: true
+        params:
+          search_radius: "${action_data.search_radius:25}"
+          
+      - name: "gather_materials"
+        action: "gather_crafting_materials"
+        required: true
+        conditions:
+          materials_needed: true
+        params:
+          target_item_type: "weapon"
+          search_radius: "${action_data.search_radius:25}"
+          
+      - name: "move_to_workshop"
+        action: "move_to_workshop"
+        required: true
+        conditions:
+          materials_ready: true
+        params:
+          workshop_type: "weaponcrafting"
+          
+      - name: "craft_weapon"
+        action: "craft_item"
+        required: true
+        conditions:
+          at_workshop: true
+        params:
+          char_name: "${context.character_name}"
+          item_code: "${action_data.target_weapon}"
+          quantity: 1
+          
+      - name: "equip_weapon"
+        action: "equip_item"
+        required: true
+        conditions:
+          weapon_crafted: true
+        params:
+          char_name: "${context.character_name}"
+          item_code: "${action_data.target_weapon}"
+          slot: "weapon"
+          
+  upgrade_armor_workflow:
+    type: "composite"
+    description: "Complete armor upgrade workflow: analyze, gather, craft, equip"
+    steps:
+      - name: "analyze_equipment_needs"
+        action: "analyze_resources"
+        required: true
+        params:
+          search_radius: "${action_data.search_radius:25}"
+          equipment_type: "armor"
+          character_level: "${context.character_level}"
+          
+      - name: "discover_workshops"
+        action: "find_workshops"
+        required: true
+        conditions:
+          workshops_needed: true
+        params:
+          search_radius: "${action_data.search_radius:25}"
+          
+      - name: "gather_materials"
+        action: "gather_crafting_materials"
+        required: true
+        conditions:
+          materials_needed: true
+        params:
+          target_item_type: "armor"
+          search_radius: "${action_data.search_radius:25}"
+          
+      - name: "move_to_workshop"
+        action: "move_to_workshop"
+        required: true
+        conditions:
+          materials_ready: true
+        params:
+          workshop_type: "gearcrafting"
+          
+      - name: "craft_armor"
+        action: "craft_item"
+        required: true
+        conditions:
+          at_workshop: true
+        params:
+          char_name: "${context.character_name}"
+          item_code: "${action_data.target_armor}"
+          quantity: 1
+          
+      - name: "equip_armor"
+        action: "equip_item"
+        required: true
+        conditions:
+          armor_crafted: true
+        params:
+          char_name: "${context.character_name}"
+          item_code: "${action_data.target_armor}"
+          slot: "${action_data.target_slot}"
+          
+  gather_crafting_materials:
+    type: "composite"
+    description: "Gather materials needed for equipment crafting"
+    steps:
+      - name: "lookup_recipe"
+        action: "lookup_item_info"
+        required: true
+        params:
+          item_code: "${action_data.target_item_type}"
+          
+      - name: "find_material_sources"
+        action: "find_resources"
+        required: true
+        conditions:
+          recipe_known: true
+        params:
+          resource_types: "${action_data.required_materials}"
+          search_radius: "${action_data.search_radius:25}"
+          character_level: "${context.character_level}"
+          
+      - name: "move_to_resources"
+        action: "move_to_resource"
+        required: true
+        conditions:
+          resource_found: true
+        params:
+          resource_x: "${action_data.resource_x}"
+          resource_y: "${action_data.resource_y}"
+          
+      - name: "gather_materials"
+        action: "gather_resources"
+        required: true
+        conditions:
+          at_resource_location: true
+        params:
+          char_name: "${context.character_name}"
+          target_resource: "${action_data.material_type}"
+
+  # Complete equipment progression workflow
+  bootstrap_equipment_workflow:
+    type: "composite"
+    description: "Complete bootstrap workflow for new characters: discover → gather → craft → equip"
+    steps:
+      - name: "discover_workshops"
+        action: "find_workshops"
+        required: true
+        params:
+          search_radius: "${action_data.search_radius:30}"
+          workshop_type: "any"
+          
+      - name: "analyze_equipment_needs"
+        action: "analyze_resources"
+        required: true
+        conditions:
+          workshops_discovered: true
+        params:
+          search_radius: "${action_data.search_radius:25}"
+          equipment_focus: true
+          character_level: "${context.character_level}"
+          
+      - name: "gather_weapon_materials"
+        action: "gather_crafting_materials"
+        required: true
+        conditions:
+          equipment_analysis_available: true
+        params:
+          target_item_type: "weapon"
+          priority_materials: ["copper", "ash_wood"]
+          search_radius: "${action_data.search_radius:25}"
+          
+      - name: "craft_weapon"
+        action: "upgrade_weapon_workflow"
+        required: true
+        conditions:
+          has_crafting_materials: true
+        params:
+          target_weapon_level: "${context.character_level}"
+          
+      - name: "gather_armor_materials"
+        action: "gather_crafting_materials"
+        required: false
+        conditions:
+          weapon_crafted: true
+        params:
+          target_item_type: "armor"
+          priority_materials: ["copper", "ash_wood"]
+          
+      - name: "craft_armor"
+        action: "upgrade_armor_workflow"
+        required: false
+        conditions:
+          has_armor_materials: true
+        params:
+          target_armor_level: "${context.character_level}"
+          
+  # Simplified equipment upgrade workflows for individual pieces
+  basic_weapon_upgrade:
+    type: "composite"
+    description: "Simplified weapon upgrade for level 2-3 characters"
+    steps:
+      - name: "find_workshops"
+        action: "find_workshops"
+        required: true
+        params:
+          workshop_type: "weaponcrafting"
+          search_radius: 25
+          
+      - name: "gather_basic_materials"
+        action: "find_resources"
+        required: true
+        conditions:
+          workshops_discovered: true
+        params:
+          resource_types: ["copper", "ash_wood"]
+          search_radius: 20
+          
+      - name: "collect_materials"
+        action: "gather_resources"
+        required: true
+        conditions:
+          resource_location_known: true
+        params:
+          char_name: "${context.character_name}"
+          
+      - name: "move_to_weaponcrafting"
+        action: "move_to_workshop"
+        required: true
+        conditions:
+          has_resources: true
+        params:
+          workshop_type: "weaponcrafting"
+          
+      - name: "craft_weapon"
+        action: "craft_item"
+        required: true
+        conditions:
+          at_workshop: true
+        params:
+          char_name: "${context.character_name}"
+          item_code: "copper_dagger"  # Basic weapon for level 2

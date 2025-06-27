@@ -10,9 +10,22 @@ data:
       efficiency_ratings: {}
       encounter_count: 1
       facility_type: unknown
-      first_discovered: '2025-06-25T23:07:55.620721'
-      last_seen: '2025-06-25T23:07:55.620733'
+      first_discovered: '2025-06-26T23:29:37.045936'
+      last_seen: '2025-06-26T23:29:37.045945'
       name: bank
+      services: []
+      usage_count: 0
+      usage_patterns:
+        avg_wait_time: 0
+        peak_hours: []
+    grand_exchange:
+      code: grand_exchange
+      efficiency_ratings: {}
+      encounter_count: 1
+      facility_type: unknown
+      first_discovered: '2025-06-26T23:29:43.169682'
+      last_seen: '2025-06-26T23:29:43.169692'
+      name: grand_exchange
       services: []
       usage_count: 0
       usage_patterns:
@@ -20,177 +33,606 @@ data:
         peak_hours: []
   items: {}
   learning_stats:
-    last_learning_session: null
+    last_learning_session: '2025-06-26T23:28:27.444900'
     learning_version: '2.0'
-    total_combats: 0
-    unique_facilities_found: 1
+    total_combats: 15
+    unique_facilities_found: 2
     unique_items_discovered: 0
-    unique_monsters_fought: 5
+    unique_monsters_fought: 10
     unique_npcs_met: 0
-    unique_workshops_found: 3
+    unique_workshops_found: 7
   monsters:
     blue_slime:
       code: blue_slime
       combat_results: []
+      encounter_count: 13
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T19:12:16.080314'
+      last_seen: '2025-06-26T23:52:44.022163'
+      name: blue_slime
+    chicken:
+      code: chicken
+      combat_results:
+      - character_hp_after: 73
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 52
+        drops: []
+        gold_gained: 1
+        result: win
+        timestamp: '2025-06-26T19:14:45.509748'
+        turns: 27
+        xp_gained: 12
+      - character_hp_after: 69
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 56
+        drops: []
+        gold_gained: 0
+        result: win
+        timestamp: '2025-06-26T19:16:51.040443'
+        turns: 29
+        xp_gained: 12
+      - character_hp_after: 69
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 56
+        drops:
+        - code: raw_chicken
+          quantity: 1
+        gold_gained: 1
+        result: win
+        timestamp: '2025-06-26T23:04:15.947639'
+        turns: 29
+        xp_gained: 12
+      - character_hp_after: 73
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 52
+        drops:
+        - code: egg
+          quantity: 1
+        gold_gained: 1
+        result: win
+        timestamp: '2025-06-26T23:08:05.177855'
+        turns: 27
+        xp_gained: 12
+      - character_hp_after: 69
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 56
+        drops:
+        - code: raw_chicken
+          quantity: 1
+        gold_gained: 0
+        result: win
+        timestamp: '2025-06-26T23:22:34.893327'
+        turns: 29
+        xp_gained: 12
+      - character_hp_after: 69
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 56
+        drops: []
+        gold_gained: 3
+        result: win
+        timestamp: '2025-06-26T23:25:59.747227'
+        turns: 29
+        xp_gained: 12
+      - character_hp_after: 69
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 56
+        drops:
+        - code: feather
+          quantity: 1
+        gold_gained: 2
+        result: win
+        timestamp: '2025-06-26T23:28:27.444888'
+        turns: 29
+        xp_gained: 12
+      encounter_count: 4
+      estimated_damage: 54
+      estimated_hp: null
+      estimated_level: 2
+      first_discovered: '2025-06-26T19:14:45.509739'
+      last_seen: '2025-06-26T23:28:21.308339'
+      locations: []
+      name: chicken
+    cow:
+      code: cow
+      combat_results: []
+      encounter_count: 8
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T19:12:15.592710'
+      last_seen: '2025-06-26T23:52:40.061422'
+      name: cow
+    cyclops:
+      code: cyclops
+      combat_results: []
       encounter_count: 2
       estimated_damage: null
       estimated_hp: null
       estimated_level: null
-      first_discovered: '2025-06-25T23:02:55.104527'
-      last_seen: '2025-06-25T23:02:57.666264'
-      name: blue_slime
-    green_slime:
-      code: green_slime
+      first_discovered: '2025-06-26T23:29:57.871305'
+      last_seen: '2025-06-26T23:30:07.584357'
+      name: cyclops
+    goblin:
+      code: goblin
       combat_results: []
-      encounter_count: 3
+      encounter_count: 2
       estimated_damage: null
       estimated_hp: null
       estimated_level: null
-      first_discovered: '2025-06-25T23:02:47.262993'
-      last_seen: '2025-06-25T23:07:50.604864'
+      first_discovered: '2025-06-26T23:29:49.558014'
+      last_seen: '2025-06-26T23:30:19.069494'
+      name: goblin
+    goblin_wolfrider:
+      code: goblin_wolfrider
+      combat_results: []
+      encounter_count: 2
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T23:29:48.884163'
+      last_seen: '2025-06-26T23:30:18.713050'
+      name: goblin_wolfrider
+    green_slime:
+      code: green_slime
+      combat_results:
+      - character_hp_after: 1
+        character_hp_before: 73
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 72
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T19:12:28.949548'
+        turns: 14
+        xp_gained: 0
+      - character_hp_after: 1
+        character_hp_before: 125
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 124
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T19:13:29.870552'
+        turns: 22
+        xp_gained: 0
+      - character_hp_after: 1
+        character_hp_before: 73
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 72
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T19:15:51.081354'
+        turns: 14
+        xp_gained: 0
+      - character_hp_after: 1
+        character_hp_before: 69
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 68
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T23:03:12.673848'
+        turns: 12
+        xp_gained: 0
+      - character_hp_after: 1
+        character_hp_before: 73
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 72
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T23:12:19.368982'
+        turns: 14
+        xp_gained: 0
+      encounter_count: 14
+      estimated_damage: 81
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T19:12:28.949539'
+      last_seen: '2025-06-26T23:52:44.613608'
+      locations: []
       name: green_slime
+    orc:
+      code: orc
+      combat_results: []
+      encounter_count: 2
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T23:29:57.492789'
+      last_seen: '2025-06-26T23:29:58.234808'
+      name: orc
+    pig:
+      code: pig
+      combat_results: []
+      encounter_count: 1
+      estimated_damage: null
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T23:29:34.466138'
+      last_seen: '2025-06-26T23:29:34.466148'
+      name: pig
     red_slime:
       code: red_slime
       combat_results: []
-      encounter_count: 3
+      encounter_count: 14
       estimated_damage: null
       estimated_hp: null
       estimated_level: null
-      first_discovered: '2025-06-25T23:02:47.447660'
-      last_seen: '2025-06-25T23:07:50.770839'
+      first_discovered: '2025-06-26T19:13:23.281500'
+      last_seen: '2025-06-26T23:52:44.417657'
       name: red_slime
+    unknown:
+      code: unknown
+      combat_results:
+      - character_hp_after: 1
+        character_hp_before: 69
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 68
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T23:07:03.376049'
+        turns: 12
+        xp_gained: 0
+      encounter_count: 0
+      estimated_damage: 68
+      estimated_hp: null
+      estimated_level: null
+      first_discovered: '2025-06-26T23:07:03.376044'
+      locations: []
+      name: unknown
     wolf:
       code: wolf
       combat_results: []
-      encounter_count: 2
+      encounter_count: 13
       estimated_damage: null
       estimated_hp: null
       estimated_level: null
-      first_discovered: '2025-06-25T23:02:55.604155'
-      last_seen: '2025-06-25T23:02:58.730815'
+      first_discovered: '2025-06-26T19:12:16.572710'
+      last_seen: '2025-06-26T23:52:45.171614'
       name: wolf
     yellow_slime:
       code: yellow_slime
-      combat_results: []
-      encounter_count: 2
-      estimated_damage: null
+      combat_results:
+      - character_hp_after: 1
+        character_hp_before: 69
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 68
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T23:24:51.812151'
+        turns: 18
+        xp_gained: 0
+      - character_hp_after: 1
+        character_hp_before: 69
+        character_level: 2
+        damage_dealt: null
+        damage_taken: 68
+        drops: []
+        gold_gained: 0
+        result: loss
+        timestamp: '2025-06-26T23:27:19.194044'
+        turns: 18
+        xp_gained: 0
+      encounter_count: 6
+      estimated_damage: 68
       estimated_hp: null
       estimated_level: null
-      first_discovered: '2025-06-25T23:02:57.852782'
-      last_seen: '2025-06-25T23:07:54.745612'
+      first_discovered: '2025-06-26T23:24:27.176925'
+      last_seen: '2025-06-26T23:52:44.216276'
       name: yellow_slime
   npcs: {}
   resources:
-    alchemy:
-      best_locations: []
-      code: alchemy
-      estimated_skill_required: null
-      estimated_yield: []
-      first_discovered: '2025-06-25T23:02:56.996914'
-      harvest_attempts: 0
-      last_seen: '2025-06-25T23:02:56.996923'
-      name: alchemy
-      successful_harvests: 0
     ash_tree:
       best_locations: []
       code: ash_tree
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:47.633614'
+      first_discovered: '2025-06-26T19:13:23.472233'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:07:52.285640'
+      last_seen: '2025-06-26T23:52:39.150530'
       name: ash_tree
       successful_harvests: 0
-    chicken:
+    bat:
       best_locations: []
-      code: chicken
+      code: bat
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:48.152963'
+      first_discovered: '2025-06-26T23:30:14.159258'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:07:55.293849'
-      name: chicken
+      last_seen: '2025-06-26T23:30:14.159266'
+      name: bat
       successful_harvests: 0
-    cooking:
+    birch_tree:
       best_locations: []
-      code: cooking
+      code: birch_tree
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:48.316617'
+      first_discovered: '2025-06-26T23:29:39.433430'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:07:55.453675'
-      name: cooking
+      last_seen: '2025-06-26T23:29:45.362701'
+      name: birch_tree
+      successful_harvests: 0
+    coal_rocks:
+      best_locations: []
+      code: coal_rocks
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:45.709643'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:45.709651'
+      name: coal_rocks
       successful_harvests: 0
     copper_rocks:
       best_locations: []
       code: copper_rocks
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:55.433988'
+      first_discovered: '2025-06-26T19:12:16.405753'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:02:55.433998'
+      last_seen: '2025-06-26T23:52:41.594332'
       name: copper_rocks
       successful_harvests: 0
-    cow:
+    dead_tree:
       best_locations: []
-      code: cow
+      code: dead_tree
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:54.552898'
+      first_discovered: '2025-06-26T23:30:21.702792'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:02:54.552908'
-      name: cow
+      last_seen: '2025-06-26T23:30:22.409941'
+      name: dead_tree
+      successful_harvests: 0
+    death_knight:
+      best_locations: []
+      code: death_knight
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:10.863259'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:34.546566'
+      name: death_knight
+      successful_harvests: 0
+    flying_serpent:
+      best_locations: []
+      code: flying_serpent
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:44.181759'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:00.160992'
+      name: flying_serpent
+      successful_harvests: 0
+    glowstem:
+      best_locations: []
+      code: glowstem
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:24.665980'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:24.665988'
+      name: glowstem
+      successful_harvests: 0
+    gold_rocks:
+      best_locations: []
+      code: gold_rocks
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:49.215890'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:49.215900'
+      name: gold_rocks
+      successful_harvests: 0
+    gudgeon_fishing_spot:
+      best_locations: []
+      code: gudgeon_fishing_spot
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:37.405777'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:37.405785'
+      name: gudgeon_fishing_spot
+      successful_harvests: 0
+    herbal_merchant:
+      best_locations: []
+      code: herbal_merchant
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:58.553474'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:58.553482'
+      name: herbal_merchant
+      successful_harvests: 0
+    highwayman:
+      best_locations: []
+      code: highwayman
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:02.815564'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:02.815573'
+      name: highwayman
+      successful_harvests: 0
+    iron_rocks:
+      best_locations: []
+      code: iron_rocks
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:53.658508'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:53.658517'
+      name: iron_rocks
+      successful_harvests: 0
+    lich:
+      best_locations: []
+      code: lich
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:22.045817'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:22.045840'
+      name: lich
       successful_harvests: 0
     monsters:
       best_locations: []
       code: monsters
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:54.755432'
+      first_discovered: '2025-06-26T19:12:15.752650'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:02:54.755442'
+      last_seen: '2025-06-26T23:52:40.259229'
       name: monsters
+      successful_harvests: 0
+    mushmush:
+      best_locations: []
+      code: mushmush
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:43.835448'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:51.533745'
+      name: mushmush
+      successful_harvests: 0
+    ogre:
+      best_locations: []
+      code: ogre
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:07.215104'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:07.921854'
+      name: ogre
+      successful_harvests: 0
+    owlbear:
+      best_locations: []
+      code: owlbear
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:32.512915'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:32.856174'
+      name: owlbear
       successful_harvests: 0
     salmon_fishing_spot:
       best_locations: []
       code: salmon_fishing_spot
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:07:53.853750'
+      first_discovered: '2025-06-26T23:29:40.107047'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:07:53.853766'
+      last_seen: '2025-06-26T23:29:40.285809'
       name: salmon_fishing_spot
+      successful_harvests: 0
+    shrimp_fishing_spot:
+      best_locations: []
+      code: shrimp_fishing_spot
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:43.502287'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:29:43.502296'
+      name: shrimp_fishing_spot
+      successful_harvests: 0
+    skeleton:
+      best_locations: []
+      code: skeleton
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:30:10.517420'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:11.202994'
+      name: skeleton
+      successful_harvests: 0
+    spruce_tree:
+      best_locations: []
+      code: spruce_tree
+      estimated_skill_required: null
+      estimated_yield: []
+      first_discovered: '2025-06-26T23:29:45.894724'
+      harvest_attempts: 0
+      last_seen: '2025-06-26T23:30:12.920347'
+      name: spruce_tree
       successful_harvests: 0
     sunflower_field:
       best_locations: []
       code: sunflower_field
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:02:56.149465'
+      first_discovered: '2025-06-26T19:12:17.058581'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:02:56.149476'
+      last_seen: '2025-06-26T23:52:42.346048'
       name: sunflower_field
       successful_harvests: 0
-    woodcutting:
+    vampire:
       best_locations: []
-      code: woodcutting
+      code: vampire
       estimated_skill_required: null
       estimated_yield: []
-      first_discovered: '2025-06-25T23:07:54.199186'
+      first_discovered: '2025-06-26T23:30:34.204505'
       harvest_attempts: 0
-      last_seen: '2025-06-25T23:07:54.199196'
-      name: woodcutting
+      last_seen: '2025-06-26T23:30:34.891103'
+      name: vampire
       successful_harvests: 0
   workshops:
+    alchemy:
+      available_recipes: []
+      best_times: []
+      code: alchemy
+      craft_skill: unknown
+      efficiency_ratings: {}
+      encounter_count: 8
+      first_discovered: '2025-06-26T19:12:17.845238'
+      last_seen: '2025-06-26T23:52:43.298045'
+      name: alchemy
+      skill_requirements: 1
+      usage_count: 0
+    cooking:
+      available_recipes: []
+      best_times: []
+      code: cooking
+      craft_skill: unknown
+      efficiency_ratings: {}
+      encounter_count: 8
+      first_discovered: '2025-06-26T19:13:23.977752'
+      last_seen: '2025-06-26T23:52:39.703459'
+      name: cooking
+      skill_requirements: 1
+      usage_count: 0
     gearcrafting:
       available_recipes: []
       best_times: []
       code: gearcrafting
       craft_skill: unknown
       efficiency_ratings: {}
-      encounter_count: 1
-      first_discovered: '2025-06-25T23:02:59.257565'
-      last_seen: '2025-06-25T23:02:59.257582'
+      encounter_count: 5
+      first_discovered: '2025-06-26T23:24:28.555682'
+      last_seen: '2025-06-26T23:52:45.741344'
       name: gearcrafting
       skill_requirements: 1
       usage_count: 0
@@ -200,10 +642,22 @@ data:
       code: jewelrycrafting
       craft_skill: unknown
       efficiency_ratings: {}
-      encounter_count: 1
-      first_discovered: '2025-06-25T23:02:56.806198'
-      last_seen: '2025-06-25T23:02:56.806210'
+      encounter_count: 8
+      first_discovered: '2025-06-26T19:12:17.673923'
+      last_seen: '2025-06-26T23:52:43.102461'
       name: jewelrycrafting
+      skill_requirements: 1
+      usage_count: 0
+    mining:
+      available_recipes: []
+      best_times: []
+      code: mining
+      craft_skill: unknown
+      efficiency_ratings: {}
+      encounter_count: 1
+      first_discovered: '2025-06-26T23:29:39.080815'
+      last_seen: '2025-06-26T23:29:39.080824'
+      name: mining
       skill_requirements: 1
       usage_count: 0
     weaponcrafting:
@@ -212,10 +666,22 @@ data:
       code: weaponcrafting
       craft_skill: unknown
       efficiency_ratings: {}
-      encounter_count: 1
-      first_discovered: '2025-06-25T23:02:55.787936'
-      last_seen: '2025-06-25T23:02:55.787948'
+      encounter_count: 8
+      first_discovered: '2025-06-26T19:12:16.742590'
+      last_seen: '2025-06-26T23:52:41.977403'
       name: weaponcrafting
+      skill_requirements: 1
+      usage_count: 0
+    woodcutting:
+      available_recipes: []
+      best_times: []
+      code: woodcutting
+      craft_skill: unknown
+      efficiency_ratings: {}
+      encounter_count: 1
+      first_discovered: '2025-06-26T23:29:34.642050'
+      last_seen: '2025-06-26T23:29:34.642060'
+      name: woodcutting
       skill_requirements: 1
       usage_count: 0
 planners: []

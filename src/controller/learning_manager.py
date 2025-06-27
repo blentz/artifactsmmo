@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 
 from src.lib.yaml_data import YamlData
 from src.game.globals import DATA_PREFIX
+from src.controller.capability_analyzer import CapabilityAnalyzer
 
 
 class LearningManager:
@@ -20,11 +21,16 @@ class LearningManager:
     using configuration-driven behavior patterns.
     """
     
-    def __init__(self, knowledge_base, map_state, config_file: str = None):
+    def __init__(self, knowledge_base, map_state, client=None, config_file: str = None):
         """Initialize learning manager with dependencies."""
         self.logger = logging.getLogger(__name__)
         self.knowledge_base = knowledge_base
         self.map_state = map_state
+        
+        # Initialize capability analyzer if client provided
+        self.capability_analyzer = None
+        if client:
+            self.capability_analyzer = CapabilityAnalyzer(client)
         
         # Load configuration
         if config_file is None:
@@ -238,6 +244,112 @@ class LearningManager:
         except Exception as e:
             self.logger.warning(f"Error finding known monsters nearby: {e}")
             return None
+    
+    def learn_from_capability_analysis(self, resource_code: str = None, item_code: str = None) -> Dict:
+        """
+        Learn about capabilities of resources and items for upgrade planning.
+        
+        Args:
+            resource_code: Resource to analyze (e.g., "ash_tree")
+            item_code: Item to analyze (e.g., "wooden_staff")
+            
+        Returns:
+            Dictionary with capability analysis results
+        """
+        if not self.capability_analyzer:
+            self.logger.warning("Capability analyzer not available - client not provided")
+            return {"error": "Capability analyzer not initialized"}
+        
+        try:
+            learning_results = {
+                "timestamp": None,
+                "resource_analysis": None,
+                "item_analysis": None
+            }
+            
+            if resource_code:
+                self.logger.info(f"🧠 Learning resource capabilities: {resource_code}")
+                drops = self.capability_analyzer.analyze_resource_drops(resource_code)
+                learning_results["resource_analysis"] = {
+                    "resource_code": resource_code,
+                    "drops": drops
+                }
+                
+                # Store in knowledge base for future planning
+                self.knowledge_base.learn_resource_capabilities(resource_code, drops)
+            
+            if item_code:
+                self.logger.info(f"🧠 Learning item capabilities: {item_code}")
+                capabilities = self.capability_analyzer.analyze_item_capabilities(item_code)
+                learning_results["item_analysis"] = capabilities
+                
+                # Store in knowledge base for future planning
+                self.knowledge_base.learn_item_capabilities(item_code, capabilities)
+            
+            return learning_results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed capability learning: {e}")
+            return {"error": str(e)}
+    
+    def analyze_upgrade_chain(self, resource_code: str, target_item_code: str) -> Dict:
+        """
+        Analyze complete upgrade chain for planning multi-step goals.
+        
+        Args:
+            resource_code: Starting resource (e.g., "ash_tree")
+            target_item_code: Target item (e.g., "wooden_staff")
+            
+        Returns:
+            Dictionary with upgrade chain analysis and viability
+        """
+        if not self.capability_analyzer:
+            return {"error": "Capability analyzer not initialized"}
+        
+        try:
+            self.logger.info(f"🔗 Analyzing upgrade chain: {resource_code} → {target_item_code}")
+            chain_analysis = self.capability_analyzer.analyze_upgrade_chain(resource_code, target_item_code)
+            
+            # Store learning results for future planning
+            if chain_analysis.get("viable"):
+                self.knowledge_base.learn_upgrade_chain(resource_code, target_item_code, chain_analysis)
+                
+                # Generate specific goal recommendations
+                for path in chain_analysis.get("paths", []):
+                    self.logger.info(f"  ✅ Learned viable path: {path['resource']} → {path['intermediate']} → {path['target']}")
+            
+            return chain_analysis
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed upgrade chain analysis: {e}")
+            return {"error": str(e)}
+    
+    def evaluate_weapon_upgrade(self, current_weapon: str, potential_upgrade: str) -> Dict:
+        """
+        Evaluate if a weapon upgrade is worthwhile based on stats.
+        
+        Args:
+            current_weapon: Current weapon code
+            potential_upgrade: Potential upgrade weapon code
+            
+        Returns:
+            Dictionary with upgrade evaluation and recommendation
+        """
+        if not self.capability_analyzer:
+            return {"error": "Capability analyzer not initialized"}
+        
+        try:
+            self.logger.info(f"⚔️ Evaluating weapon upgrade: {current_weapon} → {potential_upgrade}")
+            comparison = self.capability_analyzer.compare_weapon_upgrades(current_weapon, potential_upgrade)
+            
+            # Store upgrade evaluation for future reference
+            self.knowledge_base.learn_weapon_comparison(current_weapon, potential_upgrade, comparison)
+            
+            return comparison
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed weapon upgrade evaluation: {e}")
+            return {"error": str(e)}
     
     def reload_configuration(self) -> None:
         """Reload learning configuration from YAML."""

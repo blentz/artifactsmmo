@@ -23,21 +23,21 @@ class FindMonstersAction(ActionBase):
     }
     weights = {'find_monsters': 2.0}  # Medium-high priority for exploration
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, search_radius: int = 10,
+    def __init__(self, character_x: int = 0, character_y: int = 0, search_radius: int = 2,
                  monster_types: Optional[List[str]] = None, character_level: Optional[int] = None,
-                 level_range: int = 2, use_exponential_search: bool = True, max_search_radius: int = 30):
+                 level_range: int = 2, use_exponential_search: bool = True, max_search_radius: int = 4):
         """
         Initialize the find monsters action.
 
         Args:
             character_x: Character's X coordinate
             character_y: Character's Y coordinate
-            search_radius: Initial radius to search for monsters
+            search_radius: Initial radius to search for monsters (default: 2)
             monster_types: List of monster types to search for. If None, searches for all monsters.
             character_level: Character's current level for level-appropriate filtering. If None, no level filtering.
             level_range: Acceptable level range (+/-) for monster selection (default: 2)
             use_exponential_search: Whether to use exponential search radius expansion (default: True)
-            max_search_radius: Maximum search radius when using exponential search (default: 30)
+            max_search_radius: Maximum search radius when using exponential search (default: 4)
         """
         super().__init__()
         self.character_x = character_x
@@ -116,17 +116,54 @@ class FindMonstersAction(ActionBase):
                 locations_found = self._search_radius_for_monsters(client, target_codes, radius, map_state)
 
                 if locations_found:
-                    # Find the closest one
-                    for location, monster_code in locations_found:
-                        x, y = location
-                        distance = math.sqrt((x - self.character_x) ** 2 + (y - self.character_y) ** 2)
-                        if distance < min_distance:
-                            min_distance = distance
-                            nearest_monster_location = (x, y)
-                            found_monster_code = monster_code
-
-                    # If we found monsters at this radius, return the nearest one
-                    if nearest_monster_location:
+                    # Find the best monster considering both distance and win rate
+                    best_monster = self._select_best_monster(locations_found, kwargs)
+                    if best_monster:
+                        # Check if combat is viable before proceeding
+                        win_rate = best_monster.get('win_rate')
+                        # Require minimum 20% win rate for known monsters, or accept unknown monsters only if no better option exists
+                        combat_viable = True
+                        if win_rate is not None and win_rate < 0.2:  # Less than 20% win rate for known monsters
+                            combat_viable = False
+                            self.logger.warning(f"🚫 Combat not viable: {best_monster['monster_code']} "
+                                              f"win rate {win_rate:.1%} is too low for safe combat")
+                        elif win_rate is None:  # Unknown monster - be more cautious
+                            # Only accept unknown monsters if we've searched extensively or if character level is low enough
+                            character_level = kwargs.get('character_level', 1)
+                            if character_level <= 2 and radius <= 2:  # Low level, close monsters are probably safe
+                                combat_viable = True
+                                self.logger.info(f"ℹ️ Accepting unknown monster {best_monster['monster_code']} at level {character_level}")
+                            elif radius >= max(search_radii):  # Searched everywhere, take what we can get
+                                combat_viable = True
+                                self.logger.warning(f"⚠️ Accepting unknown monster {best_monster['monster_code']} - no alternatives found")
+                            else:
+                                combat_viable = False
+                                self.logger.info(f"⏭️ Skipping unknown monster {best_monster['monster_code']} - searching for safer options")
+                        
+                        if not combat_viable:
+                            # Continue searching at larger radius or fail if this is max radius
+                            if radius >= max(search_radii):
+                                # This is the maximum radius, combat is not viable
+                                error_response = self.get_error_response(
+                                    f"Combat not viable: All nearby monsters have poor win rates or are unknown",
+                                    suggestion="Seek equipment upgrades or explore new areas before combat",
+                                    best_monster_found=best_monster['monster_code'],
+                                    best_win_rate=win_rate,
+                                    combat_viable=False
+                                )
+                                self.log_execution_result(error_response)
+                                return error_response
+                            else:
+                                continue  # Try larger radius
+                        
+                        x, y = best_monster['location']
+                        min_distance = math.sqrt((x - self.character_x) ** 2 + (y - self.character_y) ** 2)
+                        nearest_monster_location = (x, y)
+                        found_monster_code = best_monster['monster_code']
+                        
+                        win_rate_str = f"{win_rate:.1%}" if win_rate is not None else "unknown"
+                        self.logger.info(f"🎯 Selected {found_monster_code} at {nearest_monster_location} "
+                                       f"(win rate: {win_rate_str})")
                         break
 
             if nearest_monster_location:
@@ -296,6 +333,114 @@ class FindMonstersAction(ActionBase):
             suggestions.append((new_x, new_y))
         
         return suggestions
+
+    def _select_best_monster(self, locations_found, kwargs):
+        """
+        Select the best monster from available locations considering win rates.
+        
+        Args:
+            locations_found: List of tuples (location, monster_code)
+            kwargs: Context containing knowledge_base
+            
+        Returns:
+            Dict with best monster info or None
+        """
+        try:
+            knowledge_base = kwargs.get('knowledge_base')
+            if not knowledge_base:
+                # No knowledge base, fall back to closest monster
+                return self._select_closest_monster(locations_found)
+            
+            # Evaluate each monster location
+            monster_evaluations = []
+            for location, monster_code in locations_found:
+                x, y = location
+                distance = math.sqrt((x - self.character_x) ** 2 + (y - self.character_y) ** 2)
+                
+                # Get win rate from knowledge base
+                win_rate = self._get_monster_win_rate(monster_code, knowledge_base)
+                
+                # Calculate score: higher win rate is better, closer distance is better
+                # Prioritize win rate heavily but still consider distance
+                if win_rate is not None:
+                    # Score: win_rate (0-1) * 100 - distance penalty
+                    score = win_rate * 100 - (distance * 0.1)
+                else:
+                    # Unknown win rate: use moderate score based on distance
+                    score = 50 - distance
+                
+                monster_evaluations.append({
+                    'location': location,
+                    'monster_code': monster_code,
+                    'distance': distance,
+                    'win_rate': win_rate,
+                    'score': score
+                })
+            
+            if not monster_evaluations:
+                return None
+            
+            # Sort by score (highest first)
+            monster_evaluations.sort(key=lambda x: x['score'], reverse=True)
+            
+            # Select best monster, but warn if win rate is poor
+            best_monster = monster_evaluations[0]
+            if best_monster['win_rate'] is not None and best_monster['win_rate'] < 0.3:
+                self.logger.warning(f"⚠️ Best available monster {best_monster['monster_code']} "
+                                  f"has poor win rate: {best_monster['win_rate']:.1%}")
+                self.logger.info("💡 Consider seeking equipment upgrades or exploring new areas")
+            
+            return best_monster
+            
+        except Exception as e:
+            self.logger.warning(f"Error selecting best monster: {e}")
+            # Fall back to closest monster
+            return self._select_closest_monster(locations_found)
+    
+    def _select_closest_monster(self, locations_found):
+        """Fall back to selecting the closest monster."""
+        if not locations_found:
+            return None
+        
+        min_distance = float('inf')
+        best_monster = None
+        
+        for location, monster_code in locations_found:
+            x, y = location
+            distance = math.sqrt((x - self.character_x) ** 2 + (y - self.character_y) ** 2)
+            
+            if distance < min_distance:
+                min_distance = distance
+                best_monster = {
+                    'location': location,
+                    'monster_code': monster_code,
+                    'distance': distance,
+                    'win_rate': None,
+                    'score': -distance
+                }
+        
+        return best_monster
+    
+    def _get_monster_win_rate(self, monster_code, knowledge_base):
+        """Get win rate for a monster from knowledge base."""
+        try:
+            if not hasattr(knowledge_base, 'data') or 'monsters' not in knowledge_base.data:
+                return None
+            
+            monster_data = knowledge_base.data['monsters'].get(monster_code, {})
+            combat_results = monster_data.get('combat_results', [])
+            
+            if len(combat_results) < 2:  # Need at least 2 combats for meaningful data
+                return None
+            
+            wins = sum(1 for result in combat_results if result.get('result') == 'win')
+            total_combats = len(combat_results)
+            
+            return wins / total_combats if total_combats > 0 else None
+            
+        except Exception as e:
+            self.logger.debug(f"Error getting win rate for {monster_code}: {e}")
+            return None
 
     def __repr__(self):
         monster_filter = f", types={self.monster_types}" if self.monster_types else ""

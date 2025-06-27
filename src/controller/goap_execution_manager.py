@@ -100,15 +100,18 @@ class GOAPExecutionManager:
             plans = planner.calculate()
             
             if plans:
-                best_plan = plans[0]  # First plan is the best (lowest cost)
+                best_plan = plans  # Plans is already the list of nodes
                 self.logger.info(f"GOAP plan created with {len(best_plan)} actions")
+                
                 
                 # Convert GOAP actions to controller-compatible format
                 plan_actions = []
                 for action in best_plan:
                     if isinstance(action, dict):
-                        # Action is already a dictionary
-                        plan_actions.append(action)
+                        # GOAP node is a dictionary with action name
+                        action_name = action.get('name', 'unknown')
+                        action_dict = {'name': action_name}
+                        plan_actions.append(action_dict)
                     else:
                         # Action is an object with name and reactions
                         action_dict = {

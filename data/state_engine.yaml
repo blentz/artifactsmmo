@@ -50,6 +50,70 @@ computed_states:
   character_alive:
     type: "formula"
     formula: "character_hp > 0"
+    
+  # Equipment progression computed states
+  need_weapon_upgrade:
+    type: "equipment_analysis"
+    analysis_type: "weapon_upgrade"
+    threshold_config: "weapon_upgrade_thresholds"
+    
+  need_armor_upgrade:
+    type: "equipment_analysis"
+    analysis_type: "armor_upgrade"
+    threshold_config: "armor_upgrade_thresholds"
+    
+  need_complete_equipment:
+    type: "equipment_analysis"
+    analysis_type: "complete_equipment"
+    threshold_config: "equipment_completion_thresholds"
+    
+  need_crafting_materials:
+    type: "crafting_analysis"
+    analysis_type: "materials_needed"
+    threshold_config: "material_thresholds"
+    
+  need_workshop_discovery:
+    type: "workshop_analysis"
+    analysis_type: "discovery_needed"
+    threshold_config: "workshop_discovery_thresholds"
+    
+  # Equipment status states
+  has_better_weapon:
+    type: "equipment_check"
+    check_type: "weapon_improved"
+    
+  has_better_armor:
+    type: "equipment_check"
+    check_type: "armor_improved"
+    
+  has_complete_equipment_set:
+    type: "equipment_check"
+    check_type: "set_complete"
+    
+  has_crafting_materials:
+    type: "inventory_check"
+    check_type: "materials_available"
+    
+  workshops_discovered:
+    type: "knowledge_check"
+    check_type: "workshops_known"
+    
+  # Location and crafting states
+  at_workshop:
+    type: "location_check"
+    check_type: "workshop_location"
+    
+  at_resource_location:
+    type: "location_check"
+    check_type: "resource_location"
+    
+  has_materials:
+    type: "inventory_check"
+    check_type: "required_materials"
+    
+  materials_sufficient:
+    type: "inventory_check"
+    check_type: "sufficient_quantity"
 
 # Response processing rules - replaces hardcoded update_world_state_from_response logic
 response_handlers:
@@ -143,6 +207,92 @@ response_handlers:
       type: "static"
       value: true
     can_attack:
+      type: "static"
+      value: true
+      
+  # Equipment progression response handlers
+  gather_resources:
+    has_resources:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "data.details.items"
+        value: null
+      true_value: false
+      false_value: true
+    inventory_updated:
+      type: "static"
+      value: true
+    at_resource_location:
+      type: "static"
+      value: true
+      
+  find_resources:
+    resource_location_known:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: false
+      false_value: true
+    at_resource_location:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: true
+      false_value: false
+      
+  craft_item:
+    has_equipment:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "data.details.items"
+        value: null
+      true_value: false
+      false_value: true
+    inventory_updated:
+      type: "static"
+      value: true
+    at_workshop:
+      type: "static"
+      value: true
+      
+  equip_item:
+    equipment_equipped:
+      type: "static"
+      value: true
+    character_stats_improved:
+      type: "computation"
+      method: "calculate_stat_improvement"
+    inventory_updated:
+      type: "static"
+      value: true
+      
+  unequip_item:
+    equipment_equipped:
+      type: "static"
+      value: false
+    inventory_updated:
+      type: "static"
+      value: true
+      
+  analyze_resources:
+    equipment_analysis_available:
+      type: "static"
+      value: true
+    crafting_opportunities_known:
+      type: "static"
+      value: true
+      
+  lookup_item_info:
+    equipment_info_known:
+      type: "static"
+      value: true
+    craft_plan_available:
       type: "static"
       value: true
 

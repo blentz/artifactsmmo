@@ -199,8 +199,9 @@ class MissionExecutor:
             )
             
             # Execute goal using GOAP planning with configured iteration limit
-            goal_success = self.controller.achieve_goal_with_goap(
+            goal_success = self.controller.goap_execution_manager.achieve_goal_with_goap(
                 goal_state, 
+                self.controller,
                 config_file="data/actions.yaml",
                 max_iterations=self.max_goal_iterations
             )

@@ -307,61 +307,205 @@ class ActionExecutor:
                     controller.learn_from_map_exploration(char.x, char.y, response)
             
             elif action_name == 'attack' and hasattr(controller, 'learn_from_combat'):
-                self.logger.debug(f"🔍 Processing attack learning for response: {type(response)}")
+                self.logger.info(f"🔍 Processing attack learning for response: {type(response)}")
                 
                 if hasattr(response, 'data'):
-                    # Try multiple ways to access fight data
+                    # Initialize variables
                     fight_data = None
                     monster_code = 'unknown'
                     result = 'unknown'
                     
-                    # Check for fight data in response.data.fight
+                    # Primary extraction: response.data.fight
                     if hasattr(response.data, 'fight'):
                         fight_data = response.data.fight
-                        self.logger.debug(f"🔍 Found fight data: {fight_data}")
+                        self.logger.debug(f"🔍 Found fight data object: {type(fight_data)}")
                         
-                        # Extract monster info
-                        if hasattr(fight_data, 'monster'):
-                            monster = fight_data.monster
-                            if hasattr(monster, 'code'):
-                                monster_code = monster.code
-                            elif isinstance(monster, dict):
-                                monster_code = monster.get('code', 'unknown')
-                        
-                        # Extract result
-                        if hasattr(fight_data, 'result'):
-                            result = fight_data.result
+                        # Extract monster information with improved error handling
+                        try:
+                            if hasattr(fight_data, 'monster'):
+                                monster = fight_data.monster
+                                self.logger.debug(f"🔍 Monster object type: {type(monster)}")
+                                
+                                if hasattr(monster, 'code'):
+                                    monster_code = str(monster.code)
+                                elif hasattr(monster, 'name'): 
+                                    monster_code = str(monster.name)
+                                elif isinstance(monster, dict):
+                                    monster_code = monster.get('code') or monster.get('name', 'unknown')
+                                elif isinstance(monster, str):
+                                    monster_code = monster
+                                else:
+                                    # Last resort: try to convert to string
+                                    monster_code = str(monster) if monster else 'unknown'
+                            
+                            # Extract result with improved error handling
+                            if hasattr(fight_data, 'result'):
+                                result = str(fight_data.result) if fight_data.result else 'unknown'
+                                
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ Error extracting fight data: {e}")
                     
-                    # Alternative: Check response.data directly for fight info
-                    elif hasattr(response.data, 'character'):
-                        # Sometimes the response structure might be different
-                        char_data = response.data.character
-                        self.logger.debug(f"🔍 Character data available: {type(char_data)}")
+                    # Fallback extraction: try to get monster from combat location via map
+                    if monster_code == 'unknown':
+                        try:
+                            # PRIORITY 1: Use target location from action context (where find_monsters found the monster)
+                            combat_x, combat_y = None, None
+                            if context and ('x' in context and 'y' in context):
+                                combat_x, combat_y = context['x'], context['y']
+                                self.logger.info(f"🔍 Got combat location from action context: ({combat_x}, {combat_y})")
+                            
+                            # PRIORITY 2: Get character position from the combat response 
+                            elif hasattr(response, 'data') and hasattr(response.data, 'character'):
+                                combat_char = response.data.character
+                                if hasattr(combat_char, 'x') and hasattr(combat_char, 'y'):
+                                    combat_x, combat_y = combat_char.x, combat_char.y
+                                    self.logger.info(f"🔍 Combat location from response: ({combat_x}, {combat_y})")
+                            
+                            # PRIORITY 3: Fallback to current character state position (for direct attacks)
+                            elif hasattr(controller, 'character_state') and hasattr(controller.character_state, 'data'):
+                                char_state = controller.character_state
+                                combat_x = char_state.data.get('x', 0)
+                                combat_y = char_state.data.get('y', 0)
+                                self.logger.info(f"🔍 Using character state position (direct attack): ({combat_x}, {combat_y})")
+                            
+                            # Look up monster at combat location
+                            if combat_x is not None and combat_y is not None and hasattr(controller, 'map_state') and controller.map_state:
+                                location_key = f"{combat_x},{combat_y}"
+                                self.logger.debug(f"🔍 Looking for monster at location: {location_key}")
+                                
+                                location_data = controller.map_state.data.get(location_key, {})
+                                if location_data:
+                                    content = location_data.get('content', {})
+                                    if content and content.get('type') == 'monster':
+                                        monster_code = content.get('code', 'unknown')
+                                        self.logger.info(f"🔍 ✅ SUCCESS: Extracted monster '{monster_code}' from map location ({combat_x},{combat_y})")
+                                    else:
+                                        self.logger.debug(f"🔍 Location ({combat_x},{combat_y}) content: {content}")
+                                else:
+                                    self.logger.debug(f"🔍 No location data found for position ({combat_x},{combat_y})")
+                                    
+                        except Exception as e:
+                            self.logger.warning(f"🔍 Fallback monster extraction failed: {e}")
                     
+                    # If we have response but still no data, try alternative structure
+                    if monster_code == 'unknown' and result == 'unknown':
+                        # Check if response has different structure
+                        try:
+                            # Sometimes the data might be nested differently
+                            if hasattr(response, 'parsed') and hasattr(response.parsed, 'fight'):
+                                alt_fight = response.parsed.fight
+                                if hasattr(alt_fight, 'monster'):
+                                    monster_code = str(alt_fight.monster.code if hasattr(alt_fight.monster, 'code') else alt_fight.monster)
+                                if hasattr(alt_fight, 'result'):
+                                    result = str(alt_fight.result)
+                        except Exception as e:
+                            self.logger.debug(f"Alternative extraction failed: {e}")
+                    
+                    # Get pre-combat HP from context - this should be the HP before the attack
                     pre_combat_hp = context.get('pre_combat_hp', 0)
+                    post_combat_hp = None
                     
-                    self.logger.debug(f"🔍 Combat data - Monster: {monster_code}, Result: {result}, Pre-HP: {pre_combat_hp}")
+                    # Extract post-combat HP from the response
+                    if hasattr(response, 'data') and hasattr(response.data, 'character'):
+                        post_combat_char = response.data.character
+                        if hasattr(post_combat_char, 'hp'):
+                            post_combat_hp = post_combat_char.hp
+                            self.logger.debug(f"🔍 Post-combat HP from response: {post_combat_hp}")
                     
-                    if monster_code != 'unknown' and result != 'unknown':
-                        self.logger.info(f"⚔️ Learning from combat: {monster_code} - {result}")
+                    # If no pre-combat HP in context, estimate it
+                    if pre_combat_hp == 0:
+                        if post_combat_hp is not None:
+                            # Try to calculate pre-combat HP from fight data
+                            if fight_data:
+                                # Look for damage taken or calculate from turns
+                                damage_taken = 0
+                                if hasattr(fight_data, 'damage') and fight_data.damage:
+                                    damage_taken = fight_data.damage
+                                elif result == 'loss' and hasattr(fight_data, 'turns') and fight_data.turns:
+                                    # Estimate damage based on turns for losses
+                                    damage_taken = min(100, fight_data.turns * 5)  # ~5 HP per turn
+                                
+                                if damage_taken > 0:
+                                    pre_combat_hp = post_combat_hp + damage_taken
+                                    self.logger.debug(f"🔍 Calculated pre-combat HP: {post_combat_hp} + {damage_taken} = {pre_combat_hp}")
+                                else:
+                                    # Default to max HP if we can't calculate damage
+                                    max_hp = getattr(post_combat_char, 'max_hp', 125) if hasattr(response.data, 'character') else 125
+                                    pre_combat_hp = max_hp
+                            else:
+                                # No fight data, assume started at max HP
+                                max_hp = getattr(post_combat_char, 'max_hp', 125) if hasattr(response.data, 'character') else 125
+                                pre_combat_hp = max_hp
+                        else:
+                            # Fallback to current character state
+                            current_hp = controller.character_state.data.get('hp', 0) if hasattr(controller, 'character_state') else 125
+                            pre_combat_hp = current_hp
+                    
+                    self.logger.info(f"🔍 Final combat data - Monster: '{monster_code}', Result: '{result}', Pre-HP: {pre_combat_hp}, Post-HP: {post_combat_hp}")
+                    
+                    # Process the learning if we have valid data
+                    if monster_code != 'unknown' or result != 'unknown':
+                        self.logger.info(f"⚔️ Recording combat: {monster_code} - {result}")
                         
                         # Convert fight_data to dict for knowledge base
-                        fight_dict = None
+                        fight_dict = {}
                         if fight_data:
-                            fight_dict = {}
-                            # Extract key combat data from fight_data object
-                            if hasattr(fight_data, 'xp'):
-                                fight_dict['xp'] = fight_data.xp
-                            if hasattr(fight_data, 'gold'):
-                                fight_dict['gold'] = fight_data.gold
-                            if hasattr(fight_data, 'drops'):
-                                fight_dict['drops'] = fight_data.drops
-                            if hasattr(fight_data, 'turns'):
-                                fight_dict['turns'] = fight_data.turns
+                            # Safely extract all available fight attributes
+                            for attr in ['xp', 'gold', 'drops', 'turns', 'duration', 'damage']:
+                                try:
+                                    if hasattr(fight_data, attr):
+                                        value = getattr(fight_data, attr)
+                                        if value is not None:
+                                            # Handle drops specially to convert DropSchema objects to dicts
+                                            if attr == 'drops' and value is not None:
+                                                if isinstance(value, list):
+                                                    serializable_drops = []
+                                                    for drop in value:
+                                                        if drop is None:
+                                                            continue  # Skip None entries
+                                                        elif hasattr(drop, '__dict__') and hasattr(drop, 'code'):
+                                                            # Convert DropSchema object to dict
+                                                            drop_dict = {
+                                                                'code': getattr(drop, 'code', None),
+                                                                'quantity': getattr(drop, 'quantity', 0)
+                                                            }
+                                                            serializable_drops.append(drop_dict)
+                                                        elif isinstance(drop, dict):
+                                                            # Already a dict, just keep essential fields
+                                                            serializable_drops.append({
+                                                                'code': drop.get('code'),
+                                                                'quantity': drop.get('quantity', 0)
+                                                            })
+                                                        elif isinstance(drop, str):
+                                                            # Legacy string format - keep for backward compatibility
+                                                            serializable_drops.append(drop)
+                                                        else:
+                                                            # Unknown format, try to store as-is
+                                                            serializable_drops.append(drop)
+                                                    fight_dict[attr] = serializable_drops
+                                                else:
+                                                    # Single drop item, handle similarly
+                                                    if hasattr(value, '__dict__'):
+                                                        fight_dict[attr] = {
+                                                            'code': getattr(value, 'code', None),
+                                                            'quantity': getattr(value, 'quantity', 0)
+                                                        }
+                                                    else:
+                                                        fight_dict[attr] = value
+                                            else:
+                                                fight_dict[attr] = value
+                                except Exception as e:
+                                    self.logger.debug(f"Failed to extract {attr}: {e}")
                         
-                        controller.learn_from_combat(monster_code, result, pre_combat_hp, fight_dict)
+                        # Always call learning even with partial data - knowledge base can handle it
+                        # Pass both pre and post combat HP
+                        combat_context = {
+                            'pre_combat_hp': pre_combat_hp,
+                            'post_combat_hp': post_combat_hp
+                        }
+                        controller.learn_from_combat(monster_code, result, pre_combat_hp, fight_dict, combat_context)
                     else:
-                        self.logger.warning(f"⚠️ Incomplete combat data: monster={monster_code}, result={result}")
+                        self.logger.info(f"🔍 DEBUG: No combat data available to record - monster: {monster_code}, result: {result}")
                 else:
                     self.logger.warning(f"⚠️ No response data available for attack learning")
             
