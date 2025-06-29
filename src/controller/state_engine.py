@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime, timezone
 
 from src.lib.yaml_data import YamlData
-from src.game.globals import DATA_PREFIX
+from src.game.globals import CONFIG_PREFIX
 
 
 class StateCalculationEngine:
@@ -27,7 +27,7 @@ class StateCalculationEngine:
         
         # Load state calculation configuration
         if config_file is None:
-            config_file = f"{DATA_PREFIX}/state_engine.yaml"
+            config_file = f"{CONFIG_PREFIX}/state_engine.yaml"
         
         self.config_data = YamlData(config_file)
         self._load_configuration()
@@ -374,11 +374,21 @@ class StateCalculationEngine:
             check_type = config.get('check_type', 'general')
             
             if check_type == 'weapon_improved':
-                # Check if weapon has been upgraded recently
-                return state.get('equipment_equipped', False)
+                # Check if weapon has been actually improved beyond basic equipment
+                weapon_slot = state.get('weapon_slot', '')
+                # For now, return False unless we have evidence of actual upgrade
+                # Only wooden_stick or empty means no upgrade
+                if weapon_slot in ['wooden_stick', '', None]:
+                    return False
+                # If we have any other weapon, consider it an improvement
+                # This would be enhanced with actual weapon tier comparison in real implementation
+                return weapon_slot != 'wooden_stick'
             elif check_type == 'armor_improved':
-                # Check if armor has been upgraded recently
-                return state.get('equipment_equipped', False)
+                # Check if armor has been actually improved
+                armor_slots = ['helmet_slot', 'body_armor_slot', 'leg_armor_slot', 'boots_slot']
+                equipped_armor = sum(1 for slot in armor_slots if state.get(slot, '') not in ['', None])
+                # Need at least 1 piece of armor to consider it improved from starting state
+                return equipped_armor > 0
             elif check_type == 'set_complete':
                 # Check if equipment set is complete
                 equipment_slots = ['weapon_slot', 'helmet_slot', 'body_armor_slot', 'leg_armor_slot', 'boots_slot']
@@ -432,7 +442,17 @@ class StateCalculationEngine:
         try:
             check_type = config.get('check_type', 'general')
             
-            if check_type == 'materials_available':
+            # Check for specific item types with quantity requirements
+            if check_type in ['copper_ore', 'copper', 'iron_ore', 'iron']:
+                min_quantity = config.get('min_quantity', 1)
+                return self._check_inventory_for_item(state, check_type, min_quantity)
+            elif check_type == 'raw_materials_available':
+                # Check if character has any raw materials (ores, wood, etc.)
+                return self._check_for_raw_materials(state)
+            elif check_type == 'refined_materials_available':
+                # Check if character has refined materials (metals, processed materials)
+                return self._check_for_refined_materials(state)
+            elif check_type == 'materials_available':
                 # Check if character has crafting materials
                 return state.get('has_resources', False) or state.get('inventory_updated', False)
             elif check_type == 'required_materials':
@@ -448,6 +468,75 @@ class StateCalculationEngine:
             self.logger.warning(f"Inventory check failed: {e}")
             return False
     
+    def _check_inventory_for_item(self, state: Dict[str, Any], item_code: str, min_quantity: int) -> bool:
+        """Check if inventory contains sufficient quantity of a specific item."""
+        try:
+            # Get inventory from character state
+            inventory = state.get('character_inventory', [])
+            if not inventory:
+                # Also check for raw inventory list format  
+                inventory = state.get('inventory', [])
+            
+            if not inventory:
+                self.logger.debug(f"No inventory found in state for item check: {item_code}")
+                return False
+            
+            # Sum up quantities for the specific item
+            total_quantity = 0
+            for item in inventory:
+                if isinstance(item, dict) and item.get('code') == item_code:
+                    total_quantity += item.get('quantity', 0)
+            
+            result = total_quantity >= min_quantity
+            self.logger.debug(f"Inventory check for {item_code}: have {total_quantity}, need {min_quantity}, result: {result}")
+            return result
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking inventory for {item_code}: {e}")
+            return False
+    
+    def _check_for_raw_materials(self, state: Dict[str, Any]) -> bool:
+        """Check if inventory contains any raw materials (ores, wood, etc.)."""
+        try:
+            inventory = state.get('character_inventory', [])
+            if not inventory:
+                inventory = state.get('inventory', [])
+            
+            # Define raw materials that can be transformed
+            raw_materials = ['copper_ore', 'iron_ore', 'coal', 'ash_wood', 'birch_wood', 'dead_wood']
+            
+            for item in inventory:
+                if isinstance(item, dict) and item.get('code') in raw_materials and item.get('quantity', 0) > 0:
+                    self.logger.debug(f"Found raw material: {item.get('code')} x{item.get('quantity')}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking for raw materials: {e}")
+            return False
+    
+    def _check_for_refined_materials(self, state: Dict[str, Any]) -> bool:
+        """Check if inventory contains any refined materials (metals, processed materials)."""
+        try:
+            inventory = state.get('character_inventory', [])
+            if not inventory:
+                inventory = state.get('inventory', [])
+            
+            # Define refined materials that can be used for crafting
+            refined_materials = ['copper', 'iron', 'silver', 'gold', 'logs', 'plank']
+            
+            for item in inventory:
+                if isinstance(item, dict) and item.get('code') in refined_materials and item.get('quantity', 0) > 0:
+                    self.logger.debug(f"Found refined material: {item.get('code')} x{item.get('quantity')}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking for refined materials: {e}")
+            return False
+    
     def _compute_knowledge_check(self, config: Dict[str, Any], 
                                state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
         """Check knowledge base for discovered information."""
@@ -456,7 +545,18 @@ class StateCalculationEngine:
             
             if check_type == 'workshops_known':
                 # Check if workshops have been discovered and recorded
-                return state.get('crafting_opportunities_known', False)
+                return state.get('workshops_discovered', False)
+            elif check_type == 'material_requirements_discovered':
+                # Check if material requirements for target item are known
+                return state.get('equipment_info_known', False) and state.get('recipe_known', False)
+            elif check_type == 'optimal_weapon_identified':
+                # Check if an optimal weapon has been selected through recipe evaluation
+                # This should be False initially and set True by evaluate_weapon_recipes action
+                return state.get('best_weapon_selected', False)
+            elif check_type == 'craftable_weapon_found':
+                # Check if a craftable weapon has been identified
+                # This should be False initially and set True by evaluate_weapon_recipes action  
+                return state.get('craftable_weapon_identified', False)
             else:
                 return state.get('map_explored', False)
                 
@@ -472,8 +572,10 @@ class StateCalculationEngine:
             
             if check_type == 'workshop_location':
                 # Check if character is at a workshop
-                # This would be enhanced with actual map content checking
-                return state.get('at_target_location', False)
+                return state.get('at_correct_workshop', False)
+            elif check_type == 'correct_workshop_location':
+                # Check if character is at the correct workshop for current crafting task
+                return state.get('at_correct_workshop', False)
             elif check_type == 'resource_location':
                 # Check if character is at a resource location
                 return state.get('at_target_location', False)
@@ -681,6 +783,12 @@ class StateCalculationEngine:
             return self._check_crafting_materials_needed(config, state, thresholds)
         elif method_name == 'check_workshop_discovery_needed':
             return self._check_workshop_discovery_needed(config, state, thresholds)
+        elif method_name == 'check_weaponcrafting_upgrade_needed':
+            return self._check_weaponcrafting_upgrade_needed(config, state, thresholds)
+        elif method_name == 'check_skill_upgrade_needed':
+            return self._check_skill_upgrade_needed(config, state, thresholds)
+        elif method_name == 'check_weaponcrafting_level_sufficient':
+            return self._check_weaponcrafting_level_sufficient(config, state, thresholds)
         else:
             self.logger.warning(f"Unknown computed method: {method_name}")
             return False
@@ -773,6 +881,62 @@ class StateCalculationEngine:
         """Check if workshop discovery is needed."""
         # Placeholder implementation - can be expanded
         return state.get('character_level', 1) >= 2
+
+    def _check_weaponcrafting_upgrade_needed(self, config: Dict[str, Any], state: Dict[str, Any], 
+                                           thresholds: Dict[str, Any]) -> bool:
+        """Check if weaponcrafting skill upgrade is needed for selected weapon."""
+        try:
+            # Get character's current weaponcrafting level
+            current_weaponcrafting = state.get('weaponcrafting_level', 0)
+            
+            # Check if a weapon has been selected that requires higher skill
+            # This would be set by the EvaluateWeaponRecipesAction when it identifies skill gaps
+            required_weaponcrafting = state.get('required_weaponcrafting_level', 1)
+            
+            # Also check if we're trying to craft a specific weapon that needs upgrade
+            selected_weapon = state.get('selected_weapon_code', '')
+            if selected_weapon == 'copper_dagger':
+                required_weaponcrafting = max(required_weaponcrafting, 1)
+            
+            skill_upgrade_needed = current_weaponcrafting < required_weaponcrafting
+            
+            if skill_upgrade_needed:
+                self.logger.info(f"🔧 Weaponcrafting upgrade needed: level {current_weaponcrafting} < {required_weaponcrafting}")
+            
+            return skill_upgrade_needed
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking weaponcrafting upgrade need: {e}")
+            return False
+
+    def _check_skill_upgrade_needed(self, config: Dict[str, Any], state: Dict[str, Any], 
+                                  thresholds: Dict[str, Any]) -> bool:
+        """Check if any skill upgrade is needed for current objectives."""
+        try:
+            # Check weaponcrafting specifically first (most common case)
+            if self._check_weaponcrafting_upgrade_needed(config, state, thresholds):
+                return True
+            
+            # Could add other skill checks here (gearcrafting, cooking, etc.)
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking skill upgrade need: {e}")
+            return False
+
+    def _check_weaponcrafting_level_sufficient(self, config: Dict[str, Any], state: Dict[str, Any], 
+                                             thresholds: Dict[str, Any]) -> bool:
+        """Check if weaponcrafting level is sufficient for current requirements."""
+        try:
+            current_weaponcrafting = state.get('weaponcrafting_level', 0)
+            required_weaponcrafting = state.get('required_weaponcrafting_level', 1)
+            
+            return current_weaponcrafting >= required_weaponcrafting
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking weaponcrafting level sufficiency: {e}")
+            return False
 
     def reload_configuration(self) -> None:
         """Reload state engine configuration."""

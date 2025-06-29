@@ -268,6 +268,75 @@ class AIPlayerController(StateManagerMixin):
                             'target_y': location[1]
                         })
                         self.logger.info(f"Found monster location: {location}")
+                elif action_name == 'find_workshops' and hasattr(result.response, 'get'):
+                    location = result.response.get('location')
+                    if location:
+                        result_data.update({
+                            'target_x': location[0],
+                            'target_y': location[1],
+                            'workshop_x': location[0],
+                            'workshop_y': location[1]
+                        })
+                        self.logger.info(f"Found workshop location: {location}")
+                elif action_name == 'lookup_item_info' and hasattr(result.response, 'get'):
+                    # Extract recipe information for use by find_resources
+                    if result.response.get('success') and result.response.get('recipe_found'):
+                        materials_needed = result.response.get('materials_needed', [])
+                        resource_types = []
+                        for material in materials_needed:
+                            if material.get('is_resource'):
+                                # Use resource_source mapping if available, otherwise fall back to code
+                                resource_code = material.get('resource_source', material.get('code'))
+                                resource_types.append(resource_code)
+                        
+                        # Check for crafting chain
+                        crafting_chain = result.response.get('crafting_chain', [])
+                        smelting_required = False
+                        if crafting_chain:
+                            # Find intermediate crafting steps (like copper smelting)
+                            intermediate_steps = [step for step in crafting_chain if step.get('step_type') == 'craft_intermediate']
+                            if intermediate_steps:
+                                # Set up smelting context for the first intermediate step
+                                first_step = intermediate_steps[0]
+                                result_data.update({
+                                    'smelt_item_code': first_step.get('item_code'),
+                                    'smelt_item_name': first_step.get('item_name'),
+                                    'smelt_skill': first_step.get('craft_skill')
+                                })
+                                smelting_required = True
+                                
+                        result_data.update({
+                            'recipe_item_code': result.response.get('item_code'),
+                            'recipe_item_name': result.response.get('item_name'),
+                            'resource_types': resource_types,
+                            'craft_skill': result.response.get('craft_skill'),
+                            'materials_needed': materials_needed,
+                            'crafting_chain': crafting_chain,
+                            'smelting_required': smelting_required
+                        })
+                        self.logger.info(f"📋 Recipe selected: {result.response.get('item_name')} - needs {resource_types}")
+                        if smelting_required:
+                            self.logger.info(f"🔥 Smelting required: {result_data.get('smelt_item_code')}")
+                elif action_name == 'evaluate_weapon_recipes' and hasattr(result.response, 'get'):
+                    # Extract selected weapon information for use by find_correct_workshop
+                    if result.response.get('success') and result.response.get('item_code'):
+                        result_data.update({
+                            'item_code': result.response.get('item_code'),
+                            'selected_weapon': result.response.get('selected_weapon'),
+                            'weapon_name': result.response.get('weapon_name'),
+                            'workshop_type': result.response.get('workshop_type')
+                        })
+                        self.logger.info(f"🗡️ Weapon selected: {result.response.get('weapon_name')} (code: {result.response.get('item_code')})")
+                elif action_name == 'find_resources' and hasattr(result.response, 'get'):
+                    location = result.response.get('location')
+                    if location:
+                        result_data.update({
+                            'target_x': location[0],
+                            'target_y': location[1],
+                            'resource_x': location[0],
+                            'resource_y': location[1]
+                        })
+                        self.logger.info(f"Found resource location: {location}")
             
             # Log execution result
             if result.success:
@@ -416,11 +485,11 @@ class AIPlayerController(StateManagerMixin):
             self.logger.warning("No plan to execute")
             return False
             
-        # Reset action context for new plan execution, but preserve important location data
+        # Reset action context for new plan execution, but preserve important location and recipe data
         preserved_data = {}
         if hasattr(self, 'action_context'):
-            # Preserve target location data between plan iterations
-            for key in ['x', 'y', 'target_x', 'target_y']:
+            # Preserve target location data and crafting information between plan iterations
+            for key in ['x', 'y', 'target_x', 'target_y', 'item_code', 'recipe_item_code', 'recipe_item_name', 'craft_skill', 'materials_needed', 'resource_types', 'smelt_item_code', 'smelt_item_name', 'smelt_skill', 'smelting_required', 'crafting_chain']:
                 if key in self.action_context:
                     preserved_data[key] = self.action_context[key]
         
@@ -434,6 +503,149 @@ class AIPlayerController(StateManagerMixin):
         # Plan completed successfully - set executing to False
         self.is_executing = False        
         return True
+    
+    def _execute_single_action(self, action_name: str, action_data: Dict) -> bool:
+        """
+        Execute a single action and return success status.
+        Used by iterative GOAP planning for single-action execution with learning.
+        
+        Args:
+            action_name: Name of the action to execute
+            action_data: Action data from the plan
+            
+        Returns:
+            True if action executed successfully, False otherwise
+        """
+        try:
+            # Build execution context
+            context = self._build_execution_context(action_data)
+            
+            # Execute the action using the action executor
+            result = self.action_executor.execute_action(action_name, action_data, self.client, context)
+            
+            if result and hasattr(result, 'success') and result.success:
+                # Update action context with results for future actions
+                if hasattr(result, 'response') and result.response:
+                    self._update_action_context_from_response(action_name, result.response)
+                
+                return True
+            else:
+                self.logger.warning(f"Action {action_name} failed: {result}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error executing single action {action_name}: {e}")
+            return False
+
+    def _update_action_context_from_response(self, action_name: str, response) -> None:
+        """
+        Update action context based on action execution response.
+        Used to pass data between actions in a plan.
+        """
+        result_data = {}
+        
+        if response:
+            # Extract location data for move actions
+            if action_name == 'find_monsters' and hasattr(response, 'get'):
+                location = response.get('location')
+                if location:
+                    result_data.update({
+                        'x': location[0],
+                        'y': location[1],
+                        'target_x': location[0],
+                        'target_y': location[1]
+                    })
+                    self.logger.info(f"Found monster location: {location}")
+            elif action_name == 'find_workshops' and hasattr(response, 'get'):
+                location = response.get('location')
+                if location:
+                    result_data.update({
+                        'target_x': location[0],
+                        'target_y': location[1],
+                        'workshop_x': location[0],
+                        'workshop_y': location[1]
+                    })
+                    self.logger.info(f"Found workshop location: {location}")
+            elif action_name == 'lookup_item_info' and hasattr(response, 'get'):
+                # Extract recipe information for use by find_resources
+                if response.get('success') and response.get('recipe_found'):
+                    materials_needed = response.get('materials_needed', [])
+                    resource_types = []
+                    for material in materials_needed:
+                        if material.get('is_resource'):
+                            # Use resource_source mapping if available, otherwise fall back to code
+                            resource_code = material.get('resource_source', material.get('code'))
+                            resource_types.append(resource_code)
+                    
+                    # Check for crafting chain
+                    crafting_chain = response.get('crafting_chain', [])
+                    smelting_required = False
+                    if crafting_chain:
+                        # Find intermediate crafting steps (like copper smelting)
+                        intermediate_steps = [step for step in crafting_chain if step.get('step_type') == 'craft_intermediate']
+                        if intermediate_steps:
+                            # Set up smelting context for the first intermediate step
+                            first_step = intermediate_steps[0]
+                            result_data.update({
+                                'smelt_item_code': first_step.get('item_code'),
+                                'smelt_item_name': first_step.get('item_name'),
+                                'smelt_skill': first_step.get('craft_skill')
+                            })
+                            smelting_required = True
+                            
+                    result_data.update({
+                        'recipe_item_code': response.get('item_code'),
+                        'recipe_item_name': response.get('item_name'),
+                        'resource_types': resource_types,
+                        'craft_skill': response.get('craft_skill'),
+                        'materials_needed': materials_needed,
+                        'crafting_chain': crafting_chain,
+                        'smelting_required': smelting_required
+                    })
+                    self.logger.info(f"📋 Recipe selected: {response.get('item_name')} - needs {resource_types}")
+                    if smelting_required:
+                        self.logger.info(f"🔥 Smelting required: {result_data.get('smelt_item_code')}")
+            elif action_name == 'evaluate_weapon_recipes' and hasattr(response, 'get'):
+                # Extract selected weapon information for use by find_correct_workshop
+                if response.get('success') and response.get('item_code'):
+                    result_data.update({
+                        'item_code': response.get('item_code'),
+                        'selected_weapon': response.get('selected_weapon'),
+                        'weapon_name': response.get('weapon_name'),
+                        'workshop_type': response.get('workshop_type')
+                    })
+                    self.logger.info(f"🗡️ Weapon selected: {response.get('weapon_name')} (code: {response.get('item_code')})")
+            elif action_name == 'find_resources' and hasattr(response, 'get'):
+                location = response.get('location')
+                if location:
+                    result_data.update({
+                        'target_x': location[0],
+                        'target_y': location[1],
+                        'resource_x': location[0],
+                        'resource_y': location[1]
+                    })
+                    self.logger.info(f"Found resource location: {location}")
+            elif action_name == 'transform_raw_materials' and hasattr(response, 'get'):
+                # Store transformation results for future planning
+                if response.get('success'):
+                    result_data.update({
+                        'transformation_results': response.get('materials_transformed', []),
+                        'materials_transformed_count': response.get('total_transformations', 0)
+                    })
+                    self.logger.info(f"🔄 Materials transformed: {response.get('total_transformations', 0)} operations")
+            elif action_name == 'craft_item' and hasattr(response, 'get'):
+                # Store crafting results 
+                if response.get('success'):
+                    result_data.update({
+                        'crafting_result': response,
+                        'item_crafted': response.get('item_code'),
+                        'quantity_crafted': response.get('quantity_crafted', 1)
+                    })
+                    self.logger.info(f"🔨 Crafted: {response.get('quantity_crafted', 1)}x {response.get('item_code')}")
+        
+        # Update action context with extracted data
+        if result_data and hasattr(self, 'action_context'):
+            self.action_context.update(result_data)
         
     def is_plan_complete(self) -> bool:
         """
@@ -821,7 +1033,7 @@ class AIPlayerController(StateManagerMixin):
             self.character_state, max_distance, character_level, level_range
         )
 
-    def intelligent_monster_search(self, search_radius: int = 15) -> bool:
+    def intelligent_monster_search(self, search_radius: int = 8) -> bool:
         """
         Intelligent monster search that combines learned knowledge with exploration.
         
@@ -871,4 +1083,44 @@ class AIPlayerController(StateManagerMixin):
             Dictionary with optimization suggestions
         """
         return self.learning_manager.optimize_with_knowledge(self.character_state, goal_type)
+
+    def learn_all_game_data_efficiently(self) -> Dict:
+        """
+        Learn about all available game data using efficient get_all_* API calls.
+        
+        This replaces inefficient map tile-by-tile scanning with direct API queries
+        for resources, monsters, items, NPCs, and map locations.
+        Should be called once during initialization or when comprehensive game knowledge is needed.
+        
+        Returns:
+            Dictionary with comprehensive learning results and statistics
+        """
+        if not hasattr(self, 'learning_manager') or not self.learning_manager:
+            return {
+                'success': False,
+                'error': 'Learning manager not available',
+                'stats': {'total': 0}
+            }
+        
+        if not self.client:
+            return {
+                'success': False,
+                'error': 'API client not available',
+                'stats': {'total': 0}
+            }
+        
+        self.logger.info("🚀 Starting comprehensive game data learning...")
+        result = self.learning_manager.learn_all_game_data_bulk(self.client)
+        
+        if result.get('success'):
+            stats = result.get('stats', {})
+            self.logger.info(f"✅ Game data learning complete: {stats.get('total', 0)} total items learned")
+        else:
+            errors = result.get('errors', [])
+            if errors:
+                self.logger.warning(f"⚠️ Game data learning had errors: {'; '.join(errors)}")
+            else:
+                self.logger.warning(f"⚠️ Game data learning failed: {result.get('error', 'Unknown error')}")
+        
+        return result
 

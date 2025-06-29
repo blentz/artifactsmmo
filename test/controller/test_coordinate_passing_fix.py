@@ -1,0 +1,168 @@
+"""
+Test for coordinate passing between find_resources and move actions.
+
+This tests the bug fix for the weapon upgrade workflow where move actions
+were failing with "No valid coordinates provided for move action" even
+though find_resources had successfully found coordinates.
+"""
+
+import unittest
+from unittest.mock import Mock, patch
+from src.controller.ai_player_controller import AIPlayerController
+from src.controller.action_factory import ActionFactory
+
+
+class TestCoordinatePassingFix(unittest.TestCase):
+    """Test the coordinate passing fix between find_resources and move actions."""
+    
+    def setUp(self):
+        """Set up test controller and mocks."""
+        self.controller = AIPlayerController()
+        self.controller.set_client(Mock())
+        
+        # Mock character state
+        self.mock_character_state = Mock()
+        self.mock_character_state.name = "test_character"
+        self.mock_character_state.data = {
+            'x': 0, 'y': 0, 'level': 2, 'hp': 100, 'max_hp': 100
+        }
+        self.controller.set_character_state(self.mock_character_state)
+    
+    def test_move_action_uses_target_coordinates_from_context(self):
+        """Test that move action automatically uses target coordinates when available in context."""
+        factory = ActionFactory()
+        
+        # Simulate context with target coordinates (from find_resources)
+        context = {
+            'character_name': 'test_character',
+            'target_x': 2,
+            'target_y': 0,
+            'x': 2,
+            'y': 0
+        }
+        
+        # Create move action - should auto-enable use_target_coordinates
+        action = factory.create_action('move', {}, context)
+        
+        self.assertIsNotNone(action)
+        self.assertTrue(action.use_target_coordinates)
+        self.assertEqual(action.char_name, 'test_character')
+    
+    def test_move_action_without_coordinates_in_context(self):
+        """Test that move action doesn't auto-enable use_target_coordinates when no coordinates available."""
+        factory = ActionFactory()
+        
+        # Context without target coordinates
+        context = {
+            'character_name': 'test_character'
+        }
+        
+        # Create move action - should NOT auto-enable use_target_coordinates
+        action = factory.create_action('move', {}, context)
+        
+        self.assertIsNotNone(action)
+        self.assertFalse(action.use_target_coordinates)
+        self.assertEqual(action.char_name, 'test_character')
+    
+    def test_move_action_with_explicit_coordinates(self):
+        """Test that move action works with explicit x/y coordinates."""
+        factory = ActionFactory()
+        
+        action_data = {
+            'character_name': 'test_character',
+            'x': 5,
+            'y': 3
+        }
+        
+        action = factory.create_action('move', action_data, {})
+        
+        self.assertIsNotNone(action)
+        self.assertEqual(action.x, 5)
+        self.assertEqual(action.y, 3)
+        self.assertEqual(action.char_name, 'test_character')
+    
+    def test_action_context_preservation_between_actions(self):
+        """Test that action context preserves coordinates between find_resources and move actions."""
+        # Simulate find_resources response with location
+        find_response = {
+            'success': True,
+            'location': (2, 0),
+            'resource_code': 'copper_rocks'
+        }
+        
+        # Update action context from find_resources response
+        self.controller._update_action_context_from_response('find_resources', find_response)
+        
+        # Check that coordinates were stored in action context
+        self.assertIn('target_x', self.controller.action_context)
+        self.assertIn('target_y', self.controller.action_context)
+        self.assertEqual(self.controller.action_context['target_x'], 2)
+        self.assertEqual(self.controller.action_context['target_y'], 0)
+    
+    @patch('src.controller.actions.move.move_character_api')
+    def test_complete_find_and_move_workflow(self, mock_move_api):
+        """Test complete workflow: find_resources -> action_context -> move action."""
+        # Setup mock for move API
+        mock_response = Mock()
+        mock_response.data = Mock()
+        mock_response.data.character = Mock()
+        mock_response.data.character.x = 2
+        mock_response.data.character.y = 0
+        mock_move_api.return_value = mock_response
+        
+        # Step 1: Simulate find_resources finding coordinates
+        find_response = {
+            'success': True,
+            'location': (2, 0),
+            'resource_code': 'copper_rocks'
+        }
+        
+        # Step 2: Update action context (this happens in _execute_single_action)
+        self.controller._update_action_context_from_response('find_resources', find_response)
+        
+        # Step 3: Build execution context for move action (includes action_context)
+        context = self.controller._build_execution_context({})
+        
+        # Step 4: Create move action through factory
+        factory = ActionFactory()
+        action = factory.create_action('move', {}, context)
+        
+        # Verify move action was created with target coordinates enabled
+        self.assertIsNotNone(action)
+        self.assertTrue(action.use_target_coordinates)
+        
+        # Step 5: Execute move action
+        response = action.execute(self.controller.client, **context)
+        
+        # Verify move was successful
+        self.assertIsNotNone(response)
+        mock_move_api.assert_called_once()
+    
+    def test_composite_action_move_configuration(self):
+        """Test that composite actions have move steps configured correctly."""
+        executor = self.controller.action_executor
+        
+        # Check that find_and_move_to_monster composite action exists
+        self.assertTrue(executor._is_composite_action('find_and_move_to_monster'))
+        
+        # Get the composite action configuration
+        config = executor.config_data.data.get('composite_actions', {}).get('find_and_move_to_monster', {})
+        steps = config.get('steps', [])
+        
+        # Find the move step
+        move_step = None
+        for step in steps:
+            if step.get('action') == 'move':
+                move_step = step
+                break
+        
+        self.assertIsNotNone(move_step, "Move step not found in find_and_move_to_monster composite action")
+        
+        # Verify move step has use_target_coordinates set
+        params = move_step.get('params', {})
+        self.assertIn('use_target_coordinates', params)
+        self.assertTrue(params['use_target_coordinates'])
+
+
+if __name__ == '__main__':
+    unittest.main()

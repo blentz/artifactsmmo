@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from .action_factory import ActionFactory
 from ..lib.yaml_data import YamlData
+from ..game.globals import CONFIG_PREFIX
 
 
 @dataclass
@@ -50,9 +51,9 @@ class ActionExecutor:
         
         # Load configuration
         if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "data" / "action_configurations.yaml"
+            config_path = f"{CONFIG_PREFIX}/action_configurations.yaml"
         
-        self.config_data = YamlData(str(config_path))
+        self.config_data = YamlData(config_path)
         self.factory = ActionFactory(self.config_data)
         self._load_configurations()
         
@@ -261,7 +262,7 @@ class ActionExecutor:
             # Use intelligent search from context if available
             controller = context.get('controller')
             if controller and hasattr(controller, 'intelligent_monster_search'):
-                search_radius = action_data.get('search_radius', 15)
+                search_radius = action_data.get('search_radius', 8)
                 success = controller.intelligent_monster_search(search_radius)
                 
                 if success:

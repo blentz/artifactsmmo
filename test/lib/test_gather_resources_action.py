@@ -61,7 +61,7 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         result = self.action.execute(mock_client)
         self.assertFalse(result['success'])
-        self.assertIn('No character data available', result['error'])
+        self.assertIn('No character data or position available', result['error'])
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_map_api_fails(self, mock_get_map_api):

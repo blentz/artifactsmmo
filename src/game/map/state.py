@@ -12,12 +12,12 @@ class MapState(YamlData):
     _client = None
     data = None
 
-    def __init__(self, client, name="map", initial_scan=True, cache_duration=300):
+    def __init__(self, client, name="map", initial_scan=True, cache_duration=180):
         YamlData.__init__(self, filename=f"{DATA_PREFIX}/{name}.yaml")
 
         self._client = client
         self._learning_callback = None
-        self.cache_duration = cache_duration  # Cache duration in seconds (default: 5 minutes)
+        self.cache_duration = cache_duration  # Cache duration in seconds (default: 3 minutes)
 
         # Initialize data as empty dict if not loaded from file
         if not self.data:
@@ -54,15 +54,34 @@ class MapState(YamlData):
         
         # Check if we have fresh cached data
         if cache and self.is_cache_fresh(x, y):
+            # Cache hit - return cached data without API call
             return self.data
+        
+        # Cache miss or expired - need to fetch from API
+        current_time = time.time()
+        if coord_key in self.data and 'last_scanned' in self.data[coord_key]:
+            age = current_time - self.data[coord_key]['last_scanned']
+            if age >= self.cache_duration:
+                print(f"🔄 Cache expired for ({x},{y}) - age {age:.1f}s >= {self.cache_duration}s, refreshing from API")
+            else:
+                print(f"🆕 First scan for ({x},{y})")
+        else:
+            print(f"🆕 First scan for ({x},{y})")
         
         # Get map data from API
         map_response = get_map_x_y(x, y, client=self._client)  # FIXME: not async
+        
+        # Handle 404 responses (coordinates outside map boundaries)
+        if map_response is None:
+            print(f"🚫 Map boundary detected at ({x},{y}) - coordinate outside map")
+            # Don't cache invalid coordinates, just return None
+            return None
+            
         maptile = map_response.data
         tile_dict = maptile.to_dict()
         
         # Add timestamp to the tile data for cache freshness tracking
-        tile_dict['last_scanned'] = time.time()
+        tile_dict['last_scanned'] = current_time
         self.data[coord_key] = tile_dict
         
         # Trigger learning callback if content is found

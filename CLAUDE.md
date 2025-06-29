@@ -9,33 +9,11 @@ This is the **artifactsmmo AI player** project. This project is an AI player use
 ## Project Principles
 
 - Backward compatibility is not a priority and should not be factored into your solutions.
-
-## Multi-Goal Thinking & Equipment Progression Architecture
-
-The AI player uses a sophisticated multi-goal coordination system that prioritizes equipment upgrades through comprehensive crafting workflows. Key architectural patterns:
-
-### Goal Prioritization Strategy
-- **Equipment goals have higher priority than combat goals for low-level characters (levels 1-5)**
-- Priority ranges: Equipment (70-78) > Combat (50-60) > Exploration (25-42)
-- Bootstrap goal (priority 78) coordinates multiple objectives for new characters
-- Goal selection is driven by character state conditions and level-appropriate thresholds
-
-### Multi-Step Equipment Progression Pipeline
-The system implements a complete crafting workflow: **Discovery → Resource Gathering → Crafting → Equipment → Combat Validation**
-
-1. **Discovery Phase**: Find workshops and resource locations (`discover_workshops` goal)
-2. **Resource Gathering Phase**: Collect materials like copper, ash_wood (`gather_crafting_materials`)
-3. **Crafting Phase**: Create equipment at workshops (`upgrade_weapon`, `upgrade_armor`)
-4. **Equipment Phase**: Equip new gear for stat improvements
-5. **Combat Validation**: Test effectiveness through monster hunting
-
-### Equipment-Focused State Variables
-Key computed states for equipment progression:
-- `need_workshop_discovery` - Triggers workshop finding for level 2+ characters
-- `need_weapon_upgrade` - Triggers when weapon is 1+ levels behind character
-- `need_armor_upgrade` - Triggers when armor coverage is insufficient
-- `workshops_discovered` - Tracks available crafting facilities
-- `has_crafting_materials` - Monitors resource inventory for crafting
+- General case solutions must be preferred over special-case handling.
+- Behavior-based solutions must be preferred over hard-coded solutions.
+- The API responses are authoritative and the only source for data.
+- Use object-oriented strategies, function pointer passing, and callback methods to execute behaviors to minimize complex if-else logic.
+- Use test-driven development strategies to ensure that all changes have tests that confirm their correctness.
 
 ### State Engine Integration Patterns
 - **StateCalculationEngine integration**: Add computed state variables to world state calculation
@@ -48,12 +26,6 @@ computed_state = self.state_engine.calculate_derived_state(state, self.threshold
 if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
     computed_state['is_on_cooldown'] = current_cooldown_state
 ```
-
-### Composite Action Workflows
-- **Equipment workflows**: Chain discovery → gathering → crafting → equipping
-- **Dependency tracking**: Each step has prerequisites and fallback strategies
-- **Material requirements**: Level-appropriate resources (copper+ash_wood for level 2)
-- **Multi-step thinking**: Actions coordinate toward long-term equipment objectives
 
 ### Critical Testing & Validation Requirements
 **ALWAYS verify changes with both unit tests AND real API execution:**
@@ -80,11 +52,11 @@ if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
 - `pylint` - Run Pylint
 
 ### Execution
-- `run.sh` - Run application. This command can only be used after all unit tests pass with no errors.
+- `run.sh` - Run application. This command can only be used after all unit tests pass with no errors. This command writes to session.log. No additional output redirection or piping is needed to follow the output.
 
 ### Additional Command-Line Utilities
 - `jq` - JSON query tool
-
+- `yq` - YAML query tool
 
 ## Architecture
 
@@ -120,16 +92,20 @@ if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
 - `log.py` - Logging facilities
 - `yaml_data.py` - YAML-backed file storage
 
-**Configuration** (`data/`):
+**Configuration** (`config/`):
 - `action_configurations.yaml` - YAML-driven action definitions and composite workflows
 - `state_configurations.yaml` - Object-oriented state class configuration
 - `actions.yaml` - GOAP action configurations for planning
 - `skill_goals.yaml` - Skill progression templates and strategies (9 skills)
 - `goal_templates.yaml` - Goal template definitions
 - `state_engine.yaml` - State calculation rules
-- `world.yaml` - World state persistence
-- `knowledge.yaml` - Learning and combat data persistence
-- `map.yaml` - Map exploration data persistence
+- `default_actions.yaml` - Default action configurations
+- `ai_player.yaml` - AI player configuration
+
+**Data** (`data/`):
+- `world.yaml` - World state persistence (runtime)
+- `knowledge.yaml` - Learning and combat data persistence (runtime)
+- `map.yaml` - Map exploration data persistence (runtime)
 
 **ArtifactsMMO API Client Library** (`artifactsmmo-api-client/`):
 - `artifactsmmo-api-client/` - API Client library files for connecting to the ArtifactsMMO API

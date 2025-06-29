@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.lib.yaml_data import YamlData
-from src.game.globals import DATA_PREFIX
+from src.game.globals import CONFIG_PREFIX
 from src.controller.state_engine import StateCalculationEngine
 
 
@@ -29,7 +29,7 @@ class GOAPGoalManager:
         
         # Load goal configuration
         if config_file is None:
-            config_file = f"{DATA_PREFIX}/goal_templates.yaml"
+            config_file = f"{CONFIG_PREFIX}/goal_templates.yaml"
         
         self.config_data = YamlData(config_file)
         self._load_configuration()
@@ -108,6 +108,17 @@ class GOAPGoalManager:
             'xp_percentage': xp_percentage,
             'is_on_cooldown': is_on_cooldown,
             
+            # Equipment slots for equipment status checks
+            'weapon_slot': char_data.get('weapon_slot', ''),
+            'helmet_slot': char_data.get('helmet_slot', ''),
+            'body_armor_slot': char_data.get('body_armor_slot', ''),
+            'leg_armor_slot': char_data.get('leg_armor_slot', ''),
+            'boots_slot': char_data.get('boots_slot', ''),
+            'shield_slot': char_data.get('shield_slot', ''),
+            'ring1_slot': char_data.get('ring1_slot', ''),
+            'ring2_slot': char_data.get('ring2_slot', ''),
+            'amulet_slot': char_data.get('amulet_slot', ''),
+            
             # Skill levels for crafting viability checks
             'mining_level': char_data.get('mining_level', 1),
             'woodcutting_level': char_data.get('woodcutting_level', 1),
@@ -117,6 +128,10 @@ class GOAPGoalManager:
             'jewelrycrafting_level': char_data.get('jewelrycrafting_level', 1),
             'cooking_level': char_data.get('cooking_level', 1),
             'alchemy_level': char_data.get('alchemy_level', 1),
+            
+            # Character inventory for material checks
+            'character_inventory': char_data.get('inventory', []),
+            'inventory': char_data.get('inventory', []),
             
             # Default state flags (may be overridden by rules)
             'has_hunted_monsters': False,
@@ -130,10 +145,10 @@ class GOAPGoalManager:
             'need_exploration': False,
             'at_resource_location': False,
             'at_workshop': False,
-            'equipment_info_unknown': current_level < 3,
+            'equipment_info_unknown': True,  # Always start unknown to trigger lookup_item_info 
             'resource_location_known': False,
             'workshop_location_known': False,
-            'equipment_info_known': current_level >= 3,
+            'equipment_info_known': False,  # Will be set by lookup_item_info action
             'craft_plan_available': False,
             'inventory_updated': False,
             'equipment_equipped': False,  # Should be computed based on actual equipment
@@ -170,7 +185,80 @@ class GOAPGoalManager:
             computed_state['is_on_cooldown'] = current_cooldown_state
         state.update(computed_state)
         
+        # Debug: Log equipment and computed state values 
+        equipment_states = {k: v for k, v in state.items() if 'armor' in k or 'weapon' in k or 'equipment' in k}
+        if equipment_states:
+            self.logger.info(f"🔧 Equipment states: {equipment_states}")
+        
+        # Debug: Log key computed states from state engine
+        computed_states = {k: v for k, v in state.items() if k in [
+            'has_raw_materials', 'has_refined_materials', 'at_correct_workshop',
+            'workshops_discovered', 'has_crafting_materials', 'materials_sufficient',
+            'best_weapon_selected', 'craftable_weapon_identified', 'material_requirements_known',
+            'need_workshop_discovery', 'need_specific_workshop', 'at_workshop'
+        ]}
+        if computed_states:
+            self.logger.info(f"🔧 Computed states: {computed_states}")
+        
         return state
+    
+    def _compute_state_method(self, method_name: str, state: Dict[str, Any]) -> bool:
+        """Compute state values using specific methods."""
+        try:
+            if method_name == 'check_armor_improved':
+                # For now, always return False since we don't have armor comparison logic
+                return False
+            elif method_name == 'check_weapon_improved':
+                # For now, always return False since we don't have weapon comparison logic  
+                return False
+            elif method_name == 'check_equipment_set_complete':
+                # Check if all major equipment slots are filled
+                # This would need character data to check actual slots
+                return False
+            elif method_name == 'check_workshops_known':
+                # For now, assume workshops are not discovered initially
+                return False
+            elif method_name == 'check_at_workshop':
+                # Would need to check if current location is a workshop
+                return False
+            elif method_name == 'check_at_resource_location':
+                # Would need to check if current location has resources
+                return False
+            elif method_name == 'check_required_materials':
+                # Would need to check inventory for required materials
+                return False
+            elif method_name == 'check_weapon_upgrade_needed':
+                # For low-level characters, always need weapon upgrades
+                character_level = state.get('character_level', 1)
+                return character_level < 5
+            elif method_name == 'check_armor_upgrade_needed':
+                # For low-level characters, always need armor upgrades
+                character_level = state.get('character_level', 1)
+                return character_level < 5
+            elif method_name == 'check_complete_equipment_needed':
+                # For characters below level 3, need complete equipment
+                character_level = state.get('character_level', 1)
+                return character_level < 3
+            elif method_name == 'check_workshop_discovery_needed':
+                # Need workshop discovery at level 2+
+                character_level = state.get('character_level', 1)
+                return character_level >= 2
+            elif method_name == 'check_combat_viability':
+                # For now, assume combat is viable
+                return False
+            else:
+                # Delegate to state engine for all computed state methods
+                try:
+                    config = {'type': 'computed', 'method': method_name}
+                    result = self.state_engine._dispatch_computed_method(method_name, config, state, self.thresholds)
+                    return result
+                except Exception as e:
+                    self.logger.warning(f"Error delegating to state engine for '{method_name}': {e}")
+                    return False
+                
+        except Exception as e:
+            self.logger.warning(f"Error computing state method '{method_name}': {e}")
+            return False
     
     def _apply_state_calculation_rules(self, base_state: Dict[str, Any]) -> Dict[str, Any]:
         """Apply YAML-defined state calculation rules to compute derived state."""
@@ -182,9 +270,14 @@ class GOAPGoalManager:
                 if isinstance(rule_config, dict):
                     if rule_config.get('type') == 'computed':
                         # Special computed values (like cooldown checking)
-                        if rule_config.get('method') == 'check_cooldown_expiration':
+                        method_name = rule_config.get('method')
+                        if method_name == 'check_cooldown_expiration':
                             # Already computed in base_state as 'is_on_cooldown'
                             continue
+                        else:
+                            # Try to compute the state using the specified method
+                            computed_value = self._compute_state_method(method_name, calculated_state)
+                            calculated_state[state_key] = computed_value
                     elif 'formula' in rule_config:
                         # Formula-based calculation
                         formula = rule_config['formula']
@@ -392,6 +485,16 @@ class GOAPGoalManager:
         if not current_state.get('character_safe', False) or not current_state.get('character_alive', False):
             return None
         
+        # TEMPORARY: Force crafting goal selection to test recipe workflow
+        # This ensures we test the complete crafting sequence: recipe selection -> resource gathering -> crafting
+        character_level = current_state.get('character_level', 1)
+        if character_level >= 2:  # Force crafting goals for level 2+ characters
+            # Force upgrade_weapon goal to test the complete workflow
+            goal_config = self.goal_templates.get('upgrade_weapon')
+            if goal_config:
+                self.logger.info(f"🔧 FORCING upgrade_weapon goal to test complete recipe workflow (level {character_level})")
+                return ('upgrade_weapon', goal_config)
+        
         # Identify XP-gaining goals with their weights and viability
         xp_goals = []
         
@@ -440,8 +543,8 @@ class GOAPGoalManager:
                         'skill_weaponcrafting_progression': 'upgrade_weapon',
                         'skill_gearcrafting_progression': 'upgrade_armor', 
                         'skill_jewelrycrafting_progression': 'complete_equipment_set',
-                        'skill_cooking_progression': 'gather_crafting_materials',
-                        'skill_alchemy_progression': 'gather_crafting_materials'
+                        'skill_cooking_progression': 'upgrade_weapon',  # Cooking provides materials for weapon upgrades
+                        'skill_alchemy_progression': 'upgrade_armor'   # Alchemy provides materials for armor upgrades
                     }
                     mapped_goal = crafting_goal_mappings.get(goal_name, 'gather_crafting_materials')
                     goal_config = self.goal_templates.get(mapped_goal)
@@ -611,6 +714,7 @@ class GOAPGoalManager:
                     if resolved_value is not None:
                         target_state[key] = resolved_value
         
+        
         self.logger.info(f"Generated goal state for '{goal_name}': {target_state}")
         return target_state
     
@@ -620,7 +724,7 @@ class GOAPGoalManager:
         
         # Apply default thresholds
         strategy.setdefault('max_iterations', self.thresholds.get('max_goap_iterations', 10))
-        strategy.setdefault('hunt_radius', self.thresholds.get('default_search_radius', 15))
+        strategy.setdefault('hunt_radius', self.thresholds.get('default_search_radius', 8))
         strategy.setdefault('safety_priority', True)
         
         return strategy

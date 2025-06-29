@@ -1,12 +1,1 @@
-data:
-  at_target_location: true
-  character_x: 0
-  character_y: 1
-  has_hunted_monsters: true
-  monster_defeated: true
-  monster_present: false
-  monsters_available: false
-planners: []
-world:
-  planners: []
-  plans: []
+{}

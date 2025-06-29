@@ -30,15 +30,20 @@ class GatherResourcesAction(ActionBase):
         self.log_execution_start(character_name=self.character_name, target_resource=self.target_resource)
         
         try:
-            # First check what resource is available at the current location
-            character_response = getattr(client, '_character_cache', None)
-            if not character_response:
-                error_response = self.get_error_response("No character data available")
-                self.log_execution_result(error_response)
-                return error_response
-                
-            character_x = character_response.data.x
-            character_y = character_response.data.y
+            # Get character position from context or API
+            character_x = kwargs.get('character_x')
+            character_y = kwargs.get('character_y')
+            
+            # If position not in context, try to get from character cache
+            if character_x is None or character_y is None:
+                character_response = getattr(client, '_character_cache', None)
+                if not character_response:
+                    error_response = self.get_error_response("No character data or position available")
+                    self.log_execution_result(error_response)
+                    return error_response
+                    
+                character_x = character_response.data.x
+                character_y = character_response.data.y
             
             # Get map information to see what resource is available
             map_response = get_map_api(x=character_x, y=character_y, client=client)

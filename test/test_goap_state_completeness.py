@@ -65,7 +65,25 @@ class TestGOAPStateCompleteness(unittest.TestCase):
             
             # Crafting progression states 
             'need_crafting_materials', 'has_crafting_materials', 'materials_sufficient',
-            'recipe_known', 'resource_found', 'has_complete_equipment_set', 'all_slots_equipped'
+            'recipe_known', 'resource_found', 'has_complete_equipment_set', 'all_slots_equipped',
+            
+            # Equipment progression states  
+            'has_better_weapon', 'has_better_armor',
+            
+            # Material and workshop states
+            'has_raw_materials', 'has_refined_materials', 'material_requirements_known',
+            'need_specific_workshop', 'at_correct_workshop',
+            
+            # Recipe evaluation states
+            'best_weapon_selected', 'craftable_weapon_identified',
+            
+            # Skill progression states  
+            'need_skill_upgrade', 'skill_level_sufficient', 'skill_xp_gained',
+            'need_weaponcrafting_upgrade', 'weaponcrafting_level_sufficient',
+            'skill_requirements_checked', 'required_skill_level_known',
+            
+            # Spatial and location states
+            'location_known', 'spatial_context_updated'
         }
         
         # Check for new variables not in expected list
@@ -158,7 +176,35 @@ class TestGOAPStateCompleteness(unittest.TestCase):
                         'recipe_known': False,
                         'resource_found': False,
                         'has_complete_equipment_set': False,
-                        'all_slots_equipped': False
+                        'all_slots_equipped': False,
+                        
+                        # Equipment progression states
+                        'has_better_weapon': False,
+                        'has_better_armor': False,
+                        
+                        # Material and workshop states
+                        'has_raw_materials': False,
+                        'has_refined_materials': False,
+                        'material_requirements_known': False,
+                        'need_specific_workshop': False,
+                        'at_correct_workshop': False,
+                        
+                        # Recipe evaluation states
+                        'best_weapon_selected': False,
+                        'craftable_weapon_identified': False,
+                        
+                        # Skill progression states
+                        'need_skill_upgrade': False,
+                        'skill_level_sufficient': True,
+                        'skill_xp_gained': False,
+                        'need_weaponcrafting_upgrade': False,
+                        'weaponcrafting_level_sufficient': True,
+                        'skill_requirements_checked': False,
+                        'required_skill_level_known': False,
+                        
+                        # Spatial and location states
+                        'location_known': False,
+                        'spatial_context_updated': False
                     }
                 
                 controller.goal_manager.calculate_world_state = mock_calculate_state
@@ -209,7 +255,27 @@ class TestGOAPStateCompleteness(unittest.TestCase):
             'need_workshop_discovery': False, 'workshops_discovered': False,
             'need_crafting_materials': False, 'has_crafting_materials': False, 
             'materials_sufficient': False, 'recipe_known': False, 'resource_found': False,
-            'has_complete_equipment_set': False, 'all_slots_equipped': False
+            'has_complete_equipment_set': False, 'all_slots_equipped': False,
+            
+            # Equipment progression states
+            'has_better_weapon': False, 'has_better_armor': False,
+            
+            # Material and workshop states
+            'has_raw_materials': False, 'has_refined_materials': False,
+            'material_requirements_known': False, 'need_specific_workshop': False,
+            'at_correct_workshop': False,
+            
+            # Recipe evaluation states  
+            'best_weapon_selected': False, 'craftable_weapon_identified': False,
+            
+            # Skill progression states
+            'need_skill_upgrade': False, 'skill_level_sufficient': True,
+            'skill_xp_gained': False, 'need_weaponcrafting_upgrade': False,
+            'weaponcrafting_level_sufficient': True, 'skill_requirements_checked': False,
+            'required_skill_level_known': False,
+            
+            # Spatial and location states
+            'location_known': False, 'spatial_context_updated': False
         }
         
         # Test different goal scenarios

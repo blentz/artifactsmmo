@@ -46,8 +46,12 @@ done
 jq -c -r "$changes" openapi.json > updated_openapi.json
 mv updated_openapi.json openapi.json
 
-# bugfix
+# bugfixes
 sed -i 's/NPCs/NPCS/g' openapi.json
+
+# comment out inconvenient error-handling.
+cp .openapi_bugfixes/openapi.py ~/.virtualenvs/artifactsmmo/lib/python3.13/site-packages/openapi_python_client/parser/openapi.py
+cp .openapi_bugfixes/init.py ~/.virtualenvs/artifactsmmo/lib/python3.13/site-packages/openapi_python_client/parser/properties/__init__.py
 
 # generate client
 openapi-python-client generate --path openapi.json \

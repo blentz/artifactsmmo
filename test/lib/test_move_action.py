@@ -39,5 +39,42 @@ class TestMoveAction(unittest.TestCase):
         self.assertIsNotNone(response)
         self.assertEqual(response, mock_response)
 
+    @patch('src.controller.actions.move.move_character_api')
+    def test_move_action_already_at_destination(self, mock_move_api):
+        # Mock API to raise exception for "already at destination"
+        mock_move_api.side_effect = Exception('Move failed: Unexpected status code: 490\n\nResponse content:\n{"error":{"code":490,"message":"Character already at destination."}}')
+        
+        action = MoveAction(char_name=self.char_name, x=self.x, y=self.y)
+        response = action.execute(client=self.client)
+        
+        # Verify the API was called
+        mock_move_api.assert_called_once()
+        
+        # Verify success response for "already at destination"
+        self.assertIsInstance(response, dict)
+        self.assertTrue(response.get('success', False))
+        self.assertEqual(response.get('message'), "Character already at destination")
+        self.assertEqual(response.get('x'), self.x)
+        self.assertEqual(response.get('y'), self.y)
+        self.assertEqual(response.get('char_name'), self.char_name)
+
+    @patch('src.controller.actions.move.move_character_api')
+    def test_move_action_other_error(self, mock_move_api):
+        # Mock API to raise a different exception
+        mock_move_api.side_effect = Exception('Network error')
+        
+        action = MoveAction(char_name=self.char_name, x=self.x, y=self.y)
+        response = action.execute(client=self.client)
+        
+        # Verify the API was called
+        mock_move_api.assert_called_once()
+        
+        # Verify error response for other exceptions
+        self.assertIsInstance(response, dict)
+        self.assertFalse(response.get('success', True))
+        self.assertIn('Network error', response.get('error', ''))
+        self.assertEqual(response.get('x'), self.x)
+        self.assertEqual(response.get('y'), self.y)
+
 if __name__ == '__main__':
     unittest.main()

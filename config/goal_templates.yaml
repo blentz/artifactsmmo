@@ -83,7 +83,7 @@ goal_templates:
       character_safe: true
     strategy:
       search_radius: 4
-      max_search_attempts: 10
+      max_search_attempts: 5
       level_range: 2
       prioritize_known_monsters: true
     success_conditions:
@@ -99,7 +99,7 @@ goal_templates:
       character_safe: true
       character_alive: true
     strategy:
-      exploration_radius: 25
+      exploration_radius: 10
       max_exploration_time: 300  # seconds
       retreat_on_danger: true
       
@@ -114,7 +114,7 @@ goal_templates:
     strategy:
       search_radius: 4
       resource_priority: ["ore", "wood", "food"]
-      max_gather_attempts: 15
+      max_gather_attempts: 5
     parameters:
       required: ["resource_type"]
       optional: ["quantity", "search_radius"]
@@ -194,8 +194,8 @@ goal_templates:
     strategy:
       equipment_slots: ["weapon", "helmet", "body_armor", "leg_armor", "boots"]
       level_improvement_threshold: 1
-      search_radius: 30
-      max_craft_attempts: 10
+      search_radius: 5
+      max_craft_attempts: 5
       resource_gathering_enabled: true
       workshop_discovery_enabled: true
       prioritize_missing_slots: true
@@ -251,7 +251,7 @@ goal_templates:
       resource_types: ["copper", "iron_ore", "ash_wood", "spruce_wood", "coal"]
       prioritize_by_need: true
       level_appropriate_only: true
-      max_gather_attempts: 20
+      max_gather_attempts: 5
       adaptive_gathering: true
       equipment_focused: true
       level_2_priority_materials: ["copper", "ash_wood"]  # Focus materials for level 2 characters
@@ -290,6 +290,60 @@ goal_templates:
         operator: "=="
         value: true
       
+  # Skill progression goals
+  upgrade_skill:
+    description: "Level up a specific skill to meet crafting requirements"
+    objective_type: "skill_progression"
+    target_state:
+      skill_level_sufficient: true
+      character_safe: true
+      character_alive: true
+    strategy:
+      skill_type: "${skill_name}"
+      target_level: "${required_level}"
+      use_appropriate_actions: true
+      gather_required_materials: true
+      find_skill_locations: true
+      progressive_skill_building: true
+    parameters:
+      required: ["skill_name", "required_level"]
+      optional: ["current_level", "materials_needed"]
+    success_conditions:
+      - type: "skill_level"
+        skill: "${skill_name}"
+        operator: ">="
+        value: "${required_level}"
+      - type: "character_alive"
+        operator: "=="
+        value: true
+
+  upgrade_weaponcrafting:
+    description: "Level up weaponcrafting skill through basic weapon creation"
+    objective_type: "skill_progression"
+    target_state:
+      weaponcrafting_level_sufficient: true
+      character_safe: true
+      character_alive: true
+      at_workshop: true
+    strategy:
+      skill_type: "weaponcrafting"
+      target_level: "${required_level}"
+      basic_recipes: ["copper_dagger", "wooden_staff"]
+      materials_needed: ["copper", "ash_wood"]
+      workshop_type: "weaponcrafting"
+      progressive_crafting: true
+      gather_materials_first: true
+    parameters:
+      required: ["required_level"]
+      optional: ["current_level", "target_recipes"]
+    success_conditions:
+      - type: "weaponcrafting_level"
+        operator: ">="
+        value: "${required_level}"
+      - type: "character_alive"
+        operator: "=="
+        value: true
+
   # Multi-objective progression goal for early game
   bootstrap_character:
     description: "Bootstrap low-level character through equipment upgrades and progression"
@@ -433,6 +487,29 @@ goal_selection_rules:
       goal: "level_up"
       priority: 50
       
+  # Skill progression priorities (very high priority for crafting requirements)
+  skill_progression:
+    # Weaponcrafting skill upgrade - required for weapon crafting
+    - condition:
+        need_weaponcrafting_upgrade: true
+        character_safe: true
+        character_level: ">=1"
+      goal: "upgrade_weaponcrafting"
+      priority: 85
+      parameters:
+        required_level: 1
+
+    # General skill upgrade for any skill requirement
+    - condition:
+        need_skill_upgrade: true
+        character_safe: true
+        character_level: ">=1"
+      goal: "upgrade_skill"
+      priority: 83
+      parameters:
+        skill_name: "${required_skill}"
+        required_level: "${required_skill_level}"
+
   # Equipment progression priorities (high priority for low-level characters)
   equipment:
     # Bootstrap goal for new characters - multi-step thinking
@@ -551,6 +628,26 @@ state_calculation_rules:
     method: "check_combat_viability"
     description: "True when nearby monsters have consistently poor win rates"
     
+  # Skill progression states
+  need_weaponcrafting_upgrade:
+    type: "computed"
+    method: "check_weaponcrafting_upgrade_needed"
+    description: "True when character needs weaponcrafting skill to craft selected weapon"
+    
+  need_skill_upgrade:
+    type: "computed"
+    method: "check_skill_upgrade_needed"
+    description: "True when character needs to upgrade any skill for crafting requirements"
+    
+  weaponcrafting_level_sufficient:
+    type: "computed"
+    method: "check_weaponcrafting_level_sufficient"
+    description: "True when weaponcrafting level meets current requirements"
+    
+  skill_requirements_checked:
+    formula: "character_level >= 1"  # Default to false initially
+    description: "True when skill requirements have been checked for current task"
+    
   # Equipment status states
   has_better_weapon:
     type: "computed"
@@ -621,7 +718,7 @@ thresholds:
   armor_upgrade_level_threshold: 1   # Start looking for armor upgrades at level 1
   equipment_level_difference: 1      # Consider upgrade if equipment is 1+ levels behind
   min_equipment_slots: 2            # Minimum slots to consider "complete" equipment
-  workshop_discovery_radius: 25     # Radius to search for workshops
+  workshop_discovery_radius: 5     # Radius to search for workshops
   material_gathering_multiplier: 2.0 # Gather extra materials for safety
   equipment_priority_level_threshold: 5  # Equipment should be high priority for levels 1-5
   

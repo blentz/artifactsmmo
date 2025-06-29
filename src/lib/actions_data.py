@@ -6,7 +6,7 @@ from src.lib.yaml_data import YamlData
 class ActionsData(YamlData):
     """GOAP actions configuration data stored in YAML."""
 
-    def __init__(self, filename="data/default_actions.yaml"):
+    def __init__(self, filename="config/default_actions.yaml"):
         super().__init__(filename=filename)
 
     def get_actions(self):

@@ -13,7 +13,7 @@ from enum import Enum
 from src.lib.yaml_data import YamlData
 from src.lib.goap import World, Planner, Action_List
 from src.lib.actions_data import ActionsData
-from src.game.globals import DATA_PREFIX
+from src.game.globals import CONFIG_PREFIX
 
 
 class SkillType(Enum):
@@ -43,7 +43,7 @@ class SkillGoalManager:
         
         # Load skill goal configuration
         if config_file is None:
-            config_file = f"{DATA_PREFIX}/skill_goals.yaml"
+            config_file = f"{CONFIG_PREFIX}/skill_goals.yaml"
         
         self.config_data = YamlData(config_file)
         self._load_configuration()
@@ -352,7 +352,7 @@ class SkillGoalManager:
         """Load actions appropriate for a specific skill."""
         try:
             # Try skill-specific config first
-            skill_config_file = f"data/{skill_type.value}_actions.yaml"
+            skill_config_file = f"{CONFIG_PREFIX}/{skill_type.value}_actions.yaml"
             skill_actions_data = ActionsData(skill_config_file)
             skill_actions = skill_actions_data.get_actions()
             
@@ -364,7 +364,7 @@ class SkillGoalManager:
         
         # Fallback to default actions
         try:
-            default_actions_data = ActionsData("data/default_actions.yaml")
+            default_actions_data = ActionsData(f"{CONFIG_PREFIX}/default_actions.yaml")
             default_actions = default_actions_data.get_actions()
             self.logger.info(f"Using {len(default_actions)} default actions for {skill_type.value}")
             return default_actions

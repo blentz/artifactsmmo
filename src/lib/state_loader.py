@@ -125,7 +125,7 @@ class StateConfigLoader:
         self.logger = logging.getLogger(__name__)
         
         if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "data" / "state_configurations.yaml"
+            config_path = Path(__file__).parent.parent.parent / "config" / "state_configurations.yaml"
         
         self.config_path = Path(config_path)
         self.factory = StateFactory()

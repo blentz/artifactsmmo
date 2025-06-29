@@ -47,7 +47,21 @@ class ActionFactory:
         from .actions.rest import RestAction
         from .actions.map_lookup import MapLookupAction
         from .actions.find_monsters import FindMonstersAction
+        from .actions.find_resources import FindResourcesAction
+        from .actions.find_workshops import FindWorkshopsAction
+        from .actions.move_to_workshop import MoveToWorkshopAction
+        from .actions.move_to_resource import MoveToResourceAction
+        from .actions.gather_resources import GatherResourcesAction
         from .actions.wait import WaitAction
+        from .actions.lookup_item_info import LookupItemInfoAction
+        from .actions.craft_item import CraftItemAction
+        from .actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
+        from .actions.find_correct_workshop import FindCorrectWorkshopAction
+        from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
+        from .actions.equip_item import EquipItemAction
+        from .actions.transform_raw_materials import TransformRawMaterialsAction
+        from .actions.check_inventory import CheckInventoryAction
+        from .actions.check_location import CheckLocationAction
         
         # Register default actions with their parameter mappings
         self.register_action('move', ActionExecutorConfig(
@@ -55,7 +69,8 @@ class ActionFactory:
             constructor_params={
                 'char_name': 'character_name',  # Will be provided by controller
                 'x': 'x',
-                'y': 'y'
+                'y': 'y',
+                'use_target_coordinates': 'use_target_coordinates'
             }
         ))
         
@@ -93,10 +108,154 @@ class ActionFactory:
             }
         ))
         
+        self.register_action('find_resources', ActionExecutorConfig(
+            action_class=FindResourcesAction,
+            constructor_params={
+                'character_x': 'character_x',
+                'character_y': 'character_y',
+                'search_radius': 'search_radius',
+                'resource_types': 'resource_types',
+                'character_level': 'character_level',
+                'skill_type': 'skill_type'
+            }
+        ))
+        
+        self.register_action('gather_resources', ActionExecutorConfig(
+            action_class=GatherResourcesAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'target_resource': 'target_resource'
+            }
+        ))
+        
+        self.register_action('transform_raw_materials', ActionExecutorConfig(
+            action_class=TransformRawMaterialsAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'target_item': 'target_item'
+            }
+        ))
+        
         self.register_action('wait', ActionExecutorConfig(
             action_class=WaitAction,
             constructor_params={
                 'wait_duration': 'wait_duration'
+            }
+        ))
+        
+        self.register_action('find_workshops', ActionExecutorConfig(
+            action_class=FindWorkshopsAction,
+            constructor_params={
+                'character_x': 'character_x',
+                'character_y': 'character_y',
+                'search_radius': 'search_radius',
+                'workshop_type': 'workshop_type'
+            }
+        ))
+        
+        self.register_action('move_to_workshop', ActionExecutorConfig(
+            action_class=MoveToWorkshopAction,
+            constructor_params={
+                'char_name': 'character_name',
+                'target_x': 'target_x',
+                'target_y': 'target_y'
+            }
+        ))
+        
+        self.register_action('move_to_resource', ActionExecutorConfig(
+            action_class=MoveToResourceAction,
+            constructor_params={
+                'char_name': 'character_name',
+                'target_x': 'target_x',
+                'target_y': 'target_y'
+            }
+        ))
+        
+        self.register_action('lookup_item_info', ActionExecutorConfig(
+            action_class=LookupItemInfoAction,
+            constructor_params={
+                'item_code': 'item_code',
+                'search_term': 'search_term',
+                'item_type': 'item_type',
+                'max_level': 'max_level'
+            }
+        ))
+        
+        self.register_action('craft_item', ActionExecutorConfig(
+            action_class=CraftItemAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'item_code': 'item_code',  # Try item_code first
+                'quantity': 'quantity'
+            }
+        ))
+        
+        self.register_action('smelt_materials', ActionExecutorConfig(
+            action_class=CraftItemAction,  # Reuse CraftItemAction since smelting is just crafting
+            constructor_params={
+                'character_name': 'character_name',
+                'item_code': 'item_code',  # Will be "copper" for smelting
+                'quantity': 'quantity'
+            }
+        ))
+        
+        self.register_action('transform_material', ActionExecutorConfig(
+            action_class=TransformRawMaterialsAction,  # Specialized raw material transformation action
+            constructor_params={
+                'character_name': 'character_name',
+                'target_item': 'item_code'  # Target item to determine required materials
+            }
+        ))
+        
+        self.register_action('evaluate_weapon_recipes', ActionExecutorConfig(
+            action_class=EvaluateWeaponRecipesAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'current_weapon': 'current_weapon',
+                'character_level': 'character_level'
+            }
+        ))
+        
+        self.register_action('find_correct_workshop', ActionExecutorConfig(
+            action_class=FindCorrectWorkshopAction,
+            constructor_params={
+                'character_x': 'character_x',
+                'character_y': 'character_y',
+                'search_radius': 'search_radius',
+                'item_code': 'item_code',
+                'character_name': 'character_name'
+            }
+        ))
+        
+        self.register_action('analyze_crafting_chain', ActionExecutorConfig(
+            action_class=AnalyzeCraftingChainAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'target_item': 'target_item'
+            }
+        ))
+        
+        self.register_action('equip_item', ActionExecutorConfig(
+            action_class=EquipItemAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'item_code': 'item_code',
+                'slot': 'slot'
+            }
+        ))
+        
+        self.register_action('check_inventory', ActionExecutorConfig(
+            action_class=CheckInventoryAction,
+            constructor_params={
+                'character_name': 'character_name',
+                'required_items': 'required_items'
+            }
+        ))
+        
+        self.register_action('check_location', ActionExecutorConfig(
+            action_class=CheckLocationAction,
+            constructor_params={
+                'character_name': 'character_name'
             }
         ))
     
@@ -233,14 +392,39 @@ class ActionFactory:
                 elif data_key in context:
                     value = context[data_key]
                 else:
-                    # Check if parameter has a default value
-                    sig = inspect.signature(config.action_class.__init__)
-                    param = sig.parameters.get(param_name)
-                    if param and param.default != inspect.Parameter.empty:
-                        continue  # Skip - will use default
+                    # Special handling for craft_item action - fallback to recipe_item_code
+                    if action_name == 'craft_item' and param_name == 'item_code' and 'recipe_item_code' in context:
+                        value = context['recipe_item_code']
+                        self.logger.debug(f"Using recipe_item_code fallback for craft_item: {value}")
+                    # Special handling for smelt_materials action - fallback to smelt_item_code
+                    elif action_name == 'smelt_materials' and param_name == 'item_code' and 'smelt_item_code' in context:
+                        value = context['smelt_item_code']
+                        self.logger.debug(f"Using smelt_item_code fallback for smelt_materials: {value}")
+                    # General handling for transform_material action - detect required transformation
+                    elif action_name == 'transform_material' and param_name == 'item_code':
+                        value = self._determine_material_transformation(context)
+                        self.logger.debug(f"Determined transformation item_code for transform_material: {value}")
+                    elif action_name == 'transform_material' and param_name == 'character_name':
+                        value = context.get('character_name', context.get('char_name', 'unknown'))
+                        self.logger.debug(f"Using character_name for transform_material: {value}")
+                    elif action_name == 'transform_material' and param_name == 'quantity':
+                        value = context.get('quantity', 1)
+                        self.logger.debug(f"Using quantity for transform_material: {value}")
                     else:
-                        self.logger.warning(f"Missing required parameter {param_name} for action {action_name}")
-                        return None
+                        # Special handling for move action - enable use_target_coordinates if target coordinates are available
+                        if (action_name == 'move' and param_name == 'use_target_coordinates' and 
+                            ('target_x' in context or 'target_y' in context or 'x' in context or 'y' in context)):
+                            value = True
+                            self.logger.debug(f"Auto-enabling use_target_coordinates for move action due to available coordinates")
+                        else:
+                            # Check if parameter has a default value
+                            sig = inspect.signature(config.action_class.__init__)
+                            param = sig.parameters.get(param_name)
+                            if param and param.default != inspect.Parameter.empty:
+                                continue  # Skip - will use default
+                            else:
+                                self.logger.warning(f"Missing required parameter {param_name} for action {action_name}")
+                                return None
                 
                 # Apply preprocessor if available
                 if config.preprocessors and param_name in config.preprocessors:
@@ -308,3 +492,49 @@ class ActionFactory:
     def is_action_registered(self, action_name: str) -> bool:
         """Check if an action is registered."""
         return action_name in self._action_registry
+    
+    def _determine_material_transformation(self, context: Dict[str, Any]) -> str:
+        """
+        Determine what material needs to be transformed based on available raw materials.
+        
+        This implements general-case material transformation logic that works for any materials.
+        """
+        try:
+            # Material transformation mappings: raw -> refined
+            transformations = {
+                'copper_ore': 'copper',
+                'iron_ore': 'iron', 
+                'coal': 'coal',  # Already refined
+                'ash_wood': 'logs',
+                'birch_wood': 'logs',
+                'dead_wood': 'logs'
+            }
+            
+            # Check character inventory for available raw materials
+            character_inventory = context.get('character_inventory', [])
+            if not character_inventory:
+                character_inventory = context.get('inventory', [])
+            
+            # Find the first raw material we have that can be transformed
+            for item in character_inventory:
+                if isinstance(item, dict):
+                    item_code = item.get('code', '')
+                    quantity = item.get('quantity', 0)
+                    
+                    if item_code in transformations and quantity > 0:
+                        refined_item = transformations[item_code]
+                        self.logger.debug(f"Found transformable material: {item_code} -> {refined_item} (quantity: {quantity})")
+                        return refined_item
+            
+            # Fallback: try common materials in order of preference
+            preferred_order = ['copper_ore', 'iron_ore', 'ash_wood']
+            for raw_material in preferred_order:
+                if raw_material in transformations:
+                    return transformations[raw_material]
+            
+            # Final fallback
+            return 'copper'
+            
+        except Exception as e:
+            self.logger.warning(f"Error determining material transformation: {e}")
+            return 'copper'  # Safe fallback

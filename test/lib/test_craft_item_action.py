@@ -49,10 +49,12 @@ class TestCraftItemAction(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
-    def test_execute_no_character_cache(self):
+    @patch('src.controller.actions.craft_item.get_character_api')
+    def test_execute_no_character_cache(self, mock_get_character_api):
         """Test crafting fails without character data."""
         mock_client = Mock()
         mock_client._character_cache = None
+        mock_get_character_api.return_value = None
         
         result = self.action.execute(mock_client)
         self.assertFalse(result['success'])
@@ -94,9 +96,19 @@ class TestCraftItemAction(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertIn('No workshop available at current location', result['error'])
 
+    @patch('src.controller.actions.craft_item.get_character_api')
     @patch('src.controller.actions.craft_item.get_map_api')
-    def test_execute_wrong_content_type(self, mock_get_map_api):
+    def test_execute_wrong_content_type(self, mock_get_map_api, mock_get_character_api):
         """Test crafting fails when location has wrong content type."""
+        # Mock character API response
+        mock_character_data = Mock()
+        mock_character_data.x = 5
+        mock_character_data.y = 3
+        
+        mock_character_response = Mock()
+        mock_character_response.data = mock_character_data
+        mock_get_character_api.return_value = mock_character_response
+        
         # Mock map data with non-workshop content
         mock_content = Mock()
         mock_content.type_ = 'bank'
@@ -119,7 +131,7 @@ class TestCraftItemAction(unittest.TestCase):
         # Mock map data with workshop
         mock_content = Mock()
         mock_content.type_ = 'workshop'
-        mock_content.code = 'weapon_workshop'
+        mock_content.code = 'weaponcrafting'
         
         mock_map_data = Mock()
         mock_map_data.content = mock_content
@@ -142,7 +154,7 @@ class TestCraftItemAction(unittest.TestCase):
         # Mock map data with workshop
         mock_content = Mock()
         mock_content.type_ = 'workshop'
-        mock_content.code = 'weapon_workshop'
+        mock_content.code = 'weaponcrafting'
         
         mock_map_data = Mock()
         mock_map_data.content = mock_content
@@ -211,7 +223,7 @@ class TestCraftItemAction(unittest.TestCase):
         self.assertTrue(result['success'])
         self.assertEqual(result['item_code'], self.item_code)
         self.assertEqual(result['quantity_crafted'], self.quantity)
-        self.assertEqual(result['workshop_code'], 'weapon_workshop')
+        self.assertEqual(result['workshop_code'], 'weaponcrafting')
         self.assertEqual(result['location'], (5, 3))
 
     @patch('src.controller.actions.craft_item.crafting_api')
@@ -287,7 +299,7 @@ class TestCraftItemAction(unittest.TestCase):
         # Mock map data with workshop
         mock_content = Mock()
         mock_content.type_ = 'workshop'
-        mock_content.code = 'weapon_workshop'
+        mock_content.code = 'weaponcrafting'  # Must match the required skill
         
         mock_map_data = Mock()
         mock_map_data.content = mock_content
@@ -296,9 +308,13 @@ class TestCraftItemAction(unittest.TestCase):
         mock_map_response.data = mock_map_data
         mock_get_map_api.return_value = mock_map_response
         
-        # Mock item data
+        # Mock item data with matching craft skill
+        mock_craft = Mock()
+        mock_craft.skill = 'weaponcrafting'  # Must match workshop code
+        
         mock_item_data = Mock()
         mock_item_data.name = 'Copper Sword'
+        mock_item_data.craft = mock_craft
         
         mock_item_response = Mock()
         mock_item_response.data = mock_item_data

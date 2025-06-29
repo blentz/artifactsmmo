@@ -33,8 +33,25 @@ state_calculation:
   need_equipment:
     formula: "character_level < ${thresholds.equipment_level_threshold}"
     
+  need_crafting_materials:
+    formula: "not has_crafting_materials"
+    
+  need_workshop_discovery:
+    formula: "not workshops_discovered and character_level >= 2"
+    
   has_equipment:
     formula: "character_level >= ${thresholds.equipment_level_threshold}"
+    
+  # Recipe and crafting planning states  
+  equipment_info_unknown:
+    formula: "need_equipment and not best_weapon_selected"  # Look up recipes only if equipment needed and no weapon selected yet
+    
+  recipe_known:
+    formula: "best_weapon_selected"  # Recipe is known after weapon selection
+    
+  # Smelting and material processing states
+  need_refined_materials:
+    formula: "smelting_required == true"
     
   equipment_equipped:
     formula: "character_level >= 2"
@@ -67,15 +84,16 @@ computed_states:
     analysis_type: "complete_equipment"
     threshold_config: "equipment_completion_thresholds"
     
-  need_crafting_materials:
-    type: "crafting_analysis"
-    analysis_type: "materials_needed"
-    threshold_config: "material_thresholds"
     
   need_workshop_discovery:
     type: "workshop_analysis"
     analysis_type: "discovery_needed"
     threshold_config: "workshop_discovery_thresholds"
+    
+  need_specific_workshop:
+    type: "workshop_analysis"
+    analysis_type: "specific_workshop_needed"
+    threshold_config: "specific_workshop_thresholds"
     
   # Equipment status states
   has_better_weapon:
@@ -103,6 +121,10 @@ computed_states:
     type: "location_check"
     check_type: "workshop_location"
     
+  at_correct_workshop:
+    type: "location_check"
+    check_type: "correct_workshop_location"
+    
   at_resource_location:
     type: "location_check"
     check_type: "resource_location"
@@ -114,6 +136,40 @@ computed_states:
   materials_sufficient:
     type: "inventory_check"
     check_type: "sufficient_quantity"
+    
+  # General material checks for crafting workflows
+  has_raw_materials:
+    type: "inventory_check"
+    check_type: "raw_materials_available"
+    
+  has_refined_materials:
+    type: "inventory_check" 
+    check_type: "refined_materials_available"
+    
+  material_requirements_known:
+    type: "knowledge_check"
+    check_type: "material_requirements_discovered"
+    
+  best_weapon_selected:
+    type: "knowledge_check"
+    check_type: "optimal_weapon_identified"
+    
+  craftable_weapon_identified:
+    type: "knowledge_check" 
+    check_type: "craftable_weapon_found"
+    
+  # Skill progression states
+  need_weaponcrafting_upgrade:
+    type: "computed"
+    method: "check_weaponcrafting_upgrade_needed"
+    
+  need_skill_upgrade:
+    type: "computed"
+    method: "check_skill_upgrade_needed"
+    
+  weaponcrafting_level_sufficient:
+    type: "computed"
+    method: "check_weaponcrafting_level_sufficient"
 
 # Response processing rules - replaces hardcoded update_world_state_from_response logic
 response_handlers:
@@ -295,6 +351,100 @@ response_handlers:
     craft_plan_available:
       type: "static"
       value: true
+    recipe_known:
+      type: "static"
+      value: true
+      
+  smelt_materials:
+    has_refined_materials:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "success"
+      true_value: true
+      false_value: false
+    inventory_updated:
+      type: "static"
+      value: true
+    equipment_info_unknown:
+      type: "static"
+      value: false
+      
+  find_correct_workshop:
+    at_correct_workshop:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: false
+      false_value: true
+    workshops_discovered:
+      type: "static"
+      value: true
+    workshop_location_known:
+      type: "static"
+      value: true
+    need_specific_workshop:
+      type: "static"
+      value: false
+      
+  transform_material:
+    has_refined_materials:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "success"
+      true_value: true
+      false_value: false
+    inventory_updated:
+      type: "static"
+      value: true
+      
+  find_workshops:
+    workshops_discovered:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: false
+      false_value: true
+    workshop_location_known:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "location"
+        value: null
+      true_value: false
+      false_value: true
+    at_workshop:
+      type: "static"
+      value: false
+      
+  evaluate_weapon_recipes:
+    equipment_info_known:
+      type: "static"
+      value: true
+    recipe_known:
+      type: "static"
+      value: true
+    best_weapon_selected:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "selected_weapon"
+        value: null
+      true_value: false
+      false_value: true
+    craftable_weapon_identified:
+      type: "conditional"
+      condition:
+        type: "response_field"
+        field: "selected_weapon"
+        value: null
+      true_value: false
+      false_value: true
 
 # World state update patterns
 world_state_updates:

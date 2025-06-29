@@ -50,16 +50,20 @@ class AnalyzeResourcesAction(ActionBase):
             
             # Step 2: Analyze each resource for crafting potential
             resource_analysis = {}
+            # Get knowledge base and config data from context
+            knowledge_base = kwargs.get('knowledge_base')
+            config_data = kwargs.get('config_data')
+            
             for resource_location in nearby_resources:
-                analysis = self._analyze_resource_crafting_potential(client, resource_location)
+                analysis = self._analyze_resource_crafting_potential(client, resource_location, knowledge_base)
                 if analysis:
                     resource_analysis[resource_location['resource_code']] = analysis
             
             # Step 3: Find level-appropriate equipment that can be crafted
             equipment_opportunities = self._find_equipment_crafting_opportunities(client, resource_analysis)
             
-            # Step 4: Prioritize opportunities based on character needs
-            prioritized_opportunities = self._prioritize_crafting_opportunities(equipment_opportunities)
+            # Step 4: Prioritize opportunities based on character needs using YAML configuration
+            prioritized_opportunities = self._prioritize_crafting_opportunities(equipment_opportunities, config_data)
             
             result = self.get_success_response(
                 nearby_resources_count=len(nearby_resources),
@@ -117,7 +121,7 @@ class AnalyzeResourcesAction(ActionBase):
         
         return sorted(resources, key=lambda r: r['distance'])
 
-    def _analyze_resource_crafting_potential(self, client, resource_location: Dict) -> Optional[Dict]:
+    def _analyze_resource_crafting_potential(self, client, resource_location: Dict, knowledge_base=None) -> Optional[Dict]:
         """
         Analyze a specific resource for its crafting potential.
         
@@ -156,7 +160,8 @@ class AnalyzeResourcesAction(ActionBase):
                 for drop in resource_data.drops:
                     drop_code = getattr(drop, 'code', '')
                     if drop_code:
-                        crafting_uses = self._find_crafting_uses_for_item(client, drop_code)
+                        # Pass knowledge base through to enable API fallback pattern
+                        crafting_uses = self._find_crafting_uses_for_item(client, drop_code, knowledge_base)
                         analysis['crafting_uses'].extend(crafting_uses)
             
             return analysis
@@ -165,36 +170,30 @@ class AnalyzeResourcesAction(ActionBase):
             self.logger.warning(f"Failed to analyze resource {resource_code}: {str(e)}")
             return None
 
-    def _find_crafting_uses_for_item(self, client, item_code: str) -> List[Dict]:
+    def _find_crafting_uses_for_item(self, client, item_code: str, knowledge_base=None) -> List[Dict]:
         """
         Find what items can be crafted using the given item as a material.
-        Since we can't get all items in one call, we'll use known common equipment items.
+        Uses knowledge base first, then API discovery as fallback.
         
         Args:
             client: API client
             item_code: Code of the item to check crafting uses for
+            knowledge_base: Knowledge base instance (optional)
             
         Returns:
             List of crafting opportunities
         """
         crafting_uses = []
         
-        # Common equipment items that might use basic resources
-        common_equipment = [
-            # Weapons
-            'wooden_staff', 'copper_dagger', 'iron_sword', 'steel_sword',
-            'copper_axe', 'iron_axe', 'steel_axe',
-            # Armor
-            'leather_helmet', 'copper_helmet', 'iron_helmet', 'steel_helmet',
-            'leather_boots', 'copper_boots', 'iron_boots', 'steel_boots',
-            'leather_armor', 'copper_armor', 'iron_armor', 'steel_armor',
-            # Rings and accessories
-            'copper_ring', 'iron_ring', 'steel_ring',
-            'copper_amulet', 'iron_amulet', 'steel_amulet'
-        ]
+        # Try to get equipment items from knowledge base first
+        equipment_items = self._get_equipment_items_from_knowledge(knowledge_base)
+        
+        # If no knowledge base data, fall back to API discovery
+        if not equipment_items:
+            equipment_items = self._discover_equipment_items_from_api(client)
         
         try:
-            for equipment_code in common_equipment:
+            for equipment_code in equipment_items:
                 try:
                     item_response = get_item_api(code=equipment_code, client=client)
                     if not item_response or not item_response.data:
@@ -260,6 +259,90 @@ class AnalyzeResourcesAction(ActionBase):
         
         return materials
 
+    def _get_equipment_items_from_knowledge(self, knowledge_base=None) -> List[str]:
+        """
+        Get equipment item codes from knowledge base if available.
+        
+        Args:
+            knowledge_base: Knowledge base instance
+            
+        Returns:
+            List of equipment item codes
+        """
+        if not knowledge_base or not hasattr(knowledge_base, 'data'):
+            return []
+        
+        equipment_items = []
+        
+        try:
+            items = knowledge_base.data.get('items', {})
+            
+            for item_code, item_data in items.items():
+                item_type = item_data.get('item_type', '').lower()
+                item_level = item_data.get('level', 1)
+                
+                # Check if this is equipment and level-appropriate
+                equipment_types = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']
+                level_appropriate = abs(item_level - self.character_level) <= 5
+                
+                if item_type in equipment_types and level_appropriate:
+                    equipment_items.append(item_code)
+            
+            if equipment_items:
+                self.logger.info(f"📊 Found {len(equipment_items)} equipment items in knowledge base")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to get equipment items from knowledge base: {str(e)}")
+        
+        return equipment_items
+
+    def _discover_equipment_items_from_api(self, client) -> List[str]:
+        """
+        Discover equipment items from API by fetching items with equipment types.
+        Uses API pagination to get level-appropriate equipment.
+        
+        Args:
+            client: API client
+            
+        Returns:
+            List of equipment item codes
+        """
+        equipment_items = []
+        
+        try:
+            from artifactsmmo_api_client.api.items.get_all_item import sync as get_all_items_api
+            
+            # Get equipment items by type
+            equipment_types = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']
+            
+            for item_type in equipment_types:
+                try:
+                    # Get items of this type, focusing on level-appropriate items
+                    items_response = get_all_items_api(
+                        type_=item_type,
+                        max_level=self.character_level + 5,  # Include slightly higher level items
+                        page=1,
+                        size=50,
+                        client=client
+                    )
+                    
+                    if items_response and items_response.data:
+                        for item in items_response.data:
+                            if hasattr(item, 'code') and item.code:
+                                equipment_items.append(item.code)
+                                
+                except Exception as e:
+                    self.logger.warning(f"Failed to get {item_type} items from API: {str(e)}")
+                    continue
+            
+            self.logger.info(f"📊 Discovered {len(equipment_items)} equipment items from API")
+            return equipment_items
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to discover equipment items from API: {str(e)}")
+            # No fallback - force reliance on API data only
+            return []
+
     def _find_equipment_crafting_opportunities(self, client, resource_analysis: Dict) -> List[Dict]:
         """
         Find equipment that can be crafted from analyzed resources.
@@ -301,23 +384,92 @@ class AnalyzeResourcesAction(ActionBase):
         
         return opportunities
 
-    def _prioritize_crafting_opportunities(self, opportunities: List[Dict]) -> List[Dict]:
+    def _prioritize_crafting_opportunities(self, opportunities: List[Dict], config_data=None) -> List[Dict]:
         """
         Prioritize crafting opportunities based on character needs.
         
         Args:
             opportunities: List of crafting opportunities
+            config_data: Configuration data to get priorities from
             
         Returns:
             Sorted list of prioritized opportunities
         """
         # Sort by feasibility score (higher is better) and level appropriateness
         def priority_key(opp):
-            type_priority = {'weapon': 3, 'armor': 2, 'utility': 1}.get(opp['item_type'], 0)
-            level_priority = {'good': 3, 'acceptable': 2, 'poor': 1}.get(opp['level_appropriateness'], 0)
+            # Use YAML-configured priority values rather than hardcoded values
+            type_priority = self._get_equipment_type_priority(opp['item_type'], config_data)
+            level_priority = self._get_level_appropriateness_priority(opp['level_appropriateness'], config_data)
             return (type_priority, level_priority, opp['feasibility_score'])
         
         return sorted(opportunities, key=priority_key, reverse=True)
+
+    def _get_equipment_type_priority(self, item_type: str, config_data=None) -> int:
+        """
+        Get priority for equipment type based on YAML configuration.
+        
+        Args:
+            item_type: Type of equipment (weapon, armor, etc.)
+            config_data: Configuration data instance to read priorities from
+            
+        Returns:
+            Priority value (higher = more important)
+        """
+        # Try to get priorities from action configuration
+        if config_data and hasattr(config_data, 'data'):
+            resource_analysis_config = config_data.data.get('resource_analysis_priorities', {})
+            priorities_config = resource_analysis_config.get('equipment_type_priorities', {})
+            if priorities_config and item_type in priorities_config:
+                return priorities_config[item_type]
+        
+        # Fallback to minimal default priorities (should not be needed with proper YAML config)
+        fallback_priorities = {
+            'weapon': 3,      # Weapons generally high priority
+            'body_armor': 2,  # Armor for protection
+            'helmet': 2,      # Head protection
+            'leg_armor': 2,   # Leg protection  
+            'boots': 2,       # Foot protection
+            'ring': 1,        # Accessories
+            'amulet': 1,      # Accessories
+            'utility': 1      # Utility items
+        }
+        
+        priority = fallback_priorities.get(item_type, 0)
+        if priority == 0:
+            self.logger.warning(f"⚠️ No priority found for equipment type: {item_type} - check action_configurations.yaml")
+        
+        return priority
+
+    def _get_level_appropriateness_priority(self, level_appropriateness: str, config_data=None) -> int:
+        """
+        Get priority for level appropriateness based on YAML configuration.
+        
+        Args:
+            level_appropriateness: Level appropriateness rating
+            config_data: Configuration data instance to read priorities from
+            
+        Returns:
+            Priority value (higher = more appropriate)
+        """
+        # Try to get priorities from action configuration
+        if config_data and hasattr(config_data, 'data'):
+            resource_analysis_config = config_data.data.get('resource_analysis_priorities', {})
+            priorities_config = resource_analysis_config.get('level_appropriateness_priorities', {})
+            if priorities_config and level_appropriateness in priorities_config:
+                return priorities_config[level_appropriateness]
+        
+        # Fallback to minimal default priorities (should not be needed with proper YAML config)
+        fallback_priorities = {
+            'good': 3,        # Level-appropriate equipment
+            'acceptable': 2,   # Slightly off level but usable
+            'poor': 1         # Too far from character level
+        }
+        
+        priority = fallback_priorities.get(level_appropriateness, 0)
+        if priority == 0:
+            self.logger.warning(f"⚠️ No priority found for level appropriateness: {level_appropriateness} - check action_configurations.yaml")
+        
+        return priority
 
     def _recommend_next_action(self, prioritized_opportunities: List[Dict]) -> Dict:
         """

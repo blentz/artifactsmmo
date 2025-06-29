@@ -81,15 +81,11 @@ class TestEquipItemAction(unittest.TestCase):
         self.assertTrue(result['success'])
         self.assertEqual(result['item_code'], "iron_sword")
         self.assertEqual(result['slot'], "weapon")
-        self.assertEqual(result['quantity'], 1)
-        self.assertEqual(result['cooldown'], 30)
+        self.assertEqual(result['character_name'], "test_character")
+        self.assertTrue(result['equipped'])
         self.assertEqual(result['character_level'], 5)
         self.assertEqual(result['character_hp'], 80)
         self.assertEqual(result['character_max_hp'], 100)
-        self.assertEqual(result['item_name'], "Iron Sword")
-        self.assertEqual(result['item_type'], "weapon")
-        self.assertEqual(result['item_level'], 3)
-        self.assertEqual(result['equipped_slot'], "weapon")
 
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """

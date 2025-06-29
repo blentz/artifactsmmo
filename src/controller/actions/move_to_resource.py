@@ -76,9 +76,24 @@ class MoveToResourceAction(ActionBase):
                 return error_response
                 
         except Exception as e:
-            error_response = self.get_error_response(f"Move to resource failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            # Handle "Character already at destination" as success
+            error_msg = str(e)
+            if "490" in error_msg and "already at destination" in error_msg.lower():
+                # Character is already at the target location - this is success
+                success_response = self.get_success_response(
+                    character_x=self.target_x,
+                    character_y=self.target_y,
+                    target_x=self.target_x,
+                    target_y=self.target_y,
+                    at_resource_location=True,
+                    already_at_destination=True
+                )
+                self.log_execution_result(success_response)
+                return success_response
+            else:
+                error_response = self.get_error_response(f"Move to resource failed: {str(e)}")
+                self.log_execution_result(error_response)
+                return error_response
 
     def __repr__(self):
         return f"MoveToResourceAction({self.char_name}, {self.target_x}, {self.target_y})"

@@ -20,6 +20,14 @@ action_classes:
   find_workshops: "src.controller.actions.find_workshops.FindWorkshopsAction"
   move_to_workshop: "src.controller.actions.move_to_workshop.MoveToWorkshopAction"
   move_to_resource: "src.controller.actions.move_to_resource.MoveToResourceAction"
+  lookup_material_requirements: "src.controller.actions.lookup_item_info.LookupItemInfoAction"
+  transform_material: "src.controller.actions.transform_raw_materials.TransformRawMaterialsAction"
+  transform_raw_materials: "src.controller.actions.transform_raw_materials.TransformRawMaterialsAction"
+  find_correct_workshop: "src.controller.actions.find_correct_workshop.FindCorrectWorkshopAction"
+  evaluate_weapon_recipes: "src.controller.actions.evaluate_weapon_recipes.EvaluateWeaponRecipesAction"
+  upgrade_weaponcrafting_skill: "src.controller.actions.upgrade_weaponcrafting_skill.UpgradeWeaponcraftingSkillAction"
+  check_skill_requirement: "src.controller.actions.check_skill_requirement.CheckSkillRequirementAction"
+  find_xp_sources: "src.controller.actions.find_xp_sources.FindXpSourcesAction"
 
 action_configurations:
   # Built-in actions using default factory registration
@@ -59,9 +67,21 @@ action_configurations:
     type: "builtin"
     description: "Craft items at workshops using materials"
     
+  lookup_material_requirements:
+    type: "builtin"
+    description: "Look up what materials are needed for target equipment"
+    
+  transform_material:
+    type: "builtin"
+    description: "Transform raw materials into refined materials at workshops"
+    
   lookup_item_info:
     type: "builtin"
     description: "Look up item information and crafting recipes"
+    
+  analyze_crafting_chain:
+    type: "builtin"
+    description: "Recursively analyze complete crafting dependency chain from raw materials to final equipment"
     
   equip_item:
     type: "builtin"
@@ -87,6 +107,10 @@ action_configurations:
     type: "composite"
     description: "Basic weapon upgrade workflow for level 2-3 characters"
     
+  transform_raw_materials:
+    type: "builtin" 
+    description: "Transform raw materials into refined materials (smelting)"
+
   # Equipment progression action configurations
   find_workshops:
     type: "builtin"
@@ -100,6 +124,26 @@ action_configurations:
     type: "builtin"
     description: "Move character to a known resource location"
     
+  find_correct_workshop:
+    type: "builtin"
+    description: "Find and move to the correct workshop type for crafting a specific item"
+    
+  evaluate_weapon_recipes:
+    type: "builtin"
+    description: "Intelligently evaluate all weapon recipes and select the best craftable option"
+    
+  upgrade_weaponcrafting_skill:
+    type: "builtin"
+    description: "Level up weaponcrafting skill through strategic item crafting"
+    
+  check_skill_requirement:
+    type: "builtin"
+    description: "Check skill requirements for a task and set appropriate state variables"
+    
+  find_xp_sources:
+    type: "builtin"
+    description: "Find all sources that grant XP for a specific skill using effects analysis"
+    
   gather_crafting_materials:
     type: "composite"
     description: "Gather materials needed for equipment crafting"
@@ -111,7 +155,7 @@ action_configurations:
     sequence:
       - action: "find_monsters"
         params:
-          search_radius: 15
+          search_radius: 5
           use_intelligent_search: true
       - action: "attack"
         conditions:
@@ -140,9 +184,14 @@ parameter_mappings:
     character_hp: "character_state.data.hp"
     
   action_defaults:
-    search_radius: 10
+    search_radius: 5
     level_range: 2
     use_intelligent_search: true
+    
+  # Action-specific parameter defaults
+  craft_copper_defaults:
+    item_code: "copper"
+    quantity: 1
     
 # Composite action definitions
 composite_actions:
@@ -153,7 +202,7 @@ composite_actions:
         action: "find_monsters"
         required: true
         params:
-          search_radius: "${action_data.search_radius:15}"
+          search_radius: "${action_data.search_radius:5}"
           use_intelligent_search: true
           
       - name: "engage_target"  
@@ -178,7 +227,7 @@ composite_actions:
         action: "find_monsters"
         required: true
         params:
-          search_radius: "${action_data.search_radius:10}"
+          search_radius: "${action_data.search_radius:5}"
           level_range: "${action_data.level_range:2}"
           character_level: "${context.character_level}"
           character_x: "${context.character_x}"
@@ -191,9 +240,50 @@ composite_actions:
           monster_found: true
         params:
           char_name: "${context.character_name}"
-          x: "${action_data.monster_x}"
-          y: "${action_data.monster_y}"
+          use_target_coordinates: true
         on_failure: "abort"
+
+  craft_weapon_chain:
+    description: "Complete weapon crafting workflow with material smelting"
+    steps:
+      - name: "gather_additional_ore"
+        action: "gather_resources"
+        required: true
+        params:
+          character_name: "${context.character_name}"
+          target_resource: "copper_ore"
+        conditions:
+          need_more_ore: true
+          
+      - name: "smelt_copper"
+        action: "craft_item"
+        required: true
+        params:
+          character_name: "${context.character_name}"
+          item_code: "copper"
+          quantity: 1
+        conditions:
+          has_enough_ore: true
+          
+      - name: "craft_weapon"
+        action: "craft_item"  
+        required: true
+        params:
+          character_name: "${context.character_name}"
+          item_code: "${context.recipe_item_code}"
+          quantity: 1
+        conditions:
+          has_copper: true
+          
+      - name: "equip_weapon"
+        action: "equip_item"
+        required: true
+        params:
+          character_name: "${context.character_name}" 
+          item_code: "${context.recipe_item_code}"
+          slot: "weapon"
+        conditions:
+          weapon_crafted: true
 
   intelligent_monster_search:
     description: "Search for monsters using learned knowledge with exploration fallback"
@@ -203,7 +293,7 @@ composite_actions:
         required: false
         params:
           use_knowledge_base: true
-          search_radius: "${action_data.search_radius:15}"
+          search_radius: "${action_data.search_radius:5}"
           character_level: "${context.character_level}"
           
       - name: "move_to_known_location"
@@ -213,8 +303,7 @@ composite_actions:
           known_monster_found: true
         params:
           char_name: "${context.character_name}"
-          x: "${action_data.target_x}"
-          y: "${action_data.target_y}"
+          use_target_coordinates: true
           
       - name: "fallback_exploration"
         action: "find_and_move_to_monster"
@@ -222,7 +311,7 @@ composite_actions:
         conditions:
           known_monster_found: false
         params:
-          search_radius: "${action_data.search_radius:15}"
+          search_radius: "${action_data.search_radius:5}"
           
   # Equipment progression composite workflows
   upgrade_weapon_workflow:
@@ -233,7 +322,7 @@ composite_actions:
         action: "analyze_resources"
         required: true
         params:
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           equipment_type: "weapon"
           character_level: "${context.character_level}"
           
@@ -243,7 +332,7 @@ composite_actions:
         conditions:
           workshops_needed: true
         params:
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           
       - name: "gather_materials"
         action: "gather_crafting_materials"
@@ -252,7 +341,7 @@ composite_actions:
           materials_needed: true
         params:
           target_item_type: "weapon"
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           
       - name: "move_to_workshop"
         action: "move_to_workshop"
@@ -290,7 +379,7 @@ composite_actions:
         action: "analyze_resources"
         required: true
         params:
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           equipment_type: "armor"
           character_level: "${context.character_level}"
           
@@ -300,7 +389,7 @@ composite_actions:
         conditions:
           workshops_needed: true
         params:
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           
       - name: "gather_materials"
         action: "gather_crafting_materials"
@@ -309,7 +398,7 @@ composite_actions:
           materials_needed: true
         params:
           target_item_type: "armor"
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           
       - name: "move_to_workshop"
         action: "move_to_workshop"
@@ -356,17 +445,17 @@ composite_actions:
           recipe_known: true
         params:
           resource_types: "${action_data.required_materials}"
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           character_level: "${context.character_level}"
           
       - name: "move_to_resources"
-        action: "move_to_resource"
+        action: "move"
         required: true
         conditions:
           resource_found: true
         params:
-          resource_x: "${action_data.resource_x}"
-          resource_y: "${action_data.resource_y}"
+          char_name: "${context.character_name}"
+          use_target_coordinates: true
           
       - name: "gather_materials"
         action: "gather_resources"
@@ -374,7 +463,7 @@ composite_actions:
         conditions:
           at_resource_location: true
         params:
-          char_name: "${context.character_name}"
+          character_name: "${context.character_name}"
           target_resource: "${action_data.material_type}"
 
   # Complete equipment progression workflow
@@ -386,7 +475,7 @@ composite_actions:
         action: "find_workshops"
         required: true
         params:
-          search_radius: "${action_data.search_radius:30}"
+          search_radius: "${action_data.search_radius:5}"
           workshop_type: "any"
           
       - name: "analyze_equipment_needs"
@@ -395,7 +484,7 @@ composite_actions:
         conditions:
           workshops_discovered: true
         params:
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           equipment_focus: true
           character_level: "${context.character_level}"
           
@@ -407,7 +496,7 @@ composite_actions:
         params:
           target_item_type: "weapon"
           priority_materials: ["copper", "ash_wood"]
-          search_radius: "${action_data.search_radius:25}"
+          search_radius: "${action_data.search_radius:5}"
           
       - name: "craft_weapon"
         action: "upgrade_weapon_workflow"
@@ -444,7 +533,7 @@ composite_actions:
         required: true
         params:
           workshop_type: "weaponcrafting"
-          search_radius: 25
+          search_radius: 5
           
       - name: "gather_basic_materials"
         action: "find_resources"
@@ -453,7 +542,7 @@ composite_actions:
           workshops_discovered: true
         params:
           resource_types: ["copper", "ash_wood"]
-          search_radius: 20
+          search_radius: 5
           
       - name: "collect_materials"
         action: "gather_resources"
@@ -479,3 +568,75 @@ composite_actions:
         params:
           char_name: "${context.character_name}"
           item_code: "copper_dagger"  # Basic weapon for level 2
+
+# Configuration for analyze_resources action priorities
+# These priorities are used when evaluating equipment crafting opportunities
+resource_analysis_priorities:
+  equipment_type_priorities:
+    weapon: 3           # Weapons have highest priority for damage output
+    body_armor: 2       # Body armor for survivability
+    helmet: 2           # Head protection
+    leg_armor: 2        # Leg protection
+    boots: 2            # Foot protection
+    ring: 1             # Accessories have lower priority
+    amulet: 1           # Accessories have lower priority
+    utility: 1          # Utility items have lowest priority
+    
+  level_appropriateness_priorities:
+    good: 3             # Level-appropriate equipment (within 1 level)
+    acceptable: 2       # Slightly off level but usable (within 3 levels)
+    poor: 1             # Too far from character level (more than 3 levels)
+
+# Configuration for check_inventory action item categorization
+# These are fallback patterns used when API/knowledge base data is not available
+inventory_categorization_patterns:
+  raw_materials:
+    - "_ore"
+    - "_rocks" 
+    - "_tree"
+    - "_wood"
+    - "_spot"
+  refined_materials:
+    - "copper"
+    - "iron"
+    - "coal"
+    - "gold"
+    - "_plank"
+  crafted_items:
+    - "_dagger"
+    - "_sword"
+    - "_staff"
+    - "_helmet"
+    - "_armor"
+  consumables:
+    - "potion"
+    - "food"
+    - "raw_"
+    - "cooked_"
+
+# Configuration for evaluate_weapon_recipes action
+# Stat weights for weapon evaluation - higher values mean more important stats
+weapon_stat_weights:
+  attack_fire: 2.0
+  attack_earth: 2.0
+  attack_water: 2.0
+  attack_air: 2.0
+  dmg: 3.0           # Base damage is most important
+  dmg_fire: 2.0
+  dmg_earth: 2.0
+  dmg_water: 2.0
+  dmg_air: 2.0
+  critical_strike: 1.5
+  hp: 1.0
+  haste: 1.2
+  wisdom: 0.8
+  default: 1.0       # Default weight for unknown stats
+
+# Basic weapons to check when evaluating skill blocks
+# These are common early-game weapons that help determine progression paths
+basic_weapon_codes:
+  - "copper_dagger"
+  - "wooden_staff"
+  - "iron_dagger"
+  - "bronze_sword"
+

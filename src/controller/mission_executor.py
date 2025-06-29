@@ -9,7 +9,7 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from src.lib.yaml_data import YamlData
-from src.game.globals import DATA_PREFIX
+from src.game.globals import CONFIG_PREFIX
 
 
 class MissionExecutor:
@@ -28,7 +28,7 @@ class MissionExecutor:
         
         # Load mission configuration
         if config_file is None:
-            config_file = f"{DATA_PREFIX}/goal_templates.yaml"
+            config_file = f"{CONFIG_PREFIX}/goal_templates.yaml"
         
         self.config_data = YamlData(config_file)
         self._load_configuration()
@@ -193,16 +193,19 @@ class MissionExecutor:
             True if goal was achieved, False otherwise
         """
         try:
-            # Generate goal state with mission parameters
+            # Get current state for goal state generation
+            current_state = self.controller.get_current_world_state()
+            
+            # Generate goal state with mission parameters and current state
             goal_state = self.goal_manager.generate_goal_state(
-                goal_name, goal_config, {}, **mission_parameters
+                goal_name, goal_config, current_state, **mission_parameters
             )
             
             # Execute goal using GOAP planning with configured iteration limit
             goal_success = self.controller.goap_execution_manager.achieve_goal_with_goap(
                 goal_state, 
                 self.controller,
-                config_file="data/actions.yaml",
+                config_file=f"{CONFIG_PREFIX}/actions.yaml",
                 max_iterations=self.max_goal_iterations
             )
             

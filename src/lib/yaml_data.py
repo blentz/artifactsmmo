@@ -3,7 +3,37 @@
 import logging
 import os.path
 
-from yaml import safe_load, safe_dump
+from yaml import safe_load, safe_dump, add_representer, SafeDumper
+from enum import Enum
+
+
+def enum_representer(dumper, data):
+    """Custom YAML representer for Enum objects."""
+    return dumper.represent_str(str(data.value))
+
+
+# Register the enum representer for all Enum subclasses with SafeDumper
+SafeDumper.add_representer(Enum, enum_representer)
+
+# Also try to handle specific API enum types that might get imported
+try:
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    SafeDumper.add_representer(MapContentType, enum_representer)
+except ImportError:
+    pass
+
+try:
+    from artifactsmmo_api_client.models.item_type import ItemType
+    SafeDumper.add_representer(ItemType, enum_representer)
+except ImportError:
+    pass
+
+try:
+    from artifactsmmo_api_client.models.action_type import ActionType  
+    SafeDumper.add_representer(ActionType, enum_representer)
+except ImportError:
+    pass
+
 
 class YamlData:
     """Data stored in YAML."""

@@ -78,8 +78,11 @@ actions:
       character_safe: true
       need_resources: true
       at_resource_location: true
+      resource_found: true
     reactions:
       has_resources: true
+      has_materials: true
+      has_crafting_materials: true
       inventory_updated: true
     weight: 2.0
     description: "Gather resources from the current location"
@@ -89,26 +92,95 @@ actions:
       character_alive: true
       character_safe: true
       need_resources: true
+      recipe_known: true
       at_resource_location: false
     reactions:
-      at_resource_location: true
       resource_location_known: true
       resource_found: true
     weight: 2.0
     description: "Find nearby resource locations for gathering"
     
+  evaluate_weapon_recipes:
+    conditions:
+      character_alive: true
+      need_equipment: true
+      best_weapon_selected: false
+      character_safe: true
+    reactions:
+      equipment_info_known: true
+      recipe_known: true
+      best_weapon_selected: true
+      craftable_weapon_identified: true
+      need_specific_workshop: true
+    weight: 1.5
+    description: "Intelligently evaluate all weapon recipes and select the best craftable option"
+    
+  upgrade_weaponcrafting_skill:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_weaponcrafting_upgrade: true
+      at_workshop: true
+      has_materials: true
+    reactions:
+      weaponcrafting_level_sufficient: true
+      skill_xp_gained: true
+      character_stats_improved: true
+    weight: 4.0
+    description: "Level up weaponcrafting skill through strategic item crafting"
+    
+  check_skill_requirement:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_equipment: true
+      skill_requirements_checked: false
+    reactions:
+      skill_requirements_checked: true
+      need_skill_upgrade: true
+      skill_level_sufficient: true
+      required_skill_level_known: true
+    weight: 5.0
+    description: "Check skill requirements for a task and set appropriate state variables"
+    
+  analyze_crafting_chain:
+    conditions:
+      character_alive: true
+      need_equipment: true
+      character_safe: true
+    reactions:
+      craft_plan_available: true
+      material_requirements_known: true
+      crafting_opportunities_known: true
+    weight: 2.0
+    description: "Recursively analyze complete crafting dependency chain from raw materials to final equipment"
+    
+  transform_raw_materials:
+    conditions:
+      character_alive: true
+      character_safe: true
+      has_raw_materials: true
+      at_correct_workshop: true
+      best_weapon_selected: true
+    reactions:
+      has_refined_materials: true
+      inventory_updated: true
+    weight: 2.5
+    description: "Transform raw materials into refined materials based on selected weapon recipe"
+    
   craft_item:
     conditions:
       character_alive: true
       character_safe: true
-      has_materials: true
-      at_workshop: true
+      has_refined_materials: true
+      at_correct_workshop: true
       need_equipment: true
+      best_weapon_selected: true
     reactions:
       has_equipment: true
       inventory_updated: true
     weight: 3.0
-    description: "Craft items at a workshop using available materials"
+    description: "Craft selected weapon at correct workshop using available materials"
     
     
   lookup_item_info:
@@ -129,13 +201,16 @@ actions:
       character_safe: true
       has_equipment: true
       inventory_updated: true
+      best_weapon_selected: true
     reactions:
       equipment_equipped: true
       character_stats_improved: true
       has_complete_equipment_set: true
       all_slots_equipped: true
-    weight: 1.0
-    description: "Equip an item from inventory to an equipment slot"
+      has_better_weapon: true
+      has_better_armor: true
+    weight: 4.0
+    description: "Equip the crafted weapon to improve character combat effectiveness"
     
   unequip_item:
     conditions:
@@ -184,6 +259,18 @@ actions:
       at_workshop: false
       workshop_location_known: true
     weight: 2.5
+    
+  find_correct_workshop:
+    conditions:
+      character_alive: true
+      character_safe: true
+      need_specific_workshop: true
+      at_correct_workshop: false
+    reactions:
+      at_correct_workshop: true
+      workshops_discovered: true
+      workshop_location_known: true
+    weight: 3.0
     description: "Find and catalog available crafting workshops"
     
   move_to_workshop:
@@ -196,6 +283,7 @@ actions:
     reactions:
       at_workshop: true
       at_target_location: true
+      at_resource_location: false
     weight: 1.5
     description: "Move to a known workshop location for crafting"
     
@@ -209,6 +297,7 @@ actions:
     reactions:
       at_resource_location: true
       at_target_location: true
+      at_workshop: false
     weight: 1.5
     description: "Move to a known resource location for gathering"
     
@@ -225,6 +314,28 @@ actions:
       inventory_updated: true
     weight: 2.5
     description: "Collect resources needed for equipment crafting"
+    
+  check_inventory:
+    conditions:
+      character_alive: true
+    reactions:
+      has_crafting_materials: true
+      materials_sufficient: true
+      has_raw_materials: true
+      has_refined_materials: true
+      inventory_updated: true
+    weight: 1.0
+    description: "Check character inventory for specific items and update world state accordingly"
+    
+  check_location:
+    conditions:
+      character_alive: true
+    reactions:
+      location_known: true
+      at_target_location: true
+      spatial_context_updated: true
+    weight: 1.0
+    description: "Check current location and provide spatial context for planning decisions"
 
 # Goal configurations for common scenarios
 goal_templates:

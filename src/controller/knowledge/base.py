@@ -689,6 +689,49 @@ class KnowledgeBase(GoapData):
         """
         self.data = self._sanitize_object(self.data)
 
+    def learn_resource(self, resource_code: str, resource_data: Dict) -> None:
+        """
+        Learn about a resource from API data.
+        
+        Args:
+            resource_code: The resource code/identifier
+            resource_data: Resource data from API response
+        """
+        if resource_code not in self.data['resources']:
+            self.data['resources'][resource_code] = {
+                'code': resource_code,
+                'name': resource_data.get('name', resource_code),
+                'first_discovered': datetime.now().isoformat(),
+                'harvest_attempts': 0,
+                'successful_harvests': 0,
+                'estimated_skill_required': None,
+                'estimated_yield': [],
+                'last_updated': datetime.now().isoformat(),
+                'api_data': self._sanitize_object(resource_data)
+            }
+        else:
+            # Update existing resource with API data
+            resource_info = self.data['resources'][resource_code]
+            resource_info['last_updated'] = datetime.now().isoformat()
+            resource_info['api_data'] = self._sanitize_object(resource_data)
+            
+            # Update name if it's better than current
+            if resource_data.get('name') and resource_data['name'] != resource_code:
+                resource_info['name'] = resource_data['name']
+        
+        # Update learning stats
+        self.data['learning_stats']['resources_discovered'] = len(self.data['resources'])
+        self.logger.debug(f"📚 Learned resource: {resource_code}")
+
+    def get_all_known_resource_codes(self) -> List[str]:
+        """
+        Get all known resource codes from the knowledge base.
+        
+        Returns:
+            List of resource codes that have been discovered
+        """
+        return list(self.data.get('resources', {}).keys())
+
     def _sanitize_object(self, obj):
         """
         Recursively sanitize an object to remove DropSchema instances and other non-serializable objects.
@@ -697,6 +740,11 @@ class KnowledgeBase(GoapData):
             return obj
         elif hasattr(obj, '__class__'):
             class_name = str(obj.__class__)
+            
+            # Handle enum objects (like MapContentType) - convert to string value
+            if hasattr(obj, 'value') and hasattr(obj, '__class__') and 'Enum' in str(obj.__class__.__bases__):
+                return obj.value
+            
             # Check for any API client objects that can't be serialized
             if any(schema in class_name for schema in ['DropSchema', 'Schema', 'Response']):
                 if 'DropSchema' in class_name:
@@ -736,3 +784,43 @@ class KnowledgeBase(GoapData):
             return tuple(sanitized_items)
         else:
             return obj
+
+    def learn_effect(self, effect_name: str, effect_data: Dict) -> None:
+        """
+        Learn about an effect from API data.
+        
+        Args:
+            effect_name: Name of the effect
+            effect_data: Effect data from the API
+        """
+        try:
+            if 'effects' not in self.data:
+                self.data['effects'] = {}
+            
+            # Store sanitized effect data
+            sanitized_data = self._sanitize_object(effect_data)
+            self.data['effects'][effect_name] = sanitized_data
+            
+        except Exception as e:
+            self.logger.debug(f"Failed to learn effect {effect_name}: {e}")
+
+    def learn_xp_effects_analysis(self, xp_effects: Dict) -> None:
+        """
+        Store the XP effects analysis by skill.
+        
+        Args:
+            xp_effects: Dictionary mapping skills to their XP-granting effects
+        """
+        try:
+            self.data['xp_effects_analysis'] = xp_effects
+            
+            # Update learning stats
+            if 'learning_stats' not in self.data:
+                self.data['learning_stats'] = {}
+            
+            total_xp_effects = sum(len(effects) for effects in xp_effects.values())
+            self.data['learning_stats']['total_xp_effects_learned'] = total_xp_effects
+            self.data['learning_stats']['skills_with_xp_effects'] = len(xp_effects)
+            
+        except Exception as e:
+            self.logger.debug(f"Failed to store XP effects analysis: {e}")

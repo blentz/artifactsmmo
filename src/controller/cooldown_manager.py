@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from src.lib.yaml_data import YamlData
-from src.game.globals import DATA_PREFIX
+from src.game.globals import CONFIG_PREFIX
 
 
 class CooldownManager:
@@ -28,7 +28,7 @@ class CooldownManager:
         
         # Load configuration
         if config_file is None:
-            config_file = f"{DATA_PREFIX}/goal_templates.yaml"
+            config_file = f"{CONFIG_PREFIX}/goal_templates.yaml"
         
         self.config_data = YamlData(config_file)
         self._load_configuration()

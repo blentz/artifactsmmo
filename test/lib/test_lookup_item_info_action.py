@@ -93,15 +93,15 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_lookup_specific.assert_called_once_with(self.mock_client, self.item_code)
         self.assertEqual(result, mock_result)
 
-    @patch('src.controller.actions.lookup_item_info.LookupItemInfoAction._search_items')
-    def test_execute_with_search_parameters(self, mock_search_items):
+    @patch('src.controller.actions.lookup_item_info.LookupItemInfoAction._determine_equipment_to_craft')
+    def test_execute_with_search_parameters(self, mock_determine_equipment):
         """Test execute with search parameters."""
-        mock_result = {'success': False, 'error': 'Search not available'}
-        mock_search_items.return_value = mock_result
+        mock_result = {'success': False, 'error': 'No suitable equipment recipes found for current character level'}
+        mock_determine_equipment.return_value = mock_result
         
         result = self.action_with_search.execute(self.mock_client)
         
-        mock_search_items.assert_called_once_with(self.mock_client)
+        mock_determine_equipment.assert_called_once_with(self.mock_client)
         self.assertEqual(result, mock_result)
 
     @patch('src.controller.actions.lookup_item_info.LookupItemInfoAction._lookup_specific_item')
@@ -278,6 +278,11 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_resource_data = Mock()
         mock_resource_data.skill = 'mining'
         mock_resource_data.level = 5
+        
+        # Create mock drop that matches the material needed
+        mock_drop = Mock()
+        mock_drop.code = 'iron'
+        mock_resource_data.drops = [mock_drop]
         
         mock_resource_response = Mock()
         mock_resource_response.data = mock_resource_data
