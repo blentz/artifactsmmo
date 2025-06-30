@@ -86,6 +86,10 @@ class SkillGoalManager:
         Returns:
             GOAP goal state dictionary
         """
+        if skill_type is None:
+            self.logger.error("No skill type provided")
+            return {}
+            
         skill_name = skill_type.value
         
         if skill_name not in self.skill_templates:

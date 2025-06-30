@@ -19,6 +19,7 @@ from src.lib.yaml_data import YamlData
 from src.game.map.state import MapState
 from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
+from test.fixtures import create_mock_client
 
 
 class TestYamlDataNestedStructureBug(unittest.TestCase):
@@ -148,7 +149,7 @@ class TestMapStateCachingBug(unittest.TestCase):
     """
     
     def setUp(self):
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.temp_dir = tempfile.mkdtemp()
     
     def tearDown(self):
@@ -216,7 +217,7 @@ class TestActionParameterPassingBug(unittest.TestCase):
     
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
     def tearDown(self):
         import shutil
@@ -278,7 +279,7 @@ class TestCooldownHandlingBug(unittest.TestCase):
     
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
     def tearDown(self):
         import shutil
@@ -314,7 +315,7 @@ class TestCooldownHandlingBug(unittest.TestCase):
         controller.set_character_state(mock_character_state)
         
         # Mock the API call that refreshes character state
-        with patch('artifactsmmo_api_client.api.characters.get_character_name.sync') as mock_get_char:
+        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync') as mock_get_char:
             mock_response = Mock()
             mock_response.data.to_dict.return_value = {
                 'cooldown': 10,
@@ -415,7 +416,7 @@ class TestDataPersistenceBug(unittest.TestCase):
     
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
     
     def tearDown(self):
         import shutil

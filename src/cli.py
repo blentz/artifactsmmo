@@ -4,6 +4,7 @@
 import argparse
 import logging
 from typing import List, Optional
+from src.lib.log import JSONFormatter
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -162,11 +163,24 @@ def setup_logging(log_level: str) -> None:
     if not isinstance(numeric_level, int):
         raise ValueError(f'Invalid log level: {log_level}')
     
-    logging.basicConfig(
-        level=numeric_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # Get the root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_level)
+    
+    # Remove any existing handlers to ensure clean setup
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Create a console handler with JSON formatter
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(numeric_level)
+    
+    # Set the JSON formatter
+    json_formatter = JSONFormatter()
+    console_handler.setFormatter(json_formatter)
+    
+    # Add the handler to the root logger
+    root_logger.addHandler(console_handler)
 
 
 def get_character_list(args: argparse.Namespace) -> Optional[List[str]]:

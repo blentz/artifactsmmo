@@ -1,0 +1,211 @@
+"""Test module for AnalyzeEquipmentAction."""
+
+import unittest
+import tempfile
+import os
+from unittest.mock import Mock, patch
+from src.controller.actions.analyze_equipment import AnalyzeEquipmentAction
+from test.fixtures import (
+    create_mock_client, MockCharacterData, MockKnowledgeBase, 
+    MockInventoryItem, mock_character_response, create_test_environment,
+    cleanup_test_environment
+)
+
+
+class TestAnalyzeEquipmentAction(unittest.TestCase):
+    """Test cases for AnalyzeEquipmentAction."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir, self.original_data_prefix = create_test_environment()
+        
+        self.action = AnalyzeEquipmentAction(
+            character_name="test_character",
+            analysis_type="comprehensive"
+        )
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        cleanup_test_environment(self.temp_dir, self.original_data_prefix)
+
+    def test_analyze_equipment_action_initialization(self):
+        """Test AnalyzeEquipmentAction initialization."""
+        self.assertEqual(self.action.character_name, "test_character")
+        self.assertEqual(self.action.analysis_type, "comprehensive")
+
+    def test_analyze_equipment_action_initialization_defaults(self):
+        """Test AnalyzeEquipmentAction initialization with defaults."""
+        action = AnalyzeEquipmentAction("test")
+        self.assertEqual(action.character_name, "test")
+        self.assertEqual(action.analysis_type, "comprehensive")
+
+    def test_analyze_equipment_action_repr(self):
+        """Test AnalyzeEquipmentAction string representation."""
+        expected = "AnalyzeEquipmentAction(test_character, comprehensive)"
+        self.assertEqual(repr(self.action), expected)
+
+    def test_execute_no_client(self):
+        """Test execute fails without client."""
+        result = self.action.execute(None)
+        self.assertFalse(result['success'])
+        self.assertIn('No API client provided', result['error'])
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_execute_no_character_data(self, mock_get_character):
+        """Test execute fails when character data unavailable."""
+        mock_get_character.return_value = None
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        self.assertFalse(result['success'])
+        self.assertIn('Could not get character data', result['error'])
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_execute_successful_basic_analysis(self, mock_get_character):
+        """Test successful equipment analysis execution."""
+        # Create character with basic equipment
+        character_data = MockCharacterData(
+            name="test_character",
+            level=5,
+            inventory=[MockInventoryItem("copper_dagger", 1)]
+        )
+        character_data.weapon_slot = "copper_dagger"
+        character_data.helmet_slot = ""
+        character_data.body_armor_slot = ""
+        character_data.leg_armor_slot = ""
+        character_data.boots_slot = ""
+        character_data.ring1_slot = ""
+        character_data.ring2_slot = ""
+        character_data.amulet_slot = ""
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['equipment_analysis_available'])
+        self.assertIn('current_equipment', result)
+        self.assertIn('current_equipment', result)
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_execute_with_knowledge_base(self, mock_get_character):
+        """Test execute with knowledge base integration."""
+        character_data = MockCharacterData(name="test_character", level=3)
+        mock_get_character.return_value = mock_character_response(character_data)
+        
+        # Create knowledge base with item data
+        knowledge_base = MockKnowledgeBase()
+        knowledge_base.data['items'] = {
+            'copper_dagger': {
+                'name': 'Copper Dagger',
+                'level': 1,
+                'type': 'weapon'
+            },
+            'iron_sword': {
+                'name': 'Iron Sword', 
+                'level': 3,
+                'type': 'weapon'
+            }
+        }
+        
+        client = create_mock_client()
+        result = self.action.execute(client, knowledge_base=knowledge_base)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['equipment_analysis_available'])
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_execute_exception_handling(self, mock_get_character):
+        """Test exception handling during execution."""
+        mock_get_character.side_effect = Exception("API Error")
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        self.assertFalse(result['success'])
+        self.assertIn('Equipment analysis failed: API Error', result['error'])
+
+    def test_goap_attributes(self):
+        """Test that AnalyzeEquipmentAction has expected GOAP attributes."""
+        self.assertTrue(hasattr(AnalyzeEquipmentAction, 'conditions'))
+        self.assertTrue(hasattr(AnalyzeEquipmentAction, 'reactions'))
+        self.assertTrue(hasattr(AnalyzeEquipmentAction, 'weights'))
+
+    def test_goap_conditions(self):
+        """Test GOAP conditions are properly defined."""
+        self.assertIsInstance(AnalyzeEquipmentAction.conditions, dict)
+        self.assertIn('character_alive', AnalyzeEquipmentAction.conditions)
+
+    def test_goap_reactions(self):
+        """Test GOAP reactions are properly defined."""
+        self.assertIsInstance(AnalyzeEquipmentAction.reactions, dict)
+        expected_reactions = [
+            'equipment_analysis_available', 'need_equipment', 'has_better_weapon',
+            'has_better_armor', 'has_complete_equipment_set'
+        ]
+        for reaction in expected_reactions:
+            self.assertIn(reaction, AnalyzeEquipmentAction.reactions)
+
+    def test_goap_weights(self):
+        """Test GOAP weights are properly defined."""
+        self.assertIsInstance(AnalyzeEquipmentAction.weights, dict)
+        self.assertIn('equipment_analysis_available', AnalyzeEquipmentAction.weights)
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_analyze_current_equipment_empty(self, mock_get_character):
+        """Test analysis of character with no equipment."""
+        character_data = MockCharacterData(name="test_character", level=1)
+        # All equipment slots empty
+        for slot in ['weapon_slot', 'helmet_slot', 'body_armor_slot', 
+                    'leg_armor_slot', 'boots_slot', 'ring1_slot', 'ring2_slot', 'amulet_slot']:
+            setattr(character_data, slot, "")
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['need_equipment'])
+        self.assertEqual(result['equipment_coverage']['total_equipped'], 0)
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_equipment_coverage_calculation(self, mock_get_character):
+        """Test equipment coverage calculation."""
+        character_data = MockCharacterData(name="test_character", level=5)
+        character_data.weapon_slot = "copper_dagger"
+        character_data.helmet_slot = "leather_helmet"
+        character_data.body_armor_slot = ""
+        character_data.leg_armor_slot = ""
+        character_data.boots_slot = ""
+        character_data.ring1_slot = ""
+        character_data.ring2_slot = ""
+        character_data.amulet_slot = ""
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertEqual(result['equipment_coverage']['total_equipped'], 2)
+        self.assertAlmostEqual(result['equipment_coverage_percentage'], 16.0, places=0)  # 2/12 slots
+
+    @patch('src.controller.actions.analyze_equipment.get_character_api')
+    def test_upgrade_recommendations(self, mock_get_character):
+        """Test upgrade recommendations generation."""
+        character_data = MockCharacterData(name="test_character", level=10)
+        character_data.weapon_slot = "wooden_stick"  # Low-tier weapon
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['need_equipment'])
+        self.assertIn('upgrade_priorities', result)
+
+
+if __name__ == '__main__':
+    unittest.main()

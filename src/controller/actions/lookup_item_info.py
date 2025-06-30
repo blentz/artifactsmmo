@@ -1,9 +1,9 @@
 """ LookupItemInfoAction module """
 
 from typing import Dict, List, Optional
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 # Note: get_all_items API endpoint not available in current client
-from artifactsmmo_api_client.api.resources.get_resource import sync as get_resource_api
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
 # Note: get_all_resources API endpoint not available in current client
 from .base import ActionBase
 
@@ -12,7 +12,8 @@ class LookupItemInfoAction(ActionBase):
     """ Action to lookup item information, recipes, and crafting requirements """
 
     def __init__(self, item_code: Optional[str] = None, search_term: Optional[str] = None, 
-                 item_type: Optional[str] = None, max_level: Optional[int] = None):
+                 item_type: Optional[str] = None, max_level: Optional[int] = None,
+                 character_level: Optional[int] = None, **kwargs):
         """
         Initialize the lookup item info action.
 
@@ -27,6 +28,8 @@ class LookupItemInfoAction(ActionBase):
         self.search_term = search_term
         self.item_type = item_type
         self.max_level = max_level
+        self.character_level = character_level
+        self.kwargs = kwargs
 
     def execute(self, client, **kwargs) -> Optional[Dict]:
         """ Lookup item information and crafting requirements """
@@ -103,31 +106,42 @@ class LookupItemInfoAction(ActionBase):
 
     def _determine_equipment_to_craft(self, client) -> Dict:
         """ Determine appropriate equipment to craft based on character level and needs """
-        # For now, focus on basic equipment suitable for level 1-3 characters
-        # This should be enhanced to use character state information
+        knowledge_base = self.kwargs.get('knowledge_base')
+        action_config = self.kwargs.get('action_config', {})
         
-        # Common beginner equipment to try
-        beginner_items = [
-            # Weapons
-            'copper_dagger',    # Level 1 weapon
-            'iron_sword',       # Level 5 weapon
-            # Armor
-            'copper_armor',     # Level 1 armor
-            'iron_armor',       # Level 5 armor
-            # Tools
-            'copper_axe',       # For woodcutting
-            'copper_pickaxe'    # For mining
-        ]
+        # Get character level or use default
+        char_level = self.character_level or 1
+        
+        # Get level range from configuration
+        level_range = action_config.get('equipment_level_range', 2)
+        min_level = max(1, char_level - level_range)
+        max_level = char_level + level_range
+        
+        # Get suitable items from knowledge base
+        suitable_items = self._get_suitable_items_from_knowledge_base(
+            knowledge_base, min_level, max_level, self.item_type
+        )
+        
+        if not suitable_items:
+            # If no items in knowledge base, try API search
+            suitable_items = self._search_suitable_items_from_api(
+                client, min_level, max_level, self.item_type
+            )
         
         # Try to find the first available item that can be crafted
-        for item_code in beginner_items:
+        for item_code in suitable_items:
             try:
                 item_info = self._lookup_specific_item(client, item_code)
                 if item_info.get('success') and item_info.get('craftable'):
+                    # Check if craft level requirement is met
+                    craft_level = item_info.get('craft_level', 0)
+                    if craft_level > char_level + level_range:
+                        continue
+                    
                     # Return detailed crafting information
                     materials_info = self.lookup_crafting_materials(client, item_code)
                     
-                    # Check for multi-step crafting requirements (e.g., copper_dagger needs copper, which needs copper_ore)
+                    # Check for multi-step crafting requirements
                     crafting_chain = self._analyze_crafting_chain(client, item_code, materials_info.get('materials', []))
                     
                     # Combine item info with materials for a complete recipe
@@ -137,24 +151,27 @@ class LookupItemInfoAction(ActionBase):
                         'item_code': item_code,
                         'item_name': item_info.get('name', ''),
                         'item_type': item_info.get('type', ''),
+                        'item_level': item_info.get('level', 0),
                         'craft_skill': item_info.get('craft_skill', ''),
                         'craft_level': item_info.get('craft_level', 0),
                         'materials_needed': materials_info.get('materials', []),
-                        'crafting_chain': crafting_chain
+                        'crafting_chain': crafting_chain,
+                        'suitability_score': self._calculate_suitability_score(item_info, char_level)
                     }
                     
-                    self.logger.info(f"📋 Recipe found: {item_code} - {item_info.get('name', '')}")
+                    self.logger.info(f"📋 Recipe found: {item_code} - {item_info.get('name', '')} (level {item_info.get('level', 0)})")
                     return result
                     
             except Exception as e:
                 self.logger.debug(f"Could not lookup {item_code}: {e}")
                 continue
         
-        # If no craftable items found, return a default response
+        # If no craftable items found, return a response with suggestions
         return {
             'success': False,
-            'error': 'No suitable equipment recipes found for current character level',
-            'suggestion': 'Try hunting for equipment drops or level up first'
+            'error': f'No suitable equipment recipes found for level {char_level} (range: {min_level}-{max_level})',
+            'suggestion': f'Try adjusting level range or gathering more materials',
+            'searched_levels': {'min': min_level, 'max': max_level}
         }
 
     def _search_items(self, client) -> Dict:
@@ -278,11 +295,15 @@ class LookupItemInfoAction(ActionBase):
             except Exception as e:
                 self.logger.debug(f"Could not analyze crafting chain for {material_code}: {e}")
         
-        # Add the final target item
+        # Add the final target item with its actual craft skill
+        # Get the craft skill from the original item lookup
+        target_item_info = self._lookup_specific_item(client, target_item)
+        craft_skill = target_item_info.get('craft_skill', 'unknown') if target_item_info.get('success') else 'unknown'
+        
         crafting_chain.append({
             'step_type': 'craft_final',
             'item_code': target_item,
-            'craft_skill': 'weaponcrafting',  # Assuming weapons for now
+            'craft_skill': craft_skill,
             'materials': [m.get('code', '') for m in materials]
         })
         
@@ -291,32 +312,141 @@ class LookupItemInfoAction(ActionBase):
     def _generate_possible_resource_names(self, material_code: str) -> List[str]:
         """Generate possible resource names that might drop a given material."""
         possible_names = []
+        knowledge_base = self.kwargs.get('knowledge_base')
         
-        # Common naming patterns for materials -> resources
-        material_patterns = {
-            'copper': ['copper_rocks', 'copper_ore', 'copper_mine', 'copper_deposit', 'copper_vein'],
-            'iron_ore': ['iron_rocks', 'iron_ore', 'iron_mine', 'iron_deposit', 'iron_vein'],
-            'coal': ['coal_rocks', 'coal_ore', 'coal_mine', 'coal_deposit', 'coal_vein'],
-            'gold_ore': ['gold_rocks', 'gold_ore', 'gold_mine', 'gold_deposit', 'gold_vein'],
-            'ash_wood': ['ash_tree', 'ash_wood', 'ash_forest'],
-            'spruce_wood': ['spruce_tree', 'spruce_wood', 'spruce_forest'],
-            'birch_wood': ['birch_tree', 'birch_wood', 'birch_forest'],
-            'gudgeon': ['gudgeon_fishing_spot', 'gudgeon_pond'],
-            'shrimp': ['shrimp_fishing_spot', 'shrimp_pond']
-        }
+        # First check knowledge base for known resources that drop this material
+        if knowledge_base and hasattr(knowledge_base, 'data'):
+            resources = knowledge_base.data.get('resources', {})
+            for resource_code, resource_info in resources.items():
+                # Check API data for drops
+                api_data = resource_info.get('api_data', {})
+                drops = api_data.get('drops', [])
+                
+                for drop in drops:
+                    if isinstance(drop, dict) and drop.get('code') == material_code:
+                        possible_names.append(resource_code)
+                        self.logger.debug(f"Found {resource_code} drops {material_code} in knowledge base")
         
-        if material_code in material_patterns:
-            possible_names.extend(material_patterns[material_code])
+        # If no knowledge base hits, use pattern-based discovery
+        # Extract base material name (remove _ore suffix if present)
+        base_name = material_code.replace('_ore', '')
         
-        # Also try some generic patterns
-        possible_names.extend([
-            f"{material_code}_source",
-            f"{material_code}_spot", 
-            f"{material_code}_location",
-            material_code  # Sometimes the resource has the same name as the material
-        ])
+        # Common resource type suffixes based on skill types
+        mining_suffixes = ['_rocks', '_vein', '_deposit', '_mine']
+        woodcutting_suffixes = ['_tree', '_forest', '_grove']
+        fishing_suffixes = ['_fishing_spot', '_pond', '_waters']
         
-        return possible_names
+        # Determine likely skill type from material name
+        if 'wood' in material_code:
+            for suffix in woodcutting_suffixes:
+                possible_names.append(f"{base_name}{suffix}")
+        elif any(metal in material_code for metal in ['copper', 'iron', 'gold', 'silver']):
+            for suffix in mining_suffixes:
+                possible_names.append(f"{base_name}{suffix}")
+        elif any(fish in material_code for fish in ['gudgeon', 'shrimp', 'trout', 'bass']):
+            for suffix in fishing_suffixes:
+                possible_names.append(f"{base_name}{suffix}")
+        else:
+            # Generic patterns for unknown material types
+            possible_names.extend([
+                f"{material_code}_source",
+                f"{material_code}_spot", 
+                f"{material_code}_location",
+                material_code  # Sometimes the resource has the same name
+            ])
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_names = []
+        for name in possible_names:
+            if name not in seen:
+                seen.add(name)
+                unique_names.append(name)
+        
+        return unique_names
+
+    def _get_suitable_items_from_knowledge_base(self, knowledge_base, min_level: int, 
+                                                max_level: int, item_type: Optional[str]) -> List[str]:
+        """Get suitable items from knowledge base based on level range and type."""
+        suitable_items = []
+        
+        if not knowledge_base or not hasattr(knowledge_base, 'data'):
+            return suitable_items
+        
+        items = knowledge_base.data.get('items', {})
+        for item_code, item_info in items.items():
+            # Check item type if specified
+            if item_type and item_info.get('type') != item_type:
+                continue
+            
+            # Check level range
+            item_level = item_info.get('level', 1)
+            if min_level <= item_level <= max_level:
+                # Check if item is craftable
+                if item_info.get('craft_data'):
+                    suitable_items.append(item_code)
+        
+        # Sort by level for better progression
+        suitable_items.sort(key=lambda code: items.get(code, {}).get('level', 1))
+        
+        self.logger.info(f"Found {len(suitable_items)} suitable items in knowledge base for levels {min_level}-{max_level}")
+        return suitable_items
+    
+    def _search_suitable_items_from_api(self, client, min_level: int, 
+                                       max_level: int, item_type: Optional[str]) -> List[str]:
+        """Search for suitable items using API based on level range."""
+        suitable_items = []
+        
+        # Since we don't have get_all_items, we need to use knowledge base or config
+        action_config = self.kwargs.get('action_config', {})
+        
+        # Get item codes to check from configuration
+        items_to_check = action_config.get('craftable_items', [])
+        
+        if not items_to_check:
+            # If no config, we can't search without knowledge base
+            self.logger.warning("No items to check from config or knowledge base")
+            return suitable_items
+        
+        # Check each item
+        for item_code in items_to_check:
+            try:
+                item_info = self._lookup_specific_item(client, item_code)
+                if item_info.get('success'):
+                    item_level = item_info.get('level', 1)
+                    if min_level <= item_level <= max_level:
+                        if item_type is None or item_info.get('type') == item_type:
+                            if item_info.get('craftable'):
+                                suitable_items.append(item_code)
+            except Exception as e:
+                self.logger.debug(f"Could not check {item_code}: {e}")
+        
+        self.logger.info(f"Found {len(suitable_items)} suitable items from API for levels {min_level}-{max_level}")
+        return suitable_items
+    
+    def _calculate_suitability_score(self, item_info: Dict, character_level: int) -> float:
+        """Calculate how suitable an item is for the character's level."""
+        item_level = item_info.get('level', 1)
+        craft_level = item_info.get('craft_level', 1)
+        
+        # Score based on how close the item level is to character level
+        level_diff = abs(item_level - character_level)
+        level_score = max(0, 10 - level_diff)
+        
+        # Bonus for items at or slightly above character level
+        if item_level == character_level:
+            level_score += 5
+        elif item_level == character_level + 1:
+            level_score += 3
+        
+        # Penalty if craft level is too high
+        craft_diff = max(0, craft_level - character_level)
+        craft_penalty = craft_diff * 2
+        
+        # Final score
+        score = max(0, level_score - craft_penalty)
+        
+        return score
 
     def __repr__(self):
         if self.item_code:

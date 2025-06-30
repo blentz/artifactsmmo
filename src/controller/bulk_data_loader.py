@@ -11,11 +11,11 @@ import time
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from artifactsmmo_api_client.api.maps.get_all_map import sync as get_all_maps_api
-from artifactsmmo_api_client.api.npcs.get_all_npc import sync as get_all_npcs_api
-from artifactsmmo_api_client.api.items.get_all_item import sync as get_all_items_api
-from artifactsmmo_api_client.api.resources.get_all_resource import sync as get_all_resources_api
-from artifactsmmo_api_client.api.monsters.get_all_monster import sync as get_all_monsters_api
+from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps_api
+from artifactsmmo_api_client.api.np_cs.get_all_npcs_npcs_details_get import sync as get_all_npcs_api
+from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
+from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources_api
+from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters_api
 
 
 class BulkDataLoader:

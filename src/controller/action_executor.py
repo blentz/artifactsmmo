@@ -310,6 +310,13 @@ class ActionExecutor:
             elif action_name == 'attack' and hasattr(controller, 'learn_from_combat'):
                 self.logger.info(f"🔍 Processing attack learning for response: {type(response)}")
                 
+                # Handle both object responses and dict responses
+                if isinstance(response, dict) and 'fight_response' in response:
+                    # AttackAction returns a dict with fight_response key
+                    actual_response = response.get('fight_response')
+                    if hasattr(actual_response, 'data'):
+                        response = actual_response  # Use the actual API response
+                
                 if hasattr(response, 'data'):
                     # Initialize variables
                     fight_data = None
@@ -351,7 +358,10 @@ class ActionExecutor:
                         try:
                             # PRIORITY 1: Use target location from action context (where find_monsters found the monster)
                             combat_x, combat_y = None, None
-                            if context and ('x' in context and 'y' in context):
+                            if context and ('target_x' in context and 'target_y' in context):
+                                combat_x, combat_y = context['target_x'], context['target_y']
+                                self.logger.info(f"🔍 Got combat location from action context: ({combat_x}, {combat_y})")
+                            elif context and ('x' in context and 'y' in context):
                                 combat_x, combat_y = context['x'], context['y']
                                 self.logger.info(f"🔍 Got combat location from action context: ({combat_x}, {combat_y})")
                             
@@ -506,7 +516,7 @@ class ActionExecutor:
                         }
                         controller.learn_from_combat(monster_code, result, pre_combat_hp, fight_dict, combat_context)
                     else:
-                        self.logger.info(f"🔍 DEBUG: No combat data available to record - monster: {monster_code}, result: {result}")
+                        self.logger.debug(f"🔍 No combat data available to record - monster: {monster_code}, result: {result}")
                 else:
                     self.logger.warning(f"⚠️ No response data available for attack learning")
             

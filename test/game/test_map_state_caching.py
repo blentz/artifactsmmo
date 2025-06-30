@@ -6,12 +6,13 @@ import time
 from unittest.mock import Mock, patch
 
 from src.game.map.state import MapState
+from test.fixtures import create_mock_client
 
 
 class TestMapStateCaching(unittest.TestCase):
     
     def setUp(self):
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.temp_dir = tempfile.mkdtemp()
         
     def tearDown(self):

@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 from src.controller.actions.craft_item import CraftItemAction
+from test.fixtures import create_mock_client
 
 
 class TestCraftItemAction(unittest.TestCase):
@@ -16,7 +17,7 @@ class TestCraftItemAction(unittest.TestCase):
         self.action = CraftItemAction(self.character_name, self.item_code, self.quantity)
         
         # Mock client
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
         # Mock character response
         self.mock_character_data = Mock()
@@ -52,7 +53,7 @@ class TestCraftItemAction(unittest.TestCase):
     @patch('src.controller.actions.craft_item.get_character_api')
     def test_execute_no_character_cache(self, mock_get_character_api):
         """Test crafting fails without character data."""
-        mock_client = Mock()
+        mock_client = create_mock_client()
         mock_client._character_cache = None
         mock_get_character_api.return_value = None
         
@@ -68,7 +69,8 @@ class TestCraftItemAction(unittest.TestCase):
         result = self.action.execute(self.mock_client)
         self.assertFalse(result['success'])
         self.assertIn('Could not get map information', result['error'])
-        self.assertEqual(result['location'], (5, 3))
+        self.assertEqual(result['target_x'], 5)
+        self.assertEqual(result['target_y'], 3)
 
     @patch('src.controller.actions.craft_item.get_map_api')
     def test_execute_map_api_no_data(self, mock_get_map_api):
@@ -224,7 +226,8 @@ class TestCraftItemAction(unittest.TestCase):
         self.assertEqual(result['item_code'], self.item_code)
         self.assertEqual(result['quantity_crafted'], self.quantity)
         self.assertEqual(result['workshop_code'], 'weaponcrafting')
-        self.assertEqual(result['location'], (5, 3))
+        self.assertEqual(result['target_x'], 5)
+        self.assertEqual(result['target_y'], 3)
 
     @patch('src.controller.actions.craft_item.crafting_api')
     @patch('src.controller.actions.craft_item.get_item_api')

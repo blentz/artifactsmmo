@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
+from test.fixtures import create_mock_client
 
 
 class TestAPIOptimizationFixes(unittest.TestCase):
@@ -24,7 +25,7 @@ class TestAPIOptimizationFixes(unittest.TestCase):
     def setUp(self):
         """Set up test environment with mocked components."""
         self.temp_dir = tempfile.mkdtemp()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
         # Create controller with mocked dependencies
         with patch('src.controller.ai_player_controller.StateManagerMixin.initialize_state_management'):
@@ -87,7 +88,7 @@ class TestCharacterStateCaching(TestAPIOptimizationFixes):
         mock_response = Mock()
         mock_response.data.to_dict.return_value = {'hp': 100, 'cooldown': 0}
         
-        with patch('artifactsmmo_api_client.api.characters.get_character_name.sync', return_value=mock_response):
+        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync', return_value=mock_response):
             initial_time = time.time()
             self.controller._refresh_character_state()
             
@@ -258,7 +259,7 @@ class TestAPIErrorHandling(TestAPIOptimizationFixes):
     def test_refresh_character_state_handles_api_errors(self):
         """Test that _refresh_character_state handles API errors gracefully."""
         # Mock API error (429 rate limit)
-        with patch('artifactsmmo_api_client.api.characters.get_character_name.sync', 
+        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync', 
                    side_effect=Exception("Rate limit exceeded")):
             
             # Should not raise exception

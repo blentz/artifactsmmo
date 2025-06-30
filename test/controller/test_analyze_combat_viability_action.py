@@ -1,0 +1,244 @@
+"""Test module for AnalyzeCombatViabilityAction."""
+
+import unittest
+import tempfile
+import os
+from unittest.mock import Mock, patch
+from src.controller.actions.analyze_combat_viability import AnalyzeCombatViabilityAction
+from test.fixtures import (
+    create_mock_client, MockCharacterData, MockKnowledgeBase, MockMapState,
+    mock_character_response, create_test_environment, cleanup_test_environment
+)
+
+
+class TestAnalyzeCombatViabilityAction(unittest.TestCase):
+    """Test cases for AnalyzeCombatViabilityAction."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir, self.original_data_prefix = create_test_environment()
+        
+        self.action = AnalyzeCombatViabilityAction(
+            character_name="test_character",
+            analysis_radius=3
+        )
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        cleanup_test_environment(self.temp_dir, self.original_data_prefix)
+
+    def test_analyze_combat_viability_action_initialization(self):
+        """Test AnalyzeCombatViabilityAction initialization."""
+        self.assertEqual(self.action.character_name, "test_character")
+        self.assertEqual(self.action.analysis_radius, 3)
+
+    def test_analyze_combat_viability_action_initialization_defaults(self):
+        """Test AnalyzeCombatViabilityAction initialization with defaults."""
+        action = AnalyzeCombatViabilityAction("test")
+        self.assertEqual(action.character_name, "test")
+        self.assertEqual(action.analysis_radius, 3)
+
+    def test_analyze_combat_viability_action_repr(self):
+        """Test AnalyzeCombatViabilityAction string representation."""
+        expected = "AnalyzeCombatViabilityAction(test_character, radius=3)"
+        self.assertEqual(repr(self.action), expected)
+
+    def test_execute_no_client(self):
+        """Test execute fails without client."""
+        result = self.action.execute(None)
+        self.assertFalse(result['success'])
+        self.assertIn('No API client provided', result['error'])
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_execute_no_character_data(self, mock_get_character):
+        """Test execute fails when character data unavailable."""
+        mock_get_character.return_value = None
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        self.assertFalse(result['success'])
+        self.assertIn('Could not get character data', result['error'])
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_execute_successful_basic_analysis(self, mock_get_character):
+        """Test successful combat viability analysis execution."""
+        character_data = MockCharacterData(
+            name="test_character",
+            level=5,
+            hp=80,
+            max_hp=100,
+            x=10,
+            y=15
+        )
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['combat_viability_known'])
+        self.assertIn('character_x', result)
+        self.assertIn('character_y', result)
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_execute_with_knowledge_base(self, mock_get_character):
+        """Test execute with knowledge base integration."""
+        character_data = MockCharacterData(name="test_character", level=3, x=5, y=10)
+        mock_get_character.return_value = mock_character_response(character_data)
+        
+        # Create knowledge base with monster data
+        knowledge_base = MockKnowledgeBase()
+        knowledge_base.data['monsters'] = {
+            'chicken': {
+                'name': 'Chicken',
+                'level': 1,
+                'locations': [{'x': 6, 'y': 10}],
+                'combat_results': [
+                    {'result': 'win', 'hp_lost': 5},
+                    {'result': 'win', 'hp_lost': 3},
+                    {'result': 'loss', 'hp_lost': 50}
+                ]
+            }
+        }
+        
+        map_state = MockMapState()
+        map_state.data = {
+            '5,10': {'x': 5, 'y': 10, 'content': {'type': 'monster', 'code': 'chicken'}},
+            '6,10': {'x': 6, 'y': 10, 'content': {'type': 'monster', 'code': 'chicken'}}
+        }
+        
+        client = create_mock_client()
+        result = self.action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['combat_viability_known'])
+        self.assertIn('analysis_radius', result)
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_execute_low_hp_character(self, mock_get_character):
+        """Test analysis with low HP character."""
+        character_data = MockCharacterData(
+            name="test_character",
+            level=5,
+            hp=15,  # Low HP
+            max_hp=100
+        )
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertFalse(result['ready_for_combat'])  # Should not be combat ready with low HP
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_execute_exception_handling(self, mock_get_character):
+        """Test exception handling during execution."""
+        mock_get_character.side_effect = Exception("API Error")
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        self.assertFalse(result['success'])
+        self.assertIn('Combat viability analysis failed: API Error', result['error'])
+
+    def test_goap_attributes(self):
+        """Test that AnalyzeCombatViabilityAction has expected GOAP attributes."""
+        self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'conditions'))
+        self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'reactions'))
+        self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'weights'))
+
+    def test_goap_conditions(self):
+        """Test GOAP conditions are properly defined."""
+        self.assertIsInstance(AnalyzeCombatViabilityAction.conditions, dict)
+        self.assertIn('character_alive', AnalyzeCombatViabilityAction.conditions)
+
+    def test_goap_reactions(self):
+        """Test GOAP reactions are properly defined."""
+        self.assertIsInstance(AnalyzeCombatViabilityAction.reactions, dict)
+        expected_reactions = [
+            'combat_viability_known', 'combat_not_viable', 'need_combat', 'has_hunted_monsters'
+        ]
+        for reaction in expected_reactions:
+            self.assertIn(reaction, AnalyzeCombatViabilityAction.reactions)
+
+    def test_goap_weights(self):
+        """Test GOAP weights are properly defined."""
+        self.assertIsInstance(AnalyzeCombatViabilityAction.weights, dict)
+        self.assertIn('combat_viability_known', AnalyzeCombatViabilityAction.weights)
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_character_readiness_healthy_character(self, mock_get_character):
+        """Test character readiness calculation for healthy character."""
+        character_data = MockCharacterData(
+            name="test_character",
+            level=5,
+            hp=100,
+            max_hp=100
+        )
+        
+        mock_get_character.return_value = mock_character_response(character_data)
+        client = create_mock_client()
+        
+        result = self.action.execute(client)
+        
+        self.assertTrue(result['success'])
+        self.assertTrue(result['ready_for_combat'])
+        self.assertEqual(result['hp_percentage'], 1.0)
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api')
+    def test_combat_recommendation_generation(self, mock_get_character):
+        """Test combat recommendation generation."""
+        character_data = MockCharacterData(name="test_character", level=3, x=0, y=0)
+        mock_get_character.return_value = mock_character_response(character_data)
+        
+        knowledge_base = MockKnowledgeBase()
+        knowledge_base.data['monsters'] = {
+            'chicken': {
+                'name': 'Chicken',
+                'level': 1,
+                'locations': [{'x': 1, 'y': 1}],
+                'combat_results': [
+                    {'result': 'win', 'hp_lost': 2},
+                    {'result': 'win', 'hp_lost': 3}
+                ]
+            }
+        }
+        
+        map_state = MockMapState()
+        client = create_mock_client()
+        
+        result = self.action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        
+        self.assertTrue(result['success'])
+        self.assertIn('primary_recommendation', result)
+        self.assertIn('specific_actions', result)
+
+    @patch('src.controller.actions.analyze_combat_viability.get_character_api') 
+    def test_win_rate_analysis(self, mock_get_character):
+        """Test win rate analysis from combat history."""
+        character_data = MockCharacterData(name="test_character", level=5)
+        mock_get_character.return_value = mock_character_response(character_data)
+        
+        knowledge_base = MockKnowledgeBase()
+        knowledge_base.data['monsters'] = {
+            'goblin': {
+                'combat_results': [
+                    {'result': 'win'},
+                    {'result': 'win'},
+                    {'result': 'loss'},
+                    {'result': 'win'}
+                ]
+            }
+        }
+        
+        client = create_mock_client()
+        result = self.action.execute(client, knowledge_base=knowledge_base)
+        
+        self.assertTrue(result['success'])
+        # Should calculate win rate as 75% (3 wins out of 4 fights)
+
+
+if __name__ == '__main__':
+    unittest.main()

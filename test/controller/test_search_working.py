@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from src.controller.actions.find_resources import FindResourcesAction
 from src.controller.actions.search_base import SearchActionBase
 from src.game.map.state import MapState
+from test.fixtures import create_mock_client
 
 
 class TestSearchWorking(unittest.TestCase):
@@ -18,7 +19,7 @@ class TestSearchWorking(unittest.TestCase):
         self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
         os.environ['DATA_PREFIX'] = self.temp_dir
         
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.character_x = 5
         self.character_y = 3
 
@@ -66,7 +67,8 @@ class TestSearchWorking(unittest.TestCase):
         # Verify successful result
         self.assertTrue(result['success'])
         self.assertEqual(result['resource_code'], 'copper_rocks')
-        self.assertEqual(result['location'], (6, 3))
+        self.assertEqual(result['target_x'], 6)
+        self.assertEqual(result['target_y'], 3)
         
         # Verify cache was used, not API calls
         map_state.scan.assert_not_called()

@@ -2,7 +2,7 @@
 
 import random
 from typing import Dict, List, Optional, Tuple
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_api
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 from .base import ActionBase
 
 

@@ -1,7 +1,7 @@
 """ UnequipItemAction module """
 
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name import sync as unequip_api
+from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import sync as unequip_api
 from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 from .base import ActionBase

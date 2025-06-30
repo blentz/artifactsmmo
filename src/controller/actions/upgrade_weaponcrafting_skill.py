@@ -7,8 +7,8 @@ that provide skill experience while being accessible to low-level characters.
 
 from typing import Dict, List, Optional
 import logging
-from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
-from artifactsmmo_api_client.api.my_characters.action_crafting_my_name import sync as craft_api
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as craft_api
 from .base import ActionBase
 
 

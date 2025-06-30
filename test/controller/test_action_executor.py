@@ -7,6 +7,7 @@ import os
 import yaml
 
 from src.controller.action_executor import ActionExecutor, ActionResult, CompositeActionStep
+from test.fixtures import create_mock_client
 
 
 class TestActionExecutor(unittest.TestCase):
@@ -51,7 +52,7 @@ class TestActionExecutor(unittest.TestCase):
             yaml.dump(test_config, f)
         
         self.executor = ActionExecutor(self.config_file)
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
     
     def tearDown(self) -> None:
         """Clean up test fixtures after each test method."""

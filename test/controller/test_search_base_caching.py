@@ -6,6 +6,7 @@ import time
 from unittest.mock import Mock, patch, MagicMock
 from src.controller.actions.search_base import SearchActionBase
 from src.game.map.state import MapState
+from test.fixtures import create_mock_client
 
 
 class TestSearchBaseCaching(unittest.TestCase):
@@ -13,7 +14,7 @@ class TestSearchBaseCaching(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.search_action = SearchActionBase(character_x=5, character_y=3, search_radius=2)
         
         # Create temporary MapState for testing

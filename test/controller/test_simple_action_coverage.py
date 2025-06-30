@@ -146,7 +146,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
     def test_move_to_resource_basic(self):
         """Test MoveToResourceAction basic functionality."""
         action = MoveToResourceAction("player", 5, 10)
-        self.assertEqual(action.char_name, "player")
+        self.assertEqual(action.character_name, "player")
         self.assertEqual(action.target_x, 5)
         self.assertEqual(action.target_y, 10)
         
@@ -160,7 +160,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
     def test_move_to_workshop_basic(self):
         """Test MoveToWorkshopAction basic functionality."""
         action = MoveToWorkshopAction("player", 5, 10)
-        self.assertEqual(action.char_name, "player")
+        self.assertEqual(action.character_name, "player")
         self.assertEqual(action.target_x, 5)
         self.assertEqual(action.target_y, 10)
         

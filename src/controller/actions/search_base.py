@@ -9,11 +9,12 @@ All search-related actions can inherit from this class to use consistent search 
 import math
 import time
 from typing import Dict, List, Optional, Tuple, Set, Callable
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_api
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 from .base import ActionBase
+from .mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
 
 
-class SearchActionBase(ActionBase):
+class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin):
     """
     Base class for all search-related actions with unified search algorithm.
     
@@ -404,7 +405,9 @@ class SearchActionBase(ActionBase):
             # Check level appropriateness if character level provided
             if character_level is not None and 'level' in content_dict:
                 monster_level = content_dict.get('level', 1)
-                if abs(monster_level - character_level) > level_range:
+                # Only fight monsters at or below character level + level_range
+                # This ensures safety - no monsters above character capability
+                if monster_level > character_level + level_range:
                     return False
             
             return True

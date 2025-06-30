@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock, MagicMock
 from src.controller.actions.unequip_item import UnequipItemAction
 from artifactsmmo_api_client.models.item_slot import ItemSlot
+from test.fixtures import create_mock_client
 
 
 class TestUnequipItemAction(unittest.TestCase):
@@ -34,7 +35,7 @@ class TestUnequipItemAction(unittest.TestCase):
 
     def test_execute_invalid_slot(self):
         """ Test execute with invalid slot name """
-        client = Mock()
+        client = create_mock_client()
         action = UnequipItemAction("char", "invalid_slot")
         
         result = action.execute(client)
@@ -46,7 +47,7 @@ class TestUnequipItemAction(unittest.TestCase):
     def test_execute_success(self):
         """ Test successful execution """
         # Mock API client and response
-        client = Mock()
+        client = create_mock_client()
         mock_response = Mock()
         mock_response.data = Mock()
         
@@ -92,7 +93,7 @@ class TestUnequipItemAction(unittest.TestCase):
 
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """
-        client = Mock()
+        client = create_mock_client()
         mock_response = Mock()
         mock_response.data = None
         
@@ -104,7 +105,7 @@ class TestUnequipItemAction(unittest.TestCase):
 
     def test_execute_api_exception(self):
         """ Test execute when API throws exception """
-        client = Mock()
+        client = create_mock_client()
         
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', side_effect=Exception("API Error")):
             result = self.action.execute(client)
@@ -206,7 +207,7 @@ class TestUnequipItemAction(unittest.TestCase):
 
     def test_execute_minimal_response(self):
         """ Test execute with minimal response data """
-        client = Mock()
+        client = create_mock_client()
         mock_response = Mock()
         mock_response.data = Mock(spec=[])  # Empty spec to avoid auto-creating attributes
         
@@ -220,7 +221,7 @@ class TestUnequipItemAction(unittest.TestCase):
 
     def test_execute_utility_slot_with_quantity(self):
         """ Test execute for utility slot with custom quantity """
-        client = Mock()
+        client = create_mock_client()
         action = UnequipItemAction("char", "utility1", quantity=3)
         
         mock_response = Mock()

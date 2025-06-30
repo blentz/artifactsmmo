@@ -1,7 +1,7 @@
 """ EquipItemAction module """
 
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name import sync as equip_api
+from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import sync as equip_api
 from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 from .base import ActionBase

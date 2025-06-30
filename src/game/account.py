@@ -1,7 +1,7 @@
 """ Account module """
 import logging
 
-from artifactsmmo_api_client.api.accounts.get_account import sync
+from artifactsmmo_api_client.api.accounts.get_account_accounts_account_get import sync
 
 
 class Account:

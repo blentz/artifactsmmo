@@ -7,6 +7,7 @@ import os
 
 from src.controller.action_factory import ActionFactory, ActionExecutorConfig
 from src.controller.actions.base import ActionBase
+from test.fixtures import create_mock_client
 
 
 class MockAction(ActionBase):
@@ -31,7 +32,7 @@ class TestActionFactory(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test fixtures before each test method."""
         self.factory = ActionFactory()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
     
     def test_factory_initialization(self) -> None:
         """Test that factory initializes with default actions."""
@@ -195,7 +196,7 @@ class TestActionFactory(unittest.TestCase):
         
         action = self.factory.create_action('move', action_data)
         self.assertIsNotNone(action)
-        self.assertEqual(action.char_name, 'test_char')
+        self.assertEqual(action.character_name, 'test_char')
         self.assertEqual(action.x, 5)
         self.assertEqual(action.y, 10)
     
@@ -205,7 +206,7 @@ class TestActionFactory(unittest.TestCase):
         
         action = self.factory.create_action('attack', action_data)
         self.assertIsNotNone(action)
-        self.assertEqual(action.char_name, 'test_char')
+        self.assertEqual(action.character_name, 'test_char')
     
     def test_find_monsters_action_integration(self) -> None:
         """Test that default find_monsters action can be created."""

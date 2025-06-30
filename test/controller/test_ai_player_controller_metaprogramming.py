@@ -9,6 +9,7 @@ import yaml
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.action_executor import ActionResult
 from src.game.character.state import CharacterState
+from test.fixtures import create_mock_client, mock_character_response, MockCharacterData
 
 
 class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
@@ -54,8 +55,8 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         with open(self.state_config_file, 'w') as f:
             yaml.dump(state_config, f)
         
-        # Set up mock client
-        self.mock_client = Mock()
+        # Set up mock client using fixtures
+        self.mock_client = create_mock_client()
         
         # Mock character state
         self.mock_character_state = Mock(spec=CharacterState)

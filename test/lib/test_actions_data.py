@@ -133,7 +133,7 @@ class TestActionsData(unittest.TestCase):
         """Test ActionsData with default filename."""
         actions_data = ActionsData()
         
-        self.assertEqual(actions_data.filename, "data/default_actions.yaml")
+        self.assertEqual(actions_data.filename, "config/default_actions.yaml")
 
     @patch('src.lib.actions_data.YamlData._load_yaml')
     def test_actions_data_with_mocked_yaml(self, mock_load_yaml):

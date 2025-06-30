@@ -26,7 +26,7 @@ class TestCharacterState(unittest.TestCase):
         
         # Check that YamlData.__init__ was called with the correct filename parameter
         args, kwargs = mock_yaml_init.call_args
-        self.assertEqual(kwargs['filename'], "/tmp/test_data/character.yaml")
+        self.assertEqual(kwargs['filename'], "/tmp/test_data/characters/character.yaml")
         self.assertEqual(state.name, "character")
         self.assertEqual(state.data, self.test_data)
         mock_save.assert_called_once()
@@ -42,7 +42,7 @@ class TestCharacterState(unittest.TestCase):
         
         # Check that YamlData.__init__ was called with the correct filename parameter
         args, kwargs = mock_yaml_init.call_args
-        self.assertEqual(kwargs['filename'], f"/tmp/test_data/{self.test_name}.yaml")
+        self.assertEqual(kwargs['filename'], f"/tmp/test_data/characters/{self.test_name}.yaml")
         self.assertEqual(state.name, self.test_name)
         self.assertEqual(state.data, self.test_data)
         mock_save.assert_called_once()

@@ -18,7 +18,7 @@ class TestGOAPStateCompleteness(unittest.TestCase):
     
     def setUp(self):
         """Set up test environment."""
-        self.actions_data = ActionsData('data/actions.yaml')
+        self.actions_data = ActionsData('config/actions.yaml')
         self.actions_config = self.actions_data.get_actions()
         
     def test_all_goap_state_variables_are_documented(self):

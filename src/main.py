@@ -157,6 +157,7 @@ def show_goal_plan(goal_string, client):
     from src.lib.actions_data import ActionsData
     from src.lib.goap_data import GoapData
     from src.controller.goap_execution_manager import GOAPExecutionManager
+    from src.controller.goal_manager import GOAPGoalManager
     
     logging.info(f"\n=== GOAP Plan Analysis for Goal: {goal_string} ===")
     
@@ -165,13 +166,21 @@ def show_goal_plan(goal_string, client):
     actions_data = ActionsData("config/actions.yaml")
     goap_data = GoapData("data/world.yaml")
     
+    # Initialize goal manager to access goal templates
+    goal_manager = GOAPGoalManager()
+    
     # Load actions configuration
     actions_config = actions_data.get_actions()
     logging.info(f"Loaded {len(actions_config)} available actions")
     
-    # Parse goal string into goal state
+    # Parse goal string into goal state using goal templates when available
     goal_state = {}
-    if "level" in goal_string:
+    if goal_string in goal_manager.goal_templates:
+        # Use the target_state from the goal template
+        goal_template = goal_manager.goal_templates[goal_string]
+        goal_state = goal_template.get('target_state', {}).copy()
+        logging.info(f"Using goal template '{goal_string}' with target state: {goal_state}")
+    elif "level" in goal_string:
         # Extract level number from goal string
         import re
         level_match = re.search(r'level[\s_]*(\d+)', goal_string, re.IGNORECASE)
@@ -200,15 +209,9 @@ def show_goal_plan(goal_string, client):
             goal_state[goal_string] = True
         logging.info(f"Goal state: {goal_state}")
     
-    # Load current world state
+    # Load current world state (without hardcoded overrides)
+    # Let the GOAP execution manager handle start state configuration
     current_state = goap_data.data.copy()
-    # Add some default states if missing
-    if 'character_alive' not in current_state:
-        current_state['character_alive'] = True
-    if 'monsters_available' not in current_state:
-        current_state['monsters_available'] = True
-    if 'resources_available' not in current_state:
-        current_state['resources_available'] = True
     
     logging.info(f"\nCurrent world state has {len(current_state)} variables")
     

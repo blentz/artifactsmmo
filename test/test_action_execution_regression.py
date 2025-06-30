@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 from src.controller.action_executor import ActionExecutor, ActionResult
 from src.controller.action_factory import ActionFactory
 from src.lib.yaml_data import YamlData
+from test.fixtures import create_mock_client
 
 
 class TestActionExecutionRegression(unittest.TestCase):
@@ -21,7 +22,7 @@ class TestActionExecutionRegression(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.temp_dir = tempfile.mkdtemp()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
         # Create action executor with real configuration
         self.action_executor = ActionExecutor()

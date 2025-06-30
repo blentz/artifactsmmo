@@ -10,6 +10,7 @@ import logging
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
+from test.fixtures import create_mock_client
 
 
 class TestLevelUpGoal(unittest.TestCase):
@@ -17,7 +18,7 @@ class TestLevelUpGoal(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.controller = AIPlayerController(client=self.mock_client)
         self.logger = logging.getLogger()
         

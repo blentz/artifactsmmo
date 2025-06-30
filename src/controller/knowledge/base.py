@@ -10,6 +10,10 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Set, Tuple
 from src.lib.goap_data import GoapData
 from src.game.globals import DATA_PREFIX
+from artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get import sync as get_monster_api
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+from artifactsmmo_api_client.api.np_cs.get_npc_npcs_details_code_get import sync as get_npc_api
 
 
 class KnowledgeBase(GoapData):
@@ -134,7 +138,7 @@ class KnowledgeBase(GoapData):
             
         monster_info = self.data['monsters'][monster_code]
         monster_info['last_seen'] = datetime.now().isoformat()
-        monster_info['encounter_count'] += 1
+        monster_info['encounter_count'] = monster_info.get('encounter_count', 0) + 1
         
     def _learn_resource_discovery(self, resource_code: str, x: int, y: int, content_data: Dict) -> None:
         """Learn from discovering a resource (extends MapState with harvest experience)."""
@@ -350,6 +354,66 @@ class KnowledgeBase(GoapData):
         location_key = f"{x},{y}"
         return map_state.data.get(location_key)
         
+    def get_monster_data(self, monster_code: str, client=None) -> Optional[Dict]:
+        """
+        Get monster data from knowledge base, with API fallback if not found.
+        
+        Args:
+            monster_code: Monster code to look up
+            client: API client for fallback (optional)
+            
+        Returns:
+            Monster data dictionary or None if not found
+        """
+        # Check if we already have the monster data
+        if monster_code in self.data['monsters']:
+            return self.data['monsters'][monster_code]
+        
+        # If not found and client provided, fetch from API
+        if client:
+            try:
+                self.logger.info(f"📊 Fetching {monster_code} data from API...")
+                response = get_monster_api(code=monster_code, client=client)
+                
+                if response:
+                    monster = response.data
+                    # Store the monster data for future use
+                    monster_data = {
+                        'code': monster.code,
+                        'name': getattr(monster, 'name', monster.code),
+                        'level': getattr(monster, 'level', 1),
+                        'hp': getattr(monster, 'hp', 0),
+                        'attack_stats': {
+                            'attack_fire': getattr(monster, 'attack_fire', 0),
+                            'attack_earth': getattr(monster, 'attack_earth', 0),
+                            'attack_water': getattr(monster, 'attack_water', 0),
+                            'attack_air': getattr(monster, 'attack_air', 0)
+                        },
+                        'resistance_stats': {
+                            'res_fire': getattr(monster, 'res_fire', 0),
+                            'res_earth': getattr(monster, 'res_earth', 0),
+                            'res_water': getattr(monster, 'res_water', 0),
+                            'res_air': getattr(monster, 'res_air', 0)
+                        },
+                        'drops': getattr(monster, 'drops', []),
+                        'first_discovered': datetime.now().isoformat(),
+                        'combat_results': [],
+                        'total_combats': 0
+                    }
+                    
+                    # Store in knowledge base
+                    self.data['monsters'][monster_code] = monster_data
+                    self.save()
+                    
+                    self.logger.info(f"✅ Added {monster_code} (level {monster_data['level']}) to knowledge base")
+                    return monster_data
+                else:
+                    self.logger.warning(f"❓ Monster {monster_code} not found in API")
+            except Exception as e:
+                self.logger.error(f"Failed to fetch monster data from API: {e}")
+        
+        return None
+    
     def get_monster_combat_success_rate(self, monster_code: str, 
                                       character_level: int) -> float:
         """
@@ -824,3 +888,194 @@ class KnowledgeBase(GoapData):
             
         except Exception as e:
             self.logger.debug(f"Failed to store XP effects analysis: {e}")
+    
+    def get_combat_statistics(self) -> Dict[str, Dict]:
+        """
+        Generate combat statistics from monster combat results.
+        
+        Returns:
+            Dictionary mapping monster codes to their combat statistics
+        """
+        combat_stats = {}
+        
+        if 'monsters' not in self.data:
+            return combat_stats
+        
+        for monster_code, monster_info in self.data['monsters'].items():
+            combat_results = monster_info.get('combat_results', [])
+            
+            if not combat_results:
+                continue
+            
+            # Calculate statistics for this monster
+            total_combats = len(combat_results)
+            wins = sum(1 for r in combat_results if r.get('result') == 'win')
+            losses = sum(1 for r in combat_results if r.get('result') == 'loss')
+            
+            combat_stats[monster_code] = {
+                'total_combats': total_combats,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': wins / total_combats if total_combats > 0 else 0,
+                'combat_results': combat_results  # Include full results for recent analysis
+            }
+        
+        return combat_stats
+    
+    def get_resource_data(self, resource_code: str, client=None) -> Optional[Dict]:
+        """
+        Get resource data from knowledge base, with API fallback if not found.
+        
+        Args:
+            resource_code: Resource code to look up
+            client: API client for fallback (optional)
+            
+        Returns:
+            Resource data dictionary or None if not found
+        """
+        # Check if we already have the resource data
+        if resource_code in self.data['resources']:
+            return self.data['resources'][resource_code]
+        
+        # If not found and client provided, fetch from API
+        if client:
+            try:
+                self.logger.info(f"📊 Fetching {resource_code} data from API...")
+                response = get_resource_api(code=resource_code, client=client)
+                
+                if response:
+                    resource = response.data
+                    # Store the resource data for future use
+                    resource_data = {
+                        'code': resource.code,
+                        'name': getattr(resource, 'name', resource.code),
+                        'skill': getattr(resource, 'skill', 'unknown'),
+                        'level': getattr(resource, 'level', 1),
+                        'drops': getattr(resource, 'drops', []),
+                        'first_discovered': datetime.now().isoformat(),
+                        'harvest_attempts': 0,
+                        'successful_harvests': 0,
+                        'estimated_skill_required': getattr(resource, 'level', 1),
+                        'estimated_yield': []
+                    }
+                    
+                    # Store in knowledge base
+                    self.data['resources'][resource_code] = resource_data
+                    self.save()
+                    
+                    self.logger.info(f"✅ Added {resource_code} (skill: {resource_data['skill']}, level: {resource_data['level']}) to knowledge base")
+                    return resource_data
+                else:
+                    self.logger.warning(f"❓ Resource {resource_code} not found in API")
+            except Exception as e:
+                self.logger.error(f"Failed to fetch resource data from API: {e}")
+        
+        return None
+    
+    def get_item_data(self, item_code: str, client=None) -> Optional[Dict]:
+        """
+        Get item data from knowledge base, with API fallback if not found.
+        
+        Args:
+            item_code: Item code to look up
+            client: API client for fallback (optional)
+            
+        Returns:
+            Item data dictionary or None if not found
+        """
+        # Check if we already have the item data
+        if item_code in self.data['items']:
+            return self.data['items'][item_code]
+        
+        # If not found and client provided, fetch from API
+        if client:
+            try:
+                self.logger.info(f"📊 Fetching {item_code} data from API...")
+                response = get_item_api(code=item_code, client=client)
+                
+                if response:
+                    item = response.data
+                    # Store the item data for future use
+                    item_data = {
+                        'code': item.code,
+                        'name': getattr(item, 'name', item.code),
+                        'type': getattr(item, 'type', 'unknown'),
+                        'subtype': getattr(item, 'subtype', ''),
+                        'level': getattr(item, 'level', 1),
+                        'effects': self._sanitize_object(getattr(item, 'effects', [])),
+                        'description': getattr(item, 'description', ''),
+                        'tradeable': getattr(item, 'tradeable', False),
+                        'first_discovered': datetime.now().isoformat(),
+                        'discovery_count': 1,
+                        'sources': [],
+                        'uses': [],
+                        'market_data': {
+                            'min_price': None,
+                            'max_price': None,
+                            'avg_price': None,
+                            'price_history': []
+                        }
+                    }
+                    
+                    # Store in knowledge base
+                    self.data['items'][item_code] = item_data
+                    self.save()
+                    
+                    self.logger.info(f"✅ Added {item_code} (type: {item_data['type']}, level: {item_data['level']}) to knowledge base")
+                    return item_data
+                else:
+                    self.logger.warning(f"❓ Item {item_code} not found in API")
+            except Exception as e:
+                self.logger.error(f"Failed to fetch item data from API: {e}")
+        
+        return None
+    
+    def get_npc_data(self, npc_code: str, client=None) -> Optional[Dict]:
+        """
+        Get NPC data from knowledge base, with API fallback if not found.
+        
+        Args:
+            npc_code: NPC code to look up
+            client: API client for fallback (optional)
+            
+        Returns:
+            NPC data dictionary or None if not found
+        """
+        # Check if we already have the NPC data
+        if npc_code in self.data['npcs']:
+            return self.data['npcs'][npc_code]
+        
+        # If not found and client provided, fetch from API
+        if client:
+            try:
+                self.logger.info(f"📊 Fetching {npc_code} data from API...")
+                response = get_npc_api(code=npc_code, client=client)
+                
+                if response:
+                    npc = response.data
+                    # Store the NPC data for future use
+                    npc_data = {
+                        'code': npc.code,
+                        'name': getattr(npc, 'name', npc.code),
+                        'type': getattr(npc, 'type', 'unknown'),
+                        'subtype': getattr(npc, 'subtype', ''),
+                        'description': getattr(npc, 'description', ''),
+                        'services': self._sanitize_object(getattr(npc, 'services', [])),
+                        'first_discovered': datetime.now().isoformat(),
+                        'interaction_count': 0,
+                        'dialogue_options': [],
+                        'trade_history': []
+                    }
+                    
+                    # Store in knowledge base
+                    self.data['npcs'][npc_code] = npc_data
+                    self.save()
+                    
+                    self.logger.info(f"✅ Added {npc_code} (type: {npc_data['type']}) to knowledge base")
+                    return npc_data
+                else:
+                    self.logger.warning(f"❓ NPC {npc_code} not found in API")
+            except Exception as e:
+                self.logger.error(f"Failed to fetch NPC data from API: {e}")
+        
+        return None

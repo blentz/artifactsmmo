@@ -1,0 +1,41 @@
+# GOAP Start State Configuration
+# This file defines the default state variables that should be initialized for GOAP planning
+# These ensure that all action prerequisites are properly set up for plan generation
+
+# Core GOAP Action Prerequisites - Only variables used by actions in config/actions.yaml
+core_states:
+  # Character capabilities (required by multiple actions)
+  can_move: true
+  can_attack: true
+  character_safe: true
+  character_alive: true
+  need_combat: true
+  
+  # Location states (required for movement and positioning)
+  at_target_location: false
+  monsters_available: false    # KEY: Set to false so find_monsters is required
+  monster_present: false       # KEY: Set to false so find_monsters must run first
+  
+  # Ensure XP-seeking cycle requirements
+  need_combat: true
+  
+  # Action timing states
+  is_on_cooldown: false
+  needs_rest: false
+  
+  # Goal completion states
+  has_hunted_monsters: false
+  monster_defeated: false
+
+# Metadata
+metadata:
+  version: "1.0"
+  description: "Default GOAP start state initialization for comprehensive action planning"
+  created_by: "Claude Code"
+  last_updated: "2025-06-29"
+  
+# Usage Notes:
+# - These values provide sensible defaults for GOAP planning
+# - Actual runtime state will override these defaults
+# - Add new state variables here as new actions are developed
+# - Boolean states should default to false for requirements, true for capabilities

@@ -6,9 +6,9 @@ to final equipment, mapping out resource nodes, workshops, and intermediate step
 """
 
 from typing import Dict, List, Optional, Set, Tuple, Any
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
-from artifactsmmo_api_client.api.items.get_all_item import sync as get_all_items_api
-from artifactsmmo_api_client.api.resources.get_all_resource import sync as get_all_resources_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
+from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources_api
 from .base import ActionBase
 
 
@@ -747,7 +747,7 @@ class AnalyzeCraftingChainAction(ActionBase):
         Get character inventory as a dictionary of item_code -> quantity.
         """
         try:
-            from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+            from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
             character_response = get_character_api(name=self.character_name, client=client)
             
             if not character_response or not character_response.data:

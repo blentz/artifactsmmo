@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from datetime import datetime, timezone, timedelta
 
 from src.controller.actions.wait import WaitAction
+from test.fixtures import create_mock_client
 
 
 class TestWaitAction(unittest.TestCase):
@@ -13,7 +14,7 @@ class TestWaitAction(unittest.TestCase):
     def setUp(self):
         """ Set up test fixtures """
         self.wait_action = WaitAction(wait_duration=1.0)
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
 
     def test_init(self):
         """ Test WaitAction initialization """

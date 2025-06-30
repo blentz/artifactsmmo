@@ -2,9 +2,10 @@
 
 from typing import Dict, Optional
 from .search_base import SearchActionBase
+from .coordinate_mixin import CoordinateStandardizationMixin
 
 
-class FindWorkshopsAction(SearchActionBase):
+class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
     """ Action to find the nearest workshop location """
 
     # GOAP parameters
@@ -43,13 +44,17 @@ class FindWorkshopsAction(SearchActionBase):
             def workshop_result_processor(location, content_code, content_data):
                 x, y = location
                 distance = self._calculate_distance(x, y)
-                return self.get_success_response(
-                    location=location,
+                
+                # Create standardized coordinate response
+                coordinate_data = self.create_coordinate_response(
+                    x, y,
                     distance=distance,
                     workshop_code=content_code,
                     workshop_name=content_code,
                     workshop_type=self.workshop_type or 'general'
                 )
+                
+                return self.get_success_response(**coordinate_data)
             
             # Get map_state from context for cached access
             map_state = kwargs.get('map_state')

@@ -1,5 +1,5 @@
 import time
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_x_y
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_x_y
 from artifactsmmo_api_client.models.map_schema import MapSchema
 
 from src.lib.yaml_data import YamlData
@@ -45,7 +45,13 @@ class MapState(YamlData):
         if not isinstance(tile_data, dict) or 'last_scanned' not in tile_data:
             return False
         
-        time_since_scan = time.time() - tile_data['last_scanned']
+        # Convert last_scanned to float in case it was loaded as string from YAML
+        try:
+            last_scanned = float(tile_data['last_scanned'])
+        except (ValueError, TypeError):
+            return False
+        
+        time_since_scan = time.time() - last_scanned
         return time_since_scan < self.cache_duration
 
     def scan(self, x, y, cache=True, save_immediately=True):
@@ -60,10 +66,14 @@ class MapState(YamlData):
         # Cache miss or expired - need to fetch from API
         current_time = time.time()
         if coord_key in self.data and 'last_scanned' in self.data[coord_key]:
-            age = current_time - self.data[coord_key]['last_scanned']
-            if age >= self.cache_duration:
-                print(f"🔄 Cache expired for ({x},{y}) - age {age:.1f}s >= {self.cache_duration}s, refreshing from API")
-            else:
+            try:
+                last_scanned = float(self.data[coord_key]['last_scanned'])
+                age = current_time - last_scanned
+                if age >= self.cache_duration:
+                    print(f"🔄 Cache expired for ({x},{y}) - age {age:.1f}s >= {self.cache_duration}s, refreshing from API")
+                else:
+                    print(f"🆕 First scan for ({x},{y})")
+            except (ValueError, TypeError):
                 print(f"🆕 First scan for ({x},{y})")
         else:
             print(f"🆕 First scan for ({x},{y})")

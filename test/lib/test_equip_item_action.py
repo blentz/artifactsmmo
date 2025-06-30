@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock, MagicMock
 from src.controller.actions.equip_item import EquipItemAction
 from artifactsmmo_api_client.models.item_slot import ItemSlot
+from test.fixtures import create_mock_client
 
 
 class TestEquipItemAction(unittest.TestCase):
@@ -36,7 +37,7 @@ class TestEquipItemAction(unittest.TestCase):
 
     def test_execute_invalid_slot(self):
         """ Test execute with invalid slot name """
-        client = Mock()
+        client = create_mock_client()
         action = EquipItemAction("char", "item", "invalid_slot")
         
         result = action.execute(client)
@@ -48,7 +49,7 @@ class TestEquipItemAction(unittest.TestCase):
     def test_execute_success(self):
         """ Test successful execution """
         # Mock API client and response
-        client = Mock()
+        client = create_mock_client()
         mock_response = Mock()
         mock_response.data = Mock()
         
@@ -89,7 +90,7 @@ class TestEquipItemAction(unittest.TestCase):
 
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """
-        client = Mock()
+        client = create_mock_client()
         mock_response = Mock()
         mock_response.data = None
         
@@ -101,7 +102,7 @@ class TestEquipItemAction(unittest.TestCase):
 
     def test_execute_api_exception(self):
         """ Test execute when API throws exception """
-        client = Mock()
+        client = create_mock_client()
         
         with unittest.mock.patch('src.controller.actions.equip_item.equip_api', side_effect=Exception("API Error")):
             result = self.action.execute(client)
@@ -203,7 +204,7 @@ class TestEquipItemAction(unittest.TestCase):
 
     def test_execute_minimal_response(self):
         """ Test execute with minimal response data """
-        client = Mock()
+        client = create_mock_client()
         mock_response = Mock()
         mock_response.data = Mock(spec=[])  # Empty spec to avoid auto-creating attributes
         

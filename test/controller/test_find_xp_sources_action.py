@@ -5,6 +5,7 @@ import tempfile
 import os
 from unittest.mock import Mock, patch
 from src.controller.actions.find_xp_sources import FindXpSourcesAction
+from test.fixtures import create_mock_client
 
 
 class TestFindXpSourcesAction(unittest.TestCase):
@@ -53,118 +54,141 @@ class TestFindXpSourcesAction(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
-    @patch('src.controller.actions.find_xp_sources.KnowledgeBase')
-    def test_execute_no_knowledge_base(self, mock_knowledge_base_class):
-        """Test execute fails when knowledge base fails to load."""
-        mock_knowledge_base_class.side_effect = Exception("Failed to load knowledge base")
-        client = Mock()
+    def test_execute_no_knowledge_base(self):
+        """Test execute fails when knowledge base is not provided."""
+        client = create_mock_client()
+        mock_learning_manager = Mock()
         
-        result = self.action.execute(client)
+        # Execute with learning_manager but no knowledge_base
+        result = self.action.execute(client, learning_manager=mock_learning_manager)
         self.assertFalse(result['success'])
-        self.assertIn('Failed to load knowledge base', result['error'])
+        self.assertIn('Knowledge base not available', result['error'])
 
-    @patch('src.controller.actions.find_xp_sources.KnowledgeBase')
-    def test_execute_no_xp_effects_data(self, mock_knowledge_base_class):
-        """Test execute when no XP effects data available."""
+    def test_execute_no_learning_manager(self):
+        """Test execute when learning manager is not provided."""
+        client = create_mock_client()
         mock_knowledge_base = Mock()
-        mock_knowledge_base.data = {}
-        mock_knowledge_base_class.return_value = mock_knowledge_base
-        client = Mock()
         
-        result = self.action.execute(client)
+        # Execute with knowledge_base but no learning_manager
+        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
         self.assertFalse(result['success'])
-        self.assertIn('No XP effects analysis available', result['error'])
+        self.assertIn('Learning manager not available', result['error'])
 
-    @patch('src.controller.actions.find_xp_sources.KnowledgeBase')
-    def test_execute_no_skill_xp_effects(self, mock_knowledge_base_class):
+    def test_execute_no_skill_xp_effects(self):
         """Test execute when skill has no XP effects."""
+        client = create_mock_client()
         mock_knowledge_base = Mock()
-        mock_knowledge_base.data = {
-            'xp_effects_analysis': {
-                'mining': ['some_effect'],
-                'cooking': ['other_effect']
-            }
-        }
-        mock_knowledge_base_class.return_value = mock_knowledge_base
-        client = Mock()
+        mock_knowledge_base.data = {'effects': {}}
         
-        result = self.action.execute(client)
+        mock_learning_manager = Mock()
+        mock_learning_manager.find_xp_sources_for_skill.return_value = None
+        
+        result = self.action.execute(
+            client,
+            knowledge_base=mock_knowledge_base,
+            learning_manager=mock_learning_manager
+        )
         self.assertFalse(result['success'])
-        self.assertIn('No XP sources found for skill weaponcrafting', result['error'])
+        self.assertIn("No XP sources found for skill 'weaponcrafting'", result['error'])
 
-    @patch('src.controller.actions.find_xp_sources.KnowledgeBase')
-    def test_execute_success_basic(self, mock_knowledge_base_class):
+    def test_execute_success_basic(self):
         """Test successful execution with basic XP effects."""
+        client = create_mock_client()
         mock_knowledge_base = Mock()
         mock_knowledge_base.data = {
-            'xp_effects_analysis': {
-                'weaponcrafting': ['crafting_xp', 'weapon_smithing_xp']
-            },
-            'effects': {
-                'crafting_xp': {
-                    'name': 'crafting_xp',
-                    'description': 'Grants crafting XP'
-                },
-                'weapon_smithing_xp': {
-                    'name': 'weapon_smithing_xp', 
-                    'description': 'Grants weapon smithing XP'
-                }
+            'effects': {'weaponcrafting_xp': True},
+            'items': {
+                'copper_sword': {'name': 'Copper Sword', 'craft': {'skill': 'weaponcrafting'}},
+                'iron_sword': {'name': 'Iron Sword', 'craft': {'skill': 'weaponcrafting'}}
             }
         }
-        mock_knowledge_base_class.return_value = mock_knowledge_base
-        client = Mock()
         
-        result = self.action.execute(client)
+        mock_learning_manager = Mock()
+        mock_learning_manager.find_xp_sources_for_skill.return_value = [
+            {'source': 'copper_sword', 'xp': 10},
+            {'source': 'iron_sword', 'xp': 20}
+        ]
+        
+        result = self.action.execute(
+            client,
+            knowledge_base=mock_knowledge_base,
+            learning_manager=mock_learning_manager
+        )
         self.assertTrue(result['success'])
         self.assertEqual(result['skill'], 'weaponcrafting')
-        self.assertEqual(len(result['xp_sources']), 2)
-        self.assertIn('crafting_xp', result['xp_sources'])
-        self.assertIn('weapon_smithing_xp', result['xp_sources'])
+        self.assertIn('xp_sources', result)
+        self.assertIn('actionable_sources', result)
+        self.assertGreater(result['total_sources_found'], 0)
 
-    @patch('src.controller.actions.find_xp_sources.KnowledgeBase')
-    def test_execute_success_with_detailed_analysis(self, mock_knowledge_base_class):
+    def test_execute_success_with_detailed_analysis(self):
         """Test successful execution with detailed effect analysis."""
+        client = create_mock_client()
         mock_knowledge_base = Mock()
         mock_knowledge_base.data = {
-            'xp_effects_analysis': {
-                'weaponcrafting': ['crafting_xp']
-            },
-            'effects': {
-                'crafting_xp': {
-                    'name': 'crafting_xp',
-                    'description': 'Grants crafting XP',
-                    'value': 25
-                }
-            }
+            'effects': {'weaponcrafting_xp': {'value': 25}},
+            'items': {'copper_sword': {'craft': {'skill': 'weaponcrafting'}}}
         }
-        mock_knowledge_base_class.return_value = mock_knowledge_base
-        client = Mock()
         
-        result = self.action.execute(client)
+        mock_learning_manager = Mock()
+        mock_learning_manager.find_xp_sources_for_skill.return_value = [
+            {'source': 'crafting', 'effect': 'weaponcrafting_xp', 'value': 25}
+        ]
+        
+        # Mock the _analyze_actionable_sources to return something
+        with patch.object(self.action, '_analyze_actionable_sources', return_value=[{'item': 'copper_sword'}]):
+            result = self.action.execute(
+                client,
+                knowledge_base=mock_knowledge_base,
+                learning_manager=mock_learning_manager
+            )
+        
         self.assertTrue(result['success'])
         self.assertEqual(result['total_sources_found'], 1)
-        self.assertIn('effect_details', result)
-        self.assertEqual(len(result['effect_details']), 1)
-        self.assertEqual(result['effect_details'][0]['name'], 'crafting_xp')
-        self.assertEqual(result['effect_details'][0]['value'], 25)
+        self.assertIsNotNone(result.get('actionable_sources'))
 
-    @patch('src.controller.actions.find_xp_sources.KnowledgeBase')
-    def test_execute_missing_effect_details(self, mock_knowledge_base_class):
-        """Test execution when effect details are missing."""
+    def test_execute_missing_effect_details(self):
+        """Test execution when effect details are missing but sources exist."""
+        client = create_mock_client()
         mock_knowledge_base = Mock()
-        mock_knowledge_base.data = {
-            'xp_effects_analysis': {
-                'weaponcrafting': ['missing_effect']
-            },
-            'effects': {}
-        }
-        mock_knowledge_base_class.return_value = mock_knowledge_base
-        client = Mock()
+        mock_knowledge_base.data = {'effects': {}}
         
-        result = self.action.execute(client)
+        mock_learning_manager = Mock()
+        mock_learning_manager.find_xp_sources_for_skill.return_value = [
+            {'source': 'unknown_source', 'xp': 5}
+        ]
+        
+        result = self.action.execute(
+            client,
+            knowledge_base=mock_knowledge_base,
+            learning_manager=mock_learning_manager
+        )
         self.assertTrue(result['success'])
-        self.assertEqual(len(result['xp_sources']), 1)
-        self.assertEqual(len(result['effect_details']), 0)  # No details available
+        self.assertEqual(result['total_sources_found'], 1)
+
+    def test_execute_with_effects_learning(self):
+        """Test execution triggers effects learning when data not available."""
+        client = create_mock_client()
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.data = {}  # No effects data
+        
+        mock_learning_manager = Mock()
+        # First return None (no effects), then return effects after learning
+        mock_learning_manager.find_xp_sources_for_skill.side_effect = [
+            [{'source': 'learned_source', 'xp': 15}]
+        ]
+        mock_learning_manager.learn_all_effects_bulk.return_value = {'success': True}
+        
+        # Mock _check_effects_data_available to return False
+        with patch.object(self.action, '_check_effects_data_available', return_value=False):
+            result = self.action.execute(
+                client,
+                knowledge_base=mock_knowledge_base,
+                learning_manager=mock_learning_manager
+            )
+        
+        # Verify effects learning was called
+        mock_learning_manager.learn_all_effects_bulk.assert_called_once_with(client)
+        self.assertTrue(result['success'])
 
     def test_execute_has_goap_attributes(self):
         """Test that FindXpSourcesAction has expected GOAP attributes."""
@@ -172,6 +196,34 @@ class TestFindXpSourcesAction(unittest.TestCase):
         self.assertTrue(hasattr(FindXpSourcesAction, 'reactions'))
         self.assertTrue(hasattr(FindXpSourcesAction, 'weights'))
         self.assertTrue(hasattr(FindXpSourcesAction, 'g'))
+
+    def test_check_effects_data_available(self):
+        """Test _check_effects_data_available method."""
+        # Test when both effects and xp_effects_analysis exist
+        mock_kb = Mock()
+        mock_kb.data = {
+            'effects': {'some_effect': {}},
+            'xp_effects_analysis': {'skill': ['effect1']}
+        }
+        self.assertTrue(self.action._check_effects_data_available(mock_kb))
+        
+        # Test when effects data is empty
+        mock_kb.data = {'effects': {}}
+        self.assertFalse(self.action._check_effects_data_available(mock_kb))
+        
+        # Test when no effects key
+        mock_kb.data = {}
+        self.assertFalse(self.action._check_effects_data_available(mock_kb))
+
+    def test_find_alternative_skill_names(self):
+        """Test _find_alternative_skill_names method."""
+        # Test that method returns a list
+        alternatives = self.action._find_alternative_skill_names('weaponcrafting')
+        self.assertIsInstance(alternatives, list)
+        
+        # Test skill with no variations
+        alternatives = self.action._find_alternative_skill_names('mining')
+        self.assertIsInstance(alternatives, list)
 
 
 if __name__ == '__main__':

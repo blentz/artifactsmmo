@@ -1,7 +1,7 @@
 """ FindCorrectWorkshopAction module """
 
 from typing import Dict, Optional, Tuple
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 from .find_workshops import FindWorkshopsAction
 from .move import MoveAction
 

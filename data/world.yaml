@@ -1,1 +1,13 @@
-{}
+data:
+  at_target_location: true
+  can_attack: true
+  can_move: true
+  has_hunted_monsters: true
+  is_on_cooldown: false
+  monster_defeated: false
+  monster_present: false
+  monsters_available: false
+planners: []
+world:
+  planners: []
+  plans: []

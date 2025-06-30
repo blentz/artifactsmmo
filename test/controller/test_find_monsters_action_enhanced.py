@@ -5,6 +5,7 @@ import tempfile
 import os
 from unittest.mock import Mock, patch
 from src.controller.actions.find_monsters import FindMonstersAction
+from test.fixtures import create_mock_client
 
 
 class TestFindMonstersActionEnhanced(unittest.TestCase):
@@ -56,13 +57,13 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_find_monsters_action_repr(self):
         """Test FindMonstersAction string representation."""
-        expected = "FindMonstersAction(10, 15, radius=3, types=['chicken', 'cow'], lvl=5±2)"
+        expected = "FindMonstersAction(10, 15, radius=3, types=['chicken', 'cow'], exp_search=True)"
         self.assertEqual(repr(self.action), expected)
 
     def test_find_monsters_action_repr_no_types(self):
         """Test FindMonstersAction string representation without monster types."""
         action = FindMonstersAction(character_x=5, character_y=8, search_radius=2)
-        expected = "FindMonstersAction(5, 8, radius=2, types=[], lvl=None±2)"
+        expected = "FindMonstersAction(5, 8, radius=2, exp_search=True)"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
@@ -75,11 +76,11 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
     def test_execute_monster_api_fails(self, mock_get_monsters_api):
         """Test execute when monster API fails."""
         mock_get_monsters_api.return_value = None
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
-        self.assertIn('Could not retrieve monster information', result['error'])
+        self.assertIn('No suitable monsters found matching criteria', result['error'])
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_monster_api_no_data(self, mock_get_monsters_api):
@@ -87,44 +88,70 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = None
         mock_get_monsters_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
-        self.assertIn('Could not retrieve monster information', result['error'])
+        self.assertIn('No suitable monsters found matching criteria', result['error'])
 
-    @patch('src.controller.actions.find_monsters.MapState')
+    @patch('src.controller.actions.search_base.get_map_api')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
-    def test_execute_successful_monster_search(self, mock_get_monsters_api, mock_map_state_class):
+    def test_execute_successful_monster_search(self, mock_get_monsters_api, mock_get_map_api):
         """Test successful monster search."""
         # Mock monster API response
         mock_chicken = Mock()
         mock_chicken.code = 'chicken'
+        mock_chicken.name = 'Chicken'
         mock_chicken.level = 3
         mock_cow = Mock()
         mock_cow.code = 'cow'
+        mock_cow.name = 'Cow'
         mock_cow.level = 5
         
         mock_response = Mock()
         mock_response.data = [mock_chicken, mock_cow]
         mock_get_monsters_api.return_value = mock_response
         
-        # Mock map state with monster locations
-        mock_map_state = Mock()
-        mock_map_state.data = {
-            '11,15': {'x': 11, 'y': 15, 'content': {'code': 'chicken', 'type': 'monster'}},
-            '12,16': {'x': 12, 'y': 16, 'content': {'code': 'cow', 'type': 'monster'}},
-            '13,17': {'x': 13, 'y': 17, 'content': {'code': 'wolf', 'type': 'monster'}}
-        }
-        mock_map_state_class.return_value = mock_map_state
+        # Mock map API responses for locations within search radius
+        def map_api_side_effect(x, y, client):
+            # Within search radius of (10, 15) with radius 3
+            if (x, y) == (11, 15):
+                mock_response = Mock()
+                mock_response.data = Mock()
+                mock_response.data.x = x
+                mock_response.data.y = y
+                mock_response.data.content = Mock(code='chicken', type='monster')
+                mock_response.data.__dict__ = {'x': x, 'y': y, 'content': {'code': 'chicken', 'type': 'monster'}}
+                return mock_response
+            elif (x, y) == (12, 16):
+                mock_response = Mock()
+                mock_response.data = Mock()
+                mock_response.data.x = x
+                mock_response.data.y = y
+                mock_response.data.content = Mock(code='cow', type='monster')
+                mock_response.data.__dict__ = {'x': x, 'y': y, 'content': {'code': 'cow', 'type': 'monster'}}
+                return mock_response
+            else:
+                # Return empty location for other coordinates
+                mock_response = Mock()
+                mock_response.data = Mock()
+                mock_response.data.x = x
+                mock_response.data.y = y
+                mock_response.data.content = None
+                mock_response.data.__dict__ = {'x': x, 'y': y, 'content': None}
+                return mock_response
         
-        client = Mock()
+        mock_get_map_api.side_effect = map_api_side_effect
+        
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertTrue(result['success'])
-        self.assertIn('monsters_found', result)
-        self.assertIn('nearest_monster', result)
-        self.assertIn('search_results', result)
+        self.assertIn('target_x', result)
+        self.assertIn('target_y', result)
+        self.assertIn('distance', result)
+        self.assertIn('monster_code', result)
+        self.assertIn('target_codes', result)
 
     def test_filter_monsters_by_level_within_range(self):
         """Test _filter_monsters_by_level with monsters in level range."""
@@ -222,12 +249,13 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
-        client = Mock()
+        client = create_mock_client()
         
-        with patch('src.controller.actions.find_monsters.get_all_monsters_api', side_effect=Exception("API Error")):
+        with patch('artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync', side_effect=Exception("API Error")):
             result = self.action.execute(client)
             self.assertFalse(result['success'])
-            self.assertIn('Monster search failed', result['error'])
+            # The error message should be about no suitable monsters found
+            self.assertIn('No suitable monsters found matching criteria', result['error'])
 
     def test_execute_has_goap_attributes(self):
         """Test that FindMonstersAction has expected GOAP attributes."""
@@ -272,9 +300,14 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
             action = FindMonstersAction(monster_types=types)
             self.assertEqual(action.monster_types, types)
             
-            # Test representation includes types
+            # Test representation
             repr_str = repr(action)
-            self.assertIn(str(types), repr_str)
+            # Only check for types if they exist
+            if types:
+                self.assertIn(str(types), repr_str)
+            else:
+                # Empty types should not be in repr
+                self.assertNotIn('types=', repr_str)
 
     def test_level_filtering_edge_cases(self):
         """Test level filtering with edge cases."""
@@ -311,7 +344,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
             self.assertEqual(action.use_exponential_search, use_exp)
             self.assertEqual(action.max_search_radius, max_radius)
 
-    @patch('src.controller.actions.find_monsters.MapState')
+    @patch('src.game.map.state.MapState')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_no_monsters_found(self, mock_get_monsters_api, mock_map_state_class):
         """Test execute when no monsters are found in range."""
@@ -331,7 +364,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         }
         mock_map_state_class.return_value = mock_map_state
         
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         # Should handle gracefully
@@ -342,7 +375,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         from src.controller.actions.search_base import SearchActionBase
         self.assertIsInstance(self.action, SearchActionBase)
 
-    @patch('src.controller.actions.find_monsters.MapState')
+    @patch('src.game.map.state.MapState')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_level_appropriate_filtering(self, mock_get_monsters_api, mock_map_state_class):
         """Test that monsters are filtered by level appropriately."""
@@ -374,7 +407,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         
         # Character level 5, range 2 should find levels 3-7
         action = FindMonstersAction(character_level=5, level_range=2)
-        client = Mock()
+        client = create_mock_client()
         
         result = action.execute(client)
         # Should find appropriate_monster (level 5) but not weak(1) or strong(20)

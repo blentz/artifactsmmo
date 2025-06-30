@@ -46,7 +46,7 @@ class TestCoordinatePassingFix(unittest.TestCase):
         
         self.assertIsNotNone(action)
         self.assertTrue(action.use_target_coordinates)
-        self.assertEqual(action.char_name, 'test_character')
+        self.assertEqual(action.character_name, 'test_character')
     
     def test_move_action_without_coordinates_in_context(self):
         """Test that move action doesn't auto-enable use_target_coordinates when no coordinates available."""
@@ -62,7 +62,7 @@ class TestCoordinatePassingFix(unittest.TestCase):
         
         self.assertIsNotNone(action)
         self.assertFalse(action.use_target_coordinates)
-        self.assertEqual(action.char_name, 'test_character')
+        self.assertEqual(action.character_name, 'test_character')
     
     def test_move_action_with_explicit_coordinates(self):
         """Test that move action works with explicit x/y coordinates."""
@@ -79,7 +79,7 @@ class TestCoordinatePassingFix(unittest.TestCase):
         self.assertIsNotNone(action)
         self.assertEqual(action.x, 5)
         self.assertEqual(action.y, 3)
-        self.assertEqual(action.char_name, 'test_character')
+        self.assertEqual(action.character_name, 'test_character')
     
     def test_action_context_preservation_between_actions(self):
         """Test that action context preserves coordinates between find_resources and move actions."""
@@ -99,7 +99,7 @@ class TestCoordinatePassingFix(unittest.TestCase):
         self.assertEqual(self.controller.action_context['target_x'], 2)
         self.assertEqual(self.controller.action_context['target_y'], 0)
     
-    @patch('src.controller.actions.move.move_character_api')
+    @patch('src.controller.actions.movement_base.move_character_api')
     def test_complete_find_and_move_workflow(self, mock_move_api):
         """Test complete workflow: find_resources -> action_context -> move action."""
         # Setup mock for move API

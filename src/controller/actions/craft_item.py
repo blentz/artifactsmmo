@@ -2,15 +2,16 @@
 
 import time
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_crafting_my_name import sync as crafting_api
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_api
-from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as crafting_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 from .base import ActionBase
+from .coordinate_mixin import CoordinateStandardizationMixin
 
 
-class CraftItemAction(ActionBase):
+class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
     """ Action to craft items at workshop locations """
 
     def __init__(self, character_name: str, item_code: str, quantity: int = 1):
@@ -59,11 +60,12 @@ class CraftItemAction(ActionBase):
             # Get map information to verify workshop
             map_response = get_map_api(x=character_x, y=character_y, client=client)
             if not map_response or not map_response.data:
-                return {
-                    'success': False,
-                    'error': 'Could not get map information',
-                    'location': (character_x, character_y)
-                }
+                error_data = self.create_coordinate_response(
+                    character_x, character_y,
+                    success=False,
+                    error='Could not get map information'
+                )
+                return error_data
                 
             map_data = map_response.data
             
@@ -74,23 +76,25 @@ class CraftItemAction(ActionBase):
                           map_data.content.type_ == 'workshop')
             
             if not is_workshop:
-                return {
-                    'success': False,
-                    'error': 'No workshop available at current location',
-                    'location': (character_x, character_y),
-                    'map_content_type': getattr(map_data.content, 'type_', 'none') if has_content else 'none'
-                }
+                error_data = self.create_coordinate_response(
+                    character_x, character_y,
+                    success=False,
+                    error='No workshop available at current location',
+                    map_content_type=getattr(map_data.content, 'type_', 'none') if has_content else 'none'
+                )
+                return error_data
             
             workshop_code = getattr(map_data.content, 'code', 'unknown')
             
             # Get item details for validation
             item_details = get_item_api(code=self.item_code, client=client)
             if not item_details or not item_details.data:
-                return {
-                    'success': False,
-                    'error': f'Could not get details for item {self.item_code}',
-                    'location': (character_x, character_y)
-                }
+                error_data = self.create_coordinate_response(
+                    character_x, character_y,
+                    success=False,
+                    error=f'Could not get details for item {self.item_code}'
+                )
+                return error_data
             
             # Check workshop compatibility with item crafting requirements
             item_data = item_details.data
@@ -100,15 +104,16 @@ class CraftItemAction(ActionBase):
                 if required_skill:
                     # Skills and workshops have the same names, so direct comparison
                     if workshop_code != required_skill:
-                        return {
-                            'success': False,
-                            'error': f'Workshop type mismatch: item requires {required_skill} skill but at {workshop_code} workshop',
-                            'location': (character_x, character_y),
-                            'workshop_code': workshop_code,
-                            'required_skill': required_skill,
-                            'expected_workshop': required_skill,
-                            'item_code': self.item_code
-                        }
+                        error_data = self.create_coordinate_response(
+                            character_x, character_y,
+                            success=False,
+                            error=f'Workshop type mismatch: item requires {required_skill} skill but at {workshop_code} workshop',
+                            workshop_code=workshop_code,
+                            required_skill=required_skill,
+                            expected_workshop=required_skill,
+                            item_code=self.item_code
+                        )
+                        return error_data
             
             # Prepare crafting schema
             crafting_schema = CraftingSchema(
@@ -137,23 +142,25 @@ class CraftItemAction(ActionBase):
                     # If this is the last attempt or not a timeout error, don't retry
                     if attempt == max_retries - 1 or not is_timeout:
                         if "598" in error_msg:
-                            return {
-                                'success': False,
-                                'error': f'Workshop not found on map - API returned HTTP 598. Expected {required_skill or "unknown"} workshop, found {workshop_code}',
-                                'location': (character_x, character_y),
-                                'workshop_code': workshop_code,
-                                'api_error': error_msg,
-                                'item_code': self.item_code,
-                                'attempts': attempt + 1
-                            }
+                            error_data = self.create_coordinate_response(
+                                character_x, character_y,
+                                success=False,
+                                error=f'Workshop not found on map - API returned HTTP 598. Expected {required_skill or "unknown"} workshop, found {workshop_code}',
+                                workshop_code=workshop_code,
+                                api_error=error_msg,
+                                item_code=self.item_code,
+                                attempts=attempt + 1
+                            )
+                            return error_data
                         else:
-                            return {
-                                'success': False,
-                                'error': f'Crafting API call failed after {attempt + 1} attempts: {error_msg}',
-                                'location': (character_x, character_y),
-                                'api_error': error_msg,
-                                'attempts': attempt + 1
-                            }
+                            error_data = self.create_coordinate_response(
+                                character_x, character_y,
+                                success=False,
+                                error=f'Crafting API call failed after {attempt + 1} attempts: {error_msg}',
+                                api_error=error_msg,
+                                attempts=attempt + 1
+                            )
+                            return error_data
                     
                     # Calculate exponential backoff delay
                     delay = base_delay * (2 ** attempt)
@@ -163,17 +170,17 @@ class CraftItemAction(ActionBase):
             if crafting_response and crafting_response.data:
                 # Extract useful information from the response
                 skill_data = crafting_response.data
-                result = {
-                    'success': True,
-                    'item_code': self.item_code,
-                    'item_name': item_details.data.name,
-                    'quantity_crafted': self.quantity,
-                    'workshop_code': workshop_code,
-                    'location': (character_x, character_y),
-                    'cooldown': getattr(skill_data.cooldown, 'total_seconds', 0) if hasattr(skill_data, 'cooldown') else 0,
-                    'xp_gained': getattr(skill_data, 'xp', 0),
-                    'skill': getattr(skill_data, 'skill', 'unknown')
-                }
+                result = self.create_coordinate_response(
+                    character_x, character_y,
+                    success=True,
+                    item_code=self.item_code,
+                    item_name=item_details.data.name,
+                    quantity_crafted=self.quantity,
+                    workshop_code=workshop_code,
+                    cooldown=getattr(skill_data.cooldown, 'total_seconds', 0) if hasattr(skill_data, 'cooldown') else 0,
+                    xp_gained=getattr(skill_data, 'xp', 0),
+                    skill=getattr(skill_data, 'skill', 'unknown')
+                )
                 
                 # Add character data if available
                 if hasattr(skill_data, 'character'):
@@ -202,18 +209,21 @@ class CraftItemAction(ActionBase):
                 
                 return result
             else:
-                return {
-                    'success': False,
-                    'error': 'Crafting action failed - no response data',
-                    'location': (character_x, character_y)
-                }
+                error_data = self.create_coordinate_response(
+                    character_x, character_y,
+                    success=False,
+                    error='Crafting action failed - no response data'
+                )
+                return error_data
                 
         except Exception as e:
-            return {
-                'success': False,
-                'error': f'Crafting action failed: {str(e)}',
-                'location': getattr(self, '_last_location', (0, 0))
-            }
+            # Use default coordinates if we don't have character position
+            error_data = self.create_coordinate_response(
+                0, 0,  # Default coordinates for exception case
+                success=False,
+                error=f'Crafting action failed: {str(e)}'
+            )
+            return error_data
 
     def __repr__(self):
         return f"CraftItemAction({self.character_name}, {self.item_code}, qty={self.quantity})"

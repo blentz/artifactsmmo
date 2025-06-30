@@ -397,7 +397,7 @@ class AIPlayerController(StateManagerMixin):
             
         try:
             import time
-            from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character
+            from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
             
             char_name = self.character_state.name
             response = get_character(name=char_name, client=self.client)
@@ -545,27 +545,30 @@ class AIPlayerController(StateManagerMixin):
         result_data = {}
         
         if response:
-            # Extract location data for move actions
+            # Extract standardized coordinate data for move actions
             if action_name == 'find_monsters' and hasattr(response, 'get'):
-                location = response.get('location')
-                if location:
+                target_x = response.get('target_x')
+                target_y = response.get('target_y')
+                monster_code = response.get('monster_code')
+                if target_x is not None and target_y is not None:
                     result_data.update({
-                        'x': location[0],
-                        'y': location[1],
-                        'target_x': location[0],
-                        'target_y': location[1]
+                        'target_x': target_x,
+                        'target_y': target_y
                     })
-                    self.logger.info(f"Found monster location: {location}")
+                    if monster_code:
+                        result_data['monster_code'] = monster_code
+                    self.logger.info(f"Found monster location: ({target_x}, {target_y})")
             elif action_name == 'find_workshops' and hasattr(response, 'get'):
-                location = response.get('location')
-                if location:
+                target_x = response.get('target_x')
+                target_y = response.get('target_y')
+                if target_x is not None and target_y is not None:
                     result_data.update({
-                        'target_x': location[0],
-                        'target_y': location[1],
-                        'workshop_x': location[0],
-                        'workshop_y': location[1]
+                        'target_x': target_x,
+                        'target_y': target_y,
+                        'workshop_x': target_x,
+                        'workshop_y': target_y
                     })
-                    self.logger.info(f"Found workshop location: {location}")
+                    self.logger.info(f"Found workshop location: ({target_x}, {target_y})")
             elif action_name == 'lookup_item_info' and hasattr(response, 'get'):
                 # Extract recipe information for use by find_resources
                 if response.get('success') and response.get('recipe_found'):
@@ -898,27 +901,27 @@ class AIPlayerController(StateManagerMixin):
                 # We just need to learn from the content if it exists
                 content = map_data.get('content')
                 if content:
-                    raw_content_type = content.get('type_', 'unknown')
+                    raw_content_type = content.get('type', content.get('type_', 'unknown'))
                     content_code = content.get('code', 'unknown')
                     
                     # Use configuration-driven content classification
                     content_type = self.goal_manager.classify_content(content_code, content, raw_content_type)
                     
                     # Learn from content discovery
-                    self.logger.info(f"🔍 DEBUG: About to learn {content_type} '{content_code}' at ({x}, {y})")
-                    self.logger.info(f"🔍 DEBUG: Raw content type: '{raw_content_type}', Categorized as: '{content_type}'")
-                    self.logger.info(f"🔍 DEBUG: Content attributes: {list(content.keys())}")
-                    self.logger.info(f"🔍 DEBUG: Knowledge base type: {type(self.knowledge_base)}")
-                    self.logger.info(f"🔍 DEBUG: Knowledge base filename: {getattr(self.knowledge_base, 'filename', 'no filename')}")
+                    self.logger.debug(f"🔍 About to learn {content_type} '{content_code}' at ({x}, {y})")
+                    self.logger.debug(f"🔍 Raw content type: '{raw_content_type}', Categorized as: '{content_type}'")
+                    self.logger.debug(f"🔍 Content attributes: {list(content.keys())}")
+                    self.logger.debug(f"🔍 Knowledge base type: {type(self.knowledge_base)}")
+                    self.logger.debug(f"🔍 Knowledge base filename: {getattr(self.knowledge_base, 'filename', 'no filename')}")
                     
                     self.knowledge_base.learn_from_content_discovery(
                         content_type, content_code, x, y, content
                     )
                     
-                    self.logger.info(f"🔍 DEBUG: Knowledge base data after learning: {list(self.knowledge_base.data.keys())}")
+                    self.logger.debug(f"🔍 Knowledge base data after learning: {list(self.knowledge_base.data.keys())}")
                     
                     self.knowledge_base.save()
-                    self.logger.info(f"🔍 DEBUG: Knowledge base saved")
+                    self.logger.debug(f"🔍 Knowledge base saved")
                     
                     self.logger.info(f"🧠 Learned: {content_type} '{content_code}' at ({x}, {y})")
                 else:

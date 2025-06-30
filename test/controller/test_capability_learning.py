@@ -10,6 +10,7 @@ import os
 from src.controller.capability_analyzer import CapabilityAnalyzer
 from src.controller.learning_manager import LearningManager
 from src.controller.knowledge.base import KnowledgeBase
+from test.fixtures import create_mock_client
 
 
 class TestCapabilityLearning(unittest.TestCase):
@@ -21,7 +22,7 @@ class TestCapabilityLearning(unittest.TestCase):
         self.knowledge_file = os.path.join(self.temp_dir, 'test_knowledge.yaml')
         
         # Mock client for API calls
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
         # Initialize components
         self.knowledge_base = KnowledgeBase(filename=self.knowledge_file)

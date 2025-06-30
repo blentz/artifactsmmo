@@ -9,6 +9,7 @@ from src.controller.actions.attack import AttackAction
 from src.controller.actions.rest import RestAction
 from src.controller.actions.find_monsters import FindMonstersAction
 from src.controller.actions.map_lookup import MapLookupAction
+from test.fixtures import create_mock_client
 
 
 class TestActionGoapIntegration(unittest.TestCase):
@@ -17,7 +18,7 @@ class TestActionGoapIntegration(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test fixtures before each test method."""
         self.controller = AIPlayerController()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.controller.set_client(self.mock_client)
 
     def test_action_classes_have_goap_parameters(self) -> None:

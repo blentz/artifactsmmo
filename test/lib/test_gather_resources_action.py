@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 from src.controller.actions.gather_resources import GatherResourcesAction
+from test.fixtures import create_mock_client
 
 
 class TestGatherResourcesAction(unittest.TestCase):
@@ -15,7 +16,7 @@ class TestGatherResourcesAction(unittest.TestCase):
         self.action = GatherResourcesAction(self.character_name, self.target_resource)
         
         # Mock client
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
         # Mock character response
         self.mock_character_data = Mock()
@@ -56,7 +57,7 @@ class TestGatherResourcesAction(unittest.TestCase):
 
     def test_execute_no_character_cache(self):
         """Test gathering fails without character data."""
-        mock_client = Mock()
+        mock_client = create_mock_client()
         mock_client._character_cache = None
         
         result = self.action.execute(mock_client)

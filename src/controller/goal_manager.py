@@ -171,34 +171,56 @@ class GOAPGoalManager:
             'need_combat': current_level < 40,  # Need combat XP until max level
             'need_equipment': current_level < 10,  # Need better equipment at low levels
             'need_resources': current_level < 15,  # Need resources for crafting
+            '_knowledge_base': knowledge_base,  # Store reference for computed state methods
         }
         
         # Apply configuration-driven state calculation rules
         calculated_state = self._apply_state_calculation_rules(base_state)
         state.update(calculated_state)
         
-        # Apply state engine computed states (preserve existing cooldown calculation)
-        current_cooldown_state = state.get('is_on_cooldown')
+        # Apply state engine computed states (preserve critical base calculations)
+        # Preserve existing critical state calculations that should not be overridden
+        critical_states = {
+            'is_on_cooldown': state.get('is_on_cooldown'),
+            'character_alive': state.get('character_alive'),
+            'character_safe': state.get('character_safe'),
+            'needs_rest': state.get('needs_rest'),
+            'can_attack': state.get('can_attack'),
+            'can_move': state.get('can_move'),
+            'need_equipment': state.get('need_equipment'),
+            'need_combat': state.get('need_combat'),
+            'hp_percentage': state.get('hp_percentage'),
+            'character_level': state.get('character_level'),
+            'character_hp': state.get('character_hp'),
+            'character_max_hp': state.get('character_max_hp')
+        }
+        
         computed_state = self.state_engine.calculate_derived_state(state, self.thresholds)
-        # Don't override existing cooldown calculation with state engine
-        if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
-            computed_state['is_on_cooldown'] = current_cooldown_state
+        
+        # Don't override critical base calculations if they were already computed correctly
+        for key, value in critical_states.items():
+            if key in computed_state and value is not None:
+                computed_state[key] = value
+                
         state.update(computed_state)
+        
+        # Debug: Log critical state values for get_to_safety goal
+        self.logger.debug(f"🩺 HP state: hp={current_hp}/{max_hp} ({hp_percentage:.1f}%), needs_rest={state.get('needs_rest')}, character_safe={state.get('character_safe')}, is_on_cooldown={state.get('is_on_cooldown')}")
         
         # Debug: Log equipment and computed state values 
         equipment_states = {k: v for k, v in state.items() if 'armor' in k or 'weapon' in k or 'equipment' in k}
         if equipment_states:
-            self.logger.info(f"🔧 Equipment states: {equipment_states}")
+            self.logger.debug(f"🔧 Equipment states: {equipment_states}")
         
         # Debug: Log key computed states from state engine
         computed_states = {k: v for k, v in state.items() if k in [
             'has_raw_materials', 'has_refined_materials', 'at_correct_workshop',
             'workshops_discovered', 'has_crafting_materials', 'materials_sufficient',
             'best_weapon_selected', 'craftable_weapon_identified', 'material_requirements_known',
-            'need_workshop_discovery', 'need_specific_workshop', 'at_workshop'
+            'need_workshop_discovery', 'need_specific_workshop', 'at_workshop', 'combat_not_viable'
         ]}
         if computed_states:
-            self.logger.info(f"🔧 Computed states: {computed_states}")
+            self.logger.debug(f"🔧 Computed states: {computed_states}")
         
         return state
     
@@ -244,8 +266,87 @@ class GOAPGoalManager:
                 character_level = state.get('character_level', 1)
                 return character_level >= 2
             elif method_name == 'check_combat_viability':
-                # For now, assume combat is viable
-                return False
+                # Check if character has been losing too many fights based on knowledge base data
+                knowledge_base = state.get('_knowledge_base')
+                if not knowledge_base:
+                    return False  # Assume combat is viable if no data
+                
+                try:
+                    # Get character level
+                    char_level = state.get('character_level', 1)
+                    
+                    # Get combat statistics from knowledge base
+                    combat_stats = knowledge_base.get_combat_statistics() if hasattr(knowledge_base, 'get_combat_statistics') else {}
+                    
+                    if combat_stats:
+                        
+                        # Analyze recent combat performance
+                        recent_monsters = []
+                        total_recent_fights = 0
+                        total_recent_wins = 0
+                        
+                        # Look at all monsters we've fought recently
+                        for monster_code, stats in combat_stats.items():
+                            # Check combat results array for recent fights
+                            combat_results = stats.get('combat_results', [])
+                            
+                            # Look at the most recent combats (last 10 across all monsters)
+                            for result in combat_results[-10:]:
+                                if isinstance(result, dict):
+                                    fight_char_level = result.get('character_level', char_level)
+                                    # Only consider fights at current character level
+                                    if fight_char_level == char_level:
+                                        recent_monsters.append({
+                                            'monster': monster_code,
+                                            'result': result.get('result', 'loss'),
+                                            'timestamp': result.get('timestamp', '')
+                                        })
+                                        total_recent_fights += 1
+                                        if result.get('result') == 'win':
+                                            total_recent_wins += 1
+                        
+                        # Sort by timestamp to get truly recent fights
+                        recent_monsters.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+                        recent_monsters = recent_monsters[:10]  # Keep only the 10 most recent
+                        
+                        # Calculate win rate from recent fights
+                        if len(recent_monsters) >= 3:  # Need at least 3 recent fights
+                            recent_wins = sum(1 for m in recent_monsters if m['result'] == 'win')
+                            recent_win_rate = recent_wins / len(recent_monsters)
+                            
+                            if recent_win_rate < 0.2:  # Less than 20% win rate
+                                self.logger.warning(f"⚠️ Combat not viable: Recent win rate {recent_win_rate:.1%} ({recent_wins}/{len(recent_monsters)} wins)")
+                                
+                                # Log recent combat results
+                                for fight in recent_monsters[:5]:
+                                    self.logger.info(f"  - {fight['monster']}: {fight['result']}")
+                                
+                                return True  # combat_not_viable = True
+                        
+                        # Also check overall statistics
+                        total_fights = 0
+                        total_wins = 0
+                        
+                        for monster_code, stats in combat_stats.items():
+                            total_combats = stats.get('total_combats', 0)
+                            wins = stats.get('wins', 0)
+                            
+                            if total_combats > 0:
+                                total_fights += total_combats
+                                total_wins += wins
+                        
+                        # Check overall win rate if we have enough data
+                        if total_fights >= 10:
+                            overall_win_rate = total_wins / total_fights
+                            
+                            if overall_win_rate < 0.2:  # Less than 20% overall win rate
+                                self.logger.debug(f"📊 Overall combat data: {overall_win_rate:.1%} win rate across {total_fights} total fights")
+                                return True  # combat_not_viable = True
+                                
+                except Exception as e:
+                    self.logger.debug(f"Error checking combat viability: {e}")
+                
+                return False  # Combat is viable by default
             else:
                 # Delegate to state engine for all computed state methods
                 try:
@@ -485,16 +586,6 @@ class GOAPGoalManager:
         if not current_state.get('character_safe', False) or not current_state.get('character_alive', False):
             return None
         
-        # TEMPORARY: Force crafting goal selection to test recipe workflow
-        # This ensures we test the complete crafting sequence: recipe selection -> resource gathering -> crafting
-        character_level = current_state.get('character_level', 1)
-        if character_level >= 2:  # Force crafting goals for level 2+ characters
-            # Force upgrade_weapon goal to test the complete workflow
-            goal_config = self.goal_templates.get('upgrade_weapon')
-            if goal_config:
-                self.logger.info(f"🔧 FORCING upgrade_weapon goal to test complete recipe workflow (level {character_level})")
-                return ('upgrade_weapon', goal_config)
-        
         # Identify XP-gaining goals with their weights and viability
         xp_goals = []
         
@@ -656,7 +747,17 @@ class GOAPGoalManager:
             for key, expected_value in condition.items():
                 actual_value = state.get(key)
                 
-                if isinstance(expected_value, str) and expected_value.startswith('<'):
+                if isinstance(expected_value, str) and expected_value.startswith('<='):
+                    # Handle numeric comparisons like "<=15"
+                    threshold = float(expected_value[2:])
+                    if actual_value is None or actual_value > threshold:
+                        return False
+                elif isinstance(expected_value, str) and expected_value.startswith('>='):
+                    # Handle numeric comparisons like ">=10"  
+                    threshold = float(expected_value[2:])
+                    if actual_value is None or actual_value < threshold:
+                        return False
+                elif isinstance(expected_value, str) and expected_value.startswith('<'):
                     # Handle numeric comparisons like "<15"
                     threshold = float(expected_value[1:])
                     if actual_value is None or actual_value >= threshold:

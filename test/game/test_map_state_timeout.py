@@ -6,6 +6,7 @@ import time
 import os
 from unittest.mock import Mock, patch, MagicMock
 from src.game.map.state import MapState
+from test.fixtures import create_mock_client
 
 
 class TestMapStateTimeout(unittest.TestCase):
@@ -17,7 +18,7 @@ class TestMapStateTimeout(unittest.TestCase):
         self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
         os.environ['DATA_PREFIX'] = self.temp_dir
         
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         self.mock_response = Mock()
         self.mock_data = Mock()
         self.mock_data.to_dict.return_value = {

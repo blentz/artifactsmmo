@@ -55,7 +55,7 @@ if 'is_on_cooldown' in computed_state and current_cooldown_state is not None:
 - `run.sh` - Run application. This command can only be used after all unit tests pass with no errors. This command writes to session.log. No additional output redirection or piping is needed to follow the output.
 
 ### Additional Command-Line Utilities
-- `jq` - JSON query tool
+- `jq` - JSON query tool for querying session.log (now in JSON format)
 - `yq` - YAML query tool
 
 ## Architecture
@@ -200,6 +200,32 @@ Game Data → ActionExecutor → learn_from_* methods → save() to files
 - No manual data management required
 - Learning happens in real-time during gameplay
 - Files contain only real game data, never test data
+
+### Knowledge Base API Fallback System
+
+The knowledge base provides API fallback for "find object" style methods to ensure data availability:
+
+```python
+# Example: get_monster_data with API fallback
+monster_data = knowledge_base.get_monster_data('chicken', client=api_client)
+```
+
+**Available fallback methods**:
+- `get_monster_data(monster_code, client)` - Fetches monster data with API fallback
+- `get_resource_data(resource_code, client)` - Fetches resource data with API fallback
+- `get_item_data(item_code, client)` - Fetches item data with API fallback
+- `get_npc_data(npc_code, client)` - Fetches NPC data with API fallback
+
+**Fallback behavior**:
+1. First checks local knowledge base for cached data
+2. If not found and client provided, fetches from specific get_* API endpoint
+3. Stores fetched data in knowledge base for future use
+4. Returns None if data not found in either location
+
+**Implementation pattern**:
+- Bulk loading uses `get_all_*` APIs on startup (unchanged)
+- Individual queries use specific `get_*` APIs as fallback
+- All fetched data is sanitized and stored for future queries
 
 ### Adding New Actions
 
@@ -427,6 +453,80 @@ knowledge_base = KnowledgeBase(filename=temp_file.name)
 - **VERIFY** no test files appear in `data/` directory after test runs
 - **ISOLATE** test configurations from production configurations
 
+#### 6. Goal Condition Parsing Errors
+
+**Problem**: Goal selection conditions with compound operators causing parsing failures
+```
+Goal condition check failed: could not convert string to float: '=5'
+Goal condition check failed: could not convert string to float: '=2'
+```
+
+**Root Cause**: The `_check_goal_condition` method in `goal_manager.py` only handles simple operators (`<`, `>`) and fails when parsing compound operators (`<=`, `>=`).
+
+**Prevention**:
+- **ORDER** compound operators before simple ones in parsing logic
+- **HANDLE** `<=` and `>=` before `<` and `>` in condition evaluation
+- **EXTRACT** numeric values correctly: `"<=5"` → `float("5")` not `float("=5")`
+- **TEST** goal condition parsing with various operator combinations
+
+**Fix Pattern**:
+```python
+# CORRECT - Handle compound operators first
+if isinstance(expected_value, str) and expected_value.startswith('<='):
+    threshold = float(expected_value[2:])  # Extract from position 2
+    return actual_value <= threshold
+elif isinstance(expected_value, str) and expected_value.startswith('>='):
+    threshold = float(expected_value[2:])  # Extract from position 2
+    return actual_value >= threshold
+elif isinstance(expected_value, str) and expected_value.startswith('<'):
+    threshold = float(expected_value[1:])  # Extract from position 1
+    return actual_value < threshold
+# ... continue with other operators
+```
+
+#### 7. Combat Failure Loops and Goal Duplication
+
+**Problem**: Character gets stuck in combat failure loops when `combat_not_viable=true` due to:
+1. Duplicate emergency equipment upgrade goals causing application termination
+2. Goal state generation using comparison operators instead of numeric values
+
+**Symptoms**:
+```
+Error executing goal template 'bootstrap_character': invalid literal for int() with base 10: '=3'
+🚨 Selected emergency goal 'emergency_equipment_upgrade' (priority 98) - TERMINATES
+```
+
+**Prevention**:
+- **AVOID** duplicate goal definitions with similar functionality
+- **CONSOLIDATE** equipment upgrade logic into single goal hierarchy with emergency priorities
+- **USE** numeric target states, not comparison operators in GOAP goal templates
+- **VERIFY** emergency goals can actually execute without terminating the application
+
+**Goal Design Patterns**:
+```yaml
+# CORRECT - Numeric target state for GOAP
+bootstrap_character:
+  target_state:
+    character_level: 3  # Numeric value, not ">=3"
+    has_better_weapon: true
+    character_safe: true
+
+# CORRECT - Emergency priority without duplication
+goal_selection_rules:
+  emergency:
+    - condition:
+        combat_not_viable: true
+        character_level: "<=5"  # Condition parsing (OK here)
+      goal: "bootstrap_character"  # Reuse existing goal
+      priority: 96  # High priority for emergency
+```
+
+**Combat Failure Recovery**:
+- **DETECT** combat viability using win rate analysis in `state_engine.py`
+- **ESCALATE** to equipment upgrade goals when combat consistently fails
+- **BOOTSTRAP** low-level characters through multi-step equipment progression
+- **VERIFY** goal execution proceeds without parsing errors or termination
+
 ### Validation Requirements
 
 **MANDATORY** verification steps before claiming any fix is complete:
@@ -475,6 +575,10 @@ cat data/knowledge.yaml | grep -A5 "combat_results"
 - Runtime works but data not persisting → Verify learning callbacks and save() calls
 - Cooldowns still causing issues → Check character state refresh timing
 - Combat data missing specific fields → Verify fight_data extraction and conversion
+- Goal condition parsing fails → Check compound operator handling in `_check_goal_condition`
+- Application terminates on goal selection → Check for duplicate emergency goals and consolidate
+- GOAP execution fails on numeric parsing → Verify goal target_state uses numeric values, not operators
+- Combat failure loops persist → Check combat viability detection and goal escalation priorities
 
 ## Debugging and Troubleshooting
 
@@ -501,6 +605,15 @@ cat data/knowledge.yaml | grep -A5 "combat_results"
    - Check that action_executor extracts fight_data from API responses
    - Verify learn_from_combat() signature includes fight_data parameter
    - Confirm knowledge_base.record_combat_result() receives fight_data
+9. **Goal condition parsing failures**:
+   - Check for compound operators (`<=`, `>=`) in goal selection conditions
+   - Verify `_check_goal_condition` method handles compound operators before simple ones
+   - Ensure goal condition syntax uses proper operator ordering
+10. **Combat failure loops and goal duplication**:
+   - Check for duplicate goal definitions with similar emergency functionality
+   - Verify goal target_state uses numeric values, not comparison operators
+   - Ensure emergency goals can execute without application termination
+   - Confirm combat viability detection triggers appropriate goal escalation
 
 ### Debug Commands
 
@@ -515,4 +628,9 @@ cat data/knowledge.yaml | grep -A5 "combat_results"
 - Verify combat data recording: `grep "combat_results" data/knowledge.yaml`
 - Monitor action context: `controller.action_context` for preserved coordinates
 - Check cache behavior: Look for "Cache hit/miss" messages in map exploration
+- Check goal condition parsing: Look for "Goal condition check failed" messages in logs
+- Verify goal selection: Look for "🚨 Selected emergency goal" and priority values
+- Monitor combat viability: Look for "⚠️ Combat not viable: Recent win rate" messages
+- Check goal state generation: Look for "Generated goal state for" and verify numeric values
+- Verify goal execution: Look for "Error executing goal template" and parsing errors
 

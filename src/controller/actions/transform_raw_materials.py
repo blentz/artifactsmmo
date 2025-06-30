@@ -1,9 +1,9 @@
 """ TransformRawMaterialsAction module """
 
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_crafting_my_name import sync as crafting_api
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_api
+from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as crafting_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 from .base import ActionBase
 
@@ -16,7 +16,7 @@ class TransformRawMaterialsAction(ActionBase):
     reactions = {"has_refined_materials": True, "materials_sufficient": True}
     weights = {"has_refined_materials": 15}
 
-    def __init__(self, character_name: str, target_item: str = None):
+    def __init__(self, character_name: str, target_item: str = None, **kwargs):
         """
         Initialize the transform raw materials action.
 
@@ -27,6 +27,7 @@ class TransformRawMaterialsAction(ActionBase):
         super().__init__()
         self.character_name = character_name
         self.target_item = target_item
+        self.kwargs = kwargs
 
     def execute(self, client, **kwargs) -> Optional[Dict]:
         """ Transform raw materials into refined materials needed for crafting """
@@ -37,7 +38,7 @@ class TransformRawMaterialsAction(ActionBase):
         
         try:
             # Get current character data to check inventory
-            from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+            from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
             character_response = get_character_api(name=self.character_name, client=client)
             
             if not character_response or not character_response.data:
@@ -87,13 +88,16 @@ class TransformRawMaterialsAction(ActionBase):
                 
                 # Check for cooldown after movement and wait if needed
                 import time
-                from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+                from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
                 character_check = get_character_api(name=self.character_name, client=client)
                 if character_check and character_check.data and character_check.data.cooldown > 0:
                     cooldown_seconds = character_check.data.cooldown
                     self.logger.info(f"⏳ Cooldown active after movement: {cooldown_seconds} seconds - waiting...")
                     # Wait for cooldown to expire
-                    time.sleep(cooldown_seconds + 1)  # Add 1 second buffer
+                    # Get cooldown buffer from configuration
+                    action_config = kwargs.get('action_config', {})
+                    cooldown_buffer = action_config.get('cooldown_buffer_seconds', 1)
+                    time.sleep(cooldown_seconds + cooldown_buffer)
                     self.logger.info(f"✅ Waited {cooldown_seconds} seconds for cooldown - proceeding with crafting")
                 
                 # Use crafting API to smelt/refine the material
@@ -217,17 +221,8 @@ class TransformRawMaterialsAction(ActionBase):
             if code and quantity > 0:
                 inventory_dict[code] = quantity
         
-        # Common material transformation mappings
-        material_transforms = {
-            'copper_ore': 'copper',
-            'iron_ore': 'iron',
-            'coal_ore': 'coal',
-            'gold_ore': 'gold',
-            'ash_wood': 'ash_plank',
-            'birch_wood': 'birch_plank',
-            'spruce_wood': 'spruce_plank',
-            'dead_wood': 'hardwood_plank'
-        }
+        # Get material transformations from knowledge base or API
+        material_transforms = self._get_material_transformations_from_knowledge_base(client)
         
         # Check if we can craft directly without transformation (fallback)
         if required_materials:
@@ -274,8 +269,10 @@ class TransformRawMaterialsAction(ActionBase):
                         # Calculate how many units we can actually craft
                         max_craftable = raw_quantity // raw_needed_per_craft
                         if max_craftable > 0:
-                            # Limit to a reasonable amount when no target specified
-                            craft_quantity = min(max_craftable, 1)  # Craft only 1 unit when no target
+                            # Get default craft quantity from configuration
+                            action_config = self.kwargs.get('action_config', {})
+                            default_craft_quantity = action_config.get('default_transform_quantity', 1)
+                            craft_quantity = min(max_craftable, default_craft_quantity)
                             transformations.append((raw_material, refined_material, craft_quantity))
                     else:
                         self.logger.warning(f"⚠️ Could not determine recipe requirements for {refined_material}")
@@ -294,7 +291,7 @@ class TransformRawMaterialsAction(ActionBase):
             Dict mapping raw material code to required quantity per craft
         """
         try:
-            from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+            from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
             
             item_response = get_item_api(code=refined_material, client=client)
             if item_response and item_response.data and hasattr(item_response.data, 'craft'):
@@ -362,7 +359,7 @@ class TransformRawMaterialsAction(ActionBase):
         """
         try:
             # Look up the refined material in the API to see what workshop it requires
-            from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+            from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
             
             item_response = get_item_api(code=refined_material, client=client)
             if item_response and item_response.data and hasattr(item_response.data, 'craft'):
@@ -371,18 +368,8 @@ class TransformRawMaterialsAction(ActionBase):
                     skill_required = craft_data.skill
                     self.logger.info(f"🔍 API indicates {refined_material} requires {skill_required} skill")
                     
-                    # Map skills to workshop types
-                    skill_to_workshop = {
-                        'weaponcrafting': 'weaponcrafting',
-                        'gearcrafting': 'gearcrafting', 
-                        'jewelrycrafting': 'jewelrycrafting',
-                        'cooking': 'cooking',
-                        'alchemy': 'alchemy',
-                        'mining': 'mining',
-                        'woodcutting': 'woodcutting'
-                    }
-                    
-                    workshop_type = skill_to_workshop.get(skill_required)
+                    # Get skill to workshop mapping from knowledge base or config
+                    workshop_type = self._get_workshop_for_skill(skill_required)
                     if workshop_type:
                         self.logger.info(f"✅ Determined {raw_material} → {refined_material} requires {workshop_type} workshop")
                         return workshop_type
@@ -423,7 +410,7 @@ class TransformRawMaterialsAction(ActionBase):
                 self.logger.info(f"🏭 Found {workshop_type} workshop at ({x}, {y}) in knowledge base")
                 
                 # Check if character is already at the workshop
-                from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+                from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
                 character_response = get_character_api(name=self.character_name, client=client)
                 if character_response and character_response.data:
                     current_x = character_response.data.x
@@ -498,7 +485,7 @@ class TransformRawMaterialsAction(ActionBase):
         try:
             # For common smelting patterns, the refined material itself is often the recipe
             # Let's first try the refined material as the recipe code
-            from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+            from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
             
             item_response = get_item_api(code=refined_material, client=client)
             if item_response and item_response.data:
@@ -528,6 +515,98 @@ class TransformRawMaterialsAction(ActionBase):
         except Exception as e:
             self.logger.error(f"Error finding smelting recipe for {raw_material} → {refined_material}: {e}")
             return None
+
+    def _get_material_transformations_from_knowledge_base(self, client) -> dict:
+        """
+        Get material transformation mappings from knowledge base or API.
+        
+        Returns:
+            Dict mapping raw material codes to refined material codes
+        """
+        transformations = {}
+        
+        # First try knowledge base
+        knowledge_base = self.kwargs.get('knowledge_base')
+        if knowledge_base and hasattr(knowledge_base, 'data'):
+            items = knowledge_base.data.get('items', {})
+            
+            # Look for items that can be crafted from raw materials
+            for item_code, item_data in items.items():
+                craft_data = item_data.get('craft_data', {})
+                if craft_data and 'items' in craft_data:
+                    # Check if this is a material transformation (1 input -> 1 output)
+                    craft_items = craft_data.get('items', [])
+                    if len(craft_items) == 1:
+                        input_item = craft_items[0]
+                        if isinstance(input_item, dict):
+                            raw_material = input_item.get('code')
+                            if raw_material and self._is_raw_material(raw_material):
+                                transformations[raw_material] = item_code
+                                self.logger.debug(f"Found transformation: {raw_material} → {item_code}")
+        
+        # If no transformations found in knowledge base, try API discovery
+        if not transformations:
+            # Get common raw materials from configuration
+            action_config = self.kwargs.get('action_config', {})
+            raw_material_patterns = action_config.get('raw_material_patterns', ['_ore', '_wood'])
+            
+            # Check a sample of items to discover transformations
+            sample_items = action_config.get('transformation_sample_items', [])
+            
+            for item_code in sample_items:
+                try:
+                    item_response = get_item_api(code=item_code, client=client)
+                    if item_response and item_response.data:
+                        item_data = item_response.data
+                        if hasattr(item_data, 'craft') and item_data.craft:
+                            craft_info = item_data.craft
+                            if hasattr(craft_info, 'items') and craft_info.items:
+                                # Check if this is a simple transformation
+                                if len(craft_info.items) == 1:
+                                    input_item = craft_info.items[0]
+                                    if hasattr(input_item, 'code'):
+                                        raw_material = input_item.code
+                                        if any(pattern in raw_material for pattern in raw_material_patterns):
+                                            transformations[raw_material] = item_code
+                                            self.logger.debug(f"Discovered transformation: {raw_material} → {item_code}")
+                except Exception as e:
+                    self.logger.debug(f"Could not check {item_code}: {e}")
+        
+        self.logger.info(f"Loaded {len(transformations)} material transformations")
+        return transformations
+    
+    def _is_raw_material(self, material_code: str) -> bool:
+        """
+        Check if a material is a raw material based on naming patterns or knowledge base.
+        """
+        # Get raw material patterns from configuration
+        action_config = self.kwargs.get('action_config', {})
+        raw_patterns = action_config.get('raw_material_patterns', ['_ore', '_wood'])
+        
+        # Check if it matches any raw material pattern
+        return any(pattern in material_code for pattern in raw_patterns)
+    
+    def _get_workshop_for_skill(self, skill: str) -> Optional[str]:
+        """
+        Get workshop type for a given skill from knowledge base or configuration.
+        """
+        # First check knowledge base for workshop skill mappings
+        knowledge_base = self.kwargs.get('knowledge_base')
+        if knowledge_base and hasattr(knowledge_base, 'data'):
+            workshops = knowledge_base.data.get('workshops', {})
+            for workshop_code, workshop_data in workshops.items():
+                workshop_skill = workshop_data.get('skill')
+                if workshop_skill == skill:
+                    # Extract workshop type from code (e.g., 'mining_workshop_1' -> 'mining')
+                    workshop_type = workshop_code.split('_')[0]
+                    return workshop_type
+        
+        # Fallback to configuration mapping
+        action_config = self.kwargs.get('action_config', {})
+        skill_workshop_mapping = action_config.get('skill_workshop_mapping', {})
+        
+        # If no mapping in config, use skill name as workshop type (common pattern)
+        return skill_workshop_mapping.get(skill, skill)
 
     def __repr__(self):
         return f"TransformRawMaterialsAction({self.character_name}, target={self.target_item})"

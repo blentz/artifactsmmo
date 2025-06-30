@@ -4,8 +4,8 @@ Enables the player to understand upgrade chains like ash_tree → ash_wood → w
 """
 
 from typing import Dict, List, Optional, Tuple
-from artifactsmmo_api_client.api.resources.get_resource import sync as get_resource_api
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 from artifactsmmo_api_client.models.resource_response_schema import ResourceResponseSchema
 from artifactsmmo_api_client.models.item_response_schema import ItemResponseSchema
 from artifactsmmo_api_client.types import UNSET

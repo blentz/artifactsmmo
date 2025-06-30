@@ -8,7 +8,7 @@ state_calculation:
     formula: "hp_percentage >= ${thresholds.safe_hp_percentage}"
     
   needs_rest:
-    formula: "hp_percentage < ${thresholds.rest_hp_percentage} and not is_on_cooldown"
+    formula: "hp_percentage < ${thresholds.rest_hp_percentage}"
     
   can_attack:
     formula: "hp_percentage >= ${thresholds.attack_hp_percentage} and not is_on_cooldown"

@@ -7,8 +7,8 @@ This action checks if the character meets skill requirements for a specific task
 
 from typing import Dict, Optional
 import logging
-from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 from .base import ActionBase
 
 

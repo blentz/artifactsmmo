@@ -67,7 +67,7 @@ class ActionFactory:
         self.register_action('move', ActionExecutorConfig(
             action_class=MoveAction,
             constructor_params={
-                'char_name': 'character_name',  # Will be provided by controller
+                'character_name': 'character_name',  # Will be provided by controller
                 'x': 'x',
                 'y': 'y',
                 'use_target_coordinates': 'use_target_coordinates'
@@ -77,14 +77,14 @@ class ActionFactory:
         self.register_action('attack', ActionExecutorConfig(
             action_class=AttackAction,
             constructor_params={
-                'char_name': 'character_name'  # Will be provided by controller
+                'character_name': 'character_name'  # Will be provided by controller
             }
         ))
         
         self.register_action('rest', ActionExecutorConfig(
             action_class=RestAction,
             constructor_params={
-                'char_name': 'character_name'  # Will be provided by controller
+                'character_name': 'character_name'  # Will be provided by controller
             }
         ))
         
@@ -156,7 +156,7 @@ class ActionFactory:
         self.register_action('move_to_workshop', ActionExecutorConfig(
             action_class=MoveToWorkshopAction,
             constructor_params={
-                'char_name': 'character_name',
+                'character_name': 'character_name',
                 'target_x': 'target_x',
                 'target_y': 'target_y'
             }
@@ -165,7 +165,7 @@ class ActionFactory:
         self.register_action('move_to_resource', ActionExecutorConfig(
             action_class=MoveToResourceAction,
             constructor_params={
-                'char_name': 'character_name',
+                'character_name': 'character_name',
                 'target_x': 'target_x',
                 'target_y': 'target_y'
             }

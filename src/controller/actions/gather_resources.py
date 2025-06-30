@@ -1,9 +1,9 @@
 """ GatherResourcesAction module """
 
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_gathering_my_name import sync as gathering_api
-from artifactsmmo_api_client.api.resources.get_resource import sync as get_resource_api
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_api
+from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import sync as gathering_api
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 from .base import ActionBase
 
 

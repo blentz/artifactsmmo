@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 
 from src.lib.goap import World, Planner, Action_List
 from src.lib.actions_data import ActionsData
+from src.lib.yaml_data import YamlData
 from src.game.globals import CONFIG_PREFIX
 
 
@@ -29,6 +30,45 @@ class GOAPExecutionManager:
         self.current_world = None
         self.current_planner = None
         
+        # Cached start state configuration
+        self._start_state_config = None
+        
+    def _load_start_state_defaults(self) -> Dict[str, Any]:
+        """
+        Load default start state configuration from YAML file.
+        
+        Returns:
+            Dictionary of default state variables with their initial values
+        """
+        if self._start_state_config is not None:
+            return self._start_state_config
+            
+        try:
+            start_state_data = YamlData(f"{CONFIG_PREFIX}/goap_start_state.yaml")
+            
+            # Get the core states section
+            defaults = start_state_data.data.get('core_states', {})
+            
+            self._start_state_config = defaults
+            self.logger.debug(f"Loaded {len(defaults)} default start state variables from configuration")
+            return defaults
+            
+        except Exception as e:
+            self.logger.warning(f"Could not load start state configuration: {e}")
+            # Return minimal fallback defaults
+            return {
+                'can_move': True,
+                'can_attack': True,
+                'character_safe': True,
+                'character_alive': True,
+                'need_combat': True,
+                'at_target_location': False,
+                'monsters_available': False,
+                'monster_present': False,
+                'is_on_cooldown': False,
+                'needs_rest': False
+            }
+    
     def create_world_with_planner(self, start_state: Dict[str, Any], 
                                 goal_state: Dict[str, Any], 
                                 actions_config: Dict[str, Dict]) -> World:
@@ -45,8 +85,11 @@ class GOAPExecutionManager:
         """
         world = World()
         
-        # Get all keys from start state, goal state, AND action conditions/reactions
-        all_keys = set(start_state.keys()) | set(goal_state.keys())
+        # Load default start state configuration first to get all possible state keys
+        start_state_defaults = self._load_start_state_defaults()
+        
+        # Get all keys from start state, goal state, action conditions/reactions, AND defaults
+        all_keys = set(start_state.keys()) | set(goal_state.keys()) | set(start_state_defaults.keys())
         
         # Extract all state variables used in action conditions and reactions
         for action_name, action_config in actions_config.items():
@@ -61,14 +104,19 @@ class GOAPExecutionManager:
         # Create planner with all required state keys
         planner = Planner(*all_keys)
         
-        # Ensure start state has values for all required state variables
-        complete_start_state = {}
+        # Build complete start state with proper precedence:
+        # 1. Start with configuration defaults
+        # 2. Add any additional keys from actions with False defaults  
+        # 3. Override with actual start_state values
+        complete_start_state = start_state_defaults.copy()
+        
+        # Add any missing action-required keys with False defaults
         for key in all_keys:
-            if key in start_state:
-                complete_start_state[key] = start_state[key]
-            else:
-                # Default to False for missing boolean state variables
+            if key not in complete_start_state:
                 complete_start_state[key] = False
+        
+        # Override with actual runtime state values
+        complete_start_state.update(start_state)
         
         # Set start and goal states on the planner
         planner.set_start_state(**complete_start_state)
@@ -117,7 +165,10 @@ class GOAPExecutionManager:
         try:
             world = self.create_world_with_planner(start_state, goal_state, actions_config)
             planner = self.current_planner
+            
+            self.logger.debug(f"📊 Starting GOAP calculation with {len(actions_config)} actions...")
             plans = planner.calculate()
+            self.logger.debug(f"📊 GOAP calculation completed successfully")
             
             if plans:
                 best_plan = plans  # Plans is already the list of nodes
@@ -143,6 +194,28 @@ class GOAPExecutionManager:
                 return plan_actions
             else:
                 self.logger.warning("No GOAP plan found for goal")
+                self.logger.info(f"Start state key values:")
+                self.logger.info(f"  - character_safe: {start_state.get('character_safe')}")
+                self.logger.info(f"  - needs_rest: {start_state.get('needs_rest')}")
+                self.logger.info(f"  - is_on_cooldown: {start_state.get('is_on_cooldown')}")
+                self.logger.info(f"  - hp_percentage: {start_state.get('hp_percentage')}")
+                self.logger.info(f"  - character_alive: {start_state.get('character_alive')}")
+                self.logger.info(f"Goal state: {goal_state}")
+                self.logger.info(f"Available actions: {list(actions_config.keys())}")
+                # Check which actions have their conditions met
+                self.logger.info("Checking action conditions:")
+                for action_name, action_config in actions_config.items():
+                    conditions = action_config.get('conditions', {})
+                    all_met = True
+                    unmet_conditions = []
+                    for cond_key, cond_value in conditions.items():
+                        if start_state.get(cond_key) != cond_value:
+                            all_met = False
+                            unmet_conditions.append(f"{cond_key}: need {cond_value}, have {start_state.get(cond_key)}")
+                    if all_met:
+                        self.logger.info(f"  ✓ {action_name}: all conditions met")
+                    else:
+                        self.logger.info(f"  ✗ {action_name}: unmet conditions - {unmet_conditions}")
                 return None
                 
         except Exception as e:
@@ -196,8 +269,8 @@ class GOAPExecutionManager:
         This phase should use the analyze_crafting_chain action and existing
         knowledge to build a comprehensive plan before execution begins.
         """
-        # Get current state
-        current_state = controller.get_current_world_state(force_refresh=True)
+        # Get current state without forcing refresh to avoid infinite loops
+        current_state = controller.get_current_world_state(force_refresh=False)
         
         # Check if goal is already achieved
         if self._is_goal_achieved(goal_state, current_state):
@@ -211,6 +284,7 @@ class GOAPExecutionManager:
             return None
         
         # First, try to use existing knowledge to create a complete plan
+        self.logger.info("🧠 Attempting knowledge-based planning...")
         knowledge_based_plan = self._create_knowledge_based_plan(
             current_state, goal_state, actions_config, controller
         )
@@ -220,6 +294,7 @@ class GOAPExecutionManager:
             return knowledge_based_plan
         
         # If knowledge-based planning fails, create a discovery plan
+        self.logger.info("🔍 Knowledge-based planning failed, attempting discovery planning...")
         discovery_plan = self._create_discovery_plan(
             current_state, goal_state, actions_config
         )
@@ -228,6 +303,7 @@ class GOAPExecutionManager:
             self.logger.info(f"🔍 Created discovery plan with {len(discovery_plan)} actions")
             return discovery_plan
         
+        self.logger.error("❌ Both knowledge-based and discovery planning failed")
         return None
     
     def _execute_plan_with_selective_replanning(self, plan: List[Dict], controller, 
@@ -282,15 +358,33 @@ class GOAPExecutionManager:
             
             if not success:
                 self.logger.warning(f"Action {action_name} failed")
-                # For failed actions, try replanning from current position
-                remaining_plan = self._replan_from_current_position(
-                    controller, goal_state, config_file, current_plan[action_index:]
-                )
-                if remaining_plan:
-                    current_plan = current_plan[:action_index] + remaining_plan
-                    continue
-                else:
+                
+                # Handle specific failure types with targeted recovery
+                if self._is_authentication_failure(action_name, controller):
+                    self.logger.error("🚨 Authentication failure detected - aborting execution")
                     return False
+                elif self._is_coordinate_failure(action_name, controller):
+                    self.logger.warning("📍 Coordinate failure detected - forcing find_monsters replan")
+                    # Force a complete replan starting with find_monsters
+                    remaining_plan = self._create_recovery_plan_with_find_monsters(
+                        controller, goal_state, config_file
+                    )
+                    if remaining_plan:
+                        current_plan = remaining_plan
+                        action_index = 0  # Reset to start of new plan
+                        continue
+                    else:
+                        return False
+                else:
+                    # For other failures, try replanning from current position
+                    remaining_plan = self._replan_from_current_position(
+                        controller, goal_state, config_file, current_plan[action_index:]
+                    )
+                    if remaining_plan:
+                        current_plan = current_plan[:action_index] + remaining_plan
+                        continue
+                    else:
+                        return False
             
             # Check if this action requires replanning
             if self._is_discovery_action(action_name):
@@ -310,6 +404,18 @@ class GOAPExecutionManager:
                         current_plan = current_plan[:action_index + 1] + remaining_plan
                     
             action_index += 1
+            
+            # Check for cooldown after action execution
+            # Move and attack actions can put character on cooldown
+            if action_name in ['move', 'attack', 'gather_resources', 'craft_item']:
+                current_state = controller.get_current_world_state(force_refresh=True)
+                if current_state.get('is_on_cooldown', False):
+                    # Insert wait action at next position if not already present
+                    if action_index < len(current_plan) and current_plan[action_index].get('name') != 'wait':
+                        self.logger.info("🕐 Cooldown detected after action - inserting wait action")
+                        current_plan = self._handle_cooldown_with_plan_insertion(
+                            current_plan, action_index, controller
+                        )
         
         # Check final goal achievement
         final_state = controller.get_current_world_state(force_refresh=True)
@@ -322,9 +428,12 @@ class GOAPExecutionManager:
         """
         Create a complete plan using existing knowledge without API discovery calls.
         """
+        self.logger.debug("📊 Starting knowledge-based plan creation")
+        
         # Check if we have sufficient knowledge to plan
         knowledge_base = getattr(controller, 'knowledge_base', None)
         if not knowledge_base or not hasattr(knowledge_base, 'data'):
+            self.logger.debug("📊 No knowledge base available for planning")
             return None
         
         # For equipment goals, try to use analyze_crafting_chain
@@ -355,7 +464,17 @@ class GOAPExecutionManager:
                     self.logger.warning(f"Knowledge-based planning failed: {e}")
         
         # Fall back to standard GOAP planning
-        return self.create_plan(current_state, goal_state, actions_config)
+        self.logger.debug("📊 Falling back to standard GOAP planning")
+        try:
+            plan = self.create_plan(current_state, goal_state, actions_config)
+            if plan:
+                self.logger.debug(f"📊 Standard GOAP planning created {len(plan)} action plan")
+            else:
+                self.logger.debug("📊 Standard GOAP planning found no valid plan")
+            return plan
+        except Exception as e:
+            self.logger.warning(f"📊 Standard GOAP planning failed: {e}")
+            return None
     
     def _create_discovery_plan(self, current_state: Dict[str, Any], 
                              goal_state: Dict[str, Any], 
@@ -684,3 +803,154 @@ class GOAPExecutionManager:
         """Reset the current world and planner."""
         self.current_world = None
         self.current_planner = None
+    
+    def initialize_session_state(self, controller) -> None:
+        """
+        Initialize clean session state for XP-seeking goal achievement.
+        
+        This method ensures that GOAP planning starts with a clean state that
+        requires find_monsters action, preventing incomplete 2-action plans.
+        
+        Args:
+            controller: AI controller for state access and data persistence
+        """
+        try:
+            # Reset action context to prevent stale coordinates
+            if hasattr(controller, 'action_context'):
+                controller.action_context = {}
+            
+            # Load start state defaults from configuration
+            start_state_defaults = self._load_start_state_defaults()
+            
+            # Force critical states for XP-seeking cycle
+            session_state = start_state_defaults.copy()
+            session_state.update({
+                # Ensure find_monsters is required for complete 3-action plans
+                'monsters_available': False,
+                'monster_present': False,
+                'at_target_location': False,
+                
+                # Reset goal completion states
+                'has_hunted_monsters': False,
+                'monster_defeated': False,
+                
+                # Ensure character can act
+                'character_alive': True,
+                'character_safe': True,
+                'can_move': True,
+                'can_attack': True,
+                'need_combat': True,
+                
+                # Clear cooldown states
+                'is_on_cooldown': False,
+                'needs_rest': False
+            })
+            
+            # Initialize world state for GOAP planning
+            if hasattr(controller, 'goap_data') and controller.goap_data:
+                # Preserve existing structure but update critical values
+                current_data = controller.goap_data.data.copy()
+                current_data.update(session_state)
+                controller.goap_data.data = current_data
+                controller.goap_data.save()
+                
+                self.logger.info(f"🔧 Initialized session state with {len(session_state)} GOAP variables")
+                self.logger.info("🎯 Ensured find_monsters → move → attack cycle will be planned")
+            else:
+                self.logger.warning("No GOAP data available for session state initialization")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to initialize session state: {e}")
+            # Continue execution with default behavior
+    
+    def _is_authentication_failure(self, action_name: str, controller) -> bool:
+        """
+        Detect authentication failures to prevent infinite retry loops.
+        
+        Args:
+            action_name: Name of the failed action
+            controller: AI controller for error context
+            
+        Returns:
+            True if authentication failure detected, False otherwise
+        """
+        try:
+            # Check for authentication-related errors in recent log messages
+            # This is a simple heuristic - could be enhanced with actual error inspection
+            return False  # For now, let authentication failures be handled by the application
+        except Exception:
+            return False
+    
+    def _is_coordinate_failure(self, action_name: str, controller) -> bool:
+        """
+        Detect coordinate/movement failures that require find_monsters replan.
+        
+        Args:
+            action_name: Name of the failed action
+            controller: AI controller for error context
+            
+        Returns:
+            True if coordinate failure detected, False otherwise
+        """
+        try:
+            # Check if this is a move action failing due to missing coordinates
+            if action_name == 'move':
+                # Check if action context lacks target coordinates
+                if hasattr(controller, 'action_context'):
+                    context = controller.action_context
+                    if context.get('target_x') is None or context.get('target_y') is None:
+                        self.logger.info("🔍 Move action failed due to missing target coordinates")
+                        return True
+            return False
+        except Exception as e:
+            self.logger.warning(f"Error checking coordinate failure: {e}")
+            return False
+    
+    def _create_recovery_plan_with_find_monsters(self, controller, goal_state: Dict[str, Any],
+                                               config_file: str = None) -> Optional[List[Dict]]:
+        """
+        Create a recovery plan that starts with find_monsters to get fresh coordinates.
+        
+        Args:
+            controller: AI controller
+            goal_state: Desired goal state  
+            config_file: Optional action configuration file
+            
+        Returns:
+            List of action dictionaries for recovery plan
+        """
+        try:
+            # Force a clean state that requires find_monsters
+            recovery_state = controller.get_current_world_state(force_refresh=False)
+            recovery_state.update({
+                'monsters_available': False,
+                'monster_present': False,
+                'at_target_location': False
+            })
+            
+            # Clear action context to force fresh coordinate discovery
+            if hasattr(controller, 'action_context'):
+                # Keep some context but remove location data
+                preserved_context = {}
+                for key in ['item_code', 'recipe_item_code', 'craft_skill']:
+                    if key in controller.action_context:
+                        preserved_context[key] = controller.action_context[key]
+                controller.action_context = preserved_context
+            
+            # Load actions configuration
+            actions_config = self._load_actions_from_config(config_file)
+            if not actions_config:
+                return None
+            
+            # Create plan with forced find_monsters requirement
+            recovery_plan = self.create_plan(recovery_state, goal_state, actions_config)
+            if recovery_plan:
+                self.logger.info(f"🔄 Created recovery plan with {len(recovery_plan)} actions")
+                return recovery_plan
+            else:
+                self.logger.warning("Failed to create recovery plan")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error creating recovery plan: {e}")
+            return None

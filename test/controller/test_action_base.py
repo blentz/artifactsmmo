@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock
 from src.controller.actions.base import ActionBase
+from test.fixtures import create_mock_client
 
 
 class TestActionBase(unittest.TestCase):
@@ -11,7 +12,7 @@ class TestActionBase(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.action = ActionBase()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
 
     def test_action_base_initialization(self):
         """Test ActionBase initialization."""

@@ -207,38 +207,6 @@ goal_templates:
         operator: ">="
         value: 80  # 80% of slots equipped with appropriate level gear
 
-  emergency_equipment_upgrade:
-    description: "Emergency equipment upgrade when combat is not viable due to poor win rates"
-    objective_type: "equipment_progression"
-    target_state:
-      combat_viable: true
-      equipment_improved: true
-      character_safe: true
-      character_alive: true
-    strategy:
-      priority_focus: "weapon"  # Focus on weapon first for attack power
-      upgrade_threshold: 0.2    # Trigger when win rate < 20%
-      max_iterations: 15
-      resource_gathering_enabled: true
-      workshop_discovery_enabled: true
-      crafting_enabled: true
-      exploration_radius: 25
-      force_upgrade: true       # Bypass normal level requirements
-    parameters:
-      optional: ["priority_focus", "upgrade_threshold", "exploration_radius"]
-    success_conditions:
-      - type: "weapon_attack_improved"
-        operator: ">"
-        value: 0  # Any improvement in attack power
-      - type: "combat_viability_restored"
-        operator: "=="
-        value: true
-    failure_conditions:
-      - type: "max_iterations_exceeded"
-        value: "${strategy.max_iterations}"
-      - type: "no_upgrade_options_found"
-        operator: "=="
-        value: true
   gather_crafting_materials:
     description: "Collect resources needed for equipment crafting"
     objective_type: "resource_gathering"
@@ -344,60 +312,30 @@ goal_templates:
         operator: "=="
         value: true
 
-  # Multi-objective progression goal for early game
-  bootstrap_character:
-    description: "Bootstrap low-level character through equipment upgrades and progression"
-    objective_type: "multi_step_progression"
-    target_state:
-      character_level: ">=3"
-      has_better_weapon: true
-      has_better_armor: true
-      workshops_discovered: true
-      character_safe: true
-    strategy:
-      multi_goal_execution: true
-      priority_order: ["discover_workshops", "gather_crafting_materials", "upgrade_weapon", "upgrade_armor", "hunt_monsters"]
-      adaptive_prioritization: true
-      safety_first: true
-      level_range: [1, 5]  # Only for low-level characters
-      equipment_focus: true
-      parallel_objectives: true
-    success_conditions:
-      - type: "character_level"
-        operator: ">="
-        value: 3
-      - type: "equipment_equipped"
-        operator: "=="
-        value: true
-      - type: "workshops_discovered"
-        operator: "=="
-        value: true
-    execution_phases:
-      phase_1:
-        name: "Discovery Phase"
-        goals: ["discover_workshops"]
-        required: true
-        timeout: 300  # 5 minutes
-      phase_2:
-        name: "Resource Gathering Phase"
-        goals: ["gather_crafting_materials"]
-        required: true
-        depends_on: ["phase_1"]
-        timeout: 600  # 10 minutes  
-      phase_3:
-        name: "Equipment Crafting Phase"
-        goals: ["upgrade_weapon", "upgrade_armor"]
-        required: false  # One is sufficient
-        depends_on: ["phase_2"]
-        timeout: 300  # 5 minutes
-      phase_4:
-        name: "Combat Testing Phase"
-        goals: ["hunt_monsters"]
-        required: false
-        depends_on: ["phase_3"]
-        timeout: 300  # 5 minutes
 
   # Survival and maintenance goals
+  get_to_safety:
+    description: "Emergency recovery to restore HP to 100% after combat loss"
+    objective_type: "survival"
+    target_state:
+      character_safe: true
+      needs_rest: false
+      character_alive: true
+    strategy:
+      rest_priority: "immediate"
+      safe_location_required: false  # Can rest anywhere after combat
+      target_hp_percentage: 100  # Fully recover
+      max_rest_cycles: 10  # Allow multiple rest actions if needed
+    success_conditions:
+      - type: "hp_percentage"
+        operator: ">="
+        value: 100
+      - type: "character_safe"
+        operator: "=="
+        value: true
+    parameters:
+      optional: ["target_hp_percentage"]
+        
   recover_health:
     description: "Restore character health to safe levels"
     objective_type: "survival"
@@ -438,18 +376,60 @@ goal_selection_rules:
       goal: "revive_character"
       priority: 100
       
+    # HP-based safety should be the highest priority for living characters
+    - condition:
+        hp_percentage: "<30"
+        character_alive: true
+        is_on_cooldown: false
+      goal: "get_to_safety"
+      priority: 99
+      
+    - condition:
+        hp_percentage: "<50"
+        character_alive: true
+        is_on_cooldown: false
+        has_hunted_monsters: true  # Just finished combat, need recovery
+      goal: "get_to_safety"
+      priority: 98
+      
+    # When combat is not viable, prioritize weapon upgrades for low-level characters
+    # BUT only if character is at safe HP levels
     - condition:
         combat_not_viable: true
         character_safe: true
         character_alive: true
-      goal: "emergency_equipment_upgrade"
+        character_level: "<=5"  # Low-level characters need better weapons
+        need_equipment: true
+        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
+      goal: "upgrade_weapon"
+      priority: 96
+      
+    - condition:
+        combat_not_viable: true
+        character_safe: true
+        character_alive: true
+        character_level: ">=2"  # Level 2+ characters can upgrade weapon when combat fails
+        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
+      goal: "upgrade_weapon"
       priority: 95
       
     - condition:
-        hp_percentage: "<15"
-        is_on_cooldown: false
-      goal: "recover_health"
-      priority: 90
+        combat_not_viable: true
+        character_safe: true
+        character_alive: true
+        character_level: ">=2"  # Level 2+ characters can upgrade armor when combat fails
+        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
+      goal: "upgrade_armor"
+      priority: 94
+      
+    - condition:
+        combat_not_viable: true
+        character_safe: true
+        character_alive: true
+        character_level: ">=3"  # Level 3+ characters can get complete equipment when combat fails
+        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
+      goal: "complete_equipment_set"
+      priority: 93
       
   # Maintenance priorities (medium-high priority)
   maintenance:
@@ -458,11 +438,14 @@ goal_selection_rules:
       goal: "wait_for_cooldown"
       priority: 80
       
+    # Health recovery for characters that are not in immediate danger (hp > 30%) but still need rest
     - condition:
         needs_rest: true
-        character_safe: false
+        character_alive: true
+        hp_percentage: ">=30"
+        hp_percentage: "<80"
       goal: "recover_health"
-      priority: 70
+      priority: 75
       
   # Progression priorities (medium priority)
   progression:
@@ -471,6 +454,7 @@ goal_selection_rules:
         character_level: ">35"
         character_safe: true
         can_attack: true
+        hp_percentage: ">=80"  # High-level progression requires good HP
       goal: "reach_max_level"
       priority: 65
       
@@ -478,12 +462,15 @@ goal_selection_rules:
         need_combat: true
         character_safe: true
         can_attack: true
+        hp_percentage: ">=80"  # Only hunt when HP is at safe levels
       goal: "hunt_monsters"
       priority: 60
       
     - condition:
         needs_xp: true
         character_level: "<10"
+        character_safe: true
+        hp_percentage: ">=80"  # Only attempt leveling when HP is safe
       goal: "level_up"
       priority: 50
       
@@ -512,12 +499,13 @@ goal_selection_rules:
 
   # Equipment progression priorities (high priority for low-level characters)
   equipment:
-    # Bootstrap goal for new characters - multi-step thinking
+    # Weapon upgrade goal for new characters needing equipment
     - condition:
         character_level: "<=5"
         character_safe: true
         need_equipment: true
-      goal: "bootstrap_character"
+        need_weapon_upgrade: true
+      goal: "upgrade_weapon"
       priority: 78
       
     # Workshop discovery should come first for new players

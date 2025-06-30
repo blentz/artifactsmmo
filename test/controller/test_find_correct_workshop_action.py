@@ -5,6 +5,7 @@ import tempfile
 import os
 from unittest.mock import Mock, patch
 from src.controller.actions.find_correct_workshop import FindCorrectWorkshopAction
+from test.fixtures import create_mock_client
 
 
 class TestFindCorrectWorkshopAction(unittest.TestCase):
@@ -63,7 +64,7 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
     def test_execute_item_api_fails(self, mock_get_item_api):
         """Test execute when item API fails."""
         mock_get_item_api.return_value = None
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
@@ -75,7 +76,7 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = None
         mock_get_item_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
@@ -91,37 +92,30 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
         self.assertIn('does not have crafting information', result['error'])
 
-    @patch('src.controller.actions.find_correct_workshop.get_character_api')
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
-    def test_execute_character_api_fails(self, mock_get_item_api, mock_get_character_api):
-        """Test execute when character API fails."""
-        # Mock item with craft requirements
-        mock_craft = Mock()
-        mock_craft.skill = 'weaponcrafting'
+    def test_execute_item_api_no_craft_data(self, mock_get_item_api):
+        """Test execute when item has no craft data."""
+        # Mock item without craft requirements
         mock_item_data = Mock()
-        mock_item_data.craft = mock_craft
+        mock_item_data.craft = None
         mock_item_response = Mock()
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
-        # Mock character API failure
-        mock_get_character_api.return_value = None
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
-        self.assertIn('Could not retrieve character location', result['error'])
+        self.assertIn('does not have crafting information', result['error'])
 
-    @patch('src.controller.actions.find_correct_workshop.FindWorkshopsAction')
-    @patch('src.controller.actions.find_correct_workshop.get_character_api')
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
-    def test_execute_success_workshop_found(self, mock_get_item_api, mock_get_character_api, mock_find_workshops_action_class):
+    def test_execute_success_workshop_found(self, mock_get_item_api):
         """Test successful execution when workshop is found."""
         # Mock item with craft requirements
         mock_craft = Mock()
@@ -132,36 +126,30 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
-        # Mock character location
-        mock_character_data = Mock()
-        mock_character_data.x = 10
-        mock_character_data.y = 15
-        mock_character_response = Mock()
-        mock_character_response.data = mock_character_data
-        mock_get_character_api.return_value = mock_character_response
-        
-        # Mock FindWorkshopsAction success
-        mock_find_workshops_action = Mock()
-        mock_find_workshops_action.execute.return_value = {
-            'success': True,
-            'workshop_code': 'weaponcrafting',
-            'location': (12, 15)
-        }
-        mock_find_workshops_action_class.return_value = mock_find_workshops_action
-        
-        client = Mock()
-        
-        result = self.action.execute(client)
+        # Mock unified_search to return success
+        with patch.object(self.action, 'unified_search') as mock_unified_search:
+            mock_unified_search.return_value = {
+                'success': True,
+                'workshop_code': 'weaponcrafting',
+                'workshop_type': 'weaponcrafting',
+                'location': (12, 15),
+                'target_x': 12,
+                'target_y': 15,
+                'required_skill': 'weaponcrafting',
+                'item_code': 'copper_sword'
+            }
+            
+            client = create_mock_client()
+            
+            result = self.action.execute(client)
         self.assertTrue(result['success'])
         self.assertEqual(result['item_code'], 'copper_sword')
         self.assertEqual(result['required_skill'], 'weaponcrafting')
         self.assertEqual(result['workshop_type'], 'weaponcrafting')
-        self.assertEqual(result['workshop_location'], (12, 15))
+        self.assertEqual(result['location'], (12, 15))
 
-    @patch('src.controller.actions.find_correct_workshop.FindWorkshopsAction')
-    @patch('src.controller.actions.find_correct_workshop.get_character_api')
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
-    def test_execute_workshop_not_found(self, mock_get_item_api, mock_get_character_api, mock_find_workshops_action_class):
+    def test_execute_workshop_not_found(self, mock_get_item_api):
         """Test execution when workshop is not found."""
         # Mock item with craft requirements
         mock_craft = Mock()
@@ -172,31 +160,19 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
-        # Mock character location
-        mock_character_data = Mock()
-        mock_character_data.x = 10
-        mock_character_data.y = 15
-        mock_character_response = Mock()
-        mock_character_response.data = mock_character_data
-        mock_get_character_api.return_value = mock_character_response
-        
-        # Mock FindWorkshopsAction failure
-        mock_find_workshops_action = Mock()
-        mock_find_workshops_action.execute.return_value = {
-            'success': False,
-            'error': 'No workshop found'
-        }
-        mock_find_workshops_action_class.return_value = mock_find_workshops_action
-        
-        client = Mock()
-        
-        result = self.action.execute(client)
+        # Mock unified_search to return failure
+        with patch.object(self.action, 'unified_search') as mock_unified_search:
+            mock_unified_search.return_value = None  # unified_search returns None when no workshop found
+            
+            client = create_mock_client()
+            
+            result = self.action.execute(client)
         self.assertFalse(result['success'])
-        self.assertIn('Workshop search failed', result['error'])
+        self.assertIn('No weaponcrafting workshop found', result['error'])
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
-        client = Mock()
+        client = create_mock_client()
         
         with patch('src.controller.actions.find_correct_workshop.get_item_api', side_effect=Exception("API Error")):
             result = self.action.execute(client)

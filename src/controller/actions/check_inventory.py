@@ -7,7 +7,7 @@ sufficient materials are available for crafting.
 """
 
 from typing import Dict, List, Optional, Any
-from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from .base import ActionBase
 
 

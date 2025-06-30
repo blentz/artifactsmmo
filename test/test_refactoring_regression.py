@@ -16,6 +16,7 @@ from src.controller.action_factory import ActionFactory
 from src.controller.mission_executor import MissionExecutor
 from src.lib.actions_data import ActionsData
 from src.lib.yaml_data import YamlData
+from test.fixtures import create_mock_client
 
 
 class TestGOAPIntegrationRegression(unittest.TestCase):
@@ -52,7 +53,7 @@ class TestGOAPIntegrationRegression(unittest.TestCase):
         }
         goal_state = {'has_hunted_monsters': True, 'monster_defeated': True, 'character_safe': True}
         
-        actions_data = ActionsData('data/actions.yaml')
+        actions_data = ActionsData('config/actions.yaml')
         actions_config = actions_data.get_actions()
         
         # Create plan and verify it contains valid action names
@@ -102,7 +103,7 @@ class TestGOAPIntegrationRegression(unittest.TestCase):
         }
         goal_state = {'is_on_cooldown': False}
         
-        actions_data = ActionsData('data/actions.yaml')
+        actions_data = ActionsData('config/actions.yaml')
         actions_config = actions_data.get_actions()
         
         plan = self.manager.create_plan(cooldown_state, goal_state, actions_config)
@@ -125,11 +126,11 @@ class TestActionRegistryRegression(unittest.TestCase):
         Fixed: All GOAP actions now properly registered in action_configurations.yaml
         """
         # Load GOAP actions
-        actions_data = ActionsData('data/actions.yaml')
+        actions_data = ActionsData('config/actions.yaml')
         goap_actions = set(actions_data.get_actions().keys())
         
         # Load factory actions
-        config_data = YamlData('data/action_configurations.yaml')
+        config_data = YamlData('config/action_configurations.yaml')
         factory = ActionFactory(config_data)
         factory_actions = set(factory.get_available_actions())
         
@@ -145,7 +146,7 @@ class TestActionRegistryRegression(unittest.TestCase):
         
     def test_all_factory_actions_have_valid_classes(self):
         """Test that all registered actions have valid action classes."""
-        config_data = YamlData('data/action_configurations.yaml')
+        config_data = YamlData('config/action_configurations.yaml')
         action_classes = config_data.data.get('action_classes', {})
         
         for action_name, class_path in action_classes.items():
@@ -162,7 +163,7 @@ class TestActionRegistryRegression(unittest.TestCase):
     
     def test_no_orphaned_goap_actions(self):
         """Test that GOAP configuration doesn't reference non-existent actions."""
-        actions_data = ActionsData('data/actions.yaml')
+        actions_data = ActionsData('config/actions.yaml')
         goap_actions = set(actions_data.get_actions().keys())
         
         # Check that action files exist for all GOAP actions (except composite actions)
@@ -228,7 +229,7 @@ class TestPlanExecutionRegression(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.temp_dir = tempfile.mkdtemp()
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
     def tearDown(self):
         """Clean up test environment."""
@@ -237,7 +238,7 @@ class TestPlanExecutionRegression(unittest.TestCase):
     
     def test_action_factory_loads_all_configurations(self):
         """Test that ActionFactory properly loads all action configurations."""
-        config_data = YamlData('data/action_configurations.yaml')
+        config_data = YamlData('config/action_configurations.yaml')
         factory = ActionFactory(config_data)
         
         # Check that YAML-defined actions are loaded
@@ -272,7 +273,7 @@ class TestPlanExecutionRegression(unittest.TestCase):
     
     def test_goap_world_state_completeness(self):
         """Test that world state includes all variables needed by GOAP actions."""
-        actions_data = ActionsData('data/actions.yaml')
+        actions_data = ActionsData('config/actions.yaml')
         actions_config = actions_data.get_actions()
         
         # Collect all state variables used in GOAP actions

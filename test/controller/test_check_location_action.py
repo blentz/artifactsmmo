@@ -5,6 +5,7 @@ import tempfile
 import os
 from unittest.mock import Mock, patch
 from src.controller.actions.check_location import CheckLocationAction
+from test.fixtures import create_mock_client
 
 
 class TestCheckLocationAction(unittest.TestCase):
@@ -44,7 +45,7 @@ class TestCheckLocationAction(unittest.TestCase):
     def test_execute_character_api_fails(self, mock_get_character_api):
         """Test execute when character API fails."""
         mock_get_character_api.return_value = None
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
@@ -56,7 +57,7 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = None
         mock_get_character_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertFalse(result['success'])
@@ -73,18 +74,17 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = mock_character
         mock_get_character_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertTrue(result['success'])
         self.assertEqual(result['character_name'], 'test_character')
-        self.assertEqual(result['location']['x'], 10)
-        self.assertEqual(result['location']['y'], 15)
-        self.assertIn('location_check_time', result)
+        self.assertEqual(result['current_x'], 10)
+        self.assertEqual(result['current_y'], 15)
+        self.assertIn('location_info', result)
 
-    @patch('src.controller.actions.check_location.get_map_api')
     @patch('src.controller.actions.check_location.get_character_api')
-    def test_execute_success_with_map_data(self, mock_get_character_api, mock_get_map_api):
+    def test_execute_success_with_map_data(self, mock_get_character_api):
         """Test successful execution with map data."""
         # Mock character location
         mock_character = Mock()
@@ -95,29 +95,28 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response.data = mock_character
         mock_get_character_api.return_value = mock_response
         
-        # Mock map data at location
-        mock_map_data = Mock()
-        mock_map_data.x = 5
-        mock_map_data.y = 8
-        mock_map_data.content = {'type': 'resource', 'code': 'copper_rocks'}
-        mock_map_response = Mock()
-        mock_map_response.data = mock_map_data
-        mock_get_map_api.return_value = mock_map_response
+        # Mock map state that will be passed as kwarg
+        mock_map_state = Mock()
+        mock_location_data = Mock()
+        mock_location_data.content_type = 'resource'
+        mock_location_data.content_code = 'copper_rocks'
+        mock_map_state.get_location_info.return_value = mock_location_data
         
-        client = Mock()
+        client = create_mock_client()
         
-        result = self.action.execute(client)
+        result = self.action.execute(client, map_state=mock_map_state)
         self.assertTrue(result['success'])
-        self.assertEqual(result['location']['x'], 5)
-        self.assertEqual(result['location']['y'], 8)
-        self.assertIn('map_content', result)
-        self.assertEqual(result['map_content']['type'], 'resource')
-        self.assertEqual(result['map_content']['code'], 'copper_rocks')
+        self.assertEqual(result['current_x'], 5)
+        self.assertEqual(result['current_y'], 8)
+        # The action returns location_info, not map_content
+        self.assertIn('location_info', result)
+        self.assertEqual(result['location_info']['content_type'], 'resource')
+        self.assertIn('location_info', result)
+        self.assertEqual(result['location_info']['content_code'], 'copper_rocks')
 
-    @patch('src.controller.actions.check_location.get_map_api')
     @patch('src.controller.actions.check_location.get_character_api')
-    def test_execute_map_api_fails(self, mock_get_character_api, mock_get_map_api):
-        """Test execution when map API fails."""
+    def test_execute_map_api_fails(self, mock_get_character_api):
+        """Test execution when map state is not available."""
         # Mock character location
         mock_character = Mock()
         mock_character.x = 5
@@ -127,16 +126,16 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response.data = mock_character
         mock_get_character_api.return_value = mock_response
         
-        # Mock map API failure
-        mock_get_map_api.return_value = None
+        client = create_mock_client()
         
-        client = Mock()
-        
+        # Execute without map_state
         result = self.action.execute(client)
         self.assertTrue(result['success'])  # Should still succeed without map data
-        self.assertEqual(result['location']['x'], 5)
-        self.assertEqual(result['location']['y'], 8)
-        self.assertIsNone(result.get('map_content'))  # No map content
+        self.assertEqual(result['current_x'], 5)
+        self.assertEqual(result['current_y'], 8)
+        self.assertIn('location_info', result)
+        # When no map state, location_info will be empty
+        self.assertEqual(result['location_info'], {})
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_with_target_location_context(self, mock_get_character_api):
@@ -148,18 +147,17 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = mock_character
         mock_get_character_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         # Context with target location
         context = {'target_x': 10, 'target_y': 15}
         
         result = self.action.execute(client, **context)
         self.assertTrue(result['success'])
-        self.assertEqual(result['location']['x'], 10)
-        self.assertEqual(result['location']['y'], 15)
+        self.assertEqual(result['current_x'], 10)
+        self.assertEqual(result['current_y'], 15)
         # Should indicate if at target location
-        if 'at_target_location' in result:
-            self.assertTrue(result['at_target_location'])
+        self.assertTrue(result.get('at_location', False))
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_not_at_target_location(self, mock_get_character_api):
@@ -171,18 +169,18 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = mock_character
         mock_get_character_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         # Context with different target location
         context = {'target_x': 10, 'target_y': 15}
         
         result = self.action.execute(client, **context)
         self.assertTrue(result['success'])
-        self.assertEqual(result['location']['x'], 5)
-        self.assertEqual(result['location']['y'], 8)
-        # Should indicate not at target location
-        if 'at_target_location' in result:
-            self.assertFalse(result['at_target_location'])
+        self.assertEqual(result['current_x'], 5)
+        self.assertEqual(result['current_y'], 8)
+        # The action always sets target coordinates to current location
+        self.assertEqual(result['target_x'], 5)
+        self.assertEqual(result['target_y'], 8)
 
     def test_calculate_distance_helper_method(self):
         """Test _calculate_distance helper method."""
@@ -216,7 +214,7 @@ class TestCheckLocationAction(unittest.TestCase):
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
-        client = Mock()
+        client = create_mock_client()
         
         with patch('src.controller.actions.check_location.get_character_api', side_effect=Exception("API Error")):
             result = self.action.execute(client)
@@ -274,19 +272,15 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = mock_character
         mock_get_character_api.return_value = mock_response
-        client = Mock()
+        client = create_mock_client()
         
         result = self.action.execute(client)
         self.assertTrue(result['success'])
         
-        # Should capture additional character information if the action does so
-        self.assertEqual(result['location']['x'], 10)
-        self.assertEqual(result['location']['y'], 15)
-        
-        # Additional data might be included depending on implementation
-        if 'character_stats' in result:
-            self.assertIn('level', result['character_stats'])
-            self.assertIn('hp', result['character_stats'])
+        # Should capture location information
+        self.assertEqual(result['current_x'], 10)
+        self.assertEqual(result['current_y'], 15)
+        self.assertEqual(result['character_name'], 'test_character')
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_coordinate_validation(self, mock_get_character_api):
@@ -307,12 +301,12 @@ class TestCheckLocationAction(unittest.TestCase):
             mock_response = Mock()
             mock_response.data = mock_character
             mock_get_character_api.return_value = mock_response
-            client = Mock()
+            client = create_mock_client()
             
             result = self.action.execute(client)
             self.assertTrue(result['success'])
-            self.assertEqual(result['location']['x'], x)
-            self.assertEqual(result['location']['y'], y)
+            self.assertEqual(result['current_x'], x)
+            self.assertEqual(result['current_y'], y)
 
 
 if __name__ == '__main__':

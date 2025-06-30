@@ -40,7 +40,6 @@ actions:
   rest:
     conditions:
       character_alive: true
-      character_safe: false
       needs_rest: true
     reactions:
       character_safe: true
@@ -148,6 +147,7 @@ actions:
       character_alive: true
       need_equipment: true
       character_safe: true
+      best_weapon_selected: true
     reactions:
       craft_plan_available: true
       material_requirements_known: true

@@ -2,8 +2,8 @@
 
 import logging
 from typing import Dict, List, Optional, Tuple
-from artifactsmmo_api_client.api.items.get_all_item import sync as get_all_items_api
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
+from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 from artifactsmmo_api_client.models.item_type import ItemType
 from .base import ActionBase
 
@@ -30,7 +30,21 @@ class EvaluateWeaponRecipesAction(ActionBase):
         """
         super().__init__()
         self.character_name = character_name
-        self.current_weapon = current_weapon or 'wooden_stick'
+        # Get default weapon from configuration or knowledge base
+        action_config = kwargs.get('action_config', {})
+        default_weapon = action_config.get('default_weapon')
+        
+        # If no default in config, try to get starting weapon from knowledge base
+        if not default_weapon:
+            knowledge_base = kwargs.get('knowledge_base')
+            if knowledge_base and hasattr(knowledge_base, 'data'):
+                starting_equipment = knowledge_base.data.get('starting_equipment', {})
+                default_weapon = starting_equipment.get('weapon', 'unarmed')
+            else:
+                # No default weapon - character starts unarmed
+                default_weapon = None
+                
+        self.current_weapon = current_weapon or default_weapon
         self.character_level = character_level
         self.kwargs = kwargs
         self.logger = logging.getLogger(__name__)
@@ -48,7 +62,7 @@ class EvaluateWeaponRecipesAction(ActionBase):
         
         try:
             # Get current character data to extract skills and inventory
-            from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character_api
+            from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
             character_response = get_character_api(name=self.character_name, client=client)
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
@@ -133,7 +147,9 @@ class EvaluateWeaponRecipesAction(ActionBase):
             
             weapon_recipes = {}
             processed = 0
-            max_weapons = 5  # Limit to prevent hanging
+            # Get max weapons from configuration
+            action_config = self.kwargs.get('action_config', {})
+            max_weapons = action_config.get('max_weapons_to_evaluate', 10)
             
             for weapon in items_response.data:
                 if processed >= max_weapons:
@@ -218,7 +234,10 @@ class EvaluateWeaponRecipesAction(ActionBase):
         
         # Check character level requirement
         weapon_level = recipe_data.get('level', 1)
-        if weapon_level > self.character_level + 2:  # Allow weapons up to 2 levels higher
+        action_config = self.kwargs.get('action_config', {})
+        max_level_above = action_config.get('max_weapon_level_above_character', 2)
+        
+        if weapon_level > self.character_level + max_level_above:
             return None
         
         # Get crafting requirements - only use real API data
@@ -366,33 +385,56 @@ class EvaluateWeaponRecipesAction(ActionBase):
         action_config = self.kwargs.get('action_config', {})
         weights = action_config.get('weapon_stat_weights', {})
         
-        # Return configured weight or default
-        return weights.get(stat, weights.get('default', 1.0))
+        # Return configured weight or get from knowledge base
+        configured_weight = weights.get(stat)
+        if configured_weight is not None:
+            return configured_weight
+            
+        # Try to determine weight from knowledge base stat importance
+        knowledge_base = self.kwargs.get('knowledge_base')
+        if knowledge_base and hasattr(knowledge_base, 'data'):
+            stat_importance = knowledge_base.data.get('stat_importance', {})
+            kb_weight = stat_importance.get(stat)
+            if kb_weight is not None:
+                return kb_weight
+        
+        # Default weight from config or 1.0
+        return weights.get('default', 1.0)
 
     def _calculate_craftability_score(self, stat_improvement: Dict, 
                                     material_availability: Dict,
                                     weapon_level: int, required_skill_level: int) -> float:
         """Calculate overall craftability score for ranking recipes"""
+        # Get scoring configuration
+        action_config = self.kwargs.get('action_config', {})
+        scoring = action_config.get('craftability_scoring', {})
+        
         score = 0.0
         
-        # Stat improvement score (0-100)
+        # Stat improvement score
+        stat_weight = scoring.get('stat_improvement_weight', 100)
+        stat_multiplier = scoring.get('stat_improvement_multiplier', 10)
         if stat_improvement['is_upgrade']:
-            improvement_score = min(stat_improvement['total_improvement'] * 10, 100)
+            improvement_score = min(stat_improvement['total_improvement'] * stat_multiplier, stat_weight)
             score += improvement_score
         
-        # Material availability score (0-50)
+        # Material availability score
+        material_weight = scoring.get('material_availability_weight', 50)
         if material_availability['total_materials'] > 0:
             availability_ratio = material_availability['sufficient_quantities'] / material_availability['total_materials']
-            score += availability_ratio * 50
+            score += availability_ratio * material_weight
         
-        # Level appropriateness score (0-25)
+        # Level appropriateness score
+        level_weight = scoring.get('level_appropriateness_weight', 25)
+        max_level_diff = scoring.get('max_level_difference', 2)
         level_diff = abs(weapon_level - self.character_level)
-        if level_diff <= 2:
-            score += (2 - level_diff) * 12.5
+        if level_diff <= max_level_diff:
+            score += (max_level_diff - level_diff) * (level_weight / max_level_diff)
         
         # Skill requirement penalty
+        skill_penalty_multiplier = scoring.get('skill_penalty_multiplier', 10)
         if required_skill_level > self.character_level:
-            score -= (required_skill_level - self.character_level) * 10
+            score -= (required_skill_level - self.character_level) * skill_penalty_multiplier
         
         return max(score, 0.0)
 
@@ -409,40 +451,97 @@ class EvaluateWeaponRecipesAction(ActionBase):
         return recipe_evaluations[0]
 
     def _check_skill_blocked_weapons(self, client, character_skills: Dict) -> List[Dict]:
-        """Check for weapons that are blocked only by skill requirements (have materials but not skill)"""
+        """Check for weapons that are blocked only by skill requirements"""
         skill_blocked = []
         
-        # Get basic weapons from configuration, with fallback
-        basic_weapons = self._get_basic_weapons_from_config()
+        # First check knowledge base for all known weapons
+        knowledge_base = self.kwargs.get('knowledge_base')
+        weapons_to_check = []
         
-        for weapon_code in basic_weapons:
+        if knowledge_base and hasattr(knowledge_base, 'data'):
+            items = knowledge_base.data.get('items', {})
+            # Get all weapon items from knowledge base
+            for item_code, item_data in items.items():
+                if item_data.get('type') == 'weapon':
+                    # Check if it's within reasonable level range
+                    weapon_level = item_data.get('level', 1)
+                    action_config = self.kwargs.get('action_config', {})
+                    max_check_level = action_config.get('max_skill_check_weapon_level', self.character_level + 5)
+                    
+                    if weapon_level <= max_check_level:
+                        weapons_to_check.append(item_code)
+        
+        # If no weapons in knowledge base, get from API with pagination
+        if not weapons_to_check:
             try:
-                weapon_response = get_item_api(code=weapon_code, client=client)
-                if not weapon_response or not weapon_response.data:
-                    continue
-                    
-                weapon_data = weapon_response.data
-                craft_info = getattr(weapon_data, 'craft', None)
+                # Query API for weapons up to a reasonable level
+                weapons_response = get_all_items_api(client=client, type_=ItemType.WEAPON, page=1, size=50)
+                if weapons_response and weapons_response.data:
+                    for weapon in weapons_response.data:
+                        if hasattr(weapon, 'code') and hasattr(weapon, 'level'):
+                            if weapon.level <= self.character_level + 5:
+                                weapons_to_check.append(weapon.code)
+            except Exception as e:
+                self.logger.warning(f"Error fetching weapons from API: {e}")
+        
+        # Check each weapon for skill requirements
+        checked_count = 0
+        max_checks = self.kwargs.get('action_config', {}).get('max_skill_blocked_checks', 20)
+        
+        for weapon_code in weapons_to_check:
+            if checked_count >= max_checks:
+                break
+                
+            try:
+                # Try knowledge base first
+                weapon_data = None
+                craft_info = None
+                
+                if knowledge_base and hasattr(knowledge_base, 'data'):
+                    kb_item = knowledge_base.data.get('items', {}).get(weapon_code, {})
+                    if kb_item and 'craft_data' in kb_item:
+                        craft_data = kb_item['craft_data']
+                        required_skill = craft_data.get('skill', 'weaponcrafting')
+                        required_skill_level = craft_data.get('level', 1)
+                        weapon_name = kb_item.get('name', weapon_code)
+                        weapon_data = kb_item
+                        craft_info = craft_data
+                
+                # If not in knowledge base, query API
                 if not craft_info:
-                    continue
-                    
-                required_skill = getattr(craft_info, 'skill', 'weaponcrafting')
-                required_skill_level = getattr(craft_info, 'level', 1)
+                    weapon_response = get_item_api(code=weapon_code, client=client)
+                    if not weapon_response or not weapon_response.data:
+                        continue
+                        
+                    weapon_data = weapon_response.data
+                    craft_info = getattr(weapon_data, 'craft', None)
+                    if not craft_info:
+                        continue
+                        
+                    required_skill = getattr(craft_info, 'skill', 'weaponcrafting')
+                    required_skill_level = getattr(craft_info, 'level', 1)
+                    weapon_name = getattr(weapon_data, 'name', weapon_code)
+                
                 character_skill_level = character_skills.get(f"{required_skill}_level", 0)
                 
-                # Check if this weapon is blocked only by skill (not materials)
+                # Check if this weapon is blocked only by skill
                 if character_skill_level < required_skill_level:
                     skill_blocked.append({
                         'weapon_code': weapon_code,
-                        'weapon_name': getattr(weapon_data, 'name', weapon_code),
+                        'weapon_name': weapon_name,
                         'required_skill': required_skill,
                         'required_skill_level': required_skill_level,
                         'current_skill_level': character_skill_level
                     })
+                
+                checked_count += 1
                     
             except Exception as e:
                 self.logger.warning(f"Error checking skill requirements for {weapon_code}: {e}")
                 continue
+        
+        # Sort by required skill level (ascending) to find easiest upgrade path
+        skill_blocked.sort(key=lambda x: x['required_skill_level'])
         
         return skill_blocked
 
@@ -540,7 +639,29 @@ class EvaluateWeaponRecipesAction(ActionBase):
         """Get basic weapon codes from configuration"""
         action_config = self.kwargs.get('action_config', {})
         basic_weapons = action_config.get('basic_weapon_codes', [])
+        return basic_weapons
+    
+    def _get_basic_weapons_from_knowledge_base(self) -> List[str]:
+        """Get weapon codes from knowledge base based on level range"""
+        basic_weapons = []
         
+        knowledge_base = self.kwargs.get('knowledge_base')
+        if knowledge_base and hasattr(knowledge_base, 'data'):
+            items = knowledge_base.data.get('items', {})
+            
+            # Get max level for "basic" weapons from config
+            action_config = self.kwargs.get('action_config', {})
+            max_basic_level = action_config.get('max_basic_weapon_level', 5)
+            
+            # Find all weapons within level range
+            for item_code, item_data in items.items():
+                if item_data.get('type') == 'weapon':
+                    level = item_data.get('level', 1)
+                    if level <= max_basic_level:
+                        basic_weapons.append(item_code)
+            
+            # Sort by level for consistency
+            basic_weapons.sort(key=lambda code: items.get(code, {}).get('level', 1))
         
         return basic_weapons
 

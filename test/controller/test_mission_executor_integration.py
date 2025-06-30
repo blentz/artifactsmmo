@@ -13,6 +13,7 @@ import os
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.mission_executor import MissionExecutor
+from test.fixtures import create_mock_client
 
 
 class TestMissionExecutorIntegration(unittest.TestCase):
@@ -23,7 +24,7 @@ class TestMissionExecutorIntegration(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         
         # Create mock client
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         
         # Create mock goal manager
         self.mock_goal_manager = Mock()
@@ -37,19 +38,17 @@ class TestMissionExecutorIntegration(unittest.TestCase):
         
         # Patch data directory to use temp directory
         with patch('src.game.globals.DATA_PREFIX', self.temp_dir):
-            with patch('src.controller.mission_executor.DATA_PREFIX', self.temp_dir):
-                with patch('src.controller.state_engine.DATA_PREFIX', self.temp_dir):
-                    with patch('src.controller.cooldown_manager.DATA_PREFIX', self.temp_dir):
-                        with patch('src.controller.world.state.DATA_PREFIX', self.temp_dir):
-                            with patch('src.controller.knowledge.base.DATA_PREFIX', self.temp_dir):
-                                # Create required configuration files
-                                self._create_test_config_files()
-                                
-                                # Initialize controller
-                                self.controller = AIPlayerController(
-                                    client=self.mock_client,
-                                    goal_manager=self.mock_goal_manager
-                                )
+            with patch('src.game.globals.CONFIG_PREFIX', self.temp_dir):
+                with patch('src.controller.world.state.DATA_PREFIX', self.temp_dir):
+                    with patch('src.controller.knowledge.base.DATA_PREFIX', self.temp_dir):
+                        # Create required configuration files
+                        self._create_test_config_files()
+                        
+                        # Initialize controller
+                        self.controller = AIPlayerController(
+                            client=self.mock_client,
+                            goal_manager=self.mock_goal_manager
+                        )
     
     def tearDown(self):
         """Clean up test fixtures."""

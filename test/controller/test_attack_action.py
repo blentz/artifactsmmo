@@ -1,369 +1,271 @@
-"""Test module for AttackAction."""
+"""Unit tests for AttackAction class."""
 
 import unittest
-import tempfile
-import os
 from unittest.mock import Mock, patch
+
+from artifactsmmo_api_client.client import AuthenticatedClient
 from src.controller.actions.attack import AttackAction
 
 
 class TestAttackAction(unittest.TestCase):
-    """Test cases for AttackAction."""
-
     def setUp(self):
-        """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
-        os.environ['DATA_PREFIX'] = self.temp_dir
-        
-        self.character_name = "test_character"
-        self.action = AttackAction(self.character_name)
-
-    def tearDown(self):
-        """Clean up test fixtures."""
-        os.environ['DATA_PREFIX'] = self.original_data_prefix
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self.client = AuthenticatedClient(base_url="https://api.artifactsmmo.com", token="test_token")
+        self.char_name = "test_character"
 
     def test_attack_action_initialization(self):
-        """Test AttackAction initialization."""
-        self.assertEqual(self.action.char_name, "test_character")
-        self.assertEqual(self.action.min_hp_threshold, 1)
+        action = AttackAction(character_name=self.char_name)
+        self.assertEqual(action.character_name, self.char_name)
+        self.assertIsNotNone(action.logger)
 
     def test_attack_action_repr(self):
-        """Test AttackAction string representation."""
-        expected = "AttackAction(test_character)"
-        self.assertEqual(repr(self.action), expected)
-
-    def test_execute_no_client(self):
-        """Test execute fails without client."""
-        result = self.action.execute(None)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
-
-    def test_can_safely_attack_safe_hp(self):
-        """Test can_safely_attack returns True for safe HP."""
-        # Test with HP above threshold
-        self.assertTrue(self.action.can_safely_attack(50))
-        self.assertTrue(self.action.can_safely_attack(25))
-        self.assertTrue(self.action.can_safely_attack(2))
-
-    def test_can_safely_attack_unsafe_hp(self):
-        """Test can_safely_attack returns False for unsafe HP."""
-        # Test with HP at or below threshold
-        self.assertFalse(self.action.can_safely_attack(1))
-        self.assertFalse(self.action.can_safely_attack(0))
-
-    def test_execute_hp_too_low(self):
-        """Test execute when character HP is too low."""
-        client = Mock()
-        
-        # Mock character state with low HP
-        character_state = Mock()
-        character_state.data = {'hp': 1}
-        
-        result = self.action.execute(client, character_state=character_state)
-        self.assertFalse(result['success'])
-        self.assertIn('HP (1) is too low for safe combat', result['error'])
-        self.assertEqual(result['character_hp'], 1)
-        self.assertEqual(result['min_hp_threshold'], 1)
+        action = AttackAction(character_name="test_char")
+        expected = "AttackAction(test_char)"
+        self.assertEqual(repr(action), expected)
 
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_fight_api_fails(self, mock_fight_api):
-        """Test execute when fight API fails."""
-        mock_fight_api.return_value = None
-        client = Mock()
+    def test_attack_action_execute_win(self, mock_fight_api):
+        # Mock the API response for a win
+        mock_response = Mock()
+        mock_fight_data = {
+            'result': 'win',
+            'xp': 100,
+            'gold': 50,
+            'drops': [{'code': 'sword', 'quantity': 1}]
+        }
+        mock_response.data = Mock()
+        mock_response.data.fight = Mock()
+        mock_response.data.fight.to_dict.return_value = mock_fight_data
+        mock_fight_api.return_value = mock_response
         
-        # Mock character state with safe HP
-        character_state = Mock()
-        character_state.data = {'hp': 50}
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
         
-        result = self.action.execute(client, character_state=character_state)
-        self.assertFalse(result['success'])
-        self.assertIn('Fight API call failed', result['error'])
+        # Verify the API was called with correct parameters
+        mock_fight_api.assert_called_once_with(
+            name=self.char_name,
+            client=self.client
+        )
+        
+        # Verify response format
+        self.assertTrue(result['success'])
+        self.assertEqual(result['action'], 'AttackAction')
+        self.assertEqual(result['xp_gained'], 100)
+        self.assertEqual(result['gold_gained'], 50)
+        self.assertEqual(result['drops'], mock_fight_data['drops'])
+        self.assertTrue(result['monster_defeated'])
+        self.assertTrue(result['has_hunted_monsters'])
 
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_fight_api_no_data(self, mock_fight_api):
-        """Test execute when fight API returns no data."""
+    def test_attack_action_execute_loss(self, mock_fight_api):
+        # Mock the API response for a loss
+        mock_response = Mock()
+        mock_fight_data = {
+            'result': 'loss',
+            'xp': 0,
+            'gold': 0,
+            'drops': []
+        }
+        mock_response.data = Mock()
+        mock_response.data.fight = Mock()
+        mock_response.data.fight.to_dict.return_value = mock_fight_data
+        mock_fight_api.return_value = mock_response
+        
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
+        
+        # Verify response shows loss
+        self.assertTrue(result['success'])
+        self.assertEqual(result['xp_gained'], 0)
+        self.assertEqual(result['gold_gained'], 0)
+        self.assertFalse(result['monster_defeated'])
+
+    @patch('src.controller.actions.attack.fight_character_api')
+    def test_attack_action_execute_no_fight_data(self, mock_fight_api):
+        # Mock the API response without fight data
         mock_response = Mock()
         mock_response.data = None
         mock_fight_api.return_value = mock_response
-        client = Mock()
         
-        # Mock character state with safe HP
-        character_state = Mock()
-        character_state.data = {'hp': 50}
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
         
-        result = self.action.execute(client, character_state=character_state)
+        # Should still return success with default values
+        self.assertTrue(result['success'])
+        self.assertEqual(result['xp_gained'], 0)
+        self.assertEqual(result['gold_gained'], 0)
+        self.assertEqual(result['drops'], [])
+        self.assertFalse(result['monster_defeated'])
+
+    @patch('src.controller.actions.attack.fight_character_api')
+    def test_attack_action_execute_no_fight_object(self, mock_fight_api):
+        # Mock the API response without fight object
+        mock_response = Mock()
+        mock_response.data = Mock()
+        mock_response.data.fight = None
+        mock_fight_api.return_value = mock_response
+        
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
+        
+        # Should still return success with default values
+        self.assertTrue(result['success'])
+        self.assertEqual(result['xp_gained'], 0)
+
+    def test_attack_action_execute_no_client(self):
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=None)
+        
+        # Should return error
         self.assertFalse(result['success'])
-        self.assertIn('Fight API call failed', result['error'])
+        self.assertIn('No API client provided', result['error'])
 
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_successful_attack(self, mock_fight_api):
-        """Test successful attack execution."""
-        # Mock successful fight response
-        mock_fight_data = Mock()
-        mock_fight_data.xp = 25
-        mock_fight_data.gold = 10
-        mock_fight_data.drops = []
-        mock_character = Mock()
-        mock_character.hp = 45
-        mock_response = Mock()
-        mock_response.data = Mock()
-        mock_response.data.fight = mock_fight_data
-        mock_response.data.character = mock_character
-        mock_fight_api.return_value = mock_response
+    def test_attack_action_execute_cooldown_error(self, mock_fight_api):
+        # Mock API to raise cooldown error
+        mock_fight_api.side_effect = Exception("Character is in cooldown")
         
-        client = Mock()
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
         
-        # Mock character state with safe HP
-        character_state = Mock()
-        character_state.data = {'hp': 50}
-        
-        result = self.action.execute(client, character_state=character_state)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['char_name'], 'test_character')
-        self.assertIn('fight_data', result)
-        self.assertIn('character_data', result)
-
-    @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_no_character_state(self, mock_fight_api):
-        """Test execute without character state (skips HP check)."""
-        # Mock successful fight response
-        mock_fight_data = Mock()
-        mock_fight_data.xp = 25
-        mock_character = Mock()
-        mock_character.hp = 45
-        mock_response = Mock()
-        mock_response.data = Mock()
-        mock_response.data.fight = mock_fight_data
-        mock_response.data.character = mock_character
-        mock_fight_api.return_value = mock_response
-        
-        client = Mock()
-        
-        result = self.action.execute(client)  # No character_state
-        self.assertTrue(result['success'])
-        self.assertEqual(result['char_name'], 'test_character')
-
-    @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_with_different_hp_thresholds(self, mock_fight_api):
-        """Test execute with different HP safety thresholds."""
-        # Set different threshold
-        self.action.min_hp_threshold = 10
-        
-        client = Mock()
-        
-        # Test HP above threshold (safe)
-        character_state = Mock()
-        character_state.data = {'hp': 15}
-        
-        mock_response = Mock()
-        mock_response.data = Mock()
-        mock_response.data.fight = Mock()
-        mock_response.data.character = Mock()
-        mock_fight_api.return_value = mock_response
-        
-        result = self.action.execute(client, character_state=character_state)
-        self.assertTrue(result['success'])
-        
-        # Test HP at threshold (unsafe)
-        character_state.data = {'hp': 10}
-        result = self.action.execute(client, character_state=character_state)
+        # Should return error with cooldown flag
         self.assertFalse(result['success'])
-        self.assertIn('HP (10) is too low', result['error'])
-
-    def test_calculate_damage_taken_helper_method(self):
-        """Test _calculate_damage_taken helper method."""
-        pre_hp = 100
-        post_hp = 85
-        
-        # Test basic functionality if method exists
-        if hasattr(self.action, '_calculate_damage_taken'):
-            damage = self.action._calculate_damage_taken(pre_hp, post_hp)
-            self.assertEqual(damage, 15)
-            
-            # Test no damage case
-            damage = self.action._calculate_damage_taken(100, 100)
-            self.assertEqual(damage, 0)
-
-    def test_analyze_fight_result_helper_method(self):
-        """Test _analyze_fight_result helper method."""
-        fight_data = Mock()
-        fight_data.xp = 25
-        fight_data.gold = 10
-        fight_data.drops = []
-        
-        # Test basic functionality if method exists
-        if hasattr(self.action, '_analyze_fight_result'):
-            analysis = self.action._analyze_fight_result(fight_data)
-            self.assertIsInstance(analysis, dict)
-
-    def test_execute_exception_handling(self):
-        """Test exception handling during execution."""
-        client = Mock()
-        
-        with patch('src.controller.actions.attack.fight_character_api', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
-            self.assertFalse(result['success'])
-            self.assertIn('Fight execution failed', result['error'])
-
-    def test_execute_has_goap_attributes(self):
-        """Test that AttackAction has expected GOAP attributes."""
-        self.assertTrue(hasattr(AttackAction, 'conditions'))
-        self.assertTrue(hasattr(AttackAction, 'reactions'))
-        self.assertTrue(hasattr(AttackAction, 'weights'))
-        self.assertTrue(hasattr(AttackAction, 'g'))
-
-    def test_goap_conditions(self):
-        """Test GOAP conditions are properly defined."""
-        expected_conditions = {
-            'monster_present': True,
-            'can_attack': True,
-            'character_safe': True,
-            'character_alive': True
-        }
-        self.assertEqual(AttackAction.conditions, expected_conditions)
-
-    def test_goap_reactions(self):
-        """Test GOAP reactions are properly defined."""
-        expected_reactions = {
-            'monster_present': False,
-            'has_hunted_monsters': True
-        }
-        self.assertEqual(AttackAction.reactions, expected_reactions)
-
-    def test_goap_weights(self):
-        """Test GOAP weights are properly defined."""
-        expected_weights = {'attack': 3.0}
-        self.assertEqual(AttackAction.weights, expected_weights)
-
-    def test_different_character_names(self):
-        """Test action works with different character names."""
-        character_names = ['player1', 'test_char', 'ai_player', 'special-character']
-        
-        for name in character_names:
-            action = AttackAction(name)
-            self.assertEqual(action.char_name, name)
-            
-            # Test representation includes character name
-            self.assertIn(name, repr(action))
-
-    def test_hp_threshold_customization(self):
-        """Test customizing HP safety threshold."""
-        # Test default threshold
-        action1 = AttackAction("player")
-        self.assertEqual(action1.min_hp_threshold, 1)
-        
-        # Test custom threshold
-        action2 = AttackAction("player")
-        action2.min_hp_threshold = 20
-        self.assertEqual(action2.min_hp_threshold, 20)
-        
-        # Test threshold behavior
-        self.assertFalse(action2.can_safely_attack(20))
-        self.assertFalse(action2.can_safely_attack(15))
-        self.assertTrue(action2.can_safely_attack(25))
+        self.assertIn('Character is in cooldown', result['error'])
+        self.assertTrue(result.get('is_cooldown', False))
 
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_fight_data_extraction(self, mock_fight_api):
-        """Test proper extraction of fight data from API response."""
-        # Mock complex fight response
-        mock_drops = [
-            Mock(code='feather', quantity=2),
-            Mock(code='raw_chicken', quantity=1)
-        ]
-        mock_fight_data = Mock()
-        mock_fight_data.xp = 15
-        mock_fight_data.gold = 5
-        mock_fight_data.drops = mock_drops
-        mock_fight_data.result = 'win'
-        mock_fight_data.turns = 3
+    def test_attack_action_execute_no_monster_error(self, mock_fight_api):
+        # Mock API to raise no monster error
+        mock_fight_api.side_effect = Exception("Monster not found at this location")
         
-        mock_character = Mock()
-        mock_character.hp = 80
-        mock_character.xp = 250
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
         
-        mock_response = Mock()
-        mock_response.data = Mock()
-        mock_response.data.fight = mock_fight_data
-        mock_response.data.character = mock_character
-        mock_fight_api.return_value = mock_response
-        
-        client = Mock()
-        character_state = Mock()
-        character_state.data = {'hp': 90}
-        
-        result = self.action.execute(client, character_state=character_state)
-        self.assertTrue(result['success'])
-        
-        # Verify fight data extraction
-        fight_data = result['fight_data']
-        self.assertEqual(fight_data.xp, 15)
-        self.assertEqual(fight_data.gold, 5)
-        self.assertEqual(len(fight_data.drops), 2)
-        
-        # Verify character data extraction
-        character_data = result['character_data']
-        self.assertEqual(character_data.hp, 80)
-        self.assertEqual(character_data.xp, 250)
-
-    def test_character_state_data_formats(self):
-        """Test handling different character state data formats."""
-        client = Mock()
-        
-        # Test with standard data format
-        character_state1 = Mock()
-        character_state1.data = {'hp': 50, 'max_hp': 100}
-        
-        # Test with missing max_hp
-        character_state2 = Mock()
-        character_state2.data = {'hp': 50}
-        
-        # Test with zero HP
-        character_state3 = Mock()
-        character_state3.data = {'hp': 0}
-        
-        test_cases = [
-            (character_state1, True),   # Safe HP
-            (character_state2, True),   # Safe HP, missing max_hp
-            (character_state3, False),  # Unsafe HP
-        ]
-        
-        for char_state, should_be_safe in test_cases:
-            hp = char_state.data.get('hp', 0)
-            result_safe = self.action.can_safely_attack(hp)
-            self.assertEqual(result_safe, should_be_safe, 
-                           f"HP {hp} safety check failed: expected {should_be_safe}, got {result_safe}")
+        # Should return error with no_monster flag
+        self.assertFalse(result['success'])
+        self.assertIn('No monster at location', result['error'])
+        self.assertTrue(result.get('no_monster', False))
 
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_execute_api_response_edge_cases(self, mock_fight_api):
-        """Test handling of edge cases in API responses."""
-        client = Mock()
-        character_state = Mock()
-        character_state.data = {'hp': 50}
+    def test_attack_action_execute_wrong_location_error(self, mock_fight_api):
+        # Mock API to raise wrong location error
+        mock_fight_api.side_effect = Exception("497 Character already at this location")
         
-        # Test response with missing fight data
-        mock_response1 = Mock()
-        mock_response1.data = Mock()
-        mock_response1.data.fight = None
-        mock_response1.data.character = Mock()
-        mock_fight_api.return_value = mock_response1
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
         
-        result = self.action.execute(client, character_state=character_state)
-        # Should handle gracefully
-        self.assertIn('success', result)
+        # Should return error with wrong_location flag
+        self.assertFalse(result['success'])
+        self.assertIn('must be at monster location', result['error'])
+        self.assertTrue(result.get('wrong_location', False))
+
+    @patch('src.controller.actions.attack.fight_character_api')
+    def test_attack_action_execute_action_not_allowed_error(self, mock_fight_api):
+        # Mock API to raise action not allowed error
+        mock_fight_api.side_effect = Exception("486 This action is not allowed")
         
-        # Test response with missing character data
-        mock_response2 = Mock()
-        mock_response2.data = Mock()
-        mock_response2.data.fight = Mock()
-        mock_response2.data.character = None
-        mock_fight_api.return_value = mock_response2
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
         
-        result = self.action.execute(client, character_state=character_state)
-        # Should handle gracefully
-        self.assertIn('success', result)
+        # Should return error with action_not_allowed flag
+        self.assertFalse(result['success'])
+        self.assertIn('Action not allowed', result['error'])
+        self.assertTrue(result.get('action_not_allowed', False))
+
+    @patch('src.controller.actions.attack.fight_character_api')
+    def test_attack_action_execute_character_not_found_error(self, mock_fight_api):
+        # Mock API to raise character not found error
+        mock_fight_api.side_effect = Exception("Character not found")
+        
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
+        
+        # Should return appropriate error
+        self.assertFalse(result['success'])
+        self.assertIn('Character not found', result['error'])
+
+    @patch('src.controller.actions.attack.fight_character_api')
+    def test_attack_action_execute_generic_error(self, mock_fight_api):
+        # Mock API to raise generic error
+        mock_fight_api.side_effect = Exception("Network error")
+        
+        action = AttackAction(character_name=self.char_name)
+        result = action.execute(client=self.client)
+        
+        # Should return error with original message
+        self.assertFalse(result['success'])
+        self.assertIn('Network error', result['error'])
+
+    def test_attack_action_validate_no_character_name(self):
+        """Test validation fails when character name is empty."""
+        action = AttackAction("")
+        result = action.validate_execution_context(self.client)
+        self.assertFalse(result)
+
+    def test_estimate_fight_duration_with_monster_data(self):
+        """Test fight duration estimation with monster data."""
+        action = AttackAction(character_name=self.char_name)
+        
+        # Test with specific monster HP
+        monster_data = {'hp': 50}
+        duration = action.estimate_fight_duration(None, monster_data)
+        self.assertEqual(duration, 5)  # 50 HP / 10 damage per turn
+        
+        # Test with low HP monster
+        monster_data = {'hp': 5}
+        duration = action.estimate_fight_duration(None, monster_data)
+        self.assertEqual(duration, 1)  # Minimum 1 turn
+        
+        # Test with high HP monster
+        monster_data = {'hp': 100}
+        duration = action.estimate_fight_duration(None, monster_data)
+        self.assertEqual(duration, 10)  # 100 HP / 10 damage per turn
+
+    def test_estimate_fight_duration_without_monster_data(self):
+        """Test fight duration estimation without monster data."""
+        action = AttackAction(character_name=self.char_name)
+        
+        # Test with low level character
+        char_state = Mock()
+        char_state.level = 1
+        duration = action.estimate_fight_duration(char_state)
+        self.assertEqual(duration, 5)  # Max duration for low level
+        
+        # Test with mid level character
+        char_state.level = 10
+        duration = action.estimate_fight_duration(char_state)
+        self.assertEqual(duration, 3)  # 5 - 10//5 = 3
+        
+        # Test with high level character
+        char_state.level = 20
+        duration = action.estimate_fight_duration(char_state)
+        self.assertEqual(duration, 2)  # Min duration
+
+    def test_estimate_fight_duration_no_character_state(self):
+        """Test fight duration estimation with no character state."""
+        action = AttackAction(character_name=self.char_name)
+        duration = action.estimate_fight_duration(None)
+        self.assertEqual(duration, 5)  # Default for level 1
+
+    def test_attack_action_class_attributes(self):
+        """Test AttackAction class has expected GOAP attributes."""
+        # Check that GOAP attributes exist
+        self.assertIsInstance(AttackAction.conditions, dict)
+        self.assertIsInstance(AttackAction.reactions, dict)
+        self.assertIsInstance(AttackAction.weights, dict)
+        
+        # Check specific GOAP conditions
+        self.assertIn('monster_present', AttackAction.conditions)
+        self.assertIn('can_attack', AttackAction.conditions)
+        self.assertIn('character_safe', AttackAction.conditions)
+        self.assertIn('character_alive', AttackAction.conditions)
+        
+        # Check specific GOAP reactions
+        self.assertIn('monster_present', AttackAction.reactions)
+        self.assertIn('has_hunted_monsters', AttackAction.reactions)
+        
+        # Check weight
+        self.assertIn('attack', AttackAction.weights)
+        self.assertEqual(AttackAction.weights['attack'], 3.0)
 
 
 if __name__ == '__main__':

@@ -7,6 +7,8 @@ import yaml
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 from src.controller.action_executor import ActionExecutor, ActionResult, CompositeActionStep
+from src.controller.action_factory import ActionFactory
+from test.fixtures import create_mock_client
 
 
 class TestActionExecutorEnhanced(unittest.TestCase):
@@ -124,139 +126,106 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         self.assertIsNone(step.conditions)
         self.assertEqual(step.on_failure, 'continue')
 
-    def test_load_action_configurations(self):
-        """Test loading action configurations."""
+    def test_action_executor_initialization(self):
+        """Test ActionExecutor initialization."""
         executor = ActionExecutor(self.config_file)
-        configs = executor.load_action_configurations()
         
-        self.assertIn('action_configurations', configs)
-        self.assertIn('move', configs['action_configurations'])
-        self.assertEqual(configs['action_configurations']['move']['type'], 'builtin')
+        # Check that executor has necessary attributes
+        self.assertIsNotNone(executor.factory)
+        self.assertIsInstance(executor.learning_callbacks, dict)
+        self.assertIsInstance(executor.state_updaters, dict)
 
-    def test_load_action_configurations_file_not_found(self):
-        """Test loading configurations when file doesn't exist."""
-        executor = ActionExecutor('/nonexistent/file.yaml')
-        configs = executor.load_action_configurations()
+    def test_action_executor_factory_integration(self):
+        """Test ActionExecutor factory integration."""
+        executor = ActionExecutor(self.config_file)
         
-        # Should return empty config if file not found
-        self.assertIsInstance(configs, dict)
-
-    def test_is_composite_action_true(self):
-        """Test is_composite_action returns True for composite actions."""
-        executor = ActionExecutor(self.config_file)
-        self.assertTrue(executor.is_composite_action('test_composite'))
-
-    def test_is_composite_action_false(self):
-        """Test is_composite_action returns False for builtin actions."""
-        executor = ActionExecutor(self.config_file)
-        self.assertFalse(executor.is_composite_action('move'))
-
-    def test_is_composite_action_unknown(self):
-        """Test is_composite_action returns False for unknown actions."""
-        executor = ActionExecutor(self.config_file)
-        self.assertFalse(executor.is_composite_action('unknown_action'))
+        # Check that factory is properly initialized
+        self.assertIsNotNone(executor.factory)
+        self.assertIsInstance(executor.factory, ActionFactory)
 
     @patch('src.controller.action_executor.ActionFactory')
     def test_execute_simple_action_success(self, mock_factory_class):
         """Test successful execution of simple action."""
-        # Mock factory and action
-        mock_action = Mock()
-        mock_action.execute.return_value = {'success': True, 'message': 'Action completed'}
-        
+        # Mock factory to return success tuple
         mock_factory = Mock()
-        mock_factory.create_action.return_value = mock_action
+        mock_factory.execute_action.return_value = (True, {'success': True, 'message': 'Action completed'})
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
-        client = Mock()
+        client = create_mock_client()
         
-        result = executor.execute_action('move', client, x=5, y=10)
+        result = executor.execute_action('move', {'x': 5, 'y': 10}, client)
         
         self.assertIsInstance(result, ActionResult)
         self.assertTrue(result.success)
         self.assertEqual(result.action_name, 'move')
-        mock_factory.create_action.assert_called_once_with('move', x=5, y=10)
+        mock_factory.execute_action.assert_called_once_with('move', {'x': 5, 'y': 10}, client, {})
 
     @patch('src.controller.action_executor.ActionFactory')
     def test_execute_simple_action_failure(self, mock_factory_class):
         """Test failed execution of simple action."""
-        # Mock factory to return None (action creation failed)
+        # Mock factory to return failure tuple
         mock_factory = Mock()
-        mock_factory.create_action.return_value = None
+        mock_factory.execute_action.return_value = (False, None)
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
-        client = Mock()
+        client = create_mock_client()
         
-        result = executor.execute_action('unknown_action', client)
+        result = executor.execute_action('unknown_action', {}, client)
         
         self.assertIsInstance(result, ActionResult)
         self.assertFalse(result.success)
-        self.assertIn('Failed to create action', result.error_message)
+        self.assertEqual(result.action_name, 'unknown_action')
 
     @patch('src.controller.action_executor.ActionFactory')
     def test_execute_action_exception_handling(self, mock_factory_class):
         """Test exception handling during action execution."""
-        # Mock action that raises exception
-        mock_action = Mock()
-        mock_action.execute.side_effect = Exception("Test exception")
-        
+        # Mock factory to raise exception
         mock_factory = Mock()
-        mock_factory.create_action.return_value = mock_action
+        mock_factory.execute_action.side_effect = Exception("Test exception")
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
-        client = Mock()
+        client = create_mock_client()
         
-        result = executor.execute_action('move', client)
+        result = executor.execute_action('move', {}, client)
         
         self.assertIsInstance(result, ActionResult)
         self.assertFalse(result.success)
         self.assertIn('Test exception', result.error_message)
 
-    def test_get_composite_action_steps(self):
-        """Test extracting composite action steps."""
+    def test_action_executor_config_data(self):
+        """Test ActionExecutor config_data is loaded."""
         executor = ActionExecutor(self.config_file)
-        steps = executor.get_composite_action_steps('test_composite')
         
-        self.assertEqual(len(steps), 2)
-        self.assertEqual(steps[0].name, 'step1')
-        self.assertEqual(steps[0].action, 'move')
-        self.assertTrue(steps[0].required)
-        self.assertEqual(steps[1].name, 'step2')
-        self.assertEqual(steps[1].action, 'attack')
-        self.assertFalse(steps[1].required)
-
-    def test_get_composite_action_steps_not_found(self):
-        """Test getting steps for non-existent composite action."""
-        executor = ActionExecutor(self.config_file)
-        steps = executor.get_composite_action_steps('nonexistent')
-        
-        self.assertEqual(steps, [])
+        # Check that config_data is loaded
+        self.assertIsNotNone(executor.config_data)
+        self.assertIsInstance(executor.config_data.data, dict)
 
     @patch('src.controller.action_executor.ActionFactory')
     def test_execute_composite_action_success(self, mock_factory_class):
         """Test successful execution of composite action."""
-        # Mock successful actions for each step
-        mock_move_action = Mock()
-        mock_move_action.execute.return_value = {'success': True, 'message': 'Moved'}
-        
-        mock_attack_action = Mock()
-        mock_attack_action.execute.return_value = {'success': True, 'message': 'Attacked'}
-        
+        # Mock factory to return success for each step
         mock_factory = Mock()
-        mock_factory.create_action.side_effect = [mock_move_action, mock_attack_action]
+        # Return success for both move and attack steps
+        mock_factory.execute_action.side_effect = [
+            (True, {'success': True, 'message': 'Moved'}),
+            (True, {'success': True, 'message': 'Attacked'})
+        ]
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
-        client = Mock()
+        client = create_mock_client()
         
-        result = executor.execute_action('test_composite', client)
+        result = executor.execute_action('test_composite', {}, client)
         
         self.assertIsInstance(result, ActionResult)
         self.assertTrue(result.success)
         self.assertEqual(result.action_name, 'test_composite')
-        self.assertIn('steps_completed', result.response)
+        # Composite actions return 'steps' and 'composite' in response
+        self.assertIn('steps', result.response)
+        self.assertTrue(result.response.get('composite', False))
 
     def test_validate_step_conditions_true(self):
         """Test step condition validation when conditions are met."""

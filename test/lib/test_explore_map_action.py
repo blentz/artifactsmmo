@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 from src.controller.actions.explore_map import ExploreMapAction
+from test.fixtures import create_mock_client
 
 
 class TestExploreMapAction(unittest.TestCase):
@@ -229,7 +230,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_execute_success(self):
         """ Test successful exploration execution """
-        client = Mock()
+        client = create_mock_client()
         
         # Mock map API responses
         mock_content = Mock()
@@ -260,7 +261,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_execute_api_failure(self):
         """ Test execution when API calls fail """
-        client = Mock()
+        client = create_mock_client()
         
         with patch('src.controller.actions.explore_map.get_map_api', side_effect=Exception("API Error")):
             result = self.action.execute(client)

@@ -3,10 +3,10 @@
 import json
 import logging
 
-from artifactsmmo_api_client.api.accounts.get_account_character import sync as account_sync
-from artifactsmmo_api_client.api.characters.create_character import sync as create_character
-from artifactsmmo_api_client.api.characters.delete_character import sync as delete_character
-from artifactsmmo_api_client.api.characters.get_character_name import sync as get_character
+from artifactsmmo_api_client.api.accounts.get_account_characters_accounts_account_characters_get import sync as account_sync
+from artifactsmmo_api_client.api.characters.create_character_characters_create_post import sync as create_character
+from artifactsmmo_api_client.api.characters.delete_character_characters_delete_post import sync as delete_character
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema

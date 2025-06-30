@@ -73,9 +73,19 @@ class MissionExecutor:
         self.logger.info("🚀 Starting goal-driven mission execution")
         self.logger.info(f"📋 Mission parameters: {mission_parameters}")
         
+        # Initialize clean session state for XP-seeking goal achievement
+        if hasattr(self.controller, 'goap_execution_manager'):
+            self.controller.goap_execution_manager.initialize_session_state(self.controller)
+        
         target_level = mission_parameters.get('target_level')
         initial_level = self.controller.character_state.data.get('level', 1)
         mission_success = False
+        
+        # Variables to track goal persistence
+        current_goal_name = None
+        current_goal_config = None
+        goal_start_level = initial_level
+        mission_iteration = 0
         
         for mission_iteration in range(1, self.max_mission_iterations + 1):
             current_level = self.controller.character_state.data.get('level', 1)
@@ -89,23 +99,54 @@ class MissionExecutor:
                 mission_success = True
                 break
             
-            # Use goal manager for intelligent goal selection
-            goal_selection = self._select_mission_goal(mission_parameters)
+            # Check if we need to select a new goal
+            # Re-select if: no current goal, leveled up, or HP dropped significantly
+            current_hp = self.controller.character_state.data.get('hp', 100)
+            max_hp = self.controller.character_state.data.get('max_hp', 100)
+            hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
             
-            if not goal_selection:
-                self.logger.warning("❌ No suitable goal found for current state")
-                break
+            should_reselect_goal = (
+                current_goal_name is None or 
+                current_level > goal_start_level or
+                (hp_percentage < 100 and current_goal_name != 'get_to_safety')  # Combat loss
+            )
+            
+            if should_reselect_goal:
+                if current_level > goal_start_level:
+                    self.logger.info(f"🎊 Level up detected! Selecting new XP-gaining goal...")
+                elif hp_percentage < 100:
+                    self.logger.info(f"💔 HP dropped to {hp_percentage:.1f}% - re-evaluating goals...")
                 
-            goal_name, goal_config = goal_selection
-            self.logger.info(f"🎯 Selected goal: '{goal_name}' - {goal_config.get('description', 'No description')}")
+                # Use goal manager for intelligent goal selection
+                goal_selection = self._select_mission_goal(mission_parameters)
+                
+                if not goal_selection:
+                    self.logger.warning("❌ No suitable goal found for current state")
+                    break
+                    
+                current_goal_name, current_goal_config = goal_selection
+                goal_start_level = current_level
+                self.logger.info(f"🎯 Selected goal: '{current_goal_name}' - {current_goal_config.get('description', 'No description')}")
+                if current_goal_name == 'get_to_safety':
+                    self.logger.info(f"🛡️ Prioritizing safety recovery before continuing mission")
+                else:
+                    self.logger.info(f"📌 Will pursue this goal until level-up (from level {goal_start_level})")
+            else:
+                self.logger.info(f"🔁 Continuing to pursue goal: '{current_goal_name}'")
             
             # Execute goal using GOAP planning
-            goal_success = self._execute_goal_template(goal_name, goal_config, mission_parameters)
+            goal_success = self._execute_goal_template(current_goal_name, current_goal_config, mission_parameters)
             
             if goal_success:
-                self.logger.info(f"✅ Goal '{goal_name}' achieved successfully")
+                self.logger.info(f"✅ Goal '{current_goal_name}' achieved successfully")
+                # Clear current goal after successful completion to force re-selection
+                # This applies to maintenance and emergency goals that shouldn't persist
+                if current_goal_name in ['get_to_safety', 'wait_for_cooldown']:
+                    self.logger.info(f"🔄 Clearing {current_goal_name} goal to allow new goal selection")
+                    current_goal_name = None
+                    current_goal_config = None
             else:
-                self.logger.warning(f"⚠️ Goal '{goal_name}' execution incomplete")
+                self.logger.warning(f"⚠️ Goal '{current_goal_name}' execution incomplete")
                 
             # Check progress toward mission objective
             new_level = self.controller.character_state.data.get('level', 1)

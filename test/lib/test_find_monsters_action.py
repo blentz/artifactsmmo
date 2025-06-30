@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 from src.controller.actions.find_monsters import FindMonstersAction
+from test.fixtures import create_mock_client
 
 
 class TestFindMonstersAction(unittest.TestCase):
@@ -28,7 +29,7 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         
         # Mock client
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
 
     def test_find_monsters_action_initialization_default(self):
         """Test FindMonstersAction initialization with default parameters."""
@@ -84,13 +85,11 @@ class TestFindMonstersAction(unittest.TestCase):
         action = FindMonstersAction(monster_types=None)
         self.assertEqual(action.monster_types, [])
 
-    @patch('src.controller.actions.find_monsters.get_all_monsters_api')
-    def test_execute_no_client(self, mock_get_monsters):
+    def test_execute_no_client(self):
         """Test finding monsters fails without client."""
-        mock_get_monsters.side_effect = Exception("No client")
         result = self.action.execute(None)
         self.assertFalse(result['success'])
-        self.assertIn('No suitable monsters found', result['error'])
+        self.assertIn('No API client provided', result['error'])
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_empty_monsters_data(self, mock_get_monsters):
@@ -101,8 +100,7 @@ class TestFindMonstersAction(unittest.TestCase):
         self.assertIn('No suitable monsters found', result['error'])
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
-    def test_execute_find_monster_success(self, mock_unified_search, mock_get_monsters):
+    def test_execute_find_monster_success(self, mock_get_monsters):
         """Test finding monsters successfully."""
         # Mock API response
         mock_monster = Mock()
@@ -111,19 +109,54 @@ class TestFindMonstersAction(unittest.TestCase):
         mock_monster.level = 5
         mock_get_monsters.return_value = Mock(data=[mock_monster])
         
-        # Mock search result
-        mock_unified_search.return_value = {
-            'success': True,
-            'location': (6, 7),
-            'monster_code': 'green_slime',
-            'distance': 2.236
+        # Create mock knowledge base with viable monster data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.data = {
+            'monsters': {
+                'green_slime': {
+                    'level': 5,
+                    'combat_results': [
+                        {'result': 'win'},
+                        {'result': 'win'},
+                        {'result': 'loss'}
+                    ]
+                }
+            }
         }
         
-        result = self.action.execute(self.mock_client)
+        # Create mock map state
+        mock_map_state = Mock()
+        mock_map_state.data = {
+            '6,7': {
+                'content': {
+                    'code': 'green_slime',
+                    'type': 'monster'
+                },
+                'x': 6,
+                'y': 7
+            }
+        }
+        
+        # Mock the search method to return our test location
+        with patch.object(self.action, '_search_radius_for_content') as mock_search:
+            mock_search.return_value = [
+                ((6, 7), 'green_slime', {'code': 'green_slime', 'type': 'monster'})
+            ]
+            
+            # Execute with proper kwargs
+            result = self.action.execute(
+                self.mock_client,
+                knowledge_base=mock_knowledge_base,
+                map_state=mock_map_state,
+                character_level=5
+            )
+        
         self.assertTrue(result['success'])
-        self.assertEqual(result['location'], (6, 7))
+        self.assertEqual(result['target_x'], 6)
+        self.assertEqual(result['target_y'], 7)
         self.assertEqual(result['monster_code'], 'green_slime')
         self.assertAlmostEqual(result['distance'], 2.236, places=2)
+        self.assertAlmostEqual(result['win_rate'], 0.667, places=2)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')

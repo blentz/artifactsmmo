@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 from src.controller.actions.find_resources import FindResourcesAction
+from test.fixtures import create_mock_client
 
 
 class TestFindResourcesAction(unittest.TestCase):
@@ -29,7 +30,7 @@ class TestFindResourcesAction(unittest.TestCase):
         )
         
         # Mock client
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
 
     def test_find_resources_action_initialization(self):
         """Test FindResourcesAction initialization with all parameters."""
@@ -191,16 +192,11 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertEqual(result, ['iron_ore'])
 
     def test_determine_target_resource_codes_empty(self):
-        """Test _determine_target_resource_codes with empty inputs falls back to defaults."""
+        """Test _determine_target_resource_codes with empty inputs and no knowledge base."""
         action = FindResourcesAction()
+        # Without knowledge base, should return empty list
         result = action._determine_target_resource_codes([], [])
-        # Should return default resource types when no input provided
-        expected_defaults = [
-            'copper_rocks', 'iron_rocks', 'coal_rocks', 'gold_rocks',
-            'ash_tree', 'spruce_tree', 'birch_tree',
-            'gudgeon_fishing_spot', 'shrimp_fishing_spot'
-        ]
-        self.assertEqual(result, expected_defaults)
+        self.assertEqual(result, [])
 
 
 if __name__ == '__main__':

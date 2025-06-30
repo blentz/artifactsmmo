@@ -10,6 +10,7 @@ from src.controller.actions.find_monsters import FindMonstersAction
 from src.controller.actions.find_workshops import FindWorkshopsAction
 from src.controller.actions.search_base import SearchActionBase
 from src.game.map.state import MapState
+from test.fixtures import create_mock_client
 
 
 class TestSearchComprehensive(unittest.TestCase):
@@ -21,7 +22,7 @@ class TestSearchComprehensive(unittest.TestCase):
         self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
         os.environ['DATA_PREFIX'] = self.temp_dir
         
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
         SearchActionBase.clear_boundary_cache()
 
     def tearDown(self):
@@ -213,7 +214,8 @@ class TestSearchComprehensive(unittest.TestCase):
         # Verify successful result
         self.assertTrue(result['success'])
         self.assertEqual(result['resource_code'], 'iron_rocks')
-        self.assertEqual(result['location'], (6, 3))
+        self.assertEqual(result['target_x'], 6)
+        self.assertEqual(result['target_y'], 3)
 
     def test_cache_optimization_prevents_api_calls(self):
         """Test that caching optimization prevents excessive API calls."""

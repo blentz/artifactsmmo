@@ -1,9 +1,9 @@
 """ AnalyzeResourcesAction module """
 
 from typing import Dict, List, Optional, Set
-from artifactsmmo_api_client.api.resources.get_resource import sync as get_resource_api
-from artifactsmmo_api_client.api.items.get_item import sync as get_item_api
-from artifactsmmo_api_client.api.maps.get_map_x_y import sync as get_map_api
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 from .base import ActionBase
 
 
@@ -310,7 +310,7 @@ class AnalyzeResourcesAction(ActionBase):
         equipment_items = []
         
         try:
-            from artifactsmmo_api_client.api.items.get_all_item import sync as get_all_items_api
+            from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
             
             # Get equipment items by type
             equipment_types = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']

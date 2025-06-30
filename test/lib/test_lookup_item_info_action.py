@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 from src.controller.actions.lookup_item_info import LookupItemInfoAction
+from test.fixtures import create_mock_client
 
 
 class TestLookupItemInfoAction(unittest.TestCase):
@@ -23,7 +24,7 @@ class TestLookupItemInfoAction(unittest.TestCase):
         )
         
         # Mock client
-        self.mock_client = Mock()
+        self.mock_client = create_mock_client()
 
     def test_lookup_item_info_action_initialization_with_code(self):
         """Test LookupItemInfoAction initialization with item code."""
