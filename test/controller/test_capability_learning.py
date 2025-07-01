@@ -2,14 +2,15 @@
 Test capability learning system for ash_tree → ash_wood → wooden_staff analysis.
 """
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import os
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
 from src.controller.capability_analyzer import CapabilityAnalyzer
-from src.controller.learning_manager import LearningManager
 from src.controller.knowledge.base import KnowledgeBase
+from src.controller.learning_manager import LearningManager
+
 from test.fixtures import create_mock_client
 
 

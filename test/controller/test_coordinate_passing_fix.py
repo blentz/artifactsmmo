@@ -8,8 +8,11 @@ though find_resources had successfully found coordinates.
 
 import unittest
 from unittest.mock import Mock, patch
-from src.controller.ai_player_controller import AIPlayerController
+
 from src.controller.action_factory import ActionFactory
+from src.controller.ai_player_controller import AIPlayerController
+
+from test.fixtures import MockActionContext
 
 
 class TestCoordinatePassingFix(unittest.TestCase):
@@ -29,57 +32,63 @@ class TestCoordinatePassingFix(unittest.TestCase):
         self.controller.set_character_state(self.mock_character_state)
     
     def test_move_action_uses_target_coordinates_from_context(self):
-        """Test that move action automatically uses target coordinates when available in context."""
+        """Test that move action can access target coordinates from context."""
         factory = ActionFactory()
         
         # Simulate context with target coordinates (from find_resources)
-        context = {
-            'character_name': 'test_character',
-            'target_x': 2,
-            'target_y': 0,
-            'x': 2,
-            'y': 0
-        }
+        context = MockActionContext(
+            character_name='test_character',
+            target_x=2,
+            target_y=0,
+            x=2,
+            y=0,
+            use_target_coordinates=True
+        )
         
-        # Create move action - should auto-enable use_target_coordinates
+        # Create move action
         action = factory.create_action('move', {}, context)
         
         self.assertIsNotNone(action)
-        self.assertTrue(action.use_target_coordinates)
-        self.assertEqual(action.character_name, 'test_character')
+        # Verify action can get target coordinates from context
+        target_x, target_y = action.get_target_coordinates(context)
+        self.assertEqual(target_x, 2)
+        self.assertEqual(target_y, 0)
     
     def test_move_action_without_coordinates_in_context(self):
-        """Test that move action doesn't auto-enable use_target_coordinates when no coordinates available."""
+        """Test that move action returns None coordinates when no coordinates available."""
         factory = ActionFactory()
         
         # Context without target coordinates
-        context = {
-            'character_name': 'test_character'
-        }
+        context = MockActionContext(
+            character_name='test_character'
+        )
         
-        # Create move action - should NOT auto-enable use_target_coordinates
+        # Create move action
         action = factory.create_action('move', {}, context)
         
         self.assertIsNotNone(action)
-        self.assertFalse(action.use_target_coordinates)
-        self.assertEqual(action.character_name, 'test_character')
+        # Verify action returns None coordinates when not available
+        target_x, target_y = action.get_target_coordinates(context)
+        self.assertIsNone(target_x)
+        self.assertIsNone(target_y)
     
     def test_move_action_with_explicit_coordinates(self):
         """Test that move action works with explicit x/y coordinates."""
         factory = ActionFactory()
         
-        action_data = {
-            'character_name': 'test_character',
-            'x': 5,
-            'y': 3
-        }
+        context = MockActionContext(
+            character_name='test_character',
+            x=5,
+            y=3
+        )
         
-        action = factory.create_action('move', action_data, {})
+        action = factory.create_action('move', {}, context)
         
         self.assertIsNotNone(action)
-        self.assertEqual(action.x, 5)
-        self.assertEqual(action.y, 3)
-        self.assertEqual(action.character_name, 'test_character')
+        # Verify action can get explicit coordinates from context
+        target_x, target_y = action.get_target_coordinates(context)
+        self.assertEqual(target_x, 5)
+        self.assertEqual(target_y, 3)
     
     def test_action_context_preservation_between_actions(self):
         """Test that action context preserves coordinates between find_resources and move actions."""
@@ -121,18 +130,18 @@ class TestCoordinatePassingFix(unittest.TestCase):
         self.controller._update_action_context_from_response('find_resources', find_response)
         
         # Step 3: Build execution context for move action (includes action_context)
-        context = self.controller._build_execution_context({})
+        context = self.controller._build_execution_context({'use_target_coordinates': True})
         
         # Step 4: Create move action through factory
         factory = ActionFactory()
         action = factory.create_action('move', {}, context)
         
-        # Verify move action was created with target coordinates enabled
+        # Verify move action was created
         self.assertIsNotNone(action)
-        self.assertTrue(action.use_target_coordinates)
         
-        # Step 5: Execute move action
-        response = action.execute(self.controller.client, **context)
+        # Step 5: Execute move action with MockActionContext
+        action_context = MockActionContext(**context)
+        response = action.execute(self.controller.client, action_context)
         
         # Verify move was successful
         self.assertIsNotNone(response)

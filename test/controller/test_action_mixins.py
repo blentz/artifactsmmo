@@ -1,6 +1,6 @@
-import unittest
-from unittest.mock import Mock, patch, MagicMock
 import logging
+import unittest
+from unittest.mock import Mock, patch
 
 from src.controller.actions.mixins import CharacterDataMixin, KnowledgeBaseSearchMixin, MapStateAccessMixin
 

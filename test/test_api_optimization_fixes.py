@@ -8,14 +8,14 @@ This test file covers the fixes made to address:
 4. Character state caching optimization
 """
 
-import unittest
-import time
 import tempfile
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timezone, timedelta
+import time
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
 
 from src.controller.ai_player_controller import AIPlayerController
-from src.game.character.state import CharacterState
+
 from test.fixtures import create_mock_client
 
 
@@ -88,7 +88,7 @@ class TestCharacterStateCaching(TestAPIOptimizationFixes):
         mock_response = Mock()
         mock_response.data.to_dict.return_value = {'hp': 100, 'cooldown': 0}
         
-        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync', return_value=mock_response):
+        with patch('src.controller.ai_player_controller.get_character', return_value=mock_response):
             initial_time = time.time()
             self.controller._refresh_character_state()
             
@@ -181,7 +181,9 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
         
         # Mock time.sleep to avoid actually waiting
         with patch('time.sleep') as mock_sleep:
-            result = wait_action.execute(self.mock_client, character_state=self.mock_character_state)
+            from test.fixtures import MockActionContext
+            context = MockActionContext(character_state=self.mock_character_state)
+            result = wait_action.execute(self.mock_client, context)
             
             # Should have called sleep with reasonable duration
             mock_sleep.assert_called_once()
@@ -205,7 +207,9 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
         
         # Mock time.sleep to verify it's called with minimal duration
         with patch('time.sleep') as mock_sleep:
-            result = wait_action.execute(self.mock_client, character_state=self.mock_character_state)
+            from test.fixtures import MockActionContext
+            context = MockActionContext(character_state=self.mock_character_state)
+            result = wait_action.execute(self.mock_client, context)
             
             # Should have called sleep with minimal duration for expired cooldown
             mock_sleep.assert_called_once()
@@ -259,7 +263,7 @@ class TestAPIErrorHandling(TestAPIOptimizationFixes):
     def test_refresh_character_state_handles_api_errors(self):
         """Test that _refresh_character_state handles API errors gracefully."""
         # Mock API error (429 rate limit)
-        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync', 
+        with patch('src.controller.ai_player_controller.get_character', 
                    side_effect=Exception("Rate limit exceeded")):
             
             # Should not raise exception
@@ -272,15 +276,25 @@ class TestAPIErrorHandling(TestAPIOptimizationFixes):
     def test_cooldown_wait_handles_api_failures(self):
         """Test that cooldown wait continues to work even with API failures."""
         # Set up character with future cooldown expiration
-        future_time = datetime.now(timezone.utc) + timedelta(seconds=2)
+        future_time = datetime.now(timezone.utc) + timedelta(seconds=0.1)  # Short wait for test
         self.mock_character_state.data['cooldown_expiration'] = future_time.isoformat()
+        self.mock_character_state.data['cooldown'] = 0.1  # 0.1 seconds cooldown
         
-        # Mock _execute_action to succeed despite API issues
-        with patch.object(self.controller, '_execute_action', return_value=(True, {})):
+        # Mock the action executor to succeed
+        with patch.object(self.controller.action_executor, 'execute_action') as mock_execute:
+            mock_execute.return_value = Mock(success=True)
             success = self.controller._execute_cooldown_wait()
             
             # Should succeed even with stale character state
             self.assertTrue(success)
+            
+            # Verify wait action was called with proper context
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args
+            self.assertEqual(call_args[0][0], 'wait')  # action name
+            context = call_args[0][3]  # context argument
+            self.assertIn('character_state', context)
+            self.assertEqual(context['character_state'], self.mock_character_state)
 
 
 if __name__ == '__main__':

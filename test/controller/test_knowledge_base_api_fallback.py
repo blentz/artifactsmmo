@@ -1,9 +1,10 @@
 """Test module for KnowledgeBase API fallback functionality."""
 
+import os
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
-import tempfile
-import os
+
 from src.controller.knowledge.base import KnowledgeBase
 
 

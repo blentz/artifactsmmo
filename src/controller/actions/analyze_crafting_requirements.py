@@ -5,10 +5,13 @@ This action analyzes crafting requirements, material needs, and recipe availabil
 for strategic crafting planning and material gathering guidance.
 """
 
-from typing import Dict, Optional, List
-import logging
+from typing import Dict, List, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
@@ -32,50 +35,49 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
     }
     weights = {"crafting_requirements_known": 12}
 
-    def __init__(self, character_name: str, target_items: List[str] = None, crafting_goal: str = "equipment"):
+    def __init__(self):
         """
         Initialize the crafting requirements analysis action.
-
-        Args:
-            character_name: Name of the character to analyze
-            target_items: Specific items to analyze crafting for (optional)
-            crafting_goal: General crafting goal (equipment, consumables, materials)
         """
         super().__init__()
-        self.character_name = character_name
-        self.target_items = target_items or []
-        self.crafting_goal = crafting_goal
-        self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """Analyze crafting requirements and material needs."""
-        if not self.validate_execution_context(client):
+        # Call superclass to set self._context
+        super().execute(client, context)
+        
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
             
+        # Get parameters from context
+        character_name = context.character_name
+        target_items = context.get('target_items', [])
+        crafting_goal = context.get('crafting_goal', 'equipment')
+        
         self.log_execution_start(
-            character_name=self.character_name,
-            target_items=self.target_items,
-            crafting_goal=self.crafting_goal
+            character_name=character_name,
+            target_items=target_items,
+            crafting_goal=crafting_goal
         )
         
         try:
             # Get current character data
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
             
             character_data = character_response.data
             
             # Get context data
-            knowledge_base = kwargs.get('knowledge_base')
+            knowledge_base = context.knowledge_base
             
             # Determine target items if not specified
-            if not self.target_items:
-                self.target_items = self._determine_target_items(character_data, knowledge_base)
+            if not target_items:
+                target_items = self._determine_target_items(character_data, knowledge_base, crafting_goal)
             
             # Analyze crafting requirements for each target item
             requirements_analysis = self._analyze_item_requirements(
-                self.target_items, client, knowledge_base
+                target_items, client, knowledge_base
             )
             
             # Analyze current material availability
@@ -106,8 +108,8 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
             # Create result
             result = self.get_success_response(
                 crafting_requirements_known=True,
-                target_items=self.target_items,
-                crafting_goal=self.crafting_goal,
+                target_items=target_items,
+                crafting_goal=crafting_goal,
                 **requirements_analysis,
                 **material_analysis,
                 **gathering_analysis,
@@ -124,14 +126,14 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
             self.log_execution_result(error_response)
             return error_response
 
-    def _determine_target_items(self, character_data, knowledge_base) -> List[str]:
+    def _determine_target_items(self, character_data, knowledge_base, crafting_goal: str) -> List[str]:
         """Determine target items to craft based on character needs and goal."""
         try:
             target_items = []
             character_level = getattr(character_data, 'level', 1)
             weapon_slot = getattr(character_data, 'weapon_slot', '')
             
-            if self.crafting_goal == 'equipment':
+            if crafting_goal == 'equipment':
                 # Determine equipment needs
                 if weapon_slot in ['wooden_stick', '', None] and character_level >= 2:
                     target_items.extend(['copper_dagger', 'wooden_staff'])
@@ -140,11 +142,11 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
                 if character_level >= 3:
                     target_items.extend(['leather_helmet', 'leather_boots'])
                     
-            elif self.crafting_goal == 'consumables':
+            elif crafting_goal == 'consumables':
                 # Basic consumables
                 target_items.extend(['cooked_chicken', 'fried_eggs'])
                 
-            elif self.crafting_goal == 'materials':
+            elif crafting_goal == 'materials':
                 # Material processing items
                 target_items.extend(['copper', 'iron', 'logs'])
                 
@@ -614,4 +616,4 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
             return {'need_crafting_materials': True, 'materials_sufficient': False}
 
     def __repr__(self):
-        return f"AnalyzeCraftingRequirementsAction({self.character_name}, {self.crafting_goal})"
+        return "AnalyzeCraftingRequirementsAction()"

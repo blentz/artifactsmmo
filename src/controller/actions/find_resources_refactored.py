@@ -1,38 +1,26 @@
 """ FindResourcesAction module - Refactored version """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
+
+from src.lib.action_context import ActionContext
+
 from .search_base import SearchActionBase
 
 
 class FindResourcesAction(SearchActionBase):
     """ Action to find the nearest map location with specified resources """
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, search_radius: int = 5,
-                 resource_types: Optional[List[str]] = None, character_level: Optional[int] = None,
-                 skill_type: Optional[str] = None, level_range: int = 5, **kwargs):
+    def __init__(self):
         """
         Initialize the find resources action.
-
-        Args:
-            character_x: Character's X coordinate
-            character_y: Character's Y coordinate
-            search_radius: Radius to search for resources
-            resource_types: List of resource types/codes to search for
-            character_level: Character's current skill level for level-appropriate filtering
-            skill_type: Skill type to filter by (mining, woodcutting, fishing)
-            level_range: Acceptable level range (+/-) for resource selection
         """
-        super().__init__(character_x, character_y, search_radius)
-        self.resource_types = resource_types or []
-        self.character_level = character_level
-        self.skill_type = skill_type
-        self.level_range = level_range
+        super().__init__()
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find the nearest resource location using unified search algorithm """
-        return self.validate_and_execute(client, **kwargs)
+        return self.validate_and_execute(client, context)
     
-    def perform_action(self, client, **kwargs) -> Dict:
+    def perform_action(self, client, context: ActionContext) -> Dict:
         """
         Perform the resource search with knowledge base fallback.
         
@@ -41,19 +29,28 @@ class FindResourcesAction(SearchActionBase):
         2. Map state search second
         3. API search as fallback
         """
+        # Get parameters from context
+        character_x = context.get('character_x', context.character_x)
+        character_y = context.get('character_y', context.character_y)
+        search_radius = context.get('search_radius', 5)
+        resource_types = context.get('resource_types', [])
+        character_level = context.get('character_level')
+        skill_type = context.get('skill_type')
+        level_range = context.get('level_range', 5)
+        
         self.log_execution_start(
-            character_x=self.character_x,
-            character_y=self.character_y, 
-            search_radius=self.search_radius,
-            resource_types=self.resource_types
+            character_x=character_x,
+            character_y=character_y, 
+            search_radius=search_radius,
+            resource_types=resource_types
         )
         
         # Extract context
-        knowledge_base = self.extract_knowledge_base(kwargs)
-        map_state = self.extract_map_state(kwargs)
+        knowledge_base = context.knowledge_base
+        map_state = context.map_state
         
         # Determine target resource codes
-        target_codes = self._determine_target_resource_codes(kwargs)
+        target_codes = self._determine_target_resource_codes(resource_types)
         if not target_codes:
             return self.get_error_response("No target resource types specified")
         
@@ -62,13 +59,13 @@ class FindResourcesAction(SearchActionBase):
             kb_results = self.search_knowledge_base_resources(
                 knowledge_base, 
                 resource_code=target_codes[0] if len(target_codes) == 1 else None,
-                skill_type=self.skill_type
+                skill_type=skill_type
             )
             
             # Find closest known resource with location
-            closest_kb_resource = self._find_closest_kb_resource(kb_results)
+            closest_kb_resource = self._find_closest_kb_resource(kb_results, character_x, character_y)
             if closest_kb_resource:
-                return self._format_resource_response(closest_kb_resource, source='knowledge_base')
+                return self._format_resource_response(closest_kb_resource, source='knowledge_base', character_x=character_x, character_y=character_y)
         
         # Priority 2: Search map state for cached locations
         if map_state:
@@ -77,19 +74,19 @@ class FindResourcesAction(SearchActionBase):
                     map_state,
                     content_type='resource',
                     content_code=resource_code,
-                    center=(self.character_x, self.character_y),
-                    radius=self.search_radius
+                    center=(character_x, character_y),
+                    radius=search_radius
                 )
                 
                 if map_results:
-                    closest = min(map_results, key=lambda r: self._calculate_distance(*r['location']))
-                    return self._format_resource_response(closest, source='map_state')
+                    closest = min(map_results, key=lambda r: self._calculate_distance(*r['location'], character_x, character_y))
+                    return self._format_resource_response(closest, source='map_state', character_x=character_x, character_y=character_y)
         
         # Priority 3: Fall back to API search
         resource_filter = self.create_resource_filter(
             resource_types=target_codes,
-            skill_type=self.skill_type,
-            character_level=self.character_level
+            skill_type=skill_type,
+            character_level=character_level
         )
         
         # Define result processor for API results
@@ -98,31 +95,23 @@ class FindResourcesAction(SearchActionBase):
                 'location': location,
                 'code': content_code,
                 'data': content_data
-            }, source='api_search')
+            }, source='api_search', character_x=character_x, character_y=character_y)
         
         # Use unified search algorithm
-        result = self.unified_search(client, resource_filter, resource_result_processor, map_state)
+        result = self.unified_search(client, character_x, character_y, search_radius, resource_filter, resource_result_processor, map_state)
         
         self.log_execution_result(result)
         return result
 
-    def _determine_target_resource_codes(self, kwargs: Dict) -> List[str]:
+    def _determine_target_resource_codes(self, resource_types: List[str]) -> List[str]:
         """Determine which resource codes to search for based on context."""
         # Use explicitly provided resource types
-        if self.resource_types:
-            return self.resource_types
-            
-        # Check context for resource types
-        context_types = kwargs.get('resource_types', [])
-        materials_needed = kwargs.get('materials_needed', [])
+        if resource_types:
+            return resource_types
         
-        # Combine all possible resource codes
-        all_codes = list(context_types)
-        all_codes.extend([m.get('code', '') for m in materials_needed if isinstance(m, dict)])
-        
-        return list(set(filter(None, all_codes)))  # Remove duplicates and empty strings
+        return []  # No resource types provided
 
-    def _find_closest_kb_resource(self, kb_results: List[Dict]) -> Optional[Dict]:
+    def _find_closest_kb_resource(self, kb_results: List[Dict], character_x: int, character_y: int) -> Optional[Dict]:
         """Find the closest resource from knowledge base results that has location data."""
         valid_results = []
         
@@ -142,9 +131,9 @@ class FindResourcesAction(SearchActionBase):
             return None
             
         # Return closest
-        return min(valid_results, key=lambda r: self._calculate_distance(*r['location']))
+        return min(valid_results, key=lambda r: self._calculate_distance(*r['location'], character_x, character_y))
 
-    def _format_resource_response(self, resource_info: Dict, source: str) -> Dict:
+    def _format_resource_response(self, resource_info: Dict, source: str, character_x: int, character_y: int) -> Dict:
         """Format a resource finding into a standard response."""
         location = resource_info.get('location', (0, 0))
         code = resource_info.get('code', '')
@@ -160,7 +149,7 @@ class FindResourcesAction(SearchActionBase):
             level = data.get('level_required', data.get('level', 1))
         
         x, y = location
-        distance = self._calculate_distance(x, y)
+        distance = self._calculate_distance(x, y, character_x, character_y)
         
         return self.get_success_response(
             location=location,
@@ -211,16 +200,16 @@ class FindResourcesAction(SearchActionBase):
             # Check level requirements
             if character_level is not None:
                 resource_level = content_data.get('level', 1)
-                if abs(resource_level - character_level) > self.level_range:
+                if abs(resource_level - character_level) > 5:  # Default level range
                     return False
             
             return True
         
         return resource_filter
 
-    def _calculate_distance(self, x: int, y: int) -> int:
+    def _calculate_distance(self, x: int, y: int, character_x: int, character_y: int) -> int:
         """Calculate Manhattan distance from character to given coordinates."""
-        return abs(x - self.character_x) + abs(y - self.character_y)
+        return abs(x - character_x) + abs(y - character_y)
 
     def __repr__(self):
-        return f"FindResourcesAction({self.character_x}, {self.character_y}, radius={self.search_radius}, types={self.resource_types})"
+        return "FindResourcesAction()"

@@ -1,14 +1,19 @@
 """Test module for AnalyzeEquipmentAction."""
 
 import unittest
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.analyze_equipment import AnalyzeEquipmentAction
+
 from test.fixtures import (
-    create_mock_client, MockCharacterData, MockKnowledgeBase, 
-    MockInventoryItem, mock_character_response, create_test_environment,
-    cleanup_test_environment
+    MockActionContext,
+    MockCharacterData,
+    MockInventoryItem,
+    MockKnowledgeBase,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+    mock_character_response,
 )
 
 
@@ -19,10 +24,7 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir, self.original_data_prefix = create_test_environment()
         
-        self.action = AnalyzeEquipmentAction(
-            character_name="test_character",
-            analysis_type="comprehensive"
-        )
+        self.action = AnalyzeEquipmentAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -30,23 +32,24 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
 
     def test_analyze_equipment_action_initialization(self):
         """Test AnalyzeEquipmentAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.analysis_type, "comprehensive")
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, AnalyzeEquipmentAction)
 
-    def test_analyze_equipment_action_initialization_defaults(self):
-        """Test AnalyzeEquipmentAction initialization with defaults."""
-        action = AnalyzeEquipmentAction("test")
-        self.assertEqual(action.character_name, "test")
-        self.assertEqual(action.analysis_type, "comprehensive")
+    def test_analyze_equipment_action_goap_params(self):
+        """Test AnalyzeEquipmentAction GOAP parameters."""
+        self.assertEqual(self.action.conditions["character_alive"], True)
+        self.assertTrue("equipment_analysis_available" in self.action.reactions)
+        self.assertTrue("equipment_info_known" in self.action.reactions)
 
     def test_analyze_equipment_action_repr(self):
         """Test AnalyzeEquipmentAction string representation."""
-        expected = "AnalyzeEquipmentAction(test_character, comprehensive)"
+        expected = "AnalyzeEquipmentAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -56,7 +59,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         mock_get_character.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -81,7 +89,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['equipment_analysis_available'])
@@ -110,7 +123,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=knowledge_base
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['equipment_analysis_available'])
@@ -121,7 +139,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         mock_get_character.side_effect = Exception("API Error")
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Equipment analysis failed: API Error', result['error'])
 
@@ -163,7 +186,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['need_equipment'])
@@ -185,7 +213,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['equipment_coverage']['total_equipped'], 2)
@@ -200,7 +233,12 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_type="comprehensive",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['need_equipment'])

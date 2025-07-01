@@ -1,12 +1,11 @@
-import logging
-from logging.handlers import QueueHandler
-from logging.handlers import QueueListener
-from logging import StreamHandler
-from queue import Queue
 import asyncio
 import json
+import logging
 import traceback
 from datetime import datetime
+from logging import StreamHandler
+from logging.handlers import QueueHandler, QueueListener
+from queue import Queue
 
 LOGGER_TASK: asyncio.Task = None
 

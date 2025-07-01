@@ -1,13 +1,19 @@
 """Test module for AnalyzeWorkshopRequirementsAction."""
 
 import unittest
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.analyze_workshop_requirements import AnalyzeWorkshopRequirementsAction
+
 from test.fixtures import (
-    create_mock_client, MockCharacterData, MockKnowledgeBase, MockMapState,
-    mock_character_response, create_test_environment, cleanup_test_environment
+    MockActionContext,
+    MockCharacterData,
+    MockKnowledgeBase,
+    MockMapState,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+    mock_character_response,
 )
 
 
@@ -18,10 +24,7 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir, self.original_data_prefix = create_test_environment()
         
-        self.action = AnalyzeWorkshopRequirementsAction(
-            character_name="test_character",
-            goal_type="general"
-        )
+        self.action = AnalyzeWorkshopRequirementsAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -29,23 +32,18 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
 
     def test_analyze_workshop_requirements_action_initialization(self):
         """Test AnalyzeWorkshopRequirementsAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.goal_type, "general")
-
-    def test_analyze_workshop_requirements_action_initialization_defaults(self):
-        """Test AnalyzeWorkshopRequirementsAction initialization with defaults."""
-        action = AnalyzeWorkshopRequirementsAction("test")
-        self.assertEqual(action.character_name, "test")
-        self.assertEqual(action.goal_type, "general")
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, AnalyzeWorkshopRequirementsAction)
 
     def test_analyze_workshop_requirements_action_repr(self):
         """Test AnalyzeWorkshopRequirementsAction string representation."""
-        expected = "AnalyzeWorkshopRequirementsAction(test_character, general)"
+        expected = "AnalyzeWorkshopRequirementsAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -55,7 +53,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         mock_get_character.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -72,7 +76,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['workshop_requirements_known'])
@@ -109,7 +119,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         map_state = MockMapState()
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=knowledge_base,
+            map_state=map_state
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['workshop_requirements_known'])
@@ -119,12 +135,18 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_execute_weaponcrafting_goal(self, mock_get_character):
         """Test analysis with weaponcrafting-specific goal."""
-        action = AnalyzeWorkshopRequirementsAction("test_character", "weaponcrafting")
+        action = AnalyzeWorkshopRequirementsAction()
         character_data = MockCharacterData(name="test_character", level=5, weaponcrafting_level=3)
         mock_get_character.return_value = mock_character_response(character_data)
         
         client = create_mock_client()
-        result = action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="weaponcrafting",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('weaponcrafting', result['required_workshop_types'])
@@ -136,7 +158,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         mock_get_character.side_effect = Exception("API Error")
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Workshop requirements analysis failed: API Error', result['error'])
 
@@ -174,7 +202,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         
         # No knowledge base - should need discovery
         client = create_mock_client()
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['discovery_needed'])
@@ -203,7 +237,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         map_state = MockMapState()
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=knowledge_base,
+            map_state=map_state
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['at_workshop'])
@@ -225,7 +265,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         # Should identify weaponcrafting and gearcrafting as missing for level 5 character
@@ -239,7 +285,13 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         
         client = create_mock_client()
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            goal_type="general",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('primary_recommendation', result)

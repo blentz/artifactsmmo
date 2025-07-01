@@ -5,9 +5,12 @@ This action analyzes workshop discovery needs and crafting facility requirements
 for the character's current goals and strategic planning.
 """
 
-from typing import Dict, Optional, List
-import logging
+from typing import Dict, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
@@ -30,47 +33,47 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
     }
     weights = {"workshop_requirements_known": 10}
 
-    def __init__(self, character_name: str, goal_type: str = "general"):
+    def __init__(self):
         """
         Initialize the workshop requirements analysis action.
-
-        Args:
-            character_name: Name of the character to analyze
-            goal_type: Type of goal to analyze workshops for (general, weaponcrafting, etc.)
         """
         super().__init__()
-        self.character_name = character_name
-        self.goal_type = goal_type
-        self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """Analyze workshop requirements and discovery needs."""
-        if not self.validate_execution_context(client):
+        # Call superclass to set self._context
+        super().execute(client, context)
+        
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
-            
+        
+        # Get parameters from context
+        character_name = context.character_name
+        goal_type = context.get('goal_type', 'general')
+        
         self.log_execution_start(
-            character_name=self.character_name,
-            goal_type=self.goal_type
+            character_name=character_name,
+            goal_type=goal_type
         )
         
         try:
             # Get current character data
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
             
             character_data = character_response.data
             
             # Get context data
-            knowledge_base = kwargs.get('knowledge_base')
-            map_state = kwargs.get('map_state')
+            knowledge_base = context.knowledge_base
+            map_state = context.map_state
             
             # Analyze current workshop knowledge
             workshop_analysis = self._analyze_workshop_knowledge(knowledge_base, map_state)
             
             # Determine workshop requirements for current goals
             requirements_analysis = self._analyze_workshop_requirements(
-                character_data, knowledge_base, self.goal_type
+                character_data, knowledge_base, goal_type
             )
             
             # Identify missing workshops and discovery needs
@@ -96,7 +99,7 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
             # Create result
             result = self.get_success_response(
                 workshop_requirements_known=True,
-                goal_type=self.goal_type,
+                goal_type=goal_type,
                 **workshop_analysis,
                 **requirements_analysis,
                 **discovery_analysis,
@@ -458,4 +461,4 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
             return {'need_workshop_discovery': True}
 
     def __repr__(self):
-        return f"AnalyzeWorkshopRequirementsAction({self.character_name}, {self.goal_type})"
+        return "AnalyzeWorkshopRequirementsAction()"

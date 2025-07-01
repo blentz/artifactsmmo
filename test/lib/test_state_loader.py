@@ -1,13 +1,12 @@
 """Unit tests for StateLoader and YAML-driven state management."""
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import os
-import yaml
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
-from src.lib.state_loader import StateFactory, StateConfigLoader, StateClassConfig, StateManagerMixin
-from src.lib.yaml_data import YamlData
+import yaml
+from src.lib.state_loader import StateClassConfig, StateConfigLoader, StateFactory, StateManagerMixin
 
 
 class MockState:

@@ -1,10 +1,9 @@
 """Unit tests for KnowledgeBase class."""
 
-import unittest
-import tempfile
 import os
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+import tempfile
+import unittest
+from unittest.mock import Mock
 
 from src.controller.knowledge.base import KnowledgeBase
 from src.game.map.state import MapState

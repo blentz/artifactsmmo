@@ -6,14 +6,13 @@ replacing hardcoded if-elif blocks with YAML-configurable action handling.
 """
 
 import logging
-import yaml
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import time
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from .action_factory import ActionFactory
-from ..lib.yaml_data import YamlData
 from ..game.globals import CONFIG_PREFIX
+from ..lib.yaml_data import YamlData
+from .action_factory import ActionFactory
 
 
 @dataclass
@@ -94,7 +93,6 @@ class ActionExecutor:
         start_time = None
         
         try:
-            import time
             start_time = time.time()
             
             # Check if this is a composite action
@@ -518,7 +516,7 @@ class ActionExecutor:
                     else:
                         self.logger.debug(f"🔍 No combat data available to record - monster: {monster_code}, result: {result}")
                 else:
-                    self.logger.warning(f"⚠️ No response data available for attack learning")
+                    self.logger.warning("⚠️ No response data available for attack learning")
             
         
         except Exception as e:

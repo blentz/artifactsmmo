@@ -1,8 +1,12 @@
 """ MoveAction module """
 
-from typing import Dict, Optional, Tuple
-from .movement_base import MovementActionBase
+from typing import TYPE_CHECKING, Optional, Tuple
+
 from .coordinate_mixin import CoordinateStandardizationMixin
+from .movement_base import MovementActionBase
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 
 class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
@@ -18,40 +22,42 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
     }
     weights = {'move': 1.0}
 
-    def __init__(self, character_name, x=None, y=None, use_target_coordinates=False):
+    def __init__(self):
         """
         Initialize move action.
-        
-        Args:
-            character_name: Character name
-            x: Target X coordinate (optional)
-            y: Target Y coordinate (optional)
-            use_target_coordinates: Whether to use coordinates from action context
         """
-        super().__init__(character_name)
-        self.x = x
-        self.y = y
-        self.use_target_coordinates = use_target_coordinates
+        super().__init__()
 
-    def get_target_coordinates(self, **kwargs) -> Tuple[Optional[int], Optional[int]]:
+    def get_target_coordinates(self, context: 'ActionContext') -> Tuple[Optional[int], Optional[int]]:
         """
         Get target coordinates from action parameters or context using standardized format.
         
         Args:
-            **kwargs: Context parameters
+            context: ActionContext with parameters
             
         Returns:
             Tuple of (target_x, target_y) coordinates
         """
-        # If specific coordinates provided, use them
-        if self.x is not None and self.y is not None:
-            return self.x, self.y
+        # Check for target coordinates from previous actions (find_monsters, etc.)
+        target_x = context.get('target_x')
+        target_y = context.get('target_y')
+        if target_x is not None and target_y is not None:
+            return target_x, target_y
         
-        # If use_target_coordinates flag is set, get from action context using standardized logic
-        if self.use_target_coordinates:
-            return self.get_standardized_coordinates(**kwargs)
+        # Check for direct x,y coordinates in context
+        x = context.get('x')
+        y = context.get('y')
+        if x is not None and y is not None:
+            return x, y
+        
+        # Check use_target_coordinates flag
+        use_target_coordinates = context.get('use_target_coordinates', False)
+        if use_target_coordinates:
+            # Convert context to dict for get_standardized_coordinates
+            context_dict = dict(context) if hasattr(context, '__iter__') else {}
+            return self.get_standardized_coordinates(**context_dict)
         
         return None, None
 
     def __repr__(self):
-        return f"MoveAction({self.character_name}, {self.x}, {self.y})"
+        return "MoveAction()"

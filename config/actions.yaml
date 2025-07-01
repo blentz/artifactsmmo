@@ -99,20 +99,37 @@ actions:
     weight: 2.0
     description: "Find nearby resource locations for gathering"
     
-  evaluate_weapon_recipes:
+  analyze_equipment_gaps:
     conditions:
       character_alive: true
-      need_equipment: true
-      best_weapon_selected: false
-      character_safe: true
+    reactions:
+      equipment_gaps_analyzed: true
+      equipment_analysis_available: true
+    weight: 1.0
+    description: "Analyze all equipment slots for upgrade opportunities"
+
+  select_optimal_slot:
+    conditions:
+      equipment_gaps_analyzed: true
+      character_alive: true
+    reactions:
+      optimal_slot_selected: true
+      target_slot_specified: true
+    weight: 1.5
+    description: "Select optimal equipment slot for crafting based on gaps and priorities"
+
+  evaluate_recipes:
+    conditions:
+      character_alive: true
+      target_slot_specified: true
     reactions:
       equipment_info_known: true
       recipe_known: true
-      best_weapon_selected: true
-      craftable_weapon_identified: true
+      best_recipe_selected: true
+      craftable_item_identified: true
       need_specific_workshop: true
-    weight: 1.5
-    description: "Intelligently evaluate all weapon recipes and select the best craftable option"
+    weight: 2.0
+    description: "Evaluate recipes for specified equipment slot and select the best craftable option"
     
   upgrade_weaponcrafting_skill:
     conditions:
@@ -147,7 +164,7 @@ actions:
       character_alive: true
       need_equipment: true
       character_safe: true
-      best_weapon_selected: true
+      best_recipe_selected: true
     reactions:
       craft_plan_available: true
       material_requirements_known: true
@@ -155,18 +172,50 @@ actions:
     weight: 2.0
     description: "Recursively analyze complete crafting dependency chain from raw materials to final equipment"
     
+  plan_crafting_materials:
+    conditions:
+      character_alive: true
+      best_recipe_selected: true
+      craft_plan_available: false
+      character_safe: true
+    reactions:
+      craft_plan_available: true
+      need_resources: true
+      materials_sufficient: true
+      material_requirements_known: true
+      recipe_known: true
+      need_equipment: false
+    weight: 2.5
+    description: "Plan material gathering for selected item to craft"
+    
+  execute_crafting_plan:
+    conditions:
+      character_alive: true
+      character_safe: true
+      craft_plan_available: true
+      materials_sufficient: true
+      at_correct_workshop: true
+    reactions:
+      has_equipment: true
+      inventory_updated: true
+      craft_plan_available: false
+      equipment_ready: true
+      item_crafted: true
+    weight: 3.0
+    description: "Execute crafting plan including unequipping materials and crafting"
+    
   transform_raw_materials:
     conditions:
       character_alive: true
       character_safe: true
       has_raw_materials: true
       at_correct_workshop: true
-      best_weapon_selected: true
+      best_recipe_selected: true
     reactions:
       has_refined_materials: true
       inventory_updated: true
     weight: 2.5
-    description: "Transform raw materials into refined materials based on selected weapon recipe"
+    description: "Transform raw materials into refined materials based on selected recipe"
     
   craft_item:
     conditions:
@@ -175,12 +224,12 @@ actions:
       has_refined_materials: true
       at_correct_workshop: true
       need_equipment: true
-      best_weapon_selected: true
+      best_recipe_selected: true
     reactions:
       has_equipment: true
       inventory_updated: true
     weight: 3.0
-    description: "Craft selected weapon at correct workshop using available materials"
+    description: "Craft selected item at correct workshop using available materials"
     
     
   lookup_item_info:
@@ -201,7 +250,7 @@ actions:
       character_safe: true
       has_equipment: true
       inventory_updated: true
-      best_weapon_selected: true
+      best_recipe_selected: true
     reactions:
       equipment_equipped: true
       character_stats_improved: true
@@ -210,7 +259,7 @@ actions:
       has_better_weapon: true
       has_better_armor: true
     weight: 4.0
-    description: "Equip the crafted weapon to improve character combat effectiveness"
+    description: "Equip the crafted item to improve character effectiveness"
     
   unequip_item:
     conditions:

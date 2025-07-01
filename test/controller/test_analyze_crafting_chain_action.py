@@ -1,10 +1,12 @@
 """Test module for AnalyzeCraftingChainAction."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
+
 from test.fixtures import create_mock_client
 
 
@@ -19,10 +21,7 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         
         self.character_name = "test_character"
         self.target_item = "iron_sword"
-        self.action = AnalyzeCraftingChainAction(
-            character_name=self.character_name,
-            target_item=self.target_item
-        )
+        self.action = AnalyzeCraftingChainAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -32,43 +31,48 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
 
     def test_analyze_crafting_chain_action_initialization(self):
         """Test AnalyzeCraftingChainAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.target_item, "iron_sword")
-        self.assertEqual(self.action.analyzed_items, set())
-        self.assertEqual(self.action.resource_nodes, {})
-        self.assertEqual(self.action.workshops, {})
-        self.assertEqual(self.action.crafting_dependencies, {})
-        self.assertEqual(self.action.transformation_chains, [])
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(self.action, AnalyzeCraftingChainAction)
+        self.assertFalse(hasattr(self.action, 'character_name'))
+        self.assertFalse(hasattr(self.action, 'target_item'))
+        # analyzed_items is a valid instance variable for the action's functionality
+        self.assertTrue(hasattr(self.action, 'analyzed_items'))
 
     def test_analyze_crafting_chain_action_initialization_defaults(self):
         """Test AnalyzeCraftingChainAction initialization with defaults."""
-        action = AnalyzeCraftingChainAction("player")
-        self.assertEqual(action.character_name, "player")
-        self.assertIsNone(action.target_item)
+        action = AnalyzeCraftingChainAction()
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(action, AnalyzeCraftingChainAction)
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'target_item'))
 
     def test_analyze_crafting_chain_action_repr(self):
         """Test AnalyzeCraftingChainAction string representation."""
-        expected = "AnalyzeCraftingChainAction(test_character, target=iron_sword)"
+        expected = "AnalyzeCraftingChainAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_analyze_crafting_chain_action_repr_no_target(self):
         """Test AnalyzeCraftingChainAction string representation without target."""
-        action = AnalyzeCraftingChainAction("player")
-        expected = "AnalyzeCraftingChainAction(player, target=None)"
+        action = AnalyzeCraftingChainAction()
+        expected = "AnalyzeCraftingChainAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_character", target_item="iron_sword")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
     def test_execute_no_target_item(self):
         """Test execute fails without target item."""
-        action = AnalyzeCraftingChainAction("player")
+        from test.fixtures import MockActionContext
+        action = AnalyzeCraftingChainAction()
         client = create_mock_client()
+        context = MockActionContext(character_name="player")
         
-        result = action.execute(client)
+        result = action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('No target item specified', result['error'])
 
@@ -80,7 +84,9 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         
         client = create_mock_client()
         
-        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting chain analysis failed:', result['error'])
 
@@ -91,7 +97,9 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         
         client = create_mock_client()
         
-        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting chain analysis failed:', result['error'])
 
@@ -109,7 +117,9 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         
         client = create_mock_client()
         
-        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not analyze crafting chain', result['error'])
 
@@ -152,7 +162,9 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         
         client = create_mock_client()
         
-        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['target_item'], 'iron_sword')
         self.assertIn('chain_analysis', result)
@@ -176,7 +188,9 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         mock_knowledge_base = Mock()
         mock_knowledge_base.data.side_effect = Exception("Unexpected Error")
         
-        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting chain analysis failed:', result['error'])
 

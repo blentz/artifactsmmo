@@ -6,11 +6,11 @@ hardcoded if-elif blocks with YAML-driven state computation and response handlin
 """
 
 import logging
-from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime, timezone
+from typing import Any, Callable, Dict
 
-from src.lib.yaml_data import YamlData
 from src.game.globals import CONFIG_PREFIX
+from src.lib.yaml_data import YamlData
 
 
 class StateCalculationEngine:
@@ -221,24 +221,6 @@ class StateCalculationEngine:
         
         if computation_type == 'cooldown_check':
             return self._compute_cooldown_status(state)
-        elif computation_type == 'location_distance':
-            return self._compute_distance(computation_config, state)
-        elif computation_type == 'aggregation':
-            return self._compute_aggregation(computation_config, state)
-        elif computation_type == 'equipment_analysis':
-            return self._compute_equipment_analysis(computation_config, state, thresholds)
-        elif computation_type == 'equipment_check':
-            return self._compute_equipment_check(computation_config, state, thresholds)
-        elif computation_type == 'crafting_analysis':
-            return self._compute_crafting_analysis(computation_config, state, thresholds)
-        elif computation_type == 'workshop_analysis':
-            return self._compute_workshop_analysis(computation_config, state, thresholds)
-        elif computation_type == 'inventory_check':
-            return self._compute_inventory_check(computation_config, state, thresholds)
-        elif computation_type == 'knowledge_check':
-            return self._compute_knowledge_check(computation_config, state, thresholds)
-        elif computation_type == 'location_check':
-            return self._compute_location_check(computation_config, state, thresholds)
         elif computation_type == 'computed':
             # Method dispatch for computed states
             method_name = computation_config.get('method')
@@ -270,32 +252,6 @@ class StateCalculationEngine:
             self.logger.warning(f"Error computing cooldown status: {e}")
             return cooldown_seconds > 0
     
-    def _compute_equipment_analysis(self, config: Dict[str, Any], 
-                                  state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Compute equipment upgrade analysis. DEPRECATED - Use AnalyzeEquipmentAction instead."""
-        try:
-            analysis_type = config.get('analysis_type', 'general')
-            
-            # TODO: Replace this with AnalyzeEquipmentAction execution through ActionExecutor
-            # AnalyzeEquipmentAction provides superior functionality with:
-            # - Real-time equipment data from API
-            # - Comprehensive equipment tier analysis  
-            # - Dynamic upgrade priority calculation
-            # - Integration with item database for equipment stats
-            
-            # For now, use state flags set by AnalyzeEquipmentAction
-            if analysis_type == 'weapon_upgrade':
-                return state.get('has_better_weapon', False)
-            elif analysis_type == 'armor_upgrade':
-                return state.get('has_better_armor', False)
-            elif analysis_type == 'complete_equipment':
-                return state.get('has_complete_equipment_set', False)
-            else:
-                return state.get('equipment_analysis_available', False) and state.get('need_equipment', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Equipment analysis failed: {e}")
-            return False
     
     # REMOVED: _analyze_weapon_upgrade_need, _analyze_armor_upgrade_need, _analyze_complete_equipment_need
     # These functions duplicated functionality now available in AnalyzeEquipmentAction.
@@ -308,99 +264,9 @@ class StateCalculationEngine:
     # 
     # Use AnalyzeEquipmentAction through ActionExecutor instead of these hardcoded functions.
     
-    def _compute_equipment_check(self, config: Dict[str, Any], 
-                               state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Check equipment status and improvements. DEPRECATED - Use AnalyzeEquipmentAction instead."""
-        try:
-            check_type = config.get('check_type', 'general')
-            
-            # TODO: Replace this with AnalyzeEquipmentAction execution through ActionExecutor
-            # For now, use state flags set by AnalyzeEquipmentAction
-            if check_type == 'weapon_improved':
-                return state.get('has_better_weapon', False)
-            elif check_type == 'armor_improved':
-                return state.get('has_better_armor', False)
-            elif check_type == 'set_complete':
-                return state.get('has_complete_equipment_set', False)
-            else:
-                return state.get('equipment_analysis_available', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Equipment check failed: {e}")
-            return False
     
-    def _compute_crafting_analysis(self, config: Dict[str, Any], 
-                                 state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Analyze crafting material needs. DEPRECATED - Use AnalyzeCraftingRequirementsAction instead."""
-        try:
-            analysis_type = config.get('analysis_type', 'materials_needed')
-            
-            # TODO: Replace this with AnalyzeCraftingRequirementsAction execution through ActionExecutor
-            # AnalyzeCraftingRequirementsAction provides superior functionality with:
-            # - Real-time recipe analysis from API
-            # - Comprehensive material requirement calculations
-            # - Inventory vs requirements comparison
-            # - Crafting strategy recommendations
-            
-            # For now, use state flags set by AnalyzeCraftingRequirementsAction
-            if analysis_type == 'materials_needed':
-                return state.get('need_crafting_materials', False)
-            else:
-                return state.get('crafting_requirements_known', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Crafting analysis failed: {e}")
-            return False
     
-    def _compute_workshop_analysis(self, config: Dict[str, Any], 
-                                 state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Analyze workshop discovery needs. DEPRECATED - Use AnalyzeWorkshopRequirementsAction instead."""
-        try:
-            analysis_type = config.get('analysis_type', 'discovery_needed')
-            
-            # TODO: Replace this with AnalyzeWorkshopRequirementsAction execution through ActionExecutor
-            # AnalyzeWorkshopRequirementsAction provides superior functionality with:
-            # - Real-time workshop location analysis
-            # - Goal-specific workshop requirements
-            # - Workshop discovery priority calculation
-            # - Integration with crafting goals
-            
-            # For now, use state flags set by AnalyzeWorkshopRequirementsAction
-            if analysis_type == 'discovery_needed':
-                return state.get('need_workshop_discovery', False)
-            else:
-                return state.get('workshop_requirements_known', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Workshop analysis failed: {e}")
-            return False
     
-    def _compute_inventory_check(self, config: Dict[str, Any], 
-                               state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Check inventory status for materials and items. DEPRECATED - Use CheckInventoryAction instead."""
-        try:
-            check_type = config.get('check_type', 'general')
-            
-            # TODO: Replace this with CheckInventoryAction execution through ActionExecutor
-            # This function duplicates functionality available in CheckInventoryAction
-            
-            # For now, use state flags set by CheckInventoryAction
-            if check_type == 'raw_materials_available':
-                return state.get('has_raw_materials', False)
-            elif check_type == 'refined_materials_available':
-                return state.get('has_refined_materials', False)
-            elif check_type == 'materials_available':
-                return state.get('has_crafting_materials', False) or state.get('inventory_updated', False)
-            elif check_type == 'required_materials':
-                return state.get('materials_sufficient', False)
-            elif check_type == 'sufficient_quantity':
-                return state.get('materials_sufficient', False)
-            else:
-                return state.get('inventory_updated', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Inventory check failed: {e}")
-            return False
     
     # REMOVED: _check_inventory_for_item, _check_for_raw_materials, _check_for_refined_materials
     # These functions duplicated functionality available in CheckInventoryAction.
@@ -412,60 +278,7 @@ class StateCalculationEngine:
     # 
     # Use CheckInventoryAction through ActionExecutor instead of these hardcoded functions.
     
-    def _compute_knowledge_check(self, config: Dict[str, Any], 
-                               state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Check knowledge base for discovered information. DEPRECATED - Use AnalyzeKnowledgeStateAction instead."""
-        try:
-            check_type = config.get('check_type', 'general')
-            
-            # TODO: Replace this with AnalyzeKnowledgeStateAction execution through ActionExecutor
-            # AnalyzeKnowledgeStateAction provides superior functionality with:
-            # - Comprehensive knowledge base completeness analysis
-            # - Information gap identification and prioritization
-            # - Learning progress tracking and recommendations
-            # - Scope-specific knowledge analysis (combat, crafting, exploration)
-            
-            # For now, use state flags set by AnalyzeKnowledgeStateAction and other actions
-            if check_type == 'workshops_known':
-                return state.get('workshops_discovered', False)
-            elif check_type == 'material_requirements_discovered':
-                return state.get('equipment_info_known', False) and state.get('recipe_known', False)
-            elif check_type == 'optimal_weapon_identified':
-                return state.get('best_weapon_selected', False)
-            elif check_type == 'craftable_weapon_found':
-                return state.get('craftable_weapon_identified', False)
-            else:
-                return state.get('map_explored', False) or state.get('exploration_data_available', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Knowledge check failed: {e}")
-            return False
     
-    def _compute_location_check(self, config: Dict[str, Any], 
-                              state: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        """Check character location relative to objectives. DEPRECATED - Use CheckLocationAction instead."""
-        try:
-            check_type = config.get('check_type', 'general')
-            
-            # TODO: Replace this with CheckLocationAction execution through ActionExecutor
-            # CheckLocationAction provides superior functionality with:
-            # - Real-time location data from API
-            # - Workshop/resource/bank capability detection
-            # - Dynamic location analysis using knowledge base
-            
-            # For now, use state flags set by CheckLocationAction
-            if check_type == 'workshop_location':
-                return state.get('at_correct_workshop', False)
-            elif check_type == 'correct_workshop_location':
-                return state.get('at_correct_workshop', False)
-            elif check_type == 'resource_location':
-                return state.get('at_target_location', False)
-            else:
-                return state.get('at_target_location', False)
-                
-        except Exception as e:
-            self.logger.warning(f"Location check failed: {e}")
-            return False
     
     def process_action_response(self, action_name: str, response: Any, 
                               current_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -664,12 +477,6 @@ class StateCalculationEngine:
             return self._check_crafting_materials_needed(config, state, thresholds)
         elif method_name == 'check_workshop_discovery_needed':
             return self._check_workshop_discovery_needed(config, state, thresholds)
-        elif method_name == 'check_weaponcrafting_upgrade_needed':
-            return self._check_weaponcrafting_upgrade_needed(config, state, thresholds)
-        elif method_name == 'check_skill_upgrade_needed':
-            return self._check_skill_upgrade_needed(config, state, thresholds)
-        elif method_name == 'check_weaponcrafting_level_sufficient':
-            return self._check_weaponcrafting_level_sufficient(config, state, thresholds)
         else:
             self.logger.warning(f"Unknown computed method: {method_name}")
             return False
@@ -677,51 +484,86 @@ class StateCalculationEngine:
     def _check_combat_viability(self, config: Dict[str, Any], state: Dict[str, Any], 
                                thresholds: Dict[str, Any]) -> bool:
         """
-        Check if combat is viable. DEPRECATED - Use AnalyzeCombatViabilityAction instead.
+        Check if combat is viable using weighted win rate calculation.
         Returns True if combat is NOT viable (poor performance).
         """
         try:
-            # TODO: Replace this with AnalyzeCombatViabilityAction execution through ActionExecutor
-            # AnalyzeCombatViabilityAction provides superior functionality with:
-            # - Comprehensive combat performance analysis
-            # - Character combat readiness assessment
-            # - Strategic combat recommendations
-            # - Real-time monster data analysis
-            # - Combat risk assessment
-            
-            # Check if we have knowledge base to assess combat performance
+            # Get knowledge base to assess combat performance
             knowledge_base = state.get('knowledge_base') or state.get('_knowledge_base')
-            if knowledge_base:
-                # Get recent combat success rate across all monsters
-                total_combats = 0
-                total_losses = 0
-                
-                if hasattr(knowledge_base, 'data') and 'monsters' in knowledge_base.data:
-                    char_level = state.get('character_level', 1)
-                    
-                    # Check combat performance for all known monsters
-                    for monster_code, monster_data in knowledge_base.data['monsters'].items():
-                        if 'combat_results' in monster_data:
-                            # Filter recent combats at current level
-                            recent_results = [
-                                r for r in monster_data['combat_results']
-                                if abs(r.get('character_level', 1) - char_level) <= 1
-                            ]
-                            
-                            for result in recent_results[-5:]:  # Last 5 combats per monster
-                                total_combats += 1
-                                if result.get('result') == 'loss':
-                                    total_losses += 1
-                    
-                    # If we have enough combat data and high loss rate, combat is not viable
-                    if total_combats >= 3:  # Need at least 3 combats to judge
-                        loss_rate = total_losses / total_combats
-                        if loss_rate >= 0.75:  # 75% or more losses
-                            self.logger.info(f"⚔️ Combat not viable: {total_losses}/{total_combats} losses ({loss_rate:.0%})")
-                            return True
+            if not knowledge_base or not hasattr(knowledge_base, 'data'):
+                return False  # Assume combat is viable if no data
             
-            # For now, also use state flags set by AnalyzeCombatViabilityAction
-            return state.get('combat_not_viable', False)
+            char_level = state.get('character_level', 1)
+            character_data = state
+            min_win_rate = thresholds.get('min_combat_win_rate', 0.2)  # 20% minimum win rate
+            recency_decay = thresholds.get('recency_decay_factor', 0.9)
+            
+            # Analyze all known monsters to determine overall viability
+            total_weighted_wins = 0.0
+            total_weight = 0.0
+            recent_combats = []
+            
+            # Collect recent combat results across all monsters
+            for monster_code, monster_data in knowledge_base.data.get('monsters', {}).items():
+                combat_results = monster_data.get('combat_results', [])
+                
+                # Filter for recent combats at current level
+                level_filtered = [
+                    result for result in combat_results
+                    if abs(result.get('character_level', 1) - char_level) <= 1
+                ]
+                
+                # Add to recent combats list with monster code
+                for result in level_filtered:
+                    recent_combats.append({
+                        'monster': monster_code,
+                        'result': result.get('result'),
+                        'timestamp': result.get('timestamp', ''),
+                        'monster_level': monster_data.get('level', 1)
+                    })
+            
+            # Sort by timestamp to get truly recent fights
+            recent_combats.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            
+            # Calculate weighted win rate for recent combats
+            for i, combat in enumerate(recent_combats[:20]):  # Consider last 20 combats
+                weight = recency_decay ** i
+                total_weight += weight
+                
+                if combat['result'] == 'win':
+                    total_weighted_wins += weight
+                    
+                # Apply level-based penalty for fighting higher level monsters
+                level_diff = combat.get('monster_level', 1) - char_level
+                if level_diff > 0:
+                    # Reduce effective weight for fights against higher level monsters
+                    penalty = 0.1 * level_diff  # 10% penalty per level difference
+                    total_weight += penalty
+            
+            # Need at least 5 combats to make a determination
+            if len(recent_combats) < 5:
+                self.logger.debug(f"⚔️ Insufficient combat data ({len(recent_combats)} combats) - assuming viable")
+                return False  # Combat is viable by default
+            
+            # Calculate weighted win rate
+            weighted_win_rate = total_weighted_wins / total_weight if total_weight > 0 else 0.0
+            
+            # Check if combat is not viable
+            if weighted_win_rate < min_win_rate:
+                # Log detailed analysis
+                total_wins = sum(1 for c in recent_combats[:10] if c['result'] == 'win')
+                self.logger.warning(
+                    f"⚠️ Combat not viable: Recent win rate {weighted_win_rate:.1%} "
+                    f"({total_wins}/{min(10, len(recent_combats))} recent wins) below threshold {min_win_rate:.1%}"
+                )
+                
+                # Log recent combat results
+                for combat in recent_combats[:5]:
+                    self.logger.info(f"  - {combat['monster']}: {combat['result']}")
+                
+                return True  # combat_not_viable = True
+            
+            return False  # Combat is viable
             
         except Exception as e:
             self.logger.warning(f"Error checking combat viability: {e}")
@@ -757,46 +599,8 @@ class StateCalculationEngine:
         # Placeholder implementation - can be expanded
         return state.get('character_level', 1) >= 2
 
-    def _check_weaponcrafting_upgrade_needed(self, config: Dict[str, Any], state: Dict[str, Any], 
-                                           thresholds: Dict[str, Any]) -> bool:
-        """Check if weaponcrafting skill upgrade is needed. DEPRECATED - Use CheckSkillRequirementAction instead."""
-        try:
-            # TODO: Replace this with CheckSkillRequirementAction execution through ActionExecutor
-            # CheckSkillRequirementAction provides superior functionality with:
-            # - Dynamic skill requirement discovery from API
-            # - Comprehensive skill analysis for all skill types
-            # - Real-time item requirement checking
-            
-            # For now, use state flags set by CheckSkillRequirementAction
-            return state.get('need_weaponcrafting_upgrade', False)
-            
-        except Exception as e:
-            self.logger.warning(f"Error checking weaponcrafting upgrade need: {e}")
-            return False
 
-    def _check_skill_upgrade_needed(self, config: Dict[str, Any], state: Dict[str, Any], 
-                                  thresholds: Dict[str, Any]) -> bool:
-        """Check if any skill upgrade is needed. DEPRECATED - Use CheckSkillRequirementAction instead."""
-        try:
-            # TODO: Replace this with CheckSkillRequirementAction execution through ActionExecutor
-            # For now, use state flags set by CheckSkillRequirementAction
-            return state.get('need_skill_upgrade', False)
-            
-        except Exception as e:
-            self.logger.warning(f"Error checking skill upgrade need: {e}")
-            return False
 
-    def _check_weaponcrafting_level_sufficient(self, config: Dict[str, Any], state: Dict[str, Any], 
-                                             thresholds: Dict[str, Any]) -> bool:
-        """Check if weaponcrafting level is sufficient. DEPRECATED - Use CheckSkillRequirementAction instead."""
-        try:
-            # TODO: Replace this with CheckSkillRequirementAction execution through ActionExecutor
-            # For now, use state flags set by CheckSkillRequirementAction
-            return state.get('weaponcrafting_level_sufficient', False)
-            
-        except Exception as e:
-            self.logger.warning(f"Error checking weaponcrafting level sufficiency: {e}")
-            return False
 
     def reload_configuration(self) -> None:
         """Reload state engine configuration."""

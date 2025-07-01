@@ -4,6 +4,7 @@
 import argparse
 import logging
 from typing import List, Optional
+
 from src.lib.log import JSONFormatter
 
 

@@ -1,9 +1,10 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
 
 from src.lib.yaml_data import YamlData
+
 
 class TestYamlData(unittest.TestCase):
     def setUp(self):

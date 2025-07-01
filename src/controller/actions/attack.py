@@ -1,17 +1,16 @@
 """ AttackAction module """
 
+from typing import TYPE_CHECKING
+
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import sync as fight_character_api
-from .character_base import CharacterActionBase
 
-# Import to support testing with character state
-try:
-    from src.game.character.state import CharacterState
-except ImportError:
-    # Handle import for testing scenarios
-    CharacterState = None
+from .base import ActionBase
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 
-class AttackAction(CharacterActionBase):
+class AttackAction(ActionBase):
     """ Attack action for fighting monsters with XP tracking and HP safety """
     
     # GOAP parameters - can be overridden by configuration  
@@ -27,25 +26,25 @@ class AttackAction(CharacterActionBase):
     }
     weights = {'attack': 3.0}  # Higher weight since it's a goal action
 
-    def __init__(self, character_name):
-        """
-        Initialize attack action.
-        
-        Args:
-            character_name: Character name
-        """
-        super().__init__(character_name)
+    def __init__(self):
+        """Initialize attack action."""
+        super().__init__()
 
-    def execute(self, client, **kwargs):
+    def execute(self, client, context: 'ActionContext'):
         """ Execute the attack action """
-        if not self.validate_execution_context(client):
+        if not client:
             return self.get_error_response("No API client provided")
             
-        self.log_execution_start(character_name=self.character_name)
+        # Get character name from context
+        character_name = context.character_name
+        if not character_name:
+            return self.get_error_response("No character name provided")
+            
+        self.log_execution_start(character_name=character_name)
         
         try:
             response = fight_character_api(
-                name=self.character_name,
+                name=character_name,
                 client=client
             )
             
@@ -110,12 +109,12 @@ class AttackAction(CharacterActionBase):
             else:
                 return self.get_error_response(f"Attack failed: {error_msg}")
 
-    def estimate_fight_duration(self, character_state, monster_data=None):
+    def estimate_fight_duration(self, context: 'ActionContext', monster_data=None):
         """
         Estimate how long a fight will take based on character and monster stats.
         
         Args:
-            character_state: Current character state
+            context: ActionContext with character information
             monster_data: Optional monster data for more accurate estimates
             
         Returns:
@@ -129,9 +128,9 @@ class AttackAction(CharacterActionBase):
             return max(1, monster_hp // estimated_player_damage)
         
         # Default estimate based on character level
-        char_level = getattr(character_state, 'level', 1) if character_state else 1
+        char_level = getattr(context, 'character_level', None) or context.get('character_level', 1)
         # Higher level characters tend to fight stronger monsters that take longer
         return min(5, max(2, 5 - char_level // 5))  # 2-5 turns based on level
 
     def __repr__(self):
-        return f"AttackAction({self.character_name})"
+        return "AttackAction()"

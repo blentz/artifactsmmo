@@ -1,12 +1,14 @@
 """Working tests that demonstrate core search functionality."""
 
-import unittest
-import tempfile
 import os
-from unittest.mock import Mock, patch
+import tempfile
+import unittest
+from unittest.mock import Mock
+
 from src.controller.actions.find_resources import FindResourcesAction
 from src.controller.actions.search_base import SearchActionBase
 from src.game.map.state import MapState
+
 from test.fixtures import create_mock_client
 
 
@@ -31,7 +33,9 @@ class TestSearchWorking(unittest.TestCase):
 
     def test_find_resources_basic_functionality(self):
         """Test that FindResourcesAction can find resources successfully."""
-        action = FindResourcesAction(
+        action = FindResourcesAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
             character_x=self.character_x,
             character_y=self.character_y,
             search_radius=2,
@@ -61,8 +65,11 @@ class TestSearchWorking(unittest.TestCase):
         map_state.is_cache_fresh = Mock(return_value=True)
         map_state.scan = Mock()  # Won't be called since cache is fresh
         
+        # Add map_state to context
+        context.map_state = map_state
+        
         # Execute the action
-        result = action.execute(self.mock_client, map_state=map_state, resource_types=['copper_rocks'])
+        result = action.execute(self.mock_client, context)
         
         # Verify successful result
         self.assertTrue(result['success'])
@@ -131,11 +138,12 @@ class TestSearchWorking(unittest.TestCase):
         self.assertEqual(total_boundaries, 0)
         
         # Record boundary hits in all directions
-        search_action = SearchActionBase(character_x=5, character_y=5, search_radius=1)
-        search_action._record_boundary_hit(3, 5)  # West boundary (x < character_x, y == character_y)
-        search_action._record_boundary_hit(7, 5)  # East boundary (x > character_x, y == character_y)
-        search_action._record_boundary_hit(5, 3)  # South boundary (y < character_y, x == character_x)
-        search_action._record_boundary_hit(5, 7)  # North boundary (y > character_y, x == character_x)
+        search_action = SearchActionBase()
+        character_x, character_y = 5, 5
+        search_action._record_boundary_hit(character_x, character_y, 3, 5)  # West boundary (x < character_x, y == character_y)
+        search_action._record_boundary_hit(character_x, character_y, 7, 5)  # East boundary (x > character_x, y == character_y)
+        search_action._record_boundary_hit(character_x, character_y, 5, 3)  # South boundary (y < character_y, x == character_x)
+        search_action._record_boundary_hit(character_x, character_y, 5, 7)  # North boundary (y > character_y, x == character_x)
         
         # Verify boundaries were recorded
         self.assertGreater(len(SearchActionBase._map_boundaries['west']), 0)
@@ -144,8 +152,10 @@ class TestSearchWorking(unittest.TestCase):
         self.assertGreater(len(SearchActionBase._map_boundaries['north']), 0)
 
     def test_action_parameter_preservation(self):
-        """Test that action parameters are preserved correctly."""
-        action = FindResourcesAction(
+        """Test that action parameters are preserved correctly in context."""
+        action = FindResourcesAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
             character_x=10,
             character_y=15,
             search_radius=7,
@@ -154,13 +164,13 @@ class TestSearchWorking(unittest.TestCase):
             skill_type='mining'
         )
         
-        # Verify all parameters are preserved
-        self.assertEqual(action.character_x, 10)
-        self.assertEqual(action.character_y, 15)
-        self.assertEqual(action.search_radius, 7)
-        self.assertEqual(action.resource_types, ['iron_rocks', 'coal_rocks'])
-        self.assertEqual(action.character_level, 5)
-        self.assertEqual(action.skill_type, 'mining')
+        # Verify all parameters are preserved in context
+        self.assertEqual(context.character_x, 10)
+        self.assertEqual(context.character_y, 15)
+        self.assertEqual(context.get('search_radius'), 7)
+        self.assertEqual(context.get('resource_types'), ['iron_rocks', 'coal_rocks'])
+        self.assertEqual(context.character_level, 5)
+        self.assertEqual(context.get('skill_type'), 'mining')
 
 
 if __name__ == '__main__':

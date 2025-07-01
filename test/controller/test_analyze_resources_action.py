@@ -1,11 +1,17 @@
 """Test module for AnalyzeResourcesAction."""
 
 import unittest
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import (
+    MockActionContext,
+    MockKnowledgeBase,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+)
 
 
 class TestAnalyzeResourcesAction(unittest.TestCase):
@@ -13,55 +19,28 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
-        os.environ['DATA_PREFIX'] = self.temp_dir
+        self.temp_dir, self.original_data_prefix = create_test_environment()
         
-        self.action = AnalyzeResourcesAction(
-            character_x=10,
-            character_y=15,
-            character_level=5,
-            analysis_radius=8,
-            equipment_types=['weapon', 'armor']
-        )
+        self.action = AnalyzeResourcesAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
-        os.environ['DATA_PREFIX'] = self.original_data_prefix
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        cleanup_test_environment(self.temp_dir, self.original_data_prefix)
 
     def test_analyze_resources_action_initialization(self):
         """Test AnalyzeResourcesAction initialization."""
-        self.assertEqual(self.action.character_x, 10)
-        self.assertEqual(self.action.character_y, 15)
-        self.assertEqual(self.action.character_level, 5)
-        self.assertEqual(self.action.analysis_radius, 8)
-        self.assertEqual(self.action.equipment_types, ['weapon', 'armor'])
-
-    def test_analyze_resources_action_initialization_defaults(self):
-        """Test AnalyzeResourcesAction initialization with defaults."""
-        action = AnalyzeResourcesAction()
-        self.assertEqual(action.character_x, 0)
-        self.assertEqual(action.character_y, 0)
-        self.assertEqual(action.character_level, 1)
-        self.assertEqual(action.analysis_radius, 10)
-        self.assertEqual(action.equipment_types, ['weapon', 'armor', 'utility'])
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, AnalyzeResourcesAction)
 
     def test_analyze_resources_action_repr(self):
         """Test AnalyzeResourcesAction string representation."""
-        expected = "AnalyzeResourcesAction(10, 15, level=5, radius=8)"
+        expected = "AnalyzeResourcesAction()"
         self.assertEqual(repr(self.action), expected)
-
-    def test_analyze_resources_action_repr_no_types(self):
-        """Test AnalyzeResourcesAction string representation without equipment types."""
-        action = AnalyzeResourcesAction(character_x=5, character_y=3)
-        expected = "AnalyzeResourcesAction(5, 3, level=1, radius=10)"
-        self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -71,7 +50,16 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
         mock_find_resources.return_value = []
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            character_x=10,
+            character_y=15,
+            character_level=5,
+            analysis_radius=8,
+            equipment_types=['weapon', 'armor'],
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('No resources found in analysis radius', result['error'])
 
@@ -83,8 +71,18 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
         """Test exception handling during execution."""
         client = create_mock_client()
         
+        context = MockActionContext(
+            character_name="test_character",
+            character_x=10,
+            character_y=15,
+            character_level=5,
+            analysis_radius=8,
+            equipment_types=['weapon', 'armor'],
+            knowledge_base=MockKnowledgeBase()
+        )
+        
         with patch('src.controller.actions.analyze_resources.AnalyzeResourcesAction._find_nearby_resources', side_effect=Exception("Unexpected Error")):
-            result = self.action.execute(client)
+            result = self.action.execute(client, context)
             self.assertFalse(result['success'])
             self.assertIn('Resource analysis failed: Unexpected Error', result['error'])
 

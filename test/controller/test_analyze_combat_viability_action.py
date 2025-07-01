@@ -1,13 +1,19 @@
 """Test module for AnalyzeCombatViabilityAction."""
 
 import unittest
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.analyze_combat_viability import AnalyzeCombatViabilityAction
+
 from test.fixtures import (
-    create_mock_client, MockCharacterData, MockKnowledgeBase, MockMapState,
-    mock_character_response, create_test_environment, cleanup_test_environment
+    MockActionContext,
+    MockCharacterData,
+    MockKnowledgeBase,
+    MockMapState,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+    mock_character_response,
 )
 
 
@@ -18,10 +24,7 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir, self.original_data_prefix = create_test_environment()
         
-        self.action = AnalyzeCombatViabilityAction(
-            character_name="test_character",
-            analysis_radius=3
-        )
+        self.action = AnalyzeCombatViabilityAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -29,23 +32,26 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
 
     def test_analyze_combat_viability_action_initialization(self):
         """Test AnalyzeCombatViabilityAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.analysis_radius, 3)
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(self.action, AnalyzeCombatViabilityAction)
+        self.assertFalse(hasattr(self.action, 'analysis_radius'))
 
     def test_analyze_combat_viability_action_initialization_defaults(self):
         """Test AnalyzeCombatViabilityAction initialization with defaults."""
-        action = AnalyzeCombatViabilityAction("test")
-        self.assertEqual(action.character_name, "test")
-        self.assertEqual(action.analysis_radius, 3)
+        action = AnalyzeCombatViabilityAction()
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(action, AnalyzeCombatViabilityAction)
+        self.assertFalse(hasattr(action, 'analysis_radius'))
 
     def test_analyze_combat_viability_action_repr(self):
         """Test AnalyzeCombatViabilityAction string representation."""
-        expected = "AnalyzeCombatViabilityAction(test_character, radius=3)"
+        expected = "AnalyzeCombatViabilityAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -54,8 +60,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         """Test execute fails when character data unavailable."""
         mock_get_character.return_value = None
         client = create_mock_client()
+        context = MockActionContext(character_name="test_character", character_state="no_state")
         
-        result = self.action.execute(client)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -73,8 +80,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
+        context = MockActionContext(character_name="test_character")
         
-        result = self.action.execute(client)
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['combat_viability_known'])
@@ -109,7 +117,12 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        context = MockActionContext(
+            character_name="test_character",
+            knowledge_base=knowledge_base,
+            map_state=map_state
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['combat_viability_known'])
@@ -127,8 +140,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
+        context = MockActionContext(character_name="test_character", character_state="no_state")
         
-        result = self.action.execute(client)
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertFalse(result['ready_for_combat'])  # Should not be combat ready with low HP
@@ -138,8 +152,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         """Test exception handling during execution."""
         mock_get_character.side_effect = Exception("API Error")
         client = create_mock_client()
+        context = MockActionContext(character_name="test_character", character_state="no_state")
         
-        result = self.action.execute(client)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Combat viability analysis failed: API Error', result['error'])
 
@@ -180,8 +195,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         
         mock_get_character.return_value = mock_character_response(character_data)
         client = create_mock_client()
+        context = MockActionContext(character_name="test_character")
         
-        result = self.action.execute(client)
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['ready_for_combat'])
@@ -209,7 +225,12 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         map_state = MockMapState()
         client = create_mock_client()
         
-        result = self.action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        context = MockActionContext(
+            character_name="test_character",
+            knowledge_base=knowledge_base,
+            map_state=map_state
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('primary_recommendation', result)
@@ -234,7 +255,11 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            knowledge_base=knowledge_base
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         # Should calculate win rate as 75% (3 wins out of 4 fights)

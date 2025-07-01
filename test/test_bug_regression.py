@@ -8,17 +8,16 @@ This test file covers the major bugs that were fixed:
 4. Cooldown handling to execute wait actions during cooldowns
 """
 
-import unittest
+import os
 import tempfile
 import time
-import os
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timezone, timedelta
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
 
-from src.lib.yaml_data import YamlData
-from src.game.map.state import MapState
 from src.controller.ai_player_controller import AIPlayerController
-from src.game.character.state import CharacterState
+from src.lib.yaml_data import YamlData
+
 from test.fixtures import create_mock_client
 
 
@@ -74,8 +73,6 @@ class TestYamlDataNestedStructureBug(unittest.TestCase):
         
     def test_knowledge_persistence_content_type_mapping(self):
         """Test that knowledge persistence works with proper content type mapping."""
-        import tempfile
-        import os
         from src.controller.ai_player_controller import AIPlayerController
         
         # Create controller with content type mapping
@@ -124,7 +121,7 @@ class TestYamlDataNestedStructureBug(unittest.TestCase):
         
         # Read file directly to verify structure
         import yaml
-        with open(self.filename, 'r') as f:
+        with open(self.filename) as f:
             saved_content = yaml.safe_load(f)
         
         # Should have proper structure with data wrapped correctly
@@ -287,7 +284,8 @@ class TestCooldownHandlingBug(unittest.TestCase):
     
     @patch('src.controller.ai_player_controller.StateManagerMixin.initialize_state_management')
     @patch('src.controller.ai_player_controller.StateManagerMixin.create_managed_state')
-    def test_character_state_refresh_for_cooldown_detection(self, mock_create_state, mock_init_state):
+    @patch.object(AIPlayerController, '_invalidate_location_states')
+    def test_character_state_refresh_for_cooldown_detection(self, mock_invalidate, mock_create_state, mock_init_state):
         """Test that character state is refreshed before cooldown detection."""
         # Setup mocks
         mock_world_state = Mock()
@@ -315,7 +313,7 @@ class TestCooldownHandlingBug(unittest.TestCase):
         controller.set_character_state(mock_character_state)
         
         # Mock the API call that refreshes character state
-        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync') as mock_get_char:
+        with patch('src.controller.ai_player_controller.get_character') as mock_get_char:
             mock_response = Mock()
             mock_response.data.to_dict.return_value = {
                 'cooldown': 10,
@@ -339,7 +337,8 @@ class TestCooldownHandlingBug(unittest.TestCase):
     
     @patch('src.controller.ai_player_controller.StateManagerMixin.initialize_state_management')
     @patch('src.controller.ai_player_controller.StateManagerMixin.create_managed_state')
-    def test_cooldown_detection_triggers_wait_action(self, mock_create_state, mock_init_state):
+    @patch.object(AIPlayerController, '_invalidate_location_states')
+    def test_cooldown_detection_triggers_wait_action(self, mock_invalidate, mock_create_state, mock_init_state):
         """Test that detected cooldown triggers wait action execution."""
         # Setup mocks
         mock_world_state = Mock()
@@ -442,7 +441,7 @@ class TestDataPersistenceBug(unittest.TestCase):
         
         # Verify proper structure
         import yaml
-        with open(test_file, 'r') as f:
+        with open(test_file) as f:
             saved_content = yaml.safe_load(f)
         
         # Should have the expected structure

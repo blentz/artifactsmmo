@@ -6,17 +6,15 @@ This test module verifies that the AI player can successfully complete
 the XP-seeking cycle: find_monsters → move → attack → gain XP → replan → repeat.
 """
 
-import unittest
-import tempfile
 import os
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
 from src.controller.ai_player_controller import AIPlayerController
+from src.controller.goal_manager import GOAPGoalManager
 from src.controller.goap_execution_manager import GOAPExecutionManager
 from src.controller.mission_executor import MissionExecutor
-from src.controller.goal_manager import GOAPGoalManager
-from src.game.character.state import CharacterState
 from src.lib.goap_data import GoapData
 
 

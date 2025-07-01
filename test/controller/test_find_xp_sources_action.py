@@ -1,10 +1,12 @@
 """Test module for FindXpSourcesAction."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.find_xp_sources import FindXpSourcesAction
+
 from test.fixtures import create_mock_client
 
 
@@ -18,7 +20,7 @@ class TestFindXpSourcesAction(unittest.TestCase):
         os.environ['DATA_PREFIX'] = self.temp_dir
         
         self.skill = "weaponcrafting"
-        self.action = FindXpSourcesAction(self.skill, character_level=5)
+        self.action = FindXpSourcesAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -28,29 +30,34 @@ class TestFindXpSourcesAction(unittest.TestCase):
 
     def test_find_xp_sources_action_initialization(self):
         """Test FindXpSourcesAction initialization."""
-        self.assertEqual(self.action.skill, "weaponcrafting")
-        self.assertEqual(self.action.kwargs.get('character_level'), 5)
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(self.action, FindXpSourcesAction)
+        self.assertFalse(hasattr(self.action, 'skill'))
+        self.assertFalse(hasattr(self.action, 'character_level'))
 
     def test_find_xp_sources_action_initialization_defaults(self):
         """Test FindXpSourcesAction initialization with defaults."""
-        action = FindXpSourcesAction("mining")
-        self.assertEqual(action.skill, "mining")
-        self.assertEqual(action.kwargs, {})
+        action = FindXpSourcesAction()
+        self.assertIsInstance(action, FindXpSourcesAction)
+        self.assertFalse(hasattr(action, 'skill'))
+        self.assertFalse(hasattr(action, 'kwargs'))
 
     def test_find_xp_sources_action_repr(self):
         """Test FindXpSourcesAction string representation."""
-        expected = "FindXpSourcesAction(skill=weaponcrafting)"
+        expected = "FindXpSourcesAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_find_xp_sources_action_repr_no_kwargs(self):
         """Test FindXpSourcesAction string representation without kwargs."""
-        action = FindXpSourcesAction("cooking")
-        expected = "FindXpSourcesAction(skill=cooking)"
+        action = FindXpSourcesAction()
+        expected = "FindXpSourcesAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(skill="weaponcrafting", character_level=5)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -60,7 +67,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
         mock_learning_manager = Mock()
         
         # Execute with learning_manager but no knowledge_base
-        result = self.action.execute(client, learning_manager=mock_learning_manager)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(skill="weaponcrafting", learning_manager=mock_learning_manager, knowledge_base=None)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Knowledge base not available', result['error'])
 
@@ -70,7 +79,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
         mock_knowledge_base = Mock()
         
         # Execute with knowledge_base but no learning_manager
-        result = self.action.execute(client, knowledge_base=mock_knowledge_base)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Learning manager not available', result['error'])
 
@@ -83,11 +94,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
         mock_learning_manager = Mock()
         mock_learning_manager.find_xp_sources_for_skill.return_value = None
         
-        result = self.action.execute(
-            client,
-            knowledge_base=mock_knowledge_base,
-            learning_manager=mock_learning_manager
-        )
+        from test.fixtures import MockActionContext
+        context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn("No XP sources found for skill 'weaponcrafting'", result['error'])
 
@@ -109,11 +118,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
             {'source': 'iron_sword', 'xp': 20}
         ]
         
-        result = self.action.execute(
-            client,
-            knowledge_base=mock_knowledge_base,
-            learning_manager=mock_learning_manager
-        )
+        from test.fixtures import MockActionContext
+        context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['skill'], 'weaponcrafting')
         self.assertIn('xp_sources', result)
@@ -136,11 +143,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
         
         # Mock the _analyze_actionable_sources to return something
         with patch.object(self.action, '_analyze_actionable_sources', return_value=[{'item': 'copper_sword'}]):
-            result = self.action.execute(
-                client,
-                knowledge_base=mock_knowledge_base,
-                learning_manager=mock_learning_manager
-            )
+            from test.fixtures import MockActionContext
+            context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
+            result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['total_sources_found'], 1)
@@ -157,11 +162,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
             {'source': 'unknown_source', 'xp': 5}
         ]
         
-        result = self.action.execute(
-            client,
-            knowledge_base=mock_knowledge_base,
-            learning_manager=mock_learning_manager
-        )
+        from test.fixtures import MockActionContext
+        context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['total_sources_found'], 1)
 
@@ -180,11 +183,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
         
         # Mock _check_effects_data_available to return False
         with patch.object(self.action, '_check_effects_data_available', return_value=False):
-            result = self.action.execute(
-                client,
-                knowledge_base=mock_knowledge_base,
-                learning_manager=mock_learning_manager
-            )
+            from test.fixtures import MockActionContext
+            context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
+            result = self.action.execute(client, context)
         
         # Verify effects learning was called
         mock_learning_manager.learn_all_effects_bulk.assert_called_once_with(client)
@@ -217,12 +218,14 @@ class TestFindXpSourcesAction(unittest.TestCase):
 
     def test_find_alternative_skill_names(self):
         """Test _find_alternative_skill_names method."""
+        from unittest.mock import Mock
         # Test that method returns a list
-        alternatives = self.action._find_alternative_skill_names('weaponcrafting')
+        mock_kb = Mock()
+        alternatives = self.action._find_alternative_skill_names('weaponcrafting', mock_kb)
         self.assertIsInstance(alternatives, list)
         
         # Test skill with no variations
-        alternatives = self.action._find_alternative_skill_names('mining')
+        alternatives = self.action._find_alternative_skill_names('mining', mock_kb)
         self.assertIsInstance(alternatives, list)
 
 

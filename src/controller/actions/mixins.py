@@ -5,8 +5,8 @@ This module provides mixins that encapsulate common patterns found across
 multiple action classes, reducing code duplication.
 """
 
-from typing import Dict, Optional, Any, Tuple, List
-import logging
+from typing import Any, Dict, List, Optional, Tuple
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 

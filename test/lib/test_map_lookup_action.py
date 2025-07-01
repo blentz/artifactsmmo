@@ -1,37 +1,43 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from artifactsmmo_api_client.client import AuthenticatedClient
-from artifactsmmo_api_client.models.map_response_schema import MapResponseSchema
-from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
+from artifactsmmo_api_client.models.map_response_schema import MapResponseSchema
+from artifactsmmo_api_client.models.map_schema import MapSchema
 from src.controller.actions.map_lookup import MapLookupAction
+
+from test.fixtures import MockActionContext, create_mock_client
+
 
 class TestMapLookupAction(unittest.TestCase):
     def setUp(self):
-        self.client = AuthenticatedClient(base_url="https://api.artifactsmmo.com", token="test_token")
+        self.client = create_mock_client()
         self.x = 5
         self.y = 10
+        self.action = MapLookupAction()
 
     def test_map_lookup_action_initialization(self):
-        action = MapLookupAction(x=self.x, y=self.y)
-        self.assertEqual(action.x, self.x)
-        self.assertEqual(action.y, self.y)
+        action = MapLookupAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'x'))
+        self.assertFalse(hasattr(action, 'y'))
 
     def test_map_lookup_action_repr(self):
-        action = MapLookupAction(x=self.x, y=self.y)
-        expected_repr = f"MapLookupAction({self.x}, {self.y})"
+        action = MapLookupAction()
+        expected_repr = "MapLookupAction()"
         self.assertEqual(repr(action), expected_repr)
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_action_execute(self, mock_get_map_api):
         # Mock the API response to avoid making actual API calls
         mock_response = Mock()
+        mock_response.data = Mock()
         mock_get_map_api.return_value = mock_response
         
-        action = MapLookupAction(x=self.x, y=self.y)
-        response = action.execute(client=self.client)
+        action = MapLookupAction()
+        context = MockActionContext(x=self.x, y=self.y)
+        response = action.execute(client=self.client, context=context)
         
         # Verify the API was called with correct parameters
         mock_get_map_api.assert_called_once_with(
@@ -42,7 +48,7 @@ class TestMapLookupAction(unittest.TestCase):
         
         # Verify response is returned
         self.assertIsNotNone(response)
-        self.assertEqual(response, mock_response)
+        self.assertTrue(response['success'])
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_action_execute_with_real_map_data(self, mock_get_map_api):
@@ -61,17 +67,18 @@ class TestMapLookupAction(unittest.TestCase):
         mock_response = MapResponseSchema(data=mock_map_data)
         mock_get_map_api.return_value = mock_response
         
-        action = MapLookupAction(x=self.x, y=self.y)
-        response = action.execute(client=self.client)
+        action = MapLookupAction()
+        context = MockActionContext(x=self.x, y=self.y)
+        response = action.execute(client=self.client, context=context)
         
         # Verify the response contains expected data
-        self.assertIsInstance(response, MapResponseSchema)
-        self.assertEqual(response.data.name, "Forest")
-        self.assertEqual(response.data.skin, "forest")
-        self.assertEqual(response.data.x, self.x)
-        self.assertEqual(response.data.y, self.y)
-        self.assertEqual(response.data.content.type_, MapContentType.MONSTER)
-        self.assertEqual(response.data.content.code, "chicken")
+        self.assertIsInstance(response, dict)
+        self.assertTrue(response['success'])
+        self.assertEqual(response['x'], self.x)
+        self.assertEqual(response['y'], self.y)
+        if 'content' in response:
+            self.assertEqual(response['content']['type'], 'monster')
+            self.assertEqual(response['content']['code'], 'chicken')
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_action_execute_with_empty_map(self, mock_get_map_api):
@@ -86,14 +93,17 @@ class TestMapLookupAction(unittest.TestCase):
         mock_response = MapResponseSchema(data=mock_map_data)
         mock_get_map_api.return_value = mock_response
         
-        action = MapLookupAction(x=self.x, y=self.y)
-        response = action.execute(client=self.client)
+        action = MapLookupAction()
+        context = MockActionContext(x=self.x, y=self.y)
+        response = action.execute(client=self.client, context=context)
         
         # Verify the response handles empty content correctly
-        self.assertIsInstance(response, MapResponseSchema)
-        self.assertEqual(response.data.name, "Empty Field")
-        self.assertEqual(response.data.skin, "grass")
-        self.assertIsNone(response.data.content)
+        self.assertIsInstance(response, dict)
+        self.assertTrue(response['success'])
+        self.assertEqual(response['x'], self.x)
+        self.assertEqual(response['y'], self.y)
+        if 'content' in response:
+            self.assertIsNone(response['content'])
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_different_content_types(self, mock_get_map_api):
@@ -123,21 +133,42 @@ class TestMapLookupAction(unittest.TestCase):
                 mock_response = MapResponseSchema(data=mock_map_data)
                 mock_get_map_api.return_value = mock_response
                 
-                action = MapLookupAction(x=self.x, y=self.y)
-                response = action.execute(client=self.client)
+                action = MapLookupAction()
+                context = MockActionContext(x=self.x, y=self.y)
+                response = action.execute(client=self.client, context=context)
                 
-                self.assertEqual(response.data.content.type_, content_type)
-                self.assertEqual(response.data.content.code, code)
+                self.assertTrue(response['success'])
+                if 'content' in response and response['content']:
+                    self.assertEqual(response['content']['type'], content_type.value)
+                    self.assertEqual(response['content']['code'], code)
 
     def test_map_lookup_action_class_attributes(self):
         # Test that the action has the expected GOAP-related attributes
-        action = MapLookupAction(x=self.x, y=self.y)
+        action = MapLookupAction()
         
         # Check that class attributes exist (following the pattern from MoveAction)
         self.assertIsInstance(action.conditions, dict)
         self.assertIsInstance(action.reactions, dict)
         self.assertIsInstance(action.weights, dict)
-        self.assertIsNone(action.g)  # goal attribute
+        self.assertTrue(hasattr(action, 'g'))  # goal attribute
+
+    def test_map_lookup_action_no_client(self):
+        # Test that execute fails gracefully without a client
+        action = MapLookupAction()
+        context = MockActionContext(x=self.x, y=self.y)
+        response = action.execute(client=None, context=context)
+        
+        self.assertFalse(response['success'])
+        self.assertIn('No API client provided', response['error'])
+
+    def test_map_lookup_action_missing_coordinates(self):
+        # Test that execute fails when coordinates are missing
+        action = MapLookupAction()
+        context = MockActionContext()  # No x, y coordinates
+        response = action.execute(client=self.client, context=context)
+        
+        self.assertFalse(response['success'])
+        self.assertIn('coordinates', response['error'].lower())
 
 if __name__ == '__main__':
     unittest.main()

@@ -6,8 +6,12 @@ updating world state accordingly. Used as a GOAP reaction to determine if
 sufficient materials are available for crafting.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
@@ -25,33 +29,37 @@ class CheckInventoryAction(ActionBase):
     }
     weights = {"inventory_updated": 1.0}
 
-    def __init__(self, character_name: str, required_items: List[Dict] = None):
+    def __init__(self):
         """
         Initialize the check inventory action.
-
-        Args:
-            character_name: Name of the character to check
-            required_items: List of dicts with 'item_code' and 'quantity' keys
         """
         super().__init__()
-        self.character_name = character_name
-        self.required_items = required_items or []
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Check inventory for required items and update world state """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        character_name = context.character_name
+        required_items = context.get('required_items', [])
+        
+        # Handle both single string and list formats for required_items
+        if isinstance(required_items, str):
+            required_items = [{'item_code': required_items, 'quantity': 1}]
+        elif isinstance(required_items, list) and len(required_items) > 0 and isinstance(required_items[0], str):
+            required_items = [{'item_code': item, 'quantity': 1} for item in required_items]
             
-        self.log_execution_start(character_name=self.character_name, required_items=self.required_items)
+        self.log_execution_start(character_name=character_name, required_items=required_items)
         
         try:
             # Get current character inventory
-            inventory_dict = self._get_character_inventory(client)
+            inventory_dict = self._get_character_inventory(client, character_name)
             
             # Check for specific required items if provided
             item_checks = {}
-            if self.required_items:
-                for item_req in self.required_items:
+            if required_items:
+                for item_req in required_items:
                     item_code = item_req.get('item_code')
                     required_qty = item_req.get('quantity', 1)
                     current_qty = inventory_dict.get(item_code, 0)
@@ -66,8 +74,8 @@ class CheckInventoryAction(ActionBase):
                     self.logger.info(f"📦 {item_code}: {current_qty}/{required_qty} {'✅' if has_sufficient else '❌'}")
             
             # Analyze inventory for common material categories using API/knowledge base data
-            knowledge_base = kwargs.get('knowledge_base')
-            config_data = kwargs.get('config_data')
+            knowledge_base = context.knowledge_base
+            config_data = context.get('config_data')
             inventory_analysis = self._analyze_inventory_categories(inventory_dict, knowledge_base, config_data)
             
             # Update world state based on findings
@@ -80,7 +88,9 @@ class CheckInventoryAction(ActionBase):
                 'inventory_analysis': inventory_analysis,
                 'world_state_updates': world_state_updates,
                 'total_items': len([k for k, v in inventory_dict.items() if v > 0]),
-                'inventory_summary': self._create_inventory_summary(inventory_dict)
+                'inventory_summary': self._create_inventory_summary(inventory_dict),
+                # Add inventory_status for compatibility with transform_raw_materials
+                'inventory_status': {item: {'available': qty} for item, qty in inventory_dict.items()}
             }
             
             self.log_execution_result(result)
@@ -91,12 +101,12 @@ class CheckInventoryAction(ActionBase):
             self.log_execution_result(error_response)
             return error_response
 
-    def _get_character_inventory(self, client) -> Dict[str, int]:
+    def _get_character_inventory(self, client, character_name: str) -> Dict[str, int]:
         """
         Get character inventory as a dictionary of item_code -> quantity.
         """
         try:
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             
             if not character_response or not character_response.data:
                 return {}
@@ -285,4 +295,4 @@ class CheckInventoryAction(ActionBase):
         return f"{len(items)} items: {', '.join(items[:5])}" + ("..." if len(items) > 5 else "")
 
     def __repr__(self):
-        return f"CheckInventoryAction({self.character_name}, {len(self.required_items)} requirements)"
+        return "CheckInventoryAction()"

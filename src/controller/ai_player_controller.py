@@ -7,9 +7,18 @@ YAML-driven action execution.
 """
 
 import logging
-import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
+
+# Action classes are now loaded dynamically via ActionFactory from YAML configuration
+# State classes for type hints and learning method access
+from src.game.character.state import CharacterState
+from src.game.globals import CONFIG_PREFIX
+from src.game.map.state import MapState
+from src.lib.action_context import ActionContext
+from src.lib.yaml_data import YamlData
 
 # GOAP functionality now handled by GOAPExecutionManager
 from src.lib.state_loader import StateManagerMixin
@@ -17,16 +26,14 @@ from src.lib.state_loader import StateManagerMixin
 # Metaprogramming components
 from .action_executor import ActionExecutor, ActionResult
 from .cooldown_manager import CooldownManager
-from .mission_executor import MissionExecutor
-from .learning_manager import LearningManager
-from .skill_goal_manager import SkillGoalManager, SkillType
+
+# Additional imports
+from .goal_manager import GOAPGoalManager
 from .goap_execution_manager import GOAPExecutionManager
-
-# Action classes are now loaded dynamically via ActionFactory from YAML configuration
-
-# State classes for type hints and learning method access
-from src.game.character.state import CharacterState
-from src.game.map.state import MapState
+from .learning_manager import LearningManager
+from .mission_executor import MissionExecutor
+from .skill_goal_manager import SkillGoalManager, SkillType
+from .state_engine import StateCalculationEngine
 
 
 class AIPlayerController(StateManagerMixin):
@@ -45,11 +52,9 @@ class AIPlayerController(StateManagerMixin):
         # Initialize goal-driven system
         self.goal_manager = goal_manager
         if self.goal_manager is None:
-            from .goal_manager import GOAPGoalManager
             self.goal_manager = GOAPGoalManager()
         
         # Initialize state calculation engine
-        from .state_engine import StateCalculationEngine
         self.state_engine = StateCalculationEngine()
         
         # Initialize metaprogramming components
@@ -102,6 +107,43 @@ class AIPlayerController(StateManagerMixin):
         """
         self.character_state = character_state
         self.logger.info(f"Character state set: {character_state}")
+        # Invalidate location-based states when character is set/changed
+        self._invalidate_location_states()
+        
+    def _invalidate_location_states(self) -> None:
+        """
+        Invalidate location-based states that may be stale from previous runs.
+        
+        This prevents the GOAP planner from using outdated location information
+        like at_correct_workshop, at_target_location, etc.
+        """
+        if not self.world_state or not hasattr(self.world_state, 'data'):
+            return
+            
+        # Load location states from YAML configuration
+        try:
+            location_config = YamlData(f"{CONFIG_PREFIX}/location_states.yaml")
+            location_states = location_config.data.get('location_based_states', [])
+            
+            if not location_states:
+                self.logger.warning("No location-based states found in configuration")
+                return
+                
+        except Exception as e:
+            self.logger.warning(f"Could not load location states config: {e}")
+            # Fallback to essential states if config can't be loaded
+            location_states = ['at_correct_workshop', 'at_target_location', 'at_resource_location']
+        
+        # Invalidate each location-based state
+        invalidated_count = 0
+        for state in location_states:
+            if state in self.world_state.data:
+                self.world_state.data[state] = False
+                invalidated_count += 1
+                
+        if invalidated_count > 0:
+            self.world_state.save()
+            self.logger.debug(f"Invalidated {invalidated_count} location-based world states")
         
     def set_map_state(self, map_state: MapState) -> None:
         """
@@ -111,7 +153,7 @@ class AIPlayerController(StateManagerMixin):
             map_state: The map state to use
         """
         self.map_state = map_state
-        self.logger.info(f"Map state set")
+        self.logger.info("Map state set")
         
     # GOAP planning is now handled by GOAPExecutionManager
             
@@ -243,7 +285,7 @@ class AIPlayerController(StateManagerMixin):
                         self.logger.info(f"⏰ Still on cooldown after wait, will retry {action_name} next iteration")
                         return True, {}  # Return success so plan continues
                 else:
-                    self.logger.warning(f"❌ Wait action failed during cooldown")
+                    self.logger.warning("❌ Wait action failed during cooldown")
                     return False, {}
             
             # Prepare execution context
@@ -364,7 +406,7 @@ class AIPlayerController(StateManagerMixin):
         Returns:
             True if wait action was successful, False otherwise
         """
-        return self.cooldown_manager.handle_cooldown_with_wait(self.character_state, self.action_executor)
+        return self.cooldown_manager.handle_cooldown_with_wait(self.character_state, self.action_executor, self)
     
     def _is_character_on_cooldown(self) -> bool:
         """
@@ -396,23 +438,20 @@ class AIPlayerController(StateManagerMixin):
             return
             
         try:
-            import time
-            from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
             
             char_name = self.character_state.name
             response = get_character(name=char_name, client=self.client)
             
             if response and hasattr(response, 'data'):
                 # Update character state with fresh data
-                fresh_data = response.data.to_dict()
-                self.character_state.data.update(fresh_data)
+                self.character_state.update_from_api_response(response.data)
                 self.character_state.save()
                 
                 # Update cache timestamp after successful refresh
                 self.cooldown_manager.mark_character_state_refreshed()
                 
                 # Log cooldown information if present
-                cooldown_expiration = fresh_data.get('cooldown_expiration')
+                cooldown_expiration = self.character_state.data.get('cooldown_expiration')
                 if cooldown_expiration:
                     self.logger.info(f"Updated character cooldown expiration: {cooldown_expiration}")
                 else:
@@ -421,37 +460,25 @@ class AIPlayerController(StateManagerMixin):
         except Exception as e:
             self.logger.warning(f"Failed to refresh character state: {e}")
     
-    def _build_execution_context(self, action_data: Dict) -> Dict[str, Any]:
+    def _build_execution_context(self, action_data: Dict) -> 'ActionContext':
         """
-        Build execution context for action execution.
+        Build unified execution context for action execution.
         
         Args:
             action_data: Action data from the plan
             
         Returns:
-            Context dictionary with controller state and character info
+            ActionContext instance with all execution dependencies
         """
-        context = {
-            'controller': self,
-            'character_state': self.character_state,
-            'world_state': self.world_state,
-            'map_state': self.map_state,
-            'knowledge_base': self.knowledge_base,
-        }
         
-        # Include action context data (results from previous actions) first
-        context.update(self.action_context)
+        # Create unified context from controller state
+        context = ActionContext.from_controller(self, action_data)
         
-        # Add character information if available (this should override action context for freshness)
-        if self.character_state and hasattr(self.character_state, 'name'):
-            character_data = {
-                'character_name': self.character_state.name,
-                'character_x': self.character_state.data.get('x', 0),
-                'character_y': self.character_state.data.get('y', 0),
-                'character_level': self.character_state.data.get('level', 1),
-                'pre_combat_hp': self.character_state.data.get('hp', 0),
-            }
-            context.update(character_data)
+        # Add action configurations if available
+        if hasattr(self.action_executor, 'config_data') and self.action_executor.config_data:
+            eval_config = self.action_executor.config_data.data.get('evaluate_weapon_recipes', {})
+            if eval_config:
+                context.set_parameter('action_config', eval_config)
         
         return context
     
@@ -485,15 +512,10 @@ class AIPlayerController(StateManagerMixin):
             self.logger.warning("No plan to execute")
             return False
             
-        # Reset action context for new plan execution, but preserve important location and recipe data
-        preserved_data = {}
-        if hasattr(self, 'action_context'):
-            # Preserve target location data and crafting information between plan iterations
-            for key in ['x', 'y', 'target_x', 'target_y', 'item_code', 'recipe_item_code', 'recipe_item_name', 'craft_skill', 'materials_needed', 'resource_types', 'smelt_item_code', 'smelt_item_name', 'smelt_skill', 'smelting_required', 'crafting_chain']:
-                if key in self.action_context:
-                    preserved_data[key] = self.action_context[key]
-        
-        self.action_context = preserved_data
+        # Preserve action context between plan iterations
+        # This allows actions to pass information to subsequent actions
+        if not hasattr(self, 'action_context'):
+            self.action_context = {}
         self.is_executing = True
         
         while self.is_executing and self.current_action_index < len(self.current_plan):
@@ -542,113 +564,24 @@ class AIPlayerController(StateManagerMixin):
         Update action context based on action execution response.
         Used to pass data between actions in a plan.
         """
-        result_data = {}
-        
-        if response:
-            # Extract standardized coordinate data for move actions
-            if action_name == 'find_monsters' and hasattr(response, 'get'):
-                target_x = response.get('target_x')
-                target_y = response.get('target_y')
-                monster_code = response.get('monster_code')
-                if target_x is not None and target_y is not None:
-                    result_data.update({
-                        'target_x': target_x,
-                        'target_y': target_y
-                    })
-                    if monster_code:
-                        result_data['monster_code'] = monster_code
-                    self.logger.info(f"Found monster location: ({target_x}, {target_y})")
-            elif action_name == 'find_workshops' and hasattr(response, 'get'):
-                target_x = response.get('target_x')
-                target_y = response.get('target_y')
-                if target_x is not None and target_y is not None:
-                    result_data.update({
-                        'target_x': target_x,
-                        'target_y': target_y,
-                        'workshop_x': target_x,
-                        'workshop_y': target_y
-                    })
-                    self.logger.info(f"Found workshop location: ({target_x}, {target_y})")
-            elif action_name == 'lookup_item_info' and hasattr(response, 'get'):
-                # Extract recipe information for use by find_resources
-                if response.get('success') and response.get('recipe_found'):
-                    materials_needed = response.get('materials_needed', [])
-                    resource_types = []
-                    for material in materials_needed:
-                        if material.get('is_resource'):
-                            # Use resource_source mapping if available, otherwise fall back to code
-                            resource_code = material.get('resource_source', material.get('code'))
-                            resource_types.append(resource_code)
-                    
-                    # Check for crafting chain
-                    crafting_chain = response.get('crafting_chain', [])
-                    smelting_required = False
-                    if crafting_chain:
-                        # Find intermediate crafting steps (like copper smelting)
-                        intermediate_steps = [step for step in crafting_chain if step.get('step_type') == 'craft_intermediate']
-                        if intermediate_steps:
-                            # Set up smelting context for the first intermediate step
-                            first_step = intermediate_steps[0]
-                            result_data.update({
-                                'smelt_item_code': first_step.get('item_code'),
-                                'smelt_item_name': first_step.get('item_name'),
-                                'smelt_skill': first_step.get('craft_skill')
-                            })
-                            smelting_required = True
-                            
-                    result_data.update({
-                        'recipe_item_code': response.get('item_code'),
-                        'recipe_item_name': response.get('item_name'),
-                        'resource_types': resource_types,
-                        'craft_skill': response.get('craft_skill'),
-                        'materials_needed': materials_needed,
-                        'crafting_chain': crafting_chain,
-                        'smelting_required': smelting_required
-                    })
-                    self.logger.info(f"📋 Recipe selected: {response.get('item_name')} - needs {resource_types}")
-                    if smelting_required:
-                        self.logger.info(f"🔥 Smelting required: {result_data.get('smelt_item_code')}")
-            elif action_name == 'evaluate_weapon_recipes' and hasattr(response, 'get'):
-                # Extract selected weapon information for use by find_correct_workshop
-                if response.get('success') and response.get('item_code'):
-                    result_data.update({
-                        'item_code': response.get('item_code'),
-                        'selected_weapon': response.get('selected_weapon'),
-                        'weapon_name': response.get('weapon_name'),
-                        'workshop_type': response.get('workshop_type')
-                    })
-                    self.logger.info(f"🗡️ Weapon selected: {response.get('weapon_name')} (code: {response.get('item_code')})")
-            elif action_name == 'find_resources' and hasattr(response, 'get'):
-                location = response.get('location')
-                if location:
-                    result_data.update({
-                        'target_x': location[0],
-                        'target_y': location[1],
-                        'resource_x': location[0],
-                        'resource_y': location[1]
-                    })
-                    self.logger.info(f"Found resource location: {location}")
-            elif action_name == 'transform_raw_materials' and hasattr(response, 'get'):
-                # Store transformation results for future planning
-                if response.get('success'):
-                    result_data.update({
-                        'transformation_results': response.get('materials_transformed', []),
-                        'materials_transformed_count': response.get('total_transformations', 0)
-                    })
-                    self.logger.info(f"🔄 Materials transformed: {response.get('total_transformations', 0)} operations")
-            elif action_name == 'craft_item' and hasattr(response, 'get'):
-                # Store crafting results 
-                if response.get('success'):
-                    result_data.update({
-                        'crafting_result': response,
-                        'item_crafted': response.get('item_code'),
-                        'quantity_crafted': response.get('quantity_crafted', 1)
-                    })
-                    self.logger.info(f"🔨 Crafted: {response.get('quantity_crafted', 1)}x {response.get('item_code')}")
-        
-        # Update action context with extracted data
-        if result_data and hasattr(self, 'action_context'):
-            self.action_context.update(result_data)
+        if not response:
+            return
+            
+        # If response is a dictionary, merge it into action context
+        if isinstance(response, dict):
+            if not hasattr(self, 'action_context'):
+                self.action_context = {}
+            self.action_context.update(response)
+            
+            # Extract coordinates from location tuple if present
+            if 'location' in response and isinstance(response['location'], tuple) and len(response['location']) >= 2:
+                self.action_context['target_x'] = response['location'][0]
+                self.action_context['target_y'] = response['location'][1]
+                self.logger.info(f"Extracted coordinates from {action_name}: ({response['location'][0]}, {response['location'][1]})")
+            
+            # Log coordinate updates if present
+            if 'target_x' in response and 'target_y' in response:
+                self.logger.info(f"Updated coordinates from {action_name}: ({response['target_x']}, {response['target_y']})")
         
     def is_plan_complete(self) -> bool:
         """
@@ -711,14 +644,14 @@ class AIPlayerController(StateManagerMixin):
         
         # Apply any additional derived state using state engine
         if hasattr(self.world_state, 'data') and self.world_state.data:
-            # Merge persistent world state data
+            # Merge ALL persistent world state data, not just a subset
+            # This ensures states like inventory_updated, materials_sufficient, etc. are preserved
             world_data = self.world_state.data
-            state.update({
-                'monsters_available': world_data.get('monsters_available', False),
-                'at_target_location': world_data.get('at_target_location', False),
-                'monster_present': world_data.get('monster_present', False),
-                'has_hunted_monsters': world_data.get('has_hunted_monsters', False),
-            })
+            for key, value in world_data.items():
+                # Only update if the key doesn't already exist in the calculated state
+                # This allows calculated states to override persisted states when needed
+                if key not in state:
+                    state[key] = value
         
         self.logger.debug(f"Current world state: {state}")
         return state
@@ -739,15 +672,9 @@ class AIPlayerController(StateManagerMixin):
             if hasattr(response, 'data') and hasattr(response.data, 'character'):
                 char_data = response.data.character
                 if self.character_state:
-                    self.character_state.data.update({
-                        'level': char_data.level,
-                        'xp': char_data.xp,
-                        'hp': char_data.hp,
-                        'x': char_data.x,
-                        'y': char_data.y,
-                    })
+                    self.character_state.update_from_api_response(char_data)
                     self.character_state.save()
-                    self.logger.debug(f"Updated character state: Level {char_data.level}, XP {char_data.xp}, HP {char_data.hp}")
+                    self.logger.debug("Updated character state from action response")
             
             # Use state engine for configuration-driven response processing
             current_state = self.get_current_world_state()
@@ -894,7 +821,6 @@ class AIPlayerController(StateManagerMixin):
                 
                 # Ensure map_state exists and let it handle location storage
                 if not self.map_state:
-                    from src.game.map.state import MapState
                     self.map_state = MapState(self.client)
                 
                 # MapState will handle the location caching automatically when scan() is called
@@ -921,7 +847,7 @@ class AIPlayerController(StateManagerMixin):
                     self.logger.debug(f"🔍 Knowledge base data after learning: {list(self.knowledge_base.data.keys())}")
                     
                     self.knowledge_base.save()
-                    self.logger.debug(f"🔍 Knowledge base saved")
+                    self.logger.debug("🔍 Knowledge base saved")
                     
                     self.logger.info(f"🧠 Learned: {content_type} '{content_code}' at ({x}, {y})")
                 else:

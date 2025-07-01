@@ -1,9 +1,10 @@
 """Test module for ActionBase."""
 
 import unittest
-from unittest.mock import Mock
+
 from src.controller.actions.base import ActionBase
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestActionBase(unittest.TestCase):
@@ -13,6 +14,7 @@ class TestActionBase(unittest.TestCase):
         """Set up test fixtures."""
         self.action = ActionBase()
         self.mock_client = create_mock_client()
+        self.mock_context = MockActionContext(character_name="test_character")
 
     def test_action_base_initialization(self):
         """Test ActionBase initialization."""
@@ -21,20 +23,21 @@ class TestActionBase(unittest.TestCase):
         self.assertEqual(self.action.logger.name, 'ActionBase')
 
     def test_execute_not_implemented(self):
-        """Test that execute method raises NotImplementedError."""
-        with self.assertRaises(NotImplementedError) as context:
-            self.action.execute(self.mock_client)
+        """Test that validate_and_execute method returns error for NotImplementedError."""
+        result = self.action.validate_and_execute(self.mock_client, self.mock_context)
         
-        self.assertIn("Subclasses must implement execute method", str(context.exception))
+        self.assertIsInstance(result, dict)
+        self.assertFalse(result['success'])
+        self.assertIn("Subclasses must implement perform_action method", result['error'])
 
     def test_validate_execution_context_with_client(self):
         """Test validate_execution_context with valid client."""
-        result = self.action.validate_execution_context(self.mock_client)
+        result = self.action.validate_execution_context(self.mock_client, self.mock_context)
         self.assertTrue(result)
 
     def test_validate_execution_context_without_client(self):
         """Test validate_execution_context with None client."""
-        result = self.action.validate_execution_context(None)
+        result = self.action.validate_execution_context(None, self.mock_context)
         self.assertFalse(result)
 
     def test_get_error_response_basic(self):

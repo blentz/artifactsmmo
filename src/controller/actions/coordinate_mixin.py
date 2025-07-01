@@ -6,7 +6,7 @@ This mixin provides standardized coordinate handling for all actions,
 ensuring consistent parameter names and return formats across the system.
 """
 
-from typing import Tuple, Optional, Dict, Any
+from typing import Any, Dict, Optional, Tuple
 
 
 class CoordinateStandardizationMixin:

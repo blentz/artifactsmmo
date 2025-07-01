@@ -6,11 +6,20 @@ replacing hardcoded learning logic in the AI controller.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from src.lib.yaml_data import YamlData
-from src.game.globals import CONFIG_PREFIX
+from artifactsmmo_api_client.api.effects.get_all_effects_effects_get import sync as get_all_effects_api
+from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
+from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps_api
+from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters_api
+from artifactsmmo_api_client.api.np_cs.get_all_npcs_npcs_details_get import sync as get_all_npcs_api
+
+# API client imports
+from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources_api
+
 from src.controller.capability_analyzer import CapabilityAnalyzer
+from src.game.globals import CONFIG_PREFIX
+from src.lib.yaml_data import YamlData
 
 
 class LearningManager:
@@ -361,8 +370,6 @@ class LearningManager:
         Returns:
             Dictionary with learning results and statistics
         """
-        from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources_api
-        
         try:
             self.logger.info("🔍 Learning all resources using get_all_resource API...")
             
@@ -531,8 +538,6 @@ class LearningManager:
     
     def _learn_all_monsters_bulk(self, client) -> Dict:
         """Learn all monsters using get_all_monster API."""
-        from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters_api
-        
         try:
             total_learned = 0
             monsters_learned = []
@@ -586,8 +591,6 @@ class LearningManager:
     
     def _learn_all_items_bulk(self, client) -> Dict:
         """Learn all items using get_all_item API."""
-        from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
-        
         try:
             total_learned = 0
             items_learned = []
@@ -641,8 +644,6 @@ class LearningManager:
     
     def _learn_all_npcs_bulk(self, client) -> Dict:
         """Learn all NPCs using get_all_npc API."""
-        from artifactsmmo_api_client.api.np_cs.get_all_npcs_npcs_details_get import sync as get_all_npcs_api
-        
         try:
             total_learned = 0
             npcs_learned = []
@@ -696,8 +697,6 @@ class LearningManager:
     
     def _learn_all_maps_bulk(self, client) -> Dict:
         """Learn all map locations using get_all_map API."""
-        from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps_api
-        
         try:
             total_learned = 0
             maps_learned = []
@@ -785,8 +784,6 @@ class LearningManager:
         Returns:
             Dictionary with effects learning results and XP effect analysis
         """
-        from artifactsmmo_api_client.api.effects.get_all_effects_effects_get import sync as get_all_effects_api
-        
         try:
             self.logger.info("🔍 Learning all effects using get_all_effect API...")
             

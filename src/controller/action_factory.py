@@ -8,10 +8,36 @@ eliminating the need for hardcoded if-elif blocks in the controller.
 import importlib
 import inspect
 import logging
-from typing import Any, Dict, Optional, Type, Callable
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional, Type, Union
 
+from ..lib.action_context import ActionContext
+from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
+from .actions.attack import AttackAction
 from .actions.base import ActionBase
+from .actions.check_inventory import CheckInventoryAction
+from .actions.check_location import CheckLocationAction
+from .actions.craft_item import CraftItemAction
+from .actions.equip_item import EquipItemAction
+from .actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
+from .actions.execute_crafting_plan import ExecuteCraftingPlanAction
+from .actions.find_correct_workshop import FindCorrectWorkshopAction
+from .actions.find_monsters import FindMonstersAction
+from .actions.find_resources import FindResourcesAction
+from .actions.find_workshops import FindWorkshopsAction
+from .actions.gather_resources import GatherResourcesAction
+from .actions.lookup_item_info import LookupItemInfoAction
+from .actions.map_lookup import MapLookupAction
+
+# Action imports
+from .actions.move import MoveAction
+from .actions.move_to_resource import MoveToResourceAction
+from .actions.move_to_workshop import MoveToWorkshopAction
+from .actions.plan_crafting_materials import PlanCraftingMaterialsAction
+from .actions.rest import RestAction
+from .actions.transform_raw_materials import TransformRawMaterialsAction
+from .actions.unequip_item import UnequipItemAction
+from .actions.wait import WaitAction
 
 
 @dataclass
@@ -42,221 +68,131 @@ class ActionFactory:
     
     def _setup_default_actions(self) -> None:
         """Set up the default action mappings with their parameter configurations."""
-        from .actions.move import MoveAction
-        from .actions.attack import AttackAction
-        from .actions.rest import RestAction
-        from .actions.map_lookup import MapLookupAction
-        from .actions.find_monsters import FindMonstersAction
-        from .actions.find_resources import FindResourcesAction
-        from .actions.find_workshops import FindWorkshopsAction
-        from .actions.move_to_workshop import MoveToWorkshopAction
-        from .actions.move_to_resource import MoveToResourceAction
-        from .actions.gather_resources import GatherResourcesAction
-        from .actions.wait import WaitAction
-        from .actions.lookup_item_info import LookupItemInfoAction
-        from .actions.craft_item import CraftItemAction
-        from .actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
-        from .actions.find_correct_workshop import FindCorrectWorkshopAction
-        from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
-        from .actions.equip_item import EquipItemAction
-        from .actions.transform_raw_materials import TransformRawMaterialsAction
-        from .actions.check_inventory import CheckInventoryAction
-        from .actions.check_location import CheckLocationAction
         
         # Register default actions with their parameter mappings
         self.register_action('move', ActionExecutorConfig(
             action_class=MoveAction,
-            constructor_params={
-                'character_name': 'character_name',  # Will be provided by controller
-                'x': 'x',
-                'y': 'y',
-                'use_target_coordinates': 'use_target_coordinates'
-            }
+            constructor_params={}
         ))
         
         self.register_action('attack', ActionExecutorConfig(
             action_class=AttackAction,
-            constructor_params={
-                'character_name': 'character_name'  # Will be provided by controller
-            }
+            constructor_params={}
         ))
         
         self.register_action('rest', ActionExecutorConfig(
             action_class=RestAction,
-            constructor_params={
-                'character_name': 'character_name'  # Will be provided by controller
-            }
+            constructor_params={}
         ))
         
         self.register_action('map_lookup', ActionExecutorConfig(
             action_class=MapLookupAction,
-            constructor_params={
-                'x': 'x',
-                'y': 'y'
-            }
+            constructor_params={}
         ))
         
         self.register_action('find_monsters', ActionExecutorConfig(
             action_class=FindMonstersAction,
-            constructor_params={
-                'character_x': 'character_x',
-                'character_y': 'character_y',
-                'search_radius': 'search_radius',
-                'monster_types': 'monster_types',
-                'character_level': 'character_level',
-                'level_range': 'level_range'
-            }
+            constructor_params={}
         ))
         
         self.register_action('find_resources', ActionExecutorConfig(
             action_class=FindResourcesAction,
-            constructor_params={
-                'character_x': 'character_x',
-                'character_y': 'character_y',
-                'search_radius': 'search_radius',
-                'resource_types': 'resource_types',
-                'character_level': 'character_level',
-                'skill_type': 'skill_type'
-            }
+            constructor_params={}
         ))
         
         self.register_action('gather_resources', ActionExecutorConfig(
             action_class=GatherResourcesAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'target_resource': 'target_resource'
-            }
+            constructor_params={}
         ))
         
         self.register_action('transform_raw_materials', ActionExecutorConfig(
             action_class=TransformRawMaterialsAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'target_item': 'target_item'
-            }
+            constructor_params={}
         ))
         
         self.register_action('wait', ActionExecutorConfig(
             action_class=WaitAction,
-            constructor_params={
-                'wait_duration': 'wait_duration'
-            }
+            constructor_params={}
         ))
         
         self.register_action('find_workshops', ActionExecutorConfig(
             action_class=FindWorkshopsAction,
-            constructor_params={
-                'character_x': 'character_x',
-                'character_y': 'character_y',
-                'search_radius': 'search_radius',
-                'workshop_type': 'workshop_type'
-            }
+            constructor_params={}
         ))
         
         self.register_action('move_to_workshop', ActionExecutorConfig(
             action_class=MoveToWorkshopAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'target_x': 'target_x',
-                'target_y': 'target_y'
-            }
+            constructor_params={}
         ))
         
         self.register_action('move_to_resource', ActionExecutorConfig(
             action_class=MoveToResourceAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'target_x': 'target_x',
-                'target_y': 'target_y'
-            }
+            constructor_params={}
         ))
         
         self.register_action('lookup_item_info', ActionExecutorConfig(
             action_class=LookupItemInfoAction,
-            constructor_params={
-                'item_code': 'item_code',
-                'search_term': 'search_term',
-                'item_type': 'item_type',
-                'max_level': 'max_level'
-            }
+            constructor_params={}
         ))
         
         self.register_action('craft_item', ActionExecutorConfig(
             action_class=CraftItemAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'item_code': 'item_code',  # Try item_code first
-                'quantity': 'quantity'
-            }
+            constructor_params={}
         ))
         
         self.register_action('smelt_materials', ActionExecutorConfig(
             action_class=CraftItemAction,  # Reuse CraftItemAction since smelting is just crafting
-            constructor_params={
-                'character_name': 'character_name',
-                'item_code': 'item_code',  # Will be "copper" for smelting
-                'quantity': 'quantity'
-            }
+            constructor_params={}
         ))
         
         self.register_action('transform_material', ActionExecutorConfig(
             action_class=TransformRawMaterialsAction,  # Specialized raw material transformation action
-            constructor_params={
-                'character_name': 'character_name',
-                'target_item': 'item_code'  # Target item to determine required materials
-            }
+            constructor_params={}
         ))
         
         self.register_action('evaluate_weapon_recipes', ActionExecutorConfig(
             action_class=EvaluateWeaponRecipesAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'current_weapon': 'current_weapon',
-                'character_level': 'character_level'
-            }
+            constructor_params={}
         ))
         
         self.register_action('find_correct_workshop', ActionExecutorConfig(
             action_class=FindCorrectWorkshopAction,
-            constructor_params={
-                'character_x': 'character_x',
-                'character_y': 'character_y',
-                'search_radius': 'search_radius',
-                'item_code': 'item_code',
-                'character_name': 'character_name'
-            }
+            constructor_params={}
         ))
         
         self.register_action('analyze_crafting_chain', ActionExecutorConfig(
             action_class=AnalyzeCraftingChainAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'target_item': 'target_item'
-            }
+            constructor_params={}
         ))
         
         self.register_action('equip_item', ActionExecutorConfig(
             action_class=EquipItemAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'item_code': 'item_code',
-                'slot': 'slot'
-            }
+            constructor_params={}
+        ))
+        
+        self.register_action('unequip_item', ActionExecutorConfig(
+            action_class=UnequipItemAction,
+            constructor_params={}
         ))
         
         self.register_action('check_inventory', ActionExecutorConfig(
             action_class=CheckInventoryAction,
-            constructor_params={
-                'character_name': 'character_name',
-                'required_items': 'required_items'
-            }
+            constructor_params={}
         ))
         
         self.register_action('check_location', ActionExecutorConfig(
             action_class=CheckLocationAction,
-            constructor_params={
-                'character_name': 'character_name'
-            }
+            constructor_params={}
+        ))
+        
+        self.register_action('plan_crafting_materials', ActionExecutorConfig(
+            action_class=PlanCraftingMaterialsAction,
+            constructor_params={}
+        ))
+        
+        self.register_action('execute_crafting_plan', ActionExecutorConfig(
+            action_class=ExecuteCraftingPlanAction,
+            constructor_params={}
         ))
     
     def _load_action_classes_from_yaml(self) -> None:
@@ -363,14 +299,14 @@ class ActionFactory:
         return function_map
     
     def create_action(self, action_name: str, action_data: Dict[str, Any], 
-                     context: Dict[str, Any] = None) -> Optional[ActionBase]:
+                     context: Union[Dict[str, Any], 'ActionContext'] = None) -> Optional[ActionBase]:
         """
         Create an action instance based on configuration and data.
         
         Args:
             action_name: Name of the action to create
             action_data: Data from the action plan
-            context: Additional context (character state, etc.)
+            context: Additional context (character state, etc.) or ActionContext instance
             
         Returns:
             Action instance ready for execution, or None if creation failed
@@ -382,40 +318,53 @@ class ActionFactory:
         config = self._action_registry[action_name]
         context = context or {}
         
-        
         try:
-            # Build constructor arguments
+            # Check if this action has no constructor params (uses ActionContext)
+            if not config.constructor_params:
+                # Action uses ActionContext pattern, no constructor args needed
+                action = config.action_class()
+                self.logger.debug(f"Created action {action_name} with ActionContext pattern: {action}")
+                return action
+            
+            # Legacy pattern: Build constructor arguments
             constructor_args = {}
+            
+            # Convert ActionContext to dict if needed
+            if isinstance(context, ActionContext):
+                context_dict = dict(context)  # Uses ActionContext's __iter__ and __getitem__
+            else:
+                context_dict = context
+            
             for param_name, data_key in config.constructor_params.items():
                 if data_key in action_data:
                     value = action_data[data_key]
-                elif data_key in context:
-                    value = context[data_key]
+                elif data_key in context_dict:
+                    value = context_dict[data_key]
                 else:
                     # Special handling for craft_item action - fallback to recipe_item_code
-                    if action_name == 'craft_item' and param_name == 'item_code' and 'recipe_item_code' in context:
-                        value = context['recipe_item_code']
+                    if action_name == 'craft_item' and param_name == 'item_code' and 'recipe_item_code' in context_dict:
+                        value = context_dict['recipe_item_code']
                         self.logger.debug(f"Using recipe_item_code fallback for craft_item: {value}")
                     # Special handling for smelt_materials action - fallback to smelt_item_code
-                    elif action_name == 'smelt_materials' and param_name == 'item_code' and 'smelt_item_code' in context:
-                        value = context['smelt_item_code']
+                    elif action_name == 'smelt_materials' and param_name == 'item_code' and 'smelt_item_code' in context_dict:
+                        value = context_dict['smelt_item_code']
                         self.logger.debug(f"Using smelt_item_code fallback for smelt_materials: {value}")
                     # General handling for transform_material action - detect required transformation
                     elif action_name == 'transform_material' and param_name == 'item_code':
-                        value = self._determine_material_transformation(context)
+                        value = self._determine_material_transformation(context_dict)
                         self.logger.debug(f"Determined transformation item_code for transform_material: {value}")
                     elif action_name == 'transform_material' and param_name == 'character_name':
-                        value = context.get('character_name', context.get('char_name', 'unknown'))
+                        value = context_dict.get('character_name', context_dict.get('char_name', 'unknown'))
                         self.logger.debug(f"Using character_name for transform_material: {value}")
                     elif action_name == 'transform_material' and param_name == 'quantity':
-                        value = context.get('quantity', 1)
+                        value = context_dict.get('quantity', 1)
                         self.logger.debug(f"Using quantity for transform_material: {value}")
                     else:
                         # Special handling for move action - enable use_target_coordinates if target coordinates are available
                         if (action_name == 'move' and param_name == 'use_target_coordinates' and 
-                            ('target_x' in context or 'target_y' in context or 'x' in context or 'y' in context)):
+                            ('target_x' in context_dict or 'target_y' in context_dict or 'x' in context_dict or 'y' in context_dict)):
                             value = True
-                            self.logger.debug(f"Auto-enabling use_target_coordinates for move action due to available coordinates")
+                            self.logger.debug("Auto-enabling use_target_coordinates for move action due to available coordinates")
                         else:
                             # Check if parameter has a default value
                             sig = inspect.signature(config.action_class.__init__)
@@ -433,7 +382,25 @@ class ActionFactory:
                 constructor_args[param_name] = value
             
             # Create the action instance
-            action = config.action_class(**constructor_args)
+            # Check if the action class accepts **kwargs
+            sig = inspect.signature(config.action_class.__init__)
+            accepts_kwargs = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD 
+                for param in sig.parameters.values()
+            )
+            
+            if accepts_kwargs:
+                # For actions that expect additional kwargs (like knowledge_base, action_config), pass context items
+                # that aren't already in constructor_args
+                additional_kwargs = {}
+                for key, value in context_dict.items():
+                    if key not in constructor_args and key in ['knowledge_base', 'action_config', 'map_state', 'world_state']:
+                        additional_kwargs[key] = value
+                
+                action = config.action_class(**constructor_args, **additional_kwargs)
+            else:
+                # Action doesn't accept **kwargs, only pass constructor args
+                action = config.action_class(**constructor_args)
             self.logger.debug(f"Created action {action_name}: {action}")
             return action
             
@@ -442,7 +409,7 @@ class ActionFactory:
             return None
     
     def execute_action(self, action_name: str, action_data: Dict[str, Any], 
-                      client, context: Dict[str, Any] = None) -> tuple[bool, Any]:
+                      client, context: Union[Dict[str, Any], 'ActionContext'] = None) -> tuple[bool, Any]:
         """
         Create and execute an action in one step.
         
@@ -450,7 +417,7 @@ class ActionFactory:
             action_name: Name of the action to execute
             action_data: Data from the action plan
             client: API client for action execution
-            context: Additional context (character state, etc.)
+            context: Additional context (character state, etc.) or ActionContext instance
             
         Returns:
             Tuple of (success: bool, response: Any)
@@ -460,9 +427,18 @@ class ActionFactory:
             return False, None
         
         try:
-            # Execute the action with context passed as kwargs
-            kwargs = context.copy() if context else {}
-            response = action.execute(client, **kwargs)
+            # Convert dict context to ActionContext if needed
+            if isinstance(context, dict):
+                # Create ActionContext from dict
+                action_context = ActionContext()
+                action_context.update(context)
+            elif isinstance(context, ActionContext):
+                action_context = context
+            else:
+                action_context = ActionContext()
+            
+            # Execute the action with ActionContext
+            response = action.execute(client, action_context)
             
             # Apply postprocessors if available
             config = self._action_registry[action_name]

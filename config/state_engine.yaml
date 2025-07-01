@@ -49,6 +49,13 @@ state_calculation:
   recipe_known:
     formula: "best_weapon_selected"  # Recipe is known after weapon selection
     
+  # Equipment readiness states
+  equipment_ready:
+    formula: "has_equipment and character_level >= 3"
+    
+  weapon_crafted:
+    formula: "best_weapon_selected and has_crafting_materials"
+    
   # Smelting and material processing states
   need_refined_materials:
     formula: "smelting_required == true"
@@ -68,108 +75,110 @@ computed_states:
     type: "formula"
     formula: "character_hp > 0"
     
+  # Combat viability state (still actively used)
+  combat_not_viable:
+    type: "computed"
+    method: "check_combat_viability"
+    
   # Equipment progression computed states
+  # NOTE: Equipment analysis is now handled by AnalyzeEquipmentAction
+  # These states should be set by action responses, not computed here
   need_weapon_upgrade:
-    type: "equipment_analysis"
-    analysis_type: "weapon_upgrade"
-    threshold_config: "weapon_upgrade_thresholds"
+    type: "formula"
+    formula: "has_better_weapon == false and character_level >= 2"
     
   need_armor_upgrade:
-    type: "equipment_analysis"
-    analysis_type: "armor_upgrade"
-    threshold_config: "armor_upgrade_thresholds"
+    type: "formula"
+    formula: "has_better_armor == false and character_level >= 3"
     
   need_complete_equipment:
-    type: "equipment_analysis"
-    analysis_type: "complete_equipment"
-    threshold_config: "equipment_completion_thresholds"
-    
+    type: "formula"
+    formula: "has_complete_equipment_set == false and character_level >= 2"
     
   need_workshop_discovery:
-    type: "workshop_analysis"
-    analysis_type: "discovery_needed"
-    threshold_config: "workshop_discovery_thresholds"
+    type: "formula"
+    formula: "workshops_discovered == false and character_level >= 2"
     
   need_specific_workshop:
-    type: "workshop_analysis"
-    analysis_type: "specific_workshop_needed"
-    threshold_config: "specific_workshop_thresholds"
+    type: "formula"
+    formula: "workshop_requirements_known == true and at_correct_workshop == false"
     
   # Equipment status states
+  # These states are set by action execution, not computed
   has_better_weapon:
-    type: "equipment_check"
-    check_type: "weapon_improved"
+    type: "formula"
+    formula: "equipment_analysis_available == true and weapon_upgrade_available == true"
     
   has_better_armor:
-    type: "equipment_check"
-    check_type: "armor_improved"
+    type: "formula"
+    formula: "equipment_analysis_available == true and armor_upgrade_available == true"
     
   has_complete_equipment_set:
-    type: "equipment_check"
-    check_type: "set_complete"
+    type: "formula"
+    formula: "equipment_analysis_available == true and equipment_set_complete == true"
     
   has_crafting_materials:
-    type: "inventory_check"
-    check_type: "materials_available"
+    type: "formula"
+    formula: "inventory_updated == true and materials_sufficient == true"
     
   workshops_discovered:
-    type: "knowledge_check"
-    check_type: "workshops_known"
+    type: "formula"
+    formula: "workshop_location_known == true"
     
   # Location and crafting states
   at_workshop:
-    type: "location_check"
-    check_type: "workshop_location"
+    type: "formula"
+    formula: "at_target_location == true and workshop_location_known == true"
     
   at_correct_workshop:
-    type: "location_check"
-    check_type: "correct_workshop_location"
+    type: "formula"
+    formula: "at_target_location == true and correct_workshop_found == true"
     
   at_resource_location:
-    type: "location_check"
-    check_type: "resource_location"
+    type: "formula"
+    formula: "at_target_location == true and resource_location_known == true"
     
   has_materials:
-    type: "inventory_check"
-    check_type: "required_materials"
+    type: "formula"
+    formula: "materials_sufficient == true"
     
   materials_sufficient:
-    type: "inventory_check"
-    check_type: "sufficient_quantity"
+    type: "formula"
+    formula: "inventory_updated == true and required_materials_available == true"
     
   # General material checks for crafting workflows
   has_raw_materials:
-    type: "inventory_check"
-    check_type: "raw_materials_available"
+    type: "formula"
+    formula: "inventory_updated == true and raw_materials_available == true"
     
   has_refined_materials:
-    type: "inventory_check" 
-    check_type: "refined_materials_available"
+    type: "formula" 
+    formula: "inventory_updated == true and refined_materials_available == true"
     
   material_requirements_known:
-    type: "knowledge_check"
-    check_type: "material_requirements_discovered"
+    type: "formula"
+    formula: "equipment_info_known == true and recipe_known == true"
     
   best_weapon_selected:
-    type: "knowledge_check"
-    check_type: "optimal_weapon_identified"
+    type: "formula"
+    formula: "equipment_info_known == true and weapon_selected == true"
     
   craftable_weapon_identified:
-    type: "knowledge_check" 
-    check_type: "craftable_weapon_found"
+    type: "formula" 
+    formula: "recipe_known == true and craftable_weapon_found == true"
     
   # Skill progression states
   need_weaponcrafting_upgrade:
-    type: "computed"
-    method: "check_weaponcrafting_upgrade_needed"
+    type: "formula"
+    formula: "skill_upgrade_needed == true and weaponcrafting_skill_insufficient == true"
     
   need_skill_upgrade:
-    type: "computed"
-    method: "check_skill_upgrade_needed"
+    type: "formula"
+    formula: "skill_upgrade_needed == true"
     
   weaponcrafting_level_sufficient:
-    type: "computed"
-    method: "check_weaponcrafting_level_sufficient"
+    type: "formula"
+    formula: "skill_requirements_met == true"
 
 # Response processing rules - replaces hardcoded update_world_state_from_response logic
 response_handlers:

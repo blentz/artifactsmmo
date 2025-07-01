@@ -25,6 +25,9 @@ action_classes:
   transform_raw_materials: "src.controller.actions.transform_raw_materials.TransformRawMaterialsAction"
   find_correct_workshop: "src.controller.actions.find_correct_workshop.FindCorrectWorkshopAction"
   evaluate_weapon_recipes: "src.controller.actions.evaluate_weapon_recipes.EvaluateWeaponRecipesAction"
+  analyze_equipment_gaps: "src.controller.actions.analyze_equipment_gaps.AnalyzeEquipmentGapsAction"
+  select_optimal_slot: "src.controller.actions.select_optimal_slot.SelectOptimalSlotAction"
+  evaluate_recipes: "src.controller.actions.evaluate_recipes.EvaluateRecipesAction"
   upgrade_weaponcrafting_skill: "src.controller.actions.upgrade_weaponcrafting_skill.UpgradeWeaponcraftingSkillAction"
   check_skill_requirement: "src.controller.actions.check_skill_requirement.CheckSkillRequirementAction"
   find_xp_sources: "src.controller.actions.find_xp_sources.FindXpSourcesAction"
@@ -83,6 +86,14 @@ action_configurations:
     type: "builtin"
     description: "Recursively analyze complete crafting dependency chain from raw materials to final equipment"
     
+  plan_crafting_materials:
+    type: "builtin"
+    description: "Plan material gathering for selected item to craft"
+    
+  execute_crafting_plan:
+    type: "builtin"
+    description: "Execute crafting plan including unequipping materials and crafting"
+    
   equip_item:
     type: "builtin"
     description: "Equip an item from inventory"
@@ -98,6 +109,18 @@ action_configurations:
   analyze_resources:
     type: "builtin"
     description: "Analyze nearby resources for crafting opportunities"
+    
+  analyze_equipment_gaps:
+    type: "builtin"
+    description: "Analyze all equipment slots and calculate upgrade priorities"
+    
+  select_optimal_slot:
+    type: "builtin"
+    description: "Select optimal equipment slot based on gaps and crafting skill"
+    
+  evaluate_recipes:
+    type: "builtin"
+    description: "Evaluate recipes for specified equipment slot and select the best craftable option"
     
   bootstrap_equipment_workflow:
     type: "composite"
@@ -428,6 +451,69 @@ composite_actions:
           item_code: "${action_data.target_armor}"
           slot: "${action_data.target_slot}"
           
+  upgrade_weapon:
+    type: "composite"
+    description: "Complete weapon upgrade workflow: evaluate recipes, gather materials, craft, and equip"
+    steps:
+      - name: "check_inventory"
+        action: "check_inventory"
+        required: true
+        params:
+          character_name: "${context.character_name}"
+          
+      - name: "evaluate_weapon_recipes"
+        action: "evaluate_weapon_recipes"
+        required: true
+        params:
+          character_name: "${context.character_name}"
+          current_weapon: "${context.weapon_slot}"
+          character_level: "${context.character_level}"
+          
+      - name: "check_workshops"
+        action: "find_correct_workshop"
+        required: true
+        conditions:
+          selected_weapon: true
+        params:
+          workshop_type: "weaponcrafting"
+          item_code: "${action_result.selected_weapon}"
+          
+      - name: "gather_materials"
+        action: "gather_crafting_materials"
+        required: true
+        conditions:
+          materials_needed: true
+        params:
+          target_item_type: "${action_result.selected_weapon}"
+          required_materials: "${action_result.required_materials}"
+          
+      - name: "move_to_workshop"
+        action: "move"
+        required: true
+        conditions:
+          workshop_location_known: true
+        params:
+          use_target_coordinates: true
+          
+      - name: "craft_weapon"
+        action: "craft_item"
+        required: true
+        conditions:
+          at_workshop: true
+        params:
+          character_name: "${context.character_name}"
+          item_code: "${action_result.selected_weapon}"
+          
+      - name: "equip_weapon"
+        action: "equip_item"
+        required: true
+        conditions:
+          weapon_crafted: true
+        params:
+          character_name: "${context.character_name}"
+          item_code: "${action_result.selected_weapon}"
+          slot: "weapon"
+
   gather_crafting_materials:
     type: "composite"
     description: "Gather materials needed for equipment crafting"
@@ -639,4 +725,17 @@ basic_weapon_codes:
   - "wooden_staff"
   - "iron_dagger"
   - "bronze_sword"
+
+# Configuration for evaluate_weapon_recipes action
+evaluate_weapon_recipes:
+  max_weapons_to_evaluate: 50      # With level filtering, this should be sufficient
+  max_weapon_level_above_character: 1  # Only consider weapons up to 1 level above character
+  max_weapon_level_below_character: 1  # Only consider weapons up to 1 level below character
+  craftability_scoring:
+    inventory_proximity_weight: 1000  # Very high weight for recipes we're close to completing
+    stat_improvement_weight: 50
+    stat_improvement_multiplier: 5
+    level_appropriateness_weight: 25
+    max_level_difference: 1
+    skill_penalty_multiplier: 10
 

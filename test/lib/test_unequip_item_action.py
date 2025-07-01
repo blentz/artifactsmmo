@@ -1,10 +1,12 @@
 """ Test module for UnequipItemAction """
 
 import unittest
-from unittest.mock import Mock, MagicMock
-from src.controller.actions.unequip_item import UnequipItemAction
+from unittest.mock import Mock
+
 from artifactsmmo_api_client.models.item_slot import ItemSlot
-from test.fixtures import create_mock_client
+from src.controller.actions.unequip_item import UnequipItemAction
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestUnequipItemAction(unittest.TestCase):
@@ -14,31 +16,47 @@ class TestUnequipItemAction(unittest.TestCase):
         """ Set up test fixtures """
         self.character_name = "test_character"
         self.slot = "weapon"
-        self.action = UnequipItemAction(self.character_name, self.slot)
+        self.action = UnequipItemAction()
+        self.context = MockActionContext(
+            character_name=self.character_name,
+            slot=self.slot,
+            quantity=1
+        )
 
     def test_init_basic(self):
         """ Test basic initialization """
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.slot, "weapon")
-        self.assertEqual(self.action.quantity, 1)
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(self.action, UnequipItemAction)
+        # Parameters are provided via context during execution
 
     def test_init_with_quantity(self):
         """ Test initialization with custom quantity """
-        action = UnequipItemAction("char", "utility1", quantity=3)
-        self.assertEqual(action.quantity, 3)
+        action = UnequipItemAction()
+        context = MockActionContext(
+            character_name="char",
+            slot="utility1",
+            quantity=3
+        )
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(action, UnequipItemAction)
 
     def test_execute_no_client(self):
         """ Test execute with no API client """
-        result = self.action.execute(None)
+        result = self.action.execute(None, self.context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
     def test_execute_invalid_slot(self):
         """ Test execute with invalid slot name """
         client = create_mock_client()
-        action = UnequipItemAction("char", "invalid_slot")
+        action = UnequipItemAction()
+        context = MockActionContext(
+            character_name="char",
+            slot="invalid_slot",
+            quantity=1
+        )
         
-        result = action.execute(client)
+        result = action.execute(client, context)
         
         self.assertFalse(result['success'])
         self.assertIn('Invalid equipment slot', result['error'])
@@ -76,7 +94,7 @@ class TestUnequipItemAction(unittest.TestCase):
         
         # Patch the API call
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
-            result = self.action.execute(client)
+            result = self.action.execute(client, self.context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['slot'], "weapon")
@@ -98,7 +116,7 @@ class TestUnequipItemAction(unittest.TestCase):
         mock_response.data = None
         
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
-            result = self.action.execute(client)
+            result = self.action.execute(client, self.context)
         
         self.assertFalse(result['success'])
         self.assertIn('no response data', result['error'])
@@ -108,7 +126,7 @@ class TestUnequipItemAction(unittest.TestCase):
         client = create_mock_client()
         
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
+            result = self.action.execute(client, self.context)
         
         self.assertFalse(result['success'])
         self.assertIn('API Error', result['error'])
@@ -196,13 +214,13 @@ class TestUnequipItemAction(unittest.TestCase):
 
     def test_repr(self):
         """ Test string representation """
-        expected = "UnequipItemAction(test_character, weapon, qty=1)"
+        expected = "UnequipItemAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_repr_with_quantity(self):
         """ Test string representation with custom quantity """
-        action = UnequipItemAction("char", "utility2", quantity=2)
-        expected = "UnequipItemAction(char, utility2, qty=2)"
+        action = UnequipItemAction()
+        expected = "UnequipItemAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_minimal_response(self):
@@ -213,7 +231,7 @@ class TestUnequipItemAction(unittest.TestCase):
         
         # Only provide basic data without optional fields
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
-            result = self.action.execute(client)
+            result = self.action.execute(client, self.context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['slot'], "weapon")
@@ -222,7 +240,12 @@ class TestUnequipItemAction(unittest.TestCase):
     def test_execute_utility_slot_with_quantity(self):
         """ Test execute for utility slot with custom quantity """
         client = create_mock_client()
-        action = UnequipItemAction("char", "utility1", quantity=3)
+        action = UnequipItemAction()
+        context = MockActionContext(
+            character_name="char",
+            slot="utility1",
+            quantity=3
+        )
         
         mock_response = Mock()
         mock_response.data = Mock()
@@ -238,7 +261,7 @@ class TestUnequipItemAction(unittest.TestCase):
         mock_response.data.slot = ItemSlot.UTILITY1
         
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
-            result = action.execute(client)
+            result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['quantity'], 3)

@@ -128,6 +128,12 @@ goal_templates:
       equipment_equipped: true
       character_stats_improved: true
       character_safe: true
+      # Equipment analysis states
+      equipment_gaps_analyzed: true
+      optimal_slot_selected: true
+      target_slot_specified: true
+      best_recipe_selected: true
+      craftable_item_identified: true
     strategy:
       equipment_type: "weapon"
       level_improvement_threshold: 1  # At least 1 level better
@@ -147,6 +153,25 @@ goal_templates:
       - type: "weapon_level_improved"
         operator: "=="
         value: true
+        
+  craft_selected_item:
+    description: "Craft the item that was selected by evaluate_recipes"
+    objective_type: "equipment_progression"
+    target_state:
+      has_equipment: true
+      item_crafted: true
+      inventory_updated: true
+      character_safe: true
+    strategy:
+      priority_actions: ["plan_crafting_materials", "execute_crafting_plan", "equip_item"]
+      requires_recipe_selection: true
+      max_craft_attempts: 3
+    prerequisites:
+      - best_recipe_selected: true
+    success_conditions:
+      - type: "item_crafted"
+        operator: "=="
+        value: true
     dependency_chain:
       - step: "workshop_discovery"
         required_state: {"workshops_discovered": true}
@@ -157,6 +182,127 @@ goal_templates:
       - step: "crafting_execution"
         required_state: {"at_workshop": true, "has_materials": true}
         
+  level_crafting_skill:
+    description: "Level up any crafting skill by creating optimal equipment upgrades"
+    objective_type: "skill_progression"
+    target_state:
+      skill_xp_gained: true
+      equipment_equipped: true
+      character_safe: true
+      item_crafted: true
+      # Equipment analysis states
+      equipment_gaps_analyzed: true
+      optimal_slot_selected: true
+      target_slot_specified: true
+      best_recipe_selected: true
+      craftable_item_identified: true
+    strategy:
+      priority_actions: [
+        "analyze_equipment_gaps",
+        "select_optimal_slot", 
+        "evaluate_recipes",
+        "plan_crafting_materials",
+        "execute_crafting_plan",
+        "equip_item"
+      ]
+      auto_slot_selection: true
+      prioritize_equipment_gaps: true
+      level_improvement_threshold: 1
+      max_craft_attempts: 3
+    parameters:
+      required: ["target_craft_skill"]
+      optional: ["min_xp_gain", "max_iterations", "equipment_priority_override"]
+    success_conditions:
+      - type: "skill_xp_gained"
+        operator: "=="
+        value: true
+      - type: "item_crafted"
+        operator: "=="
+        value: true
+        
+  upgrade_equipment:
+    description: "Craft and equip better equipment for the specified slot"
+    objective_type: "equipment_progression"
+    target_state:
+      has_better_equipment: true
+      equipment_equipped: true
+      character_stats_improved: true
+      character_safe: true
+      # Equipment analysis states
+      equipment_gaps_analyzed: true
+      optimal_slot_selected: true
+      target_slot_specified: true
+      best_recipe_selected: true
+      craftable_item_identified: true
+    strategy:
+      level_improvement_threshold: 1
+      search_radius: 4
+      max_craft_attempts: 5
+      resource_gathering_enabled: true
+      workshop_discovery_enabled: true
+      slot_based_evaluation: true
+    parameters:
+      required: ["target_equipment_slot"]
+      optional: ["max_level_diff", "search_radius", "craft_skill_override"]
+    success_conditions:
+      - type: "equipment_equipped"
+        operator: "=="
+        value: true
+      - type: "equipment_level_improved"
+        operator: "=="
+        value: true
+
+  # Specific skill XP goals using the generic template
+  level_weaponcrafting:
+    extends: "level_crafting_skill"
+    description: "Level weaponcrafting by creating optimal weapon/shield upgrades"
+    objective_type: "skill_progression"
+    parameters:
+      target_craft_skill: "weaponcrafting"
+    strategy:
+      equipment_priority: ["weapon", "shield"]
+      focus_combat_effectiveness: true
+
+  level_gearcrafting:
+    extends: "level_crafting_skill"  
+    description: "Level gearcrafting by creating optimal armor upgrades"
+    objective_type: "skill_progression"
+    parameters:
+      target_craft_skill: "gearcrafting"
+    strategy:
+      equipment_priority: ["body_armor", "helmet", "leg_armor", "boots"]
+      focus_defense: true
+
+  level_jewelrycrafting:
+    extends: "level_crafting_skill"
+    description: "Level jewelrycrafting by creating optimal accessory upgrades"
+    objective_type: "skill_progression"
+    parameters:
+      target_craft_skill: "jewelrycrafting"
+    strategy:
+      equipment_priority: ["amulet", "ring1", "ring2"]
+      focus_special_effects: true
+
+  level_cooking:
+    extends: "level_crafting_skill"
+    description: "Level cooking by creating useful consumables"
+    objective_type: "skill_progression"
+    parameters:
+      target_craft_skill: "cooking"
+    strategy:
+      equipment_priority: ["consumable"]
+      focus_utility: true
+
+  level_alchemy:
+    extends: "level_crafting_skill"
+    description: "Level alchemy by creating powerful potions"
+    objective_type: "skill_progression"
+    parameters:
+      target_craft_skill: "alchemy"
+    strategy:
+      equipment_priority: ["potion"]
+      focus_temporary_boosts: true
+        
   upgrade_armor:
     description: "Craft and equip better armor pieces for increased survivability"
     objective_type: "equipment_progression"
@@ -165,6 +311,12 @@ goal_templates:
       equipment_equipped: true
       character_stats_improved: true
       character_safe: true
+      # Equipment analysis states
+      equipment_gaps_analyzed: true
+      optimal_slot_selected: true
+      target_slot_specified: true
+      best_recipe_selected: true
+      craftable_item_identified: true
     strategy:
       equipment_types: ["helmet", "body_armor", "leg_armor", "boots"]
       level_improvement_threshold: 1
@@ -191,6 +343,12 @@ goal_templates:
       all_slots_equipped: true
       character_stats_improved: true
       character_safe: true
+      # Equipment analysis states
+      equipment_gaps_analyzed: true
+      optimal_slot_selected: true
+      target_slot_specified: true
+      best_recipe_selected: true
+      craftable_item_identified: true
     strategy:
       equipment_slots: ["weapon", "helmet", "body_armor", "leg_armor", "boots"]
       level_improvement_threshold: 1
@@ -392,6 +550,7 @@ goal_selection_rules:
       goal: "get_to_safety"
       priority: 98
       
+      
     # When combat is not viable, prioritize weapon upgrades for low-level characters
     # BUT only if character is at safe HP levels
     - condition:
@@ -499,6 +658,14 @@ goal_selection_rules:
 
   # Equipment progression priorities (high priority for low-level characters)
   equipment:
+    # Craft already selected weapon (highest equipment priority)
+    - condition:
+        best_weapon_selected: true
+        character_safe: true
+        weapon_crafted: false
+      goal: "craft_selected_weapon"
+      priority: 78
+      
     # Weapon upgrade goal for new characters needing equipment
     - condition:
         character_level: "<=5"
@@ -506,7 +673,7 @@ goal_selection_rules:
         need_equipment: true
         need_weapon_upgrade: true
       goal: "upgrade_weapon"
-      priority: 78
+      priority: 75
       
     # Workshop discovery should come first for new players
     - condition:
@@ -616,21 +783,11 @@ state_calculation_rules:
     method: "check_combat_viability"
     description: "True when nearby monsters have consistently poor win rates"
     
-  # Skill progression states
-  need_weaponcrafting_upgrade:
-    type: "computed"
-    method: "check_weaponcrafting_upgrade_needed"
-    description: "True when character needs weaponcrafting skill to craft selected weapon"
-    
-  need_skill_upgrade:
-    type: "computed"
-    method: "check_skill_upgrade_needed"
-    description: "True when character needs to upgrade any skill for crafting requirements"
-    
-  weaponcrafting_level_sufficient:
-    type: "computed"
-    method: "check_weaponcrafting_level_sufficient"
-    description: "True when weaponcrafting level meets current requirements"
+  # Skill progression states (set by CheckSkillRequirementAction)
+  # These states are set by actions, not computed by the state engine
+  # need_weaponcrafting_upgrade - set by CheckSkillRequirementAction
+  # need_skill_upgrade - set by CheckSkillRequirementAction  
+  # weaponcrafting_level_sufficient - set by CheckSkillRequirementAction
     
   skill_requirements_checked:
     formula: "character_level >= 1"  # Default to false initially
@@ -733,6 +890,10 @@ thresholds:
   good_success_rate_threshold: 0.7  # Threshold for considering a monster "safe"
   dangerous_success_rate_threshold: 0.3  # Threshold for warning about dangerous monsters
   optimization_distance_radius: 20  # Radius for optimization suggestions
+  
+  # Combat viability thresholds
+  min_combat_win_rate: 0.2  # Minimum weighted win rate to consider combat viable (20%)
+  recency_decay_factor: 0.9  # Weight decay for older combats (each older combat worth 90% of the next)
   
 # Content classification rules - replaces hardcoded categorization logic
 content_classification:

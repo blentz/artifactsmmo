@@ -1,8 +1,8 @@
 """Unit tests for MapState caching functionality."""
 
-import unittest
 import tempfile
 import time
+import unittest
 from unittest.mock import Mock, patch
 
 from src.game.map.state import MapState

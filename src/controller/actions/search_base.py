@@ -7,9 +7,10 @@ All search-related actions can inherit from this class to use consistent search 
 """
 
 import math
-import time
-from typing import Dict, List, Optional, Tuple, Set, Callable
+from typing import Callable, Dict, List, Optional, Set, Tuple
+
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
+
 from .base import ActionBase
 from .mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
 
@@ -34,21 +35,14 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         'west': set()      # coordinates that returned 404 when going west
     }
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, search_radius: int = 5):
+    def __init__(self):
         """
         Initialize the search action base.
-
-        Args:
-            character_x: Character's X coordinate (search center)
-            character_y: Character's Y coordinate (search center)
-            search_radius: Maximum radius to search
         """
         super().__init__()
-        self.character_x = character_x
-        self.character_y = character_y
-        self.search_radius = search_radius
 
-    def unified_search(self, client, content_filter: Callable[[Dict, int, int], bool],
+    def unified_search(self, client, character_x: int, character_y: int, search_radius: int,
+                      content_filter: Callable[[Dict, int, int], bool],
                       result_processor: Callable[[Tuple[int, int], str, Dict], Dict] = None,
                       map_state = None) -> Optional[Dict]:
         """
@@ -56,6 +50,9 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         
         Args:
             client: API client for making map requests
+            character_x: Character's current X coordinate
+            character_y: Character's current Y coordinate
+            search_radius: Maximum radius to search
             content_filter: Function that takes (content_data, x, y) and returns True if content matches
             result_processor: Optional function to process successful results
             map_state: MapState instance for cached map access (preferred over direct API calls)
@@ -63,20 +60,20 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         Returns:
             Dictionary with search results or None if nothing found
         """
-        if not self.validate_execution_context(client):
+        if not client:
             return self.get_error_response("No API client provided")
         
         # Search results
         found_locations = []
         
         # Search in expanding circles around the character
-        for radius in range(1, self.search_radius + 1):
-            locations_at_radius = self._search_radius_for_content(client, radius, content_filter, map_state)
+        for radius in range(1, search_radius + 1):
+            locations_at_radius = self._search_radius_for_content(client, character_x, character_y, radius, content_filter, map_state)
             
             if locations_at_radius:
                 found_locations.extend(locations_at_radius)
                 # For immediate results, find the closest one at this radius
-                closest_location = self._find_closest_location(locations_at_radius)
+                closest_location = self._find_closest_location(character_x, character_y, locations_at_radius)
                 if closest_location:
                     location, content_code, content_data = closest_location
                     
@@ -86,7 +83,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                     else:
                         # Default result processing
                         x, y = location
-                        distance = self._calculate_distance(x, y)
+                        distance = self._calculate_distance(character_x, character_y, x, y)
                         return self.get_success_response(
                             location=location,
                             distance=distance,
@@ -95,9 +92,9 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                         )
         
         # If no locations found, return error
-        return self.get_error_response(f"No matching content found within radius {self.search_radius}")
+        return self.get_error_response(f"No matching content found within radius {search_radius}")
 
-    def _search_radius_for_content(self, client, radius: int, 
+    def _search_radius_for_content(self, client, character_x: int, character_y: int, radius: int, 
                                   content_filter: Callable[[Dict, int, int], bool],
                                   map_state = None) -> List[Tuple[Tuple[int, int], str, Dict]]:
         """
@@ -115,7 +112,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         found_content = []
         
         # Generate coordinates at the given radius using efficient boundary traversal
-        coordinates = self._generate_radius_coordinates(radius)
+        coordinates = self._generate_radius_coordinates(character_x, character_y, radius)
         
         for x, y in coordinates:
             # Skip if this coordinate is likely outside map boundaries
@@ -137,7 +134,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                             scan_result = map_state.scan(x, y, cache=True)
                             # Check if scan returned None (boundary hit)
                             if scan_result is None:
-                                self._record_boundary_hit(x, y)
+                                self._record_boundary_hit(character_x, character_y, x, y)
                                 self.logger.debug(f"Map boundary detected at ({x}, {y})")
                                 continue
                             coord_key = f"{x},{y}"
@@ -146,7 +143,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                         except Exception as scan_error:
                             # Handle scan errors (including 404s that throw exceptions)
                             if "404" in str(scan_error) or "not found" in str(scan_error).lower():
-                                self._record_boundary_hit(x, y)
+                                self._record_boundary_hit(character_x, character_y, x, y)
                                 self.logger.debug(f"Map boundary detected at ({x}, {y}) via exception: {scan_error}")
                             else:
                                 self.logger.debug(f"Error scanning ({x}, {y}): {scan_error}")
@@ -158,7 +155,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                     
                     # Handle 404 responses (coordinates outside map)
                     if map_response is None:
-                        self._record_boundary_hit(x, y)
+                        self._record_boundary_hit(character_x, character_y, x, y)
                         self.logger.debug(f"Map boundary detected at ({x}, {y})")
                         continue
                     
@@ -187,13 +184,15 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         
         return found_content
 
-    def _generate_radius_coordinates(self, radius: int) -> List[Tuple[int, int]]:
+    def _generate_radius_coordinates(self, character_x: int, character_y: int, radius: int) -> List[Tuple[int, int]]:
         """
         Generate coordinates at a specific radius from character position.
         
         Uses efficient boundary traversal instead of checking every coordinate in a square.
         
         Args:
+            character_x: Character's X coordinate
+            character_y: Character's Y coordinate
             radius: Distance from character position
             
         Returns:
@@ -202,18 +201,18 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         coordinates = []
         
         if radius == 0:
-            return [(self.character_x, self.character_y)]
+            return [(character_x, character_y)]
         
         # Generate coordinates on the boundary of the radius
         # Top and bottom edges
-        for x in range(self.character_x - radius, self.character_x + radius + 1):
-            coordinates.append((x, self.character_y - radius))  # Top edge
-            coordinates.append((x, self.character_y + radius))  # Bottom edge
+        for x in range(character_x - radius, character_x + radius + 1):
+            coordinates.append((x, character_y - radius))  # Top edge
+            coordinates.append((x, character_y + radius))  # Bottom edge
         
         # Left and right edges (excluding corners already added)
-        for y in range(self.character_y - radius + 1, self.character_y + radius):
-            coordinates.append((self.character_x - radius, y))  # Left edge
-            coordinates.append((self.character_x + radius, y))  # Right edge
+        for y in range(character_y - radius + 1, character_y + radius):
+            coordinates.append((character_x - radius, y))  # Left edge
+            coordinates.append((character_x + radius, y))  # Right edge
         
         return coordinates
 
@@ -242,11 +241,13 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                     content_dict[attr_key] = getattr(content, attr)
             return content_dict
 
-    def _find_closest_location(self, locations: List[Tuple[Tuple[int, int], str, Dict]]) -> Optional[Tuple[Tuple[int, int], str, Dict]]:
+    def _find_closest_location(self, character_x: int, character_y: int, locations: List[Tuple[Tuple[int, int], str, Dict]]) -> Optional[Tuple[Tuple[int, int], str, Dict]]:
         """
         Find the closest location from a list of found locations.
         
         Args:
+            character_x: Character's X coordinate
+            character_y: Character's Y coordinate
             locations: List of (location, content_code, content_data) tuples
             
         Returns:
@@ -261,7 +262,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         for location_tuple in locations:
             location, content_code, content_data = location_tuple
             x, y = location
-            distance = self._calculate_distance(x, y)
+            distance = self._calculate_distance(character_x, character_y, x, y)
             
             if distance < min_distance:
                 min_distance = distance
@@ -269,18 +270,20 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         
         return closest_location
 
-    def _calculate_distance(self, x: int, y: int) -> float:
+    def _calculate_distance(self, from_x: int, from_y: int, to_x: int, to_y: int) -> float:
         """
-        Calculate distance from character to given coordinates.
+        Calculate distance between two coordinates.
         
         Args:
-            x: Target X coordinate
-            y: Target Y coordinate
+            from_x: Starting X coordinate
+            from_y: Starting Y coordinate
+            to_x: Target X coordinate
+            to_y: Target Y coordinate
             
         Returns:
             Euclidean distance
         """
-        return math.sqrt((x - self.character_x) ** 2 + (y - self.character_y) ** 2)
+        return math.sqrt((to_x - from_x) ** 2 + (to_y - from_y) ** 2)
 
     def _is_likely_outside_map(self, x: int, y: int) -> bool:
         """
@@ -317,22 +320,24 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         
         return False
 
-    def _record_boundary_hit(self, x: int, y: int) -> None:
+    def _record_boundary_hit(self, character_x: int, character_y: int, x: int, y: int) -> None:
         """
         Record that we hit a map boundary at the given coordinates.
         
         Args:
+            character_x: Character's X coordinate
+            character_y: Character's Y coordinate
             x: X coordinate where boundary was hit
             y: Y coordinate where boundary was hit
         """
         # Determine which direction this boundary represents relative to character
-        if y > self.character_y:
+        if y > character_y:
             self._map_boundaries['north'].add((x, y))
-        elif y < self.character_y:
+        elif y < character_y:
             self._map_boundaries['south'].add((x, y))
-        elif x > self.character_x:
+        elif x > character_x:
             self._map_boundaries['east'].add((x, y))
-        elif x < self.character_x:
+        elif x < character_x:
             self._map_boundaries['west'].add((x, y))
             
         # Log boundary information for debugging

@@ -2,7 +2,12 @@
 
 import time
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Dict, Optional
+
 from .base import ActionBase
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 
 class WaitAction(ActionBase):
@@ -20,22 +25,22 @@ class WaitAction(ActionBase):
     }
     weights = {'wait': 0.1}  # Lowest priority - only when we have to wait
 
-    def __init__(self, wait_duration: float = 1.0):
+    def __init__(self):
         """
         Initialize the wait action.
-        
-        Args:
-            wait_duration: Duration to wait in seconds (default: 1.0)
         """
         super().__init__()
-        self.wait_duration = wait_duration
 
-    def execute(self, client, character_state=None, **kwargs):
+    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """ Execute the wait action - wait for cooldown to expire """
-        self.log_execution_start(wait_duration=self.wait_duration)
+        # Get wait duration from context or use default
+        wait_duration = context.get('wait_duration', 1.0)
+        
+        self.log_execution_start(wait_duration=wait_duration)
         
         # Check if we have character state with cooldown information
-        remaining_cooldown = self.wait_duration
+        remaining_cooldown = wait_duration
+        character_state = context.character_state
         
         if character_state is not None:
             char_data = character_state.data
@@ -88,4 +93,4 @@ class WaitAction(ActionBase):
             return error_response
 
     def __repr__(self):
-        return f"WaitAction(duration={self.wait_duration})"
+        return "WaitAction()"

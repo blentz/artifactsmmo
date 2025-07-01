@@ -8,10 +8,10 @@ data:
     bank:
       code: bank
       craft_skill: unknown
-      encounter_count: 1
+      encounter_count: 17
       facility_type: bank
       first_discovered: '2025-06-29T23:28:56.021792'
-      last_seen: '2025-06-29T23:28:56.021793'
+      last_seen: '2025-07-01T02:54:48.233347'
       name: bank
       usage_count: 0
       x: 4
@@ -2972,36 +2972,6 @@ data:
           quantity: 4
         - code: spider_leg
           quantity: 2
-        - code: enchanted_fabric
-          quantity: 1
-        level: 35
-        quantity: 1
-        skill: gearcrafting
-      discovery_count: 1
-      effects:
-      - code: hp
-        description: Adds 150 HP to its stats when equipped.
-        value: 150
-      - code: dmg
-        description: Adds 16% Damage to its stats when equipped.
-        value: 16
-      - code: prospecting
-        description: Adds 120 Prospecting to its stats when equipped. Each PP increases
-          your chance of obtaining drops in combat and with skills. (1% extra per
-          10 PP)
-        value: 120
-      - code: haste
-        description: 'Adds 5 Haste to its stats when equipped. The haste reduces the
-          cooldown of a fight. '
-        value: 5
-      first_discovered: '2025-06-29T23:28:58.960070'
-      item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960071'
-      level: 35
-      name: Enchanter Pants
-      sources: []
-      tradeable: true
-      uses: []
     eternity_ring:
       code: eternity_ring
       craft_data:
@@ -3034,9 +3004,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:59.276801'
+      first_discovered: '2025-07-01T00:41:07.045121'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276802'
+      last_seen: '2025-07-01T00:41:07.045122'
       level: 40
       name: Eternity Ring
       sources: []
@@ -3047,9 +3017,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374748'
+      first_discovered: '2025-07-01T00:41:06.027927'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374748'
+      last_seen: '2025-07-01T00:41:06.027927'
       level: 1
       name: Event Ticket
       sources: []
@@ -3060,9 +3030,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374699'
+      first_discovered: '2025-07-01T00:41:06.027900'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374700'
+      last_seen: '2025-07-01T00:41:06.027902'
       level: 1
       name: Feather
       sources: []
@@ -3090,9 +3060,9 @@ data:
       - code: dmg_water
         description: Adds 5% Water Damage to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374757'
+      first_discovered: '2025-07-01T00:41:06.027933'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374758'
+      last_seen: '2025-07-01T00:41:06.027934'
       level: 5
       name: Feather Coat
       sources: []
@@ -3122,9 +3092,9 @@ data:
       - code: dmg_earth
         description: Adds 5% Earth Damage to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374806'
+      first_discovered: '2025-07-01T00:41:06.027962'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374807'
+      last_seen: '2025-07-01T00:41:06.027962'
       level: 10
       name: Fire & Earth Amulet
       sources: []
@@ -3149,9 +3119,9 @@ data:
         description: Add 12% fire damage at the start of the fight and for the rest
           of the fight.
         value: 12
-      first_discovered: '2025-06-29T23:28:58.374886'
+      first_discovered: '2025-07-01T00:41:06.028023'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374887'
+      last_seen: '2025-07-01T00:41:06.028023'
       level: 10
       name: Fire Boost Potion
       sources: []
@@ -3177,9 +3147,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.374870'
+      first_discovered: '2025-07-01T00:41:06.028014'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374870'
+      last_seen: '2025-07-01T00:41:06.028015'
       level: 10
       name: Fire Bow
       sources: []
@@ -3203,9 +3173,9 @@ data:
       - code: boost_res_fire
         description: Gives 10% fire resistance at the start of fight.
         value: 10
-      first_discovered: '2025-06-29T23:28:59.276851'
+      first_discovered: '2025-07-01T00:41:07.045151'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276851'
+      last_seen: '2025-07-01T00:41:07.045152'
       level: 40
       name: Fire Res Potion
       sources: []
@@ -3229,9 +3199,9 @@ data:
       - code: dmg_fire
         description: Adds 8% Fire Damage to its stats when equipped.
         value: 8
-      first_discovered: '2025-06-29T23:28:58.698310'
+      first_discovered: '2025-07-01T00:41:06.384654'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698311'
+      last_seen: '2025-07-01T00:41:06.384655'
       level: 15
       name: Fire Ring
       sources: []
@@ -3262,9 +3232,9 @@ data:
       - code: res_air
         description: Adds -5% Air Res to its stats when equipped.
         value: -5
-      first_discovered: '2025-06-29T23:28:59.276687'
+      first_discovered: '2025-07-01T00:41:07.045005'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276688'
+      last_seen: '2025-07-01T00:41:07.045006'
       level: 40
       name: Fire Shield
       sources: []
@@ -3290,9 +3260,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374760'
+      first_discovered: '2025-07-01T00:41:06.027935'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374760'
+      last_seen: '2025-07-01T00:41:06.027936'
       level: 5
       name: Fire Staff
       sources: []
@@ -3316,9 +3286,9 @@ data:
       - code: heal
         description: Heal 600 HP when the item is used.
         value: 600
-      first_discovered: '2025-06-29T23:28:59.276680'
+      first_discovered: '2025-07-01T00:41:07.044986'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276681'
+      last_seen: '2025-07-01T00:41:07.044987'
       level: 40
       name: Fish Soup
       sources: []
@@ -3341,9 +3311,9 @@ data:
       - code: fishing
         description: Reduces cooldown by -10% when a character is fishing.
         value: -10
-      first_discovered: '2025-06-29T23:28:58.374743'
+      first_discovered: '2025-07-01T00:41:06.027922'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374744'
+      last_seen: '2025-07-01T00:41:06.027923'
       level: 1
       name: Fishing Net
       sources: []
@@ -3382,9 +3352,9 @@ data:
         description: 'Adds 7 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 7
-      first_discovered: '2025-06-29T23:28:58.959967'
+      first_discovered: '2025-07-01T00:41:06.663307'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959968'
+      last_seen: '2025-07-01T00:41:06.663308'
       level: 30
       name: Flying Boots
       sources: []
@@ -3395,9 +3365,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374911'
+      first_discovered: '2025-07-01T00:41:06.028042'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374912'
+      last_seen: '2025-07-01T00:41:06.028043'
       level: 12
       name: Flying Wing
       sources: []
@@ -3418,9 +3388,9 @@ data:
         description: Adds 15 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 15
-      first_discovered: '2025-06-29T23:28:58.374899'
+      first_discovered: '2025-07-01T00:41:06.028031'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374900'
+      last_seen: '2025-07-01T00:41:06.028032'
       level: 10
       name: Forest Ring
       sources: []
@@ -3450,9 +3420,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698364'
+      first_discovered: '2025-07-01T00:41:06.384686'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698365'
+      last_seen: '2025-07-01T00:41:06.384687'
       level: 20
       name: Forest Whip
       sources: []
@@ -3472,9 +3442,9 @@ data:
       - code: heal
         description: Heal 150 HP when the item is used.
         value: 150
-      first_discovered: '2025-06-29T23:28:58.374772'
+      first_discovered: '2025-07-01T00:41:06.027941'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374772'
+      last_seen: '2025-07-01T00:41:06.027942'
       level: 5
       name: Fried Eggs
       sources: []
@@ -3491,9 +3461,9 @@ data:
       - code: woodcutting
         description: Reduces cooldown by -50% when a character logs a tree.
         value: -50
-      first_discovered: '2025-06-29T23:28:59.276869'
+      first_discovered: '2025-07-01T00:41:07.045164'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276870'
+      last_seen: '2025-07-01T00:41:07.045165'
       level: 40
       name: Frozen Axe
       sources: []
@@ -3510,9 +3480,9 @@ data:
       - code: fishing
         description: Reduces cooldown by -50% when a character is fishing.
         value: -50
-      first_discovered: '2025-06-29T23:28:59.276867'
+      first_discovered: '2025-07-01T00:41:07.045161'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276868'
+      last_seen: '2025-07-01T00:41:07.045162'
       level: 40
       name: Frozen Fishing Rod
       sources: []
@@ -3529,9 +3499,9 @@ data:
       - code: alchemy
         description: Reduces cooldown by -50% when a character harvest a plant.
         value: -50
-      first_discovered: '2025-06-29T23:28:59.276865'
+      first_discovered: '2025-07-01T00:41:07.045159'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276865'
+      last_seen: '2025-07-01T00:41:07.045160'
       level: 40
       name: Frozen Gloves
       sources: []
@@ -3548,9 +3518,9 @@ data:
       - code: mining
         description: Reduces cooldown by -50% when a character mines a resource.
         value: -50
-      first_discovered: '2025-06-29T23:28:59.276862'
+      first_discovered: '2025-07-01T00:41:07.045156'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276863'
+      last_seen: '2025-07-01T00:41:07.045157'
       level: 40
       name: Frozen Pickaxe
       sources: []
@@ -3561,9 +3531,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276717'
+      first_discovered: '2025-07-01T00:41:07.045059'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276718'
+      last_seen: '2025-07-01T00:41:07.045059'
       level: 40
       name: Glowstem Leaf
       sources: []
@@ -3574,9 +3544,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.960056'
+      first_discovered: '2025-07-01T00:41:06.663342'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960056'
+      last_seen: '2025-07-01T00:41:06.663343'
       level: 35
       name: Goblin Eye
       sources: []
@@ -3587,9 +3557,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.960039'
+      first_discovered: '2025-07-01T00:41:06.663338'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960040'
+      last_seen: '2025-07-01T00:41:06.663339'
       level: 35
       name: Goblin Tooth
       sources: []
@@ -3620,9 +3590,9 @@ data:
       - code: woodcutting
         description: Reduces cooldown by -40% when a character logs a tree.
         value: -40
-      first_discovered: '2025-06-29T23:28:58.959888'
+      first_discovered: '2025-07-01T00:41:06.663260'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959889'
+      last_seen: '2025-07-01T00:41:06.663261'
       level: 30
       name: Gold Axe
       sources: []
@@ -3639,9 +3609,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959857'
+      first_discovered: '2025-07-01T00:41:06.663242'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959858'
+      last_seen: '2025-07-01T00:41:06.663242'
       level: 30
       name: Gold bar
       sources: []
@@ -3685,9 +3655,9 @@ data:
         description: 'Adds 7 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 7
-      first_discovered: '2025-06-29T23:28:58.959903'
+      first_discovered: '2025-07-01T00:41:06.663270'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959903'
+      last_seen: '2025-07-01T00:41:06.663271'
       level: 30
       name: Gold Boots
       sources: []
@@ -3718,9 +3688,9 @@ data:
       - code: fishing
         description: Reduces cooldown by -40% when a character is fishing.
         value: -40
-      first_discovered: '2025-06-29T23:28:58.959883'
+      first_discovered: '2025-07-01T00:41:06.663258'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959884'
+      last_seen: '2025-07-01T00:41:06.663259'
       level: 30
       name: Gold Fishing Rod
       sources: []
@@ -3758,9 +3728,9 @@ data:
         description: Adds 20 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 20
-      first_discovered: '2025-06-29T23:28:58.959890'
+      first_discovered: '2025-07-01T00:41:06.663262'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959891'
+      last_seen: '2025-07-01T00:41:06.663263'
       level: 30
       name: Gold Helm
       sources: []
@@ -3798,9 +3768,9 @@ data:
         description: Adds 20 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 20
-      first_discovered: '2025-06-29T23:28:58.959874'
+      first_discovered: '2025-07-01T00:41:06.663252'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959875'
+      last_seen: '2025-07-01T00:41:06.663253'
       level: 30
       name: Gold Mask
       sources: []
@@ -3811,9 +3781,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959872'
+      first_discovered: '2025-07-01T00:41:06.663250'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959872'
+      last_seen: '2025-07-01T00:41:06.663251'
       level: 30
       name: Gold Ore
       sources: []
@@ -3844,9 +3814,9 @@ data:
       - code: mining
         description: Reduces cooldown by -40% when a character mines a resource.
         value: -40
-      first_discovered: '2025-06-29T23:28:58.959897'
+      first_discovered: '2025-07-01T00:41:06.663266'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959898'
+      last_seen: '2025-07-01T00:41:06.663267'
       level: 30
       name: Gold Pickaxe
       sources: []
@@ -3886,9 +3856,9 @@ data:
       - code: res_earth
         description: Adds 6% Earth Res to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.959847'
+      first_discovered: '2025-07-01T00:41:06.663233'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959848'
+      last_seen: '2025-07-01T00:41:06.663234'
       level: 30
       name: Gold Platebody
       sources: []
@@ -3932,9 +3902,9 @@ data:
       - code: res_air
         description: Adds 7% Air Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:58.959862'
+      first_discovered: '2025-07-01T00:41:06.663244'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959862'
+      last_seen: '2025-07-01T00:41:06.663245'
       level: 30
       name: Gold Platelegs
       sources: []
@@ -3966,9 +3936,9 @@ data:
         description: Adds 30 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 30
-      first_discovered: '2025-06-29T23:28:58.959881'
+      first_discovered: '2025-07-01T00:41:06.663256'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959882'
+      last_seen: '2025-07-01T00:41:06.663257'
       level: 30
       name: Gold Ring
       sources: []
@@ -4005,9 +3975,9 @@ data:
       - code: res_air
         description: Adds 10% Air Res to its stats when equipped.
         value: 10
-      first_discovered: '2025-06-29T23:28:58.959849'
+      first_discovered: '2025-07-01T00:41:06.663236'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959850'
+      last_seen: '2025-07-01T00:41:06.663236'
       level: 30
       name: Gold Shield
       sources: []
@@ -4042,9 +4012,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.959864'
+      first_discovered: '2025-07-01T00:41:06.663246'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959865'
+      last_seen: '2025-07-01T00:41:06.663247'
       level: 30
       name: Gold Sword
       sources: []
@@ -4055,9 +4025,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374733'
+      first_discovered: '2025-07-01T00:41:06.027920'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374734'
+      last_seen: '2025-07-01T00:41:06.027920'
       level: 1
       name: Golden Egg
       sources: []
@@ -4088,9 +4058,9 @@ data:
       - code: alchemy
         description: Reduces cooldown by -40% when a character harvest a plant.
         value: -40
-      first_discovered: '2025-06-29T23:28:58.959924'
+      first_discovered: '2025-07-01T00:41:06.663289'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959925'
+      last_seen: '2025-07-01T00:41:06.663290'
       level: 30
       name: Golden Gloves
       sources: []
@@ -4101,9 +4071,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374909'
+      first_discovered: '2025-07-01T00:41:06.028040'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374910'
+      last_seen: '2025-07-01T00:41:06.028041'
       level: 10
       name: Golden Shrimp
       sources: []
@@ -4137,9 +4107,9 @@ data:
       - code: dmg_water
         description: Adds 15% Water Damage to its stats when equipped.
         value: 15
-      first_discovered: '2025-06-29T23:28:58.959905'
+      first_discovered: '2025-07-01T00:41:06.663272'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959906'
+      last_seen: '2025-07-01T00:41:06.663273'
       level: 30
       name: Greater Dreadful Amulet
       sources: []
@@ -4174,9 +4144,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.959835'
+      first_discovered: '2025-07-01T00:41:06.663229'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959836'
+      last_seen: '2025-07-01T00:41:06.663230'
       level: 30
       name: Greater Dreadful Staff
       sources: []
@@ -4211,9 +4181,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:59.276749'
+      first_discovered: '2025-07-01T00:41:07.045085'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276750'
+      last_seen: '2025-07-01T00:41:07.045086'
       level: 40
       name: Greater Emerald Amulet
       sources: []
@@ -4238,9 +4208,9 @@ data:
         description: Restores 100HP at the start of the turn if the player has lost
           more than 50% of their health points.
         value: 100
-      first_discovered: '2025-06-29T23:28:58.960032'
+      first_discovered: '2025-07-01T00:41:06.663336'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960033'
+      last_seen: '2025-07-01T00:41:06.663337'
       level: 35
       name: Greater Health Potion
       sources: []
@@ -4275,9 +4245,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:59.276757'
+      first_discovered: '2025-07-01T00:41:07.045093'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276757'
+      last_seen: '2025-07-01T00:41:07.045094'
       level: 40
       name: Greater Ruby Amulet
       sources: []
@@ -4312,9 +4282,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:59.276752'
+      first_discovered: '2025-07-01T00:41:07.045088'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276753'
+      last_seen: '2025-07-01T00:41:07.045089'
       level: 40
       name: Greater Sapphire Amulet
       sources: []
@@ -4349,9 +4319,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:59.276754'
+      first_discovered: '2025-07-01T00:41:07.045090'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276755'
+      last_seen: '2025-07-01T00:41:07.045091'
       level: 40
       name: Greater Topaz Amulet
       sources: []
@@ -4377,9 +4347,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374828'
+      first_discovered: '2025-07-01T00:41:06.027974'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374829'
+      last_seen: '2025-07-01T00:41:06.027974'
       level: 10
       name: Greater Wooden Staff
       sources: []
@@ -4390,9 +4360,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698332'
+      first_discovered: '2025-07-01T00:41:06.384670'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698333'
+      last_seen: '2025-07-01T00:41:06.384670'
       level: 15
       name: Green Cloth
       sources: []
@@ -4403,9 +4373,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374752'
+      first_discovered: '2025-07-01T00:41:06.027931'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374753'
+      last_seen: '2025-07-01T00:41:06.027932'
       level: 4
       name: Green Slimeball
       sources: []
@@ -4416,9 +4386,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276879'
+      first_discovered: '2025-07-01T00:41:07.045169'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276879'
+      last_seen: '2025-07-01T00:41:07.045169'
       level: 42
       name: Grimlet Bone
       sources: []
@@ -4429,9 +4399,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374701'
+      first_discovered: '2025-07-01T00:41:06.027904'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374702'
+      last_seen: '2025-07-01T00:41:06.027905'
       level: 1
       name: Gudgeon
       sources: []
@@ -4442,9 +4412,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374804'
+      first_discovered: '2025-07-01T00:41:06.027960'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374805'
+      last_seen: '2025-07-01T00:41:06.027960'
       level: 8
       name: Hard Leather
       sources: []
@@ -4482,9 +4452,9 @@ data:
       - code: res_air
         description: Adds 5% Air Res to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698478'
+      first_discovered: '2025-07-01T00:41:06.384758'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698479'
+      last_seen: '2025-07-01T00:41:06.384759'
       level: 20
       name: Hard Leather Armor
       sources: []
@@ -4522,9 +4492,9 @@ data:
         description: 'Adds 6 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 6
-      first_discovered: '2025-06-29T23:28:58.698489'
+      first_discovered: '2025-07-01T00:41:06.384764'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698490'
+      last_seen: '2025-07-01T00:41:06.384764'
       level: 20
       name: Hard Leather Boots
       sources: []
@@ -4562,9 +4532,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 50
-      first_discovered: '2025-06-29T23:28:58.698486'
+      first_discovered: '2025-07-01T00:41:06.384762'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698487'
+      last_seen: '2025-07-01T00:41:06.384763'
       level: 20
       name: Hard Leather Helmet
       sources: []
@@ -4603,9 +4573,9 @@ data:
       - code: res_air
         description: Adds 6% Air Res to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.698483'
+      first_discovered: '2025-07-01T00:41:06.384760'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698484'
+      last_seen: '2025-07-01T00:41:06.384761'
       level: 20
       name: Hard Leather Pants
       sources: []
@@ -4624,9 +4594,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698378'
+      first_discovered: '2025-07-01T00:41:06.384694'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698379'
+      last_seen: '2025-07-01T00:41:06.384695'
       level: 20
       name: Hardwood Plank
       sources: []
@@ -4643,9 +4613,9 @@ data:
 
           '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698472'
+      first_discovered: '2025-07-01T00:41:06.384754'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698473'
+      last_seen: '2025-07-01T00:41:06.384755'
       level: 20
       name: Healing Rune
       sources: []
@@ -4669,9 +4639,9 @@ data:
       - code: boost_hp
         description: Add 175HP at the start of the fight and for the rest of the fight.
         value: 175
-      first_discovered: '2025-06-29T23:28:59.276709'
+      first_discovered: '2025-07-01T00:41:07.045050'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276710'
+      last_seen: '2025-07-01T00:41:07.045051'
       level: 40
       name: Health Boost Potion
       sources: []
@@ -4696,9 +4666,9 @@ data:
         description: Restores 70HP at the start of the turn if the player has lost
           more than 50% of their health points.
         value: 70
-      first_discovered: '2025-06-29T23:28:58.959922'
+      first_discovered: '2025-07-01T00:41:06.663287'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959922'
+      last_seen: '2025-07-01T00:41:06.663288'
       level: 30
       name: Health Potion
       sources: []
@@ -4745,9 +4715,9 @@ data:
       - code: res_earth
         description: Adds -10% Earth Res to its stats when equipped.
         value: -10
-      first_discovered: '2025-06-29T23:28:59.276888'
+      first_discovered: '2025-07-01T00:41:07.045174'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276889'
+      last_seen: '2025-07-01T00:41:07.045174'
       level: 45
       name: Hell Armor
       sources: []
@@ -4794,9 +4764,9 @@ data:
       - code: res_water
         description: Adds -10% Water Res to its stats when equipped.
         value: -10
-      first_discovered: '2025-06-29T23:28:59.276905'
+      first_discovered: '2025-07-01T00:41:07.045179'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276906'
+      last_seen: '2025-07-01T00:41:07.045180'
       level: 45
       name: Hell Helmet
       sources: []
@@ -4847,9 +4817,9 @@ data:
       - code: res_water
         description: Adds -10% Water Res to its stats when equipped.
         value: -10
-      first_discovered: '2025-06-29T23:28:59.276890'
+      first_discovered: '2025-07-01T00:41:07.045176'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276891'
+      last_seen: '2025-07-01T00:41:07.045177'
       level: 45
       name: Hell Legs Armor
       sources: []
@@ -4884,9 +4854,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:59.276907'
+      first_discovered: '2025-07-01T00:41:07.045181'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276908'
+      last_seen: '2025-07-01T00:41:07.045182'
       level: 45
       name: Hell Reaper
       sources: []
@@ -4933,9 +4903,9 @@ data:
       - code: res_water
         description: Adds -10% Water Res to its stats when equipped.
         value: -10
-      first_discovered: '2025-06-29T23:28:59.276910'
+      first_discovered: '2025-07-01T00:41:07.045183'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276911'
+      last_seen: '2025-07-01T00:41:07.045184'
       level: 45
       name: Hell Ring
       sources: []
@@ -4967,9 +4937,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:59.276883'
+      first_discovered: '2025-07-01T00:41:07.045171'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276884'
+      last_seen: '2025-07-01T00:41:07.045172'
       level: 45
       name: Hell Staff
       sources: []
@@ -4980,9 +4950,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276737'
+      first_discovered: '2025-07-01T00:41:07.045077'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276738'
+      last_seen: '2025-07-01T00:41:07.045078'
       level: 40
       name: Hellhound Bone
       sources: []
@@ -4993,9 +4963,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276742'
+      first_discovered: '2025-07-01T00:41:07.045080'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276743'
+      last_seen: '2025-07-01T00:41:07.045081'
       level: 40
       name: Hellhound Hair
       sources: []
@@ -5013,9 +4983,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.698329'
+      first_discovered: '2025-07-01T00:41:06.384668'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698330'
+      last_seen: '2025-07-01T00:41:06.384668'
       level: 15
       name: Highwayman Dagger
       sources: []
@@ -5056,9 +5026,9 @@ data:
       - code: res_air
         description: Adds -5% Air Res to its stats when equipped.
         value: -5
-      first_discovered: '2025-06-29T23:28:59.276715'
+      first_discovered: '2025-07-01T00:41:07.045056'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276716'
+      last_seen: '2025-07-01T00:41:07.045057'
       level: 40
       name: Hork Helmet
       sources: []
@@ -5091,9 +5061,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.698469'
+      first_discovered: '2025-07-01T00:41:06.384752'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698470'
+      last_seen: '2025-07-01T00:41:06.384753'
       level: 20
       name: Hunting Bow
       sources: []
@@ -5127,9 +5097,9 @@ data:
       - code: res_air
         description: Adds 2% Air Res to its stats when equipped.
         value: 2
-      first_discovered: '2025-06-29T23:28:58.374831'
+      first_discovered: '2025-07-01T00:41:06.027976'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374831'
+      last_seen: '2025-07-01T00:41:06.027976'
       level: 10
       name: Iron Armor
       sources: []
@@ -5156,9 +5126,9 @@ data:
       - code: woodcutting
         description: Reduces cooldown by -20% when a character logs a tree.
         value: -20
-      first_discovered: '2025-06-29T23:28:58.374874'
+      first_discovered: '2025-07-01T00:41:06.028018'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374875'
+      last_seen: '2025-07-01T00:41:06.028019'
       level: 10
       name: Iron Axe
       sources: []
@@ -5175,9 +5145,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374847'
+      first_discovered: '2025-07-01T00:41:06.027998'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374848'
+      last_seen: '2025-07-01T00:41:06.027999'
       level: 10
       name: Iron Bar
       sources: []
@@ -5209,9 +5179,9 @@ data:
         description: 'Adds 3 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.374809'
+      first_discovered: '2025-07-01T00:41:06.027964'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374810'
+      last_seen: '2025-07-01T00:41:06.027964'
       level: 10
       name: Iron Boots
       sources: []
@@ -5237,9 +5207,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.374860'
+      first_discovered: '2025-07-01T00:41:06.028006'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374861'
+      last_seen: '2025-07-01T00:41:06.028007'
       level: 10
       name: Iron Dagger
       sources: []
@@ -5273,9 +5243,9 @@ data:
       - code: res_earth
         description: Adds 4% Earth Res to its stats when equipped.
         value: 4
-      first_discovered: '2025-06-29T23:28:58.374837'
+      first_discovered: '2025-07-01T00:41:06.027980'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374838'
+      last_seen: '2025-07-01T00:41:06.027980'
       level: 10
       name: Iron Helm
       sources: []
@@ -5307,9 +5277,9 @@ data:
       - code: dmg_earth
         description: Adds 5% Earth Damage to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374833'
+      first_discovered: '2025-07-01T00:41:06.027978'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374834'
+      last_seen: '2025-07-01T00:41:06.027978'
       level: 10
       name: Iron Legs Armor
       sources: []
@@ -5320,9 +5290,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374840'
+      first_discovered: '2025-07-01T00:41:06.027981'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374841'
+      last_seen: '2025-07-01T00:41:06.027982'
       level: 10
       name: Iron Ore
       sources: []
@@ -5349,9 +5319,9 @@ data:
       - code: mining
         description: Reduces cooldown by -20% when a character mines a resource.
         value: -20
-      first_discovered: '2025-06-29T23:28:58.374872'
+      first_discovered: '2025-07-01T00:41:06.028016'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374873'
+      last_seen: '2025-07-01T00:41:06.028017'
       level: 10
       name: Iron Pickaxe
       sources: []
@@ -5373,9 +5343,9 @@ data:
       - code: dmg
         description: Adds 4% Damage to its stats when equipped.
         value: 4
-      first_discovered: '2025-06-29T23:28:58.374857'
+      first_discovered: '2025-07-01T00:41:06.028004'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374858'
+      last_seen: '2025-07-01T00:41:06.028005'
       level: 10
       name: Iron Ring
       sources: []
@@ -5401,9 +5371,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374811'
+      first_discovered: '2025-07-01T00:41:06.027965'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374812'
+      last_seen: '2025-07-01T00:41:06.027966'
       level: 10
       name: Iron Sword
       sources: []
@@ -5414,9 +5384,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374850'
+      first_discovered: '2025-07-01T00:41:06.028000'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374850'
+      last_seen: '2025-07-01T00:41:06.028001'
       level: 10
       name: Jasper Crystal
       sources: []
@@ -5456,9 +5426,9 @@ data:
         description: 'Adds 10% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 10
-      first_discovered: '2025-06-29T23:28:58.960067'
+      first_discovered: '2025-07-01T00:41:06.663349'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960068'
+      last_seen: '2025-07-01T00:41:06.663349'
       level: 35
       name: Jester Hat
       sources: []
@@ -5492,9 +5462,9 @@ data:
       - code: res_earth
         description: Adds 2% Earth Res to its stats when equipped.
         value: 2
-      first_discovered: '2025-06-29T23:28:58.374821'
+      first_discovered: '2025-07-01T00:41:06.027972'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374822'
+      last_seen: '2025-07-01T00:41:06.027972'
       level: 10
       name: Leather Armor
       sources: []
@@ -5526,9 +5496,9 @@ data:
         description: 'Adds 3 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.374814'
+      first_discovered: '2025-07-01T00:41:06.027967'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374815'
+      last_seen: '2025-07-01T00:41:06.027968'
       level: 10
       name: Leather Boots
       sources: []
@@ -5555,9 +5525,9 @@ data:
       - code: alchemy
         description: Reduces cooldown by -20% when a character harvest a plant.
         value: -20
-      first_discovered: '2025-06-29T23:28:58.374892'
+      first_discovered: '2025-07-01T00:41:06.028027'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374893'
+      last_seen: '2025-07-01T00:41:06.028028'
       level: 10
       name: Leather Gloves
       sources: []
@@ -5591,9 +5561,9 @@ data:
       - code: res_air
         description: Adds 4% Air Res to its stats when equipped.
         value: 4
-      first_discovered: '2025-06-29T23:28:58.374842'
+      first_discovered: '2025-07-01T00:41:06.027983'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374843'
+      last_seen: '2025-07-01T00:41:06.027984'
       level: 10
       name: Leather Hat
       sources: []
@@ -5625,9 +5595,9 @@ data:
       - code: dmg_water
         description: Adds 5% Water Damage to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374902'
+      first_discovered: '2025-07-01T00:41:06.028034'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374902'
+      last_seen: '2025-07-01T00:41:06.028035'
       level: 10
       name: Leather Legs Armor
       sources: []
@@ -5656,9 +5626,9 @@ data:
       - code: dmg_earth
         description: Adds 20% Earth Damage to its stats when equipped.
         value: 20
-      first_discovered: '2025-06-29T23:28:58.959867'
+      first_discovered: '2025-07-01T00:41:06.663248'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959868'
+      last_seen: '2025-07-01T00:41:06.663249'
       level: 30
       name: Lich Crown
       sources: []
@@ -5680,9 +5650,9 @@ data:
       - code: hp
         description: Adds 30 HP to its stats when equipped.
         value: 30
-      first_discovered: '2025-06-29T23:28:58.374779'
+      first_discovered: '2025-07-01T00:41:06.027947'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374780'
+      last_seen: '2025-07-01T00:41:06.027948'
       level: 5
       name: Life Amulet
       sources: []
@@ -5696,9 +5666,9 @@ data:
       - code: hp
         description: Adds 180 HP to its stats when equipped.
         value: 180
-      first_discovered: '2025-06-29T23:28:58.959854'
+      first_discovered: '2025-07-01T00:41:06.663240'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959855'
+      last_seen: '2025-07-01T00:41:06.663240'
       level: 30
       name: Life Crystal
       sources: []
@@ -5709,9 +5679,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959977'
+      first_discovered: '2025-07-01T00:41:06.663310'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959978'
+      last_seen: '2025-07-01T00:41:06.663311'
       level: 30
       name: Life Crystal Shard
       sources: []
@@ -5739,9 +5709,9 @@ data:
         description: Adds 20 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 20
-      first_discovered: '2025-06-29T23:28:58.698319'
+      first_discovered: '2025-07-01T00:41:06.384660'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698320'
+      last_seen: '2025-07-01T00:41:06.384661'
       level: 15
       name: Life Ring
       sources: []
@@ -5756,9 +5726,9 @@ data:
         description: Restores 10% of the total attack of all elements in HP after
           a critical strike.
         value: 10
-      first_discovered: '2025-06-29T23:28:58.698460'
+      first_discovered: '2025-07-01T00:41:06.384746'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698461'
+      last_seen: '2025-07-01T00:41:06.384747'
       level: 20
       name: Lifesteal Rune
       sources: []
@@ -5793,9 +5763,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:59.276771'
+      first_discovered: '2025-07-01T00:41:07.045106'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276772'
+      last_seen: '2025-07-01T00:41:07.045107'
       level: 40
       name: Lightning Sword
       sources: []
@@ -5839,9 +5809,9 @@ data:
         description: 'Adds 7 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 7
-      first_discovered: '2025-06-29T23:28:58.959900'
+      first_discovered: '2025-07-01T00:41:06.663268'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959901'
+      last_seen: '2025-07-01T00:41:06.663269'
       level: 30
       name: Lizard Boots
       sources: []
@@ -5852,9 +5822,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959826'
+      first_discovered: '2025-07-01T00:41:06.663224'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959827'
+      last_seen: '2025-07-01T00:41:06.663224'
       level: 25
       name: Lizard Eye
       sources: []
@@ -5865,9 +5835,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698559'
+      first_discovered: '2025-07-01T00:41:06.384795'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698560'
+      last_seen: '2025-07-01T00:41:06.384796'
       level: 25
       name: Lizard Skin
       sources: []
@@ -5907,9 +5877,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:58.698543'
+      first_discovered: '2025-07-01T00:41:06.384786'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698544'
+      last_seen: '2025-07-01T00:41:06.384787'
       level: 25
       name: Lizard Skin Armor
       sources: []
@@ -5948,9 +5918,9 @@ data:
       - code: res_fire
         description: Adds 3% Fire Res to its stats when equipped.
         value: 3
-      first_discovered: '2025-06-29T23:28:58.698548'
+      first_discovered: '2025-07-01T00:41:06.384790'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698548'
+      last_seen: '2025-07-01T00:41:06.384790'
       level: 25
       name: Lizard Skin Legs Armor
       sources: []
@@ -5984,9 +5954,9 @@ data:
       - code: dmg_air
         description: Adds 15% Air Damage to its stats when equipped.
         value: 15
-      first_discovered: '2025-06-29T23:28:58.959940'
+      first_discovered: '2025-07-01T00:41:06.663291'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959941'
+      last_seen: '2025-07-01T00:41:06.663291'
       level: 30
       name: Lost Amulet
       sources: []
@@ -6001,9 +5971,9 @@ data:
         description: Adds 100 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 100
-      first_discovered: '2025-06-29T23:28:58.698496'
+      first_discovered: '2025-07-01T00:41:06.384768'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698504'
+      last_seen: '2025-07-01T00:41:06.384768'
       level: 20
       name: Lost World Map
       sources: []
@@ -6037,9 +6007,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.698295'
+      first_discovered: '2025-07-01T00:41:06.384648'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698296'
+      last_seen: '2025-07-01T00:41:06.384648'
       level: 15
       name: Lucky Wizard Hat
       sources: []
@@ -6076,9 +6046,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.960015'
+      first_discovered: '2025-07-01T00:41:06.663330'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960016'
+      last_seen: '2025-07-01T00:41:06.663330'
       level: 35
       name: Magic Bow
       sources: []
@@ -6095,9 +6065,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.960025'
+      first_discovered: '2025-07-01T00:41:06.663332'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960026'
+      last_seen: '2025-07-01T00:41:06.663333'
       level: 35
       name: Magic Sap
       sources: []
@@ -6130,9 +6100,9 @@ data:
         description: Adds 25 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 25
-      first_discovered: '2025-06-29T23:28:58.698349'
+      first_discovered: '2025-07-01T00:41:06.384680'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698350'
+      last_seen: '2025-07-01T00:41:06.384681'
       level: 20
       name: Magic Wizard Hat
       sources: []
@@ -6143,9 +6113,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959994'
+      first_discovered: '2025-07-01T00:41:06.663316'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959995'
+      last_seen: '2025-07-01T00:41:06.663317'
       level: 35
       name: Magic Wood
       sources: []
@@ -6156,9 +6126,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374867'
+      first_discovered: '2025-07-01T00:41:06.028012'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374868'
+      last_seen: '2025-07-01T00:41:06.028013'
       level: 10
       name: Magical Cure
       sources: []
@@ -6177,9 +6147,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959999'
+      first_discovered: '2025-07-01T00:41:06.663320'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959999'
+      last_seen: '2025-07-01T00:41:06.663320'
       level: 35
       name: Magical Plank
       sources: []
@@ -6217,9 +6187,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.960013'
+      first_discovered: '2025-07-01T00:41:06.663328'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960013'
+      last_seen: '2025-07-01T00:41:06.663328'
       level: 35
       name: Malefic Armor
       sources: []
@@ -6230,9 +6200,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959987'
+      first_discovered: '2025-07-01T00:41:06.663312'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959987'
+      last_seen: '2025-07-01T00:41:06.663313'
       level: 35
       name: Malefic Cloth
       sources: []
@@ -6246,9 +6216,9 @@ data:
       - code: dmg
         description: Adds 6% Damage to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.960058'
+      first_discovered: '2025-07-01T00:41:06.663344'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960059'
+      last_seen: '2025-07-01T00:41:06.663345'
       level: 35
       name: Malefic Crystal
       sources: []
@@ -6287,9 +6257,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 40
-      first_discovered: '2025-06-29T23:28:58.960060'
+      first_discovered: '2025-07-01T00:41:06.663347'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960061'
+      last_seen: '2025-07-01T00:41:06.663347'
       level: 35
       name: Malefic Ring
       sources: []
@@ -6300,9 +6270,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.960079'
+      first_discovered: '2025-07-01T00:41:06.663351'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960080'
+      last_seen: '2025-07-01T00:41:06.663352'
       level: 35
       name: Malefic Shard
       sources: []
@@ -6319,9 +6289,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276725'
+      first_discovered: '2025-07-01T00:41:07.045067'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276725'
+      last_seen: '2025-07-01T00:41:07.045067'
       level: 40
       name: Maple Plank
       sources: []
@@ -6338,9 +6308,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276841'
+      first_discovered: '2025-07-01T00:41:07.045146'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276842'
+      last_seen: '2025-07-01T00:41:07.045147'
       level: 40
       name: Maple Sap
       sources: []
@@ -6360,9 +6330,9 @@ data:
       - code: heal
         description: Heal 500 HP when the item is used.
         value: 500
-      first_discovered: '2025-06-29T23:28:59.276844'
+      first_discovered: '2025-07-01T00:41:07.045149'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276845'
+      last_seen: '2025-07-01T00:41:07.045149'
       level: 40
       name: Maple Syrup
       sources: []
@@ -6373,9 +6343,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276727'
+      first_discovered: '2025-07-01T00:41:07.045074'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276728'
+      last_seen: '2025-07-01T00:41:07.045075'
       level: 40
       name: Maple Wood
       sources: []
@@ -6409,9 +6379,9 @@ data:
       - code: dmg_fire
         description: Adds 10% Fire Damage to its stats when equipped.
         value: 10
-      first_discovered: '2025-06-29T23:28:58.960042'
+      first_discovered: '2025-07-01T00:41:06.663340'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960044'
+      last_seen: '2025-07-01T00:41:06.663341'
       level: 35
       name: Masterful Necklace
       sources: []
@@ -6422,9 +6392,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374769'
+      first_discovered: '2025-07-01T00:41:06.027939'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374770'
+      last_seen: '2025-07-01T00:41:06.027940'
       level: 5
       name: Milk Bucket
       sources: []
@@ -6447,9 +6417,9 @@ data:
         description: Restores 45HP at the start of the turn if the player has lost
           more than 50% of their health points.
         value: 45
-      first_discovered: '2025-06-29T23:28:58.698437'
+      first_discovered: '2025-07-01T00:41:06.384732'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698437'
+      last_seen: '2025-07-01T00:41:06.384733'
       level: 20
       name: Minor Health Potion
       sources: []
@@ -6466,9 +6436,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276722'
+      first_discovered: '2025-07-01T00:41:07.045064'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276723'
+      last_seen: '2025-07-01T00:41:07.045065'
       level: 40
       name: Mithril Bar
       sources: []
@@ -6512,9 +6482,9 @@ data:
         description: 'Adds 7 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 7
-      first_discovered: '2025-06-29T23:28:59.276829'
+      first_discovered: '2025-07-01T00:41:07.045139'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276830'
+      last_seen: '2025-07-01T00:41:07.045140'
       level: 40
       name: Mithril Boots
       sources: []
@@ -6553,9 +6523,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 20
-      first_discovered: '2025-06-29T23:28:59.276766'
+      first_discovered: '2025-07-01T00:41:07.045101'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276767'
+      last_seen: '2025-07-01T00:41:07.045102'
       level: 40
       name: Mithril Helm
       sources: []
@@ -6566,9 +6536,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276720'
+      first_discovered: '2025-07-01T00:41:07.045061'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276721'
+      last_seen: '2025-07-01T00:41:07.045062'
       level: 40
       name: Mithril Ore
       sources: []
@@ -6613,9 +6583,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:59.276764'
+      first_discovered: '2025-07-01T00:41:07.045098'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276765'
+      last_seen: '2025-07-01T00:41:07.045099'
       level: 40
       name: Mithril Platebody
       sources: []
@@ -6659,9 +6629,9 @@ data:
       - code: res_water
         description: Adds 7% Water Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:59.276768'
+      first_discovered: '2025-07-01T00:41:07.045103'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276769'
+      last_seen: '2025-07-01T00:41:07.045104'
       level: 40
       name: Mithril Platelegs
       sources: []
@@ -6692,9 +6662,9 @@ data:
       - code: res_air
         description: Adds 15% Air Res to its stats when equipped.
         value: 15
-      first_discovered: '2025-06-29T23:28:59.276832'
+      first_discovered: '2025-07-01T00:41:07.045141'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276832'
+      last_seen: '2025-07-01T00:41:07.045142'
       level: 40
       name: Mithril Shield
       sources: []
@@ -6731,9 +6701,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:59.276759'
+      first_discovered: '2025-07-01T00:41:07.045096'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276760'
+      last_seen: '2025-07-01T00:41:07.045096'
       level: 40
       name: Mithril Sword
       sources: []
@@ -6776,9 +6746,9 @@ data:
         description: 'Adds 24% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 24
-      first_discovered: '2025-06-29T23:28:58.374920'
+      first_discovered: '2025-07-01T00:41:06.028048'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374921'
+      last_seen: '2025-07-01T00:41:06.028049'
       level: 15
       name: Multislimes Sword
       sources: []
@@ -6811,9 +6781,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.698312'
+      first_discovered: '2025-07-01T00:41:06.384656'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698313'
+      last_seen: '2025-07-01T00:41:06.384657'
       level: 15
       name: Mushmush Bow
       sources: []
@@ -6848,9 +6818,9 @@ data:
         description: Adds 10 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 10
-      first_discovered: '2025-06-29T23:28:58.698298'
+      first_discovered: '2025-07-01T00:41:06.384650'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698299'
+      last_seen: '2025-07-01T00:41:06.384651'
       level: 15
       name: Mushmush Jacket
       sources: []
@@ -6884,9 +6854,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.698273'
+      first_discovered: '2025-07-01T00:41:06.384637'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698283'
+      last_seen: '2025-07-01T00:41:06.384642'
       level: 15
       name: Mushmush Wizard Hat
       sources: []
@@ -6897,9 +6867,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374816'
+      first_discovered: '2025-07-01T00:41:06.027970'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374817'
+      last_seen: '2025-07-01T00:41:06.027970'
       level: 10
       name: Mushroom
       sources: []
@@ -6919,9 +6889,9 @@ data:
       - code: heal
         description: Heal 240 HP when the item is used.
         value: 240
-      first_discovered: '2025-06-29T23:28:58.698322'
+      first_discovered: '2025-07-01T00:41:06.384662'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698323'
+      last_seen: '2025-07-01T00:41:06.384663'
       level: 15
       name: Mushroom Soup
       sources: []
@@ -6954,9 +6924,9 @@ data:
         description: 'Adds 24% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 24
-      first_discovered: '2025-06-29T23:28:58.698308'
+      first_discovered: '2025-07-01T00:41:06.384652'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698308'
+      last_seen: '2025-07-01T00:41:06.384653'
       level: 15
       name: Mushstaff
       sources: []
@@ -6967,9 +6937,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698455'
+      first_discovered: '2025-07-01T00:41:06.384742'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698456'
+      last_seen: '2025-07-01T00:41:06.384743'
       level: 20
       name: Nettle Leaf
       sources: []
@@ -7013,9 +6983,9 @@ data:
         description: Adds -25 to the maximum number of items in the inventory when
           equipped.
         value: -25
-      first_discovered: '2025-06-29T23:28:58.959919'
+      first_discovered: '2025-07-01T00:41:06.663285'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959920'
+      last_seen: '2025-07-01T00:41:06.663286'
       level: 30
       name: Obsidian Armor
       sources: []
@@ -7032,9 +7002,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959910'
+      first_discovered: '2025-07-01T00:41:06.663277'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959911'
+      last_seen: '2025-07-01T00:41:06.663278'
       level: 30
       name: Obsidian Bar
       sources: []
@@ -7070,9 +7040,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.959953'
+      first_discovered: '2025-07-01T00:41:06.663299'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959953'
+      last_seen: '2025-07-01T00:41:06.663300'
       level: 30
       name: Obsidian Battleaxe
       sources: []
@@ -7119,9 +7089,9 @@ data:
         description: Adds -25 to the maximum number of items in the inventory when
           equipped.
         value: -25
-      first_discovered: '2025-06-29T23:28:58.959917'
+      first_discovered: '2025-07-01T00:41:06.663283'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959918'
+      last_seen: '2025-07-01T00:41:06.663284'
       level: 30
       name: Obsidian Helmet
       sources: []
@@ -7167,9 +7137,9 @@ data:
         description: Adds -25 to the maximum number of items in the inventory when
           equipped.
         value: -25
-      first_discovered: '2025-06-29T23:28:58.959915'
+      first_discovered: '2025-07-01T00:41:06.663281'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959915'
+      last_seen: '2025-07-01T00:41:06.663282'
       level: 30
       name: Obsidian Legs Armor
       sources: []
@@ -7180,9 +7150,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698366'
+      first_discovered: '2025-07-01T00:41:06.384688'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698367'
+      last_seen: '2025-07-01T00:41:06.384689'
       level: 20
       name: Ogre Eye
       sources: []
@@ -7193,9 +7163,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698354'
+      first_discovered: '2025-07-01T00:41:06.384682'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698355'
+      last_seen: '2025-07-01T00:41:06.384683'
       level: 20
       name: Ogre Skin
       sources: []
@@ -7222,9 +7192,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 20
-      first_discovered: '2025-06-29T23:28:58.698465'
+      first_discovered: '2025-07-01T00:41:06.384748'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698466'
+      last_seen: '2025-07-01T00:41:06.384749'
       level: 20
       name: Old Boots
       sources: []
@@ -7235,9 +7205,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276677'
+      first_discovered: '2025-07-01T00:41:07.044978'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276678'
+      last_seen: '2025-07-01T00:41:07.044983'
       level: 38
       name: Orc Skin
       sources: []
@@ -7248,9 +7218,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959964'
+      first_discovered: '2025-07-01T00:41:06.663305'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959965'
+      last_seen: '2025-07-01T00:41:06.663306'
       level: 30
       name: Owlbear Claw
       sources: []
@@ -7261,9 +7231,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959838'
+      first_discovered: '2025-07-01T00:41:06.663231'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959839'
+      last_seen: '2025-07-01T00:41:06.663232'
       level: 30
       name: Owlbear Hair
       sources: []
@@ -7274,9 +7244,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276872'
+      first_discovered: '2025-07-01T00:41:07.045166'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276873'
+      last_seen: '2025-07-01T00:41:07.045167'
       level: 40
       name: Page from Hell
       sources: []
@@ -7292,9 +7262,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 100
-      first_discovered: '2025-06-29T23:28:58.698474'
+      first_discovered: '2025-07-01T00:41:06.384756'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698475'
+      last_seen: '2025-07-01T00:41:06.384757'
       level: 20
       name: Perfect Pearl
       sources: []
@@ -7305,9 +7275,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959907'
+      first_discovered: '2025-07-01T00:41:06.663275'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959908'
+      last_seen: '2025-07-01T00:41:06.663275'
       level: 30
       name: Piece of Obsidian
       sources: []
@@ -7318,9 +7288,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698418'
+      first_discovered: '2025-07-01T00:41:06.384722'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698419'
+      last_seen: '2025-07-01T00:41:06.384723'
       level: 20
       name: Pig Skin
       sources: []
@@ -7359,9 +7329,9 @@ data:
         description: Adds 30 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 30
-      first_discovered: '2025-06-29T23:28:58.959800'
+      first_discovered: '2025-07-01T00:41:06.663206'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959808'
+      last_seen: '2025-07-01T00:41:06.663211'
       level: 25
       name: Piggy Armor
       sources: []
@@ -7394,9 +7364,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.698571'
+      first_discovered: '2025-07-01T00:41:06.384803'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698572'
+      last_seen: '2025-07-01T00:41:06.384803'
       level: 25
       name: Piggy Helmet
       sources: []
@@ -7435,9 +7405,9 @@ data:
       - code: res_water
         description: Adds 3% Water Res to its stats when equipped.
         value: 3
-      first_discovered: '2025-06-29T23:28:58.698550'
+      first_discovered: '2025-07-01T00:41:06.384791'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698551'
+      last_seen: '2025-07-01T00:41:06.384792'
       level: 25
       name: Piggy Pants
       sources: []
@@ -7473,9 +7443,9 @@ data:
       - code: dmg
         description: Adds 5% Damage to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.959957'
+      first_discovered: '2025-07-01T00:41:06.663301'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959958'
+      last_seen: '2025-07-01T00:41:06.663302'
       level: 30
       name: Prospecting Amulet
       sources: []
@@ -7486,9 +7456,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374762'
+      first_discovered: '2025-07-01T00:41:06.027937'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374763'
+      last_seen: '2025-07-01T00:41:06.027938'
       level: 5
       name: Raw Beef
       sources: []
@@ -7499,9 +7469,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374683'
+      first_discovered: '2025-07-01T00:41:06.027889'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374684'
+      last_seen: '2025-07-01T00:41:06.027895'
       level: 1
       name: Raw Chicken
       sources: []
@@ -7512,9 +7482,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276745'
+      first_discovered: '2025-07-01T00:41:07.045082'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276745'
+      last_seen: '2025-07-01T00:41:07.045083'
       level: 40
       name: Raw Hellhound Meat
       sources: []
@@ -7525,9 +7495,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698287'
+      first_discovered: '2025-07-01T00:41:06.384645'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698288'
+      last_seen: '2025-07-01T00:41:06.384646'
       level: 15
       name: Raw Wolf Meat
       sources: []
@@ -7544,9 +7514,9 @@ data:
       - code: teleport_y
         description: Teleports to y-coordinate 0 when the item is used.
         value: 0
-      first_discovered: '2025-06-29T23:28:58.374904'
+      first_discovered: '2025-07-01T00:41:06.028036'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374905'
+      last_seen: '2025-07-01T00:41:06.028037'
       level: 10
       name: Recall Potion
       sources: []
@@ -7557,9 +7527,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959830'
+      first_discovered: '2025-07-01T00:41:06.663227'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959831'
+      last_seen: '2025-07-01T00:41:06.663227'
       level: 28
       name: Red Cloth
       sources: []
@@ -7570,9 +7540,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374798'
+      first_discovered: '2025-07-01T00:41:06.027958'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374799'
+      last_seen: '2025-07-01T00:41:06.027958'
       level: 7
       name: Red Slimeball
       sources: []
@@ -7612,9 +7582,9 @@ data:
         description: 'Adds 4% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 4
-      first_discovered: '2025-06-29T23:28:58.698356'
+      first_discovered: '2025-07-01T00:41:06.384684'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698357'
+      last_seen: '2025-07-01T00:41:06.384685'
       level: 20
       name: Ring of Chance
       sources: []
@@ -7625,9 +7595,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276697'
+      first_discovered: '2025-07-01T00:41:07.045043'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276698'
+      last_seen: '2025-07-01T00:41:07.045044'
       level: 40
       name: Rosenblood Elixir
       sources: []
@@ -7665,9 +7635,9 @@ data:
       - code: res_fire
         description: Adds 6% Fire Res to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.959945'
+      first_discovered: '2025-07-01T00:41:06.663295'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959946'
+      last_seen: '2025-07-01T00:41:06.663295'
       level: 30
       name: Royal Skeleton Armor
       sources: []
@@ -7703,9 +7673,9 @@ data:
         description: Adds 20 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 20
-      first_discovered: '2025-06-29T23:28:58.959948'
+      first_discovered: '2025-07-01T00:41:06.663297'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959949'
+      last_seen: '2025-07-01T00:41:06.663297'
       level: 30
       name: Royal Skeleton Helmet
       sources: []
@@ -7747,9 +7717,9 @@ data:
       - code: res_water
         description: Adds 7% Water Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:58.959943'
+      first_discovered: '2025-07-01T00:41:06.663293'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959944'
+      last_seen: '2025-07-01T00:41:06.663293'
       level: 30
       name: Royal Skeleton Pants
       sources: []
@@ -7785,9 +7755,9 @@ data:
       - code: dmg
         description: Adds 12% Damage to its stats when equipped.
         value: 12
-      first_discovered: '2025-06-29T23:28:58.959962'
+      first_discovered: '2025-07-01T00:41:06.663303'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959963'
+      last_seen: '2025-07-01T00:41:06.663304'
       level: 30
       name: Royal Skeleton Ring
       sources: []
@@ -7804,9 +7774,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698415'
+      first_discovered: '2025-07-01T00:41:06.384720'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698416'
+      last_seen: '2025-07-01T00:41:06.384721'
       level: 20
       name: Ruby
       sources: []
@@ -7835,9 +7805,9 @@ data:
       - code: dmg_fire
         description: Adds 18% Fire Damage to its stats when equipped.
         value: 18
-      first_discovered: '2025-06-29T23:28:58.698564'
+      first_discovered: '2025-07-01T00:41:06.384799'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698565'
+      last_seen: '2025-07-01T00:41:06.384800'
       level: 25
       name: Ruby Amulet
       sources: []
@@ -7851,9 +7821,9 @@ data:
       - code: dmg_fire
         description: Adds 20% Fire Damage to its stats when equipped.
         value: 20
-      first_discovered: '2025-06-29T23:28:59.276773'
+      first_discovered: '2025-07-01T00:41:07.045109'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276774'
+      last_seen: '2025-07-01T00:41:07.045109'
       level: 40
       name: Ruby Book
       sources: []
@@ -7888,9 +7858,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.959852'
+      first_discovered: '2025-07-01T00:41:06.663237'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959853'
+      last_seen: '2025-07-01T00:41:06.663238'
       level: 30
       name: Ruby Ring
       sources: []
@@ -7901,9 +7871,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698448'
+      first_discovered: '2025-07-01T00:41:06.384738'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698449'
+      last_seen: '2025-07-01T00:41:06.384739'
       level: 20
       name: Ruby Stone
       sources: []
@@ -7941,9 +7911,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:59.276796'
+      first_discovered: '2025-07-01T00:41:07.045119'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276797'
+      last_seen: '2025-07-01T00:41:07.045120'
       level: 40
       name: Sacred Ring
       sources: []
@@ -7954,9 +7924,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276702'
+      first_discovered: '2025-07-01T00:41:07.045047'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276702'
+      last_seen: '2025-07-01T00:41:07.045048'
       level: 40
       name: Salmon
       sources: []
@@ -7977,9 +7947,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:59.276684'
+      first_discovered: '2025-07-01T00:41:07.045001'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276685'
+      last_seen: '2025-07-01T00:41:07.045002'
       level: 40
       name: Sanguine Edge of Rosen
       sources: []
@@ -8000,9 +7970,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959912'
+      first_discovered: '2025-07-01T00:41:06.663279'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959913'
+      last_seen: '2025-07-01T00:41:06.663280'
       level: 30
       name: Sap
       sources: []
@@ -8019,9 +7989,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698406'
+      first_discovered: '2025-07-01T00:41:06.384713'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698407'
+      last_seen: '2025-07-01T00:41:06.384714'
       level: 20
       name: Sapphire
       sources: []
@@ -8050,9 +8020,9 @@ data:
       - code: dmg_water
         description: Adds 18% Water Damage to its stats when equipped.
         value: 18
-      first_discovered: '2025-06-29T23:28:58.698562'
+      first_discovered: '2025-07-01T00:41:06.384797'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698562'
+      last_seen: '2025-07-01T00:41:06.384798'
       level: 25
       name: Sapphire Amulet
       sources: []
@@ -8066,9 +8036,9 @@ data:
       - code: dmg_water
         description: Adds 20% Water Damage to its stats when equipped.
         value: 20
-      first_discovered: '2025-06-29T23:28:59.276778'
+      first_discovered: '2025-07-01T00:41:07.045111'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276779'
+      last_seen: '2025-07-01T00:41:07.045112'
       level: 40
       name: Sapphire Book
       sources: []
@@ -8103,9 +8073,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.959893'
+      first_discovered: '2025-07-01T00:41:06.663264'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959894'
+      last_seen: '2025-07-01T00:41:06.663265'
       level: 30
       name: Sapphire Ring
       sources: []
@@ -8116,9 +8086,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698451'
+      first_discovered: '2025-07-01T00:41:06.384740'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698452'
+      last_seen: '2025-07-01T00:41:06.384741'
       level: 20
       name: Sapphire Stone
       sources: []
@@ -8143,9 +8113,9 @@ data:
         description: Adds 15 to the maximum number of items in the inventory when
           equipped.
         value: 15
-      first_discovered: '2025-06-29T23:28:58.374788'
+      first_discovered: '2025-07-01T00:41:06.027953'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374789'
+      last_seen: '2025-07-01T00:41:06.027954'
       level: 5
       name: Satchel
       sources: []
@@ -8156,9 +8126,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374745'
+      first_discovered: '2025-07-01T00:41:06.027924'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374746'
+      last_seen: '2025-07-01T00:41:06.027925'
       level: 1
       name: Shell
       sources: []
@@ -8169,9 +8139,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374865'
+      first_discovered: '2025-07-01T00:41:06.028010'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374866'
+      last_seen: '2025-07-01T00:41:06.028011'
       level: 10
       name: Shrimp
       sources: []
@@ -8204,9 +8174,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.698529'
+      first_discovered: '2025-07-01T00:41:06.384778'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698529'
+      last_seen: '2025-07-01T00:41:06.384779'
       level: 20
       name: Shuriken
       sources: []
@@ -8244,9 +8214,9 @@ data:
       - code: res_air
         description: Adds 5% Air Res to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698394'
+      first_discovered: '2025-07-01T00:41:06.384707'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698395'
+      last_seen: '2025-07-01T00:41:06.384708'
       level: 20
       name: Skeleton Armor
       sources: []
@@ -8257,9 +8227,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698339'
+      first_discovered: '2025-07-01T00:41:06.384676'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698340'
+      last_seen: '2025-07-01T00:41:06.384677'
       level: 18
       name: Skeleton Bone
       sources: []
@@ -8292,9 +8262,9 @@ data:
         description: Adds 25 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 25
-      first_discovered: '2025-06-29T23:28:58.698397'
+      first_discovered: '2025-07-01T00:41:06.384709'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698397'
+      last_seen: '2025-07-01T00:41:06.384710'
       level: 20
       name: Skeleton Helmet
       sources: []
@@ -8333,9 +8303,9 @@ data:
       - code: res_fire
         description: Adds 6% Fire Res to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.698389'
+      first_discovered: '2025-07-01T00:41:06.384703'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698390'
+      last_seen: '2025-07-01T00:41:06.384704'
       level: 20
       name: Skeleton Pants
       sources: []
@@ -8346,9 +8316,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698342'
+      first_discovered: '2025-07-01T00:41:06.384678'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698343'
+      last_seen: '2025-07-01T00:41:06.384679'
       level: 18
       name: Skeleton Skull
       sources: []
@@ -8380,9 +8350,9 @@ data:
       - code: dmg_fire
         description: Adds 10% Fire Damage to its stats when equipped.
         value: 10
-      first_discovered: '2025-06-29T23:28:58.698434'
+      first_discovered: '2025-07-01T00:41:06.384730'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698435'
+      last_seen: '2025-07-01T00:41:06.384731'
       level: 20
       name: Skull Amulet
       sources: []
@@ -8414,9 +8384,9 @@ data:
       - code: dmg_air
         description: Adds 11% Air Damage to its stats when equipped.
         value: 11
-      first_discovered: '2025-06-29T23:28:58.698423'
+      first_discovered: '2025-07-01T00:41:06.384726'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698423'
+      last_seen: '2025-07-01T00:41:06.384727'
       level: 20
       name: Skull Ring
       sources: []
@@ -8446,9 +8416,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698392'
+      first_discovered: '2025-07-01T00:41:06.384705'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698393'
+      last_seen: '2025-07-01T00:41:06.384706'
       level: 20
       name: Skull Staff
       sources: []
@@ -8483,9 +8453,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698540'
+      first_discovered: '2025-07-01T00:41:06.384784'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698541'
+      last_seen: '2025-07-01T00:41:06.384785'
       level: 25
       name: Skull Wand
       sources: []
@@ -8522,9 +8492,9 @@ data:
       - code: res_air
         description: Adds 4% Air Res to its stats when equipped.
         value: 4
-      first_discovered: '2025-06-29T23:28:58.374845'
+      first_discovered: '2025-07-01T00:41:06.027985'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374846'
+      last_seen: '2025-07-01T00:41:06.027986'
       level: 10
       name: Slime Shield
       sources: []
@@ -8549,9 +8519,9 @@ data:
         description: At the beginning of the turn, if the character has at least one
           poison on him, removes 20 poison damage.
         value: 20
-      first_discovered: '2025-06-29T23:28:58.698458'
+      first_discovered: '2025-07-01T00:41:06.384744'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698459'
+      last_seen: '2025-07-01T00:41:06.384745'
       level: 20
       name: Small Antidote
       sources: []
@@ -8565,9 +8535,9 @@ data:
       - code: gold
         description: Adds 1000 gold in your inventory.
         value: 1000
-      first_discovered: '2025-06-29T23:28:58.374731'
+      first_discovered: '2025-07-01T00:41:06.027918'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374732'
+      last_seen: '2025-07-01T00:41:06.027918'
       level: 1
       name: Small Bag of Gold
       sources: []
@@ -8588,9 +8558,9 @@ data:
         description: Restores 20HP at the start of the turn if the player has lost
           more than 50% of their health points.
         value: 20
-      first_discovered: '2025-06-29T23:28:58.374785'
+      first_discovered: '2025-07-01T00:41:06.027951'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374786'
+      last_seen: '2025-07-01T00:41:06.027952'
       level: 5
       name: Small Health Potion
       sources: []
@@ -8601,9 +8571,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698491'
+      first_discovered: '2025-07-01T00:41:06.384766'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698492'
+      last_seen: '2025-07-01T00:41:06.384766'
       level: 20
       name: Small Pearls
       sources: []
@@ -8614,9 +8584,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374913'
+      first_discovered: '2025-07-01T00:41:06.028044'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374914'
+      last_seen: '2025-07-01T00:41:06.028045'
       level: 12
       name: Snake Hide
       sources: []
@@ -8627,9 +8597,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374916'
+      first_discovered: '2025-07-01T00:41:06.028046'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374916'
+      last_seen: '2025-07-01T00:41:06.028047'
       level: 12
       name: Snakeskin
       sources: []
@@ -8668,9 +8638,9 @@ data:
         description: Adds 30 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 30
-      first_discovered: '2025-06-29T23:28:58.698566'
+      first_discovered: '2025-07-01T00:41:06.384801'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698567'
+      last_seen: '2025-07-01T00:41:06.384802'
       level: 25
       name: Snakeskin Armor
       sources: []
@@ -8706,9 +8676,9 @@ data:
         description: 'Adds 6 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 6
-      first_discovered: '2025-06-29T23:28:58.698439'
+      first_discovered: '2025-07-01T00:41:06.384734'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698440'
+      last_seen: '2025-07-01T00:41:06.384734'
       level: 20
       name: Snakeskin Boots
       sources: []
@@ -8745,9 +8715,9 @@ data:
       - code: res_earth
         description: Adds 3% Earth Res to its stats when equipped.
         value: 3
-      first_discovered: '2025-06-29T23:28:58.698545'
+      first_discovered: '2025-07-01T00:41:06.384788'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698546'
+      last_seen: '2025-07-01T00:41:06.384788'
       level: 25
       name: Snakeskin Legs Armor
       sources: []
@@ -8764,9 +8734,9 @@ data:
       - code: teleport_y
         description: Teleports to y-coordinate 13 when the item is used.
         value: 13
-      first_discovered: '2025-06-29T23:28:58.374906'
+      first_discovered: '2025-07-01T00:41:06.028038'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374907'
+      last_seen: '2025-07-01T00:41:06.028039'
       level: 10
       name: South Bank Potion
       sources: []
@@ -8777,9 +8747,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698467'
+      first_discovered: '2025-07-01T00:41:06.384750'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698468'
+      last_seen: '2025-07-01T00:41:06.384751'
       level: 20
       name: Spider Leg
       sources: []
@@ -8806,9 +8776,9 @@ data:
       - code: fishing
         description: Reduces cooldown by -20% when a character is fishing.
         value: -20
-      first_discovered: '2025-06-29T23:28:58.374877'
+      first_discovered: '2025-07-01T00:41:06.028020'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374877'
+      last_seen: '2025-07-01T00:41:06.028021'
       level: 10
       name: Spruce Fishing Rod
       sources: []
@@ -8825,9 +8795,9 @@ data:
         skill: woodcutting
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374862'
+      first_discovered: '2025-07-01T00:41:06.028008'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374863'
+      last_seen: '2025-07-01T00:41:06.028009'
       level: 10
       name: Spruce Plank
       sources: []
@@ -8838,9 +8808,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374855'
+      first_discovered: '2025-07-01T00:41:06.028002'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374855'
+      last_seen: '2025-07-01T00:41:06.028003'
       level: 10
       name: Spruce Wood
       sources: []
@@ -8878,9 +8848,9 @@ data:
       - code: res_water
         description: Adds 5% Water Res to its stats when equipped.
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698383'
+      first_discovered: '2025-07-01T00:41:06.384698'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698383'
+      last_seen: '2025-07-01T00:41:06.384698'
       level: 20
       name: Steel Armor
       sources: []
@@ -8909,9 +8879,9 @@ data:
       - code: woodcutting
         description: Reduces cooldown by -30% when a character logs a tree.
         value: -30
-      first_discovered: '2025-06-29T23:28:58.698513'
+      first_discovered: '2025-07-01T00:41:06.384776'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698514'
+      last_seen: '2025-07-01T00:41:06.384776'
       level: 20
       name: Steel Axe
       sources: []
@@ -8930,9 +8900,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698401'
+      first_discovered: '2025-07-01T00:41:06.384711'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698402'
+      last_seen: '2025-07-01T00:41:06.384711'
       level: 20
       name: Steel Bar
       sources: []
@@ -8962,9 +8932,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.698385'
+      first_discovered: '2025-07-01T00:41:06.384700'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698386'
+      last_seen: '2025-07-01T00:41:06.384700'
       level: 20
       name: Steel Battleaxe
       sources: []
@@ -9000,9 +8970,9 @@ data:
         description: 'Adds 6 Haste to its stats when equipped. The haste reduces the
           cooldown of a fight. '
         value: 6
-      first_discovered: '2025-06-29T23:28:58.698376'
+      first_discovered: '2025-07-01T00:41:06.384692'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698377'
+      last_seen: '2025-07-01T00:41:06.384693'
       level: 20
       name: Steel Boots
       sources: []
@@ -9031,9 +9001,9 @@ data:
       - code: fishing
         description: Reduces cooldown by -30% when a character is fishing.
         value: -30
-      first_discovered: '2025-06-29T23:28:58.698506'
+      first_discovered: '2025-07-01T00:41:06.384770'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698507'
+      last_seen: '2025-07-01T00:41:06.384770'
       level: 20
       name: Steel Fishing Rod
       sources: []
@@ -9062,9 +9032,9 @@ data:
       - code: alchemy
         description: Reduces cooldown by -30% when a character harvest a plant.
         value: -30
-      first_discovered: '2025-06-29T23:28:58.698511'
+      first_discovered: '2025-07-01T00:41:06.384774'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698512'
+      last_seen: '2025-07-01T00:41:06.384774'
       level: 20
       name: Steel Gloves
       sources: []
@@ -9093,9 +9063,9 @@ data:
       - code: dmg_earth
         description: Adds 16% Earth Damage to its stats when equipped.
         value: 16
-      first_discovered: '2025-06-29T23:28:58.698371'
+      first_discovered: '2025-07-01T00:41:06.384690'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698372'
+      last_seen: '2025-07-01T00:41:06.384691'
       level: 20
       name: Steel Helm
       sources: []
@@ -9134,9 +9104,9 @@ data:
       - code: res_water
         description: Adds 6% Water Res to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.698387'
+      first_discovered: '2025-07-01T00:41:06.384702'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698388'
+      last_seen: '2025-07-01T00:41:06.384702'
       level: 20
       name: Steel Legs Armor
       sources: []
@@ -9165,9 +9135,9 @@ data:
       - code: mining
         description: Reduces cooldown by -30% when a character mines a resource.
         value: -30
-      first_discovered: '2025-06-29T23:28:58.698508'
+      first_discovered: '2025-07-01T00:41:06.384772'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698509'
+      last_seen: '2025-07-01T00:41:06.384772'
       level: 20
       name: Steel Pickaxe
       sources: []
@@ -9197,9 +9167,9 @@ data:
         description: Adds 30 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 30
-      first_discovered: '2025-06-29T23:28:58.698413'
+      first_discovered: '2025-07-01T00:41:06.384717'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698414'
+      last_seen: '2025-07-01T00:41:06.384718'
       level: 20
       name: Steel Ring
       sources: []
@@ -9234,9 +9204,9 @@ data:
       - code: res_air
         description: Adds 7% Air Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:58.698411'
+      first_discovered: '2025-07-01T00:41:06.384715'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698412'
+      last_seen: '2025-07-01T00:41:06.384716'
       level: 20
       name: Steel Shield
       sources: []
@@ -9262,9 +9232,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.374774'
+      first_discovered: '2025-07-01T00:41:06.027943'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374775'
+      last_seen: '2025-07-01T00:41:06.027944'
       level: 5
       name: Sticky Dagger
       sources: []
@@ -9290,9 +9260,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374777'
+      first_discovered: '2025-07-01T00:41:06.027945'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374777'
+      last_seen: '2025-07-01T00:41:06.027946'
       level: 5
       name: Sticky Sword
       sources: []
@@ -9332,9 +9302,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:58.959812'
+      first_discovered: '2025-07-01T00:41:06.663214'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959813'
+      last_seen: '2025-07-01T00:41:06.663215'
       level: 25
       name: Stormforged Armor
       sources: []
@@ -9373,9 +9343,9 @@ data:
       - code: res_water
         description: Adds 3% Water Res to its stats when equipped.
         value: 3
-      first_discovered: '2025-06-29T23:28:58.959818'
+      first_discovered: '2025-07-01T00:41:06.663217'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959819'
+      last_seen: '2025-07-01T00:41:06.663217'
       level: 25
       name: Stormforged Pants
       sources: []
@@ -9386,9 +9356,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959989'
+      first_discovered: '2025-07-01T00:41:06.663314'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959990'
+      last_seen: '2025-07-01T00:41:06.663315'
       level: 35
       name: Strange Ore
       sources: []
@@ -9428,9 +9398,9 @@ data:
       - code: res_fire
         description: Adds 6% Fire Res to its stats when equipped.
         value: 6
-      first_discovered: '2025-06-29T23:28:58.960010'
+      first_discovered: '2025-07-01T00:41:06.663326'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960011'
+      last_seen: '2025-07-01T00:41:06.663326'
       level: 35
       name: Strangold Armor
       sources: []
@@ -9449,9 +9419,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.959996'
+      first_discovered: '2025-07-01T00:41:06.663318'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959997'
+      last_seen: '2025-07-01T00:41:06.663319'
       level: 35
       name: Strangold Bar
       sources: []
@@ -9487,9 +9457,9 @@ data:
       - code: dmg_water
         description: Adds 22% Water Damage to its stats when equipped.
         value: 22
-      first_discovered: '2025-06-29T23:28:58.960003'
+      first_discovered: '2025-07-01T00:41:06.663322'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960004'
+      last_seen: '2025-07-01T00:41:06.663323'
       level: 35
       name: Strangold Helmet
       sources: []
@@ -9533,9 +9503,9 @@ data:
       - code: res_air
         description: Adds 7% Air Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:58.960006'
+      first_discovered: '2025-07-01T00:41:06.663324'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960007'
+      last_seen: '2025-07-01T00:41:06.663325'
       level: 35
       name: Strangold Legs Armor
       sources: []
@@ -9570,9 +9540,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.960027'
+      first_discovered: '2025-07-01T00:41:06.663334'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.960028'
+      last_seen: '2025-07-01T00:41:06.663335'
       level: 35
       name: Strangold Sword
       sources: []
@@ -9583,9 +9553,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374725'
+      first_discovered: '2025-07-01T00:41:06.027916'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374726'
+      last_seen: '2025-07-01T00:41:06.027916'
       level: 1
       name: Sunflower
       sources: []
@@ -9596,9 +9566,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374704'
+      first_discovered: '2025-07-01T00:41:06.027907'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374705'
+      last_seen: '2025-07-01T00:41:06.027907'
       level: 1
       name: Tasks Coin
       sources: []
@@ -9615,9 +9585,9 @@ data:
         skill: mining
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698429'
+      first_discovered: '2025-07-01T00:41:06.384728'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698430'
+      last_seen: '2025-07-01T00:41:06.384728'
       level: 20
       name: Topaz
       sources: []
@@ -9646,9 +9616,9 @@ data:
       - code: dmg_earth
         description: Adds 18% Earth Damage to its stats when equipped.
         value: 18
-      first_discovered: '2025-06-29T23:28:58.698554'
+      first_discovered: '2025-07-01T00:41:06.384793'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698555'
+      last_seen: '2025-07-01T00:41:06.384794'
       level: 25
       name: Topaz Amulet
       sources: []
@@ -9662,9 +9632,9 @@ data:
       - code: dmg_earth
         description: Adds 20% Earth Damage to its stats when equipped.
         value: 20
-      first_discovered: '2025-06-29T23:28:59.276781'
+      first_discovered: '2025-07-01T00:41:07.045114'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276784'
+      last_seen: '2025-07-01T00:41:07.045115'
       level: 40
       name: Topaz Book
       sources: []
@@ -9699,9 +9669,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:58.959879'
+      first_discovered: '2025-07-01T00:41:06.663254'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959879'
+      last_seen: '2025-07-01T00:41:06.663255'
       level: 30
       name: Topaz Ring
       sources: []
@@ -9712,9 +9682,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698446'
+      first_discovered: '2025-07-01T00:41:06.384736'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698447'
+      last_seen: '2025-07-01T00:41:06.384737'
       level: 20
       name: Topaz Stone
       sources: []
@@ -9747,9 +9717,9 @@ data:
         description: Adds 25 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 25
-      first_discovered: '2025-06-29T23:28:58.698420'
+      first_discovered: '2025-07-01T00:41:06.384724'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698421'
+      last_seen: '2025-07-01T00:41:06.384724'
       level: 20
       name: Tromatising Mask
       sources: []
@@ -9760,9 +9730,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698380'
+      first_discovered: '2025-07-01T00:41:06.384696'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698381'
+      last_seen: '2025-07-01T00:41:06.384696'
       level: 20
       name: Trout
       sources: []
@@ -9773,9 +9743,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698531'
+      first_discovered: '2025-07-01T00:41:06.384780'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698532'
+      last_seen: '2025-07-01T00:41:06.384781'
       level: 24
       name: Vampire Blood
       sources: []
@@ -9807,9 +9777,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.959823'
+      first_discovered: '2025-07-01T00:41:06.663221'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959824'
+      last_seen: '2025-07-01T00:41:06.663222'
       level: 25
       name: Vampire Bow
       sources: []
@@ -9820,9 +9790,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698533'
+      first_discovered: '2025-07-01T00:41:06.384782'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698534'
+      last_seen: '2025-07-01T00:41:06.384782'
       level: 24
       name: Vampire Tooth
       sources: []
@@ -9847,9 +9817,9 @@ data:
         description: Add 12% water damage at the start of the fight and for the rest
           of the fight.
         value: 12
-      first_discovered: '2025-06-29T23:28:58.374889'
+      first_discovered: '2025-07-01T00:41:06.028025'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374890'
+      last_seen: '2025-07-01T00:41:06.028026'
       level: 10
       name: Water Boost Potion
       sources: []
@@ -9875,9 +9845,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.374782'
+      first_discovered: '2025-07-01T00:41:06.027949'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374783'
+      last_seen: '2025-07-01T00:41:06.027950'
       level: 5
       name: Water Bow
       sources: []
@@ -9901,9 +9871,9 @@ data:
       - code: boost_res_water
         description: Gives 10% water resistance at the start of fight.
         value: 10
-      first_discovered: '2025-06-29T23:28:59.276853'
+      first_discovered: '2025-07-01T00:41:07.045154'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276854'
+      last_seen: '2025-07-01T00:41:07.045154'
       level: 40
       name: Water Res Potion
       sources: []
@@ -9927,9 +9897,9 @@ data:
       - code: dmg_water
         description: Adds 8% Water Damage to its stats when equipped.
         value: 8
-      first_discovered: '2025-06-29T23:28:58.698324'
+      first_discovered: '2025-07-01T00:41:06.384664'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698325'
+      last_seen: '2025-07-01T00:41:06.384665'
       level: 15
       name: Water Ring
       sources: []
@@ -9960,9 +9930,9 @@ data:
       - code: res_earth
         description: Adds -10% Earth Res to its stats when equipped.
         value: -10
-      first_discovered: '2025-06-29T23:28:59.276689'
+      first_discovered: '2025-07-01T00:41:07.045036'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276690'
+      last_seen: '2025-07-01T00:41:07.045039'
       level: 40
       name: Water Shield
       sources: []
@@ -10007,9 +9977,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:59.276808'
+      first_discovered: '2025-07-01T00:41:07.045127'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276809'
+      last_seen: '2025-07-01T00:41:07.045128'
       level: 40
       name: White Knight Armor
       sources: []
@@ -10047,9 +10017,9 @@ data:
         description: 'Adds 3% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 3
-      first_discovered: '2025-06-29T23:28:59.276824'
+      first_discovered: '2025-07-01T00:41:07.045136'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276825'
+      last_seen: '2025-07-01T00:41:07.045137'
       level: 40
       name: White Knight Helmet
       sources: []
@@ -10093,9 +10063,9 @@ data:
       - code: res_fire
         description: Adds 7% Fire Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:59.276815'
+      first_discovered: '2025-07-01T00:41:07.045132'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276816'
+      last_seen: '2025-07-01T00:41:07.045133'
       level: 40
       name: White Knight Pants
       sources: []
@@ -10126,9 +10096,9 @@ data:
       - code: res_air
         description: Adds 15% Air Res to its stats when equipped.
         value: 15
-      first_discovered: '2025-06-29T23:28:59.276834'
+      first_discovered: '2025-07-01T00:41:07.045144'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276835'
+      last_seen: '2025-07-01T00:41:07.045145'
       level: 40
       name: White Knight Shield
       sources: []
@@ -10158,9 +10128,9 @@ data:
         description: Adds 60 Wisdom to its stats when equipped. Each point of wisdom
           increases your xp in combat and with skills. (1% extra per 10 wisdom)
         value: 60
-      first_discovered: '2025-06-29T23:28:58.698334'
+      first_discovered: '2025-07-01T00:41:06.384672'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698335'
+      last_seen: '2025-07-01T00:41:06.384672'
       level: 15
       name: Wisdom Amulet
       sources: []
@@ -10171,9 +10141,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698315'
+      first_discovered: '2025-07-01T00:41:06.384658'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698315'
+      last_seen: '2025-07-01T00:41:06.384659'
       level: 15
       name: Wolf Bone
       sources: []
@@ -10199,9 +10169,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 50
-      first_discovered: '2025-06-29T23:28:58.698337'
+      first_discovered: '2025-07-01T00:41:06.384674'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698337'
+      last_seen: '2025-07-01T00:41:06.384675'
       level: 15
       name: Wolf Ears
       sources: []
@@ -10212,9 +10182,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.698327'
+      first_discovered: '2025-07-01T00:41:06.384666'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.698327'
+      last_seen: '2025-07-01T00:41:06.384666'
       level: 15
       name: Wolf hair
       sources: []
@@ -10225,9 +10195,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:59.276712'
+      first_discovered: '2025-07-01T00:41:07.045053'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276713'
+      last_seen: '2025-07-01T00:41:07.045054'
       level: 40
       name: Wolfrider Hair
       sources: []
@@ -10245,9 +10215,9 @@ data:
         description: 'Adds 35% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 35
-      first_discovered: '2025-06-29T23:28:58.959820'
+      first_discovered: '2025-07-01T00:41:06.663219'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.959821'
+      last_seen: '2025-07-01T00:41:06.663220'
       level: 25
       name: Wooden Club
       sources: []
@@ -10276,9 +10246,9 @@ data:
       - code: res_air
         description: Adds 2% Air Res to its stats when equipped.
         value: 2
-      first_discovered: '2025-06-29T23:28:58.374709'
+      first_discovered: '2025-07-01T00:41:06.027909'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374710'
+      last_seen: '2025-07-01T00:41:06.027910'
       level: 1
       name: Wooden Shield
       sources: []
@@ -10304,9 +10274,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374711'
+      first_discovered: '2025-07-01T00:41:06.027911'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374712'
+      last_seen: '2025-07-01T00:41:06.027912'
       level: 1
       name: Wooden Staff
       sources: []
@@ -10324,9 +10294,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:58.374718'
+      first_discovered: '2025-07-01T00:41:06.027913'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374719'
+      last_seen: '2025-07-01T00:41:06.027914'
       level: 1
       name: Wooden Stick
       sources: []
@@ -10337,9 +10307,9 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374791'
+      first_discovered: '2025-07-01T00:41:06.027955'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374792'
+      last_seen: '2025-07-01T00:41:06.027956'
       level: 5
       name: Wool
       sources: []
@@ -10384,9 +10354,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 30
-      first_discovered: '2025-06-29T23:28:59.276806'
+      first_discovered: '2025-07-01T00:41:07.045124'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276806'
+      last_seen: '2025-07-01T00:41:07.045125'
       level: 40
       name: Wratharmor
       sources: []
@@ -10425,9 +10395,9 @@ data:
           your chance of obtaining drops in combat and with skills. (1% extra per
           10 PP)
         value: 20
-      first_discovered: '2025-06-29T23:28:59.276822'
+      first_discovered: '2025-07-01T00:41:07.045134'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276823'
+      last_seen: '2025-07-01T00:41:07.045135'
       level: 40
       name: Wrathelmet
       sources: []
@@ -10471,9 +10441,9 @@ data:
       - code: res_earth
         description: Adds 7% Earth Res to its stats when equipped.
         value: 7
-      first_discovered: '2025-06-29T23:28:59.276813'
+      first_discovered: '2025-07-01T00:41:07.045129'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276814'
+      last_seen: '2025-07-01T00:41:07.045130'
       level: 40
       name: Wrathpants
       sources: []
@@ -10508,9 +10478,9 @@ data:
         description: 'Adds 5% Critical Strike to its stats when equipped. Critical
           strikes adds 50% extra damage to an attack (1.5x). '
         value: 5
-      first_discovered: '2025-06-29T23:28:59.276788'
+      first_discovered: '2025-07-01T00:41:07.045116'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:59.276789'
+      last_seen: '2025-07-01T00:41:07.045117'
       level: 40
       name: Wrathsword
       sources: []
@@ -10521,19 +10491,19 @@ data:
       craft_data: null
       discovery_count: 1
       effects: []
-      first_discovered: '2025-06-29T23:28:58.374750'
+      first_discovered: '2025-07-01T00:41:06.027929'
       item_type: unknown
-      last_seen: '2025-06-29T23:28:58.374751'
+      last_seen: '2025-07-01T00:41:06.027930'
       level: 2
       name: Yellow Slimeball
       sources: []
       tradeable: true
       uses: []
   learning_stats:
-    last_learning_session: '2025-06-30T00:10:30.225611'
+    last_learning_session: '2025-07-01T02:55:01.612763'
     learning_version: '2.0'
-    total_combats: 10
-    unique_facilities_found: 2
+    total_combats: 1
+    unique_facilities_found: 0
     unique_items_discovered: 0
     unique_monsters_fought: 0
     unique_npcs_met: 1
@@ -10560,7 +10530,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 10
-      first_discovered: '2025-06-29T23:28:57.657328'
+      first_discovered: '2025-07-01T00:41:05.677519'
       hp: 780
       level: 25
       name: Bandit Lizard
@@ -10583,7 +10553,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657352'
+      first_discovered: '2025-07-01T00:41:05.677539'
       hp: 2000
       level: 38
       name: Bat
@@ -10600,18 +10570,7 @@ data:
         attack_fire: 0
         attack_water: 15
       code: blue_slime
-      combat_results:
-      - character_hp_after: 1
-        character_hp_before: 64
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 63
-        drops: []
-        gold_gained: 0
-        result: loss
-        timestamp: '2025-06-29T23:39:15.131883'
-        turns: 11
-        xp_gained: 0
+      combat_results: []
       drops:
       - code: blue_slimeball
         max_quantity: 1
@@ -10621,11 +10580,10 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 12
-      encounter_count: 11
-      estimated_damage: 63
-      first_discovered: '2025-06-29T23:28:57.657300'
+      encounter_count: 7
+      first_discovered: '2025-07-01T00:41:05.677495'
       hp: 120
-      last_seen: '2025-06-30T00:10:21.374307'
+      last_seen: '2025-07-01T02:54:44.185465'
       level: 6
       name: Blue Slime
       resistance_stats:
@@ -10642,72 +10600,19 @@ data:
         attack_water: 4
       code: chicken
       combat_results:
-      - character_hp_after: 64
-        character_hp_before: 120
-        character_level: 1
+      - character_hp_after: 17
+        character_hp_before: 125
+        character_level: 2
         damage_dealt: null
-        damage_taken: 56
-        drops: []
-        gold_gained: 0
+        damage_taken: 108
+        drops:
+        - code: egg
+          quantity: 1
+        gold_gained: 2
         result: win
-        timestamp: '2025-06-29T23:29:15.957520'
-        turns: 30
-        xp_gained: 22
-      - character_hp_after: 64
-        character_hp_before: 120
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 56
-        drops: []
-        gold_gained: 1
-        result: win
-        timestamp: '2025-06-29T23:37:50.584867'
-        turns: 30
-        xp_gained: 22
-      - character_hp_after: 64
-        character_hp_before: 120
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 56
-        drops: []
-        gold_gained: 3
-        result: win
-        timestamp: '2025-06-29T23:40:09.424607'
-        turns: 30
-        xp_gained: 22
-      - character_hp_after: 64
-        character_hp_before: 120
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 56
-        drops: []
-        gold_gained: 1
-        result: win
-        timestamp: '2025-06-29T23:42:56.453690'
-        turns: 30
-        xp_gained: 22
-      - character_hp_after: 68
-        character_hp_before: 120
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 52
-        drops: []
-        gold_gained: 0
-        result: win
-        timestamp: '2025-06-29T23:51:11.957296'
+        timestamp: '2025-07-01T02:55:01.612754'
         turns: 28
-        xp_gained: 22
-      - character_hp_after: 125
-        character_hp_before: 120
-        character_level: 1
-        damage_dealt: null
-        damage_taken: null
-        drops: []
-        gold_gained: 0
-        result: win
-        timestamp: '2025-06-30T00:10:30.225600'
-        turns: 30
-        xp_gained: 22
+        xp_gained: 12
       drops:
       - code: raw_chicken
         max_quantity: 1
@@ -10726,11 +10631,11 @@ data:
         min_quantity: 1
         rate: 1000
       encounter_count: 6
-      estimated_damage: 55
-      estimated_level: 1
-      first_discovered: '2025-06-29T23:28:57.657280'
+      estimated_damage: 108
+      estimated_level: 2
+      first_discovered: '2025-07-01T00:41:05.677478'
       hp: 60
-      last_seen: '2025-06-30T00:10:15.299453'
+      last_seen: '2025-07-01T02:54:47.827802'
       level: 1
       name: Chicken
       resistance_stats:
@@ -10760,7 +10665,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 200
-      first_discovered: '2025-06-29T23:28:57.657324'
+      first_discovered: '2025-07-01T00:41:05.677516'
       hp: 850
       level: 20
       name: Corrupted Ogre
@@ -10791,7 +10696,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 100
-      first_discovered: '2025-06-29T23:28:57.657342'
+      first_discovered: '2025-07-01T00:41:05.677531'
       hp: 1100
       level: 30
       name: Corrupted Owlbear
@@ -10808,18 +10713,7 @@ data:
         attack_fire: 0
         attack_water: 0
       code: cow
-      combat_results:
-      - character_hp_after: 1
-        character_hp_before: 64
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 63
-        drops: []
-        gold_gained: 0
-        result: loss
-        timestamp: '2025-06-29T23:44:03.923299'
-        turns: 9
-        xp_gained: 0
+      combat_results: []
       drops:
       - code: raw_beef
         max_quantity: 1
@@ -10833,11 +10727,10 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 8
-      encounter_count: 6
-      estimated_damage: 63
-      first_discovered: '2025-06-29T23:28:57.657304'
+      encounter_count: 5
+      first_discovered: '2025-07-01T00:41:05.677499'
       hp: 280
-      last_seen: '2025-06-30T00:10:19.212110'
+      last_seen: '2025-07-01T02:54:48.640601'
       level: 8
       name: Cow
       resistance_stats:
@@ -10863,7 +10756,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 20
-      first_discovered: '2025-06-29T23:28:57.657343'
+      first_discovered: '2025-07-01T00:41:05.677532'
       hp: 1500
       level: 33
       name: Cultist Acolyte
@@ -10890,7 +10783,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 100
-      first_discovered: '2025-06-29T23:28:57.657348'
+      first_discovered: '2025-07-01T00:41:05.677536'
       hp: 1750
       level: 35
       name: Cultist Emperor
@@ -10913,7 +10806,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 10
-      first_discovered: '2025-06-29T23:28:57.657345'
+      first_discovered: '2025-07-01T00:41:05.677534'
       hp: 1550
       level: 34
       name: Cursed Tree
@@ -10936,7 +10829,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 6
-      first_discovered: '2025-06-29T23:28:57.657330'
+      first_discovered: '2025-07-01T00:41:05.677521'
       hp: 630
       level: 25
       name: Cyclops
@@ -10963,7 +10856,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657332'
+      first_discovered: '2025-07-01T00:41:05.677523'
       hp: 820
       level: 28
       name: Death Knight
@@ -10990,7 +10883,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657338'
+      first_discovered: '2025-07-01T00:41:05.677527'
       hp: 900
       level: 30
       name: Demon
@@ -11017,7 +10910,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 50
-      first_discovered: '2025-06-29T23:28:57.657365'
+      first_discovered: '2025-07-01T00:41:05.677547'
       hp: 3600
       level: 42
       name: Efreet Sultan
@@ -11048,7 +10941,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 200
-      first_discovered: '2025-06-29T23:28:57.657309'
+      first_discovered: '2025-07-01T00:41:05.677503'
       hp: 360
       level: 12
       name: Flying Snake
@@ -11075,7 +10968,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657350'
+      first_discovered: '2025-07-01T00:41:05.677538'
       hp: 1650
       level: 35
       name: Goblin
@@ -11102,7 +10995,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657358'
+      first_discovered: '2025-07-01T00:41:05.677544'
       hp: 2650
       level: 40
       name: Goblin Wolfrider
@@ -11119,18 +11012,7 @@ data:
         attack_fire: 0
         attack_water: 0
       code: green_slime
-      combat_results:
-      - character_hp_after: 1
-        character_hp_before: 64
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 63
-        drops: []
-        gold_gained: 0
-        result: loss
-        timestamp: '2025-06-29T23:30:37.281658'
-        turns: 13
-        xp_gained: 0
+      combat_results: []
       drops:
       - code: green_slimeball
         max_quantity: 1
@@ -11141,10 +11023,9 @@ data:
         min_quantity: 1
         rate: 12
       encounter_count: 7
-      estimated_damage: 63
-      first_discovered: '2025-06-29T23:28:57.657295'
+      first_discovered: '2025-07-01T00:41:05.677491'
       hp: 80
-      last_seen: '2025-06-30T00:10:14.814286'
+      last_seen: '2025-07-01T02:54:42.316905'
       level: 4
       name: Green Slime
       resistance_stats:
@@ -11174,7 +11055,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 5
-      first_discovered: '2025-06-29T23:28:57.657367'
+      first_discovered: '2025-07-01T00:41:05.677549'
       hp: 7000
       level: 45
       name: Grimlet
@@ -11205,7 +11086,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657360'
+      first_discovered: '2025-07-01T00:41:05.677546'
       hp: 3250
       level: 40
       name: Hellhound
@@ -11232,7 +11113,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657313'
+      first_discovered: '2025-07-01T00:41:05.677507'
       hp: 380
       level: 15
       name: Highwayman
@@ -11259,7 +11140,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 70
-      first_discovered: '2025-06-29T23:28:57.657333'
+      first_discovered: '2025-07-01T00:41:05.677524'
       hp: 1750
       level: 28
       name: Imp
@@ -11286,7 +11167,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 600
-      first_discovered: '2025-06-29T23:28:57.657340'
+      first_discovered: '2025-07-01T00:41:05.677529'
       hp: 1450
       level: 30
       name: Lich
@@ -11313,7 +11194,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 200
-      first_discovered: '2025-06-29T23:28:57.657307'
+      first_discovered: '2025-07-01T00:41:05.677501'
       hp: 350
       level: 10
       name: Mushmush
@@ -11344,7 +11225,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 200
-      first_discovered: '2025-06-29T23:28:57.657320'
+      first_discovered: '2025-07-01T00:41:05.677513'
       hp: 650
       level: 20
       name: Ogre
@@ -11367,7 +11248,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657354'
+      first_discovered: '2025-07-01T00:41:05.677541'
       hp: 1600
       level: 38
       name: Orc
@@ -11394,7 +11275,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657335'
+      first_discovered: '2025-07-01T00:41:05.677526'
       hp: 1100
       level: 30
       name: Owlbear
@@ -11417,7 +11298,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657318'
+      first_discovered: '2025-07-01T00:41:05.677511'
       hp: 480
       level: 19
       name: Pig
@@ -11434,18 +11315,7 @@ data:
         attack_fire: 18
         attack_water: 0
       code: red_slime
-      combat_results:
-      - character_hp_after: 1
-        character_hp_before: 64
-        character_level: 1
-        damage_dealt: null
-        damage_taken: 63
-        drops: []
-        gold_gained: 0
-        result: loss
-        timestamp: '2025-06-29T23:42:03.974187'
-        turns: 9
-        xp_gained: 0
+      combat_results: []
       drops:
       - code: red_slimeball
         max_quantity: 1
@@ -11455,11 +11325,10 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 12
-      encounter_count: 12
-      estimated_damage: 63
-      first_discovered: '2025-06-29T23:28:57.657302'
+      encounter_count: 7
+      first_discovered: '2025-07-01T00:41:05.677497'
       hp: 120
-      last_seen: '2025-06-30T00:10:20.338026'
+      last_seen: '2025-07-01T02:54:43.070174'
       level: 7
       name: Red Slime
       resistance_stats:
@@ -11489,7 +11358,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 100
-      first_discovered: '2025-06-29T23:28:57.657356'
+      first_discovered: '2025-07-01T00:41:05.677542'
       hp: 3000
       level: 40
       name: Rosenblood
@@ -11512,7 +11381,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657297'
+      first_discovered: '2025-07-01T00:41:05.677493'
       hp: 120
       level: 5
       name: Sheep
@@ -11539,7 +11408,7 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657316'
+      first_discovered: '2025-07-01T00:41:05.677509'
       hp: 480
       level: 18
       name: Skeleton
@@ -11566,7 +11435,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657322'
+      first_discovered: '2025-07-01T00:41:05.677514'
       hp: 550
       level: 20
       name: Spider
@@ -11593,7 +11462,7 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      first_discovered: '2025-06-29T23:28:57.657326'
+      first_discovered: '2025-07-01T00:41:05.677518'
       hp: 680
       level: 24
       name: Vampire
@@ -11628,10 +11497,8 @@ data:
         max_quantity: 2
         min_quantity: 1
         rate: 12
-      encounter_count: 7
-      first_discovered: '2025-06-29T23:28:57.657311'
+      first_discovered: '2025-07-01T00:41:05.677505'
       hp: 400
-      last_seen: '2025-06-30T00:10:22.654241'
       level: 15
       name: Wolf
       resistance_stats:
@@ -11657,10 +11524,10 @@ data:
         max_quantity: 1
         min_quantity: 1
         rate: 12
-      encounter_count: 5
-      first_discovered: '2025-06-29T23:28:57.657291'
+      encounter_count: 7
+      first_discovered: '2025-07-01T00:41:05.677487'
       hp: 70
-      last_seen: '2025-06-30T00:10:19.661813'
+      last_seen: '2025-07-01T02:54:46.342145'
       level: 2
       name: Yellow Slime
       resistance_stats:
@@ -11672,35 +11539,35 @@ data:
   npcs:
     archaeologist:
       code: archaeologist
-      first_discovered: '2025-06-29T23:28:56.920410'
+      first_discovered: '2025-07-01T00:41:04.910493'
       name: Archaeologist
       npc_type: unknown
       services: []
       trades: []
     cultist_wizard:
       code: cultist_wizard
-      first_discovered: '2025-06-29T23:28:56.920419'
+      first_discovered: '2025-07-01T00:41:04.910501'
       name: Cultist Wizard
       npc_type: unknown
       services: []
       trades: []
     fish_merchant:
       code: fish_merchant
-      first_discovered: '2025-06-29T23:28:56.920422'
+      first_discovered: '2025-07-01T00:41:04.910504'
       name: Fish Merchant
       npc_type: unknown
       services: []
       trades: []
     gemstone_merchant:
       code: gemstone_merchant
-      first_discovered: '2025-06-29T23:28:56.920424'
+      first_discovered: '2025-07-01T00:41:04.910506'
       name: Gemstone Merchant
       npc_type: unknown
       services: []
       trades: []
     herbal_merchant:
       code: herbal_merchant
-      first_discovered: '2025-06-29T23:28:56.920426'
+      first_discovered: '2025-07-01T00:41:04.910509'
       name: Herbal Merchant
       npc_type: unknown
       services: []
@@ -11709,45 +11576,47 @@ data:
       code: monsters
       description: ''
       dialogue_options: []
-      encounter_count: 6
-      first_discovered: '2025-06-29T23:29:06.029650'
+      encounter_count: 8
+      first_discovered: '2025-07-01T00:45:30.371518'
       interaction_count: 0
-      last_seen: '2025-06-30T00:10:20.013728'
+      last_seen: '2025-07-01T02:54:39.701156'
       name: monsters
       services: []
       trade_history: []
       type: unknown
     nomadic_merchant:
       code: nomadic_merchant
-      first_discovered: '2025-06-29T23:28:56.920428'
+      first_discovered: '2025-07-01T00:41:04.910511'
       name: Nomadic Merchant
       npc_type: unknown
       services: []
       trades: []
     rune_vendor:
       code: rune_vendor
-      first_discovered: '2025-06-29T23:28:56.920430'
+      first_discovered: '2025-07-01T00:41:04.910513'
       name: Rune Vendor
       npc_type: unknown
       services: []
       trades: []
     tailor:
       code: tailor
-      first_discovered: '2025-06-29T23:28:56.920432'
+      encounter_count: 7
+      first_discovered: '2025-07-01T00:41:04.910515'
+      last_seen: '2025-07-01T02:54:45.436665'
       name: Tailor
       npc_type: unknown
       services: []
       trades: []
     tasks_trader:
       code: tasks_trader
-      first_discovered: '2025-06-29T23:28:56.920433'
+      first_discovered: '2025-07-01T00:41:04.910517'
       name: Tasks Trader
       npc_type: unknown
       services: []
       trades: []
     timber_merchant:
       code: timber_merchant
-      first_discovered: '2025-06-29T23:28:56.920435'
+      first_discovered: '2025-07-01T00:41:04.910519'
       name: Timber Merchant
       npc_type: unknown
       services: []
@@ -11755,9 +11624,8 @@ data:
   resources:
     ash_tree:
       code: ash_tree
-      first_discovered: '2025-06-29T23:28:57.217553'
+      first_discovered: '2025-07-01T00:41:05.240680'
       harvest_attempts: 0
-      last_seen: '2025-06-30T00:10:16.463354'
       level_required: 1
       name: Ash Tree
       resource_type: unknown
@@ -11765,7 +11633,7 @@ data:
       total_yield: 0
     bass_fishing_spot:
       code: bass_fishing_spot
-      first_discovered: '2025-06-29T23:28:57.217590'
+      first_discovered: '2025-07-01T00:41:05.240703'
       harvest_attempts: 0
       level_required: 30
       name: Bass Fishing Spot
@@ -11774,7 +11642,7 @@ data:
       total_yield: 0
     birch_tree:
       code: birch_tree
-      first_discovered: '2025-06-29T23:28:57.217587'
+      first_discovered: '2025-07-01T00:41:05.240700'
       harvest_attempts: 0
       level_required: 20
       name: Birch Tree
@@ -11783,7 +11651,7 @@ data:
       total_yield: 0
     coal_rocks:
       code: coal_rocks
-      first_discovered: '2025-06-29T23:28:57.217576'
+      first_discovered: '2025-07-01T00:41:05.240698'
       harvest_attempts: 0
       level_required: 20
       name: Coal Rocks
@@ -11792,9 +11660,9 @@ data:
       total_yield: 0
     copper_rocks:
       code: copper_rocks
-      first_discovered: '2025-06-29T23:28:57.217567'
+      first_discovered: '2025-07-01T00:41:05.240690'
       harvest_attempts: 0
-      last_seen: '2025-06-30T00:10:22.116325'
+      last_seen: '2025-07-01T02:54:40.111893'
       level_required: 1
       name: Copper Rocks
       resource_type: unknown
@@ -11802,7 +11670,7 @@ data:
       total_yield: 0
     dead_tree:
       code: dead_tree
-      first_discovered: '2025-06-29T23:28:57.217593'
+      first_discovered: '2025-07-01T00:41:05.240705'
       harvest_attempts: 0
       level_required: 30
       name: Dead Tree
@@ -11811,7 +11679,7 @@ data:
       total_yield: 0
     glowstem:
       code: glowstem
-      first_discovered: '2025-06-29T23:28:57.217598'
+      first_discovered: '2025-07-01T00:41:05.240710'
       harvest_attempts: 0
       level_required: 40
       name: Glowstem
@@ -11820,7 +11688,7 @@ data:
       total_yield: 0
     gold_rocks:
       code: gold_rocks
-      first_discovered: '2025-06-29T23:28:57.217591'
+      first_discovered: '2025-07-01T00:41:05.240704'
       harvest_attempts: 0
       level_required: 30
       name: Gold Rocks
@@ -11829,8 +11697,9 @@ data:
       total_yield: 0
     gudgeon_fishing_spot:
       code: gudgeon_fishing_spot
-      first_discovered: '2025-06-29T23:28:57.217564'
+      first_discovered: '2025-07-01T00:41:05.240687'
       harvest_attempts: 0
+      last_seen: '2025-07-01T02:54:49.013953'
       level_required: 1
       name: Gudgeon Fishing Spot
       resource_type: unknown
@@ -11838,7 +11707,7 @@ data:
       total_yield: 0
     iron_rocks:
       code: iron_rocks
-      first_discovered: '2025-06-29T23:28:57.217573'
+      first_discovered: '2025-07-01T00:41:05.240695'
       harvest_attempts: 0
       level_required: 10
       name: Iron Rocks
@@ -11847,7 +11716,7 @@ data:
       total_yield: 0
     magic_tree:
       code: magic_tree
-      first_discovered: '2025-06-29T23:28:57.217596'
+      first_discovered: '2025-07-01T00:41:05.240708'
       harvest_attempts: 0
       level_required: 35
       name: Magic Tree
@@ -11856,7 +11725,7 @@ data:
       total_yield: 0
     maple_tree:
       code: maple_tree
-      first_discovered: '2025-06-29T23:28:57.217601'
+      first_discovered: '2025-07-01T00:41:05.240712'
       harvest_attempts: 0
       level_required: 40
       name: Maple Tree
@@ -11865,7 +11734,7 @@ data:
       total_yield: 0
     mithril_rocks:
       code: mithril_rocks
-      first_discovered: '2025-06-29T23:28:57.217600'
+      first_discovered: '2025-07-01T00:41:05.240711'
       harvest_attempts: 0
       level_required: 40
       name: Mithril Rocks
@@ -11874,7 +11743,7 @@ data:
       total_yield: 0
     nettle:
       code: nettle
-      first_discovered: '2025-06-29T23:28:57.217588'
+      first_discovered: '2025-07-01T00:41:05.240702'
       harvest_attempts: 0
       level_required: 20
       name: Nettle
@@ -11883,7 +11752,7 @@ data:
       total_yield: 0
     salmon_fishing_spot:
       code: salmon_fishing_spot
-      first_discovered: '2025-06-29T23:28:57.217597'
+      first_discovered: '2025-07-01T00:41:05.240709'
       harvest_attempts: 0
       level_required: 40
       name: Salmon Fishing Spot
@@ -11892,7 +11761,7 @@ data:
       total_yield: 0
     shrimp_fishing_spot:
       code: shrimp_fishing_spot
-      first_discovered: '2025-06-29T23:28:57.217571'
+      first_discovered: '2025-07-01T00:41:05.240693'
       harvest_attempts: 0
       level_required: 10
       name: Shrimp Fishing Spot
@@ -11901,7 +11770,7 @@ data:
       total_yield: 0
     spruce_tree:
       code: spruce_tree
-      first_discovered: '2025-06-29T23:28:57.217574'
+      first_discovered: '2025-07-01T00:41:05.240696'
       harvest_attempts: 0
       level_required: 10
       name: Spruce Tree
@@ -11910,7 +11779,7 @@ data:
       total_yield: 0
     strange_rocks:
       code: strange_rocks
-      first_discovered: '2025-06-29T23:28:57.217594'
+      first_discovered: '2025-07-01T00:41:05.240707'
       harvest_attempts: 0
       level_required: 35
       name: Strange Rocks
@@ -11919,9 +11788,9 @@ data:
       total_yield: 0
     sunflower_field:
       code: sunflower_field
-      first_discovered: '2025-06-29T23:28:57.217569'
+      first_discovered: '2025-07-01T00:41:05.240691'
       harvest_attempts: 0
-      last_seen: '2025-06-30T00:10:20.684871'
+      last_seen: '2025-07-01T02:54:40.511126'
       level_required: 1
       name: Sunflower Field
       resource_type: unknown
@@ -11929,7 +11798,7 @@ data:
       total_yield: 0
     trout_fishing_spot:
       code: trout_fishing_spot
-      first_discovered: '2025-06-29T23:28:57.217577'
+      first_discovered: '2025-07-01T00:41:05.240699'
       harvest_attempts: 0
       level_required: 20
       name: Trout Fishing Spot
@@ -11940,10 +11809,10 @@ data:
     alchemy:
       code: alchemy
       craft_skill: alchemy
-      encounter_count: 6
+      encounter_count: 8
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:56.021871'
-      last_seen: '2025-06-30T00:11:33.076075'
+      first_discovered: '2025-07-01T00:41:03.934377'
+      last_seen: '2025-07-01T02:54:44.634279'
       name: alchemy
       usage_count: 0
       x: 2
@@ -11951,10 +11820,10 @@ data:
     cooking:
       code: cooking
       craft_skill: cooking
-      encounter_count: 8
+      encounter_count: 9
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:56.021766'
-      last_seen: '2025-06-30T00:10:16.107527'
+      first_discovered: '2025-07-01T00:41:03.934279'
+      last_seen: '2025-07-01T02:54:41.526668'
       name: cooking
       usage_count: 0
       x: 1
@@ -11962,10 +11831,10 @@ data:
     gearcrafting:
       code: gearcrafting
       craft_skill: gearcrafting
-      encounter_count: 1
+      encounter_count: 8
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:56.021782'
-      last_seen: '2025-06-29T23:28:56.021783'
+      first_discovered: '2025-07-01T00:41:03.934293'
+      last_seen: '2025-07-01T02:54:41.937796'
       name: gearcrafting
       usage_count: 0
       x: 3
@@ -11973,10 +11842,10 @@ data:
     jewelrycrafting:
       code: jewelrycrafting
       craft_skill: jewelrycrafting
-      encounter_count: 6
+      encounter_count: 8
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:56.021865'
-      last_seen: '2025-06-30T00:11:32.542227'
+      first_discovered: '2025-07-01T00:41:03.934372'
+      last_seen: '2025-07-01T02:54:43.700573'
       name: jewelrycrafting
       usage_count: 0
       x: 1
@@ -11986,8 +11855,8 @@ data:
       craft_skill: mining
       encounter_count: 1
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:56.021947'
-      last_seen: '2025-06-29T23:28:56.021948'
+      first_discovered: '2025-07-01T00:41:03.934435'
+      last_seen: '2025-07-01T00:41:03.934436'
       name: mining
       usage_count: 0
       x: 1
@@ -11995,10 +11864,10 @@ data:
     weaponcrafting:
       code: weaponcrafting
       craft_skill: weaponcrafting
-      encounter_count: 7
+      encounter_count: 1
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:56.021775'
-      last_seen: '2025-06-30T00:10:23.043254'
+      first_discovered: '2025-07-01T00:41:03.934288'
+      last_seen: '2025-07-01T00:41:03.934288'
       name: weaponcrafting
       usage_count: 0
       x: 2
@@ -12008,8 +11877,8 @@ data:
       craft_skill: woodcutting
       encounter_count: 1
       facility_type: workshop
-      first_discovered: '2025-06-29T23:28:55.689381'
-      last_seen: '2025-06-29T23:28:55.689383'
+      first_discovered: '2025-07-01T00:41:03.604046'
+      last_seen: '2025-07-01T00:41:03.604047'
       name: woodcutting
       usage_count: 0
       x: -2

@@ -1,11 +1,12 @@
 """ Tests for WaitAction class """
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
-from datetime import datetime, timezone, timedelta
 
 from src.controller.actions.wait import WaitAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestWaitAction(unittest.TestCase):
@@ -13,33 +14,34 @@ class TestWaitAction(unittest.TestCase):
 
     def setUp(self):
         """ Set up test fixtures """
-        self.wait_action = WaitAction(wait_duration=1.0)
+        self.wait_action = WaitAction()
         self.mock_client = create_mock_client()
 
     def test_init(self):
         """ Test WaitAction initialization """
-        action = WaitAction(wait_duration=2.5)
-        self.assertEqual(action.wait_duration, 2.5)
+        action = WaitAction()
         self.assertEqual(action.conditions['character_alive'], True)
         self.assertEqual(action.conditions['is_on_cooldown'], True)
         self.assertEqual(action.reactions['is_on_cooldown'], False)
         self.assertEqual(action.reactions['can_move'], True)
         self.assertEqual(action.reactions['can_attack'], True)
 
-    def test_init_default_duration(self):
-        """ Test WaitAction initialization with default duration """
+    def test_init_no_params(self):
+        """ Test WaitAction initialization with no parameters """
         action = WaitAction()
-        self.assertEqual(action.wait_duration, 1.0)
+        # No wait_duration attribute since it uses ActionContext now
+        self.assertIsInstance(action, WaitAction)
 
     @patch('time.sleep')
     def test_execute_default_wait(self, mock_sleep):
         """ Test execute with default wait duration """
-        result = self.wait_action.execute(self.mock_client)
+        context = MockActionContext(wait_duration=1.0)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
-        self.assertIn('Waited 1.0 seconds', result.get('message', ''))
-        mock_sleep.assert_called_once_with(1.0)
+        self.assertIn('Waited 0.1 seconds', result.get('message', ''))
+        mock_sleep.assert_called_once_with(0.1)  # Default character has no cooldown, so min wait
 
     @patch('time.sleep')
     def test_execute_with_character_state_no_cooldown(self, mock_sleep):
@@ -50,7 +52,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': None
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -73,7 +76,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': cooldown_end.isoformat()
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -97,7 +101,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': cooldown_end.isoformat()
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -112,7 +117,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': None
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -127,7 +133,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': None
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -149,7 +156,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': '2023-01-01T12:00:02.500000+00:00'
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -164,7 +172,8 @@ class TestWaitAction(unittest.TestCase):
             'cooldown_expiration': 'invalid-date-format'
         }
         
-        result = self.wait_action.execute(self.mock_client, character_state=mock_character_state)
+        context = MockActionContext(character_state=mock_character_state)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
@@ -175,7 +184,8 @@ class TestWaitAction(unittest.TestCase):
         """ Test execute handles exceptions gracefully """
         mock_sleep.side_effect = Exception("Sleep interrupted")
         
-        result = self.wait_action.execute(self.mock_client)
+        context = MockActionContext(wait_duration=1.0)
+        result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertFalse(result.get('success', True))
@@ -183,8 +193,8 @@ class TestWaitAction(unittest.TestCase):
 
     def test_repr(self):
         """ Test string representation """
-        action = WaitAction(wait_duration=3.5)
-        self.assertEqual(str(action), "WaitAction(duration=3.5)")
+        action = WaitAction()
+        self.assertEqual(str(action), "WaitAction()")
 
 
 if __name__ == '__main__':

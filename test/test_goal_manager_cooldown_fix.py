@@ -5,9 +5,9 @@ This test validates the fix for the bug where expired cooldowns were incorrectly
 detected as active due to stale legacy cooldown field values.
 """
 
-import unittest
 import tempfile
-from datetime import datetime, timezone, timedelta
+import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from src.controller.goal_manager import GOAPGoalManager
@@ -180,8 +180,9 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
     
     def test_ai_player_controller_cooldown_check(self):
         """Test the AI player controller's _is_character_on_cooldown method."""
-        from src.controller.ai_player_controller import AIPlayerController
         from unittest.mock import Mock
+
+        from src.controller.ai_player_controller import AIPlayerController
         
         # Create controller with mocked dependencies
         with patch('src.controller.ai_player_controller.StateManagerMixin.initialize_state_management'):

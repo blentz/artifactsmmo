@@ -2,8 +2,9 @@
 
 import unittest
 from unittest.mock import Mock, patch
+
 import httpx
-from src.lib.throttled_transport import ThrottledTransport, ThrottledAsyncTransport
+from src.lib.throttled_transport import ThrottledAsyncTransport, ThrottledTransport
 
 
 class TestThrottledTransport(unittest.TestCase):

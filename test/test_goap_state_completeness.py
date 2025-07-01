@@ -75,7 +75,10 @@ class TestGOAPStateCompleteness(unittest.TestCase):
             'need_specific_workshop', 'at_correct_workshop',
             
             # Recipe evaluation states
-            'best_weapon_selected', 'craftable_weapon_identified',
+            'best_recipe_selected', 'craftable_item_identified',
+            
+            # Equipment analysis states
+            'equipment_gaps_analyzed', 'optimal_slot_selected', 'target_slot_specified',
             
             # Skill progression states  
             'need_skill_upgrade', 'skill_level_sufficient', 'skill_xp_gained',
@@ -83,7 +86,10 @@ class TestGOAPStateCompleteness(unittest.TestCase):
             'skill_requirements_checked', 'required_skill_level_known',
             
             # Spatial and location states
-            'location_known', 'spatial_context_updated'
+            'location_known', 'spatial_context_updated',
+            
+            # New equipment readiness states
+            'equipment_ready', 'item_crafted'
         }
         
         # Check for new variables not in expected list
@@ -192,6 +198,13 @@ class TestGOAPStateCompleteness(unittest.TestCase):
                         # Recipe evaluation states
                         'best_weapon_selected': False,
                         'craftable_weapon_identified': False,
+                        'best_recipe_selected': False,
+                        'craftable_item_identified': False,
+                        
+                        # Equipment analysis states
+                        'equipment_gaps_analyzed': False,
+                        'optimal_slot_selected': False,
+                        'target_slot_specified': False,
                         
                         # Skill progression states
                         'need_skill_upgrade': False,
@@ -204,7 +217,12 @@ class TestGOAPStateCompleteness(unittest.TestCase):
                         
                         # Spatial and location states
                         'location_known': False,
-                        'spatial_context_updated': False
+                        'spatial_context_updated': False,
+                        
+                        # Additional equipment states
+                        'equipment_ready': False,
+                        'weapon_crafted': False,
+                        'item_crafted': False
                     }
                 
                 controller.goal_manager.calculate_world_state = mock_calculate_state

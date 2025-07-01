@@ -5,11 +5,15 @@ This action performs comprehensive equipment analysis for the character,
 determining upgrade needs and equipment priorities for GOAP planning.
 """
 
-from typing import Dict, Optional, List
-import logging
+from typing import TYPE_CHECKING, Dict, List, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+
 from .base import ActionBase
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 
 class AnalyzeEquipmentAction(ActionBase):
@@ -33,39 +37,39 @@ class AnalyzeEquipmentAction(ActionBase):
     }
     weights = {"equipment_analysis_available": 15}
 
-    def __init__(self, character_name: str, analysis_type: str = "comprehensive"):
+    def __init__(self):
         """
         Initialize the equipment analysis action.
-
-        Args:
-            character_name: Name of the character to analyze
-            analysis_type: Type of analysis (comprehensive, weapon, armor, complete_set)
         """
         super().__init__()
-        self.character_name = character_name
-        self.analysis_type = analysis_type
-        self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """Perform comprehensive equipment analysis."""
-        if not self.validate_execution_context(client):
+        # Call superclass to set self._context
+        super().execute(client, context)
+        
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
             
+        # Get parameters from context
+        character_name = context.character_name
+        analysis_type = context.get('analysis_type', 'comprehensive')
+        
         self.log_execution_start(
-            character_name=self.character_name,
-            analysis_type=self.analysis_type
+            character_name=character_name,
+            analysis_type=analysis_type
         )
         
         try:
             # Get current character data
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
             
             character_data = character_response.data
             
             # Perform comprehensive equipment analysis
-            analysis_results = self._analyze_equipment(character_data, client, **kwargs)
+            analysis_results = self._analyze_equipment(character_data, client, context)
             
             # Determine equipment needs and priorities
             equipment_needs = self._determine_equipment_needs(analysis_results, character_data)
@@ -74,7 +78,7 @@ class AnalyzeEquipmentAction(ActionBase):
             result = self.get_success_response(
                 equipment_analysis_available=True,
                 equipment_info_known=True,
-                analysis_type=self.analysis_type,
+                analysis_type=analysis_type,
                 character_level=getattr(character_data, 'level', 1),
                 **equipment_needs,
                 **analysis_results
@@ -88,7 +92,7 @@ class AnalyzeEquipmentAction(ActionBase):
             self.log_execution_result(error_response)
             return error_response
 
-    def _analyze_equipment(self, character_data, client, **kwargs) -> Dict:
+    def _analyze_equipment(self, character_data, client, context: 'ActionContext') -> Dict:
         """Perform detailed equipment analysis."""
         try:
             # Extract current equipment
@@ -421,4 +425,4 @@ class AnalyzeEquipmentAction(ActionBase):
             return 'unknown'
 
     def __repr__(self):
-        return f"AnalyzeEquipmentAction({self.character_name}, {self.analysis_type})"
+        return "AnalyzeEquipmentAction()"

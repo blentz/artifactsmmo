@@ -5,17 +5,14 @@ This module provides a metaprogramming approach to loading and instantiating
 state classes from YAML configuration, enabling data-driven state management.
 """
 
-import logging
 import importlib
-import inspect
-from pathlib import Path
-from typing import Any, Dict, Type, Optional, Union, List
-from dataclasses import dataclass, field
+import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Type, Union
 
 import yaml
-
-from .yaml_data import YamlData
 
 
 @dataclass
@@ -138,7 +135,7 @@ class StateConfigLoader:
                 self.logger.warning(f"State configuration file not found: {self.config_path}")
                 return
             
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path) as f:
                 config_data = yaml.safe_load(f)
             
             state_configs = config_data.get('state_classes', {})

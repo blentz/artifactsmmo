@@ -1,10 +1,12 @@
 """Test module for CheckLocationAction."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.check_location import CheckLocationAction
+
 from test.fixtures import create_mock_client
 
 
@@ -18,7 +20,7 @@ class TestCheckLocationAction(unittest.TestCase):
         os.environ['DATA_PREFIX'] = self.temp_dir
         
         self.character_name = "test_character"
-        self.action = CheckLocationAction(character_name=self.character_name)
+        self.action = CheckLocationAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -28,16 +30,19 @@ class TestCheckLocationAction(unittest.TestCase):
 
     def test_check_location_action_initialization(self):
         """Test CheckLocationAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
+        self.assertFalse(hasattr(self.action, 'character_name'))
+        self.assertIsNotNone(self.action.logger)
 
     def test_check_location_action_repr(self):
         """Test CheckLocationAction string representation."""
-        expected = "CheckLocationAction(test_character)"
+        expected = "CheckLocationAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -47,7 +52,9 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_get_character_api.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -59,7 +66,9 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -76,7 +85,9 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['character_name'], 'test_character')
         self.assertEqual(result['current_x'], 10)
@@ -104,7 +115,9 @@ class TestCheckLocationAction(unittest.TestCase):
         
         client = create_mock_client()
         
-        result = self.action.execute(client, map_state=mock_map_state)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name, map_state=mock_map_state)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['current_x'], 5)
         self.assertEqual(result['current_y'], 8)
@@ -129,7 +142,9 @@ class TestCheckLocationAction(unittest.TestCase):
         client = create_mock_client()
         
         # Execute without map_state
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])  # Should still succeed without map data
         self.assertEqual(result['current_x'], 5)
         self.assertEqual(result['current_y'], 8)
@@ -150,9 +165,10 @@ class TestCheckLocationAction(unittest.TestCase):
         client = create_mock_client()
         
         # Context with target location
-        context = {'target_x': 10, 'target_y': 15}
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name, target_x=10, target_y=15)
         
-        result = self.action.execute(client, **context)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['current_x'], 10)
         self.assertEqual(result['current_y'], 15)
@@ -172,9 +188,10 @@ class TestCheckLocationAction(unittest.TestCase):
         client = create_mock_client()
         
         # Context with different target location
-        context = {'target_x': 10, 'target_y': 15}
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name, target_x=10, target_y=15)
         
-        result = self.action.execute(client, **context)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['current_x'], 5)
         self.assertEqual(result['current_y'], 8)
@@ -217,7 +234,9 @@ class TestCheckLocationAction(unittest.TestCase):
         client = create_mock_client()
         
         with patch('src.controller.actions.check_location.get_character_api', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
+            from test.fixtures import MockActionContext
+            context = MockActionContext(character_name=self.character_name)
+            result = self.action.execute(client, context)
             self.assertFalse(result['success'])
             self.assertIn('Location check failed', result['error'])
 
@@ -252,11 +271,14 @@ class TestCheckLocationAction(unittest.TestCase):
         character_names = ['player1', 'test_char', 'ai_player', 'special-character']
         
         for name in character_names:
-            action = CheckLocationAction(name)
-            self.assertEqual(action.character_name, name)
+            action = CheckLocationAction()
+            from test.fixtures import MockActionContext
+            context = MockActionContext(character_name=name)
+            # Test that action works with different character names
+            self.assertIsInstance(action, CheckLocationAction)
             
             # Test representation
-            expected_repr = f"CheckLocationAction({name})"
+            expected_repr = "CheckLocationAction()"
             self.assertEqual(repr(action), expected_repr)
 
     @patch('src.controller.actions.check_location.get_character_api')
@@ -274,7 +296,9 @@ class TestCheckLocationAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         
         # Should capture location information
@@ -303,7 +327,9 @@ class TestCheckLocationAction(unittest.TestCase):
             mock_get_character_api.return_value = mock_response
             client = create_mock_client()
             
-            result = self.action.execute(client)
+            from test.fixtures import MockActionContext
+            context = MockActionContext(character_name=self.character_name)
+            result = self.action.execute(client, context)
             self.assertTrue(result['success'])
             self.assertEqual(result['current_x'], x)
             self.assertEqual(result['current_y'], y)

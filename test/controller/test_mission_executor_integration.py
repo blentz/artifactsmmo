@@ -6,13 +6,14 @@ ensuring that large monolithic methods have been successfully replaced with
 goal template-driven execution.
 """
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import os
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.mission_executor import MissionExecutor
+
 from test.fixtures import create_mock_client
 
 

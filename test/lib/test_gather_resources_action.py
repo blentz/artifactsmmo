@@ -2,8 +2,10 @@
 
 import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.gather_resources import GatherResourcesAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestGatherResourcesAction(unittest.TestCase):
@@ -13,7 +15,7 @@ class TestGatherResourcesAction(unittest.TestCase):
         """Set up test fixtures."""
         self.character_name = "TestCharacter"
         self.target_resource = "copper"
-        self.action = GatherResourcesAction(self.character_name, self.target_resource)
+        self.action = GatherResourcesAction()
         
         # Mock client
         self.mock_client = create_mock_client()
@@ -29,29 +31,33 @@ class TestGatherResourcesAction(unittest.TestCase):
 
     def test_gather_resources_action_initialization(self):
         """Test GatherResourcesAction initialization."""
-        self.assertEqual(self.action.character_name, self.character_name)
-        self.assertEqual(self.action.target_resource, self.target_resource)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(self.action, 'character_name'))
+        self.assertFalse(hasattr(self.action, 'target_resource'))
 
     def test_gather_resources_action_initialization_no_target(self):
         """Test GatherResourcesAction initialization without target resource."""
-        action = GatherResourcesAction(self.character_name)
-        self.assertEqual(action.character_name, self.character_name)
-        self.assertIsNone(action.target_resource)
+        action = GatherResourcesAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'target_resource'))
 
     def test_gather_resources_action_repr_with_target(self):
         """Test GatherResourcesAction string representation with target."""
-        expected = f"GatherResourcesAction({self.character_name}, target={self.target_resource})"
+        # Repr is now simplified
+        expected = "GatherResourcesAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_gather_resources_action_repr_no_target(self):
         """Test GatherResourcesAction string representation without target."""
-        action = GatherResourcesAction(self.character_name)
-        expected = f"GatherResourcesAction({self.character_name})"
+        action = GatherResourcesAction()
+        expected = "GatherResourcesAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test gathering fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -60,7 +66,9 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_client = create_mock_client()
         mock_client._character_cache = None
         
-        result = self.action.execute(mock_client)
+        # Test without position in context
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=None, character_y=None)
+        result = self.action.execute(mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('No character data or position available', result['error'])
 
@@ -69,7 +77,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         """Test gathering fails when map API fails."""
         mock_get_map_api.return_value = None
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get map information', result['error'])
         self.assertEqual(result['location'], (5, 3))
@@ -81,7 +90,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_response.data = None
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get map information', result['error'])
 
@@ -96,7 +106,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('No resource available at current location', result['error'])
 
@@ -114,7 +125,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('No resource available at current location', result['error'])
 
@@ -133,7 +145,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Resource iron_ore does not match target copper', result['error'])
         self.assertEqual(result['available_resource'], 'iron_ore')
@@ -157,7 +170,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         # Mock resource API failure
         mock_get_resource_api.return_value = None
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get details for resource copper', result['error'])
 
@@ -182,7 +196,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_resource_response.data = None
         mock_get_resource_api.return_value = mock_resource_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get details for resource copper', result['error'])
 
@@ -196,7 +211,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         # Mock gathering API failure
         mock_gathering_api.return_value = None
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Gathering action failed - no response data', result['error'])
 
@@ -212,7 +228,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_gathering_response.data = None
         mock_gathering_api.return_value = mock_gathering_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Gathering action failed - no response data', result['error'])
 
@@ -232,7 +249,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_gathering_response.data = mock_skill_data
         mock_gathering_api.return_value = mock_gathering_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['resource_code'], 'copper')
         self.assertEqual(result['location'], (5, 3))
@@ -271,7 +289,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         mock_gathering_response.data = mock_skill_data
         mock_gathering_api.return_value = mock_gathering_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['cooldown'], 15)
         self.assertEqual(result['xp_gained'], 15)
@@ -288,7 +307,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         """Test exception handling during gathering."""
         mock_get_map_api.side_effect = Exception("Network error")
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Gathering action failed: Network error', result['error'])
 
@@ -297,7 +317,7 @@ class TestGatherResourcesAction(unittest.TestCase):
     def test_execute_no_target_any_resource(self, mock_get_map_api, mock_get_resource_api):
         """Test gathering any resource when no target specified."""
         # Create action without target
-        action = GatherResourcesAction(self.character_name)
+        action = GatherResourcesAction()
         
         # Mock map data with any resource
         mock_content = Mock()
@@ -330,7 +350,8 @@ class TestGatherResourcesAction(unittest.TestCase):
             mock_gathering_response.data = mock_skill_data
             mock_gathering_api.return_value = mock_gathering_response
             
-            result = action.execute(self.mock_client)
+            context = MockActionContext(character_name=self.character_name, character_x=5, character_y=3)
+            result = action.execute(self.mock_client, context)
             self.assertTrue(result['success'])
             self.assertEqual(result['resource_code'], 'iron_ore')
 

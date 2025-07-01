@@ -2,14 +2,12 @@
 Unit tests for level_up_goal functionality in AIPlayerController.
 """
 
+import logging
 import unittest
 from unittest.mock import Mock, patch
-import tempfile
-import os
-import logging
 
 from src.controller.ai_player_controller import AIPlayerController
-from src.game.character.state import CharacterState
+
 from test.fixtures import create_mock_client
 
 

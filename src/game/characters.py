@@ -3,16 +3,19 @@
 import json
 import logging
 
-from artifactsmmo_api_client.api.accounts.get_account_characters_accounts_account_characters_get import sync as account_sync
+from artifactsmmo_api_client.api.accounts.get_account_characters_accounts_account_characters_get import (
+    sync as account_sync,
+)
 from artifactsmmo_api_client.api.characters.create_character_characters_create_post import sync as create_character
 from artifactsmmo_api_client.api.characters.delete_character_characters_delete_post import sync as delete_character
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
 from artifactsmmo_api_client.errors import UnexpectedStatus
-from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
+from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
 
 from src.game.character.state import CharacterState
+
 
 class Characters:
     """ Character class """
@@ -46,7 +49,7 @@ class Characters:
     def _sync(self):
         """ Sync characters list. """
         characters = account_sync(account=self._account.name, client=self._client).data
-        self._characters = [CharacterState(name=char.name, data=char.to_dict()) for char in characters]
+        self._characters = [CharacterState(data=char.to_dict(), name=char.name) for char in characters]
         logging.debug(f"account: {self._account.name}, characters: {self._characters}")
 
     def create(self, name):

@@ -1,15 +1,14 @@
 """Test CLI log level functionality"""
 
-import unittest
 import logging
-from unittest.mock import patch
-import sys
 import os
+import sys
+import unittest
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.cli import setup_logging, parse_args
+from src.cli import parse_args, setup_logging
 
 
 class TestCLILogLevel(unittest.TestCase):

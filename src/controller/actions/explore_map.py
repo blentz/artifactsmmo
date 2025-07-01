@@ -2,47 +2,47 @@
 
 import random
 from typing import Dict, List, Optional, Tuple
+
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
 class ExploreMapAction(ActionBase):
     """ Action to explore the map for monsters, resources, and strategic locations """
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, exploration_radius: int = 15,
-                 exploration_strategy: str = "spiral", target_content_types: Optional[List[str]] = None):
+    def __init__(self):
         """
         Initialize the explore map action.
-
-        Args:
-            character_x: Character's current X coordinate
-            character_y: Character's current Y coordinate
-            exploration_radius: Radius around character to explore
-            exploration_strategy: Strategy to use ("spiral", "random", "cardinal", "grid")
-            target_content_types: Types of content to prioritize (e.g., ["monster", "resource"])
         """
         super().__init__()
-        self.character_x = character_x
-        self.character_y = character_y
-        self.exploration_radius = exploration_radius
-        self.exploration_strategy = exploration_strategy
-        self.target_content_types = target_content_types or ["monster", "resource"]
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Explore the map to find interesting locations """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        character_x = context.get('character_x', context.character_x)
+        character_y = context.get('character_y', context.character_y)
+        exploration_radius = context.get('exploration_radius', 15)
+        exploration_strategy = context.get('exploration_strategy', 'spiral')
+        target_content_types = context.get('target_content_types', ['monster', 'resource'])
             
         self.log_execution_start(
-            character_x=self.character_x,
-            character_y=self.character_y, 
-            radius=self.exploration_radius,
-            strategy=self.exploration_strategy
+            character_x=character_x,
+            character_y=character_y, 
+            radius=exploration_radius,
+            strategy=exploration_strategy
         )
         
         try:
             # Generate exploration coordinates based on strategy
-            exploration_coords = self._generate_exploration_coordinates()
+            exploration_coords = self._generate_exploration_coordinates(
+                character_x, character_y, exploration_radius, exploration_strategy
+            )
             
             discovered_locations = {
                 "monsters": [],
@@ -62,7 +62,7 @@ class ExploreMapAction(ActionBase):
                     
                     if map_response and map_response.data:
                         map_data = map_response.data
-                        location_info = self._analyze_location(map_data, x, y)
+                        location_info = self._analyze_location(map_data, x, y, character_x, character_y, target_content_types)
                         
                         if location_info:
                             content_type = location_info.get('content_type', 'other')
@@ -80,7 +80,7 @@ class ExploreMapAction(ActionBase):
                     continue
             
             # Analyze discoveries and suggest next action
-            next_action_suggestion = self._suggest_next_action(discovered_locations)
+            next_action_suggestion = self._suggest_next_action(discovered_locations, character_x, character_y, exploration_radius)
             
             result = self.get_success_response(
                 explored_locations=explored_count,
@@ -89,7 +89,7 @@ class ExploreMapAction(ActionBase):
                 discovered_workshops=len(discovered_locations["workshops"]),
                 discoveries=discovered_locations,
                 next_action_suggestion=next_action_suggestion,
-                exploration_strategy_used=self.exploration_strategy
+                exploration_strategy_used=exploration_strategy
             )
             
             self.log_execution_result(result)
@@ -100,74 +100,75 @@ class ExploreMapAction(ActionBase):
             self.log_execution_result(error_response)
             return error_response
 
-    def _generate_exploration_coordinates(self) -> List[Tuple[int, int]]:
+    def _generate_exploration_coordinates(self, character_x: int, character_y: int, 
+                                        exploration_radius: int, exploration_strategy: str) -> List[Tuple[int, int]]:
         """
         Generate exploration coordinates based on the chosen strategy.
         
         Returns:
             List of (x, y) coordinates to explore
         """
-        if self.exploration_strategy == "spiral":
-            return self._generate_spiral_coordinates()
-        elif self.exploration_strategy == "random":
-            return self._generate_random_coordinates()
-        elif self.exploration_strategy == "cardinal":
-            return self._generate_cardinal_coordinates()
-        elif self.exploration_strategy == "grid":
-            return self._generate_grid_coordinates()
+        if exploration_strategy == "spiral":
+            return self._generate_spiral_coordinates(character_x, character_y, exploration_radius)
+        elif exploration_strategy == "random":
+            return self._generate_random_coordinates(character_x, character_y, exploration_radius)
+        elif exploration_strategy == "cardinal":
+            return self._generate_cardinal_coordinates(character_x, character_y, exploration_radius)
+        elif exploration_strategy == "grid":
+            return self._generate_grid_coordinates(character_x, character_y, exploration_radius)
         else:
             # Default to spiral
-            return self._generate_spiral_coordinates()
+            return self._generate_spiral_coordinates(character_x, character_y, exploration_radius)
 
-    def _generate_spiral_coordinates(self) -> List[Tuple[int, int]]:
+    def _generate_spiral_coordinates(self, character_x: int, character_y: int, exploration_radius: int) -> List[Tuple[int, int]]:
         """Generate coordinates in a spiral pattern from character position."""
         coords = []
-        for radius in range(1, self.exploration_radius + 1):
+        for radius in range(1, exploration_radius + 1):
             # Generate coordinates at this radius
             for angle_step in range(0, 360, 45):  # Every 45 degrees
                 angle_rad = angle_step * 3.14159 / 180
-                x = round(self.character_x + radius * cos_approximation(angle_rad))
-                y = round(self.character_y + radius * sin_approximation(angle_rad))
+                x = round(character_x + radius * cos_approximation(angle_rad))
+                y = round(character_y + radius * sin_approximation(angle_rad))
                 coords.append((x, y))
         return coords
 
-    def _generate_random_coordinates(self) -> List[Tuple[int, int]]:
+    def _generate_random_coordinates(self, character_x: int, character_y: int, exploration_radius: int) -> List[Tuple[int, int]]:
         """Generate random coordinates within exploration radius."""
         coords = []
-        for _ in range(self.exploration_radius * 2):  # Generate more random points
+        for _ in range(exploration_radius * 2):  # Generate more random points
             # Random offset within exploration radius
-            dx = random.randint(-self.exploration_radius, self.exploration_radius)
-            dy = random.randint(-self.exploration_radius, self.exploration_radius)
-            coords.append((self.character_x + dx, self.character_y + dy))
+            dx = random.randint(-exploration_radius, exploration_radius)
+            dy = random.randint(-exploration_radius, exploration_radius)
+            coords.append((character_x + dx, character_y + dy))
         return coords
 
-    def _generate_cardinal_coordinates(self) -> List[Tuple[int, int]]:
+    def _generate_cardinal_coordinates(self, character_x: int, character_y: int, exploration_radius: int) -> List[Tuple[int, int]]:
         """Generate coordinates in cardinal directions (N, S, E, W)."""
         coords = []
-        for distance in range(1, self.exploration_radius + 1):
+        for distance in range(1, exploration_radius + 1):
             # North, South, East, West
             coords.extend([
-                (self.character_x, self.character_y + distance),
-                (self.character_x, self.character_y - distance),
-                (self.character_x + distance, self.character_y),
-                (self.character_x - distance, self.character_y)
+                (character_x, character_y + distance),
+                (character_x, character_y - distance),
+                (character_x + distance, character_y),
+                (character_x - distance, character_y)
             ])
         return coords
 
-    def _generate_grid_coordinates(self) -> List[Tuple[int, int]]:
+    def _generate_grid_coordinates(self, character_x: int, character_y: int, exploration_radius: int) -> List[Tuple[int, int]]:
         """Generate coordinates in a grid pattern."""
         coords = []
-        step_size = max(1, self.exploration_radius // 5)  # Grid spacing
-        for x in range(self.character_x - self.exploration_radius, 
-                      self.character_x + self.exploration_radius + 1, step_size):
-            for y in range(self.character_y - self.exploration_radius,
-                          self.character_y + self.exploration_radius + 1, step_size):
-                if abs(x - self.character_x) <= self.exploration_radius and \
-                   abs(y - self.character_y) <= self.exploration_radius:
+        step_size = max(1, exploration_radius // 5)  # Grid spacing
+        for x in range(character_x - exploration_radius, 
+                      character_x + exploration_radius + 1, step_size):
+            for y in range(character_y - exploration_radius,
+                          character_y + exploration_radius + 1, step_size):
+                if abs(x - character_x) <= exploration_radius and \
+                   abs(y - character_y) <= exploration_radius:
                     coords.append((x, y))
         return coords
 
-    def _analyze_location(self, map_data, x: int, y: int) -> Optional[Dict]:
+    def _analyze_location(self, map_data, x: int, y: int, character_x: int, character_y: int, target_content_types: List[str]) -> Optional[Dict]:
         """
         Analyze a map location and extract useful information.
         
@@ -175,6 +176,9 @@ class ExploreMapAction(ActionBase):
             map_data: Map data from API response
             x: X coordinate
             y: Y coordinate
+            character_x: Character's X coordinate
+            character_y: Character's Y coordinate
+            target_content_types: Types of content to analyze
             
         Returns:
             Dictionary with location information or None if not interesting
@@ -185,7 +189,7 @@ class ExploreMapAction(ActionBase):
         content = map_data.content
         content_type = getattr(content, 'type_', None)
         
-        if content_type not in self.target_content_types:
+        if content_type not in target_content_types:
             return None
         
         location_info = {
@@ -193,7 +197,7 @@ class ExploreMapAction(ActionBase):
             'y': y,
             'content_type': content_type,
             'code': getattr(content, 'code', ''),
-            'distance_from_character': abs(x - self.character_x) + abs(y - self.character_y)
+            'distance_from_character': abs(x - character_x) + abs(y - character_y)
         }
         
         # Add type-specific information
@@ -206,7 +210,7 @@ class ExploreMapAction(ActionBase):
         
         return location_info
 
-    def _suggest_next_action(self, discoveries: Dict) -> Dict:
+    def _suggest_next_action(self, discoveries: Dict, character_x: int, character_y: int, exploration_radius: int) -> Dict:
         """
         Suggest the next best action based on what was discovered.
         
@@ -264,26 +268,25 @@ class ExploreMapAction(ActionBase):
                 'action': 'relocate',
                 'reason': 'No interesting content found in current area',
                 'priority': 'medium',
-                'target_location': self._suggest_relocation_target()
+                'target_location': self._suggest_relocation_target(character_x, character_y, exploration_radius)
             }
         
         return suggestion
 
-    def _suggest_relocation_target(self) -> Tuple[int, int]:
+    def _suggest_relocation_target(self, character_x: int, character_y: int, exploration_radius: int) -> Tuple[int, int]:
         """Suggest a relocation target when nothing is found in current area."""
         # Move to a random direction with larger distance
         directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)]
         direction = random.choice(directions)
-        distance = self.exploration_radius * 2  # Move farther away
+        distance = exploration_radius * 2  # Move farther away
         
-        new_x = self.character_x + direction[0] * distance
-        new_y = self.character_y + direction[1] * distance
+        new_x = character_x + direction[0] * distance
+        new_y = character_y + direction[1] * distance
         
         return (new_x, new_y)
 
     def __repr__(self):
-        return (f"ExploreMapAction({self.character_x}, {self.character_y}, "
-                f"radius={self.exploration_radius}, strategy={self.exploration_strategy})")
+        return "ExploreMapAction()"
 
 
 def cos_approximation(angle_rad: float) -> float:

@@ -5,9 +5,12 @@ This action analyzes the knowledge base completeness, information gaps,
 and learning progress to guide exploration and information gathering.
 """
 
-from typing import Dict, Optional, List
-import logging
+from typing import Dict, List, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
@@ -31,40 +34,40 @@ class AnalyzeKnowledgeStateAction(ActionBase):
     }
     weights = {"knowledge_state_analyzed": 8}
 
-    def __init__(self, character_name: str, analysis_scope: str = "comprehensive"):
+    def __init__(self):
         """
         Initialize the knowledge state analysis action.
-
-        Args:
-            character_name: Name of the character to analyze
-            analysis_scope: Scope of analysis (comprehensive, combat, crafting, exploration)
         """
         super().__init__()
-        self.character_name = character_name
-        self.analysis_scope = analysis_scope
-        self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """Analyze knowledge base state and completeness."""
-        if not self.validate_execution_context(client):
+        # Call superclass to set self._context
+        super().execute(client, context)
+        
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
             
+        # Get parameters from context
+        character_name = context.character_name
+        analysis_scope = context.get('analysis_scope', 'comprehensive')
+        
         self.log_execution_start(
-            character_name=self.character_name,
-            analysis_scope=self.analysis_scope
+            character_name=character_name,
+            analysis_scope=analysis_scope
         )
         
         try:
             # Get current character data for context
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
             
             character_data = character_response.data
             
             # Get knowledge base and map state
-            knowledge_base = kwargs.get('knowledge_base')
-            map_state = kwargs.get('map_state')
+            knowledge_base = context.knowledge_base
+            map_state = context.map_state
             
             if not knowledge_base:
                 return self.get_error_response("No knowledge base available for analysis")
@@ -73,17 +76,18 @@ class AnalyzeKnowledgeStateAction(ActionBase):
             general_analysis = self._analyze_general_knowledge_state(knowledge_base, character_data)
             
             # Scope-specific analyses
-            if self.analysis_scope in ['comprehensive', 'combat']:
+            analysis_scope = analysis_scope
+            if analysis_scope in ['comprehensive', 'combat']:
                 combat_analysis = self._analyze_combat_knowledge(knowledge_base, character_data)
             else:
                 combat_analysis = {}
             
-            if self.analysis_scope in ['comprehensive', 'crafting']:
+            if analysis_scope in ['comprehensive', 'crafting']:
                 crafting_analysis = self._analyze_crafting_knowledge(knowledge_base, character_data)
             else:
                 crafting_analysis = {}
             
-            if self.analysis_scope in ['comprehensive', 'exploration']:
+            if analysis_scope in ['comprehensive', 'exploration']:
                 exploration_analysis = self._analyze_exploration_knowledge(knowledge_base, map_state, character_data)
             else:
                 exploration_analysis = {}
@@ -106,7 +110,7 @@ class AnalyzeKnowledgeStateAction(ActionBase):
             # Create result
             result = self.get_success_response(
                 knowledge_state_analyzed=True,
-                analysis_scope=self.analysis_scope,
+                analysis_scope=analysis_scope,
                 **general_analysis,
                 **combat_analysis,
                 **crafting_analysis,
@@ -681,4 +685,4 @@ class AnalyzeKnowledgeStateAction(ActionBase):
             return {'knowledge_base_comprehensive': False}
 
     def __repr__(self):
-        return f"AnalyzeKnowledgeStateAction({self.character_name}, {self.analysis_scope})"
+        return "AnalyzeKnowledgeStateAction()"

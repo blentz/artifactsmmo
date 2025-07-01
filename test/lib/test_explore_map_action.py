@@ -2,7 +2,9 @@
 
 import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.explore_map import ExploreMapAction
+
 from test.fixtures import create_mock_client
 
 
@@ -11,29 +13,27 @@ class TestExploreMapAction(unittest.TestCase):
 
     def setUp(self):
         """ Set up test fixtures """
-        self.action = ExploreMapAction(
-            character_x=10,
-            character_y=10,
-            exploration_radius=5,
-            exploration_strategy="spiral"
-        )
+        self.action = ExploreMapAction()
 
     def test_init_basic(self):
         """ Test basic initialization """
-        self.assertEqual(self.action.character_x, 10)
-        self.assertEqual(self.action.character_y, 10)
-        self.assertEqual(self.action.exploration_radius, 5)
-        self.assertEqual(self.action.exploration_strategy, "spiral")
-        self.assertEqual(self.action.target_content_types, ["monster", "resource"])
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(self.action, ExploreMapAction)
+        self.assertFalse(hasattr(self.action, 'character_x'))
+        self.assertFalse(hasattr(self.action, 'character_y'))
+        self.assertFalse(hasattr(self.action, 'exploration_radius'))
+        self.assertFalse(hasattr(self.action, 'exploration_strategy'))
+        self.assertFalse(hasattr(self.action, 'target_content_types'))
 
     def test_init_custom_content_types(self):
         """ Test initialization with custom content types """
-        action = ExploreMapAction(0, 0, 10, "grid", ["monster", "workshop"])
-        self.assertEqual(action.target_content_types, ["monster", "workshop"])
+        action = ExploreMapAction()
+        self.assertIsInstance(action, ExploreMapAction)
+        self.assertFalse(hasattr(action, 'target_content_types'))
 
     def test_generate_spiral_coordinates(self):
         """ Test spiral coordinate generation """
-        coords = self.action._generate_spiral_coordinates()
+        coords = self.action._generate_spiral_coordinates(10, 10, 5)
         
         # Should generate coordinates in spiral pattern
         self.assertTrue(len(coords) > 0)
@@ -45,7 +45,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_generate_random_coordinates(self):
         """ Test random coordinate generation """
-        coords = self.action._generate_random_coordinates()
+        coords = self.action._generate_random_coordinates(10, 10, 5)
         
         # Should generate some coordinates
         self.assertTrue(len(coords) > 0)
@@ -57,7 +57,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_generate_cardinal_coordinates(self):
         """ Test cardinal direction coordinate generation """
-        coords = self.action._generate_cardinal_coordinates()
+        coords = self.action._generate_cardinal_coordinates(10, 10, 5)
         
         # Should generate coordinates in N, S, E, W directions
         self.assertTrue(len(coords) > 0)
@@ -75,7 +75,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_generate_grid_coordinates(self):
         """ Test grid coordinate generation """
-        coords = self.action._generate_grid_coordinates()
+        coords = self.action._generate_grid_coordinates(10, 10, 5)
         
         # Should generate coordinates in grid pattern
         self.assertTrue(len(coords) > 0)
@@ -90,8 +90,8 @@ class TestExploreMapAction(unittest.TestCase):
         strategies = ["spiral", "random", "cardinal", "grid", "unknown"]
         
         for strategy in strategies:
-            action = ExploreMapAction(0, 0, 3, strategy)
-            coords = action._generate_exploration_coordinates()
+            action = ExploreMapAction()
+            coords = action._generate_exploration_coordinates(0, 0, 3, strategy)
             self.assertTrue(len(coords) > 0, f"Strategy {strategy} should generate coordinates")
 
     def test_analyze_location_monster(self):
@@ -103,7 +103,7 @@ class TestExploreMapAction(unittest.TestCase):
         mock_map_data = Mock()
         mock_map_data.content = mock_content
         
-        result = self.action._analyze_location(mock_map_data, 12, 8)
+        result = self.action._analyze_location(mock_map_data, 12, 8, 10, 10, ['monster', 'resource'])
         
         self.assertIsNotNone(result)
         self.assertEqual(result['content_type'], 'monster')
@@ -121,7 +121,7 @@ class TestExploreMapAction(unittest.TestCase):
         mock_map_data = Mock()
         mock_map_data.content = mock_content
         
-        result = self.action._analyze_location(mock_map_data, 10, 15)
+        result = self.action._analyze_location(mock_map_data, 10, 15, 10, 10, ['monster', 'resource'])
         
         self.assertIsNotNone(result)
         self.assertEqual(result['content_type'], 'resource')
@@ -133,7 +133,7 @@ class TestExploreMapAction(unittest.TestCase):
         mock_map_data = Mock()
         mock_map_data.content = None
         
-        result = self.action._analyze_location(mock_map_data, 10, 10)
+        result = self.action._analyze_location(mock_map_data, 10, 10, 10, 10, ["monster", "resource"])
         self.assertIsNone(result)
 
     def test_analyze_location_irrelevant_content(self):
@@ -144,7 +144,7 @@ class TestExploreMapAction(unittest.TestCase):
         mock_map_data = Mock()
         mock_map_data.content = mock_content
         
-        result = self.action._analyze_location(mock_map_data, 10, 10)
+        result = self.action._analyze_location(mock_map_data, 10, 10, 10, 10, ["monster", "resource"])
         self.assertIsNone(result)
 
     def test_suggest_next_action_monster_found(self):
@@ -159,7 +159,7 @@ class TestExploreMapAction(unittest.TestCase):
             "other": []
         }
         
-        suggestion = self.action._suggest_next_action(discoveries)
+        suggestion = self.action._suggest_next_action(discoveries, 10, 10, 5)
         
         self.assertEqual(suggestion['action'], 'move_to_monster')
         self.assertEqual(suggestion['priority'], 'high')
@@ -177,7 +177,7 @@ class TestExploreMapAction(unittest.TestCase):
             "other": []
         }
         
-        suggestion = self.action._suggest_next_action(discoveries)
+        suggestion = self.action._suggest_next_action(discoveries, 10, 10, 5)
         
         self.assertEqual(suggestion['action'], 'investigate_resource')
         self.assertEqual(suggestion['priority'], 'medium')
@@ -195,7 +195,7 @@ class TestExploreMapAction(unittest.TestCase):
             "other": []
         }
         
-        suggestion = self.action._suggest_next_action(discoveries)
+        suggestion = self.action._suggest_next_action(discoveries, 10, 10, 5)
         
         self.assertEqual(suggestion['action'], 'visit_workshop')
         self.assertEqual(suggestion['priority'], 'medium')
@@ -209,7 +209,7 @@ class TestExploreMapAction(unittest.TestCase):
             "other": []
         }
         
-        suggestion = self.action._suggest_next_action(discoveries)
+        suggestion = self.action._suggest_next_action(discoveries, 10, 10, 5)
         
         self.assertEqual(suggestion['action'], 'relocate')
         self.assertEqual(suggestion['priority'], 'medium')
@@ -217,7 +217,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_suggest_relocation_target(self):
         """ Test relocation target suggestion """
-        target = self.action._suggest_relocation_target()
+        target = self.action._suggest_relocation_target(10, 10, 5)
         
         # Should be a tuple of (x, y)
         self.assertIsInstance(target, tuple)
@@ -226,7 +226,7 @@ class TestExploreMapAction(unittest.TestCase):
         x, y = target
         # Should be farther away than exploration radius
         distance = max(abs(x - 10), abs(y - 10))
-        self.assertGreater(distance, self.action.exploration_radius)
+        self.assertGreater(distance, 5)
 
     def test_execute_success(self):
         """ Test successful exploration execution """
@@ -243,8 +243,16 @@ class TestExploreMapAction(unittest.TestCase):
         mock_map_response = Mock()
         mock_map_response.data = mock_map_data
         
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=10,
+            character_y=10,
+            exploration_radius=5,
+            exploration_strategy="spiral"
+        )
+        
         with patch('src.controller.actions.explore_map.get_map_api', return_value=mock_map_response):
-            result = self.action.execute(client)
+            result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('explored_locations', result)
@@ -255,7 +263,14 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_execute_no_client(self):
         """ Test execution with no API client """
-        result = self.action.execute(None)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=10,
+            character_y=10,
+            exploration_radius=5,
+            exploration_strategy="spiral"
+        )
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -263,8 +278,16 @@ class TestExploreMapAction(unittest.TestCase):
         """ Test execution when API calls fail """
         client = create_mock_client()
         
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=10,
+            character_y=10,
+            exploration_radius=5,
+            exploration_strategy="spiral"
+        )
+        
         with patch('src.controller.actions.explore_map.get_map_api', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
+            result = self.action.execute(client, context)
         
         # Should still succeed even if some API calls fail
         self.assertTrue(result['success'])
@@ -272,7 +295,7 @@ class TestExploreMapAction(unittest.TestCase):
 
     def test_repr(self):
         """ Test string representation """
-        expected = "ExploreMapAction(10, 10, radius=5, strategy=spiral)"
+        expected = "ExploreMapAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_cos_sin_approximations(self):
@@ -301,7 +324,7 @@ class TestExploreMapAction(unittest.TestCase):
         }
         
         # Monsters should have priority
-        suggestion = self.action._suggest_next_action(discoveries)
+        suggestion = self.action._suggest_next_action(discoveries, 10, 10, 5)
         self.assertEqual(suggestion['action'], 'move_to_monster')
 
 

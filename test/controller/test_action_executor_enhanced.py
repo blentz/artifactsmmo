@@ -1,13 +1,14 @@
 """Enhanced test module for ActionExecutor."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+
 import yaml
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
 from src.controller.action_executor import ActionExecutor, ActionResult, CompositeActionStep
 from src.controller.action_factory import ActionFactory
+
 from test.fixtures import create_mock_client
 
 

@@ -1,20 +1,22 @@
 """Simple tests to improve action test coverage without complex mocking."""
 
-import unittest
-import tempfile
 import os
-from unittest.mock import Mock, patch
-from src.controller.actions.find_xp_sources import FindXpSourcesAction
-from src.controller.actions.check_skill_requirement import CheckSkillRequirementAction
-from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
-from src.controller.actions.find_correct_workshop import FindCorrectWorkshopAction
+import tempfile
+import unittest
+
 from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
-from src.controller.actions.transform_raw_materials import TransformRawMaterialsAction
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
 from src.controller.actions.check_inventory import CheckInventoryAction
 from src.controller.actions.check_location import CheckLocationAction
+from src.controller.actions.check_skill_requirement import CheckSkillRequirementAction
+from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
+from src.controller.actions.find_correct_workshop import FindCorrectWorkshopAction
+from src.controller.actions.find_xp_sources import FindXpSourcesAction
 from src.controller.actions.move_to_resource import MoveToResourceAction
 from src.controller.actions.move_to_workshop import MoveToWorkshopAction
+from src.controller.actions.transform_raw_materials import TransformRawMaterialsAction
+
+from test.fixtures import MockActionContext
 
 
 class TestSimpleActionCoverage(unittest.TestCase):
@@ -34,157 +36,179 @@ class TestSimpleActionCoverage(unittest.TestCase):
 
     def test_find_xp_sources_basic(self):
         """Test FindXpSourcesAction basic functionality."""
-        action = FindXpSourcesAction("weaponcrafting")
-        self.assertEqual(action.skill, "weaponcrafting")
+        action = FindXpSourcesAction()
+        # Action no longer stores skill as instance attribute
+        self.assertFalse(hasattr(action, 'skill'))
         
         # Test repr
-        self.assertIn("weaponcrafting", repr(action))
+        self.assertEqual("FindXpSourcesAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(skill="weaponcrafting")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_check_skill_requirement_basic(self):
         """Test CheckSkillRequirementAction basic functionality."""
-        action = CheckSkillRequirementAction("player", target_item="sword")
-        self.assertEqual(action.character_name, "player")
-        self.assertEqual(action.target_item, "sword")
+        action = CheckSkillRequirementAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'target_item'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("CheckSkillRequirementAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player", target_item="sword")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_evaluate_weapon_recipes_basic(self):
         """Test EvaluateWeaponRecipesAction basic functionality."""
-        action = EvaluateWeaponRecipesAction("player")
-        self.assertEqual(action.character_name, "player")
+        action = EvaluateWeaponRecipesAction()
+        # Action no longer stores character_name as instance attribute
+        self.assertFalse(hasattr(action, 'character_name'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("EvaluateWeaponRecipesAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_find_correct_workshop_basic(self):
         """Test FindCorrectWorkshopAction basic functionality."""
-        action = FindCorrectWorkshopAction(item_code="sword")
-        self.assertEqual(action.item_code, "sword")
+        action = FindCorrectWorkshopAction()
+        # Action no longer stores item_code as instance attribute
+        self.assertFalse(hasattr(action, 'item_code'))
         
         # Test repr
-        self.assertIn("sword", repr(action))
+        self.assertEqual("FindCorrectWorkshopAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(item_code="sword")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_analyze_crafting_chain_basic(self):
         """Test AnalyzeCraftingChainAction basic functionality."""
-        action = AnalyzeCraftingChainAction("player", "sword")
-        self.assertEqual(action.character_name, "player")
-        self.assertEqual(action.target_item, "sword")
+        action = AnalyzeCraftingChainAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'target_item'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("AnalyzeCraftingChainAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player", target_item="sword")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_transform_raw_materials_basic(self):
         """Test TransformRawMaterialsAction basic functionality."""
-        action = TransformRawMaterialsAction("player")
-        self.assertEqual(action.character_name, "player")
+        action = TransformRawMaterialsAction()
+        # Action no longer stores character_name as instance attribute
+        self.assertFalse(hasattr(action, 'character_name'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("TransformRawMaterialsAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_analyze_resources_basic(self):
         """Test AnalyzeResourcesAction basic functionality."""
-        action = AnalyzeResourcesAction(character_x=5, character_y=10)
-        self.assertEqual(action.character_x, 5)
-        self.assertEqual(action.character_y, 10)
+        action = AnalyzeResourcesAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_x'))
+        self.assertFalse(hasattr(action, 'character_y'))
         
         # Test repr
-        self.assertIn("5", repr(action))
+        self.assertEqual("AnalyzeResourcesAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_x=5, character_y=10)
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_check_inventory_basic(self):
         """Test CheckInventoryAction basic functionality."""
-        action = CheckInventoryAction("player")
-        self.assertEqual(action.character_name, "player")
+        action = CheckInventoryAction()
+        # Action no longer stores character_name as instance attribute
+        self.assertFalse(hasattr(action, 'character_name'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("CheckInventoryAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_check_location_basic(self):
         """Test CheckLocationAction basic functionality."""
-        action = CheckLocationAction("player")
-        self.assertEqual(action.character_name, "player")
+        action = CheckLocationAction()
+        # Action no longer stores character_name as instance attribute
+        self.assertFalse(hasattr(action, 'character_name'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("CheckLocationAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player")
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_move_to_resource_basic(self):
         """Test MoveToResourceAction basic functionality."""
-        action = MoveToResourceAction("player", 5, 10)
-        self.assertEqual(action.character_name, "player")
-        self.assertEqual(action.target_x, 5)
-        self.assertEqual(action.target_y, 10)
+        action = MoveToResourceAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'target_x'))
+        self.assertFalse(hasattr(action, 'target_y'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("MoveToResourceAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player", target_x=5, target_y=10)
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_move_to_workshop_basic(self):
         """Test MoveToWorkshopAction basic functionality."""
-        action = MoveToWorkshopAction("player", 5, 10)
-        self.assertEqual(action.character_name, "player")
-        self.assertEqual(action.target_x, 5)
-        self.assertEqual(action.target_y, 10)
+        action = MoveToWorkshopAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'target_x'))
+        self.assertFalse(hasattr(action, 'target_y'))
         
         # Test repr
-        self.assertIn("player", repr(action))
+        self.assertEqual("MoveToWorkshopAction()", repr(action))
         
         # Test no client
-        result = action.execute(None)
+        context = MockActionContext(character_name="player", target_x=5, target_y=10)
+        result = action.execute(None, context)
         self.assertFalse(result['success'])
 
     def test_goap_attributes(self):
         """Test that actions have GOAP attributes."""
         actions = [
-            FindXpSourcesAction("skill"),
-            CheckSkillRequirementAction("player"),
-            EvaluateWeaponRecipesAction("player"),
+            FindXpSourcesAction(),
+            CheckSkillRequirementAction(),
+            EvaluateWeaponRecipesAction(),
             FindCorrectWorkshopAction(),
-            AnalyzeCraftingChainAction("player", "item"),
-            TransformRawMaterialsAction("player"),
+            AnalyzeCraftingChainAction(),
+            TransformRawMaterialsAction(),
             AnalyzeResourcesAction(),
-            CheckInventoryAction("player"),
-            CheckLocationAction("player"),
-            MoveToResourceAction("player", 5, 10),
-            MoveToWorkshopAction("player", 5, 10)
+            CheckInventoryAction(),
+            CheckLocationAction(),
+            MoveToResourceAction(),
+            MoveToWorkshopAction()
         ]
         
         for action in actions:

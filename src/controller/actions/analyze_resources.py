@@ -1,49 +1,60 @@
 """ AnalyzeResourcesAction module """
 
-from typing import Dict, List, Optional, Set
-from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+from typing import Dict, List, Optional
+
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
 class AnalyzeResourcesAction(ActionBase):
     """ Action to analyze nearby resources for equipment crafting opportunities """
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, character_level: int = 1,
-                 analysis_radius: int = 10, equipment_types: Optional[List[str]] = None):
+    # GOAP parameters
+    conditions = {"character_alive": True}
+    reactions = {
+        "resource_analysis_complete": True,
+        "nearby_resources_known": True,
+        "crafting_opportunities_identified": True,
+        "resource_locations_known": True
+    }
+    weights = {"resource_analysis_complete": 6}
+
+    def __init__(self):
         """
         Initialize the analyze resources action.
-
-        Args:
-            character_x: Character's X coordinate
-            character_y: Character's Y coordinate  
-            character_level: Character's current level for level-appropriate equipment
-            analysis_radius: Radius to search for resources
-            equipment_types: Types of equipment to prioritize (e.g., ["weapon", "armor"])
         """
         super().__init__()
-        self.character_x = character_x
-        self.character_y = character_y
-        self.character_level = character_level
-        self.analysis_radius = analysis_radius
-        self.equipment_types = equipment_types or ["weapon", "armor", "utility"]
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Analyze nearby resources for crafting opportunities """
-        if not self.validate_execution_context(client):
+        # Call superclass to set self._context
+        super().execute(client, context)
+        
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
-            
+        
+        # Get parameters from context
+        character_x = context.get('character_x', 0)
+        character_y = context.get('character_y', 0)
+        character_level = context.get('character_level', 1)
+        analysis_radius = context.get('analysis_radius', 10)
+        equipment_types = context.get('equipment_types', ["weapon", "armor", "utility"])
+        
         self.log_execution_start(
-            character_x=self.character_x,
-            character_y=self.character_y,
-            character_level=self.character_level,
-            analysis_radius=self.analysis_radius
+            character_x=character_x,
+            character_y=character_y,
+            character_level=character_level,
+            analysis_radius=analysis_radius
         )
         
         try:
             # Step 1: Find nearby resources
-            nearby_resources = self._find_nearby_resources(client)
+            nearby_resources = self._find_nearby_resources(client, character_x, character_y, analysis_radius)
             
             if not nearby_resources:
                 return self.get_error_response("No resources found in analysis radius")
@@ -51,16 +62,20 @@ class AnalyzeResourcesAction(ActionBase):
             # Step 2: Analyze each resource for crafting potential
             resource_analysis = {}
             # Get knowledge base and config data from context
-            knowledge_base = kwargs.get('knowledge_base')
-            config_data = kwargs.get('config_data')
+            knowledge_base = context.knowledge_base
+            config_data = context.get('config_data')
             
             for resource_location in nearby_resources:
-                analysis = self._analyze_resource_crafting_potential(client, resource_location, knowledge_base)
+                analysis = self._analyze_resource_crafting_potential(
+                    client, resource_location, knowledge_base, character_level, equipment_types
+                )
                 if analysis:
                     resource_analysis[resource_location['resource_code']] = analysis
             
             # Step 3: Find level-appropriate equipment that can be crafted
-            equipment_opportunities = self._find_equipment_crafting_opportunities(client, resource_analysis)
+            equipment_opportunities = self._find_equipment_crafting_opportunities(
+                client, resource_analysis, character_level, equipment_types
+            )
             
             # Step 4: Prioritize opportunities based on character needs using YAML configuration
             prioritized_opportunities = self._prioritize_crafting_opportunities(equipment_opportunities, config_data)
@@ -81,7 +96,7 @@ class AnalyzeResourcesAction(ActionBase):
             self.log_execution_result(error_response)
             return error_response
 
-    def _find_nearby_resources(self, client) -> List[Dict]:
+    def _find_nearby_resources(self, client, character_x: int, character_y: int, analysis_radius: int) -> List[Dict]:
         """
         Find all resources within the analysis radius.
         
@@ -91,10 +106,10 @@ class AnalyzeResourcesAction(ActionBase):
         resources = []
         
         # Search in a grid pattern around the character
-        for dx in range(-self.analysis_radius, self.analysis_radius + 1):
-            for dy in range(-self.analysis_radius, self.analysis_radius + 1):
-                x = self.character_x + dx
-                y = self.character_y + dy
+        for dx in range(-analysis_radius, analysis_radius + 1):
+            for dy in range(-analysis_radius, analysis_radius + 1):
+                x = character_x + dx
+                y = character_y + dy
                 
                 try:
                     map_response = get_map_api(x=x, y=y, client=client)
@@ -121,7 +136,7 @@ class AnalyzeResourcesAction(ActionBase):
         
         return sorted(resources, key=lambda r: r['distance'])
 
-    def _analyze_resource_crafting_potential(self, client, resource_location: Dict, knowledge_base=None) -> Optional[Dict]:
+    def _analyze_resource_crafting_potential(self, client, resource_location: Dict, knowledge_base, character_level: int, equipment_types: List[str]) -> Optional[Dict]:
         """
         Analyze a specific resource for its crafting potential.
         
@@ -153,7 +168,7 @@ class AnalyzeResourcesAction(ActionBase):
             }
             
             # Check if character can gather this resource
-            analysis['can_gather'] = analysis['level_required'] <= self.character_level
+            analysis['can_gather'] = analysis['level_required'] <= character_level
             
             # Find what this resource can be used to craft
             if hasattr(resource_data, 'drops') and resource_data.drops:
@@ -161,7 +176,7 @@ class AnalyzeResourcesAction(ActionBase):
                     drop_code = getattr(drop, 'code', '')
                     if drop_code:
                         # Pass knowledge base through to enable API fallback pattern
-                        crafting_uses = self._find_crafting_uses_for_item(client, drop_code, knowledge_base)
+                        crafting_uses = self._find_crafting_uses_for_item(client, drop_code, knowledge_base, character_level, equipment_types)
                         analysis['crafting_uses'].extend(crafting_uses)
             
             return analysis
@@ -170,7 +185,7 @@ class AnalyzeResourcesAction(ActionBase):
             self.logger.warning(f"Failed to analyze resource {resource_code}: {str(e)}")
             return None
 
-    def _find_crafting_uses_for_item(self, client, item_code: str, knowledge_base=None) -> List[Dict]:
+    def _find_crafting_uses_for_item(self, client, item_code: str, knowledge_base, character_level: int, equipment_types: List[str]) -> List[Dict]:
         """
         Find what items can be crafted using the given item as a material.
         Uses knowledge base first, then API discovery as fallback.
@@ -186,11 +201,11 @@ class AnalyzeResourcesAction(ActionBase):
         crafting_uses = []
         
         # Try to get equipment items from knowledge base first
-        equipment_items = self._get_equipment_items_from_knowledge(knowledge_base)
+        equipment_items = self._get_equipment_items_from_knowledge(knowledge_base, character_level, equipment_types)
         
         # If no knowledge base data, fall back to API discovery
         if not equipment_items:
-            equipment_items = self._discover_equipment_items_from_api(client)
+            equipment_items = self._discover_equipment_items_from_api(client, character_level, equipment_types)
         
         try:
             for equipment_code in equipment_items:
@@ -213,8 +228,8 @@ class AnalyzeResourcesAction(ActionBase):
                                     item_type = getattr(item, 'type', 'unknown')
                                     
                                     # Check if this is level-appropriate equipment
-                                    level_appropriate = abs(item_level - self.character_level) <= 3
-                                    is_equipment = item_type in self.equipment_types
+                                    level_appropriate = abs(item_level - character_level) <= 3
+                                    is_equipment = item_type in equipment_types
                                     
                                     if level_appropriate and is_equipment:
                                         craft_info = {
@@ -259,7 +274,7 @@ class AnalyzeResourcesAction(ActionBase):
         
         return materials
 
-    def _get_equipment_items_from_knowledge(self, knowledge_base=None) -> List[str]:
+    def _get_equipment_items_from_knowledge(self, knowledge_base, character_level: int, equipment_types: List[str]) -> List[str]:
         """
         Get equipment item codes from knowledge base if available.
         
@@ -282,10 +297,10 @@ class AnalyzeResourcesAction(ActionBase):
                 item_level = item_data.get('level', 1)
                 
                 # Check if this is equipment and level-appropriate
-                equipment_types = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']
-                level_appropriate = abs(item_level - self.character_level) <= 5
+                equipment_type_names = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']
+                level_appropriate = abs(item_level - character_level) <= 5
                 
-                if item_type in equipment_types and level_appropriate:
+                if item_type in equipment_type_names and level_appropriate:
                     equipment_items.append(item_code)
             
             if equipment_items:
@@ -296,7 +311,7 @@ class AnalyzeResourcesAction(ActionBase):
         
         return equipment_items
 
-    def _discover_equipment_items_from_api(self, client) -> List[str]:
+    def _discover_equipment_items_from_api(self, client, character_level: int, equipment_types: List[str]) -> List[str]:
         """
         Discover equipment items from API by fetching items with equipment types.
         Uses API pagination to get level-appropriate equipment.
@@ -313,14 +328,14 @@ class AnalyzeResourcesAction(ActionBase):
             from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items_api
             
             # Get equipment items by type
-            equipment_types = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']
+            equipment_type_names = ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']
             
-            for item_type in equipment_types:
+            for item_type in equipment_type_names:
                 try:
                     # Get items of this type, focusing on level-appropriate items
                     items_response = get_all_items_api(
                         type_=item_type,
-                        max_level=self.character_level + 5,  # Include slightly higher level items
+                        max_level=character_level + 5,  # Include slightly higher level items
                         page=1,
                         size=50,
                         client=client
@@ -343,7 +358,7 @@ class AnalyzeResourcesAction(ActionBase):
             # No fallback - force reliance on API data only
             return []
 
-    def _find_equipment_crafting_opportunities(self, client, resource_analysis: Dict) -> List[Dict]:
+    def _find_equipment_crafting_opportunities(self, client, resource_analysis: Dict, character_level: int, equipment_types: List[str]) -> List[Dict]:
         """
         Find equipment that can be crafted from analyzed resources.
         
@@ -362,7 +377,7 @@ class AnalyzeResourcesAction(ActionBase):
             
             for craft_use in analysis['crafting_uses']:
                 # Calculate feasibility score
-                level_diff = abs(craft_use['item_level'] - self.character_level)
+                level_diff = abs(craft_use['item_level'] - character_level)
                 distance_factor = 1.0 / (1.0 + analysis['distance'])
                 level_factor = 1.0 / (1.0 + level_diff)
                 
@@ -502,5 +517,4 @@ class AnalyzeResourcesAction(ActionBase):
         }
 
     def __repr__(self):
-        return (f"AnalyzeResourcesAction({self.character_x}, {self.character_y}, "
-                f"level={self.character_level}, radius={self.analysis_radius})")
+        return "AnalyzeResourcesAction()"

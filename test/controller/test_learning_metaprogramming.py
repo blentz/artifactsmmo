@@ -1,13 +1,13 @@
 """Tests for learning integration with metaprogramming approach."""
 
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
-import tempfile
-import os
 
-from src.controller.ai_player_controller import AIPlayerController
 from src.controller.action_executor import ActionResult
+from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
+
 from test.fixtures import create_mock_client
 
 
@@ -132,6 +132,7 @@ class TestLearningMetaprogramming(unittest.TestCase):
                 
                 # Verify learning was called
                 self.assertTrue(result)
+                # The pre_combat_hp defaults to 100 when not in context
                 controller.learn_from_combat.assert_called_once_with('test_monster', 'win', 100)
     
     @patch('src.controller.ai_player_controller.ActionExecutor')

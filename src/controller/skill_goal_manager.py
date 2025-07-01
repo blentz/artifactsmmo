@@ -7,13 +7,13 @@ template-driven skill advancement.
 """
 
 import logging
-from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
+from typing import Any, Dict, List, Tuple
 
-from src.lib.yaml_data import YamlData
-from src.lib.goap import World, Planner, Action_List
-from src.lib.actions_data import ActionsData
 from src.game.globals import CONFIG_PREFIX
+from src.lib.actions_data import ActionsData
+from src.lib.goap import Action_List, Planner, World
+from src.lib.yaml_data import YamlData
 
 
 class SkillType(Enum):

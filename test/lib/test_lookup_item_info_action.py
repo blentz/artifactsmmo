@@ -2,8 +2,10 @@
 
 import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.lookup_item_info import LookupItemInfoAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestLookupItemInfoAction(unittest.TestCase):
@@ -16,46 +18,47 @@ class TestLookupItemInfoAction(unittest.TestCase):
         self.item_type = "weapon"
         self.max_level = 10
         
-        self.action_with_code = LookupItemInfoAction(item_code=self.item_code)
-        self.action_with_search = LookupItemInfoAction(
-            search_term=self.search_term,
-            item_type=self.item_type,
-            max_level=self.max_level
-        )
+        self.action_with_code = LookupItemInfoAction()
+        self.action_with_search = LookupItemInfoAction()
         
         # Mock client
         self.mock_client = create_mock_client()
 
     def test_lookup_item_info_action_initialization_with_code(self):
         """Test LookupItemInfoAction initialization with item code."""
-        self.assertEqual(self.action_with_code.item_code, self.item_code)
-        self.assertIsNone(self.action_with_code.search_term)
-        self.assertIsNone(self.action_with_code.item_type)
-        self.assertIsNone(self.action_with_code.max_level)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(self.action_with_code, 'item_code'))
+        self.assertFalse(hasattr(self.action_with_code, 'search_term'))
+        self.assertFalse(hasattr(self.action_with_code, 'item_type'))
+        self.assertFalse(hasattr(self.action_with_code, 'max_level'))
 
     def test_lookup_item_info_action_initialization_with_search(self):
         """Test LookupItemInfoAction initialization with search parameters."""
-        self.assertIsNone(self.action_with_search.item_code)
-        self.assertEqual(self.action_with_search.search_term, self.search_term)
-        self.assertEqual(self.action_with_search.item_type, self.item_type)
-        self.assertEqual(self.action_with_search.max_level, self.max_level)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(self.action_with_search, 'item_code'))
+        self.assertFalse(hasattr(self.action_with_search, 'search_term'))
+        self.assertFalse(hasattr(self.action_with_search, 'item_type'))
+        self.assertFalse(hasattr(self.action_with_search, 'max_level'))
 
     def test_lookup_item_info_action_initialization_defaults(self):
         """Test LookupItemInfoAction initialization with defaults."""
         action = LookupItemInfoAction()
-        self.assertIsNone(action.item_code)
-        self.assertIsNone(action.search_term)
-        self.assertIsNone(action.item_type)
-        self.assertIsNone(action.max_level)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'item_code'))
+        self.assertFalse(hasattr(action, 'search_term'))
+        self.assertFalse(hasattr(action, 'item_type'))
+        self.assertFalse(hasattr(action, 'max_level'))
 
     def test_lookup_item_info_action_repr_with_code(self):
         """Test LookupItemInfoAction string representation with item code."""
-        expected = f"LookupItemInfoAction({self.item_code})"
+        # Repr is now simplified
+        expected = "LookupItemInfoAction()"
         self.assertEqual(repr(self.action_with_code), expected)
 
     def test_lookup_item_info_action_repr_with_search(self):
         """Test LookupItemInfoAction string representation with search parameters."""
-        expected = f"LookupItemInfoAction(search='{self.search_term}', type='{self.item_type}', max_level={self.max_level})"
+        # Repr is now simplified
+        expected = "LookupItemInfoAction()"
         self.assertEqual(repr(self.action_with_search), expected)
 
     def test_lookup_item_info_action_repr_no_parameters(self):
@@ -66,13 +69,15 @@ class TestLookupItemInfoAction(unittest.TestCase):
 
     def test_lookup_item_info_action_repr_partial_parameters(self):
         """Test LookupItemInfoAction string representation with partial parameters."""
-        action = LookupItemInfoAction(search_term="test", max_level=5)
-        expected = "LookupItemInfoAction(search='test', max_level=5)"
+        action = LookupItemInfoAction()
+        expected = "LookupItemInfoAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test lookup fails without client."""
-        result = self.action_with_code.execute(None)
+        
+        context = MockActionContext(character_name="test_char", item_code=self.item_code)
+        result = self.action_with_code.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -89,7 +94,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_result = {'success': True, 'item_code': self.item_code}
         mock_lookup_specific.return_value = mock_result
         
-        result = self.action_with_code.execute(self.mock_client)
+        
+        context = MockActionContext(character_name="test_char", item_code=self.item_code)
+        result = self.action_with_code.execute(self.mock_client, context)
         
         mock_lookup_specific.assert_called_once_with(self.mock_client, self.item_code)
         self.assertEqual(result, mock_result)
@@ -100,9 +107,12 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_result = {'success': False, 'error': 'No suitable equipment recipes found for current character level'}
         mock_determine_equipment.return_value = mock_result
         
-        result = self.action_with_search.execute(self.mock_client)
         
-        mock_determine_equipment.assert_called_once_with(self.mock_client)
+        context = MockActionContext(character_name="test_char", search_term=self.search_term, 
+                                  item_type=self.item_type, max_level=self.max_level)
+        result = self.action_with_search.execute(self.mock_client, context)
+        
+        mock_determine_equipment.assert_called_once_with(self.mock_client, context)
         self.assertEqual(result, mock_result)
 
     @patch('src.controller.actions.lookup_item_info.LookupItemInfoAction._lookup_specific_item')
@@ -110,7 +120,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         """Test exception handling during lookup."""
         mock_lookup_specific.side_effect = Exception("Network error")
         
-        result = self.action_with_code.execute(self.mock_client)
+        
+        context = MockActionContext(character_name="test_char", item_code=self.item_code)
+        result = self.action_with_code.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Item lookup failed: Network error', result['error'])
 
@@ -129,6 +141,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
+        # Create context for test
+        
+        context = MockActionContext(character_name="test_char")
         result = self.action_with_code._lookup_specific_item(self.mock_client, self.item_code)
         
         self.assertTrue(result['success'])
@@ -162,6 +177,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
+        # Create context for test
+        
+        context = MockActionContext(character_name="test_char")
         result = self.action_with_code._lookup_specific_item(self.mock_client, self.item_code)
         
         self.assertTrue(result['success'])
@@ -190,6 +208,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
+        # Create context for test
+        
+        context = MockActionContext(character_name="test_char")
         result = self.action_with_code._lookup_specific_item(self.mock_client, self.item_code)
         
         self.assertTrue(result['success'])
@@ -202,6 +223,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         """Test _lookup_specific_item when item not found."""
         mock_get_item_api.return_value = None
         
+        # Create context for test
+        
+        context = MockActionContext(character_name="test_char")
         result = self.action_with_code._lookup_specific_item(self.mock_client, self.item_code)
         
         self.assertFalse(result['success'])
@@ -214,6 +238,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_item_response.data = None
         mock_get_item_api.return_value = mock_item_response
         
+        # Create context for test
+        
+        context = MockActionContext(character_name="test_char")
         result = self.action_with_code._lookup_specific_item(self.mock_client, self.item_code)
         
         self.assertFalse(result['success'])
@@ -221,6 +248,8 @@ class TestLookupItemInfoAction(unittest.TestCase):
 
     def test_search_items_not_available(self):
         """Test _search_items returns error about missing API."""
+        
+        context = MockActionContext(character_name="test_char")
         result = self.action_with_search._search_items(self.mock_client)
         
         self.assertFalse(result['success'])
@@ -232,7 +261,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         """Test lookup_crafting_materials when item not found."""
         mock_lookup_specific.return_value = {'success': False, 'error': 'Item not found'}
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         self.assertFalse(result['success'])
         self.assertIn(f'Item {self.item_code} is not craftable or not found', result['error'])
@@ -246,7 +277,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
             'name': 'Basic Item'
         }
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         self.assertFalse(result['success'])
         self.assertIn(f'Item {self.item_code} is not craftable or not found', result['error'])
@@ -289,7 +322,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         mock_resource_response.data = mock_resource_data
         mock_get_resource_api.return_value = mock_resource_response
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['item_code'], self.item_code)
@@ -333,7 +368,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         # Mock resource API (material is NOT a resource)
         mock_get_resource_api.return_value = None
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(len(result['materials']), 1)
@@ -370,7 +407,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         # Mock resource API exception
         mock_get_resource_api.side_effect = Exception("API error")
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(len(result['materials']), 1)
@@ -396,7 +435,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
         # Mock material item not found
         mock_get_item_api.return_value = None
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         # Should still succeed but skip materials that can't be found
         self.assertTrue(result['success'])
@@ -415,7 +456,9 @@ class TestLookupItemInfoAction(unittest.TestCase):
             # No 'craft_items' key
         }
         
-        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code)
+        
+        context = MockActionContext(character_name="test_char")
+        result = self.action_with_code.lookup_crafting_materials(self.mock_client, self.item_code, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(len(result['materials']), 0)

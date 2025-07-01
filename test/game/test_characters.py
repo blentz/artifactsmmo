@@ -1,10 +1,11 @@
 """Unit tests for Characters class."""
 
-import unittest
 import json
-from unittest.mock import Mock, patch, MagicMock
-from src.game.characters import Characters
+import unittest
+from unittest.mock import Mock, patch
+
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from src.game.characters import Characters
 
 
 class TestCharacters(unittest.TestCase):

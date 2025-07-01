@@ -5,12 +5,16 @@ This module provides a base class that encapsulates common movement patterns,
 reducing duplication across movement actions.
 """
 
-from typing import Dict, Optional, Tuple, Any
-import logging
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
+
 from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post import sync as move_character_api
 from artifactsmmo_api_client.models.destination_schema import DestinationSchema
+
 from .base import ActionBase
 from .mixins import CharacterDataMixin
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 
 class MovementActionBase(ActionBase, CharacterDataMixin):
@@ -21,31 +25,26 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
     reactions = {"at_location": True}
     weights = {"at_location": 10}
     
-    def __init__(self, character_name: str):
+    def __init__(self):
         """
         Initialize movement action base.
-        
-        Args:
-            character_name: Name of the character to move
         """
         super().__init__()
-        self.character_name = character_name
-        self.logger = logging.getLogger(self.__class__.__name__)
     
-    def get_target_coordinates(self, **kwargs) -> Tuple[Optional[int], Optional[int]]:
+    def get_target_coordinates(self, context: 'ActionContext') -> Tuple[Optional[int], Optional[int]]:
         """
         Get target coordinates for movement.
         To be overridden by subclasses for custom coordinate extraction.
         
         Args:
-            **kwargs: Context parameters
+            context: ActionContext with parameters
             
         Returns:
             Tuple of (x, y) coordinates or (None, None)
         """
         # Default implementation - direct coordinates
-        target_x = kwargs.get('target_x')
-        target_y = kwargs.get('target_y')
+        target_x = context.get('target_x')
+        target_y = context.get('target_y')
         return target_x, target_y
     
     def execute_movement(self, client, target_x: int, target_y: int, 
@@ -71,7 +70,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
             
             # Execute movement
             response = move_character_api(
-                name=self.character_name,
+                name=movement_context.get('character_name', 'unknown'),
                 client=client,
                 body=destination
             )
@@ -96,7 +95,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 return result
             else:
                 return self.get_error_response(
-                    f"Movement failed: No response data",
+                    "Movement failed: No response data",
                     target_x=target_x,
                     target_y=target_y
                 )
@@ -104,7 +103,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         except Exception as e:
             # Handle "already at destination" as success
             error_str = str(e).lower()
-            if "490" in str(e) and "already at destination" in error_str:
+            if "490" in str(e) and ("already at" in error_str or "destination" in error_str):
                 self.logger.info(f"✓ Already at destination ({target_x}, {target_y})")
                 return self.get_success_response(
                     moved=False,
@@ -124,25 +123,32 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 target_y=target_y
             )
     
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """
         Execute the movement action.
         
         Args:
             client: API client
-            **kwargs: Additional context parameters
+            context: ActionContext with parameters
             
         Returns:
             Action result dictionary
         """
         # Validate client
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             error_response = self.get_error_response("No API client provided")
             self.log_execution_result(error_response)
             return error_response
         
+        # Get character name from context
+        character_name = context.character_name
+        if not character_name:
+            error_response = self.get_error_response("No character name provided")
+            self.log_execution_result(error_response)
+            return error_response
+        
         # Get target coordinates
-        target_x, target_y = self.get_target_coordinates(**kwargs)
+        target_x, target_y = self.get_target_coordinates(context)
         
         if target_x is None or target_y is None:
             error_response = self.get_error_response(
@@ -155,13 +161,14 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         
         # Log execution start
         self.log_execution_start(
-            character_name=self.character_name,
+            character_name=character_name,
             target_x=target_x,
             target_y=target_y
         )
         
         # Build movement context
-        movement_context = self.build_movement_context(**kwargs)
+        movement_context = self.build_movement_context(context)
+        movement_context['character_name'] = character_name
         
         # Execute movement
         result = self.execute_movement(client, target_x, target_y, movement_context)
@@ -170,13 +177,13 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         self.log_execution_result(result)
         return result
     
-    def build_movement_context(self, **kwargs) -> Dict:
+    def build_movement_context(self, context: 'ActionContext') -> Dict:
         """
         Build context information for the movement.
         Can be overridden by subclasses to add specific context.
         
         Args:
-            **kwargs: Context parameters
+            context: ActionContext with parameters
             
         Returns:
             Movement context dictionary
@@ -199,4 +206,4 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         return abs(to_x - from_x) + abs(to_y - from_y)
     
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.character_name})"
+        return f"{self.__class__.__name__}()"

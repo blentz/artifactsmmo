@@ -1,10 +1,11 @@
 """Comprehensive unit tests for MapState class."""
 
-import unittest
-import tempfile
+import logging
 import os
-import time
-from unittest.mock import patch, Mock, MagicMock
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+
 from src.game.map.state import MapState
 from test.fixtures import create_mock_client
 
@@ -18,6 +19,13 @@ class TestMapState(unittest.TestCase):
         # Create temporary directory for test data
         self.temp_dir = tempfile.mkdtemp()
         self.addCleanup(lambda: os.rmdir(self.temp_dir) if os.path.exists(self.temp_dir) else None)
+    
+    @staticmethod
+    def _mock_yaml_init(instance, filename):
+        """Mock YamlData.__init__ method that properly initializes logger."""
+        instance._log = logging.getLogger()
+        instance.filename = filename
+        instance.data = {}
 
     @patch('src.game.map.state.DATA_PREFIX')
     def test_map_state_initialization_default_name(self, mock_data_prefix):
@@ -25,7 +33,7 @@ class TestMapState(unittest.TestCase):
         mock_data_prefix.__str__ = Mock(return_value=self.temp_dir)
         mock_data_prefix.__add__ = Mock(return_value=f"{self.temp_dir}/map.yaml")
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             with patch.object(MapState, 'scan', return_value={}):
                 state = MapState(self.mock_client)
                 
@@ -38,7 +46,7 @@ class TestMapState(unittest.TestCase):
         mock_data_prefix.__str__ = Mock(return_value=self.temp_dir)
         mock_data_prefix.__add__ = Mock(return_value=f"{self.temp_dir}/map.yaml")
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             state = MapState(self.mock_client, initial_scan=False)
             
             # Should not have any scan data
@@ -51,7 +59,7 @@ class TestMapState(unittest.TestCase):
         mock_data_prefix.__str__ = Mock(return_value=self.temp_dir)
         mock_data_prefix.__add__ = Mock(return_value=f"{self.temp_dir}/map.yaml")
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             state = MapState(None)
             
             # Should handle no client gracefully
@@ -78,7 +86,12 @@ class TestMapState(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map.return_value = mock_response
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        def mock_yaml_init(instance, filename):
+            instance._log = logging.getLogger()
+            instance.filename = filename
+            instance.data = {}
+            
+        with patch('src.game.map.state.YamlData.__init__', mock_yaml_init):
             with patch.object(MapState, 'save'):
                 state = MapState(self.mock_client, initial_scan=False)
                 state.data = {}  # Ensure empty data
@@ -108,7 +121,7 @@ class TestMapState(unittest.TestCase):
         # Mock API returning None for boundary
         mock_get_map.return_value = None
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             state = MapState(self.mock_client, initial_scan=False)
             state.data = {}
             
@@ -126,7 +139,7 @@ class TestMapState(unittest.TestCase):
         mock_data_prefix.__str__ = Mock(return_value=self.temp_dir)
         mock_data_prefix.__add__ = Mock(return_value=f"{self.temp_dir}/map.yaml")
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             state = MapState(self.mock_client, initial_scan=False, cache_duration=300)
             state.data = {}
             
@@ -153,7 +166,7 @@ class TestMapState(unittest.TestCase):
         mock_data_prefix.__str__ = Mock(return_value=self.temp_dir)
         mock_data_prefix.__add__ = Mock(return_value=f"{self.temp_dir}/map.yaml")
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             state = MapState(self.mock_client, initial_scan=False, cache_duration=300)
             
             # Add fresh cached data
@@ -189,7 +202,7 @@ class TestMapState(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map.return_value = mock_response
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             with patch.object(MapState, 'save'):
                 state = MapState(self.mock_client, initial_scan=False, cache_duration=300)
                 
@@ -217,7 +230,7 @@ class TestMapState(unittest.TestCase):
         mock_data_prefix.__str__ = Mock(return_value=self.temp_dir)
         mock_data_prefix.__add__ = Mock(return_value=f"{self.temp_dir}/map.yaml")
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             state = MapState(self.mock_client, initial_scan=False)
             
             callback = Mock()
@@ -243,7 +256,7 @@ class TestMapState(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map.return_value = mock_response
         
-        with patch('src.game.map.state.YamlData.__init__', return_value=None):
+        with patch('src.game.map.state.YamlData.__init__', TestMapState._mock_yaml_init):
             with patch.object(MapState, 'save'):
                 state = MapState(self.mock_client, initial_scan=False)
                 state.data = {}

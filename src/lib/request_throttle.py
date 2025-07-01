@@ -5,11 +5,11 @@ Implements rate limiting to stay below the ArtifactsMMO API limit of 200 request
 Uses a sliding window approach with proper delays to ensure compliance.
 """
 
-import time
+import logging
 import threading
+import time
 from collections import deque
 from typing import Optional
-import logging
 
 
 class RequestThrottle:

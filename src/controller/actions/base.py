@@ -1,7 +1,10 @@
 """ ActionBase module  """
 
-from typing import Dict, Optional, Any
 import logging
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 class ActionBase:
     """ Base class for all GOAP actions """
@@ -14,36 +17,49 @@ class ActionBase:
     def __init__(self):
         """Initialize base action"""
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._context = None  # Will be set during execute
 
-    def execute(self, client, **kwargs) -> Optional[Any]:
-        """Execute the action - to be implemented by subclasses"""
-        raise NotImplementedError("Subclasses must implement execute method")
+    def execute(self, client, context: 'ActionContext') -> Optional[Any]:
+        """
+        Execute the action using unified ActionContext.
+        Subclasses MUST call super().execute(client, context) at the beginning of their execute method.
+        
+        Args:
+            client: API client
+            context: ActionContext containing all execution parameters
+            
+        Returns:
+            Action result
+        """
+        # Store context for use in helper methods
+        self._context = context
+        # Subclasses will implement their own execute logic after calling super()
 
-    def validate_execution_context(self, client, **kwargs) -> bool:
+    def validate_execution_context(self, client, context: 'ActionContext') -> bool:
         """Validate that the action can be executed with the given context"""
         return client is not None
     
-    def validate_and_execute(self, client, **kwargs) -> Optional[Dict]:
+    def validate_and_execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """
         Validate context and execute with standard error handling.
         This method provides a common pattern for action execution.
         
         Args:
             client: API client
-            **kwargs: Additional context parameters
+            context: ActionContext containing all execution parameters
             
         Returns:
             Action result dictionary
         """
         # Validate client
-        if not self.validate_execution_context(client, **kwargs):
+        if not self.validate_execution_context(client, context):
             error_response = self.get_error_response("No API client provided")
             self.log_execution_result(error_response)
             return error_response
         
         try:
             # Execute the actual action logic
-            return self.perform_action(client, **kwargs)
+            return self.perform_action(client, context)
         except Exception as e:
             error_response = self.get_error_response(
                 f"{self.__class__.__name__} failed: {str(e)}"
@@ -51,14 +67,14 @@ class ActionBase:
             self.log_execution_result(error_response)
             return error_response
     
-    def perform_action(self, client, **kwargs) -> Dict:
+    def perform_action(self, client, context: 'ActionContext') -> Dict:
         """
         Perform the actual action logic.
         To be implemented by subclasses when using validate_and_execute pattern.
         
         Args:
             client: API client
-            **kwargs: Additional context parameters
+            context: ActionContext containing all execution parameters
             
         Returns:
             Action result dictionary

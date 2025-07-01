@@ -6,8 +6,12 @@ for planning decisions. Used as a GOAP reaction to determine location state
 and update action context with current coordinates.
 """
 
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
@@ -23,26 +27,25 @@ class CheckLocationAction(ActionBase):
     }
     weights = {"location_known": 1.0}
 
-    def __init__(self, character_name: str):
+    def __init__(self):
         """
         Initialize the check location action.
-
-        Args:
-            character_name: Name of the character to check
         """
         super().__init__()
-        self.character_name = character_name
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Check current location and update spatial context """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        character_name = context.character_name
             
-        self.log_execution_start(character_name=self.character_name)
+        self.log_execution_start(character_name=character_name)
         
         try:
             # Get current character location
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
@@ -52,7 +55,7 @@ class CheckLocationAction(ActionBase):
             current_y = getattr(character_data, 'y', 0)
             
             # Get map information if available
-            map_state = kwargs.get('map_state')
+            map_state = context.map_state
             location_info = {}
             
             if map_state:
@@ -80,15 +83,15 @@ class CheckLocationAction(ActionBase):
                     location_info = {'content_type': 'unknown'}
             
             # Determine location capabilities using knowledge base and config data
-            knowledge_base = kwargs.get('knowledge_base')
-            config_data = kwargs.get('config_data')
+            knowledge_base = context.knowledge_base
+            config_data = context.get('config_data')
             location_capabilities = self._analyze_location_capabilities(
                 location_info, knowledge_base=knowledge_base, config_data=config_data
             )
             
             result = {
                 'success': True,
-                'character_name': self.character_name,
+                'character_name': character_name,
                 'current_x': current_x,
                 'current_y': current_y,
                 'location_info': location_info,
@@ -208,4 +211,4 @@ class CheckLocationAction(ActionBase):
         return []
 
     def __repr__(self):
-        return f"CheckLocationAction({self.character_name})"
+        return "CheckLocationAction()"

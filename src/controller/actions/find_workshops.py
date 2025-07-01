@@ -1,8 +1,11 @@
 """ FindWorkshopsAction module """
 
 from typing import Dict, Optional
-from .search_base import SearchActionBase
+
+from src.lib.action_context import ActionContext
+
 from .coordinate_mixin import CoordinateStandardizationMixin
+from .search_base import SearchActionBase
 
 
 class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
@@ -13,37 +16,37 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
     reactions = {"workshops_discovered": True, "at_target_location": False}
     weights = {"workshops_discovered": 15}
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, search_radius: int = 5,
-                 workshop_type: Optional[str] = None):
+    def __init__(self):
         """
         Initialize the find workshops action.
-
-        Args:
-            character_x: Character's X coordinate
-            character_y: Character's Y coordinate
-            search_radius: Radius to search for workshops
-            workshop_type: Type of workshop to search for (e.g., 'weaponcrafting', 'gearcrafting')
         """
-        super().__init__(character_x, character_y, search_radius)
-        self.workshop_type = workshop_type
+        super().__init__()
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find the nearest workshop location using unified search algorithm """
+        # Get parameters from context
+        character_x = context.get('character_x', context.character_x)
+        character_y = context.get('character_y', context.character_y)
+        search_radius = context.get('search_radius', 5)
+        workshop_type = context.get('workshop_type')
+        
+        # Parameters will be passed directly to helper methods via context
+        
         self.log_execution_start(
-            character_x=self.character_x,
-            character_y=self.character_y, 
-            search_radius=self.search_radius,
-            workshop_type=self.workshop_type
+            character_x=character_x,
+            character_y=character_y, 
+            search_radius=search_radius,
+            workshop_type=workshop_type
         )
         
         try:
             # Create workshop filter using the unified search base
-            workshop_filter = self.create_workshop_filter(workshop_type=self.workshop_type)
+            workshop_filter = self.create_workshop_filter(workshop_type=workshop_type)
             
             # Define result processor for workshop-specific response format
             def workshop_result_processor(location, content_code, content_data):
                 x, y = location
-                distance = self._calculate_distance(x, y)
+                distance = abs(x - character_x) + abs(y - character_y)  # Manhattan distance
                 
                 # Create standardized coordinate response
                 coordinate_data = self.create_coordinate_response(
@@ -51,16 +54,16 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
                     distance=distance,
                     workshop_code=content_code,
                     workshop_name=content_code,
-                    workshop_type=self.workshop_type or 'general'
+                    workshop_type=workshop_type or 'general'
                 )
                 
                 return self.get_success_response(**coordinate_data)
             
             # Get map_state from context for cached access
-            map_state = kwargs.get('map_state')
+            map_state = context.map_state
             
             # Use unified search algorithm
-            result = self.unified_search(client, workshop_filter, workshop_result_processor, map_state)
+            result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
             
             self.log_execution_result(result)
             return result
@@ -76,6 +79,12 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
     
 
     def __repr__(self):
-        workshop_filter = f", type={self.workshop_type}" if self.workshop_type else ""
-        return (f"FindWorkshopsAction({self.character_x}, {self.character_y}, "
-               f"radius={self.search_radius}{workshop_filter})")
+        # Handle case where instance variables might not be set
+        character_x = getattr(self, 'character_x', 0)
+        character_y = getattr(self, 'character_y', 0)
+        search_radius = getattr(self, 'search_radius', 5)
+        workshop_type = getattr(self, 'workshop_type', None)
+        
+        workshop_filter = f", type={workshop_type}" if workshop_type else ""
+        return (f"FindWorkshopsAction({character_x}, {character_y}, "
+               f"radius={search_radius}{workshop_filter})")

@@ -1,62 +1,58 @@
 data:
   -1,-1:
     content: null
-    last_scanned: 1751256613.7521145
-    name: Forest
-    skin: forest_2
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858805'
     x: -1
     y: -1
   -1,-2:
     content: null
-    last_scanned: 1751256617.612999
-    name: Forest
-    skin: forest_2
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858766'
     x: -1
     y: -2
   -1,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223871'
+    last_scanned: '2025-07-01T02:54:33.858731'
     x: -1
     y: -3
   -1,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223821'
+    last_scanned: '2025-07-01T02:54:33.858690'
     x: -1
     y: -4
   -1,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223768'
+    last_scanned: '2025-07-01T02:54:33.858642'
     x: -1
     y: -5
   -1,0:
     content:
       code: ash_tree
       type: resource
-    last_scanned: 1751256616.3331444
-    name: Forest
-    skin: forest_ashtree2
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858839'
     x: -1
     y: 0
   -1,1:
     content: null
-    last_scanned: 1751256614.2064338
-    name: Forest
-    skin: forest_1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198354'
     x: -1
     y: 1
   -1,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021445'
+    last_scanned: '2025-07-01T02:54:34.607847'
     x: -1
     y: 10
   -1,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021480'
+    last_scanned: '2025-07-01T02:54:34.607877'
     x: -1
     y: 11
   -1,12:
@@ -64,7 +60,7 @@ data:
       code: cultist_emperor
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021518'
+    last_scanned: '2025-07-01T02:54:34.607907'
     x: -1
     y: 12
   -1,13:
@@ -72,7 +68,7 @@ data:
       code: hellhound
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387499'
+    last_scanned: '2025-07-01T02:54:34.861406'
     x: -1
     y: 13
   -1,14:
@@ -80,39 +76,37 @@ data:
       code: cultist_acolyte
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387556'
+    last_scanned: '2025-07-01T02:54:34.861454'
     x: -1
     y: 14
   -1,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387598'
+    last_scanned: '2025-07-01T02:54:34.861491'
     x: -1
     y: 15
   -1,2:
     content: null
-    last_scanned: 1751256617.9580271
-    name: Forest
-    skin: forest_2
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198409'
     x: -1
     y: 2
   -1,3:
     content: null
-    last_scanned: 1751256691.5841086
-    name: Forest
-    skin: forest_4
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198446'
     x: -1
     y: 3
   -1,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602801'
+    last_scanned: '2025-07-01T02:54:34.198478'
     x: -1
     y: 4
   -1,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602837'
+    last_scanned: '2025-07-01T02:54:34.198507'
     x: -1
     y: 5
   -1,6:
@@ -120,39 +114,37 @@ data:
       code: birch_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602870'
+    last_scanned: '2025-07-01T02:54:34.198534'
     x: -1
     y: 6
   -1,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021316'
+    last_scanned: '2025-07-01T02:54:34.607741'
     x: -1
     y: 7
   -1,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021364'
+    last_scanned: '2025-07-01T02:54:34.607780'
     x: -1
     y: 8
   -1,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021406'
+    last_scanned: '2025-07-01T02:54:34.607814'
     x: -1
     y: 9
   -2,-1:
     content: null
-    last_scanned: 1751256620.9093044
-    name: Forest
-    skin: forest_2
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858803'
     x: -2
     y: -1
   -2,-2:
     content: null
-    last_scanned: 1751256616.891046
-    name: Forest
-    skin: forest_1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858764'
     x: -2
     y: -2
   -2,-3:
@@ -160,7 +152,7 @@ data:
       code: woodcutting
       type: workshop
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223864'
+    last_scanned: '2025-07-01T02:54:33.858725'
     x: -2
     y: -3
   -2,-4:
@@ -168,47 +160,45 @@ data:
       code: salmon_fishing_spot
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223814'
+    last_scanned: '2025-07-01T02:54:33.858684'
     x: -2
     y: -4
   -2,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223765'
+    last_scanned: '2025-07-01T02:54:33.858640'
     x: -2
     y: -5
   -2,0:
     content: null
-    last_scanned: 1751256621.590351
-    name: Forest
-    skin: forest_3
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858837'
     x: -2
     y: 0
   -2,1:
     content:
       code: wolf
       type: monster
-    last_scanned: 1751256622.4451747
-    name: Forest
-    skin: forest_wolf1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198345'
     x: -2
     y: 1
   -2,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021443'
+    last_scanned: '2025-07-01T02:54:34.607845'
     x: -2
     y: 10
   -2,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021478'
+    last_scanned: '2025-07-01T02:54:34.607876'
     x: -2
     y: 11
   -2,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021516'
+    last_scanned: '2025-07-01T02:54:34.607906'
     x: -2
     y: 12
   -2,13:
@@ -216,81 +206,79 @@ data:
       code: mithril_rocks
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387494'
+    last_scanned: '2025-07-01T02:54:34.861401'
     x: -2
     y: 13
   -2,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387554'
+    last_scanned: '2025-07-01T02:54:34.861452'
     x: -2
     y: 14
   -2,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387596'
+    last_scanned: '2025-07-01T02:54:34.861490'
     x: -2
     y: 15
   -2,2:
     content: null
-    last_scanned: 1751256617.2707055
-    name: Forest
-    skin: forest_3
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198407'
     x: -2
     y: 2
   -2,3:
     content: null
-    last_scanned: 1751256691.2872481
-    name: Forest
-    skin: forest_1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198444'
     x: -2
     y: 3
   -2,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602799'
+    last_scanned: '2025-07-01T02:54:34.198477'
     x: -2
     y: 4
   -2,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602835'
+    last_scanned: '2025-07-01T02:54:34.198506'
     x: -2
     y: 5
   -2,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602868'
+    last_scanned: '2025-07-01T02:54:34.198533'
     x: -2
     y: 6
   -2,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021314'
+    last_scanned: '2025-07-01T02:54:34.607740'
     x: -2
     y: 7
   -2,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021362'
+    last_scanned: '2025-07-01T02:54:34.607779'
     x: -2
     y: 8
   -2,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021404'
+    last_scanned: '2025-07-01T02:54:34.607812'
     x: -2
     y: 9
   -3,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223969'
+    last_scanned: '2025-07-01T02:54:33.858802'
     x: -3
     y: -1
   -3,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223909'
+    last_scanned: '2025-07-01T02:54:33.858763'
     x: -3
     y: -2
   -3,-3:
@@ -298,7 +286,7 @@ data:
       code: pig
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223860'
+    last_scanned: '2025-07-01T02:54:33.858722'
     x: -3
     y: -3
   -3,-4:
@@ -306,13 +294,13 @@ data:
       code: salmon_fishing_spot
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223801'
+    last_scanned: '2025-07-01T02:54:33.858672'
     x: -3
     y: -4
   -3,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223762'
+    last_scanned: '2025-07-01T02:54:33.858637'
     x: -3
     y: -5
   -3,0:
@@ -320,25 +308,25 @@ data:
       code: wolf
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224010'
+    last_scanned: '2025-07-01T02:54:33.858835'
     x: -3
     y: 0
   -3,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602635'
+    last_scanned: '2025-07-01T02:54:34.198344'
     x: -3
     y: 1
   -3,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021441'
+    last_scanned: '2025-07-01T02:54:34.607843'
     x: -3
     y: 10
   -3,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021476'
+    last_scanned: '2025-07-01T02:54:34.607874'
     x: -3
     y: 11
   -3,12:
@@ -346,332 +334,332 @@ data:
       code: spider
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021512'
+    last_scanned: '2025-07-01T02:54:34.607902'
     x: -3
     y: 12
   -3,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387492'
+    last_scanned: '2025-07-01T02:54:34.861399'
     x: -3
     y: 13
   -3,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387551'
+    last_scanned: '2025-07-01T02:54:34.861451'
     x: -3
     y: 14
   -3,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387594'
+    last_scanned: '2025-07-01T02:54:34.861488'
     x: -3
     y: 15
   -3,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602713'
+    last_scanned: '2025-07-01T02:54:34.198405'
     x: -3
     y: 2
   -3,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602758'
+    last_scanned: '2025-07-01T02:54:34.198443'
     x: -3
     y: 3
   -3,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602797'
+    last_scanned: '2025-07-01T02:54:34.198475'
     x: -3
     y: 4
   -3,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602834'
+    last_scanned: '2025-07-01T02:54:34.198505'
     x: -3
     y: 5
   -3,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602867'
+    last_scanned: '2025-07-01T02:54:34.198531'
     x: -3
     y: 6
   -3,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021312'
+    last_scanned: '2025-07-01T02:54:34.607738'
     x: -3
     y: 7
   -3,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021360'
+    last_scanned: '2025-07-01T02:54:34.607777'
     x: -3
     y: 8
   -3,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021402'
+    last_scanned: '2025-07-01T02:54:34.607811'
     x: -3
     y: 9
   -4,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223967'
+    last_scanned: '2025-07-01T02:54:33.858800'
     x: -4
     y: -1
   -4,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223907'
+    last_scanned: '2025-07-01T02:54:33.858761'
     x: -4
     y: -2
   -4,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223858'
+    last_scanned: '2025-07-01T02:54:33.858720'
     x: -4
     y: -3
   -4,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223800'
+    last_scanned: '2025-07-01T02:54:33.858671'
     x: -4
     y: -4
   -4,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223758'
+    last_scanned: '2025-07-01T02:54:33.858633'
     x: -4
     y: -5
   -4,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224008'
+    last_scanned: '2025-07-01T02:54:33.858833'
     x: -4
     y: 0
   -4,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602632'
+    last_scanned: '2025-07-01T02:54:34.198342'
     x: -4
     y: 1
   -4,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021439'
+    last_scanned: '2025-07-01T02:54:34.607842'
     x: -4
     y: 10
   -4,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021475'
+    last_scanned: '2025-07-01T02:54:34.607873'
     x: -4
     y: 11
   -4,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021511'
+    last_scanned: '2025-07-01T02:54:34.607901'
     x: -4
     y: 12
   -4,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387490'
+    last_scanned: '2025-07-01T02:54:34.861398'
     x: -4
     y: 13
   -4,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387550'
+    last_scanned: '2025-07-01T02:54:34.861449'
     x: -4
     y: 14
   -4,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387593'
+    last_scanned: '2025-07-01T02:54:34.861486'
     x: -4
     y: 15
   -4,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602710'
+    last_scanned: '2025-07-01T02:54:34.198404'
     x: -4
     y: 2
   -4,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602757'
+    last_scanned: '2025-07-01T02:54:34.198441'
     x: -4
     y: 3
   -4,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602795'
+    last_scanned: '2025-07-01T02:54:34.198474'
     x: -4
     y: 4
   -4,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602832'
+    last_scanned: '2025-07-01T02:54:34.198503'
     x: -4
     y: 5
   -4,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602865'
+    last_scanned: '2025-07-01T02:54:34.198530'
     x: -4
     y: 6
   -4,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021310'
+    last_scanned: '2025-07-01T02:54:34.607736'
     x: -4
     y: 7
   -4,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021358'
+    last_scanned: '2025-07-01T02:54:34.607776'
     x: -4
     y: 8
   -4,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021401'
+    last_scanned: '2025-07-01T02:54:34.607809'
     x: -4
     y: 9
   -5,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223965'
+    last_scanned: '2025-07-01T02:54:33.858799'
     x: -5
     y: -1
   -5,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223905'
+    last_scanned: '2025-07-01T02:54:33.858760'
     x: -5
     y: -2
   -5,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223856'
+    last_scanned: '2025-07-01T02:54:33.858719'
     x: -5
     y: -3
   -5,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223798'
+    last_scanned: '2025-07-01T02:54:33.858669'
     x: -5
     y: -4
   -5,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223748'
+    last_scanned: '2025-07-01T02:54:33.858625'
     x: -5
     y: -5
   -5,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224006'
+    last_scanned: '2025-07-01T02:54:33.858832'
     x: -5
     y: 0
   -5,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602630'
+    last_scanned: '2025-07-01T02:54:34.198340'
     x: -5
     y: 1
   -5,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021437'
+    last_scanned: '2025-07-01T02:54:34.607840'
     x: -5
     y: 10
   -5,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021473'
+    last_scanned: '2025-07-01T02:54:34.607871'
     x: -5
     y: 11
   -5,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021509'
+    last_scanned: '2025-07-01T02:54:34.607899'
     x: -5
     y: 12
   -5,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387488'
+    last_scanned: '2025-07-01T02:54:34.861396'
     x: -5
     y: 13
   -5,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387548'
+    last_scanned: '2025-07-01T02:54:34.861447'
     x: -5
     y: 14
   -5,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387591'
+    last_scanned: '2025-07-01T02:54:34.861485'
     x: -5
     y: 15
   -5,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602708'
+    last_scanned: '2025-07-01T02:54:34.198402'
     x: -5
     y: 2
   -5,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602755'
+    last_scanned: '2025-07-01T02:54:34.198440'
     x: -5
     y: 3
   -5,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602794'
+    last_scanned: '2025-07-01T02:54:34.198473'
     x: -5
     y: 4
   -5,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602830'
+    last_scanned: '2025-07-01T02:54:34.198502'
     x: -5
     y: 5
   -5,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602864'
+    last_scanned: '2025-07-01T02:54:34.198529'
     x: -5
     y: 6
   -5,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021308'
+    last_scanned: '2025-07-01T02:54:34.607734'
     x: -5
     y: 7
   -5,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021356'
+    last_scanned: '2025-07-01T02:54:34.607774'
     x: -5
     y: 8
   -5,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021399'
+    last_scanned: '2025-07-01T02:54:34.607807'
     x: -5
     y: 9
   0,-1:
     content:
       code: green_slime
       type: monster
-    last_scanned: 1751256614.541857
+    last_scanned: 1751352882.1921659
     name: Forest
     skin: forest_greenslime2
     x: 0
@@ -680,32 +668,31 @@ data:
     content:
       code: blue_slime
       type: monster
-    last_scanned: 1751256618.2824664
-    name: Forest
-    skin: forest_blueslime1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858767'
     x: 0
     y: -2
   0,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223873'
+    last_scanned: '2025-07-01T02:54:33.858733'
     x: 0
     y: -3
   0,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223824'
+    last_scanned: '2025-07-01T02:54:33.858691'
     x: 0
     y: -4
   0,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223770'
+    last_scanned: '2025-07-01T02:54:33.858645'
     x: 0
     y: -5
   0,0:
     content: null
-    last_scanned: 1751256691.0230784
+    last_scanned: 1751352886.8882952
     name: Spawn
     skin: spawn
     x: 0
@@ -714,7 +701,7 @@ data:
     content:
       code: chicken
       type: monster
-    last_scanned: 1751256615.1860704
+    last_scanned: 1751352887.5006917
     name: City
     skin: forest_chicken1
     x: 0
@@ -722,13 +709,13 @@ data:
   0,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021447'
+    last_scanned: '2025-07-01T02:54:34.607848'
     x: 0
     y: 10
   0,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021482'
+    last_scanned: '2025-07-01T02:54:34.607879'
     x: 0
     y: 11
   0,12:
@@ -736,13 +723,13 @@ data:
       code: imp
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021521'
+    last_scanned: '2025-07-01T02:54:34.607911'
     x: 0
     y: 12
   0,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387503'
+    last_scanned: '2025-07-01T02:54:34.861410'
     x: 0
     y: 13
   0,14:
@@ -750,27 +737,27 @@ data:
       code: imp
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387559'
+    last_scanned: '2025-07-01T02:54:34.861457'
     x: 0
     y: 14
   0,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387599'
+    last_scanned: '2025-07-01T02:54:34.861493'
     x: 0
     y: 15
   0,2:
     content:
       code: cow
       type: monster
-    last_scanned: 1751256618.8966377
+    last_scanned: 1751352888.5151293
     name: City
     skin: forest_cow1
     x: 0
     y: 2
   0,3:
     content: null
-    last_scanned: 1751256691.9506059
+    last_scanned: 1751352882.5451431
     name: Forest
     skin: forest_2
     x: 0
@@ -778,44 +765,44 @@ data:
   0,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602803'
+    last_scanned: '2025-07-01T02:54:34.198480'
     x: 0
     y: 4
   0,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602839'
+    last_scanned: '2025-07-01T02:54:34.198509'
     x: 0
     y: 5
   0,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602874'
+    last_scanned: '2025-07-01T02:54:34.198537'
     x: 0
     y: 6
   0,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021320'
+    last_scanned: '2025-07-01T02:54:34.607743'
     x: 0
     y: 7
   0,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021366'
+    last_scanned: '2025-07-01T02:54:34.607782'
     x: 0
     y: 8
   0,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021408'
+    last_scanned: '2025-07-01T02:54:34.607815'
     x: 0
     y: 9
   1,-1:
     content:
       code: red_slime
       type: monster
-    last_scanned: 1751256615.5830998
+    last_scanned: 1751352882.7579288
     name: Forest
     skin: forest_redslime1
     x: 1
@@ -824,32 +811,31 @@ data:
     content:
       code: yellow_slime
       type: monster
-    last_scanned: 1751256619.5266001
-    name: Forest
-    skin: forest_yellowslime1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858771'
     x: 1
     y: -2
   1,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223875'
+    last_scanned: '2025-07-01T02:54:33.858735'
     x: 1
     y: -3
   1,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223826'
+    last_scanned: '2025-07-01T02:54:33.858693'
     x: 1
     y: -4
   1,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223772'
+    last_scanned: '2025-07-01T02:54:33.858647'
     x: 1
     y: -5
   1,0:
     content: null
-    last_scanned: 1751256616.7067313
+    last_scanned: 1751352879.2587287
     name: Forest
     skin: forest_3
     x: 1
@@ -858,7 +844,7 @@ data:
     content:
       code: cooking
       type: workshop
-    last_scanned: 1751256615.9413483
+    last_scanned: 1751352881.2920017
     name: City
     skin: forest_cs1
     x: 1
@@ -868,13 +854,13 @@ data:
       code: glowstem
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021449'
+    last_scanned: '2025-07-01T02:54:34.607850'
     x: 1
     y: 10
   1,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021483'
+    last_scanned: '2025-07-01T02:54:34.607880'
     x: 1
     y: 11
   1,12:
@@ -882,7 +868,7 @@ data:
       code: maple_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021525'
+    last_scanned: '2025-07-01T02:54:34.607914'
     x: 1
     y: 12
   1,13:
@@ -890,7 +876,7 @@ data:
       code: cultist_acolyte
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387506'
+    last_scanned: '2025-07-01T02:54:34.861412'
     x: 1
     y: 13
   1,14:
@@ -898,20 +884,20 @@ data:
       code: hellhound
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387563'
+    last_scanned: '2025-07-01T02:54:34.861461'
     x: 1
     y: 14
   1,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387601'
+    last_scanned: '2025-07-01T02:54:34.861494'
     x: 1
     y: 15
   1,2:
     content:
       code: monsters
       type: tasks_master
-    last_scanned: 1751256619.8783584
+    last_scanned: 1751352879.4169354
     name: City
     skin: forest_village3
     x: 1
@@ -920,7 +906,7 @@ data:
     content:
       code: jewelrycrafting
       type: workshop
-    last_scanned: 1751256692.2554898
+    last_scanned: 1751352883.3485186
     name: City
     skin: forest_jewelrycrafting1
     x: 1
@@ -928,7 +914,7 @@ data:
   1,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602805'
+    last_scanned: '2025-07-01T02:54:34.198481'
     x: 1
     y: 4
   1,5:
@@ -936,7 +922,7 @@ data:
       code: mining
       type: workshop
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602841'
+    last_scanned: '2025-07-01T02:54:34.198510'
     x: 1
     y: 5
   1,6:
@@ -944,7 +930,7 @@ data:
       code: coal_rocks
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602875'
+    last_scanned: '2025-07-01T02:54:34.198539'
     x: 1
     y: 6
   1,7:
@@ -952,13 +938,13 @@ data:
       code: iron_rocks
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021322'
+    last_scanned: '2025-07-01T02:54:34.607745'
     x: 1
     y: 7
   1,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021368'
+    last_scanned: '2025-07-01T02:54:34.607783'
     x: 1
     y: 8
   1,9:
@@ -966,43 +952,43 @@ data:
       code: spruce_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021410'
+    last_scanned: '2025-07-01T02:54:34.607817'
     x: 1
     y: 9
   10,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224002'
+    last_scanned: '2025-07-01T02:54:33.858828'
     x: 10
     y: -1
   10,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223961'
+    last_scanned: '2025-07-01T02:54:33.858796'
     x: 10
     y: -2
   10,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223901'
+    last_scanned: '2025-07-01T02:54:33.858757'
     x: 10
     y: -3
   10,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223852'
+    last_scanned: '2025-07-01T02:54:33.858715'
     x: 10
     y: -4
   10,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223793'
+    last_scanned: '2025-07-01T02:54:33.858665'
     x: 10
     y: -5
   10,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602617'
+    last_scanned: '2025-07-01T02:54:34.198330'
     x: 10
     y: 0
   10,1:
@@ -1010,43 +996,43 @@ data:
       code: owlbear
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602702'
+    last_scanned: '2025-07-01T02:54:34.198397'
     x: 10
     y: 1
   10,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021469'
+    last_scanned: '2025-07-01T02:54:34.607867'
     x: 10
     y: 10
   10,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021505'
+    last_scanned: '2025-07-01T02:54:34.607897'
     x: 10
     y: 11
   10,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387483'
+    last_scanned: '2025-07-01T02:54:34.861392'
     x: 10
     y: 12
   10,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387544'
+    last_scanned: '2025-07-01T02:54:34.861444'
     x: 10
     y: 13
   10,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387587'
+    last_scanned: '2025-07-01T02:54:34.861481'
     x: 10
     y: 14
   10,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387618'
+    last_scanned: '2025-07-01T02:54:34.861509'
     x: 10
     y: 15
   10,2:
@@ -1054,25 +1040,25 @@ data:
       code: owlbear
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602749'
+    last_scanned: '2025-07-01T02:54:34.198435'
     x: 10
     y: 2
   10,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602790'
+    last_scanned: '2025-07-01T02:54:34.198470'
     x: 10
     y: 3
   10,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602827'
+    last_scanned: '2025-07-01T02:54:34.198499'
     x: 10
     y: 4
   10,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602860'
+    last_scanned: '2025-07-01T02:54:34.198526'
     x: 10
     y: 5
   10,6:
@@ -1080,7 +1066,7 @@ data:
       code: vampire
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021299'
+    last_scanned: '2025-07-01T02:54:34.607727'
     x: 10
     y: 6
   10,7:
@@ -1088,7 +1074,7 @@ data:
       code: death_knight
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021349'
+    last_scanned: '2025-07-01T02:54:34.607767'
     x: 10
     y: 7
   10,8:
@@ -1096,121 +1082,121 @@ data:
       code: vampire
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021392'
+    last_scanned: '2025-07-01T02:54:34.607803'
     x: 10
     y: 8
   10,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021433'
+    last_scanned: '2025-07-01T02:54:34.607837'
     x: 10
     y: 9
   11,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224004'
+    last_scanned: '2025-07-01T02:54:33.858830'
     x: 11
     y: -1
   11,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223963'
+    last_scanned: '2025-07-01T02:54:33.858797'
     x: 11
     y: -2
   11,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223903'
+    last_scanned: '2025-07-01T02:54:33.858758'
     x: 11
     y: -3
   11,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223854'
+    last_scanned: '2025-07-01T02:54:33.858717'
     x: 11
     y: -4
   11,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223795'
+    last_scanned: '2025-07-01T02:54:33.858667'
     x: 11
     y: -5
   11,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602627'
+    last_scanned: '2025-07-01T02:54:34.198338'
     x: 11
     y: 0
   11,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602706'
+    last_scanned: '2025-07-01T02:54:34.198400'
     x: 11
     y: 1
   11,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021471'
+    last_scanned: '2025-07-01T02:54:34.607869'
     x: 11
     y: 10
   11,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021507'
+    last_scanned: '2025-07-01T02:54:34.607898'
     x: 11
     y: 11
   11,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387486'
+    last_scanned: '2025-07-01T02:54:34.861394'
     x: 11
     y: 12
   11,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387546'
+    last_scanned: '2025-07-01T02:54:34.861446'
     x: 11
     y: 13
   11,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387589'
+    last_scanned: '2025-07-01T02:54:34.861483'
     x: 11
     y: 14
   11,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387620'
+    last_scanned: '2025-07-01T02:54:34.861511'
     x: 11
     y: 15
   11,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602753'
+    last_scanned: '2025-07-01T02:54:34.198439'
     x: 11
     y: 2
   11,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602791'
+    last_scanned: '2025-07-01T02:54:34.198471'
     x: 11
     y: 3
   11,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602828'
+    last_scanned: '2025-07-01T02:54:34.198500'
     x: 11
     y: 4
   11,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602862'
+    last_scanned: '2025-07-01T02:54:34.198528'
     x: 11
     y: 5
   11,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021305'
+    last_scanned: '2025-07-01T02:54:34.607732'
     x: 11
     y: 6
   11,7:
@@ -1218,26 +1204,26 @@ data:
       code: bat
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021353'
+    last_scanned: '2025-07-01T02:54:34.607771'
     x: 11
     y: 7
   11,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021397'
+    last_scanned: '2025-07-01T02:54:34.607806'
     x: 11
     y: 8
   11,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021435'
+    last_scanned: '2025-07-01T02:54:34.607838'
     x: 11
     y: 9
   2,-1:
     content:
       code: blue_slime
       type: monster
-    last_scanned: 1751256621.1054087
+    last_scanned: 1751352883.9823868
     name: Forest
     skin: forest_blueslime2
     x: 2
@@ -1246,34 +1232,33 @@ data:
     content:
       code: red_slime
       type: monster
-    last_scanned: 1751256620.2304277
-    name: Forest
-    skin: forest_redslime2
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:33.858774'
     x: 2
     y: -2
   2,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223877'
+    last_scanned: '2025-07-01T02:54:33.858736'
     x: 2
     y: -3
   2,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223828'
+    last_scanned: '2025-07-01T02:54:33.858694'
     x: 2
     y: -4
   2,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223774'
+    last_scanned: '2025-07-01T02:54:33.858649'
     x: 2
     y: -5
   2,0:
     content:
       code: copper_rocks
       type: resource
-    last_scanned: 1751256621.777535
+    last_scanned: 1751352880.0002432
     name: Forest
     skin: forest_copperore1
     x: 2
@@ -1282,27 +1267,26 @@ data:
     content:
       code: weaponcrafting
       type: workshop
-    last_scanned: 1751256622.8781197
-    name: City
-    skin: forest_wcstation1
+    discovered_via: bulk_api
+    last_scanned: '2025-07-01T02:54:34.198367'
     x: 2
     y: 1
   2,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021453'
+    last_scanned: '2025-07-01T02:54:34.607854'
     x: 2
     y: 10
   2,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021485'
+    last_scanned: '2025-07-01T02:54:34.607882'
     x: 2
     y: 11
   2,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021529'
+    last_scanned: '2025-07-01T02:54:34.607918'
     x: 2
     y: 12
   2,13:
@@ -1310,26 +1294,26 @@ data:
       code: cultist_wizard
       type: npc
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387510'
+    last_scanned: '2025-07-01T02:54:34.861416'
     x: 2
     y: 13
   2,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387567'
+    last_scanned: '2025-07-01T02:54:34.861465'
     x: 2
     y: 14
   2,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387603'
+    last_scanned: '2025-07-01T02:54:34.861496'
     x: 2
     y: 15
   2,2:
     content:
       code: sunflower_field
       type: resource
-    last_scanned: 1751256620.5536559
+    last_scanned: 1751352880.392753
     name: City
     skin: forest_village1
     x: 2
@@ -1338,7 +1322,7 @@ data:
     content:
       code: alchemy
       type: workshop
-    last_scanned: 1751256692.9146926
+    last_scanned: 1751352884.4173188
     name: City
     skin: forest_alchemy1
     x: 2
@@ -1346,13 +1330,13 @@ data:
   2,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602806'
+    last_scanned: '2025-07-01T02:54:34.198482'
     x: 2
     y: 4
   2,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602844'
+    last_scanned: '2025-07-01T02:54:34.198513'
     x: 2
     y: 5
   2,6:
@@ -1360,13 +1344,13 @@ data:
       code: spruce_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602879'
+    last_scanned: '2025-07-01T02:54:34.198542'
     x: 2
     y: 6
   2,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021327'
+    last_scanned: '2025-07-01T02:54:34.607749'
     x: 2
     y: 7
   2,8:
@@ -1374,19 +1358,20 @@ data:
       code: highwayman
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021370'
+    last_scanned: '2025-07-01T02:54:34.607785'
     x: 2
     y: 8
   2,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021414'
+    last_scanned: '2025-07-01T02:54:34.607820'
     x: 2
     y: 9
   3,-1:
     content: null
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223986'
+    last_scanned: 1751352884.8645935
+    name: Forest
+    skin: forest_2
     x: 3
     y: -1
   3,-2:
@@ -1394,97 +1379,99 @@ data:
       code: green_slime
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223937'
+    last_scanned: '2025-07-01T02:54:33.858778'
     x: 3
     y: -2
   3,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223879'
+    last_scanned: '2025-07-01T02:54:33.858738'
     x: 3
     y: -3
   3,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223830'
+    last_scanned: '2025-07-01T02:54:33.858696'
     x: 3
     y: -4
   3,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223777'
+    last_scanned: '2025-07-01T02:54:33.858650'
     x: 3
     y: -5
   3,0:
     content: null
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224027'
+    last_scanned: 1751352880.731872
+    name: Forest
+    skin: forest_4
     x: 3
     y: 0
   3,1:
     content:
       code: gearcrafting
       type: workshop
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602669'
+    last_scanned: 1751352881.826365
+    name: City
+    skin: forest_gcstation1
     x: 3
     y: 1
   3,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021455'
+    last_scanned: '2025-07-01T02:54:34.607856'
     x: 3
     y: 10
   3,11:
-    content:
-      code: magic_tree
-      type: resource
+    content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021487'
+    last_scanned: '2025-07-01T02:54:34.607883'
     x: 3
     y: 11
   3,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021531'
+    last_scanned: '2025-07-01T02:54:34.607919'
     x: 3
     y: 12
   3,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387515'
+    last_scanned: '2025-07-01T02:54:34.861420'
     x: 3
     y: 13
   3,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387570'
+    last_scanned: '2025-07-01T02:54:34.861466'
     x: 3
     y: 14
   3,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387605'
+    last_scanned: '2025-07-01T02:54:34.861498'
     x: 3
     y: 15
   3,2:
     content: null
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602731'
+    last_scanned: 1751352880.9502697
+    name: City
+    skin: forest_village2
     x: 3
     y: 2
   3,3:
     content:
       code: tailor
       type: npc
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602772'
+    last_scanned: 1751352885.136666
+    name: City
+    skin: forest_tailor1
     x: 3
     y: 3
   3,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602808'
+    last_scanned: '2025-07-01T02:54:34.198483'
     x: 3
     y: 4
   3,5:
@@ -1492,95 +1479,98 @@ data:
       code: birch_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602845'
+    last_scanned: '2025-07-01T02:54:34.198514'
     x: 3
     y: 5
   3,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602883'
+    last_scanned: '2025-07-01T02:54:34.198545'
     x: 3
     y: 6
   3,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021329'
+    last_scanned: '2025-07-01T02:54:34.607751'
     x: 3
     y: 7
   3,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021374'
+    last_scanned: '2025-07-01T02:54:34.607788'
     x: 3
     y: 8
   3,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021416'
+    last_scanned: '2025-07-01T02:54:34.607822'
     x: 3
     y: 9
   4,-1:
     content:
       code: yellow_slime
       type: monster
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223988'
+    last_scanned: 1751352885.7407856
+    name: Forest
+    skin: forest_yellowslime2
     x: 4
     y: -1
   4,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223942'
+    last_scanned: '2025-07-01T02:54:33.858781'
     x: 4
     y: -2
   4,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223881'
+    last_scanned: '2025-07-01T02:54:33.858740'
     x: 4
     y: -3
   4,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223832'
+    last_scanned: '2025-07-01T02:54:33.858698'
     x: 4
     y: -4
   4,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223779'
+    last_scanned: '2025-07-01T02:54:33.858652'
     x: 4
     y: -5
   4,0:
     content: null
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224029'
+    last_scanned: 1751352887.2830594
+    name: Forest
+    skin: forest_3
     x: 4
     y: 0
   4,1:
     content:
       code: bank
       type: bank
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602673'
+    last_scanned: 1751352888.127872
+    name: City
+    skin: forest_bank1
     x: 4
     y: 1
   4,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021457'
+    last_scanned: '2025-07-01T02:54:34.607858'
     x: 4
     y: 10
   4,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021491'
+    last_scanned: '2025-07-01T02:54:34.607885'
     x: 4
     y: 11
   4,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021533'
+    last_scanned: '2025-07-01T02:54:34.607920'
     x: 4
     y: 12
   4,13:
@@ -1588,7 +1578,7 @@ data:
       code: items
       type: tasks_master
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387517'
+    last_scanned: '2025-07-01T02:54:34.861422'
     x: 4
     y: 13
   4,14:
@@ -1596,99 +1586,101 @@ data:
       code: maple_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387572'
+    last_scanned: '2025-07-01T02:54:34.861468'
     x: 4
     y: 14
   4,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387607'
+    last_scanned: '2025-07-01T02:54:34.861500'
     x: 4
     y: 15
   4,2:
     content:
       code: gudgeon_fishing_spot
       type: resource
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602733'
+    last_scanned: 1751352888.8757856
+    name: Lake
+    skin: forest_lake3
     x: 4
     y: 2
   4,3:
     content: null
-    discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602776'
+    last_scanned: 1751352886.6404204
+    name: Forest
+    skin: forest_2
     x: 4
     y: 3
   4,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602810'
+    last_scanned: '2025-07-01T02:54:34.198485'
     x: 4
     y: 4
   4,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602849'
+    last_scanned: '2025-07-01T02:54:34.198518'
     x: 4
     y: 5
   4,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602885'
+    last_scanned: '2025-07-01T02:54:34.198547'
     x: 4
     y: 6
   4,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021331'
+    last_scanned: '2025-07-01T02:54:34.607753'
     x: 4
     y: 7
   4,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021377'
+    last_scanned: '2025-07-01T02:54:34.607790'
     x: 4
     y: 8
   4,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021418'
+    last_scanned: '2025-07-01T02:54:34.607823'
     x: 4
     y: 9
   5,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223993'
+    last_scanned: '2025-07-01T02:54:33.858821'
     x: 5
     y: -1
   5,-2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223943'
+    last_scanned: '2025-07-01T02:54:33.858783'
     x: 5
     y: -2
   5,-3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223882'
+    last_scanned: '2025-07-01T02:54:33.858741'
     x: 5
     y: -3
   5,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223834'
+    last_scanned: '2025-07-01T02:54:33.858699'
     x: 5
     y: -4
   5,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223782'
+    last_scanned: '2025-07-01T02:54:33.858654'
     x: 5
     y: -5
   5,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224031'
+    last_scanned: '2025-07-01T02:54:33.858851'
     x: 5
     y: 0
   5,1:
@@ -1696,13 +1688,13 @@ data:
       code: grand_exchange
       type: grand_exchange
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602683'
+    last_scanned: '2025-07-01T02:54:34.198382'
     x: 5
     y: 1
   5,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021459'
+    last_scanned: '2025-07-01T02:54:34.607859'
     x: 5
     y: 10
   5,11:
@@ -1710,7 +1702,7 @@ data:
       code: tasks_trader
       type: npc
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021493'
+    last_scanned: '2025-07-01T02:54:34.607887'
     x: 5
     y: 11
   5,12:
@@ -1718,25 +1710,25 @@ data:
       code: sheep
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021534'
+    last_scanned: '2025-07-01T02:54:34.607922'
     x: 5
     y: 12
   5,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387521'
+    last_scanned: '2025-07-01T02:54:34.861426'
     x: 5
     y: 13
   5,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387576'
+    last_scanned: '2025-07-01T02:54:34.861472'
     x: 5
     y: 14
   5,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387609'
+    last_scanned: '2025-07-01T02:54:34.861501'
     x: 5
     y: 15
   5,2:
@@ -1744,7 +1736,7 @@ data:
       code: shrimp_fishing_spot
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602737'
+    last_scanned: '2025-07-01T02:54:34.198425'
     x: 5
     y: 2
   5,3:
@@ -1752,7 +1744,7 @@ data:
       code: mushmush
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602778'
+    last_scanned: '2025-07-01T02:54:34.198460'
     x: 5
     y: 3
   5,4:
@@ -1760,43 +1752,43 @@ data:
       code: flying_snake
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602812'
+    last_scanned: '2025-07-01T02:54:34.198486'
     x: 5
     y: 4
   5,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602851'
+    last_scanned: '2025-07-01T02:54:34.198519'
     x: 5
     y: 5
   5,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602887'
+    last_scanned: '2025-07-01T02:54:34.198548'
     x: 5
     y: 6
   5,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021334'
+    last_scanned: '2025-07-01T02:54:34.607755'
     x: 5
     y: 7
   5,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021379'
+    last_scanned: '2025-07-01T02:54:34.607791'
     x: 5
     y: 8
   5,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021420'
+    last_scanned: '2025-07-01T02:54:34.607825'
     x: 5
     y: 9
   6,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223995'
+    last_scanned: '2025-07-01T02:54:33.858822'
     x: 6
     y: -1
   6,-2:
@@ -1804,7 +1796,7 @@ data:
       code: goblin
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223945'
+    last_scanned: '2025-07-01T02:54:33.858784'
     x: 6
     y: -2
   6,-3:
@@ -1812,7 +1804,7 @@ data:
       code: gold_rocks
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223884'
+    last_scanned: '2025-07-01T02:54:33.858743'
     x: 6
     y: -3
   6,-4:
@@ -1820,19 +1812,19 @@ data:
       code: goblin_wolfrider
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223836'
+    last_scanned: '2025-07-01T02:54:33.858701'
     x: 6
     y: -4
   6,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223784'
+    last_scanned: '2025-07-01T02:54:33.858657'
     x: 6
     y: -5
   6,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224033'
+    last_scanned: '2025-07-01T02:54:33.858852'
     x: 6
     y: 0
   6,1:
@@ -1840,19 +1832,19 @@ data:
       code: ash_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602690'
+    last_scanned: '2025-07-01T02:54:34.198388'
     x: 6
     y: 1
   6,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021461'
+    last_scanned: '2025-07-01T02:54:34.607861'
     x: 6
     y: 10
   6,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021498'
+    last_scanned: '2025-07-01T02:54:34.607890'
     x: 6
     y: 11
   6,12:
@@ -1860,7 +1852,7 @@ data:
       code: bass_fishing_spot
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387452'
+    last_scanned: '2025-07-01T02:54:34.861368'
     x: 6
     y: 12
   6,13:
@@ -1868,31 +1860,31 @@ data:
       code: archaeologist
       type: npc
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387524'
+    last_scanned: '2025-07-01T02:54:34.861428'
     x: 6
     y: 13
   6,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387578'
+    last_scanned: '2025-07-01T02:54:34.861473'
     x: 6
     y: 14
   6,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387611'
+    last_scanned: '2025-07-01T02:54:34.861503'
     x: 6
     y: 15
   6,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602742'
+    last_scanned: '2025-07-01T02:54:34.198429'
     x: 6
     y: 2
   6,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602782'
+    last_scanned: '2025-07-01T02:54:34.198463'
     x: 6
     y: 3
   6,4:
@@ -1900,43 +1892,43 @@ data:
       code: mushmush
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602816'
+    last_scanned: '2025-07-01T02:54:34.198490'
     x: 6
     y: 4
   6,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602853'
+    last_scanned: '2025-07-01T02:54:34.198520'
     x: 6
     y: 5
   6,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602889'
+    last_scanned: '2025-07-01T02:54:34.198550'
     x: 6
     y: 6
   6,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021336'
+    last_scanned: '2025-07-01T02:54:34.607757'
     x: 6
     y: 7
   6,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021381'
+    last_scanned: '2025-07-01T02:54:34.607793'
     x: 6
     y: 8
   6,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021422'
+    last_scanned: '2025-07-01T02:54:34.607827'
     x: 6
     y: 9
   7,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223996'
+    last_scanned: '2025-07-01T02:54:33.858824'
     x: 7
     y: -1
   7,-2:
@@ -1944,7 +1936,7 @@ data:
       code: orc
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223949'
+    last_scanned: '2025-07-01T02:54:33.858787'
     x: 7
     y: -2
   7,-3:
@@ -1952,7 +1944,7 @@ data:
       code: cyclops
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223888'
+    last_scanned: '2025-07-01T02:54:33.858746'
     x: 7
     y: -3
   7,-4:
@@ -1960,37 +1952,37 @@ data:
       code: orc
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223841'
+    last_scanned: '2025-07-01T02:54:33.858706'
     x: 7
     y: -4
   7,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223786'
+    last_scanned: '2025-07-01T02:54:33.858659'
     x: 7
     y: -5
   7,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224035'
+    last_scanned: '2025-07-01T02:54:33.858854'
     x: 7
     y: 0
   7,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602695'
+    last_scanned: '2025-07-01T02:54:34.198392'
     x: 7
     y: 1
   7,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021463'
+    last_scanned: '2025-07-01T02:54:34.607863'
     x: 7
     y: 10
   7,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021500'
+    last_scanned: '2025-07-01T02:54:34.607892'
     x: 7
     y: 11
   7,12:
@@ -1998,7 +1990,7 @@ data:
       code: trout_fishing_spot
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387471'
+    last_scanned: '2025-07-01T02:54:34.861382'
     x: 7
     y: 12
   7,13:
@@ -2006,7 +1998,7 @@ data:
       code: bank
       type: bank
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387528'
+    last_scanned: '2025-07-01T02:54:34.861431'
     x: 7
     y: 13
   7,14:
@@ -2014,25 +2006,25 @@ data:
       code: nettle
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387579'
+    last_scanned: '2025-07-01T02:54:34.861475'
     x: 7
     y: 14
   7,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387613'
+    last_scanned: '2025-07-01T02:54:34.861504'
     x: 7
     y: 15
   7,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602744'
+    last_scanned: '2025-07-01T02:54:34.198430'
     x: 7
     y: 2
   7,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602784'
+    last_scanned: '2025-07-01T02:54:34.198465'
     x: 7
     y: 3
   7,4:
@@ -2040,43 +2032,43 @@ data:
       code: flying_snake
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602819'
+    last_scanned: '2025-07-01T02:54:34.198493'
     x: 7
     y: 4
   7,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602855'
+    last_scanned: '2025-07-01T02:54:34.198522'
     x: 7
     y: 5
   7,6:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602891'
+    last_scanned: '2025-07-01T02:54:34.198551'
     x: 7
     y: 6
   7,7:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021338'
+    last_scanned: '2025-07-01T02:54:34.607759'
     x: 7
     y: 7
   7,8:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021383'
+    last_scanned: '2025-07-01T02:54:34.607794'
     x: 7
     y: 8
   7,9:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021424'
+    last_scanned: '2025-07-01T02:54:34.607828'
     x: 7
     y: 9
   8,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223998'
+    last_scanned: '2025-07-01T02:54:33.858825'
     x: 8
     y: -1
   8,-2:
@@ -2084,7 +2076,7 @@ data:
       code: ogre
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223953'
+    last_scanned: '2025-07-01T02:54:33.858790'
     x: 8
     y: -2
   8,-3:
@@ -2092,7 +2084,7 @@ data:
       code: cyclops
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223893'
+    last_scanned: '2025-07-01T02:54:33.858750'
     x: 8
     y: -3
   8,-4:
@@ -2100,43 +2092,43 @@ data:
       code: ogre
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223846'
+    last_scanned: '2025-07-01T02:54:33.858710'
     x: 8
     y: -4
   8,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223789'
+    last_scanned: '2025-07-01T02:54:33.858661'
     x: 8
     y: -5
   8,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224036'
+    last_scanned: '2025-07-01T02:54:33.858856'
     x: 8
     y: 0
   8,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602697'
+    last_scanned: '2025-07-01T02:54:34.198394'
     x: 8
     y: 1
   8,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021465'
+    last_scanned: '2025-07-01T02:54:34.607864'
     x: 8
     y: 10
   8,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021501'
+    last_scanned: '2025-07-01T02:54:34.607893'
     x: 8
     y: 11
   8,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387478'
+    last_scanned: '2025-07-01T02:54:34.861388'
     x: 8
     y: 12
   8,13:
@@ -2144,43 +2136,43 @@ data:
       code: rune_vendor
       type: npc
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387537'
+    last_scanned: '2025-07-01T02:54:34.861439'
     x: 8
     y: 13
   8,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387583'
+    last_scanned: '2025-07-01T02:54:34.861478'
     x: 8
     y: 14
   8,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387614'
+    last_scanned: '2025-07-01T02:54:34.861506'
     x: 8
     y: 15
   8,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602745'
+    last_scanned: '2025-07-01T02:54:34.198432'
     x: 8
     y: 2
   8,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602786'
+    last_scanned: '2025-07-01T02:54:34.198467'
     x: 8
     y: 3
   8,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602823'
+    last_scanned: '2025-07-01T02:54:34.198496'
     x: 8
     y: 4
   8,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602856'
+    last_scanned: '2025-07-01T02:54:34.198523'
     x: 8
     y: 5
   8,6:
@@ -2188,7 +2180,7 @@ data:
       code: skeleton
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021275'
+    last_scanned: '2025-07-01T02:54:34.607708'
     x: 8
     y: 6
   8,7:
@@ -2196,7 +2188,7 @@ data:
       code: death_knight
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021340'
+    last_scanned: '2025-07-01T02:54:34.607760'
     x: 8
     y: 7
   8,8:
@@ -2204,7 +2196,7 @@ data:
       code: skeleton
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021385'
+    last_scanned: '2025-07-01T02:54:34.607796'
     x: 8
     y: 8
   8,9:
@@ -2212,13 +2204,13 @@ data:
       code: bat
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021426'
+    last_scanned: '2025-07-01T02:54:34.607830'
     x: 8
     y: 9
   9,-1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224000'
+    last_scanned: '2025-07-01T02:54:33.858827'
     x: 9
     y: -1
   9,-2:
@@ -2226,7 +2218,7 @@ data:
       code: goblin
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223957'
+    last_scanned: '2025-07-01T02:54:33.858792'
     x: 9
     y: -2
   9,-3:
@@ -2234,91 +2226,91 @@ data:
       code: goblin_wolfrider
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223896'
+    last_scanned: '2025-07-01T02:54:33.858753'
     x: 9
     y: -3
   9,-4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223850'
+    last_scanned: '2025-07-01T02:54:33.858714'
     x: 9
     y: -4
   9,-5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.223791'
+    last_scanned: '2025-07-01T02:54:33.858663'
     x: 9
     y: -5
   9,0:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.224038'
+    last_scanned: '2025-07-01T02:54:33.858857'
     x: 9
     y: 0
   9,1:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602700'
+    last_scanned: '2025-07-01T02:54:34.198395'
     x: 9
     y: 1
   9,10:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021467'
+    last_scanned: '2025-07-01T02:54:34.607866'
     x: 9
     y: 10
   9,11:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021503'
+    last_scanned: '2025-07-01T02:54:34.607895'
     x: 9
     y: 11
   9,12:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387481'
+    last_scanned: '2025-07-01T02:54:34.861390'
     x: 9
     y: 12
   9,13:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387542'
+    last_scanned: '2025-07-01T02:54:34.861443'
     x: 9
     y: 13
   9,14:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387585'
+    last_scanned: '2025-07-01T02:54:34.861480'
     x: 9
     y: 14
   9,15:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.387616'
+    last_scanned: '2025-07-01T02:54:34.861507'
     x: 9
     y: 15
   9,2:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602747'
+    last_scanned: '2025-07-01T02:54:34.198434'
     x: 9
     y: 2
   9,3:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602788'
+    last_scanned: '2025-07-01T02:54:34.198468'
     x: 9
     y: 3
   9,4:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602825'
+    last_scanned: '2025-07-01T02:54:34.198497'
     x: 9
     y: 4
   9,5:
     content: null
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:09.602858'
+    last_scanned: '2025-07-01T02:54:34.198525'
     x: 9
     y: 5
   9,6:
@@ -2326,7 +2318,7 @@ data:
       code: dead_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021292'
+    last_scanned: '2025-07-01T02:54:34.607721'
     x: 9
     y: 6
   9,7:
@@ -2334,7 +2326,7 @@ data:
       code: lich
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021345'
+    last_scanned: '2025-07-01T02:54:34.607764'
     x: 9
     y: 7
   9,8:
@@ -2342,7 +2334,7 @@ data:
       code: dead_tree
       type: resource
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021389'
+    last_scanned: '2025-07-01T02:54:34.607799'
     x: 9
     y: 8
   9,9:
@@ -2350,6 +2342,6 @@ data:
       code: cursed_tree
       type: monster
     discovered_via: bulk_api
-    last_scanned: '2025-06-30T00:10:10.021430'
+    last_scanned: '2025-07-01T02:54:34.607834'
     x: 9
     y: 9

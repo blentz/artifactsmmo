@@ -4,8 +4,9 @@ Throttled HTTP Transport for httpx
 Implements request throttling at the transport layer to ensure API rate limit compliance.
 """
 
+
 import httpx
-from typing import Iterator
+
 from .request_throttle import get_global_throttle
 
 

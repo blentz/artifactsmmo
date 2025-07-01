@@ -6,9 +6,12 @@ This action checks if the character meets skill requirements for a specific task
 """
 
 from typing import Dict, Optional
-import logging
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
@@ -30,59 +33,55 @@ class CheckSkillRequirementAction(ActionBase):
     }
     weights = {"skill_requirements_checked": 10}
 
-    def __init__(self, character_name: str, task_type: str = "crafting", target_item: str = None):
+    def __init__(self):
         """
         Initialize the skill requirement check action.
-
-        Args:
-            character_name: Name of the character
-            task_type: Type of task to check requirements for (crafting, combat, etc.)
-            target_item: Specific item to check requirements for (e.g., weapon code)
         """
         super().__init__()
-        self.character_name = character_name
-        self.task_type = task_type
-        self.target_item = target_item
-        self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """Check skill requirements and update state accordingly."""
-        if not self.validate_execution_context(client):
+        # Call superclass to set self._context
+        super().execute(client, context)
+        
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
-            
-        # Store kwargs for use in skill extraction
-        self.kwargs = kwargs
-            
+        
+        # Get parameters from context
+        character_name = context.character_name
+        task_type = context.get('task_type', 'crafting')
+        target_item = context.get('target_item')
+        
         self.log_execution_start(
-            character_name=self.character_name,
-            task_type=self.task_type,
-            target_item=self.target_item
+            character_name=character_name,
+            task_type=task_type,
+            target_item=target_item
         )
         
         try:
             # Get current character data to check skill levels
-            character_response = get_character_api(name=self.character_name, client=client)
+            character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
                 return self.get_error_response("Could not get character data")
             
             character_data = character_response.data
             # Store character data for skill discovery
             self.character_data = character_data
-            character_skills = self._extract_character_skills(character_data)
+            character_skills = self._extract_character_skills(character_data, context)
             
             # Get task requirements based on task type and target
-            requirements = self._get_task_requirements(client, character_skills)
+            requirements = self._get_task_requirements(client, character_skills, task_type, target_item)
             if not requirements:
-                return self.get_error_response(f"Could not determine skill requirements for {self.task_type}")
+                return self.get_error_response(f"Could not determine skill requirements for {task_type}")
             
             # Check if requirements are met
-            skill_check_results = self._check_skill_requirements(character_skills, requirements)
+            skill_check_results = self._check_skill_requirements(character_skills, requirements, target_item)
             
             # Prepare result with detailed skill information
             result = self.get_success_response(
                 skill_requirements_checked=True,
-                task_type=self.task_type,
-                target_item=self.target_item,
+                task_type=task_type,
+                target_item=target_item,
                 **skill_check_results
             )
             
@@ -94,12 +93,12 @@ class CheckSkillRequirementAction(ActionBase):
             self.log_execution_result(error_response)
             return error_response
 
-    def _extract_character_skills(self, character_data) -> Dict[str, int]:
+    def _extract_character_skills(self, character_data, context: ActionContext) -> Dict[str, int]:
         """Extract character skill levels from character data using knowledge base discovery."""
         skills = {}
         
         # Get skill types from knowledge base discovery
-        knowledge_base = self.kwargs.get('knowledge_base') if hasattr(self, 'kwargs') else None
+        knowledge_base = context.knowledge_base
         skill_types = self._get_skill_types_from_knowledge_base(knowledge_base)
         
         # Scan character data directly for all skill attributes to ensure we don't miss any
@@ -143,18 +142,18 @@ class CheckSkillRequirementAction(ActionBase):
         
         return skill_types
 
-    def _get_task_requirements(self, client, character_skills: Dict[str, int]) -> Optional[Dict]:
+    def _get_task_requirements(self, client, character_skills: Dict[str, int], task_type: str, target_item: str) -> Optional[Dict]:
         """Get skill requirements for the specified task."""
         try:
-            if self.task_type == "crafting" and self.target_item:
-                return self._get_crafting_requirements(client, self.target_item)
-            elif self.task_type == "weaponcrafting" and self.target_item:
-                return self._get_weaponcrafting_requirements(client, self.target_item)
-            elif self.task_type == "general_weaponcrafting":
+            if task_type == "crafting" and target_item:
+                return self._get_crafting_requirements(client, target_item)
+            elif task_type == "weaponcrafting" and target_item:
+                return self._get_weaponcrafting_requirements(client, target_item)
+            elif task_type == "general_weaponcrafting":
                 # Check general weaponcrafting requirements for basic weapons
                 return self._get_general_weaponcrafting_requirements(client)
             else:
-                self.logger.warning(f"Unknown task type: {self.task_type}")
+                self.logger.warning(f"Unknown task type: {task_type}")
                 return None
                 
         except Exception as e:
@@ -209,7 +208,7 @@ class CheckSkillRequirementAction(ActionBase):
         return lowest_requirement
 
     def _check_skill_requirements(self, character_skills: Dict[str, int], 
-                                 requirements: Dict) -> Dict:
+                                 requirements: Dict, target_item: str) -> Dict:
         """Check if character meets skill requirements."""
         primary_skill = requirements.get('primary_skill', 'unknown')
         required_level = requirements.get('primary_level', 1)
@@ -225,7 +224,7 @@ class CheckSkillRequirementAction(ActionBase):
             'required_skill_level': required_level,
             'current_skill_level': current_level,
             'skill_gap': max(0, required_level - current_level),
-            'target_item_name': requirements.get('item_name', self.target_item),
+            'target_item_name': requirements.get('item_name', target_item),
             'requirements_details': requirements
         }
         
@@ -239,11 +238,11 @@ class CheckSkillRequirementAction(ActionBase):
         # Log the skill check results
         if needs_upgrade:
             self.logger.info(f"🔧 Skill upgrade needed: {primary_skill} level {current_level} < {required_level} "
-                           f"for {requirements.get('item_name', self.target_item)}")
+                           f"for {requirements.get('item_name', target_item)}")
         else:
             self.logger.info(f"✅ Skill requirements met: {primary_skill} level {current_level} >= {required_level}")
         
         return result
 
     def __repr__(self):
-        return f"CheckSkillRequirementAction({self.character_name}, {self.task_type}, {self.target_item})"
+        return "CheckSkillRequirementAction()"

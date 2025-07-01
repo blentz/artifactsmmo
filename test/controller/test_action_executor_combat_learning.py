@@ -6,13 +6,12 @@ This test module prevents regression of critical bugs that were fixed:
 2. Monster identification bug: Monster not identified during direct attacks
 """
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import os
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
 from src.controller.action_executor import ActionExecutor
-from src.controller.ai_player_controller import AIPlayerController
 
 
 class TestActionExecutorCombatLearning(unittest.TestCase):

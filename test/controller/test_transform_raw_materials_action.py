@@ -1,11 +1,17 @@
 """Test module for TransformRawMaterialsAction."""
 
 import unittest
-import tempfile
-import os
 from unittest.mock import Mock, patch
+
 from src.controller.actions.transform_raw_materials import TransformRawMaterialsAction
-from test.fixtures import create_mock_client, mock_character_response, MockCharacterData, MockInventoryItem
+
+from test.fixtures import (
+    MockActionContext,
+    MockKnowledgeBase,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+)
 
 
 class TestTransformRawMaterialsAction(unittest.TestCase):
@@ -13,74 +19,79 @@ class TestTransformRawMaterialsAction(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
-        os.environ['DATA_PREFIX'] = self.temp_dir
+        self.temp_dir, self.original_data_prefix = create_test_environment()
         
         self.character_name = "test_character"
         self.target_item = "copper_sword"
-        self.action = TransformRawMaterialsAction(
-            character_name=self.character_name,
-            target_item=self.target_item
-        )
+        self.action = TransformRawMaterialsAction()
+        self.client = create_mock_client()
 
     def tearDown(self):
         """Clean up test fixtures."""
-        os.environ['DATA_PREFIX'] = self.original_data_prefix
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        cleanup_test_environment(self.temp_dir, self.original_data_prefix)
 
     def test_transform_raw_materials_action_initialization(self):
         """Test TransformRawMaterialsAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.target_item, "copper_sword")
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, TransformRawMaterialsAction)
 
     def test_transform_raw_materials_action_initialization_defaults(self):
         """Test TransformRawMaterialsAction initialization with defaults."""
-        action = TransformRawMaterialsAction("player")
-        self.assertEqual(action.character_name, "player")
-        self.assertIsNone(action.target_item)
+        action = TransformRawMaterialsAction()
+        self.assertIsInstance(action, TransformRawMaterialsAction)
 
     def test_transform_raw_materials_action_repr(self):
         """Test TransformRawMaterialsAction string representation."""
-        expected = "TransformRawMaterialsAction(test_character, target=copper_sword)"
+        expected = "TransformRawMaterialsAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_transform_raw_materials_action_repr_no_target(self):
         """Test TransformRawMaterialsAction string representation without target."""
-        action = TransformRawMaterialsAction("player")
-        expected = "TransformRawMaterialsAction(player, target=None)"
+        action = TransformRawMaterialsAction()
+        expected = "TransformRawMaterialsAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item=self.target_item
+        )
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.transform_raw_materials.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
         """Test execute when character API fails."""
         mock_get_character_api.return_value = None
-        client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.transform_raw_materials.get_character_api')
     def test_execute_character_api_no_data(self, mock_get_character_api):
         """Test execute when character API returns no data."""
         mock_response = Mock()
         mock_response.data = None
         mock_get_character_api.return_value = mock_response
-        client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.transform_raw_materials.get_character_api')
     def test_execute_no_inventory(self, mock_get_character_api):
         """Test execute when character has no inventory."""
         mock_character_data = Mock()
@@ -92,13 +103,16 @@ class TestTransformRawMaterialsAction(unittest.TestCase):
         mock_response.data = mock_character_data
         mock_get_character_api.return_value = mock_response
         
-        client = create_mock_client()
-        
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('No raw materials found that need transformation', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.transform_raw_materials.get_character_api')
     def test_execute_empty_inventory(self, mock_get_character_api):
         """Test execute when character has empty inventory."""
         mock_character_data = Mock()
@@ -110,9 +124,12 @@ class TestTransformRawMaterialsAction(unittest.TestCase):
         mock_response.data = mock_character_data
         mock_get_character_api.return_value = mock_response
         
-        client = create_mock_client()
-        
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('No raw materials found that need transformation', result['error'])
 
@@ -137,10 +154,14 @@ class TestTransformRawMaterialsAction(unittest.TestCase):
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
-        client = create_mock_client()
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
         
-        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
+        with patch('src.controller.actions.transform_raw_materials.get_character_api', side_effect=Exception("API Error")):
+            result = self.action.execute(self.client, context)
             self.assertFalse(result['success'])
             self.assertIn('Material transformation failed: API Error', result['error'])
 

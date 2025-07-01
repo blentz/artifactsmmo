@@ -2,9 +2,9 @@
 
 import logging
 import os.path
-
-from yaml import safe_load, safe_dump, add_representer, SafeDumper
 from enum import Enum
+
+from yaml import SafeDumper, safe_dump, safe_load
 
 
 def enum_representer(dumper, data):
@@ -29,7 +29,7 @@ except ImportError:
     pass
 
 try:
-    from artifactsmmo_api_client.models.action_type import ActionType  
+    from artifactsmmo_api_client.models.action_type import ActionType
     SafeDumper.add_representer(ActionType, enum_representer)
 except ImportError:
     pass
@@ -71,7 +71,7 @@ class YamlData:
             self._save_yaml(doc)
             return doc
 
-        with open(filename, "r") as fn:
+        with open(filename) as fn:
             self._log.debug(f"YamlData({filename}): file found. loading...")
             doc = safe_load(fn)
             if doc:

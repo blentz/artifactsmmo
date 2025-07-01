@@ -1,9 +1,14 @@
 """ LookupItemInfoAction module """
 
 from typing import Dict, List, Optional
+
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
+
 # Note: get_all_items API endpoint not available in current client
 from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+
+from src.lib.action_context import ActionContext
+
 # Note: get_all_resources API endpoint not available in current client
 from .base import ActionBase
 
@@ -11,40 +16,33 @@ from .base import ActionBase
 class LookupItemInfoAction(ActionBase):
     """ Action to lookup item information, recipes, and crafting requirements """
 
-    def __init__(self, item_code: Optional[str] = None, search_term: Optional[str] = None, 
-                 item_type: Optional[str] = None, max_level: Optional[int] = None,
-                 character_level: Optional[int] = None, **kwargs):
+    def __init__(self):
         """
         Initialize the lookup item info action.
-
-        Args:
-            item_code: Specific item code to lookup
-            search_term: Search term to find items by name/description
-            item_type: Filter by item type (weapon, armor, etc.)
-            max_level: Maximum level requirement for items
         """
         super().__init__()
-        self.item_code = item_code
-        self.search_term = search_term
-        self.item_type = item_type
-        self.max_level = max_level
-        self.character_level = character_level
-        self.kwargs = kwargs
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Lookup item information and crafting requirements """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        item_code = context.get('item_code')
+        search_term = context.get('search_term')
+        item_type = context.get('item_type')
+        max_level = context.get('max_level')
+        character_level = context.get('character_level')
             
-        self.log_execution_start(item_code=self.item_code, search_term=self.search_term)
+        self.log_execution_start(item_code=item_code, search_term=search_term)
         
         try:
-            if self.item_code:
+            if item_code:
                 # Lookup specific item
-                result = self._lookup_specific_item(client, self.item_code)
+                result = self._lookup_specific_item(client, item_code)
             else:
                 # For equipment goals, determine appropriate items to craft
-                result = self._determine_equipment_to_craft(client)
+                result = self._determine_equipment_to_craft(client, context)
             
             self.log_execution_result(result)
             return result
@@ -104,13 +102,14 @@ class LookupItemInfoAction(ActionBase):
         
         return result
 
-    def _determine_equipment_to_craft(self, client) -> Dict:
+    def _determine_equipment_to_craft(self, client, context: ActionContext) -> Dict:
         """ Determine appropriate equipment to craft based on character level and needs """
-        knowledge_base = self.kwargs.get('knowledge_base')
-        action_config = self.kwargs.get('action_config', {})
+        knowledge_base = context.knowledge_base
+        action_config = context.get('action_config', {})
         
         # Get character level or use default
-        char_level = self.character_level or 1
+        char_level = context.get('character_level') or 1
+        item_type = context.get('item_type')
         
         # Get level range from configuration
         level_range = action_config.get('equipment_level_range', 2)
@@ -119,13 +118,13 @@ class LookupItemInfoAction(ActionBase):
         
         # Get suitable items from knowledge base
         suitable_items = self._get_suitable_items_from_knowledge_base(
-            knowledge_base, min_level, max_level, self.item_type
+            knowledge_base, min_level, max_level, item_type
         )
         
         if not suitable_items:
             # If no items in knowledge base, try API search
             suitable_items = self._search_suitable_items_from_api(
-                client, min_level, max_level, self.item_type
+                client, min_level, max_level, item_type, context
             )
         
         # Try to find the first available item that can be crafted
@@ -139,10 +138,10 @@ class LookupItemInfoAction(ActionBase):
                         continue
                     
                     # Return detailed crafting information
-                    materials_info = self.lookup_crafting_materials(client, item_code)
+                    materials_info = self.lookup_crafting_materials(client, item_code, context)
                     
                     # Check for multi-step crafting requirements
-                    crafting_chain = self._analyze_crafting_chain(client, item_code, materials_info.get('materials', []))
+                    crafting_chain = self._analyze_crafting_chain(client, item_code, materials_info.get('materials', []), context)
                     
                     # Combine item info with materials for a complete recipe
                     result = {
@@ -170,7 +169,7 @@ class LookupItemInfoAction(ActionBase):
         return {
             'success': False,
             'error': f'No suitable equipment recipes found for level {char_level} (range: {min_level}-{max_level})',
-            'suggestion': f'Try adjusting level range or gathering more materials',
+            'suggestion': 'Try adjusting level range or gathering more materials',
             'searched_levels': {'min': min_level, 'max': max_level}
         }
 
@@ -184,7 +183,7 @@ class LookupItemInfoAction(ActionBase):
             'suggestion': 'Use specific item lookup instead'
         }
 
-    def lookup_crafting_materials(self, client, item_code: str) -> Dict:
+    def lookup_crafting_materials(self, client, item_code: str, context: ActionContext = None) -> Dict:
         """ Get detailed information about materials needed to craft an item """
         item_info = self._lookup_specific_item(client, item_code)
         
@@ -213,7 +212,7 @@ class LookupItemInfoAction(ActionBase):
                 }
                 
                 # Find resources that drop this material by trying common naming patterns
-                possible_resource_names = self._generate_possible_resource_names(material_code)
+                possible_resource_names = self._generate_possible_resource_names(material_code, context)
                 
                 material_info['is_resource'] = False
                 material_info['resource_sources'] = []
@@ -265,7 +264,7 @@ class LookupItemInfoAction(ActionBase):
             'materials': materials_info
         }
 
-    def _analyze_crafting_chain(self, client, target_item: str, materials: List[Dict]) -> List[Dict]:
+    def _analyze_crafting_chain(self, client, target_item: str, materials: List[Dict], context: ActionContext) -> List[Dict]:
         """
         Analyze if any materials need to be crafted first, creating a crafting chain.
         
@@ -309,10 +308,10 @@ class LookupItemInfoAction(ActionBase):
         
         return crafting_chain
 
-    def _generate_possible_resource_names(self, material_code: str) -> List[str]:
+    def _generate_possible_resource_names(self, material_code: str, context: ActionContext) -> List[str]:
         """Generate possible resource names that might drop a given material."""
         possible_names = []
-        knowledge_base = self.kwargs.get('knowledge_base')
+        knowledge_base = context.knowledge_base if context else None
         
         # First check knowledge base for known resources that drop this material
         if knowledge_base and hasattr(knowledge_base, 'data'):
@@ -393,12 +392,12 @@ class LookupItemInfoAction(ActionBase):
         return suitable_items
     
     def _search_suitable_items_from_api(self, client, min_level: int, 
-                                       max_level: int, item_type: Optional[str]) -> List[str]:
+                                       max_level: int, item_type: Optional[str], context: ActionContext) -> List[str]:
         """Search for suitable items using API based on level range."""
         suitable_items = []
         
         # Since we don't have get_all_items, we need to use knowledge base or config
-        action_config = self.kwargs.get('action_config', {})
+        action_config = context.get('action_config', {}) if context else {}
         
         # Get item codes to check from configuration
         items_to_check = action_config.get('craftable_items', [])
@@ -449,14 +448,4 @@ class LookupItemInfoAction(ActionBase):
         return score
 
     def __repr__(self):
-        if self.item_code:
-            return f"LookupItemInfoAction({self.item_code})"
-        else:
-            filters = []
-            if self.search_term:
-                filters.append(f"search='{self.search_term}'")
-            if self.item_type:
-                filters.append(f"type='{self.item_type}'")
-            if self.max_level is not None:
-                filters.append(f"max_level={self.max_level}")
-            return f"LookupItemInfoAction({', '.join(filters)})"
+        return "LookupItemInfoAction()"

@@ -5,10 +5,9 @@ This module tests the fix for the YAML serialization issue where DropSchema obje
 from the API client were causing 'cannot represent an object' errors during save.
 """
 
-import unittest
-import tempfile
 import os
-from unittest.mock import Mock
+import tempfile
+import unittest
 
 from src.controller.knowledge.base import KnowledgeBase
 

@@ -2,11 +2,15 @@
 
 import time
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as crafting_api
+
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
-from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as crafting_api
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 from .coordinate_mixin import CoordinateStandardizationMixin
 
@@ -14,40 +18,35 @@ from .coordinate_mixin import CoordinateStandardizationMixin
 class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
     """ Action to craft items at workshop locations """
 
-    def __init__(self, character_name: str, item_code: str, quantity: int = 1):
+    def __init__(self):
         """
         Initialize the craft item action.
-
-        Args:
-            character_name: Name of the character performing the action
-            item_code: Code of the item to craft
-            quantity: Number of items to craft (default: 1)
         """
         super().__init__()
-        self.character_name = character_name
-        self.item_code = item_code
-        self.quantity = quantity
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Craft the specified item """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        character_name = context.character_name
+        item_code = context.get('item_code')
+        quantity = context.get('quantity', 1)
+        
+        if not item_code:
+            return self.get_error_response("No item code provided")
             
-        self.log_execution_start(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        self.log_execution_start(character_name=character_name, item_code=item_code, quantity=quantity)
         
         try:
-            # Get current character position from cache or API
-            character_x, character_y = None, None
+            # Get current character position from context
+            character_x = context.character_x
+            character_y = context.character_y
             
-            # Try to get from client cache first
-            if hasattr(client, '_character_cache') and client._character_cache:
-                if hasattr(client._character_cache, 'data') and client._character_cache.data:
-                    character_x = client._character_cache.data.x
-                    character_y = client._character_cache.data.y
-            
-            # If cache not available, get from API
+            # If position not available, get from API
             if character_x is None or character_y is None:
-                character_response = get_character_api(name=self.character_name, client=client)
+                character_response = get_character_api(name=character_name, client=client)
                 
                 if not character_response or not character_response.data:
                     error_response = self.get_error_response('No character data available')
@@ -87,12 +86,12 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             workshop_code = getattr(map_data.content, 'code', 'unknown')
             
             # Get item details for validation
-            item_details = get_item_api(code=self.item_code, client=client)
+            item_details = get_item_api(code=item_code, client=client)
             if not item_details or not item_details.data:
                 error_data = self.create_coordinate_response(
                     character_x, character_y,
                     success=False,
-                    error=f'Could not get details for item {self.item_code}'
+                    error=f'Could not get details for item {item_code}'
                 )
                 return error_data
             
@@ -111,14 +110,14 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                             workshop_code=workshop_code,
                             required_skill=required_skill,
                             expected_workshop=required_skill,
-                            item_code=self.item_code
+                            item_code=item_code
                         )
                         return error_data
             
             # Prepare crafting schema
             crafting_schema = CraftingSchema(
-                code=self.item_code,
-                quantity=self.quantity
+                code=item_code,
+                quantity=quantity
             )
             
             # Perform the crafting action with retry logic
@@ -128,7 +127,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             for attempt in range(max_retries):
                 try:
                     crafting_response = crafting_api(
-                        name=self.character_name, 
+                        name=character_name, 
                         client=client, 
                         body=crafting_schema
                     )
@@ -148,7 +147,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                                 error=f'Workshop not found on map - API returned HTTP 598. Expected {required_skill or "unknown"} workshop, found {workshop_code}',
                                 workshop_code=workshop_code,
                                 api_error=error_msg,
-                                item_code=self.item_code,
+                                item_code=item_code,
                                 attempts=attempt + 1
                             )
                             return error_data
@@ -164,7 +163,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                     
                     # Calculate exponential backoff delay
                     delay = base_delay * (2 ** attempt)
-                    print(f"Crafting attempt {attempt + 1} failed with {error_msg}, retrying in {delay} seconds...")
+                    self.logger.info(f"Crafting attempt {attempt + 1} failed with {error_msg}, retrying in {delay} seconds...")
                     time.sleep(delay)
             
             if crafting_response and crafting_response.data:
@@ -173,9 +172,9 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                 result = self.create_coordinate_response(
                     character_x, character_y,
                     success=True,
-                    item_code=self.item_code,
+                    item_code=item_code,
                     item_name=item_details.data.name,
-                    quantity_crafted=self.quantity,
+                    quantity_crafted=quantity,
                     workshop_code=workshop_code,
                     cooldown=getattr(skill_data.cooldown, 'total_seconds', 0) if hasattr(skill_data, 'cooldown') else 0,
                     xp_gained=getattr(skill_data, 'xp', 0),
@@ -226,4 +225,4 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             return error_data
 
     def __repr__(self):
-        return f"CraftItemAction({self.character_name}, {self.item_code}, qty={self.quantity})"
+        return "CraftItemAction()"

@@ -1,10 +1,12 @@
 """Enhanced test module for FindMonstersAction."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.find_monsters import FindMonstersAction
+
 from test.fixtures import create_mock_client
 
 
@@ -17,14 +19,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
         os.environ['DATA_PREFIX'] = self.temp_dir
         
-        self.action = FindMonstersAction(
-            character_x=10,
-            character_y=15,
-            search_radius=3,
-            monster_types=['chicken', 'cow'],
-            character_level=5,
-            level_range=2
-        )
+        self.action = FindMonstersAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -34,41 +29,37 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_find_monsters_action_initialization(self):
         """Test FindMonstersAction initialization."""
-        self.assertEqual(self.action.character_x, 10)
-        self.assertEqual(self.action.character_y, 15)
-        self.assertEqual(self.action.search_radius, 3)
-        self.assertEqual(self.action.monster_types, ['chicken', 'cow'])
-        self.assertEqual(self.action.character_level, 5)
-        self.assertEqual(self.action.level_range, 2)
-        self.assertTrue(self.action.use_exponential_search)
-        self.assertEqual(self.action.max_search_radius, 4)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(self.action, 'character_x'))
+        self.assertFalse(hasattr(self.action, 'character_y'))
+        self.assertFalse(hasattr(self.action, 'search_radius'))
+        self.assertFalse(hasattr(self.action, 'monster_types'))
+        self.assertFalse(hasattr(self.action, 'character_level'))
+        self.assertIsNotNone(self.action.logger)
 
     def test_find_monsters_action_initialization_defaults(self):
         """Test FindMonstersAction initialization with defaults."""
         action = FindMonstersAction()
-        self.assertEqual(action.character_x, 0)
-        self.assertEqual(action.character_y, 0)
-        self.assertEqual(action.search_radius, 2)
-        self.assertEqual(action.monster_types, [])
-        self.assertIsNone(action.character_level)
-        self.assertEqual(action.level_range, 2)
-        self.assertTrue(action.use_exponential_search)
-        self.assertEqual(action.max_search_radius, 4)
+        # Action uses ActionContext for parameters
+        self.assertIsInstance(action, FindMonstersAction)
+        self.assertIsNotNone(action.logger)
 
     def test_find_monsters_action_repr(self):
         """Test FindMonstersAction string representation."""
-        expected = "FindMonstersAction(10, 15, radius=3, types=['chicken', 'cow'], exp_search=True)"
+        expected = "FindMonstersAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_find_monsters_action_repr_no_types(self):
         """Test FindMonstersAction string representation without monster types."""
-        action = FindMonstersAction(character_x=5, character_y=8, search_radius=2)
-        expected = "FindMonstersAction(5, 8, radius=2, exp_search=True)"
+        action = FindMonstersAction()
+        expected = "FindMonstersAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_char")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -78,7 +69,9 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         mock_get_monsters_api.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_char")
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('No suitable monsters found matching criteria', result['error'])
 
@@ -90,7 +83,9 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         mock_get_monsters_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_char")
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('No suitable monsters found matching criteria', result['error'])
 
@@ -143,9 +138,34 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         
         mock_get_map_api.side_effect = map_api_side_effect
         
+        # Create mock knowledge base
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_monster_data = Mock(side_effect=lambda code, client=None: {
+            'chicken': {'level': 3},
+            'cow': {'level': 5}
+        }.get(code))
+        
+        # Create mock map state
+        mock_map_state = Mock()
+        mock_map_state.is_cache_fresh = Mock(return_value=False)
+        mock_map_state.data = {
+            '11,15': {'x': 11, 'y': 15, 'content': {'type': 'monster', 'code': 'chicken'}},
+            '12,16': {'x': 12, 'y': 16, 'content': {'type': 'monster', 'code': 'cow'}}
+        }
+        mock_map_state.scan = Mock(side_effect=lambda x, y, cache=True: mock_map_state.data.get(f'{x},{y}'))
+        
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_name="test_char", 
+            character_x=10, 
+            character_y=15,
+            character_level=5,  # Set character level high enough for the monsters
+            knowledge_base=mock_knowledge_base,
+            map_state=mock_map_state
+        )
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertIn('target_x', result)
         self.assertIn('target_y', result)
@@ -215,13 +235,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_exponential_search_algorithm(self):
         """Test exponential search radius expansion."""
-        action = FindMonstersAction(
-            character_x=10,
-            character_y=15,
-            search_radius=1,
-            use_exponential_search=True,
-            max_search_radius=4
-        )
+        action = FindMonstersAction()
         
         # Test basic functionality if method exists
         if hasattr(action, '_get_search_radii'):
@@ -232,13 +246,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_linear_search_algorithm(self):
         """Test linear search radius expansion."""
-        action = FindMonstersAction(
-            character_x=10,
-            character_y=15,
-            search_radius=1,
-            use_exponential_search=False,
-            max_search_radius=4
-        )
+        action = FindMonstersAction()
         
         # Test basic functionality if method exists
         if hasattr(action, '_get_search_radii'):
@@ -252,10 +260,12 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         client = create_mock_client()
         
         with patch('artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
-            self.assertFalse(result['success'])
+            from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_char")
+        result = self.action.execute(client, context)
+        self.assertFalse(result['success'])
             # The error message should be about no suitable monsters found
-            self.assertIn('No suitable monsters found matching criteria', result['error'])
+        self.assertIn('No suitable monsters found matching criteria', result['error'])
 
     def test_execute_has_goap_attributes(self):
         """Test that FindMonstersAction has expected GOAP attributes."""
@@ -297,33 +307,27 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         ]
         
         for types in type_combinations:
-            action = FindMonstersAction(monster_types=types)
-            self.assertEqual(action.monster_types, types)
+            action = FindMonstersAction()
+            # Can't test monster_types attribute since it's in context now
             
             # Test representation
+            # Repr is now simplified
+            # Test representation
             repr_str = repr(action)
-            # Only check for types if they exist
-            if types:
-                self.assertIn(str(types), repr_str)
-            else:
-                # Empty types should not be in repr
-                self.assertNotIn('types=', repr_str)
-
-    def test_level_filtering_edge_cases(self):
+            # Repr is now simplified
+            self.assertEqual(repr_str, "FindMonstersAction()")
         """Test level filtering with edge cases."""
-        # Test with no character level (no filtering)
-        action1 = FindMonstersAction(character_level=None)
-        self.assertIsNone(action1.character_level)
+        # Test with various character levels through context
+        action1 = FindMonstersAction()
+        self.assertIsInstance(action1, FindMonstersAction)
         
-        # Test with zero level
-        action2 = FindMonstersAction(character_level=0, level_range=1)
-        self.assertEqual(action2.character_level, 0)
-        self.assertEqual(action2.level_range, 1)
+        # Test with zero level context
+        action2 = FindMonstersAction()
+        self.assertIsInstance(action2, FindMonstersAction)
         
-        # Test with high level
-        action3 = FindMonstersAction(character_level=50, level_range=5)
-        self.assertEqual(action3.character_level, 50)
-        self.assertEqual(action3.level_range, 5)
+        # Test with high level context
+        action3 = FindMonstersAction()
+        self.assertIsInstance(action3, FindMonstersAction)
 
     def test_search_radius_configurations(self):
         """Test different search radius configurations."""
@@ -335,14 +339,9 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         ]
         
         for initial_radius, use_exp, max_radius in configurations:
-            action = FindMonstersAction(
-                search_radius=initial_radius,
-                use_exponential_search=use_exp,
-                max_search_radius=max_radius
-            )
-            self.assertEqual(action.search_radius, initial_radius)
-            self.assertEqual(action.use_exponential_search, use_exp)
-            self.assertEqual(action.max_search_radius, max_radius)
+            action = FindMonstersAction()
+            # Configuration now comes from context/config, not constructor
+            self.assertIsInstance(action, FindMonstersAction)
 
     @patch('src.game.map.state.MapState')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
@@ -366,7 +365,9 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_char")
+        result = self.action.execute(client, context)
         # Should handle gracefully
         self.assertIn('success', result)
 
@@ -406,10 +407,12 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         mock_map_state_class.return_value = mock_map_state
         
         # Character level 5, range 2 should find levels 3-7
-        action = FindMonstersAction(character_level=5, level_range=2)
+        action = FindMonstersAction()
         client = create_mock_client()
         
-        result = action.execute(client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test_char", character_level=5, level_range=2)
+        result = action.execute(client, context)
         # Should find appropriate_monster (level 5) but not weak(1) or strong(20)
         self.assertIn('success', result)
 

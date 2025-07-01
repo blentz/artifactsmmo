@@ -5,13 +5,14 @@ This module provides reusable mock objects and helper functions to reduce
 code duplication across test files.
 """
 
-import tempfile
 import os
-from unittest.mock import Mock, MagicMock, create_autospec
-from typing import Dict, List, Optional, Any
+import tempfile
+from typing import Dict, List, Optional
+from unittest.mock import Mock
 
 # Import and extend HTTPStatus to handle ArtifactsMMO custom status codes
 from src.lib.httpstatus import extend_http_status
+
 extend_http_status()
 
 
@@ -34,7 +35,8 @@ class MockCharacterData:
                  level=1, gold=100, inventory=None, cooldown=0, 
                  mining_level=1, woodcutting_level=1, fishing_level=1,
                  weaponcrafting_level=1, gearcrafting_level=1, 
-                 jewelrycrafting_level=1, cooking_level=1, alchemy_level=1):
+                 jewelrycrafting_level=1, cooking_level=1, alchemy_level=1,
+                 weapon="iron_sword"):
         self.name = name
         self.x = x
         self.y = y
@@ -55,6 +57,29 @@ class MockCharacterData:
         self.jewelrycrafting_level = jewelrycrafting_level
         self.cooking_level = cooking_level
         self.alchemy_level = alchemy_level
+        self.weapon = weapon
+        
+        # Create a data attribute that mirrors the structure expected by actions
+        self.data = {
+            'name': name,
+            'x': x,
+            'y': y,
+            'hp': hp,
+            'max_hp': max_hp,
+            'level': level,
+            'gold': gold,
+            'cooldown': cooldown,
+            'cooldown_expiration': None,
+            'mining_level': mining_level,
+            'woodcutting_level': woodcutting_level,
+            'fishing_level': fishing_level,
+            'weaponcrafting_level': weaponcrafting_level,
+            'gearcrafting_level': gearcrafting_level,
+            'jewelrycrafting_level': jewelrycrafting_level,
+            'cooking_level': cooking_level,
+            'alchemy_level': alchemy_level,
+            'weapon': weapon
+        }
 
 
 class MockInventoryItem:
@@ -178,6 +203,10 @@ class MockKnowledgeBase:
     def get_all_known_resource_codes(self) -> List[str]:
         """Get all known resource codes."""
         return list(self.data['resources'].keys())
+    
+    def get_monster_data(self, monster_code: str, client=None) -> Optional[Dict]:
+        """Get monster data with optional API fallback."""
+        return self.data['monsters'].get(monster_code)
 
 
 class MockMapState:
@@ -195,6 +224,108 @@ class MockMapState:
         """Mock map scan."""
         key = f"{x},{y}"
         return self.data.get(key)
+
+
+class MockActionContext:
+    """Mock ActionContext for testing without excessive setup."""
+    
+    def __init__(self, character_name="test_character", character_x=0, character_y=0,
+                 character_level=1, character_hp=100, character_max_hp=100,
+                 knowledge_base="default", map_state="default", world_state=None,
+                 character_state=None, client=None, controller=None,
+                 equipment=None, **kwargs):
+        # Core attributes
+        self.character_name = character_name
+        self.character_x = character_x
+        self.character_y = character_y
+        self.character_level = character_level
+        self.character_hp = character_hp
+        self.character_max_hp = character_max_hp
+        
+        # Dependencies
+        self.knowledge_base = MockKnowledgeBase() if knowledge_base == "default" else knowledge_base
+        self.map_state = MockMapState() if map_state == "default" else map_state
+        self.world_state = world_state or {}
+        if character_state == "no_state":
+            self.character_state = None
+        elif character_state is None:
+            self.character_state = MockCharacterData(
+                name=character_name, x=character_x, y=character_y,
+                level=character_level, hp=character_hp, max_hp=character_max_hp
+            )
+        else:
+            self.character_state = character_state
+        self.client = client
+        self.controller = controller
+        self.equipment = equipment or {}
+        
+        # Store any additional attributes
+        self.action_data = kwargs.copy()
+        self.action_results = {}
+        
+        # Add any extra kwargs as attributes
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+    
+    def get(self, key, default=None):
+        """Dictionary-like get method."""
+        if hasattr(self, key):
+            return getattr(self, key)
+        if key in self.action_data:
+            return self.action_data[key]
+        return default
+    
+    def __getitem__(self, key):
+        """Dictionary-like access."""
+        return self.get(key)
+    
+    def __setitem__(self, key, value):
+        """Dictionary-like setting."""
+        self.action_data[key] = value
+    
+    def __contains__(self, key):
+        """Dictionary-like contains check."""
+        return hasattr(self, key) or key in self.action_data
+    
+    def update(self, other):
+        """Update from dictionary."""
+        if isinstance(other, dict):
+            self.action_data.update(other)
+        
+    def get_parameter(self, key, default=None):
+        """Get parameter compatible with ActionContext interface."""
+        return self.get(key, default)
+    
+    def set_parameter(self, key, value):
+        """Set parameter compatible with ActionContext interface."""
+        self[key] = value
+    
+    def set_result(self, key, value):
+        """Set result data."""
+        self.action_results[key] = value
+    
+    def keys(self):
+        """Dictionary-like keys method."""
+        # Include standard attributes
+        standard_attrs = ['character_name', 'character_x', 'character_y', 
+                         'character_level', 'character_hp', 'character_max_hp',
+                         'x', 'y', 'target_x', 'target_y', 'use_target_coordinates']
+        keys = []
+        for attr in standard_attrs:
+            if hasattr(self, attr) and getattr(self, attr) is not None:
+                keys.append(attr)
+        # Include action_data keys
+        keys.extend(self.action_data.keys())
+        return keys
+    
+    def __iter__(self):
+        """Make MockActionContext iterable like a dict."""
+        return iter(self.keys())
+    
+    def items(self):
+        """Dictionary-like items method."""
+        for key in self.keys():
+            yield key, self.get(key)
 
 
 def create_mock_client():

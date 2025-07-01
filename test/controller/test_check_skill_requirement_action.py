@@ -2,12 +2,22 @@
 
 import unittest
 from unittest.mock import patch
-from test.fixtures import (
-    create_test_environment, cleanup_test_environment, create_mock_client,
-    mock_character_response, mock_item_response, MockCharacterData, MockItemData,
-    MockCraftData, MockCraftItem
-)
+
 from src.controller.actions.check_skill_requirement import CheckSkillRequirementAction
+
+from test.fixtures import (
+    MockActionContext,
+    MockCharacterData,
+    MockCraftData,
+    MockCraftItem,
+    MockItemData,
+    MockKnowledgeBase,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+    mock_character_response,
+    mock_item_response,
+)
 
 
 class TestCheckSkillRequirementAction(unittest.TestCase):
@@ -19,10 +29,7 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         
         self.character_name = "test_character"
         self.target_item = "iron_sword"
-        self.action = CheckSkillRequirementAction(
-            character_name=self.character_name,
-            target_item=self.target_item
-        )
+        self.action = CheckSkillRequirementAction()
         self.client = create_mock_client()
 
     def tearDown(self):
@@ -31,30 +38,18 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
 
     def test_check_skill_requirement_action_initialization(self):
         """Test CheckSkillRequirementAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.target_item, "iron_sword")
-
-    def test_check_skill_requirement_action_initialization_defaults(self):
-        """Test CheckSkillRequirementAction initialization with defaults."""
-        action = CheckSkillRequirementAction("player")
-        self.assertEqual(action.character_name, "player")
-        self.assertEqual(action.task_type, "crafting")
-        self.assertIsNone(action.target_item)
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, CheckSkillRequirementAction)
 
     def test_check_skill_requirement_action_repr(self):
         """Test CheckSkillRequirementAction string representation."""
-        expected = "CheckSkillRequirementAction(test_character, crafting, iron_sword)"
+        expected = "CheckSkillRequirementAction()"
         self.assertEqual(repr(self.action), expected)
-
-    def test_check_skill_requirement_action_repr_no_target(self):
-        """Test CheckSkillRequirementAction string representation without target."""
-        action = CheckSkillRequirementAction("player")
-        expected = "CheckSkillRequirementAction(player, crafting, None)"
-        self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -80,7 +75,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         mock_get_item_api.return_value = mock_item_response(item)
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertTrue(result['success'])
         # Check the actual keys returned by the action
@@ -110,7 +111,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         mock_get_item_api.return_value = mock_item_response(item)
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertTrue(result['success'])
         self.assertFalse(result.get('skill_level_sufficient'))
@@ -135,7 +142,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         mock_get_item_api.return_value = mock_item_response(item)
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertFalse(result['success'])
         self.assertIn('Could not determine skill requirements', result['error'])
@@ -151,7 +164,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         # Mock item API failure
         mock_get_item_api.return_value = None
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertFalse(result['success'])
         self.assertIn('Could not determine skill requirements', result['error'])
@@ -167,7 +186,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         # Mock item API with no data
         mock_get_item_api.return_value = mock_item_response(None)
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertFalse(result['success'])
         self.assertIn('Could not determine skill requirements', result['error'])
@@ -177,7 +202,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         """Test execute when character API fails."""
         mock_get_character_api.return_value = None
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
@@ -188,7 +219,13 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         """Test exception handling during execution."""
         mock_get_character_api.side_effect = Exception("API Error")
         
-        result = self.action.execute(self.client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
         
         self.assertFalse(result['success'])
         self.assertIn('Skill requirement check failed', result['error'])
@@ -219,6 +256,91 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         """Test GOAP weights are properly defined."""
         expected_weights = {"skill_requirements_checked": 10}
         self.assertEqual(CheckSkillRequirementAction.weights, expected_weights)
+
+    @patch('src.controller.actions.check_skill_requirement.get_item_api')
+    @patch('src.controller.actions.check_skill_requirement.get_character_api')
+    def test_weaponcrafting_skill_states_set_correctly(self, mock_get_character_api, mock_get_item_api):
+        """Test that weaponcrafting-specific states are set correctly."""
+        # Create character with weaponcrafting level 2
+        character_data = MockCharacterData(name=self.character_name)
+        character_data.weaponcrafting_level = 2
+        mock_get_character_api.return_value = mock_character_response(character_data)
+        
+        # Create item that requires weaponcrafting level 5
+        item_data = MockItemData(code=self.target_item, name="Iron Sword", type="weapon", level=5)
+        craft_data = MockCraftData(
+            skill="weaponcrafting", 
+            level=5,
+            items=[MockCraftItem(code="iron", quantity=3)]
+        )
+        item_data.craft = craft_data
+        mock_get_item_api.return_value = mock_item_response(item_data)
+        
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
+        
+        # Verify the result
+        self.assertTrue(result['success'])
+        
+        # Check weaponcrafting-specific states
+        self.assertTrue(result['need_weaponcrafting_upgrade'])
+        self.assertFalse(result['weaponcrafting_level_sufficient'])
+        self.assertEqual(result['required_weaponcrafting_level'], 5)
+        self.assertEqual(result['current_weaponcrafting_level'], 2)
+        
+        # Check general skill states
+        self.assertFalse(result['skill_level_sufficient'])
+        self.assertTrue(result['need_skill_upgrade'])
+        self.assertEqual(result['required_skill'], 'weaponcrafting')
+        self.assertEqual(result['required_skill_level'], 5)
+        self.assertEqual(result['current_skill_level'], 2)
+        self.assertEqual(result['skill_gap'], 3)
+
+    @patch('src.controller.actions.check_skill_requirement.get_item_api')
+    @patch('src.controller.actions.check_skill_requirement.get_character_api')
+    def test_weaponcrafting_skill_sufficient(self, mock_get_character_api, mock_get_item_api):
+        """Test when weaponcrafting skill is sufficient."""
+        # Create character with weaponcrafting level 5
+        character_data = MockCharacterData(name=self.character_name)
+        character_data.weaponcrafting_level = 5
+        mock_get_character_api.return_value = mock_character_response(character_data)
+        
+        # Create item that requires weaponcrafting level 3
+        item_data = MockItemData(code=self.target_item, name="Iron Sword", type="weapon", level=5)
+        craft_data = MockCraftData(
+            skill="weaponcrafting", 
+            level=3,
+            items=[MockCraftItem(code="iron", quantity=3)]
+        )
+        item_data.craft = craft_data
+        mock_get_item_api.return_value = mock_item_response(item_data)
+        
+        context = MockActionContext(
+            character_name=self.character_name,
+            task_type="crafting",
+            target_item=self.target_item,
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(self.client, context)
+        
+        # Verify the result
+        self.assertTrue(result['success'])
+        
+        # Check weaponcrafting-specific states
+        self.assertFalse(result['need_weaponcrafting_upgrade'])
+        self.assertTrue(result['weaponcrafting_level_sufficient'])
+        self.assertEqual(result['required_weaponcrafting_level'], 3)
+        self.assertEqual(result['current_weaponcrafting_level'], 5)
+        
+        # Check general skill states
+        self.assertTrue(result['skill_level_sufficient'])
+        self.assertFalse(result['need_skill_upgrade'])
+        self.assertEqual(result['skill_gap'], 0)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,8 @@
 import unittest
-import asyncio
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.lib.log import init_logger, safely_start_logger, LOGGER_TASK
+from src.lib.log import init_logger, safely_start_logger
+
 
 class TestLoggerModule(unittest.TestCase):
 

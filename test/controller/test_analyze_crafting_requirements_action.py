@@ -1,14 +1,23 @@
 """Test module for AnalyzeCraftingRequirementsAction."""
 
 import unittest
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.analyze_crafting_requirements import AnalyzeCraftingRequirementsAction
+
 from test.fixtures import (
-    create_mock_client, MockCharacterData, MockKnowledgeBase, MockInventoryItem,
-    MockItemData, MockCraftData, MockCraftItem, mock_character_response, 
-    mock_item_response, create_test_environment, cleanup_test_environment
+    MockActionContext,
+    MockCharacterData,
+    MockCraftData,
+    MockCraftItem,
+    MockInventoryItem,
+    MockItemData,
+    MockKnowledgeBase,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+    mock_character_response,
+    mock_item_response,
 )
 
 
@@ -19,11 +28,7 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir, self.original_data_prefix = create_test_environment()
         
-        self.action = AnalyzeCraftingRequirementsAction(
-            character_name="test_character",
-            target_items=["copper_dagger"],
-            crafting_goal="equipment"
-        )
+        self.action = AnalyzeCraftingRequirementsAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -31,25 +36,24 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
 
     def test_analyze_crafting_requirements_action_initialization(self):
         """Test AnalyzeCraftingRequirementsAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.target_items, ["copper_dagger"])
-        self.assertEqual(self.action.crafting_goal, "equipment")
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, AnalyzeCraftingRequirementsAction)
 
-    def test_analyze_crafting_requirements_action_initialization_defaults(self):
-        """Test AnalyzeCraftingRequirementsAction initialization with defaults."""
-        action = AnalyzeCraftingRequirementsAction("test")
-        self.assertEqual(action.character_name, "test")
-        self.assertEqual(action.target_items, [])
-        self.assertEqual(action.crafting_goal, "equipment")
+    def test_analyze_crafting_requirements_action_goap_params(self):
+        """Test AnalyzeCraftingRequirementsAction GOAP parameters."""
+        self.assertEqual(self.action.conditions["character_alive"], True)
+        self.assertTrue("crafting_requirements_known" in self.action.reactions)
+        self.assertTrue("material_requirements_known" in self.action.reactions)
 
     def test_analyze_crafting_requirements_action_repr(self):
         """Test AnalyzeCraftingRequirementsAction string representation."""
-        expected = "AnalyzeCraftingRequirementsAction(test_character, equipment)"
+        expected = "AnalyzeCraftingRequirementsAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -59,7 +63,8 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         mock_get_character.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -94,7 +99,13 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         mock_get_item.return_value = mock_item_response(item_data)
         
         client = create_mock_client()
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=["copper_dagger"],
+            crafting_goal="equipment",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['crafting_requirements_known'])
@@ -124,7 +135,13 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=["copper_dagger"],
+            crafting_goal="equipment",
+            knowledge_base=knowledge_base
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['crafting_requirements_known'])
@@ -133,14 +150,29 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_execute_auto_target_determination(self, mock_get_character):
         """Test automatic target item determination."""
-        action = AnalyzeCraftingRequirementsAction("test_character")  # No target items
+        action = AnalyzeCraftingRequirementsAction()  # No target items
         character_data = MockCharacterData(name="test_character", level=2)
         character_data.weapon_slot = "wooden_stick"  # Poor equipment
         
         mock_get_character.return_value = mock_character_response(character_data)
         
+        # Create MockKnowledgeBase with items data so filtering doesn't remove all items
+        knowledge_base = MockKnowledgeBase()
+        knowledge_base.data['items'] = {
+            'copper_dagger': {'name': 'Copper Dagger', 'type': 'weapon'},
+            'wooden_staff': {'name': 'Wooden Staff', 'type': 'weapon'},
+            'leather_helmet': {'name': 'Leather Helmet', 'type': 'helmet'},
+            'leather_boots': {'name': 'Leather Boots', 'type': 'boots'}
+        }
+        
         client = create_mock_client()
-        result = action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=[],  # No target items - will auto-determine
+            crafting_goal="equipment",
+            knowledge_base=knowledge_base
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertGreater(len(result['target_items']), 0)  # Should determine some items
@@ -151,7 +183,13 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         mock_get_character.side_effect = Exception("API Error")
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=["copper_dagger"],
+            crafting_goal="equipment",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting requirements analysis failed: API Error', result['error'])
 
@@ -208,7 +246,13 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=["copper_dagger"],
+            crafting_goal="equipment",
+            knowledge_base=knowledge_base
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('copper_dagger', result['ready_to_craft'])
@@ -236,9 +280,15 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
             }
         }
         
-        action = AnalyzeCraftingRequirementsAction("test_character", ["iron_sword"])
+        action = AnalyzeCraftingRequirementsAction()
         client = create_mock_client()
-        result = action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=["iron_sword"],
+            crafting_goal="equipment",
+            knowledge_base=knowledge_base
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertFalse(result['skills_sufficient'])
@@ -268,7 +318,13 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            target_items=["copper_dagger"],
+            crafting_goal="equipment",
+            knowledge_base=knowledge_base
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('gathering_priorities', result)
@@ -278,13 +334,18 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_consumables_crafting_goal(self, mock_get_character):
         """Test analysis with consumables crafting goal."""
-        action = AnalyzeCraftingRequirementsAction("test_character", crafting_goal="consumables")
+        action = AnalyzeCraftingRequirementsAction()
         character_data = MockCharacterData(name="test_character", level=3)
         
         mock_get_character.return_value = mock_character_response(character_data)
         
         client = create_mock_client()
-        result = action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            crafting_goal="consumables",
+            knowledge_base=MockKnowledgeBase()
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertEqual(result['crafting_goal'], 'consumables')

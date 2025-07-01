@@ -1,10 +1,13 @@
 """ FindMonstersAction module """
 
-import math
 from typing import Dict, List, Optional
-from .search_base import SearchActionBase
-from .coordinate_mixin import CoordinateStandardizationMixin
+
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters_api
+
+from src.lib.action_context import ActionContext
+
+from .coordinate_mixin import CoordinateStandardizationMixin
+from .search_base import SearchActionBase
 
 
 class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
@@ -23,47 +26,42 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
     }
     weights = {'find_monsters': 2.0}  # Medium-high priority for exploration
 
-    def __init__(self, character_x: int = 0, character_y: int = 0, search_radius: int = 2,
-                 monster_types: Optional[List[str]] = None, character_level: Optional[int] = None,
-                 level_range: int = 2, use_exponential_search: bool = True, max_search_radius: int = 4):
+    def __init__(self):
         """
         Initialize the find monsters action.
-
-        Args:
-            character_x: Character's X coordinate
-            character_y: Character's Y coordinate
-            search_radius: Initial radius to search for monsters (default: 2)
-            monster_types: List of monster types to search for. If None, searches for all monsters.
-            character_level: Character's current level for level-appropriate filtering. If None, no level filtering.
-            level_range: Acceptable level range (+/-) for monster selection (default: 2)
-            use_exponential_search: Whether to use exponential search radius expansion (default: True)
-            max_search_radius: Maximum search radius when using exponential search (default: 4)
         """
-        super().__init__(character_x, character_y, search_radius)
-        self.monster_types = monster_types or []
-        self.character_level = character_level
-        self.level_range = level_range
-        self.use_exponential_search = use_exponential_search
-        self.max_search_radius = max_search_radius
+        super().__init__()
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find the nearest monster location using unified search algorithm """
+        # Get parameters from context
+        character_x = context.get('character_x', context.character_x)
+        character_y = context.get('character_y', context.character_y)
+        search_radius = context.get('search_radius', 2)
+        monster_types = context.get('monster_types', [])
+        character_level = context.get('character_level', context.character_level)
+        level_range = context.get('level_range', 2)
+        use_exponential_search = context.get('use_exponential_search', True)
+        max_search_radius = context.get('max_search_radius', 4)
+        
+        # Parameters will be passed directly to helper methods via context
+        
         self.log_execution_start(
-            character_x=self.character_x, 
-            character_y=self.character_y, 
-            search_radius=self.search_radius,
-            monster_types=self.monster_types
+            character_x=character_x, 
+            character_y=character_y, 
+            search_radius=search_radius,
+            monster_types=monster_types
         )
         
         # Validate client is provided
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             error_response = self.get_error_response("No API client provided")
             self.log_execution_result(error_response)
             return error_response
         
         try:
             # Get target monster codes from API
-            target_codes = self._get_target_monster_codes(client)
+            target_codes = self._get_target_monster_codes(client, monster_types, character_level, level_range)
             if not target_codes:
                 error_response = self.get_error_response("No suitable monsters found matching criteria")
                 self.log_execution_result(error_response)
@@ -72,22 +70,25 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             # Create monster filter using the unified search base
             monster_filter = self.create_monster_filter(
                 monster_types=target_codes,
-                character_level=self.character_level,
-                level_range=self.level_range
+                character_level=character_level,
+                level_range=level_range
             )
             
+            # Convert context to kwargs dict for helper methods
+            kwargs = dict(context) if hasattr(context, '__iter__') else {}
+            
             # Ensure character_level is available for viability checks
-            if 'character_level' not in kwargs and self.character_level is not None:
-                kwargs['character_level'] = self.character_level
+            if 'character_level' not in kwargs and character_level is not None:
+                kwargs['character_level'] = character_level
             
             # Collect all viable monsters across all search radii for smart selection
-            result = self._find_best_monster_target(client, monster_filter, target_codes, kwargs)
+            result = self._find_best_monster_target(client, monster_filter, target_codes, context)
             
             # If no viable monsters found, provide helpful error
             if not result or not result.get('success'):
                 error_response = self.get_error_response(
-                    f"No viable monsters found within radius {self.search_radius}",
-                    max_radius_searched=self.search_radius,
+                    f"No viable monsters found within radius {search_radius}",
+                    max_radius_searched=search_radius,
                     suggestion="Consider map exploration or resource gathering for equipment upgrades"
                 )
                 self.log_execution_result(error_response)
@@ -101,7 +102,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             self.log_execution_result(error_response)
             return error_response
     
-    def _find_best_monster_target(self, client, monster_filter, target_codes, kwargs):
+    def _find_best_monster_target(self, client, monster_filter, target_codes, context: ActionContext):
         """
         Find the best monster target based on level priority, win rate, and distance.
         
@@ -110,18 +111,27 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         2. Higher win rates (known successful combat)
         3. Closer distance (efficiency)
         """
-        knowledge_base = kwargs.get('knowledge_base')
-        action_config = kwargs.get('action_config', {})
+        # Extract parameters from context
+        search_radius = context.get('search_radius', 2)
+        character_x = context.get('character_x', context.character_x)
+        character_y = context.get('character_y', context.character_y)
+        monster_types = context.get('monster_types', [])
+        character_level = context.get('character_level', context.character_level)
+        level_range = context.get('level_range', 2)
+        use_exponential_search = context.get('use_exponential_search', True)
+        
+        knowledge_base = context.knowledge_base
+        map_state = context.map_state
+        action_config = context.get('action_config', {})
         viable_monsters = []
         
         # Search all radii to collect viable monster candidates
-        map_state = kwargs.get('map_state')
-        for radius in range(1, self.search_radius + 1):
-            locations_at_radius = self._search_radius_for_content(client, radius, monster_filter, map_state)
+        for radius in range(1, search_radius + 1):
+            locations_at_radius = self._search_radius_for_content(client, character_x, character_y, radius, monster_filter, map_state)
             
             for location, content_code, content_data in locations_at_radius:
                 x, y = location
-                distance = self._calculate_distance(x, y)
+                distance = abs(x - character_x) + abs(y - character_y)  # Manhattan distance
                 
                 # Get monster level from knowledge base (with API fallback)
                 monster_data = knowledge_base.get_monster_data(content_code, client=client)
@@ -136,11 +146,15 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
                 win_rate = self._get_monster_win_rate(content_code, knowledge_base, 
                                                      action_config=action_config) if knowledge_base else None
                 
-                # Pass monster level in kwargs for viability check
-                viability_kwargs = kwargs.copy()
-                viability_kwargs['monster_level'] = monster_level
+                # Pass monster level for viability check
+                viability_context = {
+                    'monster_level': monster_level,
+                    'character_level': character_level,
+                    'monster_types': monster_types,
+                    'level_range': level_range
+                }
                 
-                if not self._is_combat_viable(content_code, win_rate, viability_kwargs):
+                if not self._is_combat_viable(content_code, win_rate, viability_context):
                     continue  # Skip non-viable monsters
                 
                 # Store monster candidate with all selection criteria
@@ -178,8 +192,8 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
                 distance=distance,
                 monster_code=content_code,
                 target_codes=target_codes,
-                search_radius_used=self.search_radius,
-                exponential_search_used=self.use_exponential_search,
+                search_radius_used=search_radius,
+                exponential_search_used=use_exponential_search,
                 win_rate=win_rate
             )
             
@@ -212,7 +226,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         
         return best
     
-    def _get_target_monster_codes(self, client) -> List[str]:
+    def _get_target_monster_codes(self, client, monster_types: List[str], character_level: int, level_range: int) -> List[str]:
         """Get list of target monster codes based on filters."""
         try:
             monsters_response = get_all_monsters_api(client=client, size=100)
@@ -223,20 +237,20 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             for monster in monsters_response.data:
                 # Check type filter if specified
                 type_match = True
-                if self.monster_types:
+                if monster_types:
                     name_match = any(monster_type.lower() in monster.name.lower()
-                                    for monster_type in self.monster_types)
+                                    for monster_type in monster_types)
                     code_match = any(monster_type.lower() in monster.code.lower()
-                                    for monster_type in self.monster_types)
+                                    for monster_type in monster_types)
                     type_match = name_match or code_match
                 
                 # Check level filter if specified
                 level_match = True
-                if self.character_level is not None:
+                if character_level is not None and level_range is not None:
                     monster_level = getattr(monster, 'level', 1)
                     # Only fight monsters at or below character level + level_range
                     # This ensures safety - prefer monsters at character level or below
-                    level_match = monster_level <= self.character_level + self.level_range
+                    level_match = monster_level <= character_level + level_range
                 
                 if type_match and level_match:
                     target_codes.append(monster.code)
@@ -465,7 +479,4 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             return None
 
     def __repr__(self):
-        monster_filter = f", types={self.monster_types}" if self.monster_types else ""
-        exp_search = f", exp_search={self.use_exponential_search}" if self.use_exponential_search else ""
-        return (f"FindMonstersAction({self.character_x}, {self.character_y}, "
-                f"radius={self.search_radius}{monster_filter}{exp_search})")
+        return "FindMonstersAction()"

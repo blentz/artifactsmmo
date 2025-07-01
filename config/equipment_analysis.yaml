@@ -1,0 +1,90 @@
+# Equipment Analysis Configuration
+# Defines slot priorities, gap analysis parameters, and skill mappings for optimal equipment selection
+
+# Equipment slot prioritization weights
+slot_priorities:
+  # Combat effectiveness (highest priority)
+  weapon: 100
+  shield: 90
+  
+  # Defensive capability
+  body_armor: 85
+  helmet: 80
+  leg_armor: 75
+  boots: 70
+  
+  # Special effects and bonuses
+  amulet: 60
+  ring1: 50
+  ring2: 50
+  
+  # Consumables (lowest priority for permanent upgrades)
+  consumable: 30
+  potion: 25
+
+# Equipment gap scoring parameters
+gap_analysis:
+  # Level difference penalties
+  level_penalties:
+    missing_item: 100        # Empty slot gets maximum urgency
+    level_behind_1: 20       # 1 level behind character
+    level_behind_2: 40       # 2 levels behind
+    level_behind_3: 60       # 3+ levels behind gets high urgency
+    level_ahead: -10         # Ahead of character level reduces urgency
+  
+  # Stat weight multipliers for different slot types
+  stat_weights:
+    weapon:
+      attack_fire: 3.0
+      attack_earth: 3.0
+      attack_water: 3.0
+      attack_air: 3.0
+      dmg_fire: 2.0
+      dmg_earth: 2.0
+      dmg_water: 2.0
+      dmg_air: 2.0
+    armor:
+      hp: 3.0
+      res_fire: 2.0
+      res_earth: 2.0
+      res_water: 2.0
+      res_air: 2.0
+    accessory:
+      critical_strike: 3.0
+      wisdom: 2.5
+      haste: 2.0
+      attack_fire: 1.5
+      attack_earth: 1.5
+      attack_water: 1.5
+      attack_air: 1.5
+    consumable:
+      hp_restore: 3.0
+      boost_hp: 2.0
+      boost_damage: 2.0
+    potion:
+      boost_hp: 3.0
+      boost_damage: 3.0
+      boost_resistance: 2.0
+      boost_haste: 2.0
+
+# Skill to slot mappings
+skill_slot_mappings:
+  weaponcrafting: ['weapon', 'shield']
+  gearcrafting: ['helmet', 'body_armor', 'leg_armor', 'boots']
+  jewelrycrafting: ['amulet', 'ring1', 'ring2']
+  cooking: ['consumable']
+  alchemy: ['potion']
+
+# All equipment slots for comprehensive analysis
+all_equipment_slots:
+  - weapon
+  - shield
+  - helmet
+  - body_armor
+  - leg_armor
+  - boots
+  - amulet
+  - ring1
+  - ring2
+  - consumable
+  - potion

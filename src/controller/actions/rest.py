@@ -1,7 +1,13 @@
 """ RestAction module """
 
+from typing import TYPE_CHECKING
+
 from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import sync as rest_character_api
+
 from .character_base import CharacterActionBase
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 # Import to support testing with character state
 try:
@@ -27,25 +33,28 @@ class RestAction(CharacterActionBase):
     }
     weights = {'rest': 1.5}  # Medium priority - important for survival
 
-    def __init__(self, character_name):
+    def __init__(self):
         """
         Initialize rest action.
-        
-        Args:
-            character_name: Character name (kept for compatibility with existing code)
         """
-        super().__init__(character_name)
+        super().__init__()
 
-    def execute(self, client, **kwargs):
+    def execute(self, client, context: 'ActionContext'):
         """ Execute the rest action """
-        if not self.validate_execution_context(client):
+        if not client:
             return self.get_error_response("No API client provided")
             
-        self.log_execution_start(character_name=self.character_name)
+        if not self.validate_execution_context(client, context):
+            return self.get_error_response("No character name provided")
+            
+        # Get character name from context
+        character_name = context.character_name
+            
+        self.log_execution_start(character_name=character_name)
         
         try:
             response = rest_character_api(
-                name=self.character_name,
+                name=character_name,
                 client=client
             )
             
@@ -66,8 +75,9 @@ class RestAction(CharacterActionBase):
                     hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
                     
                 # Calculate HP recovered if we have previous HP info
-                if 'previous_hp' in kwargs:
-                    hp_recovered = current_hp - kwargs['previous_hp']
+                previous_hp = context.get('previous_hp', 0)
+                if previous_hp:
+                    hp_recovered = current_hp - previous_hp
                     if hp_recovered > 0:
                         self.logger.info(f"💚 Recovered {hp_recovered} HP (now {current_hp}/{max_hp})")
             
@@ -96,4 +106,4 @@ class RestAction(CharacterActionBase):
                 return self.get_error_response(f"Rest failed: {error_msg}")
 
     def __repr__(self):
-        return f"RestAction({self.character_name})"
+        return "RestAction()"

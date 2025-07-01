@@ -1,8 +1,8 @@
 """Unit tests for RequestThrottle class."""
 
 import unittest
-import time
 from unittest.mock import Mock, patch
+
 from src.lib.request_throttle import RequestThrottle, get_global_throttle, throttled_request
 
 

@@ -1,11 +1,18 @@
 """Test module for FindCorrectWorkshopAction."""
 
 import unittest
-import tempfile
-import os
 from unittest.mock import Mock, patch
+
 from src.controller.actions.find_correct_workshop import FindCorrectWorkshopAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import (
+    MockActionContext,
+    MockKnowledgeBase,
+    MockMapState,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+)
 
 
 class TestFindCorrectWorkshopAction(unittest.TestCase):
@@ -13,60 +20,69 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.original_data_prefix = os.environ.get('DATA_PREFIX', '')
-        os.environ['DATA_PREFIX'] = self.temp_dir
+        self.temp_dir, self.original_data_prefix = create_test_environment()
         
         self.item_code = "copper_sword"
         self.character_name = "test_character"
-        self.action = FindCorrectWorkshopAction(
-            item_code=self.item_code,
-            character_name=self.character_name,
-            search_radius=5
-        )
+        self.action = FindCorrectWorkshopAction()
+        self.client = create_mock_client()
 
     def tearDown(self):
         """Clean up test fixtures."""
-        os.environ['DATA_PREFIX'] = self.original_data_prefix
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        cleanup_test_environment(self.temp_dir, self.original_data_prefix)
 
     def test_find_correct_workshop_action_initialization(self):
         """Test FindCorrectWorkshopAction initialization."""
-        self.assertEqual(self.action.item_code, "copper_sword")
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.search_radius, 5)
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, FindCorrectWorkshopAction)
 
     def test_find_correct_workshop_action_initialization_defaults(self):
         """Test FindCorrectWorkshopAction initialization with defaults."""
-        action = FindCorrectWorkshopAction(item_code="iron_dagger")
-        self.assertEqual(action.item_code, "iron_dagger")
-        self.assertEqual(action.search_radius, 10)
+        action = FindCorrectWorkshopAction()
+        self.assertIsInstance(action, FindCorrectWorkshopAction)
 
     def test_find_correct_workshop_action_repr(self):
         """Test FindCorrectWorkshopAction string representation."""
-        expected = "FindCorrectWorkshopAction(0, 0, radius=5, item=copper_sword)"
+        expected = "FindCorrectWorkshopAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_find_correct_workshop_action_repr_no_character(self):
         """Test FindCorrectWorkshopAction string representation without character."""
-        action = FindCorrectWorkshopAction(item_code="iron_dagger")
-        expected = "FindCorrectWorkshopAction(0, 0, radius=10, item=iron_dagger)"
+        action = FindCorrectWorkshopAction()
+        expected = "FindCorrectWorkshopAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(
+            character_name=self.character_name,
+            item_code=self.item_code
+        )
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
+
+    def test_execute_no_item_code(self):
+        """Test execute fails without item_code."""
+        context = MockActionContext(
+            character_name=self.character_name
+            # No item_code provided
+        )
+        result = self.action.execute(self.client, context)
+        self.assertFalse(result['success'])
+        self.assertIn('No item code specified', result['error'])
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_item_api_fails(self, mock_get_item_api):
         """Test execute when item API fails."""
         mock_get_item_api.return_value = None
-        client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            item_code=self.item_code,
+            search_radius=5
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get details for item', result['error'])
 
@@ -76,9 +92,13 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_response = Mock()
         mock_response.data = None
         mock_get_item_api.return_value = mock_response
-        client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            item_code=self.item_code,
+            search_radius=5
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get details for item', result['error'])
 
@@ -92,9 +112,12 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
-        client = create_mock_client()
-        
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            item_code=self.item_code,
+            search_radius=5
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('does not have crafting information', result['error'])
 
@@ -108,9 +131,12 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         mock_item_response.data = mock_item_data
         mock_get_item_api.return_value = mock_item_response
         
-        client = create_mock_client()
-        
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name=self.character_name,
+            item_code=self.item_code,
+            search_radius=5
+        )
+        result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('does not have crafting information', result['error'])
 
@@ -139,9 +165,14 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
                 'item_code': 'copper_sword'
             }
             
-            client = create_mock_client()
-            
-            result = self.action.execute(client)
+            context = MockActionContext(
+                character_name=self.character_name,
+                item_code=self.item_code,
+                search_radius=5,
+                knowledge_base=MockKnowledgeBase(),
+                map_state=MockMapState()
+            )
+            result = self.action.execute(self.client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['item_code'], 'copper_sword')
         self.assertEqual(result['required_skill'], 'weaponcrafting')
@@ -164,18 +195,27 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         with patch.object(self.action, 'unified_search') as mock_unified_search:
             mock_unified_search.return_value = None  # unified_search returns None when no workshop found
             
-            client = create_mock_client()
-            
-            result = self.action.execute(client)
+            context = MockActionContext(
+                character_name=self.character_name,
+                item_code=self.item_code,
+                search_radius=5,
+                knowledge_base=MockKnowledgeBase(),
+                map_state=MockMapState()
+            )
+            result = self.action.execute(self.client, context)
         self.assertFalse(result['success'])
         self.assertIn('No weaponcrafting workshop found', result['error'])
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
-        client = create_mock_client()
+        context = MockActionContext(
+            character_name=self.character_name,
+            item_code=self.item_code,
+            search_radius=5
+        )
         
         with patch('src.controller.actions.find_correct_workshop.get_item_api', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
+            result = self.action.execute(self.client, context)
             self.assertFalse(result['success'])
             self.assertIn('Workshop search failed: API Error', result['error'])
 
@@ -184,7 +224,21 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         self.assertTrue(hasattr(FindCorrectWorkshopAction, 'conditions'))
         self.assertTrue(hasattr(FindCorrectWorkshopAction, 'reactions'))
         self.assertTrue(hasattr(FindCorrectWorkshopAction, 'weights'))
-        self.assertTrue(hasattr(FindCorrectWorkshopAction, 'g'))
+    
+    def test_goap_conditions(self):
+        """Test GOAP conditions are properly defined."""
+        expected_conditions = {"character_alive": True, "can_move": True}
+        self.assertEqual(FindCorrectWorkshopAction.conditions, expected_conditions)
+    
+    def test_goap_reactions(self):
+        """Test GOAP reactions are properly defined."""
+        expected_reactions = {"at_correct_workshop": True, "workshops_discovered": True}
+        self.assertEqual(FindCorrectWorkshopAction.reactions, expected_reactions)
+    
+    def test_goap_weights(self):
+        """Test GOAP weights are properly defined."""
+        expected_weights = {"at_correct_workshop": 20}
+        self.assertEqual(FindCorrectWorkshopAction.weights, expected_weights)
 
 
 if __name__ == '__main__':

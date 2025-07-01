@@ -1,0 +1,32 @@
+# Location-based states that should be invalidated when character state changes
+# These states become stale between runs or when the character moves
+
+location_based_states:
+  # Workshop-related states
+  - at_correct_workshop
+  - at_workshop
+  
+  # Position-related states
+  - at_target_location
+  - at_resource_location
+  
+  # Content-based states that depend on current location
+  - monster_present
+  - resource_found
+  
+  # Additional location-dependent states
+  - at_bank
+  - at_grand_exchange
+
+# States that should persist between runs (for reference)
+persistent_states:
+  - best_weapon_selected
+  - equipment_info_known
+  - recipe_known
+  - craftable_weapon_identified
+  - has_hunted_monsters
+  - character_safe
+  - craft_plan_available
+  - materials_sufficient
+  - workshop_location_known
+  - workshops_discovered

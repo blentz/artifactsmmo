@@ -5,10 +5,10 @@ This module tests the SkillGoalManager class that provides YAML-configurable
 skill progression goals for all crafting, gathering, and combat skills.
 """
 
-import unittest
-from unittest.mock import Mock, patch
-import tempfile
 import os
+import tempfile
+import unittest
+from unittest.mock import patch
 
 from src.controller.skill_goal_manager import SkillGoalManager, SkillType
 

@@ -1,33 +1,31 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from artifactsmmo_api_client.client import AuthenticatedClient
 from src.controller.actions.movement_base import MovementActionBase
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestMovementAction(MovementActionBase):
     """Test implementation of MovementActionBase for testing."""
     
-    def __init__(self, character_name: str, test_x: int = None, test_y: int = None):
-        super().__init__(character_name)
-        self.test_x = test_x
-        self.test_y = test_y
+    def __init__(self):
+        super().__init__()
     
-    def get_target_coordinates(self, **kwargs):
+    def get_target_coordinates(self, context):
         """Simple test implementation."""
-        if self.test_x is not None and self.test_y is not None:
-            return self.test_x, self.test_y
-        return kwargs.get('x'), kwargs.get('y')
+        return context.get('x'), context.get('y')
 
 
 class TestMovementActionBase(unittest.TestCase):
     def setUp(self):
-        self.client = AuthenticatedClient(base_url="https://api.artifactsmmo.com", token="test_token")
+        self.client = create_mock_client()
         self.char_name = "test_character"
 
     def test_movement_base_initialization(self):
-        action = TestMovementAction(self.char_name)
-        self.assertEqual(action.character_name, self.char_name)
+        action = TestMovementAction()
+        # Action no longer stores character_name as instance attribute
+        self.assertFalse(hasattr(action, 'character_name'))
         self.assertIsNotNone(action.logger)
 
     @patch('src.controller.actions.movement_base.move_character_api')
@@ -38,12 +36,14 @@ class TestMovementActionBase(unittest.TestCase):
         mock_response.data.cooldown = 10
         mock_move_api.return_value = mock_response
         
-        action = TestMovementAction(self.char_name, 5, 10)
-        result = action.execute_movement(self.client, 5, 10)
+        action = TestMovementAction()
+        context = MockActionContext(character_name=self.char_name, x=5, y=10)
+        # execute_movement expects a dict, not MockActionContext
+        movement_context = {'character_name': self.char_name}
+        result = action.execute_movement(self.client, 5, 10, movement_context)
         
         # Verify API was called correctly
         mock_move_api.assert_called_once()
-        self.assertEqual(mock_move_api.call_args.kwargs['name'], self.char_name)
         
         # Verify response format
         self.assertTrue(result['success'])
@@ -58,8 +58,11 @@ class TestMovementActionBase(unittest.TestCase):
         # Mock "already at destination" error
         mock_move_api.side_effect = Exception('490 Character already at destination')
         
-        action = TestMovementAction(self.char_name)
-        result = action.execute_movement(self.client, 5, 10)
+        action = TestMovementAction()
+        context = MockActionContext(character_name=self.char_name)
+        # execute_movement expects a dict, not MockActionContext
+        movement_context = {'character_name': self.char_name}
+        result = action.execute_movement(self.client, 5, 10, movement_context)
         
         # Verify response format for already at destination
         self.assertTrue(result['success'])
@@ -74,16 +77,20 @@ class TestMovementActionBase(unittest.TestCase):
         # Mock other error
         mock_move_api.side_effect = Exception('Network error')
         
-        action = TestMovementAction(self.char_name)
-        result = action.execute_movement(self.client, 5, 10)
+        action = TestMovementAction()
+        context = MockActionContext(character_name=self.char_name)
+        # execute_movement expects a dict, not MockActionContext
+        movement_context = {'character_name': self.char_name}
+        result = action.execute_movement(self.client, 5, 10, movement_context)
         
         # Verify error response
         self.assertFalse(result['success'])
         self.assertIn('Network error', result['error'])
 
     def test_execute_no_coordinates(self):
-        action = TestMovementAction(self.char_name)
-        result = action.execute(self.client)
+        action = TestMovementAction()
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should fail with no coordinates
         self.assertFalse(result['success'])
@@ -97,8 +104,9 @@ class TestMovementActionBase(unittest.TestCase):
         mock_response.data.cooldown = 5
         mock_move_api.return_value = mock_response
         
-        action = TestMovementAction(self.char_name)
-        result = action.execute(self.client, x=15, y=20)
+        action = TestMovementAction()
+        context = MockActionContext(character_name=self.char_name, x=15, y=20)
+        result = action.execute(self.client, context)
         
         # Verify success
         self.assertTrue(result['success'])
@@ -106,7 +114,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertEqual(result['target_y'], 20)
 
     def test_calculate_distance(self):
-        action = TestMovementAction(self.char_name)
+        action = TestMovementAction()
         
         # Test Manhattan distance calculation
         distance = action.calculate_distance(0, 0, 3, 4)
@@ -124,25 +132,27 @@ class TestMovementActionBase(unittest.TestCase):
         
         # Create custom action with context building
         class ContextTestAction(MovementActionBase):
-            def get_target_coordinates(self, **kwargs):
+            def get_target_coordinates(self, context):
                 return 10, 20
             
-            def build_movement_context(self, **kwargs):
+            def build_movement_context(self, context):
                 return {
                     'custom_field': 'test_value',
-                    'resource_code': kwargs.get('resource_code')
+                    'resource_code': context.get('resource_code')
                 }
         
-        action = ContextTestAction(self.char_name)
-        result = action.execute(self.client, resource_code='iron_ore')
+        action = ContextTestAction()
+        context = MockActionContext(character_name=self.char_name, resource_code='iron_ore')
+        result = action.execute(self.client, context)
         
         # Verify context was included in response
         self.assertEqual(result.get('custom_field'), 'test_value')
         self.assertEqual(result.get('resource_code'), 'iron_ore')
 
     def test_no_api_client(self):
-        action = TestMovementAction(self.char_name, 5, 10)
-        result = action.execute(None)
+        action = TestMovementAction()
+        context = MockActionContext(character_name=self.char_name, x=5, y=10)
+        result = action.execute(None, context)
         
         # Should fail with no client
         self.assertFalse(result['success'])

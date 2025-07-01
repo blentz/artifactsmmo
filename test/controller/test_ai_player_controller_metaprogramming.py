@@ -1,15 +1,16 @@
 """Unit tests for AIPlayerController with full metaprogramming integration."""
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import os
-import yaml
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
-from src.controller.ai_player_controller import AIPlayerController
+import yaml
 from src.controller.action_executor import ActionResult
+from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
-from test.fixtures import create_mock_client, mock_character_response, MockCharacterData
+
+from test.fixtures import create_mock_client
 
 
 class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
@@ -195,15 +196,15 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
             context = controller._build_execution_context(action_data)
             
             # Verify context contents
-            self.assertEqual(context['controller'], controller)
-            self.assertEqual(context['character_state'], self.mock_character_state)
-            self.assertEqual(context['world_state'], mock_world_state)
-            self.assertEqual(context['knowledge_base'], mock_knowledge_base)
-            self.assertEqual(context['character_name'], 'test_character')
-            self.assertEqual(context['character_x'], 5)
-            self.assertEqual(context['character_y'], 10)
-            self.assertEqual(context['character_level'], 1)
-            self.assertEqual(context['pre_combat_hp'], 100)
+            self.assertEqual(context.controller, controller)
+            self.assertEqual(context.character_state, self.mock_character_state)
+            self.assertEqual(context.world_state, mock_world_state)
+            self.assertEqual(context.knowledge_base, mock_knowledge_base)
+            self.assertEqual(context.character_name, 'test_character')
+            self.assertEqual(context.character_x, 5)
+            self.assertEqual(context.character_y, 10)
+            self.assertEqual(context.character_level, 1)
+            self.assertEqual(context.character_hp, 100)  # Changed from pre_combat_hp
     
     @patch('src.controller.ai_player_controller.ActionExecutor')
     def test_get_available_actions(self, mock_action_executor_class):

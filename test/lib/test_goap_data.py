@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from src.lib.goap_data import GoapData, Planner, Action_List, World
+from src.lib.goap_data import Action_List, GoapData, Planner
+
 
 class TestGoapData(unittest.TestCase):
     def setUp(self):

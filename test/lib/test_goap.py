@@ -1,6 +1,7 @@
 import unittest
-from src.lib.goap import World, Planner, Action_List
-from src.lib.goap import distance_to_state, conditions_are_met, node_in_list, create_node
+
+from src.lib.goap import Action_List, Planner, World, conditions_are_met, create_node, distance_to_state, node_in_list
+
 
 class TestGOAP(unittest.TestCase):
 

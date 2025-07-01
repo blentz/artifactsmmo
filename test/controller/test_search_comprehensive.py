@@ -1,15 +1,17 @@
 """Comprehensive tests for search functionality and caching integration."""
 
-import unittest
-import tempfile
 import os
+import tempfile
 import time
-from unittest.mock import Mock, patch
-from src.controller.actions.find_resources import FindResourcesAction
+import unittest
+from unittest.mock import Mock
+
 from src.controller.actions.find_monsters import FindMonstersAction
+from src.controller.actions.find_resources import FindResourcesAction
 from src.controller.actions.find_workshops import FindWorkshopsAction
 from src.controller.actions.search_base import SearchActionBase
 from src.game.map.state import MapState
+
 from test.fixtures import create_mock_client
 
 
@@ -34,41 +36,38 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_find_resources_action_initialization(self):
         """Test FindResourcesAction initializes with correct parameters."""
-        action = FindResourcesAction(
-            character_x=10, character_y=15, search_radius=7,
-            resource_types=['iron_rocks'], character_level=5
-        )
+        action = FindResourcesAction()
         
-        self.assertEqual(action.character_x, 10)
-        self.assertEqual(action.character_y, 15)
-        self.assertEqual(action.search_radius, 7)
-        self.assertEqual(action.resource_types, ['iron_rocks'])
-        self.assertEqual(action.character_level, 5)
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(action, FindResourcesAction)
+        self.assertFalse(hasattr(action, 'character_x'))
+        self.assertFalse(hasattr(action, 'character_y'))
+        self.assertFalse(hasattr(action, 'search_radius'))
+        self.assertFalse(hasattr(action, 'resource_types'))
+        self.assertFalse(hasattr(action, 'character_level'))
 
     def test_find_monsters_action_initialization(self):
         """Test FindMonstersAction initializes with correct parameters."""
-        action = FindMonstersAction(
-            character_x=5, character_y=3, search_radius=4,
-            monster_types=['green_slime'], character_level=2
-        )
+        action = FindMonstersAction()
         
-        self.assertEqual(action.character_x, 5)
-        self.assertEqual(action.character_y, 3)
-        self.assertEqual(action.search_radius, 4)
-        self.assertEqual(action.monster_types, ['green_slime'])
-        self.assertEqual(action.character_level, 2)
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(action, FindMonstersAction)
+        self.assertFalse(hasattr(action, 'character_x'))
+        self.assertFalse(hasattr(action, 'character_y'))
+        self.assertFalse(hasattr(action, 'search_radius'))
+        self.assertFalse(hasattr(action, 'monster_types'))
+        self.assertFalse(hasattr(action, 'character_level'))
 
     def test_find_workshops_action_initialization(self):
         """Test FindWorkshopsAction initializes with correct parameters."""
-        action = FindWorkshopsAction(
-            character_x=0, character_y=0, search_radius=5,
-            workshop_type='weaponcrafting'
-        )
+        action = FindWorkshopsAction()
         
-        self.assertEqual(action.character_x, 0)
-        self.assertEqual(action.character_y, 0)
-        self.assertEqual(action.search_radius, 5)
-        self.assertEqual(action.workshop_type, 'weaponcrafting')
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(action, FindWorkshopsAction)
+        self.assertFalse(hasattr(action, 'character_x'))
+        self.assertFalse(hasattr(action, 'character_y'))
+        self.assertFalse(hasattr(action, 'search_radius'))
+        self.assertFalse(hasattr(action, 'workshop_type'))
 
     def test_search_base_content_filters(self):
         """Test SearchActionBase content filter factories."""
@@ -131,11 +130,11 @@ class TestSearchComprehensive(unittest.TestCase):
         self.assertEqual(total_boundaries, 0)
         
         # Record boundaries in all directions
-        search_action = SearchActionBase(character_x=5, character_y=5, search_radius=1)
-        search_action._record_boundary_hit(3, 5)  # West
-        search_action._record_boundary_hit(7, 5)  # East  
-        search_action._record_boundary_hit(5, 3)  # South
-        search_action._record_boundary_hit(5, 7)  # North
+        search_action = SearchActionBase()
+        search_action._record_boundary_hit(3, 5, 5, 5)  # West
+        search_action._record_boundary_hit(7, 5, 5, 5)  # East  
+        search_action._record_boundary_hit(5, 3, 5, 5)  # South
+        search_action._record_boundary_hit(5, 7, 5, 5)  # North
         
         # Verify boundaries were recorded
         self.assertGreater(len(SearchActionBase._map_boundaries['west']), 0)
@@ -145,7 +144,7 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_unified_search_with_mock_content(self):
         """Test unified search algorithm with properly mocked content."""
-        search_action = SearchActionBase(character_x=5, character_y=3, search_radius=2)
+        search_action = SearchActionBase()
         
         # Create MapState with mock content
         map_state = MapState(self.mock_client, initial_scan=False)
@@ -172,7 +171,7 @@ class TestSearchComprehensive(unittest.TestCase):
             return content_dict.get('code') == 'copper_rocks'
         
         # Execute search
-        result = search_action.unified_search(self.mock_client, content_filter, map_state=map_state)
+        result = search_action.unified_search(self.mock_client, 5, 3, 2, content_filter, map_state=map_state)
         
         # Verify successful result
         self.assertTrue(result['success'])
@@ -184,7 +183,7 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_find_resources_execute_basic(self):
         """Test FindResourcesAction execute method basic functionality."""
-        action = FindResourcesAction(character_x=5, character_y=3, search_radius=2)
+        action = FindResourcesAction()
         
         # Create MapState with mock content
         map_state = MapState(self.mock_client, initial_scan=False)
@@ -209,7 +208,15 @@ class TestSearchComprehensive(unittest.TestCase):
         map_state.scan = Mock()
         
         # Execute with resource_types parameter
-        result = action.execute(self.mock_client, map_state=map_state, resource_types=['iron_rocks'])
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=5,
+            character_y=3,
+            search_radius=2,
+            resource_types=['iron_rocks'],
+            map_state=map_state
+        )
+        result = action.execute(self.mock_client, context)
         
         # Verify successful result
         self.assertTrue(result['success'])
@@ -243,14 +250,14 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_search_coordinate_generation(self):
         """Test search coordinate generation for different radii."""
-        action = SearchActionBase(character_x=5, character_y=5, search_radius=1)
+        action = SearchActionBase()
         
         # Test radius 0 (character position)
-        coords_r0 = action._generate_radius_coordinates(0)
+        coords_r0 = action._generate_radius_coordinates(5, 5, 0)
         self.assertEqual(coords_r0, [(5, 5)])
         
         # Test radius 1 (should generate 8 coordinates around character)
-        coords_r1 = action._generate_radius_coordinates(1)
+        coords_r1 = action._generate_radius_coordinates(5, 5, 1)
         self.assertGreater(len(coords_r1), 0)
         
         # All coordinates should be at distance 1 from character
@@ -261,10 +268,10 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_error_handling_in_search(self):
         """Test error handling in search operations."""
-        search_action = SearchActionBase(character_x=0, character_y=0, search_radius=1)
+        search_action = SearchActionBase()
         
         # Test with no client
-        result = search_action.unified_search(None, lambda c, x, y: True)
+        result = search_action.unified_search(None, lambda c, x, y: True, 0, 0, 1)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
         
@@ -277,7 +284,7 @@ class TestSearchComprehensive(unittest.TestCase):
         def never_match_filter(content_dict, x, y):
             return False
         
-        result = search_action.unified_search(self.mock_client, never_match_filter, map_state=map_state)
+        result = search_action.unified_search(self.mock_client, never_match_filter, 0, 0, 1, map_state=map_state)
         self.assertFalse(result['success'])
         self.assertIn('No matching content found', result['error'])
 

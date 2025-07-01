@@ -5,10 +5,14 @@ This action analyzes combat effectiveness and viability in the current area,
 providing strategic guidance for combat engagement decisions.
 """
 
-from typing import Dict, Optional, List
-import logging
+from typing import TYPE_CHECKING, Dict, List, Optional
+
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+
 from .base import ActionBase
+
+if TYPE_CHECKING:
+    from src.lib.action_context import ActionContext
 
 
 class AnalyzeCombatViabilityAction(ActionBase):
@@ -30,46 +34,53 @@ class AnalyzeCombatViabilityAction(ActionBase):
     }
     weights = {"combat_viability_known": 12}
 
-    def __init__(self, character_name: str, analysis_radius: int = 3):
+    def __init__(self):
         """
         Initialize the combat viability analysis action.
-
-        Args:
-            character_name: Name of the character to analyze
-            analysis_radius: Radius to analyze for nearby monsters (default: 3)
         """
         super().__init__()
-        self.character_name = character_name
-        self.analysis_radius = analysis_radius
-        self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """Analyze combat viability in current area."""
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
             
+        # Get character name from context
+        character_name = context.character_name
+        if not character_name:
+            return self.get_error_response("No character name provided")
+            
+        # Get analysis radius from context or use default
+        analysis_radius = context.get('analysis_radius', 3)
+            
         self.log_execution_start(
-            character_name=self.character_name,
-            analysis_radius=self.analysis_radius
+            character_name=character_name,
+            analysis_radius=analysis_radius
         )
         
         try:
-            # Get current character data
-            character_response = get_character_api(name=self.character_name, client=client)
-            if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+            # Get current character data from context or API
+            if context.character_state and hasattr(context.character_state, 'data'):
+                character_data = context.character_state
+                character_x = context.character_x
+                character_y = context.character_y
+            else:
+                # Fallback to API call
+                character_response = get_character_api(name=character_name, client=client)
+                if not character_response or not character_response.data:
+                    return self.get_error_response("Could not get character data")
+                
+                character_data = character_response.data
+                character_x = getattr(character_data, 'x', 0)
+                character_y = getattr(character_data, 'y', 0)
             
-            character_data = character_response.data
-            character_x = getattr(character_data, 'x', 0)
-            character_y = getattr(character_data, 'y', 0)
-            
-            # Get knowledge base and map state for analysis
-            knowledge_base = kwargs.get('knowledge_base')
-            map_state = kwargs.get('map_state')
+            # Get knowledge base and map state from context
+            knowledge_base = context.knowledge_base
+            map_state = context.map_state
             
             # Perform combat viability analysis
             viability_results = self._analyze_combat_viability(
-                character_data, character_x, character_y, knowledge_base, map_state
+                character_data, character_x, character_y, knowledge_base, map_state, analysis_radius
             )
             
             # Analyze character combat readiness
@@ -90,7 +101,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 combat_viability_known=True,
                 character_x=character_x,
                 character_y=character_y,
-                analysis_radius=self.analysis_radius,
+                analysis_radius=analysis_radius,
                 **viability_results,
                 **readiness_results,
                 **recommendations,
@@ -106,7 +117,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
             return error_response
 
     def _analyze_combat_viability(self, character_data, character_x: int, character_y: int,
-                                knowledge_base, map_state) -> Dict:
+                                knowledge_base, map_state, analysis_radius: int = 3) -> Dict:
         """Analyze combat viability in the current area."""
         try:
             viability_data = {
@@ -125,7 +136,12 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 return viability_data
             
             # Get monsters data from knowledge base
-            monsters_data = knowledge_base.data.get('monsters', {})
+            monsters_data = {}
+            if hasattr(knowledge_base, 'data'):
+                monsters_data = knowledge_base.data.get('monsters', {})
+            elif hasattr(knowledge_base, 'get_all_monster_data'):
+                # Use knowledge base method if available
+                monsters_data = knowledge_base.get_all_monster_data()
             
             if not monsters_data:
                 viability_data['viability_reason'] = 'No monster data in knowledge base'
@@ -133,7 +149,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
             
             # Find nearby monsters
             nearby_monsters = self._find_nearby_monsters(
-                monsters_data, character_x, character_y, self.analysis_radius
+                monsters_data, character_x, character_y, analysis_radius
             )
             
             viability_data['nearby_monsters'] = nearby_monsters
@@ -287,10 +303,19 @@ class AnalyzeCombatViabilityAction(ActionBase):
         """Analyze character's combat readiness."""
         try:
             # Extract character stats
-            hp = getattr(character_data, 'hp', 0)
-            max_hp = getattr(character_data, 'max_hp', 100)
-            level = getattr(character_data, 'level', 1)
-            weapon = getattr(character_data, 'weapon_slot', '')
+            if hasattr(character_data, 'data'):
+                # Using CharacterState from context
+                char_data = character_data.data
+                hp = char_data.get('hp', 0)
+                max_hp = char_data.get('max_hp', 100)
+                level = char_data.get('level', 1)
+                weapon = char_data.get('weapon', '')
+            else:
+                # Using API response
+                hp = getattr(character_data, 'hp', 0)
+                max_hp = getattr(character_data, 'max_hp', 100)
+                level = getattr(character_data, 'level', 1)
+                weapon = getattr(character_data, 'weapon', '')
             
             # Calculate combat readiness factors
             hp_percentage = (hp / max_hp) if max_hp > 0 else 0
@@ -321,8 +346,16 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 readiness_factors.append("Low level")
             
             # Equipment bonus (basic check)
-            armor_slots = ['helmet_slot', 'body_armor_slot', 'leg_armor_slot', 'boots_slot']
-            equipped_armor = sum(1 for slot in armor_slots if getattr(character_data, slot, ''))
+            armor_slots = ['helmet', 'body_armor', 'leg_armor', 'boots']
+            equipped_armor = 0
+            
+            if hasattr(character_data, 'data'):
+                # Using CharacterState from context
+                char_data = character_data.data
+                equipped_armor = sum(1 for slot in armor_slots if char_data.get(slot, ''))
+            else:
+                # Using API response
+                equipped_armor = sum(1 for slot in armor_slots if getattr(character_data, slot, ''))
             
             if equipped_armor >= 2:
                 readiness_score += 15
@@ -475,4 +508,4 @@ class AnalyzeCombatViabilityAction(ActionBase):
             return {'combat_not_viable': True, 'need_combat': False}
 
     def __repr__(self):
-        return f"AnalyzeCombatViabilityAction({self.character_name}, radius={self.analysis_radius})"
+        return "AnalyzeCombatViabilityAction()"

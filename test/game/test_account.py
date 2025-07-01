@@ -2,6 +2,7 @@
 
 import unittest
 from unittest.mock import Mock, patch
+
 from src.game.account import Account
 
 

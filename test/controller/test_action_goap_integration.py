@@ -1,14 +1,13 @@
 """Unit tests for Action class GOAP parameter integration."""
 
 import unittest
-from unittest.mock import Mock
 
-from src.controller.ai_player_controller import AIPlayerController
-from src.controller.actions.move import MoveAction
 from src.controller.actions.attack import AttackAction
-from src.controller.actions.rest import RestAction
 from src.controller.actions.find_monsters import FindMonstersAction
-from src.controller.actions.map_lookup import MapLookupAction
+from src.controller.actions.move import MoveAction
+from src.controller.actions.rest import RestAction
+from src.controller.ai_player_controller import AIPlayerController
+
 from test.fixtures import create_mock_client
 
 

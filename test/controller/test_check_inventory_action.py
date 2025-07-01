@@ -1,11 +1,13 @@
 """Test module for CheckInventoryAction."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.check_inventory import CheckInventoryAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestCheckInventoryAction(unittest.TestCase):
@@ -22,10 +24,7 @@ class TestCheckInventoryAction(unittest.TestCase):
             {'item_code': 'copper_ore', 'quantity': 5},
             {'item_code': 'ash_wood', 'quantity': 2}
         ]
-        self.action = CheckInventoryAction(
-            character_name=self.character_name,
-            required_items=self.required_items
-        )
+        self.action = CheckInventoryAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -35,31 +34,33 @@ class TestCheckInventoryAction(unittest.TestCase):
 
     def test_check_inventory_action_initialization(self):
         """Test CheckInventoryAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(len(self.action.required_items), 2)
-        self.assertEqual(self.action.required_items[0]['item_code'], 'copper_ore')
-        self.assertEqual(self.action.required_items[0]['quantity'], 5)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(self.action, 'character_name'))
+        self.assertFalse(hasattr(self.action, 'required_items'))
 
     def test_check_inventory_action_initialization_defaults(self):
         """Test CheckInventoryAction initialization with defaults."""
-        action = CheckInventoryAction("player")
-        self.assertEqual(action.character_name, "player")
-        self.assertEqual(action.required_items, [])
+        action = CheckInventoryAction()
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(action, 'character_name'))
+        self.assertFalse(hasattr(action, 'required_items'))
 
     def test_check_inventory_action_repr(self):
         """Test CheckInventoryAction string representation."""
-        expected = "CheckInventoryAction(test_character, 2 requirements)"
+        # Repr is now simplified
+        expected = "CheckInventoryAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_check_inventory_action_repr_no_items(self):
         """Test CheckInventoryAction string representation without required items."""
-        action = CheckInventoryAction("player")
-        expected = "CheckInventoryAction(player, 0 requirements)"
+        action = CheckInventoryAction()
+        expected = "CheckInventoryAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -69,7 +70,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         mock_get_character_api.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+        result = self.action.execute(client, context)
         # Action succeeds with empty inventory when API fails
         self.assertTrue(result['success'])
         self.assertEqual(result['inventory'], {})
@@ -83,7 +85,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+        result = self.action.execute(client, context)
         # Action succeeds with empty inventory when API returns no data
         self.assertTrue(result['success'])
         self.assertEqual(result['inventory'], {})
@@ -99,7 +102,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+        result = self.action.execute(client, context)
         # Action succeeds with empty inventory when character has no inventory
         self.assertTrue(result['success'])
         self.assertEqual(result['inventory'], {})
@@ -121,7 +125,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertIn('inventory_summary', result)
         self.assertIn('world_state_updates', result)
@@ -149,7 +154,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+        result = self.action.execute(client, context)
         self.assertTrue(result['success'])
         self.assertFalse(result['world_state_updates']['materials_sufficient'])
         
@@ -167,7 +173,7 @@ class TestCheckInventoryAction(unittest.TestCase):
     @patch('src.controller.actions.check_inventory.get_character_api')
     def test_execute_success_no_required_items(self, mock_get_character_api):
         """Test successful execution with no required items (inventory check only)."""
-        action = CheckInventoryAction("player")  # No required items
+        action = CheckInventoryAction()  # No required items
         
         mock_inventory = [
             {'slot': 1, 'code': 'copper_ore', 'quantity': 10},
@@ -180,7 +186,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = action.execute(client)
+        context = MockActionContext(character_name="player", required_items=[])
+        result = action.execute(client, context)
         self.assertTrue(result['success'])
         # When no requirements specified, materials_sufficient is True by default
         self.assertTrue(result['world_state_updates'].get('materials_sufficient', True))
@@ -203,7 +210,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         # Test basic functionality if method exists
         if hasattr(self.action, '_get_character_inventory'):
             with patch('src.controller.actions.check_inventory.get_character_api', return_value=mock_response):
-                inventory_dict = self.action._get_character_inventory(client)
+                context = MockActionContext(character_name=self.character_name)
+                inventory_dict = self.action._get_character_inventory(client, context)
                 self.assertIsInstance(inventory_dict, dict)
                 self.assertIn('copper_ore', inventory_dict)
                 self.assertEqual(inventory_dict['copper_ore'], 10)
@@ -214,7 +222,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         
         # Test basic functionality if method exists
         if hasattr(self.action, '_check_item_requirements'):
-            result = self.action._check_item_requirements(inventory_dict)
+            context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+            result = self.action._check_item_requirements(inventory_dict, context)
             self.assertIsInstance(result, dict)
             # Should have status for each required item
             self.assertIn('item_checks', result)
@@ -239,7 +248,8 @@ class TestCheckInventoryAction(unittest.TestCase):
         # The action catches exceptions in _get_character_inventory and returns empty dict
         # To trigger the main exception handler, we need to mock something else
         with patch('src.controller.actions.check_inventory.CheckInventoryAction._analyze_inventory_categories', side_effect=Exception("Analysis Error")):
-            result = self.action.execute(client)
+            context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
+            result = self.action.execute(client, context)
             self.assertFalse(result['success'])
             self.assertIn('Inventory check failed', result['error'])
 
@@ -283,14 +293,13 @@ class TestCheckInventoryAction(unittest.TestCase):
             {'item_code': 'ash_wood', 'quantity': 2, 'priority': 'medium'}
         ]
         
-        action = CheckInventoryAction("player", detailed_items)
-        self.assertEqual(len(action.required_items), 2)
-        self.assertEqual(action.required_items[0]['item_code'], 'copper_ore')
-        self.assertEqual(action.required_items[0]['quantity'], 5)
+        action = CheckInventoryAction()
+        # Action no longer stores required_items as instance attribute
+        self.assertFalse(hasattr(action, 'required_items'))
 
     def test_empty_inventory_handling(self):
         """Test handling of empty inventory."""
-        action = CheckInventoryAction("player", [{'item_code': 'copper_ore', 'quantity': 5}])
+        action = CheckInventoryAction()
         
         with patch('src.controller.actions.check_inventory.get_character_api') as mock_get_char:
             mock_inventory = []  # Empty inventory
@@ -301,7 +310,8 @@ class TestCheckInventoryAction(unittest.TestCase):
             mock_get_char.return_value = mock_response
             
             client = create_mock_client()
-            result = action.execute(client)
+            context = MockActionContext(character_name="player", required_items=[{'item_code': 'copper_ore', 'quantity': 5}])
+            result = action.execute(client, context)
             
             self.assertTrue(result['success'])
             self.assertFalse(result['world_state_updates']['materials_sufficient'])

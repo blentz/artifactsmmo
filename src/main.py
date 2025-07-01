@@ -4,23 +4,27 @@
 import asyncio
 import logging
 import os
-import sys
+import re
 import signal
+import sys
 from pathlib import Path
 
 from artifactsmmo_api_client.client import AuthenticatedClient, Client
 
-from src.game.globals import BASEURL
-from src.lib.httpstatus import extend_http_status
-from src.lib.log import safely_start_logger
-from src.lib.throttled_transport import ThrottledTransport, ThrottledAsyncTransport
+from src.cli import get_character_list, parse_args, setup_logging, validate_args
 from src.controller.ai_player_controller import AIPlayerController
+from src.controller.bulk_data_loader import BulkDataLoader
 from src.controller.goal_manager import GOAPGoalManager
+from src.controller.goap_execution_manager import GOAPExecutionManager
 from src.game.account import Account
 from src.game.characters import Characters
-from src.game.character.state import CharacterState
+from src.game.globals import BASEURL
 from src.game.map.state import MapState
-from src.cli import parse_args, validate_args, setup_logging, get_character_list
+from src.lib.actions_data import ActionsData
+from src.lib.goap_data import GoapData
+from src.lib.httpstatus import extend_http_status
+from src.lib.log import safely_start_logger
+from src.lib.throttled_transport import ThrottledTransport
 
 MAX_THREADS = 1
 RAISE_ON_UNEXPECTED_STATUS = True
@@ -81,7 +85,6 @@ async def task(character_name=None, args=None):
         logging.info("Map state initialized for data persistence with learning callbacks")
         
         # Load all game world data using bulk API calls
-        from src.controller.bulk_data_loader import BulkDataLoader
         bulk_loader = BulkDataLoader()
         bulk_loading_success = bulk_loader.load_all_game_data(client, map_state, controller.knowledge_base)
         if bulk_loading_success:
@@ -154,11 +157,6 @@ def clean_data_files():
 
 def show_goal_plan(goal_string, client):
     """Show the GOAP plan for achieving a specified goal."""
-    from src.lib.actions_data import ActionsData
-    from src.lib.goap_data import GoapData
-    from src.controller.goap_execution_manager import GOAPExecutionManager
-    from src.controller.goal_manager import GOAPGoalManager
-    
     logging.info(f"\n=== GOAP Plan Analysis for Goal: {goal_string} ===")
     
     # Initialize managers
@@ -182,7 +180,6 @@ def show_goal_plan(goal_string, client):
         logging.info(f"Using goal template '{goal_string}' with target state: {goal_state}")
     elif "level" in goal_string:
         # Extract level number from goal string
-        import re
         level_match = re.search(r'level[\s_]*(\d+)', goal_string, re.IGNORECASE)
         if level_match:
             target_level = int(level_match.group(1))
@@ -265,9 +262,6 @@ def show_goal_plan(goal_string, client):
 
 def evaluate_user_plan(plan_string, client):
     """Evaluate a user-defined plan."""
-    from src.lib.actions_data import ActionsData
-    from src.lib.goap_data import GoapData
-    
     logging.info(f"\n=== Evaluating User Plan: {plan_string} ===")
     
     # Parse plan string (e.g., "move->fight->rest" or "move,fight,rest")
@@ -359,11 +353,11 @@ def evaluate_user_plan(plan_string, client):
         logging.info(f"   ✓ Action executable (cost: {weight})")
     
     # Summary
-    logging.info(f"\n=== Plan Evaluation Summary ===")
+    logging.info("\n=== Plan Evaluation Summary ===")
     if plan_valid:
-        logging.info(f"✅ Plan is VALID and executable")
+        logging.info("✅ Plan is VALID and executable")
         logging.info(f"Total cost: {total_cost}")
-        logging.info(f"\nFinal state changes:")
+        logging.info("\nFinal state changes:")
         
         # Compare initial vs final state
         initial_state = goap_data.data.copy()
@@ -373,7 +367,7 @@ def evaluate_user_plan(plan_string, client):
             if initial_val != final_val:
                 logging.info(f"  {key}: {initial_val} → {final_val}")
     else:
-        logging.info(f"❌ Plan is INVALID and cannot be executed")
+        logging.info("❌ Plan is INVALID and cannot be executed")
         logging.info("Fix the issues above before the plan can work")
     
     # Suggest improvements

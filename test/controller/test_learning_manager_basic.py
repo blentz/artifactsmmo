@@ -1,9 +1,10 @@
 """Basic unit tests for LearningManager class."""
 
-import unittest
-import tempfile
 import os
-from unittest.mock import Mock, patch, MagicMock
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+
 from src.controller.learning_manager import LearningManager
 
 

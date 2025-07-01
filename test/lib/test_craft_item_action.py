@@ -1,9 +1,11 @@
 """Test module for CraftItemAction."""
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
 from src.controller.actions.craft_item import CraftItemAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestCraftItemAction(unittest.TestCase):
@@ -14,7 +16,7 @@ class TestCraftItemAction(unittest.TestCase):
         self.character_name = "TestCharacter"
         self.item_code = "copper_sword"
         self.quantity = 2
-        self.action = CraftItemAction(self.character_name, self.item_code, self.quantity)
+        self.action = CraftItemAction()
         
         # Mock client
         self.mock_client = create_mock_client()
@@ -30,23 +32,27 @@ class TestCraftItemAction(unittest.TestCase):
 
     def test_craft_item_action_initialization(self):
         """Test CraftItemAction initialization."""
-        self.assertEqual(self.action.character_name, self.character_name)
-        self.assertEqual(self.action.item_code, self.item_code)
-        self.assertEqual(self.action.quantity, self.quantity)
+        # Action no longer stores these as instance attributes
+        self.assertFalse(hasattr(self.action, 'character_name'))
+        self.assertFalse(hasattr(self.action, 'item_code'))
+        self.assertFalse(hasattr(self.action, 'quantity'))
 
     def test_craft_item_action_initialization_default_quantity(self):
         """Test CraftItemAction initialization with default quantity."""
-        action = CraftItemAction(self.character_name, self.item_code)
-        self.assertEqual(action.quantity, 1)
+        action = CraftItemAction()
+        # Action no longer stores quantity as instance attribute
+        self.assertFalse(hasattr(action, 'quantity'))
 
     def test_craft_item_action_repr(self):
         """Test CraftItemAction string representation."""
-        expected = f"CraftItemAction({self.character_name}, {self.item_code}, qty={self.quantity})"
+        # Repr is now simplified
+        expected = "CraftItemAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test crafting fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -57,7 +63,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_client._character_cache = None
         mock_get_character_api.return_value = None
         
-        result = self.action.execute(mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=None, character_y=None)
+        result = self.action.execute(mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('No character data available', result['error'])
 
@@ -66,7 +73,8 @@ class TestCraftItemAction(unittest.TestCase):
         """Test crafting fails when map API fails."""
         mock_get_map_api.return_value = None
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get map information', result['error'])
         self.assertEqual(result['target_x'], 5)
@@ -79,7 +87,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_response.data = None
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get map information', result['error'])
 
@@ -94,7 +103,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('No workshop available at current location', result['error'])
 
@@ -122,7 +132,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_response.data = mock_map_data
         mock_get_map_api.return_value = mock_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('No workshop available at current location', result['error'])
 
@@ -145,7 +156,8 @@ class TestCraftItemAction(unittest.TestCase):
         # Mock item API failure
         mock_get_item_api.return_value = None
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn(f'Could not get details for item {self.item_code}', result['error'])
 
@@ -170,7 +182,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_item_response.data = None
         mock_get_item_api.return_value = mock_item_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn(f'Could not get details for item {self.item_code}', result['error'])
 
@@ -184,7 +197,8 @@ class TestCraftItemAction(unittest.TestCase):
         # Mock crafting API failure
         mock_crafting_api.return_value = None
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting action failed - no response data', result['error'])
 
@@ -200,7 +214,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_crafting_response.data = None
         mock_crafting_api.return_value = mock_crafting_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting action failed - no response data', result['error'])
 
@@ -221,7 +236,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_crafting_response.data = mock_skill_data
         mock_crafting_api.return_value = mock_crafting_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=5, character_y=3)
+        result = self.action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['item_code'], self.item_code)
         self.assertEqual(result['quantity_crafted'], self.quantity)
@@ -268,7 +284,8 @@ class TestCraftItemAction(unittest.TestCase):
         mock_crafting_response.data = mock_skill_data
         mock_crafting_api.return_value = mock_crafting_response
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['cooldown'], 30)
         self.assertEqual(result['xp_gained'], 25)
@@ -286,7 +303,8 @@ class TestCraftItemAction(unittest.TestCase):
         """Test exception handling during crafting."""
         mock_get_map_api.side_effect = Exception("Network error")
         
-        result = self.action.execute(self.mock_client)
+        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Crafting action failed: Network error', result['error'])
 

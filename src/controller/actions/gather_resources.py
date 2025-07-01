@@ -1,38 +1,42 @@
 """ GatherResourcesAction module """
 
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import sync as gathering_api
-from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
+from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import (
+    sync as gathering_api,
+)
+from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
 class GatherResourcesAction(ActionBase):
     """ Action to gather resources from the current map location """
 
-    def __init__(self, character_name: str, target_resource: Optional[str] = None):
+    def __init__(self):
         """
         Initialize the gather resources action.
-
-        Args:
-            character_name: Name of the character performing the action
-            target_resource: Specific resource to gather. If None, gathers any available resource.
         """
         super().__init__()
-        self.character_name = character_name
-        self.target_resource = target_resource
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Gather resources from the current location """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
-            
-        self.log_execution_start(character_name=self.character_name, target_resource=self.target_resource)
+        
+        # Get parameters from context
+        character_name = context.character_name
+        target_resource = context.get('target_resource')
+        
+        self.log_execution_start(character_name=character_name, target_resource=target_resource)
         
         try:
-            # Get character position from context or API
-            character_x = kwargs.get('character_x')
-            character_y = kwargs.get('character_y')
+            # Get character position from context
+            character_x = context.character_x
+            character_y = context.character_y
             
             # If position not in context, try to get from character cache
             if character_x is None or character_y is None:
@@ -68,9 +72,9 @@ class GatherResourcesAction(ActionBase):
             resource_code = map_data.content.code
             
             # Check if this matches our target resource (if specified)
-            if self.target_resource and resource_code != self.target_resource:
+            if target_resource and resource_code != target_resource:
                 error_response = self.get_error_response(
-                    f'Resource {resource_code} does not match target {self.target_resource}',
+                    f'Resource {resource_code} does not match target {target_resource}',
                     location=(character_x, character_y),
                     available_resource=resource_code
                 )
@@ -88,7 +92,7 @@ class GatherResourcesAction(ActionBase):
                 return error_response
             
             # Perform the gathering action
-            gathering_response = gathering_api(name=self.character_name, client=client)
+            gathering_response = gathering_api(name=character_name, client=client)
             
             if gathering_response and gathering_response.data:
                 # Extract useful information from the response
@@ -131,5 +135,4 @@ class GatherResourcesAction(ActionBase):
             return error_response
 
     def __repr__(self):
-        target_str = f", target={self.target_resource}" if self.target_resource else ""
-        return f"GatherResourcesAction({self.character_name}{target_str})"
+        return "GatherResourcesAction()"

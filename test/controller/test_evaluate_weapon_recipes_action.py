@@ -1,11 +1,13 @@
 """Test module for EvaluateWeaponRecipesAction."""
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
+
 from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
-from test.fixtures import create_mock_client
+
+from test.fixtures import MockActionContext, create_mock_client
 
 
 class TestEvaluateWeaponRecipesAction(unittest.TestCase):
@@ -23,12 +25,7 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         self.mock_knowledge_base.data = {'items': {}, 'monsters': {}, 'starting_equipment': {}}
         
         self.mock_action_config = {'default_weapon': 'iron_sword'}
-        self.action = EvaluateWeaponRecipesAction(
-            character_name=self.character_name,
-            current_weapon="iron_sword",
-            knowledge_base=self.mock_knowledge_base,
-            action_config=self.mock_action_config
-        )
+        self.action = EvaluateWeaponRecipesAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -38,43 +35,47 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
 
     def test_evaluate_weapon_recipes_action_initialization(self):
         """Test EvaluateWeaponRecipesAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.current_weapon, "iron_sword")
+        # Action doesn't store character_name or current_weapon anymore
+        self.assertIsNotNone(self.action)
 
     def test_evaluate_weapon_recipes_action_initialization_defaults(self):
         """Test EvaluateWeaponRecipesAction initialization with defaults."""
-        action = EvaluateWeaponRecipesAction("player")
-        self.assertEqual(action.character_name, "player")
-        self.assertIsNone(action.current_weapon)
+        action = EvaluateWeaponRecipesAction()
+        self.assertIsNotNone(action)
 
     def test_evaluate_weapon_recipes_action_repr(self):
         """Test EvaluateWeaponRecipesAction string representation."""
-        expected = "EvaluateWeaponRecipesAction(test_character, current=iron_sword)"
+        expected = "EvaluateWeaponRecipesAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_evaluate_weapon_recipes_action_repr_no_current_weapon(self):
         """Test EvaluateWeaponRecipesAction string representation with default weapon."""
-        action = EvaluateWeaponRecipesAction("player")
-        expected = "EvaluateWeaponRecipesAction(player, current=None)"
+        action = EvaluateWeaponRecipesAction()
+        expected = "EvaluateWeaponRecipesAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name=self.character_name)
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
         """Test execute when character API fails."""
         mock_get_character_api.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name)
+        context.knowledge_base = self.mock_knowledge_base
+        context["action_config"] = self.mock_action_config
+        
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_character_api_no_data(self, mock_get_character_api):
         """Test execute when character API returns no data."""
         mock_response = Mock()
@@ -82,11 +83,15 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         mock_get_character_api.return_value = mock_response
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name)
+        context.knowledge_base = self.mock_knowledge_base
+        context["action_config"] = self.mock_action_config
+        
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_knowledge_base_fails(self, mock_get_character_api):
         """Test execute when knowledge base fails to load."""
         # Mock character API
@@ -101,20 +106,21 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         # Make data property raise when accessed
         type(mock_knowledge_base).data = property(lambda self: (_ for _ in ()).throw(Exception("Knowledge base error")))
         
-        action = EvaluateWeaponRecipesAction(
+        action = EvaluateWeaponRecipesAction()
+        context = MockActionContext(
             character_name=self.character_name,
-            current_weapon="iron_sword",
-            knowledge_base=mock_knowledge_base,
-            action_config=self.mock_action_config
+            current_weapon="iron_sword"
         )
+        context.knowledge_base = mock_knowledge_base
+        context["action_config"] = self.mock_action_config
         
         client = create_mock_client()
         
-        result = action.execute(client)
+        result = action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Knowledge base error', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_no_weapons_data(self, mock_get_character_api):
         """Test execute when no weapons data available."""
         # Mock character API
@@ -128,50 +134,67 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         mock_knowledge_base = Mock()
         mock_knowledge_base.data = {}
         
-        action = EvaluateWeaponRecipesAction(
+        action = EvaluateWeaponRecipesAction()
+        context = MockActionContext(
             character_name=self.character_name,
-            current_weapon="iron_sword",
-            knowledge_base=mock_knowledge_base,
-            action_config=self.mock_action_config
+            current_weapon="iron_sword"
         )
+        context.knowledge_base = mock_knowledge_base
+        context["action_config"] = self.mock_action_config
         
         client = create_mock_client()
         
-        result = action.execute(client)
+        result = action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('No weapon recipes found', result['error'])
 
-    @patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync')
+    @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_success_basic(self, mock_get_character_api):
         """Test successful execution with basic weapon data."""
         # Mock character API
         mock_character_data = Mock()
         mock_character_data.weaponcrafting_level = 5
         mock_character_data.level = 10
+        mock_character_data.inventory = []  # Empty inventory for test
+        mock_character_data.weapon_slot = 'current_weapon'  # Currently equipped weapon
         mock_character_response = Mock()
         mock_character_response.data = mock_character_data
         mock_get_character_api.return_value = mock_character_response
         
         # Mock knowledge base with weapons data
         mock_knowledge_base = Mock()
+        
+        # Mock get_item_data method
+        def mock_get_item_data(item_code, client=None):
+            if item_code in mock_knowledge_base.data['items']:
+                return mock_knowledge_base.data['items'][item_code]
+            return None
+        
+        mock_knowledge_base.get_item_data = mock_get_item_data
         mock_knowledge_base.data = {
             'items': {
                 'copper_sword': {
                     'type': 'weapon',
                     'level': 3,
                     'attack_fire': 10,
-                    'craft': {
+                    'craft_data': {
                         'skill': 'weaponcrafting',
-                        'level': 3
+                        'level': 3,
+                        'items': [
+                            {'code': 'copper', 'quantity': 5}
+                        ]
                     }
                 },
                 'iron_sword': {
                     'type': 'weapon', 
                     'level': 8,
                     'attack_fire': 20,
-                    'craft': {
+                    'craft_data': {
                         'skill': 'weaponcrafting',
-                        'level': 8
+                        'level': 8,
+                        'items': [
+                            {'code': 'iron', 'quantity': 5}
+                        ]
                     }
                 }
             }
@@ -188,34 +211,37 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
             'max_weapons_to_evaluate': 10
         }
         
-        # Create action with mocked dependencies
-        action = EvaluateWeaponRecipesAction(
+        # Create action and context with mocked dependencies
+        action = EvaluateWeaponRecipesAction()
+        context = MockActionContext(
             character_name=self.character_name,
-            current_weapon="iron_sword",
-            knowledge_base=mock_knowledge_base,
-            action_config=mock_action_config
+            current_weapon="iron_sword"
         )
+        context.knowledge_base = mock_knowledge_base
+        context["action_config"] = mock_action_config
         
         # Store character data for skill discovery
         action.character_data = mock_character_data
         
         # Mock API responses for weapon fetching
         with patch('src.controller.actions.evaluate_weapon_recipes.get_all_items_api') as mock_get_all_items:
-            with patch('src.controller.actions.evaluate_weapon_recipes.get_item_api') as mock_get_item:
-                # Mock get_all_items_api to return empty (no weapons found via API)
-                mock_items_response = Mock()
-                mock_items_response.data = []
-                mock_get_all_items.return_value = mock_items_response
-                
-                # Mock get_item_api for current weapon stats
-                mock_current_weapon = Mock()
-                mock_current_weapon.data = Mock()
-                mock_current_weapon.data.attack_fire = 20
-                mock_get_item.return_value = mock_current_weapon
-                
-                client = create_mock_client()
-                
-                result = action.execute(client)
+            # Mock get_all_items_api to return empty (no weapons found via API)
+            mock_items_response = Mock()
+            mock_items_response.data = []
+            mock_get_all_items.return_value = mock_items_response
+            
+            # Add current weapon to knowledge base for stats lookup
+            mock_knowledge_base.data['items']['current_weapon'] = {
+                'code': 'current_weapon',
+                'name': 'Current Weapon',
+                'type': 'weapon',
+                'level': 1,
+                'attack_fire': 20
+            }
+            
+            client = create_mock_client()
+            
+            result = action.execute(client, context)
         
         # Since action can't fetch weapons from API and knowledge base has limited weapons,
         # it might find no craftable weapons for the character's skill level
@@ -234,8 +260,12 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         """Test exception handling during execution."""
         client = create_mock_client()
         
-        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync', side_effect=Exception("API Error")):
-            result = self.action.execute(client)
+        context = MockActionContext(character_name=self.character_name)
+        context.knowledge_base = self.mock_knowledge_base
+        context["action_config"] = self.mock_action_config
+        
+        with patch('src.controller.actions.evaluate_weapon_recipes.get_character_api', side_effect=Exception("API Error")):
+            result = self.action.execute(client, context)
             self.assertFalse(result['success'])
             self.assertIn('Weapon recipe evaluation failed: API Error', result['error'])
 

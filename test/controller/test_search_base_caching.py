@@ -1,11 +1,13 @@
 """Unit tests for SearchActionBase MapState caching integration."""
 
-import unittest
 import tempfile
 import time
-from unittest.mock import Mock, patch, MagicMock
+import unittest
+from unittest.mock import Mock, patch
+
 from src.controller.actions.search_base import SearchActionBase
 from src.game.map.state import MapState
+
 from test.fixtures import create_mock_client
 
 
@@ -15,7 +17,10 @@ class TestSearchBaseCaching(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.mock_client = create_mock_client()
-        self.search_action = SearchActionBase(character_x=5, character_y=3, search_radius=2)
+        self.search_action = SearchActionBase()
+        self.character_x = 5
+        self.character_y = 3
+        self.search_radius = 2
         
         # Create temporary MapState for testing
         self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
@@ -58,7 +63,10 @@ class TestSearchBaseCaching(unittest.TestCase):
         
         # Execute search
         result = self.search_action.unified_search(
-            self.mock_client, 
+            self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             content_filter, 
             map_state=self.map_state
         )
@@ -101,6 +109,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         # Execute search
         result = self.search_action.unified_search(
             self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             content_filter,
             map_state=self.map_state
         )
@@ -137,6 +148,9 @@ class TestSearchBaseCaching(unittest.TestCase):
             # Execute search without MapState
             result = self.search_action.unified_search(
                 self.mock_client,
+                self.character_x,
+                self.character_y,
+                self.search_radius,
                 content_filter,
                 map_state=None  # No MapState provided
             )
@@ -160,6 +174,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         # Execute search - should handle exception gracefully
         result = self.search_action.unified_search(
             self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             content_filter,
             map_state=self.map_state
         )
@@ -208,6 +225,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         resource_filter = SearchActionBase.create_resource_filter(['copper_rocks'])
         result = self.search_action.unified_search(
             self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             resource_filter,
             map_state=self.map_state
         )
@@ -218,6 +238,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         monster_filter = SearchActionBase.create_monster_filter(['green_slime'])
         result = self.search_action.unified_search(
             self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             monster_filter,
             map_state=self.map_state
         )
@@ -228,6 +251,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         workshop_filter = SearchActionBase.create_workshop_filter('weaponcrafting')
         result = self.search_action.unified_search(
             self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             workshop_filter,
             map_state=self.map_state
         )
@@ -249,6 +275,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         # Execute search
         result = self.search_action.unified_search(
             self.mock_client,
+            self.character_x,
+            self.character_y,
+            self.search_radius,
             content_filter,
             map_state=self.map_state
         )

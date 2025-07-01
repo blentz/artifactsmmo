@@ -13,13 +13,14 @@ class TestAttackAction(unittest.TestCase):
         self.char_name = "test_character"
 
     def test_attack_action_initialization(self):
-        action = AttackAction(character_name=self.char_name)
-        self.assertEqual(action.character_name, self.char_name)
+        action = AttackAction()
+        self.assertIsInstance(action, AttackAction)
+        self.assertFalse(hasattr(action, 'character_name'))
         self.assertIsNotNone(action.logger)
 
     def test_attack_action_repr(self):
-        action = AttackAction("test_char")
-        expected = "AttackAction(test_char)"
+        action = AttackAction()
+        expected = "AttackAction()"
         self.assertEqual(repr(action), expected)
 
     @patch('src.controller.actions.attack.fight_character_api')
@@ -37,8 +38,10 @@ class TestAttackAction(unittest.TestCase):
         mock_response.data.fight.to_dict.return_value = mock_fight_data
         mock_fight_api.return_value = mock_response
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Verify the API was called with correct parameters
         mock_fight_api.assert_called_once_with(
@@ -70,8 +73,10 @@ class TestAttackAction(unittest.TestCase):
         mock_response.data.fight.to_dict.return_value = mock_fight_data
         mock_fight_api.return_value = mock_response
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Verify response shows loss
         self.assertTrue(result['success'])
@@ -86,8 +91,10 @@ class TestAttackAction(unittest.TestCase):
         mock_response.data = None
         mock_fight_api.return_value = mock_response
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should still return success with default values
         self.assertTrue(result['success'])
@@ -104,16 +111,20 @@ class TestAttackAction(unittest.TestCase):
         mock_response.data.fight = None
         mock_fight_api.return_value = mock_response
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should still return success with default values
         self.assertTrue(result['success'])
         self.assertEqual(result['xp_gained'], 0)
 
     def test_attack_action_execute_no_client(self):
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=None)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(None, context)
         
         # Should return error
         self.assertFalse(result['success'])
@@ -124,8 +135,10 @@ class TestAttackAction(unittest.TestCase):
         # Mock API to raise cooldown error
         mock_fight_api.side_effect = Exception("Character is in cooldown")
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should return error with cooldown flag
         self.assertFalse(result['success'])
@@ -137,8 +150,10 @@ class TestAttackAction(unittest.TestCase):
         # Mock API to raise no monster error
         mock_fight_api.side_effect = Exception("Monster not found at this location")
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should return error with no_monster flag
         self.assertFalse(result['success'])
@@ -150,8 +165,10 @@ class TestAttackAction(unittest.TestCase):
         # Mock API to raise wrong location error
         mock_fight_api.side_effect = Exception("497 Character already at this location")
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should return error with wrong_location flag
         self.assertFalse(result['success'])
@@ -163,8 +180,10 @@ class TestAttackAction(unittest.TestCase):
         # Mock API to raise action not allowed error
         mock_fight_api.side_effect = Exception("486 This action is not allowed")
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should return error with action_not_allowed flag
         self.assertFalse(result['success'])
@@ -176,8 +195,10 @@ class TestAttackAction(unittest.TestCase):
         # Mock API to raise character not found error
         mock_fight_api.side_effect = Exception("Character not found")
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should return appropriate error
         self.assertFalse(result['success'])
@@ -188,22 +209,27 @@ class TestAttackAction(unittest.TestCase):
         # Mock API to raise generic error
         mock_fight_api.side_effect = Exception("Network error")
         
-        action = AttackAction(character_name=self.char_name)
-        result = action.execute(client=self.client)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        result = action.execute(self.client, context)
         
         # Should return error with original message
         self.assertFalse(result['success'])
         self.assertIn('Network error', result['error'])
 
     def test_attack_action_validate_no_character_name(self):
-        """Test validation fails when character name is empty."""
-        action = AttackAction("")
-        result = action.validate_execution_context(self.client)
-        self.assertFalse(result)
+        """Test validation with empty character name returns error."""
+        from test.fixtures import MockActionContext
+        action = AttackAction()
+        context = MockActionContext(character_name="")
+        result = action.execute(self.client, context)
+        self.assertFalse(result['success'])
+        self.assertIn('character name', result['error'].lower())
 
     def test_estimate_fight_duration_with_monster_data(self):
         """Test fight duration estimation with monster data."""
-        action = AttackAction(self.char_name)
+        action = AttackAction()
         
         # Test with specific monster HP
         monster_data = {'hp': 50}
@@ -222,28 +248,30 @@ class TestAttackAction(unittest.TestCase):
 
     def test_estimate_fight_duration_without_monster_data(self):
         """Test fight duration estimation without monster data."""
-        action = AttackAction(self.char_name)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
         
         # Test with low level character
-        char_state = Mock()
-        char_state.level = 1
-        duration = action.estimate_fight_duration(char_state)
+        context = MockActionContext(character_name="test", character_level=1)
+        duration = action.estimate_fight_duration(context)
         self.assertEqual(duration, 5)  # Max duration for low level
         
         # Test with mid level character
-        char_state.level = 10
-        duration = action.estimate_fight_duration(char_state)
+        context = MockActionContext(character_name="test", character_level=10)
+        duration = action.estimate_fight_duration(context)
         self.assertEqual(duration, 3)  # 5 - 10//5 = 3
         
         # Test with high level character
-        char_state.level = 20
-        duration = action.estimate_fight_duration(char_state)
+        context = MockActionContext(character_name="test", character_level=20)
+        duration = action.estimate_fight_duration(context)
         self.assertEqual(duration, 2)  # Min duration
 
     def test_estimate_fight_duration_no_character_state(self):
         """Test fight duration estimation with no character state."""
-        action = AttackAction(self.char_name)
-        duration = action.estimate_fight_duration(None)
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name="test")  # No character_level
+        duration = action.estimate_fight_duration(context)
         self.assertEqual(duration, 5)  # Default for level 1
 
     def test_attack_action_class_attributes(self):

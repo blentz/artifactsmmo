@@ -1,9 +1,9 @@
 """Unit tests for ActionsData class."""
 
-import unittest
-import tempfile
 import os
-from unittest.mock import patch, mock_open
+import tempfile
+import unittest
+from unittest.mock import patch
 
 from src.lib.actions_data import ActionsData
 

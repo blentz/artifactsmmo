@@ -1,13 +1,19 @@
 """Test module for AnalyzeKnowledgeStateAction."""
 
 import unittest
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.analyze_knowledge_state import AnalyzeKnowledgeStateAction
+
 from test.fixtures import (
-    create_mock_client, MockCharacterData, MockKnowledgeBase, MockMapState,
-    mock_character_response, create_test_environment, cleanup_test_environment
+    MockActionContext,
+    MockCharacterData,
+    MockKnowledgeBase,
+    MockMapState,
+    cleanup_test_environment,
+    create_mock_client,
+    create_test_environment,
+    mock_character_response,
 )
 
 
@@ -18,10 +24,7 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir, self.original_data_prefix = create_test_environment()
         
-        self.action = AnalyzeKnowledgeStateAction(
-            character_name="test_character",
-            analysis_scope="comprehensive"
-        )
+        self.action = AnalyzeKnowledgeStateAction()
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -29,23 +32,24 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
 
     def test_analyze_knowledge_state_action_initialization(self):
         """Test AnalyzeKnowledgeStateAction initialization."""
-        self.assertEqual(self.action.character_name, "test_character")
-        self.assertEqual(self.action.analysis_scope, "comprehensive")
+        # Action no longer has attributes since it uses ActionContext
+        self.assertIsInstance(self.action, AnalyzeKnowledgeStateAction)
 
-    def test_analyze_knowledge_state_action_initialization_defaults(self):
-        """Test AnalyzeKnowledgeStateAction initialization with defaults."""
-        action = AnalyzeKnowledgeStateAction("test")
-        self.assertEqual(action.character_name, "test")
-        self.assertEqual(action.analysis_scope, "comprehensive")
+    def test_analyze_knowledge_state_action_goap_params(self):
+        """Test AnalyzeKnowledgeStateAction GOAP parameters."""
+        self.assertEqual(self.action.conditions["character_alive"], True)
+        self.assertTrue("knowledge_state_analyzed" in self.action.reactions)
+        self.assertTrue("exploration_data_available" in self.action.reactions)
 
     def test_analyze_knowledge_state_action_repr(self):
         """Test AnalyzeKnowledgeStateAction string representation."""
-        expected = "AnalyzeKnowledgeStateAction(test_character, comprehensive)"
+        expected = "AnalyzeKnowledgeStateAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        result = self.action.execute(None)
+        context = MockActionContext(character_name="test_character")
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -55,7 +59,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         mock_get_character.return_value = None
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Could not get character data', result['error'])
 
@@ -66,7 +76,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         mock_get_character.return_value = mock_character_response(character_data)
         
         client = create_mock_client()
-        result = self.action.execute(client)  # No knowledge_base kwarg
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=None,
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)  # No knowledge_base kwarg
         
         self.assertFalse(result['success'])
         self.assertIn('No knowledge base available for analysis', result['error'])
@@ -95,7 +111,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertTrue(result['knowledge_state_analyzed'])
@@ -105,7 +127,7 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_combat_scope_analysis(self, mock_get_character):
         """Test analysis with combat scope."""
-        action = AnalyzeKnowledgeStateAction("test_character", "combat")
+        action = AnalyzeKnowledgeStateAction()
         character_data = MockCharacterData(name="test_character", level=5)
         mock_get_character.return_value = mock_character_response(character_data)
         
@@ -124,7 +146,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="combat",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('combat_knowledge_score', result)
@@ -133,7 +161,7 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_crafting_scope_analysis(self, mock_get_character):
         """Test analysis with crafting scope."""
-        action = AnalyzeKnowledgeStateAction("test_character", "crafting")
+        action = AnalyzeKnowledgeStateAction()
         character_data = MockCharacterData(name="test_character", level=3)
         mock_get_character.return_value = mock_character_response(character_data)
         
@@ -155,7 +183,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="crafting",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('crafting_knowledge_score', result)
@@ -165,7 +199,7 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_exploration_scope_analysis(self, mock_get_character):
         """Test analysis with exploration scope."""
-        action = AnalyzeKnowledgeStateAction("test_character", "exploration")
+        action = AnalyzeKnowledgeStateAction()
         character_data = MockCharacterData(name="test_character", level=3)
         mock_get_character.return_value = mock_character_response(character_data)
         
@@ -179,7 +213,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         map_state = MockMapState()
         
         client = create_mock_client()
-        result = action.execute(client, knowledge_base=knowledge_base, map_state=map_state)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="exploration",
+            knowledge_base=knowledge_base,
+            map_state=map_state
+        )
+        result = action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('exploration_knowledge_score', result)
@@ -192,7 +232,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         mock_get_character.side_effect = Exception("API Error")
         client = create_mock_client()
         
-        result = self.action.execute(client)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=MockKnowledgeBase(),
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         self.assertFalse(result['success'])
         self.assertIn('Knowledge state analysis failed: API Error', result['error'])
 
@@ -260,7 +306,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertGreater(result['knowledge_completeness_score'], 0.0)
@@ -283,7 +335,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         }
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('priority_gaps', result)
@@ -300,7 +358,13 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         knowledge_base = MockKnowledgeBase()
         
         client = create_mock_client()
-        result = self.action.execute(client, knowledge_base=knowledge_base)
+        context = MockActionContext(
+            character_name="test_character",
+            analysis_scope="comprehensive",
+            knowledge_base=knowledge_base,
+            map_state=MockMapState()
+        )
+        result = self.action.execute(client, context)
         
         self.assertTrue(result['success'])
         self.assertIn('primary_learning_focus', result)

@@ -1,10 +1,11 @@
 """Unit tests for MapState cache timeout behavior."""
 
-import unittest
+import os
 import tempfile
 import time
-import os
-from unittest.mock import Mock, patch, MagicMock
+import unittest
+from unittest.mock import Mock, patch
+
 from src.game.map.state import MapState
 from test.fixtures import create_mock_client
 

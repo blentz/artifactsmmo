@@ -1,59 +1,64 @@
 """ EquipItemAction module """
 
 from typing import Dict, Optional
+
 from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import sync as equip_api
 from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
 class EquipItemAction(ActionBase):
     """ Action to equip items from inventory to equipment slots """
 
-    def __init__(self, character_name: str, item_code: str, slot: str, quantity: int = 1):
+    def __init__(self):
         """
         Initialize the equip item action.
-
-        Args:
-            character_name: Name of the character performing the action
-            item_code: Code of the item to equip
-            slot: Equipment slot to equip to (weapon, shield, helmet, etc.)
-            quantity: Quantity to equip (default 1)
         """
         super().__init__()
-        self.character_name = character_name
-        self.item_code = item_code
-        self.slot = slot
-        self.quantity = quantity
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Equip the specified item """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        character_name = context.character_name
+        item_code = context.get('item_code')
+        slot = context.get('slot')
+        quantity = context.get('quantity', 1)
+        
+        if not item_code:
+            return self.get_error_response("No item code provided")
+        if not slot:
+            return self.get_error_response("No slot provided")
             
         self.log_execution_start(
-            character_name=self.character_name,
-            item_code=self.item_code,
-            slot=self.slot
+            character_name=character_name,
+            item_code=item_code,
+            slot=slot
         )
         
         try:
             # Convert slot name to ItemSlot enum
-            item_slot = self._get_item_slot_enum(self.slot)
+            item_slot = self._get_item_slot_enum(slot)
             if item_slot is None:
-                error_response = self.get_error_response(f'Invalid equipment slot: {self.slot}')
+                error_response = self.get_error_response(f'Invalid equipment slot: {slot}')
                 self.log_execution_result(error_response)
                 return error_response
             
             # Prepare equip schema
             equip_schema = EquipSchema(
-                code=self.item_code,
+                code=item_code,
                 slot=item_slot
             )
             
             # Perform the equip action
             equip_response = equip_api(
-                name=self.character_name,
+                name=character_name,
                 client=client,
                 body=equip_schema
             )
@@ -63,9 +68,9 @@ class EquipItemAction(ActionBase):
                 character_data = equip_response.data
                 result = {
                     'success': True,
-                    'item_code': self.item_code,
-                    'slot': self.slot,
-                    'character_name': self.character_name,
+                    'item_code': item_code,
+                    'slot': slot,
+                    'character_name': character_name,
                     'equipped': True
                 }
                 
@@ -147,4 +152,4 @@ class EquipItemAction(ActionBase):
         return slot_mapping.get(slot_lower)
 
     def __repr__(self):
-        return f"EquipItemAction({self.character_name}, {self.item_code}, {self.slot}, qty={self.quantity})"
+        return "EquipItemAction()"

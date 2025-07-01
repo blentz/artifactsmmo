@@ -8,10 +8,9 @@ replacing hardcoded cooldown logic in the AI controller.
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
 
-from src.lib.yaml_data import YamlData
 from src.game.globals import CONFIG_PREFIX
+from src.lib.yaml_data import YamlData
 
 
 class CooldownManager:
@@ -158,13 +157,14 @@ class CooldownManager:
         """Mark that character state has been refreshed."""
         self._last_character_refresh = time.time()
     
-    def handle_cooldown_with_wait(self, character_state, action_executor) -> bool:
+    def handle_cooldown_with_wait(self, character_state, action_executor, controller=None) -> bool:
         """
         Handle active cooldown by executing a wait action with calculated duration.
         
         Args:
             character_state: Character state object
             action_executor: Action executor for running wait action
+            controller: Optional controller reference for building context
             
         Returns:
             True if cooldown was handled successfully, False otherwise
@@ -181,7 +181,18 @@ class CooldownManager:
             
             # Execute wait action with calculated duration
             wait_action_data = {'wait_duration': wait_duration}
-            result = action_executor.execute_action('wait', wait_action_data, None, {})
+            
+            # Build proper context with character state
+            context = {
+                'character_state': character_state,
+                'wait_duration': wait_duration
+            }
+            
+            # Include controller if provided
+            if controller:
+                context['controller'] = controller
+            
+            result = action_executor.execute_action('wait', wait_action_data, None, context)
             
             if result.success:
                 self.logger.info(f"✅ Successfully waited {wait_duration:.1f} seconds for cooldown")

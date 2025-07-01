@@ -1,9 +1,9 @@
 import time
-from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_x_y
-from artifactsmmo_api_client.models.map_schema import MapSchema
 
-from src.lib.yaml_data import YamlData
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_x_y
+
 from src.game.globals import DATA_PREFIX
+from src.lib.yaml_data import YamlData
 
 
 class MapState(YamlData):
@@ -27,7 +27,7 @@ class MapState(YamlData):
         if initial_scan and client:
             try:
                 self.scan(x=0, y=0)
-            except Exception as e:
+            except Exception:
                 # If initial scan fails (e.g., in tests), continue without it
                 pass
 
@@ -70,20 +70,20 @@ class MapState(YamlData):
                 last_scanned = float(self.data[coord_key]['last_scanned'])
                 age = current_time - last_scanned
                 if age >= self.cache_duration:
-                    print(f"🔄 Cache expired for ({x},{y}) - age {age:.1f}s >= {self.cache_duration}s, refreshing from API")
+                    self._log.debug(f"🔄 Cache expired for ({x},{y}) - age {age:.1f}s >= {self.cache_duration}s, refreshing from API")
                 else:
-                    print(f"🆕 First scan for ({x},{y})")
+                    self._log.debug(f"🆕 First scan for ({x},{y})")
             except (ValueError, TypeError):
-                print(f"🆕 First scan for ({x},{y})")
+                self._log.debug(f"🆕 First scan for ({x},{y})")
         else:
-            print(f"🆕 First scan for ({x},{y})")
+            self._log.debug(f"🆕 First scan for ({x},{y})")
         
         # Get map data from API
         map_response = get_map_x_y(x, y, client=self._client)  # FIXME: not async
         
         # Handle 404 responses (coordinates outside map boundaries)
         if map_response is None:
-            print(f"🚫 Map boundary detected at ({x},{y}) - coordinate outside map")
+            self._log.debug(f"🚫 Map boundary detected at ({x},{y}) - coordinate outside map")
             # Don't cache invalid coordinates, just return None
             return None
             
@@ -98,7 +98,7 @@ class MapState(YamlData):
         if self._learning_callback and maptile.content:
             try:
                 self._learning_callback(x, y, map_response)
-            except Exception as e:
+            except Exception:
                 # Don't let learning errors break map scanning
                 pass
         

@@ -1,46 +1,52 @@
 """ UnequipItemAction module """
 
 from typing import Dict, Optional
-from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import sync as unequip_api
-from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
+
+from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import (
+    sync as unequip_api,
+)
 from artifactsmmo_api_client.models.item_slot import ItemSlot
+from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
+
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 
 
 class UnequipItemAction(ActionBase):
     """ Action to unequip an item from a specific equipment slot to inventory """
 
-    def __init__(self, character_name: str, slot: str, quantity: int = 1):
+    def __init__(self):
         """
         Initialize the unequip item action.
-
-        Args:
-            character_name: Name of the character performing the action
-            slot: Equipment slot to unequip from (e.g., 'weapon', 'helmet', 'body_armor')
-            quantity: Quantity to unequip (applicable to utilities only, default=1)
         """
         super().__init__()
-        self.character_name = character_name
-        self.slot = slot
-        self.quantity = quantity
 
-    def execute(self, client, **kwargs) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Unequip an item from the specified equipment slot to inventory """
-        if not self.validate_execution_context(client):
+        if not self.validate_execution_context(client, context):
             return self.get_error_response("No API client provided")
+        
+        # Get parameters from context
+        character_name = context.character_name
+        slot = context.get('slot')
+        quantity = context.get('quantity', 1)
+        
+        if not slot:
+            return self.get_error_response("No slot provided")
             
         self.log_execution_start(
-            character_name=self.character_name, 
-            slot=self.slot,
-            quantity=self.quantity
+            character_name=character_name, 
+            slot=slot,
+            quantity=quantity
         )
         
         try:
             # Validate slot name and convert to ItemSlot enum
-            slot_enum = self._get_item_slot_enum(self.slot)
+            slot_enum = self._get_item_slot_enum(slot)
             if not slot_enum:
                 error_response = self.get_error_response(
-                    f"Invalid equipment slot: {self.slot}",
+                    f"Invalid equipment slot: {slot}",
                     valid_slots=list(ItemSlot)
                 )
                 self.log_execution_result(error_response)
@@ -49,18 +55,18 @@ class UnequipItemAction(ActionBase):
             # Create the unequip schema
             unequip_request = UnequipSchema(
                 slot=slot_enum,
-                quantity=self.quantity
+                quantity=quantity
             )
             
             # Make the API call to unequip the item
-            unequip_response = unequip_api(name=self.character_name, body=unequip_request, client=client)
+            unequip_response = unequip_api(name=character_name, body=unequip_request, client=client)
             
             if unequip_response and unequip_response.data:
                 # Extract useful information from the response
                 data = unequip_response.data
                 result = self.get_success_response(
-                    slot=self.slot,
-                    quantity=self.quantity,
+                    slot=slot,
+                    quantity=quantity,
                     cooldown=getattr(data.cooldown, 'total_seconds', 0) if hasattr(data, 'cooldown') else 0
                 )
                 
@@ -143,4 +149,4 @@ class UnequipItemAction(ActionBase):
             return None
 
     def __repr__(self):
-        return f"UnequipItemAction({self.character_name}, {self.slot}, qty={self.quantity})"
+        return "UnequipItemAction()"

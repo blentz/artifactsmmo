@@ -1,12 +1,13 @@
 """Unit tests for ActionExecutor YAML-driven execution."""
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
 import os
-import yaml
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
 
-from src.controller.action_executor import ActionExecutor, ActionResult, CompositeActionStep
+import yaml
+from src.controller.action_executor import ActionExecutor, ActionResult
+
 from test.fixtures import create_mock_client
 
 

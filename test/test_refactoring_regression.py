@@ -5,17 +5,18 @@ This test suite specifically tests the issues identified and fixed during
 the modular manager architecture refactoring to ensure they don't regress.
 """
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import Mock, patch
 
+from src.controller.action_factory import ActionFactory
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.goap_execution_manager import GOAPExecutionManager
-from src.controller.action_factory import ActionFactory
 from src.controller.mission_executor import MissionExecutor
 from src.lib.actions_data import ActionsData
 from src.lib.yaml_data import YamlData
+
 from test.fixtures import create_mock_client
 
 

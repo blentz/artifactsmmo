@@ -6,12 +6,12 @@ eliminating redundant GOAP methods from the AI controller.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from src.lib.goap import World, Planner, Action_List
-from src.lib.actions_data import ActionsData
-from src.lib.yaml_data import YamlData
 from src.game.globals import CONFIG_PREFIX
+from src.lib.actions_data import ActionsData
+from src.lib.goap import Action_List, Planner, World
+from src.lib.yaml_data import YamlData
 
 
 class GOAPExecutionManager:
@@ -168,7 +168,7 @@ class GOAPExecutionManager:
             
             self.logger.debug(f"📊 Starting GOAP calculation with {len(actions_config)} actions...")
             plans = planner.calculate()
-            self.logger.debug(f"📊 GOAP calculation completed successfully")
+            self.logger.debug("📊 GOAP calculation completed successfully")
             
             if plans:
                 best_plan = plans  # Plans is already the list of nodes
@@ -194,7 +194,7 @@ class GOAPExecutionManager:
                 return plan_actions
             else:
                 self.logger.warning("No GOAP plan found for goal")
-                self.logger.info(f"Start state key values:")
+                self.logger.info("Start state key values:")
                 self.logger.info(f"  - character_safe: {start_state.get('character_safe')}")
                 self.logger.info(f"  - needs_rest: {start_state.get('needs_rest')}")
                 self.logger.info(f"  - is_on_cooldown: {start_state.get('is_on_cooldown')}")
@@ -257,6 +257,7 @@ class GOAPExecutionManager:
         
         # Phase 2: Plan Execution with Selective Replanning
         self.logger.info(f"🚀 Phase 2: Executing plan with {len(complete_plan)} actions")
+        self.logger.debug(f"🚀 Plan: {[i['name'] for i in complete_plan]}")
         return self._execute_plan_with_selective_replanning(
             complete_plan, controller, goal_state, config_file, max_iterations
         )
@@ -320,6 +321,9 @@ class GOAPExecutionManager:
         action_index = 0
         iterations = 0
         
+        # Load actions configuration for updating world state with reactions
+        actions_config = self._load_actions_from_config(config_file)
+        
         while action_index < len(current_plan) and iterations < max_iterations:
             iterations += 1
             
@@ -356,7 +360,10 @@ class GOAPExecutionManager:
             # Execute the action
             success = controller._execute_single_action(action_name, current_action)
             
-            if not success:
+            if success:
+                # Update world state with action reactions if available
+                self._update_world_state_with_reactions(controller, action_name, actions_config)
+            else:
                 self.logger.warning(f"Action {action_name} failed")
                 
                 # Handle specific failure types with targeted recovery
@@ -441,6 +448,7 @@ class GOAPExecutionManager:
             # First check if we already know what weapon to craft
             if hasattr(controller, 'action_context') and controller.action_context.get('item_code'):
                 target_item = controller.action_context['item_code']
+                self.logger.debug(f"Found selected weapon in action context: {target_item}")
                 
                 # Use crafting chain analysis to build complete plan
                 try:
@@ -449,10 +457,10 @@ class GOAPExecutionManager:
                     
                     # Execute crafting chain analysis (this uses existing knowledge, no API calls)
                     from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
-                    chain_analyzer = AnalyzeCraftingChainAction(controller.character_state.name, target_item)
+                    chain_analyzer = AnalyzeCraftingChainAction()
                     
                     # This should use only existing knowledge
-                    chain_result = chain_analyzer.execute(controller.client, **context)
+                    chain_result = chain_analyzer.execute(controller.client, context)
                     
                     if chain_result and chain_result.get('success'):
                         action_sequence = chain_result.get('action_sequence', [])
@@ -573,8 +581,14 @@ class GOAPExecutionManager:
                 return False
             self._chain_analysis_replans = chain_replans + 1
             return True
-        elif action_name == 'evaluate_weapon_recipes':
-            # Replan after weapon evaluation to incorporate weapon selection
+        elif action_name == 'evaluate_recipes':
+            # Only replan after recipe evaluation if we haven't already done so
+            # Track if we've already evaluated and selected a recipe
+            recipe_eval_replans = getattr(self, '_recipe_eval_replans', 0)
+            if recipe_eval_replans >= 1:
+                self.logger.debug("Already replanned after recipe evaluation, skipping replan")
+                return False
+            self._recipe_eval_replans = recipe_eval_replans + 1
             return True
         
         return False
@@ -720,7 +734,7 @@ class GOAPExecutionManager:
     def _is_goal_achieved(self, goal_state: Dict[str, Any], 
                          current_state: Dict[str, Any]) -> bool:
         """Check if the goal state has been achieved."""
-        self.logger.debug(f"🔍 Checking goal achievement:")
+        self.logger.debug("🔍 Checking goal achievement:")
         self.logger.debug(f"  Goal state: {goal_state}")
         
         for key, value in goal_state.items():
@@ -751,7 +765,7 @@ class GOAPExecutionManager:
                 else:
                     self.logger.debug(f"  ✅ {key}: {current_state[key]} == {value}")
         
-        self.logger.debug(f"🎯 Goal achieved: All conditions met!")
+        self.logger.debug("🎯 Goal achieved: All conditions met!")
         return True
     
     def _load_actions_from_config(self, config_file: str = None) -> Dict[str, Dict]:
@@ -880,6 +894,31 @@ class GOAPExecutionManager:
             return False  # For now, let authentication failures be handled by the application
         except Exception:
             return False
+    
+    def _update_world_state_with_reactions(self, controller, action_name: str, actions_config: Dict[str, Dict]) -> None:
+        """
+        Update the world state with action reactions after successful execution.
+        
+        This ensures that the GOAP planner knows about state changes from completed actions.
+        """
+        if not actions_config or action_name not in actions_config:
+            return
+            
+        action_config = actions_config[action_name]
+        reactions = action_config.get('reactions', {})
+        
+        if reactions and hasattr(controller, 'world_state') and controller.world_state:
+            # Update world state data with reactions
+            if not controller.world_state.data:
+                controller.world_state.data = {}
+                
+            for key, value in reactions.items():
+                controller.world_state.data[key] = value
+                self.logger.debug(f"Updated world state: {key} = {value}")
+            
+            # Save the updated world state
+            controller.world_state.save()
+            self.logger.debug(f"World state updated with reactions from {action_name}")
     
     def _is_coordinate_failure(self, action_name: str, controller) -> bool:
         """

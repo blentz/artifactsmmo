@@ -1,8 +1,10 @@
 """Test module for FindResourcesAction."""
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
 from src.controller.actions.find_resources import FindResourcesAction
+
 from test.fixtures import create_mock_client
 
 
@@ -19,67 +21,68 @@ class TestFindResourcesAction(unittest.TestCase):
         self.skill_type = 'mining'
         self.level_range = 5
         
-        self.action = FindResourcesAction(
-            character_x=self.character_x,
-            character_y=self.character_y,
-            search_radius=self.search_radius,
-            resource_types=self.resource_types,
-            character_level=self.character_level,
-            skill_type=self.skill_type,
-            level_range=self.level_range
-        )
+        self.action = FindResourcesAction()
         
         # Mock client
         self.mock_client = create_mock_client()
 
     def test_find_resources_action_initialization(self):
         """Test FindResourcesAction initialization with all parameters."""
-        self.assertEqual(self.action.character_x, self.character_x)
-        self.assertEqual(self.action.character_y, self.character_y)
-        self.assertEqual(self.action.search_radius, self.search_radius)
-        self.assertEqual(self.action.resource_types, self.resource_types)
-        self.assertEqual(self.action.character_level, self.character_level)
-        self.assertEqual(self.action.skill_type, self.skill_type)
-        self.assertEqual(self.action.level_range, self.level_range)
+        # Action should have no parameters stored as instance variables
+        self.assertIsInstance(self.action, FindResourcesAction)
+        self.assertFalse(hasattr(self.action, 'character_x'))
+        self.assertFalse(hasattr(self.action, 'character_y'))
+        self.assertFalse(hasattr(self.action, 'search_radius'))
+        self.assertFalse(hasattr(self.action, 'resource_types'))
+        self.assertFalse(hasattr(self.action, 'character_level'))
+        self.assertFalse(hasattr(self.action, 'skill_type'))
+        self.assertFalse(hasattr(self.action, 'level_range'))
 
     def test_find_resources_action_initialization_defaults(self):
         """Test FindResourcesAction initialization with default parameters."""
         action = FindResourcesAction()
-        self.assertEqual(action.character_x, 0)
-        self.assertEqual(action.character_y, 0)
-        self.assertEqual(action.search_radius, 5)
-        self.assertEqual(action.resource_types, [])
-        self.assertIsNone(action.character_level)
-        self.assertIsNone(action.skill_type)
-        self.assertEqual(action.level_range, 5)
+        self.assertIsInstance(action, FindResourcesAction)
+        self.assertFalse(hasattr(action, 'character_x'))
+        self.assertFalse(hasattr(action, 'character_y'))
+        self.assertFalse(hasattr(action, 'search_radius'))
+        self.assertFalse(hasattr(action, 'resource_types'))
+        self.assertFalse(hasattr(action, 'character_level'))
+        self.assertFalse(hasattr(action, 'skill_type'))
+        self.assertFalse(hasattr(action, 'level_range'))
 
     def test_find_resources_action_initialization_none_resource_types(self):
         """Test FindResourcesAction initialization with None resource_types."""
-        action = FindResourcesAction(resource_types=None)
-        self.assertEqual(action.resource_types, [])
+        action = FindResourcesAction()
+        self.assertIsInstance(action, FindResourcesAction)
+        self.assertFalse(hasattr(action, 'resource_types'))
 
     def test_find_resources_action_repr_with_filters(self):
         """Test FindResourcesAction string representation with filters."""
-        expected = (f"FindResourcesAction({self.character_x}, {self.character_y}, "
-                   f"radius={self.search_radius}, types={self.resource_types}, "
-                   f"skill={self.skill_type}, level={self.character_level})")
+        expected = "FindResourcesAction()"
         self.assertEqual(repr(self.action), expected)
 
     def test_find_resources_action_repr_no_filters(self):
         """Test FindResourcesAction string representation without filters."""
-        action = FindResourcesAction(character_x=1, character_y=2, search_radius=5)
-        expected = "FindResourcesAction(1, 2, radius=5)"
+        action = FindResourcesAction()
+        expected = "FindResourcesAction()"
         self.assertEqual(repr(action), expected)
 
     def test_find_resources_action_repr_partial_filters(self):
         """Test FindResourcesAction string representation with partial filters."""
-        action = FindResourcesAction(character_x=1, character_y=2, search_radius=5, skill_type='mining')
-        expected = "FindResourcesAction(1, 2, radius=5, skill=mining)"
+        action = FindResourcesAction()
+        expected = "FindResourcesAction()"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
         """Test finding resources fails without client."""
-        result = self.action.execute(None)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=self.character_x,
+            character_y=self.character_y,
+            search_radius=self.search_radius,
+            resource_types=self.resource_types
+        )
+        result = self.action.execute(None, context)
         self.assertFalse(result['success'])
         self.assertIn('No API client provided', result['error'])
 
@@ -99,7 +102,13 @@ class TestFindResourcesAction(unittest.TestCase):
             'error': 'No matching content found within radius 3'
         }
         
-        result = self.action.execute(self.mock_client)
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=self.character_x,
+            character_y=self.character_y,
+            search_radius=self.search_radius
+        )
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('error', result)
 
@@ -111,7 +120,14 @@ class TestFindResourcesAction(unittest.TestCase):
             'error': f'No matching content found within radius {self.search_radius}'
         }
         
-        result = self.action.execute(self.mock_client, resource_types=['copper'])
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=self.character_x,
+            character_y=self.character_y,
+            search_radius=self.search_radius,
+            resource_types=['copper']
+        )
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('error', result)
 
@@ -125,7 +141,14 @@ class TestFindResourcesAction(unittest.TestCase):
             'distance': 2.828
         }
         
-        result = self.action.execute(self.mock_client, resource_types=['copper'])
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=self.character_x,
+            character_y=self.character_y,
+            search_radius=self.search_radius,
+            resource_types=['copper']
+        )
+        result = self.action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['location'], (7, 5))
         self.assertEqual(result['resource_code'], 'copper')
@@ -134,7 +157,7 @@ class TestFindResourcesAction(unittest.TestCase):
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_resources_found_default_types(self, mock_unified_search):
         """Test finding resources with default resource types."""
-        action = FindResourcesAction(character_x=5, character_y=3, search_radius=2)
+        action = FindResourcesAction()
         
         mock_unified_search.return_value = {
             'success': True,
@@ -143,7 +166,14 @@ class TestFindResourcesAction(unittest.TestCase):
             'distance': 1.0
         }
         
-        result = action.execute(self.mock_client, resource_types=['ash_wood'])
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=5,
+            character_y=3,
+            search_radius=2,
+            resource_types=['ash_wood']
+        )
+        result = action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['location'], (6, 3))
         self.assertEqual(result['resource_code'], 'ash_wood')
@@ -159,7 +189,14 @@ class TestFindResourcesAction(unittest.TestCase):
             'distance': 1.414
         }
         
-        result = self.action.execute(self.mock_client, resource_types=['copper', 'iron_ore'])
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=self.character_x,
+            character_y=self.character_y,
+            search_radius=self.search_radius,
+            resource_types=['copper', 'iron_ore']
+        )
+        result = self.action.execute(self.mock_client, context)
         self.assertTrue(result['success'])
         self.assertEqual(result['location'], (4, 4))
         self.assertEqual(result['resource_code'], 'iron_ore')
@@ -170,32 +207,42 @@ class TestFindResourcesAction(unittest.TestCase):
         """Test exception handling during resource search."""
         mock_unified_search.side_effect = Exception("API Error")
         
-        result = self.action.execute(self.mock_client, resource_types=['copper'])
+        from test.fixtures import MockActionContext
+        context = MockActionContext(
+            character_x=self.character_x,
+            character_y=self.character_y,
+            search_radius=self.search_radius,
+            resource_types=['copper']
+        )
+        result = self.action.execute(self.mock_client, context)
         self.assertFalse(result['success'])
         self.assertIn('Resource search failed', result['error'])
 
     def test_determine_target_resource_codes_context_types(self):
         """Test _determine_target_resource_codes with context resource types."""
-        result = self.action._determine_target_resource_codes(['copper_rocks'], [])
+        result = self.action._determine_target_resource_codes(['copper_rocks'], [], [], None)
         self.assertEqual(result, ['copper_rocks'])
 
     def test_determine_target_resource_codes_materials_needed(self):
         """Test _determine_target_resource_codes with materials needed."""
-        result = self.action._determine_target_resource_codes([], ['copper'])
-        # Should use dynamic discovery to find copper_rocks that drops copper
-        self.assertIsInstance(result, list)
+        # Materials needed should be a list of dicts with 'code' key
+        materials = [{'code': 'copper', 'quantity': 1}]
+        result = self.action._determine_target_resource_codes([], materials, [], None)
+        # Should extract copper from materials
+        self.assertEqual(result, ['copper'])
 
     def test_determine_target_resource_codes_fallback(self):
-        """Test _determine_target_resource_codes fallback to instance types."""
-        action = FindResourcesAction(resource_types=['iron_ore'])
-        result = action._determine_target_resource_codes([], [])
+        """Test _determine_target_resource_codes fallback to context types."""
+        action = FindResourcesAction()
+        # Test fallback to resource_types parameter (third argument)
+        result = action._determine_target_resource_codes([], [], ['iron_ore'], None)
         self.assertEqual(result, ['iron_ore'])
 
     def test_determine_target_resource_codes_empty(self):
         """Test _determine_target_resource_codes with empty inputs and no knowledge base."""
         action = FindResourcesAction()
-        # Without knowledge base, should return empty list
-        result = action._determine_target_resource_codes([], [])
+        # Without any resource types, should return empty list
+        result = action._determine_target_resource_codes([], [], [], None)
         self.assertEqual(result, [])
 
 
