@@ -13,6 +13,8 @@ actions:
     reactions:
       combat_context:
         status: 'searching'
+      resource_availability:
+        monsters: false
     weight: 2
     
   # Find monsters action
@@ -20,8 +22,6 @@ actions:
     conditions:
       combat_context:
         status: 'searching'
-      resource_availability:
-        monsters: false
       character_status:
         alive: true
     reactions:
@@ -61,12 +61,10 @@ actions:
   rest:
     conditions:
       character_status:
-        hp_percentage: "<100"
-        alive: true
+        hp_percentage: '<100'
     reactions:
       character_status:
         hp_percentage: 100
-        safe: true
     weight: 1
     
   wait:
@@ -82,10 +80,10 @@ actions:
   analyze_equipment_gaps:
     conditions:
       equipment_status:
-        upgrade_status: 'none'
+        upgrade_status: 'analyzing'
     reactions:
       equipment_status:
-        upgrade_status: 'analyzing'
+        upgrade_status: 'analyzing'  # Will be overridden to 'combat_ready' if equipment is adequate
         gaps_analyzed: true
     weight: 1
     
@@ -268,7 +266,7 @@ actions:
   initiate_equipment_analysis:
     conditions:
       equipment_status:
-        upgrade_status: 'none'
+        upgrade_status: 'needs_analysis'
       character_status:
         alive: true
     reactions:
@@ -312,7 +310,7 @@ actions:
         upgrade_status: 'completed'
     reactions:
       equipment_status:
-        upgrade_status: 'none'
+        upgrade_status: 'needs_analysis'
         selected_item: null
         target_slot: null
     weight: 1

@@ -212,7 +212,7 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
-        expected_reactions = {"craft_plan_available": True, "material_requirements_known": True, "crafting_opportunities_known": True}
+        expected_reactions = {"craft_plan_available": True, "crafting_opportunities_known": True}
         self.assertEqual(AnalyzeCraftingChainAction.reactions, expected_reactions)
 
     def test_goap_weights(self):

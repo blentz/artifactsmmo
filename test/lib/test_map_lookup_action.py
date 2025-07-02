@@ -7,15 +7,25 @@ from artifactsmmo_api_client.models.map_response_schema import MapResponseSchema
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from src.controller.actions.map_lookup import MapLookupAction
 
+from test.base_test import BaseTest
 from test.fixtures import MockActionContext, create_mock_client
 
 
-class TestMapLookupAction(unittest.TestCase):
+class TestMapLookupAction(BaseTest):
     def setUp(self):
         self.client = create_mock_client()
         self.x = 5
         self.y = 10
         self.action = MapLookupAction()
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        # Clean up mock objects
+        self.client = None
+        self.action = None
+        
+        # Clear any patches that might be active
+        patch.stopall()
 
     def test_map_lookup_action_initialization(self):
         action = MapLookupAction()

@@ -13,10 +13,11 @@ from src.controller.action_executor import ActionExecutor, ActionResult
 from src.controller.action_factory import ActionFactory
 from src.lib.yaml_data import YamlData
 
+from test.base_test import BaseTest
 from test.fixtures import create_mock_client
 
 
-class TestActionExecutionRegression(unittest.TestCase):
+class TestActionExecutionRegression(BaseTest):
     """Test action execution pipeline to prevent regressions."""
     
     def setUp(self):
@@ -31,6 +32,13 @@ class TestActionExecutionRegression(unittest.TestCase):
         """Clean up test environment."""
         import shutil
         shutil.rmtree(self.temp_dir)
+        
+        # Clean up mock objects
+        self.mock_client = None
+        self.action_executor = None
+        
+        # Clear any patches that might be active
+        patch.stopall()
     
     def test_all_registered_actions_can_be_created(self):
         """
@@ -69,30 +77,48 @@ class TestActionExecutionRegression(unittest.TestCase):
         mock_context = self._create_mock_context()
         action_data = {'param': 'value'}
         
-        # Execute unknown action
-        result = self.action_executor.execute_action('nonexistent_action', action_data, 
-                                                   self.mock_client, mock_context)
+        # Temporarily disable logging to avoid handler issues in tests
+        import logging
+        original_level = logging.root.level
+        logging.disable(logging.CRITICAL)
         
-        # Should return failure result, not raise exception
-        self.assertIsInstance(result, ActionResult)
-        self.assertFalse(result.success)
-        if result.error_message:
-            self.assertIn('Unknown action', result.error_message)
+        try:
+            # Execute unknown action
+            result = self.action_executor.execute_action('nonexistent_action', action_data, 
+                                                       self.mock_client, mock_context)
+            
+            # Should return failure result, not raise exception
+            self.assertIsInstance(result, ActionResult)
+            self.assertFalse(result.success)
+            if result.error_message:
+                self.assertIn('Unknown action', result.error_message)
+        finally:
+            # Re-enable logging
+            logging.disable(original_level)
     
     def test_action_executor_handles_missing_parameters(self):
         """Test that action executor handles missing required parameters gracefully."""
         mock_context = self._create_mock_context()
         
-        # Try to execute move action without required parameters
-        result = self.action_executor.execute_action('move', {}, self.mock_client, mock_context)
+        # Temporarily disable logging to avoid handler issues in tests
+        import logging
+        original_level = logging.root.level
+        logging.disable(logging.CRITICAL)
         
-        # Should return failure result with helpful error message
-        self.assertIsInstance(result, ActionResult)
-        self.assertFalse(result.success)
-        # Error message should mention missing parameters
-        if result.error_message:
-            self.assertTrue(any(keyword in result.error_message.lower() 
-                              for keyword in ['parameter', 'missing', 'required']))
+        try:
+            # Try to execute move action without required parameters
+            result = self.action_executor.execute_action('move', {}, self.mock_client, mock_context)
+            
+            # Should return failure result with helpful error message
+            self.assertIsInstance(result, ActionResult)
+            self.assertFalse(result.success)
+            # Error message should mention missing parameters
+            if result.error_message:
+                self.assertTrue(any(keyword in result.error_message.lower() 
+                                  for keyword in ['parameter', 'missing', 'required']))
+        finally:
+            # Re-enable logging
+            logging.disable(original_level)
     
     def test_action_executor_builds_context_correctly(self):
         """Test that action executor builds execution context correctly."""
@@ -149,26 +175,35 @@ class TestActionExecutionRegression(unittest.TestCase):
             'explore_map', 'gather_resources', 'find_resources'
         ]
         
-        for action_name in common_goap_actions:
-            with self.subTest(action=action_name):
-                # Get action-specific test data
-                action_data = self._get_minimal_action_data(action_name)
-                
-                # Execute action (should not raise exception)
-                try:
-                    result = self.action_executor.execute_action(action_name, action_data, 
-                                                               self.mock_client, mock_context)
+        # Temporarily disable logging to avoid handler issues in tests
+        import logging
+        original_level = logging.root.level
+        logging.disable(logging.CRITICAL)
+        
+        try:
+            for action_name in common_goap_actions:
+                with self.subTest(action=action_name):
+                    # Get action-specific test data
+                    action_data = self._get_minimal_action_data(action_name)
                     
-                    # Should return ActionResult (success or failure)
-                    self.assertIsInstance(result, ActionResult)
-                    self.assertEqual(result.action_name, action_name)
-                    
-                    # If it failed, should have error message (unless it's an API mock issue)
-                    if not result.success and result.error_message is not None:
-                        self.assertIsNotNone(result.error_message)
+                    # Execute action (should not raise exception)
+                    try:
+                        result = self.action_executor.execute_action(action_name, action_data, 
+                                                                   self.mock_client, mock_context)
                         
-                except Exception as e:
-                    self.fail(f"Action {action_name} execution raised unexpected exception: {e}")
+                        # Should return ActionResult (success or failure)
+                        self.assertIsInstance(result, ActionResult)
+                        self.assertEqual(result.action_name, action_name)
+                        
+                        # If it failed, should have error message (unless it's an API mock issue)
+                        if not result.success and result.error_message is not None:
+                            self.assertIsNotNone(result.error_message)
+                            
+                    except Exception as e:
+                        self.fail(f"Action {action_name} execution raised unexpected exception: {e}")
+        finally:
+            # Re-enable logging
+            logging.disable(original_level)
     
     def test_action_factory_registration_consistency(self):
         """Test that action factory registration is consistent."""
@@ -199,14 +234,23 @@ class TestActionExecutionRegression(unittest.TestCase):
             mock_action.execute.side_effect = Exception("Test exception")
             mock_create.return_value = mock_action
             
-            result = self.action_executor.execute_action('move', {'x': 1, 'y': 1}, 
-                                                       self.mock_client, mock_context)
+            # Temporarily disable logging to avoid handler issues in tests
+            import logging
+            original_level = logging.root.level
+            logging.disable(logging.CRITICAL)
             
-            # Should handle exception and return failure result
-            self.assertIsInstance(result, ActionResult)
-            self.assertFalse(result.success)
-            if result.error_message:
-                self.assertIn('Test exception', result.error_message)
+            try:
+                result = self.action_executor.execute_action('move', {'x': 1, 'y': 1}, 
+                                                           self.mock_client, mock_context)
+                
+                # Should handle exception and return failure result
+                self.assertIsInstance(result, ActionResult)
+                self.assertFalse(result.success)
+                if result.error_message:
+                    self.assertIn('Test exception', result.error_message)
+            finally:
+                # Re-enable logging
+                logging.disable(original_level)
     
     def _create_mock_context(self):
         """Create a mock execution context for testing."""
@@ -276,7 +320,7 @@ class TestActionExecutionRegression(unittest.TestCase):
         return action_data_map.get(action_name, {})
 
 
-class TestActionParameterHandling(unittest.TestCase):
+class TestActionParameterHandling(BaseTest):
     """Test action parameter handling and context building."""
     
     def test_parameter_template_resolution(self):

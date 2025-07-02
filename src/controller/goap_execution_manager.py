@@ -242,18 +242,44 @@ class GOAPExecutionManager:
                     complete_start_state[key] = False
         
         # Override with actual runtime state values
-        complete_start_state.update(start_state)
+        # Need to do a deep merge for nested dictionaries
+        for key, value in start_state.items():
+            if isinstance(value, dict) and key in complete_start_state and isinstance(complete_start_state[key], dict):
+                # Deep merge nested dictionary
+                complete_start_state[key] = complete_start_state[key].copy()
+                complete_start_state[key].update(value)
+            else:
+                complete_start_state[key] = value
         
         # Set start and goal states on the planner
         planner.set_start_state(**complete_start_state)
-        planner.set_goal_state(**goal_state)
         
-        # Fix goal state preservation for nested dictionaries
-        # The planner.state() method overwrites nested dicts with -1
-        # We need to restore the nested structure after set_goal_state
+        # The planner might not handle nested dicts properly, so we need to restore them
+        for key, value in complete_start_state.items():
+            if isinstance(value, dict):
+                planner.values[key] = value
+        
+        # For goal state, we only want to set the specific values we're checking for
+        # We don't need a complete state - GOAP will only check the specified values
+        # First, create a minimal goal state with only the keys we care about
+        minimal_goal_state = {}
+        
+        # Add all keys from goal_state to ensure they exist in planner.values
+        for key in goal_state.keys():
+            if key not in minimal_goal_state:
+                if key in complete_start_state:
+                    minimal_goal_state[key] = complete_start_state[key]
+                else:
+                    minimal_goal_state[key] = False
+        
+        # Now set the goal state with all keys present
+        planner.set_goal_state(**minimal_goal_state)
+        
+        # Override with only the specific goal values we want to check
+        # This ensures GOAP only validates the fields we care about
+        planner.goal_state = {}
         for key, value in goal_state.items():
-            if isinstance(value, dict) and key in planner.goal_state:
-                planner.goal_state[key] = value
+            planner.goal_state[key] = value
         
         # Create actions from configuration
         action_list = Action_List()
@@ -853,33 +879,51 @@ class GOAPExecutionManager:
         self.logger.debug(f"🔍 Checking goal achievement:")
         self.logger.debug(f"  Goal state: {goal_state}")
         
-        for key, value in goal_state.items():
-            current_value = current_state.get(key, None)
-            self.logger.debug(f"  Checking {key}: goal={value}, current={current_value}")
+        return self._check_nested_state_match(goal_state, current_state, "")
+    
+    def _check_nested_state_match(self, goal: Dict[str, Any], current: Dict[str, Any], path: str) -> bool:
+        """Recursively check if goal state matches current state (subset matching)."""
+        for key, goal_value in goal.items():
+            current_path = f"{path}.{key}" if path else key
             
-            if key not in current_state:
-                self.logger.debug(f"  ❌ Missing key '{key}' in current state")
+            if key not in current:
+                self.logger.debug(f"  ❌ Missing key '{current_path}' in current state")
                 return False
-                
-            if isinstance(value, str) and value.startswith('>'):
-                # Handle greater-than conditions like "character_level: >2"
-                target_value = int(value[1:])
-                if current_state[key] <= target_value:
-                    self.logger.debug(f"  ❌ {key}: {current_state[key]} <= {target_value}")
+            
+            current_value = current[key]
+            self.logger.debug(f"  Checking {current_path}: goal={goal_value}, current={current_value}")
+            
+            if isinstance(goal_value, dict) and isinstance(current_value, dict):
+                # Recursive check for nested dictionaries
+                if not self._check_nested_state_match(goal_value, current_value, current_path):
                     return False
-            elif isinstance(value, str) and value.startswith('<'):
-                # Handle less-than conditions
-                target_value = int(value[1:])
-                if current_state[key] >= target_value:
-                    self.logger.debug(f"  ❌ {key}: {current_state[key]} >= {target_value}")
+            elif isinstance(goal_value, str) and goal_value.startswith('>'):
+                # Handle greater-than conditions like ">80"
+                try:
+                    target_value = float(goal_value[1:])
+                    if current_value <= target_value:
+                        self.logger.debug(f"  ❌ {current_path}: {current_value} <= {target_value}")
+                        return False
+                except ValueError:
+                    self.logger.debug(f"  ❌ Invalid comparison format: {goal_value}")
+                    return False
+            elif isinstance(goal_value, str) and goal_value.startswith('<'):
+                # Handle less-than conditions like "<30"
+                try:
+                    target_value = float(goal_value[1:])
+                    if current_value >= target_value:
+                        self.logger.debug(f"  ❌ {current_path}: {current_value} >= {target_value}")
+                        return False
+                except ValueError:
+                    self.logger.debug(f"  ❌ Invalid comparison format: {goal_value}")
                     return False
             else:
                 # Direct equality check
-                if current_state[key] != value:
-                    self.logger.debug(f"  ❌ {key}: {current_state[key]} != {value}")
+                if current_value != goal_value:
+                    self.logger.debug(f"  ❌ {current_path}: {current_value} != {goal_value}")
                     return False
                 else:
-                    self.logger.debug(f"  ✅ {key}: {current_state[key]} == {value}")
+                    self.logger.debug(f"  ✅ {current_path}: {current_value} == {goal_value}")
         
         self.logger.debug(f"🎯 Goal achieved: All conditions met!")
         return True
@@ -956,17 +1000,17 @@ class GOAPExecutionManager:
             session_state = start_state_defaults.copy()
             
             # Initialize world state for GOAP planning
-            if hasattr(controller, 'goap_data') and controller.goap_data:
+            if hasattr(controller, 'world_state') and controller.world_state:
                 # Preserve existing structure but update critical values
-                current_data = controller.goap_data.data.copy()
+                current_data = controller.world_state.data.copy()
                 current_data.update(session_state)
-                controller.goap_data.data = current_data
-                controller.goap_data.save()
+                controller.world_state.data = current_data
+                controller.world_state.save()
                 
                 self.logger.info(f"🔧 Initialized session state with {len(session_state)} GOAP variables")
                 self.logger.info("🎯 Ensured find_monsters → move → attack cycle will be planned")
             else:
-                self.logger.warning("No GOAP data available for session state initialization")
+                self.logger.warning("No world state available for session state initialization")
                 
         except Exception as e:
             self.logger.error(f"Failed to initialize session state: {e}")

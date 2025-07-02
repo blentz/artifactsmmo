@@ -249,23 +249,14 @@ class TestRestAction(unittest.TestCase):
 
     def test_rest_action_class_attributes(self):
         """Test RestAction class has expected GOAP attributes."""
-        # Check that GOAP attributes exist and have meaningful values
-        self.assertIsInstance(RestAction.conditions, dict)
-        self.assertIsInstance(RestAction.reactions, dict)
-        self.assertIsInstance(RestAction.weight, (int, float))
+        # RestAction GOAP parameters are now defined in actions.yaml, not as class attributes
+        # Test that the class can be instantiated successfully
+        action = RestAction()
+        self.assertIsInstance(action, RestAction)
         
-        # Check specific GOAP conditions (consolidated state format)
-        self.assertIn('character_status', RestAction.conditions)
-        self.assertEqual(RestAction.conditions['character_status']['alive'], True)
-        self.assertEqual(RestAction.conditions['character_status']['hp_percentage'], '<100')
-        
-        # Check specific GOAP reactions (consolidated state format)
-        self.assertIn('character_status', RestAction.reactions)
-        self.assertEqual(RestAction.reactions['character_status']['hp_percentage'], 100)
-        self.assertEqual(RestAction.reactions['character_status']['safe'], True)
-        
-        # Check weight (consolidated format)
-        self.assertEqual(RestAction.weight, 1)
+        # Test that it inherits from expected base classes
+        from src.controller.actions.character_base import CharacterActionBase
+        self.assertIsInstance(action, CharacterActionBase)
 
 
 if __name__ == '__main__':

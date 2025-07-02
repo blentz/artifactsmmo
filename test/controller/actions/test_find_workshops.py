@@ -28,10 +28,12 @@ class TestFindWorkshopsAction(unittest.TestCase):
             },
         })
         self.assertEqual(self.action.reactions, {
-            'workshops_discovered': True,
-            'location_context': {
-                'at_target': False,
+            'workshop_status': {
+                'discovered': True
             },
+            'location_context': {
+                'workshop_known': True
+            }
         })
         self.assertEqual(self.action.weights, {"workshops_discovered": 15})
     

@@ -75,6 +75,19 @@ class AttackAction(ActionBase):
                     self.logger.info(f"💰 Gold gained: {gold_gained}")
                 if drops:
                     self.logger.info(f"📦 Items dropped: {[drop.get('code', 'unknown') for drop in drops]}")
+                
+                # If we lost the fight, trigger equipment analysis
+                if result == 'loss':
+                    self.logger.info(f"💀 Defeated in combat - triggering equipment analysis")
+                    # Update reactions to trigger equipment upgrade chain
+                    self.reactions = {
+                        'combat_context': {
+                            'status': 'completed',
+                        },
+                        'equipment_status': {
+                            'upgrade_status': 'needs_analysis',
+                        }
+                    }
                     
             # Return enhanced response with XP tracking
             return self.get_success_response(

@@ -65,7 +65,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         found_locations = []
         
         # Search in expanding circles around the character
-        for radius in range(1, search_radius + 1):
+        for radius in range(0, search_radius + 1):
             locations_at_radius = self._search_radius_for_content(client, character_x, character_y, radius, content_filter, map_state)
             
             if locations_at_radius:

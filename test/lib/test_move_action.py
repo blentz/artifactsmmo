@@ -4,13 +4,23 @@ from unittest.mock import Mock, patch
 from artifactsmmo_api_client.client import AuthenticatedClient
 from src.controller.actions.move import MoveAction
 
+from test.base_test import BaseTest
 
-class TestMoveAction(unittest.TestCase):
+
+class TestMoveAction(BaseTest):
     def setUp(self):
         self.client = AuthenticatedClient(base_url="https://api.artifactsmmo.com", token="test_token")
         self.char_name = "test_character"
         self.x = 10
         self.y = 20
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        # Clean up mock objects
+        self.client = None
+        
+        # Clear any patches that might be active
+        patch.stopall()
 
     def test_move_action_initialization(self):
         action = MoveAction()

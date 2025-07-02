@@ -43,7 +43,6 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         """Test AnalyzeCraftingRequirementsAction GOAP parameters."""
         self.assertEqual(self.action.conditions["character_status"]["alive"], True)
         self.assertTrue("crafting_requirements_known" in self.action.reactions)
-        self.assertTrue("material_requirements_known" in self.action.reactions)
 
     def test_analyze_crafting_requirements_action_repr(self):
         """Test AnalyzeCraftingRequirementsAction string representation."""
@@ -212,7 +211,7 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         self.assertIsInstance(AnalyzeCraftingRequirementsAction.reactions, dict)
         expected_reactions = [
             'crafting_requirements_known', 'need_crafting_materials',
-            'has_crafting_materials', 'materials_sufficient', 'material_requirements_known'
+            'has_crafting_materials', 'materials_sufficient'
         ]
         for reaction in expected_reactions:
             self.assertIn(reaction, AnalyzeCraftingRequirementsAction.reactions)

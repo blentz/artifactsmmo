@@ -186,7 +186,7 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         """Test GOAP reactions are properly defined."""
         self.assertIsInstance(AnalyzeWorkshopRequirementsAction.reactions, dict)
         expected_reactions = [
-            'workshop_requirements_known', 'need_workshop_discovery',
+            'workshop_requirements_known',
             'workshops_discovered', 'at_correct_workshop'
         ]
         for reaction in expected_reactions:

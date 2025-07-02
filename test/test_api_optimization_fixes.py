@@ -16,10 +16,11 @@ from unittest.mock import Mock, patch
 
 from src.controller.ai_player_controller import AIPlayerController
 
+from test.base_test import BaseTest
 from test.fixtures import create_mock_client
 
 
-class TestAPIOptimizationFixes(unittest.TestCase):
+class TestAPIOptimizationFixes(BaseTest):
     """Test API optimization fixes to prevent rate limiting and infinite loops."""
     
     def setUp(self):
@@ -50,6 +51,14 @@ class TestAPIOptimizationFixes(unittest.TestCase):
         """Clean up test environment."""
         import shutil
         shutil.rmtree(self.temp_dir)
+        
+        # Clean up mock objects
+        self.mock_client = None
+        self.controller = None
+        self.mock_character_state = None
+        
+        # Clear any patches that might be active
+        patch.stopall()
 
 
 class TestCharacterStateCaching(TestAPIOptimizationFixes):
@@ -223,38 +232,55 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
 class TestGOAPIterationOptimization(TestAPIOptimizationFixes):
     """Test GOAP iteration optimization to reduce API calls."""
     
+    def setUp(self):
+        """Set up test environment for GOAP tests."""
+        super().setUp()
+        # Ensure GOAP execution manager is properly initialized
+        if not hasattr(self.controller, 'goap_execution_manager') or self.controller.goap_execution_manager is None:
+            from src.lib.goap_execution_manager import GOAPExecutionManager
+            self.controller.goap_execution_manager = GOAPExecutionManager()
+    
     def test_achieve_goal_with_goap_reduces_api_calls(self):
         """Test that achieve_goal_with_goap reduces API calls through caching."""
         goal_state = {'test_goal': True}
         
-        with patch.object(self.controller, 'get_current_world_state') as mock_get_state:
-            with patch.object(self.controller.goap_execution_manager, '_load_actions_from_config', return_value={}):
-                # Mock state to show no cooldown so we don't get stuck in wait loop
-                mock_get_state.return_value = {
-                    'is_on_cooldown': False,
-                    'character_alive': True,
-                    'test_goal': True  # Goal already achieved
-                }
-                
-                # Run with max_iterations=3 to test caching behavior
-                result = self.controller.goap_execution_manager.achieve_goal_with_goap(goal_state, self.controller, max_iterations=3)
-                
-                # Should have called get_current_world_state multiple times
-                self.assertGreater(mock_get_state.call_count, 0)
-                
-                # Check that force_refresh was only True for first call
-                call_args_list = mock_get_state.call_args_list
-                if call_args_list:
-                    # First call should have force_refresh=True
-                    first_call_kwargs = call_args_list[0][1] if call_args_list[0][1] else {}
-                    force_refresh = first_call_kwargs.get('force_refresh', False)
-                    # Note: May be False if iterations stopped early due to goal achievement
+        # Temporarily disable logging to avoid handler issues in tests
+        import logging
+        original_level = logging.root.level
+        logging.disable(logging.CRITICAL)
+        
+        try:
+            with patch.object(self.controller, 'get_current_world_state') as mock_get_state:
+                with patch.object(self.controller.goap_execution_manager, '_load_actions_from_config', return_value={}):
+                    # Mock state to show no cooldown so we don't get stuck in wait loop
+                    mock_get_state.return_value = {
+                        'is_on_cooldown': False,
+                        'character_alive': True,
+                        'test_goal': True  # Goal already achieved
+                    }
                     
-                    # Subsequent calls should have force_refresh=False
-                    for call_args in call_args_list[1:]:
-                        call_kwargs = call_args[1] if call_args[1] else {}
-                        subsequent_force_refresh = call_kwargs.get('force_refresh', False)
-                        self.assertFalse(subsequent_force_refresh)
+                    # Run with max_iterations=3 to test caching behavior
+                    result = self.controller.goap_execution_manager.achieve_goal_with_goap(goal_state, self.controller, max_iterations=3)
+                    
+                    # Should have called get_current_world_state multiple times
+                    self.assertGreater(mock_get_state.call_count, 0)
+                    
+                    # Check that force_refresh was only True for first call
+                    call_args_list = mock_get_state.call_args_list
+                    if call_args_list:
+                        # First call should have force_refresh=True
+                        first_call_kwargs = call_args_list[0][1] if call_args_list[0][1] else {}
+                        force_refresh = first_call_kwargs.get('force_refresh', False)
+                        # Note: May be False if iterations stopped early due to goal achievement
+                        
+                        # Subsequent calls should have force_refresh=False
+                        for call_args in call_args_list[1:]:
+                            call_kwargs = call_args[1] if call_args[1] else {}
+                            subsequent_force_refresh = call_kwargs.get('force_refresh', False)
+                            self.assertFalse(subsequent_force_refresh)
+        finally:
+            # Re-enable logging
+            logging.disable(original_level)
 
 
 class TestAPIErrorHandling(TestAPIOptimizationFixes):

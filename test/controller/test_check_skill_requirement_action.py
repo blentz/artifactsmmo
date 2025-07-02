@@ -247,10 +247,10 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
         expected_reactions = {
-            "skill_requirements_checked": True,
-            "skill_level_sufficient": True,
-            "required_skill_level_known": True,
-            "need_skill_upgrade": True
+            'skill_status': {
+                'checked': True,
+                'sufficient': True
+            }
         }
         self.assertEqual(CheckSkillRequirementAction.reactions, expected_reactions)
 

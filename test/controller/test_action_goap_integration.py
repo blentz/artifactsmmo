@@ -21,35 +21,40 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.controller.set_client(self.mock_client)
 
     def test_action_classes_have_goap_parameters(self) -> None:
-        """Test that action classes have defined GOAP parameters."""
-        # Test MoveAction
-        self.assertTrue(hasattr(MoveAction, 'conditions'))
-        self.assertTrue(hasattr(MoveAction, 'reactions'))
-        self.assertTrue(hasattr(MoveAction, 'weights'))
-        self.assertIsInstance(MoveAction.conditions, dict)
-        self.assertIsInstance(MoveAction.reactions, dict)
-        self.assertIsInstance(MoveAction.weights, dict)
+        """Test that actions have defined GOAP parameters in YAML configuration."""
+        # Load actions configuration to verify GOAP parameters
+        from src.lib.yaml_data import YamlData
+        from src.game.globals import CONFIG_PREFIX
         
-        # Test AttackAction
-        self.assertTrue(hasattr(AttackAction, 'conditions'))
-        self.assertTrue(hasattr(AttackAction, 'reactions'))
-        self.assertTrue(hasattr(AttackAction, 'weights'))
-        self.assertIn('combat_context', AttackAction.conditions)
-        self.assertIn('character_status', AttackAction.conditions)
+        actions_config = YamlData(f"{CONFIG_PREFIX}/actions.yaml")
+        actions = actions_config.data.get('actions', {})
+        
+        # Test key actions have GOAP parameters in YAML
+        self.assertIn('move', actions)
+        self.assertIn('conditions', actions['move'])
+        self.assertIn('reactions', actions['move'])
+        self.assertIn('weight', actions['move'])
+        
+        self.assertIn('attack', actions)
+        self.assertIn('conditions', actions['attack'])
+        self.assertIn('reactions', actions['attack'])
+        self.assertIn('weight', actions['attack'])
         
         # Test RestAction (consolidated state format)
-        self.assertTrue(hasattr(RestAction, 'conditions'))
-        self.assertTrue(hasattr(RestAction, 'reactions'))
-        self.assertTrue(hasattr(RestAction, 'weight'))
-        self.assertIn('character_status', RestAction.conditions)
-        self.assertIn('character_status', RestAction.reactions)
+        self.assertIn('rest', actions)
+        self.assertIn('conditions', actions['rest'])
+        self.assertIn('reactions', actions['rest'])
+        self.assertIn('weight', actions['rest'])
+        self.assertIn('character_status', actions['rest']['conditions'])
+        self.assertIn('character_status', actions['rest']['reactions'])
         
         # Test FindMonstersAction
-        self.assertTrue(hasattr(FindMonstersAction, 'conditions'))
-        self.assertTrue(hasattr(FindMonstersAction, 'reactions'))
-        self.assertTrue(hasattr(FindMonstersAction, 'weights'))
-        self.assertIn('combat_context', FindMonstersAction.conditions)
-        self.assertIn('resource_availability', FindMonstersAction.reactions)
+        self.assertIn('find_monsters', actions)
+        self.assertIn('conditions', actions['find_monsters'])
+        self.assertIn('reactions', actions['find_monsters'])
+        self.assertIn('weight', actions['find_monsters'])
+        self.assertIn('combat_context', actions['find_monsters']['conditions'])
+        self.assertIn('resource_availability', actions['find_monsters']['reactions'])
 
     def test_get_action_class_defaults_move(self) -> None:
         """Test getting default GOAP parameters for move action through ActionExecutor."""

@@ -10,10 +10,8 @@ import tempfile
 from typing import Dict, List, Optional
 from unittest.mock import Mock
 
-# Import and extend HTTPStatus to handle ArtifactsMMO custom status codes
+# Import extend_http_status but don't call it here - tests should call it in setUpClass
 from src.lib.httpstatus import extend_http_status
-
-extend_http_status()
 
 
 class MockAPIResponse:

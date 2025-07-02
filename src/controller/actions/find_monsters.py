@@ -49,7 +49,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
         character_y = context.get('character_y', context.character_y)
-        search_radius = context.get('search_radius', 2)
+        search_radius = context.get('search_radius', 3)
         monster_types = context.get('monster_types', [])
         character_level = context.get('character_level', context.character_level)
         level_range = context.get('level_range', 2)
@@ -138,7 +138,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         viable_monsters = []
         
         # Search all radii to collect viable monster candidates
-        for radius in range(1, search_radius + 1):
+        for radius in range(0, search_radius + 1):
             locations_at_radius = self._search_radius_for_content(client, character_x, character_y, radius, monster_filter, map_state)
             
             for location, content_code, content_data in locations_at_radius:

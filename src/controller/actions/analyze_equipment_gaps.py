@@ -25,6 +25,9 @@ class AnalyzeEquipmentGapsAction(ActionBase):
     
     # GOAP parameters
     conditions = {
+            'equipment_status': {
+                'upgrade_status': 'analyzing',
+            },
             'character_status': {
                 'alive': True,
             },
@@ -32,7 +35,7 @@ class AnalyzeEquipmentGapsAction(ActionBase):
     
     reactions = {
         'equipment_status': {
-            'upgrade_status': 'analyzing',
+            'upgrade_status': 'analyzing',  # Default, will be overridden to 'combat_ready' if appropriate
             'gaps_analyzed': True
         }
     }
@@ -130,11 +133,39 @@ class AnalyzeEquipmentGapsAction(ActionBase):
         self.logger.info(f"📊 Equipment analysis complete: {missing_slots} missing slots, "
                         f"average urgency {avg_urgency:.1f}")
         
+        # Determine if equipment is combat ready
+        # Check if all critical slots have adequate or excellent equipment
+        critical_slots = ['weapon']  # Can expand to include armor slots
+        is_combat_ready = True
+        
+        for slot_name in critical_slots:
+            if slot_name in gap_analysis:
+                slot_data = gap_analysis[slot_name]
+                reason = slot_data.get('reason', '')
+                # Check if equipment is adequate or excellent
+                if reason not in ['adequate equipment', 'excellent stats, low urgency', 'equipment ahead of character level']:
+                    is_combat_ready = False
+                    break
+        
+        # Update reactions based on analysis
+        if is_combat_ready:
+            self.reactions = {
+                'equipment_status': {
+                    'upgrade_status': 'combat_ready',
+                    'gaps_analyzed': True
+                }
+            }
+            self.logger.info("✅ Equipment is combat ready!")
+        else:
+            # Keep default reactions (upgrade_status: 'analyzing')
+            pass
+        
         return self.get_success_response(
             slots_analyzed=len(gap_analysis),
             missing_slots=missing_slots,
             average_urgency=avg_urgency,
-            total_urgency=total_urgency
+            total_urgency=total_urgency,
+            is_combat_ready=is_combat_ready
         )
         
     def _analyze_slot_gap(self, character_state: CharacterState, slot_name: str, 

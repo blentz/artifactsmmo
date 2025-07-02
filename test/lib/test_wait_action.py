@@ -6,16 +6,26 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.wait import WaitAction
 
+from test.base_test import BaseTest
 from test.fixtures import MockActionContext, create_mock_client
 
 
-class TestWaitAction(unittest.TestCase):
+class TestWaitAction(BaseTest):
     """ Test cases for WaitAction """
 
     def setUp(self):
         """ Set up test fixtures """
         self.wait_action = WaitAction()
         self.mock_client = create_mock_client()
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        # Clean up mock objects
+        self.wait_action = None
+        self.mock_client = None
+        
+        # Clear any patches that might be active
+        patch.stopall()
 
     def test_init(self):
         """ Test WaitAction initialization """

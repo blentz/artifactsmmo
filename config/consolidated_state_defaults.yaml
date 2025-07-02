@@ -10,7 +10,7 @@ state_defaults:
     helmet: null
     boots: null
     target_slot: null
-    upgrade_status: "none"
+    upgrade_status: "needs_analysis"
     selected_item: null
     gaps_analyzed: false
     item_crafted: false

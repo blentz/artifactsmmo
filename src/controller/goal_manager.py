@@ -46,6 +46,7 @@ class GOAPGoalManager:
             self.goal_templates = self.config_data.data.get('goal_templates', {})
             self.goal_selection_rules = self.config_data.data.get('goal_selection_rules', {})
             self.state_calculation_rules = self.config_data.data.get('state_calculation_rules', {})
+            self.state_mappings = self.config_data.data.get('state_mappings', {})
             self.thresholds = self.config_data.data.get('thresholds', {})
             
             self.logger.debug(f"Loaded {len(self.goal_templates)} goal templates")
@@ -171,6 +172,10 @@ class GOAPGoalManager:
         cooldown_seconds = char_data.get('cooldown', 0)
         cooldown_expiration = char_data.get('cooldown_expiration', None)
         
+        # Debug log to see what data we're actually getting
+        self.logger.debug(f"Cooldown check - cooldown: {cooldown_seconds}, cooldown_expiration: {cooldown_expiration}")
+        self.logger.debug(f"Available char_data keys: {list(char_data.keys())}")
+        
         # First check if we have a cooldown expiration time
         if cooldown_expiration:
             try:
@@ -182,16 +187,23 @@ class GOAPGoalManager:
                 current_time = datetime.now(timezone.utc)
                 if current_time < cooldown_end:
                     remaining = (cooldown_end - current_time).total_seconds()
+                    self.logger.debug(f"Cooldown check: expiration={cooldown_expiration}, current_time={current_time.isoformat()}, remaining={remaining:.1f}s")
                     if remaining > 0.5:  # Only consider significant cooldowns
+                        self.logger.debug(f"Cooldown ACTIVE: {remaining:.1f}s remaining")
                         return True
                 else:
                     # Cooldown has expired
+                    self.logger.debug(f"Cooldown EXPIRED: expiration={cooldown_expiration}, current_time={current_time.isoformat()}")
                     return False
                         
             except Exception as e:
                 self.logger.warning(f"Error parsing cooldown expiration: {e}")
+        else:
+            self.logger.debug("No cooldown_expiration found in char_data")
         
         # Check legacy cooldown field if no expiration time
+        if cooldown_seconds > 0.5:
+            self.logger.debug(f"Legacy cooldown ACTIVE: {cooldown_seconds}s")
         return cooldown_seconds > 0.5
     
     def select_goal(self, current_state: Dict[str, Any], 
@@ -479,66 +491,67 @@ class GOAPGoalManager:
         return True
     
     def _check_goal_condition(self, condition: Dict[str, Any], state: Dict[str, Any]) -> bool:
-        """Check if a goal selection condition is met by current state.
+        """
+        Check if a goal selection condition is met by current state.
         
-        Now supports nested dictionary access for consolidated states.
+        This method works with simple boolean flags from state mappings but 
+        maintains backward compatibility for existing test operators.
+        
+        Args:
+            condition: Dictionary of conditions to check
+            state: Current world state
+            
+        Returns:
+            True if all conditions are met, False otherwise
         """
         try:
+            # Apply state mappings to get computed boolean flags (if available)
+            enhanced_state = self._apply_state_mappings_to_selection_state(state)
+            
             for key, expected_value in condition.items():
-                # Get actual value - now supports nested access
-                actual_value = self._get_nested_value(state, key)
+                # Get actual value from enhanced state first, then fallback to original state
+                actual_value = self._get_nested_value(enhanced_state, key)
+                if actual_value is None:
+                    actual_value = self._get_nested_value(state, key)
                 
-                # Handle dict conditions (for consolidated states)
+                # Handle dict conditions (for nested states)
                 if isinstance(expected_value, dict) and isinstance(actual_value, dict):
-                    # Recursively check nested conditions
+                    # Recursively check nested conditions with the actual nested data
                     if not self._check_goal_condition(expected_value, actual_value):
                         return False
                     continue
                 
-                # Handle string comparison operators
+                # Handle string comparison operators (backward compatibility)
                 if isinstance(expected_value, str):
-                    # Special values
-                    if expected_value == "!null":
-                        if actual_value is None:
-                            return False
-                        continue
-                    elif expected_value == "null":
-                        if actual_value is not None:
-                            return False
-                        continue
-                    
-                    # Numeric comparisons
-                    if expected_value.startswith('<='):
+                    # Numeric comparisons for backward compatibility
+                    if expected_value.startswith('>='):
                         threshold = float(expected_value[2:])
-                        if actual_value is None or actual_value > threshold:
+                        if actual_value is None or float(actual_value) < threshold:
                             return False
-                    elif expected_value.startswith('>='):
+                    elif expected_value.startswith('<='):
                         threshold = float(expected_value[2:])
-                        if actual_value is None or actual_value < threshold:
+                        if actual_value is None or float(actual_value) > threshold:
                             return False
                     elif expected_value.startswith('<'):
                         threshold = float(expected_value[1:])
-                        if actual_value is None or actual_value >= threshold:
+                        if actual_value is None or float(actual_value) >= threshold:
                             return False
                     elif expected_value.startswith('>'):
                         threshold = float(expected_value[1:])
-                        if actual_value is None or actual_value <= threshold:
+                        if actual_value is None or float(actual_value) <= threshold:
                             return False
-                    elif expected_value.startswith('!='):
-                        value = expected_value[2:].strip()
-                        # Special handling for != null
-                        if value == "null":
-                            if actual_value is None:
-                                return False
-                        else:
-                            if str(actual_value) == value:
-                                return False
+                    elif expected_value == "!null":
+                        if actual_value is None:
+                            return False
+                    elif expected_value == "null":
+                        if actual_value is not None:
+                            return False
                     else:
                         # Direct string equality
-                        if actual_value != expected_value:
+                        if str(actual_value) != expected_value:
                             return False
                 else:
-                    # Direct equality check
+                    # Simple equality check - preferred new approach
                     if actual_value != expected_value:
                         return False
                         
@@ -547,6 +560,51 @@ class GOAPGoalManager:
         except Exception as e:
             self.logger.warning(f"Goal condition check failed: {e}")
             return False
+    
+    def _apply_state_mappings_to_selection_state(self, state: Dict[str, Any], 
+                                                  parameters: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Apply state mappings to current state for goal selection.
+        
+        This creates computed boolean flags from the raw state values
+        using the state_mappings configuration.
+        
+        Args:
+            state: Current world state
+            parameters: Optional parameters for condition substitution
+            
+        Returns:
+            Enhanced state with computed boolean flags
+        """
+        enhanced_state = state.copy()
+        if parameters is None:
+            parameters = {}
+        
+        # Apply all state mappings to create computed flags
+        for category_name, category_mappings in self.state_mappings.items():
+            if category_name not in enhanced_state:
+                enhanced_state[category_name] = {}
+                
+            for flag_name, mapping in category_mappings.items():
+                source_path = mapping['source']
+                condition = mapping['condition']
+                
+                # Apply parameter substitution to condition if needed
+                if '{target_level}' in condition:
+                    if 'target_level' in parameters:
+                        condition = condition.replace('{target_level}', str(parameters['target_level']))
+                    else:
+                        # Skip this mapping if parameter is not available
+                        continue
+                
+                # Get source value
+                source_value = self._get_nested_value(state, source_path)
+                if source_value is not None:
+                    # Compute flag value
+                    flag_value = self._evaluate_condition(source_value, condition)
+                    enhanced_state[category_name][flag_name] = flag_value
+                    
+        return enhanced_state
     
     def _get_nested_value(self, data: Dict[str, Any], key: str) -> Any:
         """Get value from nested dictionary using dot notation.
@@ -653,43 +711,171 @@ class GOAPGoalManager:
         """
         Generate a GOAP goal state from template configuration.
         
+        This method now processes simple, declarative target states and applies
+        any necessary parameter substitution from the goal's parameter configuration.
+        
         Args:
             goal_name: Name of the goal template
-            goal_config: Goal template configuration
-            current_state: Current world state for variable substitution
+            goal_config: Goal template configuration  
+            current_state: Current world state
             **parameters: Additional parameters for goal customization
             
         Returns:
             Dictionary representing the target goal state
         """
         target_state = goal_config.get('target_state', {}).copy()
+        goal_parameters = goal_config.get('parameters', {}).copy()
         
-        # Substitute template variables
-        for key, value in target_state.items():
-            if isinstance(value, str) and value.startswith('${') and value.endswith('}'):
-                # Template variable substitution
-                var_expr = value[2:-1]  # Remove ${ and }
-                
-                if var_expr == 'current_level + 1':
-                    target_state[key] = current_state.get('character_level', 1) + 1
-                elif var_expr == 'target_level':
-                    target_state[key] = parameters.get('target_level', current_state.get('character_level', 1) + 1)
-                elif var_expr.startswith('strategy.'):
-                    # Strategy parameter reference
-                    strategy = goal_config.get('strategy', {})
-                    param_name = var_expr[9:]  # Remove 'strategy.'
-                    target_state[key] = strategy.get(param_name, value)
-                else:
-                    # Try to resolve from current state or parameters
-                    resolved_value = current_state.get(var_expr) or parameters.get(var_expr)
-                    if resolved_value is not None:
-                        target_state[key] = resolved_value
+        # Merge runtime parameters with goal template parameters
+        goal_parameters.update(parameters)
         
-        # Convert comparison operators to concrete GOAP target values
-        target_state = self._resolve_comparison_operators(target_state, current_state)
+        # Apply state mappings to resolve computed boolean flags
+        target_state = self._apply_state_mappings(target_state, current_state, goal_parameters)
         
         self.logger.debug(f"Generated goal state for '{goal_name}': {target_state}")
         return target_state
+    
+    def _apply_state_mappings(self, target_state: Dict[str, Any], current_state: Dict[str, Any], 
+                             parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply state mappings to resolve computed boolean flags in target state.
+        
+        This replaces complex template expressions and operators with simple boolean
+        flags that are computed from the current state using the state_mappings configuration.
+        
+        Args:
+            target_state: Target state with potential computed flags
+            current_state: Current world state
+            parameters: Goal parameters for dynamic values
+            
+        Returns:
+            Target state with computed flags resolved to boolean values
+        """
+        def _resolve_nested_mappings(state_dict: Dict[str, Any], path_prefix: str = "") -> Dict[str, Any]:
+            """Recursively resolve state mappings in nested dictionaries."""
+            resolved_dict = {}
+            
+            for key, value in state_dict.items():
+                current_path = f"{path_prefix}.{key}" if path_prefix else key
+                
+                if isinstance(value, dict):
+                    # Recursive case for nested dictionaries
+                    resolved_dict[key] = _resolve_nested_mappings(value, current_path)
+                elif isinstance(value, bool):
+                    # Simple boolean value - no mapping needed
+                    resolved_dict[key] = value
+                elif isinstance(value, (str, int, float)):
+                    # Simple value - no mapping needed
+                    resolved_dict[key] = value
+                else:
+                    # Check if this is a computed flag that needs mapping
+                    mapping_path = f"{path_prefix}.{key}" if path_prefix else key
+                    if self._is_computed_flag(mapping_path, current_state):
+                        resolved_dict[key] = self._compute_flag_value(mapping_path, current_state, parameters)
+                    else:
+                        resolved_dict[key] = value
+                        
+            return resolved_dict
+        
+        return _resolve_nested_mappings(target_state)
+    
+    def _is_computed_flag(self, flag_path: str, current_state: Dict[str, Any]) -> bool:
+        """Check if a flag path corresponds to a computed state mapping."""
+        # Check if the flag exists in state_mappings
+        parts = flag_path.split('.')
+        mappings = self.state_mappings
+        
+        for part in parts[:-1]:
+            if part in mappings:
+                mappings = mappings[part]
+            else:
+                return False
+                
+        return parts[-1] in mappings
+    
+    def _compute_flag_value(self, flag_path: str, current_state: Dict[str, Any], 
+                           parameters: Dict[str, Any]) -> bool:
+        """Compute the boolean value for a mapped flag based on current state."""
+        parts = flag_path.split('.')
+        mappings = self.state_mappings
+        
+        # Navigate to the flag mapping
+        for part in parts[:-1]:
+            mappings = mappings[part]
+        
+        flag_mapping = mappings[parts[-1]]
+        source_path = flag_mapping['source']
+        condition = flag_mapping['condition']
+        
+        # Get the source value from current state
+        source_value = self._get_nested_value(current_state, source_path)
+        if source_value is None:
+            return False
+            
+        # Apply parameter substitution to condition if needed
+        if '{target_level}' in condition and 'target_level' in parameters:
+            condition = condition.replace('{target_level}', str(parameters['target_level']))
+        
+        # Evaluate the condition
+        return self._evaluate_condition(source_value, condition)
+    
+    def _get_nested_value(self, data: Dict[str, Any], path: str) -> Any:
+        """Get a value from nested dictionary using dot notation."""
+        keys = path.split('.')
+        current = data
+        
+        for key in keys:
+            if isinstance(current, dict) and key in current:
+                current = current[key]
+            else:
+                return None
+                
+        return current
+    
+    def _evaluate_condition(self, value: Any, condition: str) -> bool:
+        """Evaluate a simple condition against a value."""
+        condition = condition.strip()
+        
+        if condition.startswith('< '):
+            threshold = float(condition[2:])
+            return float(value) < threshold
+        elif condition.startswith('<= '):
+            threshold = float(condition[3:])
+            return float(value) <= threshold
+        elif condition.startswith('>= '):
+            threshold = float(condition[3:])
+            return float(value) >= threshold
+        elif condition.startswith('> '):
+            threshold = float(condition[2:])
+            return float(value) > threshold
+        elif condition.startswith('== '):
+            expected = condition[3:]
+            if expected == 'true':
+                return bool(value)
+            elif expected == 'false':
+                return not bool(value)
+            elif expected == 'null':
+                return value is None
+            else:
+                try:
+                    return float(value) == float(expected)
+                except ValueError:
+                    return str(value) == expected
+        elif condition.startswith('!= '):
+            expected = condition[3:].strip()
+            if expected == 'null':
+                return value is not None
+            else:
+                try:
+                    return float(value) != float(expected)
+                except ValueError:
+                    return str(value) != expected
+        else:
+            # Default: treat as equality check
+            try:
+                return float(value) == float(condition)
+            except ValueError:
+                return str(value) == condition
     
     def get_goal_strategy(self, goal_name: str, goal_config: Dict[str, Any]) -> Dict[str, Any]:
         """Get strategy configuration for a goal, merged with defaults."""

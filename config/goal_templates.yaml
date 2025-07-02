@@ -1,32 +1,26 @@
-# GOAP Goal Templates Configuration - Consolidated State Version
-# Uses the new consolidated state system with richer data types
+# GOAP Goal Templates Configuration - Refactored Version
+# Uses simple, declarative target states with basic comparable types only
+# Complex logic moved to 4-step execution flow and GOAP planning
 
 goal_templates:
   # Core character progression goals
   level_up:
     description: "Advance character to next level through combat and experience gain"
     objective_type: "progression"
+    parameters:
+      target_level: null  # Set at runtime by mission executor
     target_state:
       character_status:
-        level: "${current_level + 1}"
-        safe: true
         alive: true
+        safe: true
       goal_progress:
-        monsters_hunted: ">0"
+        has_gained_xp: true
     strategy:
       max_iterations: 20
       hunt_radius: 4
-      xp_target: 150
       safety_priority: true
-      rest_threshold: 30  # HP percentage
-      attack_threshold: 15  # HP percentage
-    success_conditions:
-      - type: "character_level"
-        operator: ">="
-        value: "${target_level}"
-      - type: "character_alive"
-        operator: "=="
-        value: true
+      rest_threshold: 30
+      attack_threshold: 15
         
   hunt_monsters:
     description: "Hunt monsters for experience and loot"
@@ -45,35 +39,60 @@ goal_templates:
   bootstrap_character:
     description: "Get low-level character to viable state through equipment progression"
     objective_type: "equipment_progression"
+    parameters:
+      target_level: 3
     target_state:
       character_status:
-        level: 3
         safe: true
       equipment_status:
-        weapon: "!null"
         upgrade_status: "completed"
     strategy:
       max_iterations: 30
       equipment_priority: ["weapon", "shield"]
       focus_combat_effectiveness: true
-      multi_step_thinking: true
       
   upgrade_weapon:
     description: "Craft and equip a better weapon for improved combat effectiveness"
     objective_type: "equipment_progression"
     target_state:
       equipment_status:
-        weapon: "!null"
         upgrade_status: "completed"
-      character_status:
-        safe: true
     strategy:
       equipment_type: "weapon"
       level_improvement_threshold: 1
       search_radius: 4
       max_craft_attempts: 5
       
-# Goal selection rules - determines which goals to pursue based on current state
+  get_to_safety:
+    description: "Rest to restore HP when in danger"
+    objective_type: "maintenance"
+    target_state:
+      character_status:
+        hp_at_max: true
+        safe: true
+    strategy:
+      max_iterations: 5
+      
+  wait_for_cooldown:
+    description: "Wait for character cooldown to expire"
+    objective_type: "maintenance"
+    target_state:
+      character_status:
+        cooldown_active: false
+    strategy:
+      max_wait_time: 65
+      
+  revive_character:
+    description: "Revive character if dead"
+    objective_type: "emergency"
+    target_state:
+      character_status:
+        alive: true
+        hp_at_max: true
+    strategy:
+      max_attempts: 3
+      
+# Goal selection rules - uses simple boolean conditions
 goal_selection_rules:
   # Emergency priorities (highest priority)
   emergency:
@@ -85,7 +104,7 @@ goal_selection_rules:
       
     - condition:
         character_status:
-          hp_percentage: "<30"
+          hp_critically_low: true
           alive: true
       goal: "get_to_safety"
       priority: 99
@@ -94,7 +113,7 @@ goal_selection_rules:
         combat_context:
           status: "not_viable"
         character_status:
-          level: "<=5"
+          is_low_level: true
           safe: true
       goal: "bootstrap_character"
       priority: 96
@@ -112,37 +131,76 @@ goal_selection_rules:
     - condition:
         character_status:
           safe: true
-          hp_percentage: ">=80"
+          hp_sufficient_for_combat: true
         combat_context:
           status: "idle"
       goal: "hunt_monsters"
       priority: 60
 
-# State calculation rules
-state_calculation_rules:
-  # Character status computations
-  character_status.safe:
-    formula: "character_status.hp_percentage >= 30"
-    
-  character_status.cooldown_active:
-    type: "computed"
-    method: "check_cooldown_expiration"
-    
-  # Combat context computations
-  combat_context.status:
-    type: "computed"
-    method: "compute_combat_context_status"
-    
-  combat_context.recent_win_rate:
-    type: "computed"
-    method: "compute_recent_win_rate"
-    
-# Configuration thresholds
+# State mapping - defines how complex states map to simple boolean flags
+# This replaces the complex formulas and operators
+state_mappings:
+  # Character status mappings
+  character_status:
+    hp_critically_low: 
+      source: "character_status.hp_percentage"
+      condition: "< 30"
+    hp_sufficient_for_combat:
+      source: "character_status.hp_percentage" 
+      condition: ">= 80"
+    hp_at_max:
+      source: "character_status.hp_percentage"
+      condition: "== 100"
+    is_low_level:
+      source: "character_status.level"
+      condition: "<= 5"
+    level_sufficient:
+      source: "character_status.level"
+      condition: ">= {target_level}"
+    safe:
+      source: "character_status.hp_percentage"
+      condition: ">= 30"
+      
+  # Equipment status mappings  
+  equipment_status:
+    has_weapon:
+      source: "equipment_status.weapon"
+      condition: "!= null"
+    has_better_weapon:
+      source: "equipment_status.weapon_improved"
+      condition: "== true"
+    weapon_equipped:
+      source: "equipment_status.equipped"
+      condition: "== true"
+      
+  # Combat context mappings
+  combat_context:
+    has_recent_combat:
+      source: "combat_context.recent_win_rate" 
+      condition: "> 0"
+    is_combat_viable:
+      source: "combat_context.status"
+      condition: "!= not_viable"
+      
+  # Goal progress mappings
+  goal_progress:
+    has_hunted_monsters:
+      source: "goal_progress.monsters_hunted"
+      condition: "> 0"
+    has_gained_xp:
+      source: "character_status.xp_percentage"
+      condition: "> 0"
+
+# Configuration thresholds - moved from inline expressions
 thresholds:
   # Health and safety thresholds (percentages)
   safe_hp_percentage: 30
-  rest_hp_percentage: 30
-  attack_hp_percentage: 15
+  combat_hp_percentage: 80
+  max_hp_percentage: 100
+  critically_low_hp: 30
+  
+  # Level thresholds
+  low_level_threshold: 5
   
   # Combat viability thresholds
   min_combat_win_rate: 0.2

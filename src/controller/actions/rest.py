@@ -16,20 +16,7 @@ except ImportError:
 class RestAction(CharacterActionBase):
     """ Rest action for recovering HP when character is critically low """
     
-    # GOAP parameters - consolidated state format
-    conditions = {
-        "character_status": {
-            "hp_percentage": "<100",
-            "alive": True
-        }
-    }
-    reactions = {
-        "character_status": {
-            "hp_percentage": 100,
-            "safe": True
-        }
-    }
-    weight = 1
+    # GOAP parameters - removed, now defined in actions.yaml
 
     def __init__(self):
         """

@@ -16,14 +16,15 @@ class InitiateEquipmentAnalysisAction(ActionBase):
     """
     Bridge action to start equipment upgrade analysis.
     
-    This action transitions the equipment_status.upgrade_status from 'none' to 'analyzing',
-    signaling the start of the equipment upgrade process.
+    This action transitions the equipment_status.upgrade_status from 'needs_analysis' to 'analyzing',
+    signaling the start of the equipment upgrade process. This is typically triggered after
+    combat losses to reassess equipment adequacy.
     """
 
     # GOAP parameters
     conditions = {
         'equipment_status': {
-            'upgrade_status': 'none',
+            'upgrade_status': 'needs_analysis',
         },
         'character_status': {
             'alive': True,

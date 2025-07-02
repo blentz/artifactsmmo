@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import yaml
 from src.lib.state_loader import StateClassConfig, StateConfigLoader, StateFactory, StateManagerMixin
+from test.base_test import BaseTest
 
 
 class MockState:
@@ -30,7 +31,7 @@ class MockStateWithDependency:
         self.data = {}
 
 
-class TestStateFactory(unittest.TestCase):
+class TestStateFactory(BaseTest):
     """Test cases for StateFactory class."""
     
     def setUp(self) -> None:
@@ -170,7 +171,7 @@ class TestStateFactory(unittest.TestCase):
             self.assertIsNot(instance1, instance2)
 
 
-class TestStateConfigLoader(unittest.TestCase):
+class TestStateConfigLoader(BaseTest):
     """Test cases for StateConfigLoader class."""
     
     def setUp(self) -> None:
@@ -259,7 +260,7 @@ class TestStateConfigLoader(unittest.TestCase):
             self.assertIsNot(state1, state2)
 
 
-class TestStateManagerMixin(unittest.TestCase):
+class TestStateManagerMixin(BaseTest):
     """Test cases for StateManagerMixin class."""
     
     def setUp(self) -> None:

@@ -1,6 +1,11 @@
 # GOAPy
 # Generic GOAP implementation.
 # flags - https://github.com/flags
+#
+# IMPORTANT: This GOAP library supports any comparable object type that implements 
+# Python's __cmp__() method. This includes nested dictionaries, custom objects, 
+# and complex data structures. DO NOT flatten parameters or try to convert 
+# everything to basic types - the library handles comparison natively.
 
 # The MIT License (MIT)
 #

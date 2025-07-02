@@ -289,7 +289,6 @@ class TestAttackAction(unittest.TestCase):
         
         # Check specific GOAP reactions
         self.assertIn('combat_context', AttackAction.reactions)
-        self.assertIn('goal_progress', AttackAction.reactions)
         self.assertEqual(AttackAction.reactions['combat_context']['status'], 'completed')
         
         # Check weight

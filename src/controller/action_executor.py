@@ -593,7 +593,18 @@ class ActionExecutor:
         if not action_class:
             return
             
-        reactions = getattr(action_class, 'reactions', {})
+        # Check if context has an action instance with modified reactions
+        reactions = None
+        if hasattr(context, 'action_instance') and context.action_instance:
+            # Use instance reactions if available (for dynamic reactions)
+            reactions = getattr(context.action_instance, 'reactions', None)
+            if reactions:
+                self.logger.debug(f"Using instance reactions for {action_name}: {reactions}")
+        
+        # Fall back to class reactions if no instance reactions
+        if not reactions:
+            reactions = getattr(action_class, 'reactions', {})
+            
         if not reactions:
             return
             

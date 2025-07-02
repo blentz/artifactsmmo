@@ -5,10 +5,11 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.lookup_item_info import LookupItemInfoAction
 
+from test.base_test import BaseTest
 from test.fixtures import MockActionContext, create_mock_client
 
 
-class TestLookupItemInfoAction(unittest.TestCase):
+class TestLookupItemInfoAction(BaseTest):
     """Test cases for LookupItemInfoAction."""
 
     def setUp(self):
@@ -23,6 +24,16 @@ class TestLookupItemInfoAction(unittest.TestCase):
         
         # Mock client
         self.mock_client = create_mock_client()
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        # Clean up mock objects
+        self.mock_client = None
+        self.action_with_code = None
+        self.action_with_search = None
+        
+        # Clear any patches that might be active
+        patch.stopall()
 
     def test_lookup_item_info_action_initialization_with_code(self):
         """Test LookupItemInfoAction initialization with item code."""
@@ -122,11 +133,20 @@ class TestLookupItemInfoAction(unittest.TestCase):
         """Test exception handling during lookup."""
         mock_lookup_specific.side_effect = Exception("Network error")
         
-        
         context = MockActionContext(character_name="test_char", item_code=self.item_code)
-        result = self.action_with_code.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Item lookup failed: Network error', result['error'])
+        
+        # Temporarily disable logging to avoid handler issues in tests
+        import logging
+        original_level = logging.root.level
+        logging.disable(logging.CRITICAL)
+        
+        try:
+            result = self.action_with_code.execute(self.mock_client, context)
+            self.assertFalse(result['success'])
+            self.assertIn('Item lookup failed: Network error', result['error'])
+        finally:
+            # Re-enable logging
+            logging.disable(original_level)
 
     @patch('src.controller.actions.lookup_item_info.get_item_api')
     def test_lookup_specific_item_success_minimal(self, mock_get_item_api):

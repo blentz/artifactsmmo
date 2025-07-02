@@ -702,8 +702,10 @@ class AIPlayerController(StateManagerMixin):
             for key, value in world_data.items():
                 # Handle nested state merging (e.g., goal_progress)
                 if isinstance(value, dict) and key in state and isinstance(state[key], dict):
-                    # Merge nested dictionaries
-                    state[key].update(value)
+                    # Merge nested dictionaries - persistent values first, then calculated values override
+                    merged_state = value.copy()  # Start with persistent state
+                    merged_state.update(state[key])  # Let calculated state override persistent state
+                    state[key] = merged_state
                     self.logger.debug(f"Merged nested state for {key}: {state[key]}")
                 elif key not in state:
                     # Only update if the key doesn't already exist in the calculated state

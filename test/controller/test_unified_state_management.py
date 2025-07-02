@@ -13,7 +13,6 @@ class TestUnifiedStateManagement(unittest.TestCase):
     
     @patch('src.controller.ai_player_controller.StateManagerMixin.__init__', return_value=None)
     @patch('src.controller.ai_player_controller.GOAPGoalManager')
-    @patch('src.controller.ai_player_controller.StateCalculationEngine')
     @patch('src.controller.ai_player_controller.ActionExecutor')
     @patch('src.controller.ai_player_controller.CooldownManager')
     @patch('src.controller.ai_player_controller.MissionExecutor')
@@ -21,7 +20,7 @@ class TestUnifiedStateManagement(unittest.TestCase):
     @patch('src.controller.ai_player_controller.GOAPExecutionManager')
     @patch('src.controller.ai_player_controller.LearningManager')
     def setUp(self, mock_learning, mock_goap, mock_skill, mock_mission, 
-              mock_cooldown, mock_executor, mock_engine, mock_goal, mock_init):
+              mock_cooldown, mock_executor, mock_goal, mock_init):
         """Set up test fixtures."""
         self.mock_client = Mock()
         

@@ -1,5 +1,6 @@
 artifactsmmo-api-client/
-data/
+data/*.yaml
+data/characters/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

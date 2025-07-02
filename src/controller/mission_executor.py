@@ -6,6 +6,8 @@ mission logic with configurable goal template-based execution.
 """
 
 import logging
+import os
+import tempfile
 from typing import Any, Dict, List, Optional
 
 from src.game.globals import CONFIG_PREFIX
@@ -189,6 +191,196 @@ class MissionExecutor:
         
         return 0.0
     
+    def _should_reselect_goal(self, current_goal_name: str, current_level: int, 
+                             goal_start_level: int, hp_percentage: float, 
+                             combat_not_viable: bool) -> bool:
+        """
+        Determine if a new goal should be selected based on current conditions.
+        
+        Args:
+            current_goal_name: Name of the current goal (or None)
+            current_level: Character's current level
+            goal_start_level: Level when current goal was selected
+            hp_percentage: Current HP percentage
+            combat_not_viable: Whether combat is not viable
+            
+        Returns:
+            True if goal should be reselected, False otherwise
+        """
+        if current_goal_name is None:
+            return True
+            
+        if current_level > goal_start_level:
+            self.logger.info("🎊 Level up detected! Selecting new XP-gaining goal...")
+            return True
+            
+        if hp_percentage < 100 and current_goal_name != 'get_to_safety':
+            self.logger.info(f"💔 HP dropped to {hp_percentage:.1f}% - re-evaluating goals...")
+            return True
+            
+        if combat_not_viable and current_goal_name == 'hunt_monsters':
+            self.logger.info("⚔️ Combat no longer viable - switching from hunt_monsters to equipment upgrade goals...")
+            return True
+            
+        return False
+    
+    def _handle_pre_goal_setup(self, goal_name: str) -> None:
+        """
+        Handle any special setup required before executing a goal.
+        
+        Args:
+            goal_name: Name of the goal about to be executed
+        """
+        # Reset combat context if needed before hunt_monsters
+        if goal_name == 'hunt_monsters':
+            self._reset_combat_context_if_completed()
+    
+    def _handle_post_goal_cleanup(self, goal_name: str) -> None:
+        """
+        Handle any special cleanup required after executing a goal.
+        
+        Args:
+            goal_name: Name of the goal that was executed
+        """
+        # Reset combat context after successful hunt_monsters
+        if goal_name == 'hunt_monsters':
+            self._reset_combat_context_if_completed()
+    
+    def _reset_combat_context_if_completed(self) -> None:
+        """
+        Reset combat context from 'completed' to 'idle' if needed.
+        """
+        current_state = self.controller.get_current_world_state()
+        combat_status = current_state.get('combat_context', {}).get('status')
+        
+        if combat_status == 'completed':
+            self.logger.info("🔄 Resetting combat context from completed to idle")
+            
+            # Execute the reset_combat_context action
+            from src.controller.actions.reset_combat_context import ResetCombatContextAction
+            from src.lib.action_context import ActionContext
+            
+            reset_action = ResetCombatContextAction()
+            context = ActionContext()
+            context.character_name = self.controller.character_state.data.get('name')
+            reset_result = reset_action.execute(self.controller.client, context)
+            
+            if reset_result and reset_result.get('success'):
+                # Update the world state to reflect the change
+                self.controller.update_world_state(
+                    {'combat_context': {'status': 'idle', 'target': None, 'location': None}}
+                )
+    
+    def _retry_with_revised_rest_conditions(self, goal_state: Dict[str, Any]) -> bool:
+        """
+        Retry GOAP planning with revised rest action conditions.
+        
+        For safety goals, the rest action should be available when HP < 100%,
+        not when HP = 100%. This method uses the original action execution
+        approach as a fallback when GOAP planning fails.
+        
+        Args:
+            goal_state: The target goal state
+            
+        Returns:
+            True if rest was executed successfully, False otherwise
+        """
+        try:
+            current_state = self.controller.get_current_world_state()
+            character_status = current_state.get('character_status', {})
+            current_hp = character_status.get('hp_percentage', 100)
+            
+            if current_hp >= 100:
+                # No need to rest if HP is already at target
+                return False
+            
+            self.logger.info(f"🔄 Fallback: executing rest action directly for HP {current_hp}% → 100%")
+            
+            # Execute rest action directly as fallback
+            from src.controller.actions.rest import RestAction
+            from src.lib.action_context import ActionContext
+            
+            rest_action = RestAction()
+            context = ActionContext()
+            context.character_name = self.controller.character_state.data.get('name')
+            
+            # Execute rest action
+            rest_result = rest_action.execute(self.controller.client, context)
+            
+            if rest_result and rest_result.get('success'):
+                # Update character state after rest
+                self.controller.character_state.refresh(self.controller.client)
+                new_hp = self.controller.character_state.data.get('hp', 0)
+                max_hp = self.controller.character_state.data.get('max_hp', 100)
+                new_hp_percentage = (new_hp / max_hp * 100) if max_hp > 0 else 0
+                
+                self.logger.info(f"✅ Rest completed: HP now {new_hp}/{max_hp} ({new_hp_percentage:.1f}%)")
+                
+                # Check if goal is now achieved
+                updated_state = self.controller.get_current_world_state()
+                if self._is_goal_already_achieved(goal_state, updated_state):
+                    self.logger.info("✅ Goal achieved after rest fallback")
+                    return True
+                else:
+                    self.logger.debug("Goal not yet achieved after rest")
+                    return False
+            else:
+                self.logger.warning("⚠️ Rest action failed in fallback")
+                return False
+                    
+        except Exception as e:
+            self.logger.error(f"Error in rest fallback: {e}")
+            return False
+    
+    def _should_clear_goal(self, goal_name: str) -> bool:
+        """
+        Determine if a goal should be cleared after successful completion.
+        
+        Args:
+            goal_name: Name of the completed goal
+            
+        Returns:
+            True if goal should be cleared, False otherwise
+        """
+        # These goals shouldn't persist after completion
+        return goal_name in ['get_to_safety', 'wait_for_cooldown', 'hunt_monsters']
+    
+    def _is_goal_already_achieved(self, goal_state: Dict[str, Any], current_state: Dict[str, Any]) -> bool:
+        """
+        Check if a goal state is already achieved in the current world state.
+        
+        Handles nested state comparisons properly.
+        
+        Args:
+            goal_state: The target goal state
+            current_state: The current world state
+            
+        Returns:
+            True if all goal conditions are met, False otherwise
+        """
+        def check_nested_match(goal_value: Any, current_value: Any) -> bool:
+            """Recursively check if goal requirements are met in current state."""
+            if isinstance(goal_value, dict) and isinstance(current_value, dict):
+                # For dictionaries, check that all goal keys are satisfied
+                for key, val in goal_value.items():
+                    if key not in current_value:
+                        return False
+                    if not check_nested_match(val, current_value[key]):
+                        return False
+                return True
+            else:
+                # For non-dict values, direct comparison
+                return goal_value == current_value
+        
+        # Check each goal condition
+        for key, goal_value in goal_state.items():
+            if key not in current_state:
+                return False
+            if not check_nested_match(goal_value, current_state[key]):
+                return False
+                
+        return True
+    
     def execute_progression_mission(self, mission_parameters: Dict[str, Any]) -> bool:
         """
         Execute a progression mission using goal template-driven approach.
@@ -235,32 +427,19 @@ class MissionExecutor:
                 mission_success = True
                 break
             
-            # Check if we need to select a new goal
-            # Re-select if: no current goal, leveled up, HP dropped, or combat not viable
+            # Calculate current state metrics
             current_hp = self.controller.character_state.data.get('hp', 100)
             max_hp = self.controller.character_state.data.get('max_hp', 100)
             hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
             
-            # Get current world state to check combat viability
+            # Get current world state
             current_state = self.controller.get_current_world_state()
             combat_not_viable = current_state.get('combat_not_viable', False)
             
-            should_reselect_goal = (
-                current_goal_name is None or 
-                current_level > goal_start_level or
-                (hp_percentage < 100 and current_goal_name != 'get_to_safety') or  # Combat loss
-                (combat_not_viable and current_goal_name == 'hunt_monsters')  # Combat no longer viable
-            )
-            
-            if should_reselect_goal:
-                if current_level > goal_start_level:
-                    self.logger.info("🎊 Level up detected! Selecting new XP-gaining goal...")
-                elif hp_percentage < 100:
-                    self.logger.info(f"💔 HP dropped to {hp_percentage:.1f}% - re-evaluating goals...")
-                elif combat_not_viable and current_goal_name == 'hunt_monsters':
-                    self.logger.info("⚔️ Combat no longer viable - switching from hunt_monsters to equipment upgrade goals...")
-                
-                # Use goal manager for intelligent goal selection
+            # Check if we need to select a new goal
+            if self._should_reselect_goal(current_goal_name, current_level, goal_start_level, 
+                                         hp_percentage, combat_not_viable):
+                # Select new goal
                 goal_selection = self._select_mission_goal(mission_parameters)
                 
                 if not goal_selection:
@@ -270,6 +449,7 @@ class MissionExecutor:
                 current_goal_name, current_goal_config = goal_selection
                 goal_start_level = current_level
                 self.logger.info(f"🎯 Selected goal: '{current_goal_name}' - {current_goal_config.get('description', 'No description')}")
+                
                 if current_goal_name == 'get_to_safety':
                     self.logger.info("🛡️ Prioritizing safety recovery before continuing mission")
                 else:
@@ -277,23 +457,26 @@ class MissionExecutor:
             else:
                 self.logger.info(f"🔁 Continuing to pursue goal: '{current_goal_name}'")
             
+            # Handle any pre-goal setup
+            self._handle_pre_goal_setup(current_goal_name)
+            
             # Execute goal using GOAP planning
             goal_success = self._execute_goal_template(current_goal_name, current_goal_config, mission_parameters)
             
             if goal_success:
                 self.logger.info(f"✅ Goal '{current_goal_name}' achieved successfully")
-                # Reset failure tracking for successful goals
                 self._reset_goal_failures_on_success(current_goal_name)
                 
-                # Clear current goal after successful completion to force re-selection
-                # This applies to maintenance and emergency goals that shouldn't persist
-                if current_goal_name in ['get_to_safety', 'wait_for_cooldown']:
+                # Handle any post-goal cleanup
+                self._handle_post_goal_cleanup(current_goal_name)
+                
+                # Clear goal if it shouldn't persist
+                if self._should_clear_goal(current_goal_name):
                     self.logger.info(f"🔄 Clearing {current_goal_name} goal to allow new goal selection")
                     current_goal_name = None
                     current_goal_config = None
             else:
                 self.logger.warning(f"⚠️ Goal '{current_goal_name}' execution incomplete")
-                # Track the failure to prevent repeated attempts
                 self._track_goal_failure(current_goal_name)
                 
                 # Force re-selection to try a different goal
@@ -307,6 +490,21 @@ class MissionExecutor:
                 self.logger.info(f"📈 Level progress: {current_level} → {new_level}")
                 
         # Report mission results
+        self._report_mission_results(initial_level, target_level, mission_iteration, mission_success)
+        
+        return mission_success
+    
+    def _report_mission_results(self, initial_level: int, target_level: Optional[int], 
+                               iterations: int, success: bool) -> None:
+        """
+        Report the results of a mission execution.
+        
+        Args:
+            initial_level: Starting level
+            target_level: Target level (or None)
+            iterations: Number of iterations executed
+            success: Whether mission was successful
+        """
         final_level = self.controller.character_state.data.get('level', 1)
         levels_gained = final_level - initial_level
         
@@ -314,11 +512,9 @@ class MissionExecutor:
         self.logger.info("🏆 MISSION EXECUTION RESULTS")
         self.logger.info(f"🎯 Target level: {target_level}")
         self.logger.info(f"📈 Levels gained: {levels_gained} ({initial_level} → {final_level})")
-        self.logger.info(f"🔄 Mission iterations: {mission_iteration}")
-        self.logger.info(f"🎊 Mission success: {'✅ YES' if mission_success else '❌ NO'}")
+        self.logger.info(f"🔄 Mission iterations: {iterations}")
+        self.logger.info(f"🎊 Mission success: {'✅ YES' if success else '❌ NO'}")
         self.logger.info("=" * 50)
-        
-        return mission_success
     
     def execute_level_progression(self, target_level: int = None) -> bool:
         """
@@ -417,6 +613,11 @@ class MissionExecutor:
                 goal_name, goal_config, current_state, **goal_parameters
             )
             
+            # Check if goal is already achieved
+            if self._is_goal_already_achieved(goal_state, current_state):
+                self.logger.info(f"✅ Goal '{goal_name}' is already achieved - no action needed")
+                return True
+            
             # Track progress before execution
             progress_before = self._evaluate_goal_progress(goal_name, current_state, goal_config)
             
@@ -427,6 +628,16 @@ class MissionExecutor:
                 config_file=f"{CONFIG_PREFIX}/actions.yaml",
                 max_iterations=self.max_goal_iterations
             )
+            
+            # If GOAP planning failed for safety goals, modify conditions and retry
+            if not goal_success and goal_name == 'get_to_safety':
+                self.logger.debug(f"🔧 GOAP planning failed for '{goal_name}', revising rest action conditions")
+                
+                # For safety goals, we need to make rest action available when HP < 100%
+                # Temporarily modify the actions config to use correct rest condition
+                revised_success = self._retry_with_revised_rest_conditions(goal_state)
+                if revised_success:
+                    goal_success = True
             
             # Track progress after execution
             post_execution_state = self.controller.get_current_world_state()

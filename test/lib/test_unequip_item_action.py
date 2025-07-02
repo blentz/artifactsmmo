@@ -6,10 +6,11 @@ from unittest.mock import Mock
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 from src.controller.actions.unequip_item import UnequipItemAction
 
+from test.base_test import BaseTest
 from test.fixtures import MockActionContext, create_mock_client
 
 
-class TestUnequipItemAction(unittest.TestCase):
+class TestUnequipItemAction(BaseTest):
     """ Test cases for UnequipItemAction """
 
     def setUp(self):
@@ -22,6 +23,15 @@ class TestUnequipItemAction(unittest.TestCase):
             slot=self.slot,
             quantity=1
         )
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        # Clean up mock objects
+        self.action = None
+        self.context = None
+        
+        # Clear any patches that might be active
+        unittest.mock.patch.stopall()
 
     def test_init_basic(self):
         """ Test basic initialization """

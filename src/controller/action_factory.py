@@ -437,6 +437,9 @@ class ActionFactory:
             else:
                 action_context = ActionContext()
             
+            # Store action instance in context for dynamic reactions
+            action_context.action_instance = action
+            
             # Execute the action with ActionContext
             response = action.execute(client, action_context)
             
