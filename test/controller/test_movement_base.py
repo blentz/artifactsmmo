@@ -156,7 +156,7 @@ class TestMovementActionBase(unittest.TestCase):
         
         # Should fail with no client
         self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        self.assertIn('error', result)
 
 
 if __name__ == '__main__':

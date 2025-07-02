@@ -6,12 +6,12 @@ eliminating redundant GOAP methods from the AI controller.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
-from src.game.globals import CONFIG_PREFIX
+from src.lib.goap import World, Planner, Action_List
 from src.lib.actions_data import ActionsData
-from src.lib.goap import Action_List, Planner, World
 from src.lib.yaml_data import YamlData
+from src.game.globals import CONFIG_PREFIX
 
 
 class GOAPExecutionManager:
@@ -33,6 +33,8 @@ class GOAPExecutionManager:
         # Cached start state configuration
         self._start_state_config = None
         
+        # Load state mappings for consolidated-to-flat transformation
+        
     def _load_start_state_defaults(self) -> Dict[str, Any]:
         """
         Load default start state configuration from YAML file.
@@ -44,10 +46,11 @@ class GOAPExecutionManager:
             return self._start_state_config
             
         try:
-            start_state_data = YamlData(f"{CONFIG_PREFIX}/goap_start_state.yaml")
+            # Use consolidated state defaults instead of goap_start_state
+            start_state_data = YamlData(f"{CONFIG_PREFIX}/consolidated_state_defaults.yaml")
             
-            # Get the core states section
-            defaults = start_state_data.data.get('core_states', {})
+            # Get the state defaults section
+            defaults = start_state_data.data.get('state_defaults', {})
             
             self._start_state_config = defaults
             self.logger.debug(f"Loaded {len(defaults)} default start state variables from configuration")
@@ -55,19 +58,128 @@ class GOAPExecutionManager:
             
         except Exception as e:
             self.logger.warning(f"Could not load start state configuration: {e}")
-            # Return minimal fallback defaults
-            return {
-                'can_move': True,
-                'can_attack': True,
-                'character_safe': True,
-                'character_alive': True,
-                'need_combat': True,
-                'at_target_location': False,
-                'monsters_available': False,
-                'monster_present': False,
-                'is_on_cooldown': False,
-                'needs_rest': False
-            }
+            # Return empty dict - no fallback
+            return {}
+    
+    
+    
+    
+    def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
+        """
+        Get value from nested dictionary using dot notation.
+        
+        Args:
+            data: Dictionary to search
+            key_path: Dot-separated path like "character_status.safe"
+            
+        Returns:
+            Value at the path or None if not found
+        """
+        if '.' not in key_path:
+            return data.get(key_path)
+        
+        parts = key_path.split('.')
+        current = data
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return None
+        return current
+    
+    
+    
+    def _convert_goal_value_to_goap_format(self, goal_value: Any) -> Any:
+        """
+        Convert special goal values to GOAP-compatible format.
+        
+        Args:
+            goal_value: Goal value like '!null', 'completed', '>0', etc.
+            
+        Returns:
+            GOAP-compatible value (boolean, numeric)
+        """
+        if isinstance(goal_value, str):
+            # Handle special string values
+            if goal_value == '!null':
+                return True  # Non-null means True
+            elif goal_value == 'null':
+                return False  # Null means False
+            elif goal_value == 'completed':
+                return True  # Completed state means True
+            elif goal_value == 'idle':
+                return False  # Idle state means False  
+            elif goal_value.startswith('>'):
+                # Convert ">0" to a positive number that GOAP can target
+                try:
+                    threshold = float(goal_value[1:])
+                    return int(threshold) + 1  # Target slightly above threshold
+                except ValueError:
+                    return True
+            elif goal_value.startswith('>='):
+                # Convert ">=0" to a number that GOAP can target
+                try:
+                    threshold = float(goal_value[2:])
+                    return int(threshold)  # Target at least the threshold
+                except ValueError:
+                    return True
+            else:
+                # For other string values, return as-is for now
+                return goal_value
+        else:
+            # Return non-string values as-is
+            return goal_value
+    
+    def _check_condition_matches(self, state: Dict[str, Any], cond_key: str, cond_value: Any) -> bool:
+        """
+        Check if a condition matches the current state, supporting nested state structures.
+        
+        Args:
+            state: Current state dictionary
+            cond_key: The state key to check
+            cond_value: Expected value (can be nested dict or simple value)
+            
+        Returns:
+            True if condition matches, False otherwise
+        """
+        current_value = state.get(cond_key)
+        
+        # Handle simple value comparison
+        if not isinstance(cond_value, dict):
+            # Handle special comparison operators
+            if isinstance(cond_value, str):
+                if cond_value == '!null':
+                    return current_value is not None
+                elif cond_value.startswith('<'):
+                    try:
+                        threshold = float(cond_value[1:])
+                        return isinstance(current_value, (int, float)) and current_value < threshold
+                    except (ValueError, TypeError):
+                        return False
+                elif cond_value.startswith('>'):
+                    try:
+                        threshold = float(cond_value[1:])
+                        return isinstance(current_value, (int, float)) and current_value > threshold
+                    except (ValueError, TypeError):
+                        return False
+            
+            return current_value == cond_value
+        
+        # Handle nested dict comparison
+        if not isinstance(current_value, dict):
+            return False
+        
+        # Check that all required nested conditions are satisfied
+        for nested_key, nested_value in cond_value.items():
+            if nested_key not in current_value:
+                return False
+            
+            # Recursive check for deeper nesting
+            if not self._check_condition_matches(current_value, nested_key, nested_value):
+                return False
+        
+        return True
+    
     
     def create_world_with_planner(self, start_state: Dict[str, Any], 
                                 goal_state: Dict[str, Any], 
@@ -88,8 +200,10 @@ class GOAPExecutionManager:
         # Load default start state configuration first to get all possible state keys
         start_state_defaults = self._load_start_state_defaults()
         
-        # Get all keys from start state, goal state, action conditions/reactions, AND defaults
-        all_keys = set(start_state.keys()) | set(goal_state.keys()) | set(start_state_defaults.keys())
+        # Get all keys from states
+        all_keys = set(start_state.keys()) | set(goal_state.keys())
+        if start_state_defaults:
+            all_keys.update(start_state_defaults.keys())
         
         # Extract all state variables used in action conditions and reactions
         for action_name, action_config in actions_config.items():
@@ -104,16 +218,28 @@ class GOAPExecutionManager:
         # Create planner with all required state keys
         planner = Planner(*all_keys)
         
+        # Override the planner's default -1 values with proper defaults
+        # This is crucial for nested dictionary states
+        if start_state_defaults:
+            for key, value in start_state_defaults.items():
+                if key in planner.values:
+                    planner.values[key] = value
+        
         # Build complete start state with proper precedence:
         # 1. Start with configuration defaults
         # 2. Add any additional keys from actions with False defaults  
         # 3. Override with actual start_state values
-        complete_start_state = start_state_defaults.copy()
+        complete_start_state = start_state_defaults.copy() if start_state_defaults else {}
         
-        # Add any missing action-required keys with False defaults
+        # Add any missing action-required keys with appropriate defaults
         for key in all_keys:
             if key not in complete_start_state:
-                complete_start_state[key] = False
+                # Check if this is a nested state key from defaults
+                if start_state_defaults and key in start_state_defaults:
+                    complete_start_state[key] = start_state_defaults[key]
+                else:
+                    # Only set to False if it's not a dictionary state
+                    complete_start_state[key] = False
         
         # Override with actual runtime state values
         complete_start_state.update(start_state)
@@ -121,6 +247,13 @@ class GOAPExecutionManager:
         # Set start and goal states on the planner
         planner.set_start_state(**complete_start_state)
         planner.set_goal_state(**goal_state)
+        
+        # Fix goal state preservation for nested dictionaries
+        # The planner.state() method overwrites nested dicts with -1
+        # We need to restore the nested structure after set_goal_state
+        for key, value in goal_state.items():
+            if isinstance(value, dict) and key in planner.goal_state:
+                planner.goal_state[key] = value
         
         # Create actions from configuration
         action_list = Action_List()
@@ -155,7 +288,7 @@ class GOAPExecutionManager:
         Create a GOAP plan to achieve a goal.
         
         Args:
-            start_state: Current state
+            start_state: Current state in consolidated format
             goal_state: Desired state
             actions_config: Available actions
             
@@ -168,7 +301,7 @@ class GOAPExecutionManager:
             
             self.logger.debug(f"📊 Starting GOAP calculation with {len(actions_config)} actions...")
             plans = planner.calculate()
-            self.logger.debug("📊 GOAP calculation completed successfully")
+            self.logger.debug(f"📊 GOAP calculation completed successfully")
             
             if plans:
                 best_plan = plans  # Plans is already the list of nodes
@@ -194,28 +327,25 @@ class GOAPExecutionManager:
                 return plan_actions
             else:
                 self.logger.warning("No GOAP plan found for goal")
-                self.logger.info("Start state key values:")
-                self.logger.info(f"  - character_safe: {start_state.get('character_safe')}")
-                self.logger.info(f"  - needs_rest: {start_state.get('needs_rest')}")
-                self.logger.info(f"  - is_on_cooldown: {start_state.get('is_on_cooldown')}")
-                self.logger.info(f"  - hp_percentage: {start_state.get('hp_percentage')}")
-                self.logger.info(f"  - character_alive: {start_state.get('character_alive')}")
-                self.logger.info(f"Goal state: {goal_state}")
-                self.logger.info(f"Available actions: {list(actions_config.keys())}")
+                self.logger.debug(f"Start state: {start_state}")
+                self.logger.debug(f"Goal state: {goal_state}")
+                self.logger.debug(f"Available actions: {list(actions_config.keys())}")
                 # Check which actions have their conditions met
-                self.logger.info("Checking action conditions:")
+                self.logger.debug("Checking action conditions:")
                 for action_name, action_config in actions_config.items():
                     conditions = action_config.get('conditions', {})
                     all_met = True
                     unmet_conditions = []
                     for cond_key, cond_value in conditions.items():
-                        if start_state.get(cond_key) != cond_value:
+                        # Check against state for nested conditions
+                        if not self._check_condition_matches(start_state, cond_key, cond_value):
                             all_met = False
-                            unmet_conditions.append(f"{cond_key}: need {cond_value}, have {start_state.get(cond_key)}")
+                            current_value = self._get_nested_value(start_state, cond_key) if '.' in str(cond_key) else start_state.get(cond_key)
+                            unmet_conditions.append(f"{cond_key}: need {cond_value}, have {current_value}")
                     if all_met:
-                        self.logger.info(f"  ✓ {action_name}: all conditions met")
+                        self.logger.debug(f"  ✓ {action_name}: all conditions met")
                     else:
-                        self.logger.info(f"  ✗ {action_name}: unmet conditions - {unmet_conditions}")
+                        self.logger.debug(f"  ✗ {action_name}: unmet conditions - {unmet_conditions}")
                 return None
                 
         except Exception as e:
@@ -321,9 +451,6 @@ class GOAPExecutionManager:
         action_index = 0
         iterations = 0
         
-        # Load actions configuration for updating world state with reactions
-        actions_config = self._load_actions_from_config(config_file)
-        
         while action_index < len(current_plan) and iterations < max_iterations:
             iterations += 1
             
@@ -360,10 +487,7 @@ class GOAPExecutionManager:
             # Execute the action
             success = controller._execute_single_action(action_name, current_action)
             
-            if success:
-                # Update world state with action reactions if available
-                self._update_world_state_with_reactions(controller, action_name, actions_config)
-            else:
+            if not success:
                 self.logger.warning(f"Action {action_name} failed")
                 
                 # Handle specific failure types with targeted recovery
@@ -448,7 +572,6 @@ class GOAPExecutionManager:
             # First check if we already know what weapon to craft
             if hasattr(controller, 'action_context') and controller.action_context.get('item_code'):
                 target_item = controller.action_context['item_code']
-                self.logger.debug(f"Found selected weapon in action context: {target_item}")
                 
                 # Use crafting chain analysis to build complete plan
                 try:
@@ -457,10 +580,10 @@ class GOAPExecutionManager:
                     
                     # Execute crafting chain analysis (this uses existing knowledge, no API calls)
                     from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
-                    chain_analyzer = AnalyzeCraftingChainAction()
+                    chain_analyzer = AnalyzeCraftingChainAction(controller.character_state.name, target_item)
                     
                     # This should use only existing knowledge
-                    chain_result = chain_analyzer.execute(controller.client, context)
+                    chain_result = chain_analyzer.execute(controller.client, **context)
                     
                     if chain_result and chain_result.get('success'):
                         action_sequence = chain_result.get('action_sequence', [])
@@ -493,12 +616,11 @@ class GOAPExecutionManager:
         # Create plan that prioritizes discovery actions
         discovery_focused_state = current_state.copy()
         
-        # Adjust state to favor discovery actions
-        discovery_focused_state.update({
-            'need_workshop_discovery': True,
-            'equipment_info_unknown': True,
-            'material_requirements_known': False
-        })
+        # Note: Removed hardcoded discovery states (need_workshop_discovery, 
+        # equipment_info_unknown, material_requirements_known) as they are:
+        # 1. Not used as conditions by any actions
+        # 2. Only set as reactions by some actions
+        # 3. Causing GOAP to initialize them as -1 which breaks nested state handling
         
         return self.create_plan(discovery_focused_state, goal_state, actions_config)
     
@@ -581,14 +703,8 @@ class GOAPExecutionManager:
                 return False
             self._chain_analysis_replans = chain_replans + 1
             return True
-        elif action_name == 'evaluate_recipes':
-            # Only replan after recipe evaluation if we haven't already done so
-            # Track if we've already evaluated and selected a recipe
-            recipe_eval_replans = getattr(self, '_recipe_eval_replans', 0)
-            if recipe_eval_replans >= 1:
-                self.logger.debug("Already replanned after recipe evaluation, skipping replan")
-                return False
-            self._recipe_eval_replans = recipe_eval_replans + 1
+        elif action_name == 'evaluate_weapon_recipes':
+            # Replan after weapon evaluation to incorporate weapon selection
             return True
         
         return False
@@ -734,7 +850,7 @@ class GOAPExecutionManager:
     def _is_goal_achieved(self, goal_state: Dict[str, Any], 
                          current_state: Dict[str, Any]) -> bool:
         """Check if the goal state has been achieved."""
-        self.logger.debug("🔍 Checking goal achievement:")
+        self.logger.debug(f"🔍 Checking goal achievement:")
         self.logger.debug(f"  Goal state: {goal_state}")
         
         for key, value in goal_state.items():
@@ -765,7 +881,7 @@ class GOAPExecutionManager:
                 else:
                     self.logger.debug(f"  ✅ {key}: {current_state[key]} == {value}")
         
-        self.logger.debug("🎯 Goal achieved: All conditions met!")
+        self.logger.debug(f"🎯 Goal achieved: All conditions met!")
         return True
     
     def _load_actions_from_config(self, config_file: str = None) -> Dict[str, Dict]:
@@ -836,29 +952,8 @@ class GOAPExecutionManager:
             # Load start state defaults from configuration
             start_state_defaults = self._load_start_state_defaults()
             
-            # Force critical states for XP-seeking cycle
+            # Use configured start state defaults for session initialization
             session_state = start_state_defaults.copy()
-            session_state.update({
-                # Ensure find_monsters is required for complete 3-action plans
-                'monsters_available': False,
-                'monster_present': False,
-                'at_target_location': False,
-                
-                # Reset goal completion states
-                'has_hunted_monsters': False,
-                'monster_defeated': False,
-                
-                # Ensure character can act
-                'character_alive': True,
-                'character_safe': True,
-                'can_move': True,
-                'can_attack': True,
-                'need_combat': True,
-                
-                # Clear cooldown states
-                'is_on_cooldown': False,
-                'needs_rest': False
-            })
             
             # Initialize world state for GOAP planning
             if hasattr(controller, 'goap_data') and controller.goap_data:
@@ -894,31 +989,6 @@ class GOAPExecutionManager:
             return False  # For now, let authentication failures be handled by the application
         except Exception:
             return False
-    
-    def _update_world_state_with_reactions(self, controller, action_name: str, actions_config: Dict[str, Dict]) -> None:
-        """
-        Update the world state with action reactions after successful execution.
-        
-        This ensures that the GOAP planner knows about state changes from completed actions.
-        """
-        if not actions_config or action_name not in actions_config:
-            return
-            
-        action_config = actions_config[action_name]
-        reactions = action_config.get('reactions', {})
-        
-        if reactions and hasattr(controller, 'world_state') and controller.world_state:
-            # Update world state data with reactions
-            if not controller.world_state.data:
-                controller.world_state.data = {}
-                
-            for key, value in reactions.items():
-                controller.world_state.data[key] = value
-                self.logger.debug(f"Updated world state: {key} = {value}")
-            
-            # Save the updated world state
-            controller.world_state.save()
-            self.logger.debug(f"World state updated with reactions from {action_name}")
     
     def _is_coordinate_failure(self, action_name: str, controller) -> bool:
         """

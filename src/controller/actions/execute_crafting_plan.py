@@ -32,11 +32,13 @@ class ExecuteCraftingPlanAction(ActionBase):
     
     # GOAP parameters
     conditions = {
-        "character_alive": True,
-        "character_safe": True,
-        "craft_plan_available": True,
-        "materials_sufficient": True
-    }
+            'character_status': {
+                'alive': True,
+                'safe': True,
+            },
+            'craft_plan_available': True,
+            'materials_sufficient': True,
+        }
     reactions = {
         "has_equipment": True,
         "inventory_updated": True,
@@ -52,9 +54,6 @@ class ExecuteCraftingPlanAction(ActionBase):
         
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """Execute the crafting plan"""
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         target_item = context.get('target_item')

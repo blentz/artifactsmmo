@@ -24,12 +24,16 @@ class CheckSkillRequirementAction(ActionBase):
     """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
-        "skill_requirements_checked": True,
-        "need_skill_upgrade": True,
-        "skill_level_sufficient": True,
-        "required_skill_level_known": True
+        'skill_status': {
+            'checked': True,
+            'sufficient': True
+        }
     }
     weights = {"skill_requirements_checked": 10}
 
@@ -43,9 +47,6 @@ class CheckSkillRequirementAction(ActionBase):
         """Check skill requirements and update state accordingly."""
         # Call superclass to set self._context
         super().execute(client, context)
-        
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
         
         # Get parameters from context
         character_name = context.character_name

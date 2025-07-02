@@ -19,9 +19,22 @@ class TransformRawMaterialsAction(ActionBase):
     """ Action to transform raw materials into refined materials (e.g., copper_ore → copper) """
 
     # GOAP parameters
-    conditions = {"character_alive": True, "has_raw_materials": True, "character_safe": True}
-    reactions = {"has_refined_materials": True, "materials_sufficient": True}
-    weights = {"has_refined_materials": 15}
+    conditions = {
+            'character_status': {
+                'alive': True,
+                'safe': True,
+            },
+            'inventory_status': {
+                'has_raw_materials': True
+            }
+        }
+    reactions = {
+        'inventory_status': {
+            'has_refined_materials': True,
+            'materials_sufficient': True
+        }
+    }
+    weights = {"inventory_status.has_refined_materials": 15}
 
     def __init__(self):
         """
@@ -31,9 +44,6 @@ class TransformRawMaterialsAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Transform raw materials into refined materials needed for crafting """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         target_item = context.get('target_item')
@@ -518,8 +528,7 @@ class TransformRawMaterialsAction(ActionBase):
                             return refined_material
                         else:
                             self.logger.warning(f"❌ Recipe '{refined_material}' doesn't use {raw_material} (uses: {required_materials})")
-            
-            
+
             self.logger.error(f"❌ No smelting recipe found for {raw_material} → {refined_material}")
             return None
             

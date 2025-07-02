@@ -5,23 +5,26 @@ This module provides a base class that encapsulates common movement patterns,
 reducing duplication across movement actions.
 """
 
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post import sync as move_character_api
 from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
+from src.lib.action_context import ActionContext
+
 from .base import ActionBase
 from .mixins import CharacterDataMixin
-
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
 
 
 class MovementActionBase(ActionBase, CharacterDataMixin):
     """Base class for all movement-related actions."""
     
     # Default GOAP parameters for movement actions
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {"at_location": True}
     weights = {"at_location": 10}
     
@@ -134,18 +137,8 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         Returns:
             Action result dictionary
         """
-        # Validate client
-        if not self.validate_execution_context(client, context):
-            error_response = self.get_error_response("No API client provided")
-            self.log_execution_result(error_response)
-            return error_response
-        
         # Get character name from context
         character_name = context.character_name
-        if not character_name:
-            error_response = self.get_error_response("No character name provided")
-            self.log_execution_result(error_response)
-            return error_response
         
         # Get target coordinates
         target_x, target_y = self.get_target_coordinates(context)

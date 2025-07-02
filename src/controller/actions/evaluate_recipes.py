@@ -7,11 +7,10 @@ character requirements.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from src.controller.actions.base import ActionBase
 from src.game.character.state import CharacterState
-from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
 
 
@@ -29,16 +28,20 @@ class EvaluateRecipesAction(ActionBase):
     
     # GOAP parameters for planning
     conditions = {
-        'character_alive': True,
-        'target_slot_specified': True
-    }
+            'character_status': {
+                'alive': True,
+            },
+            'equipment_status': {
+                'target_slot': '!null',
+                'selected_item': None
+            }
+        }
     
     reactions = {
-        'equipment_info_known': True,
-        'recipe_known': True,
-        'best_recipe_selected': True,
-        'craftable_item_identified': True,
-        'need_specific_workshop': True
+        'equipment_status': {
+            'selected_item': 'wooden_staff',
+            'recipe_evaluated': True
+        }
     }
     
     weight = 2.0
@@ -157,8 +160,6 @@ class EvaluateRecipesAction(ActionBase):
         """
         super().execute(client, context)
         
-        if not client:
-            return self.get_error_response("No API client provided")
             
         # Get target slot from action context (set by SelectOptimalSlotAction)
         target_slot = context.get_parameter('target_equipment_slot')

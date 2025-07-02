@@ -19,10 +19,6 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find the nearest resource location using unified search algorithm """
-        # Validate client
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
         character_y = context.get('character_y', context.character_y)

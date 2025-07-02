@@ -18,7 +18,14 @@ class FindResourcesAction(SearchActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find the nearest resource location using unified search algorithm """
-        return self.validate_and_execute(client, context)
+        try:
+            return self.perform_action(client, context)
+        except Exception as e:
+            error_response = self.get_error_response(
+                f"{self.__class__.__name__} failed: {str(e)}"
+            )
+            self.log_execution_result(error_response)
+            return error_response
     
     def perform_action(self, client, context: ActionContext) -> Dict:
         """

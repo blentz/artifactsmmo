@@ -1,12 +1,11 @@
 """ MoveAction module """
 
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import Optional, Tuple
+
+from src.lib.action_context import ActionContext
 
 from .coordinate_mixin import CoordinateStandardizationMixin
 from .movement_base import MovementActionBase
-
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
 
 
 class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
@@ -14,12 +13,16 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
     
     # GOAP parameters - can be overridden by configuration
     conditions = {
-        'can_move': True,
-        'character_alive': True
-    }
+            'character_status': {
+                'cooldown_active': False,
+                'alive': True,
+            },
+        }
     reactions = {
-        'at_target_location': True
-    }
+            'location_context': {
+                'at_target': True,
+            },
+        }
     weights = {'move': 1.0}
 
     def __init__(self):

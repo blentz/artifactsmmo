@@ -37,9 +37,13 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
 
     def test_analyze_equipment_action_goap_params(self):
         """Test AnalyzeEquipmentAction GOAP parameters."""
-        self.assertEqual(self.action.conditions["character_alive"], True)
-        self.assertTrue("equipment_analysis_available" in self.action.reactions)
-        self.assertTrue("equipment_info_known" in self.action.reactions)
+        # Test consolidated state format
+        self.assertIn("character_status", self.action.conditions)
+        self.assertEqual(self.action.conditions["character_status"]["alive"], True)
+        
+        self.assertIn("equipment_status", self.action.reactions)
+        self.assertEqual(self.action.reactions["equipment_status"]["upgrade_status"], "analyzing")
+        self.assertEqual(self.action.reactions["equipment_status"]["target_slot"], "weapon")
 
     def test_analyze_equipment_action_repr(self):
         """Test AnalyzeEquipmentAction string representation."""
@@ -50,8 +54,10 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         """Test execute fails without client."""
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # With centralized validation, None client triggers validation error
+        self.assertFalse(result["success"])
+        # Direct action execution bypasses centralized validation
+        self.assertIn('error', result)
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -152,27 +158,24 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         """Test that AnalyzeEquipmentAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeEquipmentAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeEquipmentAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeEquipmentAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeEquipmentAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
         self.assertIsInstance(AnalyzeEquipmentAction.conditions, dict)
-        self.assertIn('character_alive', AnalyzeEquipmentAction.conditions)
+        self.assertIn('character_status', AnalyzeEquipmentAction.conditions)
+        self.assertEqual(AnalyzeEquipmentAction.conditions['character_status']['alive'], True)
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
         self.assertIsInstance(AnalyzeEquipmentAction.reactions, dict)
-        expected_reactions = [
-            'equipment_analysis_available', 'need_equipment', 'has_better_weapon',
-            'has_better_armor', 'has_complete_equipment_set'
-        ]
-        for reaction in expected_reactions:
-            self.assertIn(reaction, AnalyzeEquipmentAction.reactions)
+        self.assertIn('equipment_status', AnalyzeEquipmentAction.reactions)
+        self.assertEqual(AnalyzeEquipmentAction.reactions['equipment_status']['upgrade_status'], 'analyzing')
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        self.assertIsInstance(AnalyzeEquipmentAction.weights, dict)
-        self.assertIn('equipment_analysis_available', AnalyzeEquipmentAction.weights)
+        self.assertIsInstance(AnalyzeEquipmentAction.weight, (int, float))
+        self.assertEqual(AnalyzeEquipmentAction.weight, 1)
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_analyze_current_equipment_empty(self, mock_get_character):

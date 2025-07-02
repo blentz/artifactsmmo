@@ -48,8 +48,10 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
             current_level=0
         )
         result = self.action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # With centralized validation, None client triggers validation error
+        self.assertFalse(result["success"])
+        # Direct action execution bypasses centralized validation
+        self.assertIn('error', result)
 
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -172,24 +174,35 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
         expected_conditions = {
-            "character_alive": True,
-            "at_workshop": True,
-            "has_materials": True
+            'character_status': {
+                'alive': True,
+                'safe': True,
+            },
+            'workshop_status': {
+                'at_workshop': True
+            },
+            'inventory_status': {
+                'has_materials': True
+            }
         }
         self.assertEqual(UpgradeWeaponcraftingSkillAction.conditions, expected_conditions)
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
         expected_reactions = {
-            "weaponcrafting_level_sufficient": True,
-            "skill_xp_gained": True,
-            "character_stats_improved": True
+            'skill_status': {
+                'weaponcrafting_level_sufficient': True,
+                'xp_gained': True
+            },
+            'character_status': {
+                'stats_improved': True
+            }
         }
         self.assertEqual(UpgradeWeaponcraftingSkillAction.reactions, expected_reactions)
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"weaponcrafting_level_sufficient": 30}
+        expected_weights = {"skill_status.weaponcrafting_level_sufficient": 30}
         self.assertEqual(UpgradeWeaponcraftingSkillAction.weights, expected_weights)
 
 

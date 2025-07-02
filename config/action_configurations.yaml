@@ -3,12 +3,37 @@
 
 # Action class registry - replaces hardcoded action_class_map
 action_classes:
+  # Core consolidated actions
+  analyze_equipment: "src.controller.actions.analyze_equipment.AnalyzeEquipmentAction"
+  select_recipe: "src.controller.actions.select_recipe.SelectRecipeAction"
+  fight: "src.controller.actions.fight.FightAction"
+  scan: "src.controller.actions.scan.ScanAction"
   move: "src.controller.actions.move.MoveAction"
-  attack: "src.controller.actions.attack.AttackAction"  
   rest: "src.controller.actions.rest.RestAction"
+  wait: "src.controller.actions.wait.WaitAction"
+  gather: "src.controller.actions.gather_resources.GatherResourcesAction"
+  craft: "src.controller.actions.craft_item.CraftItemAction"
+  equip: "src.controller.actions.equip_item.EquipItemAction"
+  unequip: "src.controller.actions.unequip_item.UnequipItemAction"
+  
+  # Bridge actions - Combat Flow
+  initiate_combat_search: "src.controller.actions.initiate_combat_search.InitiateCombatSearchAction"
+  reset_combat_context: "src.controller.actions.reset_combat_context.ResetCombatContextAction"
+  abort_combat_search: "src.controller.actions.abort_combat_search.AbortCombatSearchAction"
+  mark_combat_not_viable: "src.controller.actions.mark_combat_not_viable.MarkCombatNotViableAction"
+  recover_combat_viability: "src.controller.actions.recover_combat_viability.RecoverCombatViabilityAction"
+  
+  # Bridge actions - Equipment Flow
+  initiate_equipment_analysis: "src.controller.actions.initiate_equipment_analysis.InitiateEquipmentAnalysisAction"
+  mark_equipment_crafting: "src.controller.actions.mark_equipment_crafting.MarkEquipmentCraftingAction"
+  mark_equipment_ready: "src.controller.actions.mark_equipment_ready.MarkEquipmentReadyAction"
+  complete_equipment_upgrade: "src.controller.actions.complete_equipment_upgrade.CompleteEquipmentUpgradeAction"
+  reset_equipment_upgrade: "src.controller.actions.reset_equipment_upgrade.ResetEquipmentUpgradeAction"
+  
+  # Legacy actions (for backward compatibility during transition)
+  attack: "src.controller.actions.attack.AttackAction"
   map_lookup: "src.controller.actions.map_lookup.MapLookupAction"
   find_monsters: "src.controller.actions.find_monsters.FindMonstersAction"
-  wait: "src.controller.actions.wait.WaitAction"
   gather_resources: "src.controller.actions.gather_resources.GatherResourcesAction"
   find_resources: "src.controller.actions.find_resources.FindResourcesAction"
   craft_item: "src.controller.actions.craft_item.CraftItemAction"
@@ -33,7 +58,45 @@ action_classes:
   find_xp_sources: "src.controller.actions.find_xp_sources.FindXpSourcesAction"
 
 action_configurations:
-  # Built-in actions using default factory registration
+  # Core consolidated actions
+  analyze_equipment:
+    type: "builtin"
+    description: "Analyze equipment status and set upgrade targets"
+    
+  select_recipe:
+    type: "builtin"
+    description: "Select optimal recipe for equipment crafting"
+    
+  fight:
+    type: "builtin"
+    description: "Fight monsters using consolidated state format"
+    
+  initiate_combat_search:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.initiate_combat_search.InitiateCombatSearchAction"
+    description: "Bridge action to transition combat context from idle to searching"
+    
+  scan:
+    type: "builtin"
+    description: "Scan surrounding area for workshops and resources"
+    
+  gather:
+    type: "builtin"
+    description: "Gather resources using consolidated state format"
+    
+  craft:
+    type: "builtin"
+    description: "Craft items using consolidated state format"
+    
+  equip:
+    type: "builtin"
+    description: "Equip items using consolidated state format"
+    
+  unequip:
+    type: "builtin"
+    description: "Unequip items using consolidated state format"
+  
+  # Core actions
   move:
     type: "builtin"  # Uses default factory setup
     description: "Move character to a target location"
@@ -739,3 +802,52 @@ evaluate_weapon_recipes:
     max_level_difference: 1
     skill_penalty_multiplier: 10
 
+# Bridge action configurations
+# These actions handle state transitions without API calls
+action_configurations:
+  # Combat Flow Bridge Actions
+  reset_combat_context:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.reset_combat_context.ResetCombatContextAction"
+    description: "Reset combat context from completed to idle"
+  
+  abort_combat_search:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.abort_combat_search.AbortCombatSearchAction"
+    description: "Abort combat search when no monsters found"
+  
+  mark_combat_not_viable:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.mark_combat_not_viable.MarkCombatNotViableAction"
+    description: "Mark combat as not viable when win rate too low"
+  
+  recover_combat_viability:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.recover_combat_viability.RecoverCombatViabilityAction"
+    description: "Recover combat viability after equipment upgrade"
+  
+  # Equipment Flow Bridge Actions
+  initiate_equipment_analysis:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.initiate_equipment_analysis.InitiateEquipmentAnalysisAction"
+    description: "Start equipment upgrade analysis process"
+  
+  mark_equipment_crafting:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.mark_equipment_crafting.MarkEquipmentCraftingAction"
+    description: "Mark equipment as being crafted"
+  
+  mark_equipment_ready:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.mark_equipment_ready.MarkEquipmentReadyAction"
+    description: "Mark equipment as ready for equipping"
+  
+  complete_equipment_upgrade:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.complete_equipment_upgrade.CompleteEquipmentUpgradeAction"
+    description: "Complete equipment upgrade process"
+  
+  reset_equipment_upgrade:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.reset_equipment_upgrade.ResetEquipmentUpgradeAction"
+    description: "Reset equipment upgrade for new cycle"

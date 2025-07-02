@@ -19,7 +19,11 @@ class CheckInventoryAction(ActionBase):
     """ Action to check inventory for specific items and update world state """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
         "has_crafting_materials": True, 
         "materials_sufficient": True,
@@ -37,9 +41,6 @@ class CheckInventoryAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Check inventory for required items and update world state """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         required_items = context.get('required_items', [])

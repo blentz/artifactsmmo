@@ -88,6 +88,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         
         # Mock state creation
         mock_world_state = Mock()
+        mock_world_state.data = {}  # Add empty data dict
         mock_knowledge_base = Mock()
         
         with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
@@ -111,6 +112,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         with patch.object(AIPlayerController, 'initialize_state_management'):
             with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
                 mock_world_state = Mock()
+                mock_world_state.data = {}  # Add empty data dict
                 mock_knowledge_base = Mock()
                 mock_create_state.side_effect = [mock_world_state, mock_knowledge_base]
                 
@@ -153,6 +155,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         mock_action_executor.return_value = mock_executor_instance
         
         mock_world_state = Mock()
+        mock_world_state.data = {}  # Add empty data dict
         mock_knowledge_base = Mock()
         
         with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
@@ -183,6 +186,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         mock_action_executor.return_value = mock_executor_instance
         
         mock_world_state = Mock()
+        mock_world_state.data = {}  # Add empty data dict
         mock_knowledge_base = Mock()
         
         with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
@@ -216,6 +220,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         with patch.object(AIPlayerController, 'initialize_state_management'):
             with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
                 mock_world_state = Mock()
+                mock_world_state.data = {}  # Add empty data dict
                 mock_knowledge_base = Mock()
                 mock_create_state.side_effect = [mock_world_state, mock_knowledge_base]
                 
@@ -237,6 +242,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         with patch.object(AIPlayerController, 'initialize_state_management'):
             with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
                 mock_world_state = Mock()
+                mock_world_state.data = {}  # Add empty data dict
                 mock_knowledge_base = Mock()
                 mock_create_state.side_effect = [mock_world_state, mock_knowledge_base]
                 
@@ -258,6 +264,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         mock_action_executor.return_value = mock_executor_instance
         
         mock_world_state = Mock()
+        mock_world_state.data = {}  # Add empty data dict
         mock_knowledge_base = Mock()
         
         with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
@@ -278,6 +285,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         mock_action_executor.return_value = mock_executor_instance
         
         mock_world_state = Mock()
+        mock_world_state.data = {}  # Add empty data dict
         mock_knowledge_base = Mock()
         
         with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:
@@ -300,6 +308,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
         mock_action_executor.return_value = mock_executor_instance
         
         mock_world_state = Mock()
+        mock_world_state.data = {}  # Add empty data dict
         mock_knowledge_base = Mock()
         
         with patch.object(AIPlayerController, 'create_managed_state') as mock_create_state:

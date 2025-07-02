@@ -1,0 +1,199 @@
+# Consolidated State Schema Configuration
+# This file defines the new state structure using richer data types
+# to reduce the number of state variables from ~98 to ~15
+
+consolidated_states:
+  # Equipment status consolidation (replaces ~15 boolean states)
+  equipment_status:
+    type: "dict"
+    description: "Consolidated equipment information"
+    schema:
+      weapon: "string"  # Current equipped weapon code or null
+      armor: "string"   # Current equipped armor code or null  
+      shield: "string"  # Current equipped shield code or null
+      helmet: "string"  # Current equipped helmet code or null
+      boots: "string"   # Current equipped boots code or null
+      target_slot: "string"  # Currently working on slot
+      upgrade_status: "string"  # "none", "analyzing", "crafting", "ready", "completed"
+      selected_item: "string"  # Item selected for crafting
+      gaps_analyzed: "bool"  # Whether equipment gaps have been analyzed
+      item_crafted: "bool"  # Whether the selected item has been crafted
+      equipped: "bool"  # Whether the new item has been equipped
+      recipe_evaluated: "bool"  # Whether recipes have been evaluated
+    default:
+      weapon: null
+      armor: null
+      shield: null
+      helmet: null
+      boots: null
+      target_slot: null
+      upgrade_status: "none"
+      selected_item: null
+      gaps_analyzed: false
+      item_crafted: false
+      equipped: false
+      recipe_evaluated: false
+  
+  # Location context consolidation (replaces ~7 boolean states)
+  location_context:
+    type: "dict"
+    description: "Current and target location information"
+    schema:
+      current: "dict"  # {x: int, y: int, type: string}
+      workshop: "dict"  # {type: string, x: int, y: int} or null
+      target: "dict"  # {x: int, y: int, reason: string} or null
+      at_workshop: "bool"  # Whether character is at a workshop
+      at_resource: "bool"  # Whether character is at a resource location
+      at_target: "bool"  # Whether character has reached target location
+      workshop_known: "bool"  # Whether workshop location is known
+    default:
+      current: {x: 0, y: 0, type: "spawn"}
+      workshop: null
+      target: null
+      at_workshop: false
+      at_resource: false
+      at_target: false
+      workshop_known: false
+  
+  # Materials consolidation (replaces ~8 boolean states)
+  materials:
+    type: "dict"
+    description: "Resource inventory and requirements"
+    schema:
+      inventory: "dict"  # {resource_code: quantity}
+      required: "dict"   # {resource_code: quantity}
+      status: "string"   # "unknown", "sufficient", "needed", "gathering", "refining"
+      gathered: "bool"   # Whether materials have been gathered
+    default:
+      inventory: {}
+      required: {}
+      status: "unknown"
+      gathered: false
+  
+  # Combat context consolidation (replaces ~6 boolean states)
+  combat_context:
+    type: "dict"
+    description: "Combat status and target information"
+    schema:
+      status: "string"  # "idle", "ready", "in_combat", "not_viable", "searching"
+      target: "string"  # Monster code or null
+      location: "dict"  # {x: int, y: int} or null
+      recent_win_rate: "float"  # Recent weighted win rate
+    default:
+      status: "idle"
+      target: null
+      location: null
+      recent_win_rate: 1.0
+  
+  # Skills consolidation (replaces ~54 boolean states - 6 per skill × 9 skills)
+  skills:
+    type: "dict"
+    description: "All skill levels and requirements"
+    schema:
+      weaponcrafting: "dict"  # {level: int, required: int, xp: int}
+      gearcrafting: "dict"
+      jewelrycrafting: "dict"
+      cooking: "dict"
+      alchemy: "dict"
+      mining: "dict"
+      woodcutting: "dict"
+      fishing: "dict"
+      combat: "dict"
+    default_skill:
+      level: 1
+      required: 0
+      xp: 0
+  
+  # Character status consolidation
+  character_status:
+    type: "dict"
+    description: "Character health and basic status"
+    schema:
+      level: "int"
+      hp_percentage: "float"
+      xp_percentage: "float"
+      alive: "bool"
+      safe: "bool"  # hp >= 30%
+      cooldown_active: "bool"
+    default:
+      level: 1
+      hp_percentage: 100.0
+      xp_percentage: 0.0
+      alive: true
+      safe: true
+      cooldown_active: false
+  
+  # Goal progress consolidation
+  goal_progress:
+    type: "dict"
+    description: "Current goal execution state"
+    schema:
+      current_goal: "string"  # Goal template name
+      phase: "string"  # "planning", "executing", "completed", "failed"
+      steps_completed: "int"
+      total_steps: "int"
+      blocked_by: "string"  # What's blocking progress
+      monsters_hunted: "int"  # Count of monsters hunted in current goal
+    default:
+      current_goal: null
+      phase: "planning"
+      steps_completed: 0
+      total_steps: 0
+      blocked_by: null
+      monsters_hunted: 0
+
+# Additional state fields that need to be tracked
+additional_states:
+  # Resource availability states
+  resource_availability:
+    type: "dict"
+    description: "Track resource discovery status"
+    schema:
+      monsters: "bool"  # Whether monsters are currently available
+      resources: "bool"  # Whether resources are currently available
+    default:
+      monsters: false
+      resources: false
+  
+  # Workshop status states
+  workshop_status:
+    type: "dict"
+    description: "Workshop discovery and location tracking"
+    schema:
+      discovered: "bool"  # Whether any workshops have been discovered
+      locations: "dict"   # {workshop_type: {x: int, y: int}}
+    default:
+      discovered: false
+      locations: {}
+  
+  # Skill check status
+  skill_status:
+    type: "dict"
+    description: "Skill requirement check results"
+    schema:
+      checked: "bool"     # Whether skill requirements have been checked
+      sufficient: "bool"  # Whether skills are sufficient for current task
+    default:
+      checked: false
+      sufficient: false
+  
+  # Inventory tracking
+  inventory:
+    type: "dict"
+    description: "Inventory state tracking"
+    schema:
+      updated: "bool"  # Whether inventory has been recently updated
+    default:
+      updated: false
+
+# State calculation methods that need implementation
+computed_state_methods:
+  - check_weapon_improved: "Compare current weapon level to character level"
+  - check_armor_improved: "Compare current armor level to character level"
+  - check_equipment_set_complete: "Check if all major slots filled with level-appropriate gear"
+  - check_workshops_known: "Check if relevant workshops discovered in map data"
+  - check_at_workshop: "Compare current location to known workshop locations"
+  - check_at_resource_location: "Check if current location has gatherable resources"
+  - check_required_materials: "Compare inventory to recipe requirements"
+  - check_cooldown_expiration: "Compare current time to cooldown expiration"
+  - check_combat_viability: "Analyze recent combat win rates"

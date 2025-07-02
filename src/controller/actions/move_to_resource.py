@@ -11,8 +11,19 @@ class MoveToResourceAction(MovementActionBase):
     """ Action to move character to a resource location """
 
     # GOAP parameters
-    conditions = {"character_alive": True, "can_move": True, "resource_location_known": True}
-    reactions = {"at_resource_location": True, "at_target_location": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+                'cooldown_active': False,
+            },
+            'resource_location_known': True,
+        }
+    reactions = {
+            'at_resource_location': True,
+            'location_context': {
+                'at_target': True,
+            },
+        }
     weights = {"at_resource_location": 10}
 
     def __init__(self):

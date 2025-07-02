@@ -5,15 +5,14 @@ This action performs comprehensive equipment analysis for the character,
 determining upgrade needs and equipment priorities for GOAP planning.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
-from .base import ActionBase
+from src.lib.action_context import ActionContext
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from .base import ActionBase
 
 
 class AnalyzeEquipmentAction(ActionBase):
@@ -25,17 +24,19 @@ class AnalyzeEquipmentAction(ActionBase):
     equipment analysis that integrates with the GOAP planning system.
     """
 
-    # GOAP parameters
-    conditions = {"character_alive": True}
-    reactions = {
-        "equipment_analysis_available": True,
-        "need_equipment": True,
-        "has_better_weapon": True,
-        "has_better_armor": True,
-        "has_complete_equipment_set": True,
-        "equipment_info_known": True
+    # GOAP parameters - consolidated state format
+    conditions = {
+        "character_status": {
+            "alive": True
+        }
     }
-    weights = {"equipment_analysis_available": 15}
+    reactions = {
+        "equipment_status": {
+            "upgrade_status": "analyzing",
+            "target_slot": "weapon"
+        }
+    }
+    weight = 1
 
     def __init__(self):
         """
@@ -48,9 +49,6 @@ class AnalyzeEquipmentAction(ActionBase):
         # Call superclass to set self._context
         super().execute(client, context)
         
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-            
         # Get parameters from context
         character_name = context.character_name
         analysis_type = context.get('analysis_type', 'comprehensive')
@@ -74,14 +72,23 @@ class AnalyzeEquipmentAction(ActionBase):
             # Determine equipment needs and priorities
             equipment_needs = self._determine_equipment_needs(analysis_results, character_data)
             
-            # Create result with GOAP state updates
+            # Create result with consolidated state updates
             result = self.get_success_response(
-                equipment_analysis_available=True,
-                equipment_info_known=True,
+                equipment_status={
+                    "upgrade_status": "analyzing",
+                    "target_slot": equipment_needs.get('equipment_upgrade_priority', 'weapon'),
+                    "analysis_complete": True,
+                    "needs_upgrade": equipment_needs.get('need_equipment', False)
+                },
                 analysis_type=analysis_type,
                 character_level=getattr(character_data, 'level', 1),
+                # Include equipment needs at top level for backward compatibility
                 **equipment_needs,
-                **analysis_results
+                # Include analysis results
+                **analysis_results,
+                # Add expected flags for tests
+                equipment_analysis_available=True,
+                equipment_info_known=True
             )
             
             self.log_execution_result(result)

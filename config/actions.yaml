@@ -1,448 +1,318 @@
-# GOAP Action Configuration
-# This file defines the available actions for the AI player's Goal-Oriented Action Planning system
+# GOAP Actions Configuration - Consolidated State Version
+# Uses the new consolidated state system with richer data types
 
 actions:
-  move:
+  # Combat search bridge action
+  initiate_combat_search:
     conditions:
-      can_move: true
-      at_target_location: false
+      combat_context:
+        status: 'idle'
+      character_status:
+        alive: true
+        cooldown_active: false
     reactions:
-      at_target_location: true
-    weight: 1.0
-    description: "Move character to a target location"
+      combat_context:
+        status: 'searching'
+    weight: 2
     
+  # Find monsters action
   find_monsters:
     conditions:
-      need_combat: true
-      monsters_available: false
-      can_attack: true
+      combat_context:
+        status: 'searching'
+      resource_availability:
+        monsters: false
+      character_status:
+        alive: true
     reactions:
-      monsters_available: true
-      monster_present: true
-      at_target_location: false
-    weight: 2.0
-    description: "Find nearby monsters suitable for combat"
+      resource_availability:
+        monsters: true
+      combat_context:
+        status: 'ready'
+      location_context:
+        at_target: true
+    weight: 2
     
+  # Movement actions
+  move:
+    conditions:
+      character_status:
+        alive: true
+        cooldown_active: false
+    reactions:
+      location_context:
+        at_target: true
+    weight: 1
+    
+  # Combat actions
   attack:
     conditions:
-      monster_present: true
-      can_attack: true
-      character_safe: true
-      at_target_location: true
+      combat_context:
+        status: "ready"
+      character_status:
+        safe: true
+        alive: true
     reactions:
-      monster_present: false
-      has_hunted_monsters: true
-      monster_defeated: true
-      character_safe: true
-    weight: 3.0
-    description: "Attack a monster in combat"
+      combat_context:
+        status: "completed"
+    weight: 3
     
+  # Rest actions
   rest:
     conditions:
-      character_alive: true
-      needs_rest: true
+      character_status:
+        hp_percentage: "<100"
+        alive: true
     reactions:
-      character_safe: true
-      needs_rest: false
-      can_attack: true
-    weight: 1.5
-    description: "Rest to recover HP when critically low"
+      character_status:
+        hp_percentage: 100
+        safe: true
+    weight: 1
     
   wait:
     conditions:
-      character_alive: true
-      is_on_cooldown: true
+      character_status:
+        cooldown_active: true
     reactions:
-      is_on_cooldown: false
-      can_move: true
-      can_attack: true
-    weight: 0.1
-    description: "Wait for cooldown to expire before taking other actions"
+      character_status:
+        cooldown_active: false
+    weight: 1
     
-  hunt:
-    conditions:
-      character_alive: true
-      can_attack: true
-      character_safe: true
-      need_combat: true
-    reactions:
-      character_safe: true
-      character_alive: true
-    weight: 2.5
-    description: "Hunt monsters to gain XP and progress toward leveling"
-    
-  gather_resources:
-    conditions:
-      character_alive: true
-      character_safe: true
-      need_resources: true
-      at_resource_location: true
-      resource_found: true
-    reactions:
-      has_resources: true
-      has_materials: true
-      has_crafting_materials: true
-      inventory_updated: true
-    weight: 2.0
-    description: "Gather resources from the current location"
-    
-  find_resources:
-    conditions:
-      character_alive: true
-      character_safe: true
-      need_resources: true
-      recipe_known: true
-      at_resource_location: false
-    reactions:
-      resource_location_known: true
-      resource_found: true
-    weight: 2.0
-    description: "Find nearby resource locations for gathering"
-    
+  # Equipment analysis and planning
   analyze_equipment_gaps:
     conditions:
-      character_alive: true
+      equipment_status:
+        upgrade_status: 'none'
     reactions:
-      equipment_gaps_analyzed: true
-      equipment_analysis_available: true
-    weight: 1.0
-    description: "Analyze all equipment slots for upgrade opportunities"
-
+      equipment_status:
+        upgrade_status: 'analyzing'
+        gaps_analyzed: true
+    weight: 1
+    
   select_optimal_slot:
     conditions:
-      equipment_gaps_analyzed: true
-      character_alive: true
+      equipment_status:
+        gaps_analyzed: true
+        target_slot: null
     reactions:
-      optimal_slot_selected: true
-      target_slot_specified: true
-    weight: 1.5
-    description: "Select optimal equipment slot for crafting based on gaps and priorities"
-
+      equipment_status:
+        target_slot: 'weapon'
+    weight: 1
+    
   evaluate_recipes:
     conditions:
-      character_alive: true
-      target_slot_specified: true
+      equipment_status:
+        target_slot: '!null'
+        selected_item: null
     reactions:
-      equipment_info_known: true
-      recipe_known: true
-      best_recipe_selected: true
-      craftable_item_identified: true
-      need_specific_workshop: true
-    weight: 2.0
-    description: "Evaluate recipes for specified equipment slot and select the best craftable option"
+      equipment_status:
+        selected_item: 'wooden_staff'
+        recipe_evaluated: true
+    weight: 2
     
-  upgrade_weaponcrafting_skill:
+  # Workshop discovery
+  find_workshops:
     conditions:
-      character_alive: true
-      character_safe: true
-      need_weaponcrafting_upgrade: true
-      at_workshop: true
-      has_materials: true
+      workshop_status:
+        discovered: false
+      character_status:
+        alive: true
+        cooldown_active: false
     reactions:
-      weaponcrafting_level_sufficient: true
-      skill_xp_gained: true
-      character_stats_improved: true
-    weight: 4.0
-    description: "Level up weaponcrafting skill through strategic item crafting"
+      workshop_status:
+        discovered: true
+      location_context:
+        workshop_known: true
+    weight: 2
     
+  # Move to workshop
+  move_to_workshop:
+    conditions:
+      workshop_status:
+        discovered: true
+      location_context:
+        at_workshop: false
+      character_status:
+        alive: true
+        cooldown_active: false
+    reactions:
+      location_context:
+        at_workshop: true
+    weight: 1
+    
+  # Crafting actions
   check_skill_requirement:
     conditions:
-      character_alive: true
-      character_safe: true
-      need_equipment: true
-      skill_requirements_checked: false
+      equipment_status:
+        selected_item: '!null'
+      skill_status:
+        checked: false
     reactions:
-      skill_requirements_checked: true
-      need_skill_upgrade: true
-      skill_level_sufficient: true
-      required_skill_level_known: true
-    weight: 5.0
-    description: "Check skill requirements for a task and set appropriate state variables"
-    
-  analyze_crafting_chain:
-    conditions:
-      character_alive: true
-      need_equipment: true
-      character_safe: true
-      best_recipe_selected: true
-    reactions:
-      craft_plan_available: true
-      material_requirements_known: true
-      crafting_opportunities_known: true
-    weight: 2.0
-    description: "Recursively analyze complete crafting dependency chain from raw materials to final equipment"
-    
-  plan_crafting_materials:
-    conditions:
-      character_alive: true
-      best_recipe_selected: true
-      craft_plan_available: false
-      character_safe: true
-    reactions:
-      craft_plan_available: true
-      need_resources: true
-      materials_sufficient: true
-      material_requirements_known: true
-      recipe_known: true
-      need_equipment: false
-    weight: 2.5
-    description: "Plan material gathering for selected item to craft"
-    
-  execute_crafting_plan:
-    conditions:
-      character_alive: true
-      character_safe: true
-      craft_plan_available: true
-      materials_sufficient: true
-      at_correct_workshop: true
-    reactions:
-      has_equipment: true
-      inventory_updated: true
-      craft_plan_available: false
-      equipment_ready: true
-      item_crafted: true
-    weight: 3.0
-    description: "Execute crafting plan including unequipping materials and crafting"
-    
-  transform_raw_materials:
-    conditions:
-      character_alive: true
-      character_safe: true
-      has_raw_materials: true
-      at_correct_workshop: true
-      best_recipe_selected: true
-    reactions:
-      has_refined_materials: true
-      inventory_updated: true
-    weight: 2.5
-    description: "Transform raw materials into refined materials based on selected recipe"
+      skill_status:
+        checked: true
+        sufficient: true
+    weight: 1
     
   craft_item:
     conditions:
-      character_alive: true
-      character_safe: true
-      has_refined_materials: true
-      at_correct_workshop: true
-      need_equipment: true
-      best_recipe_selected: true
+      location_context:
+        at_workshop: true
+      materials:
+        status: 'sufficient'
+      skill_status:
+        sufficient: true
+      character_status:
+        alive: true
+        cooldown_active: false
     reactions:
-      has_equipment: true
-      inventory_updated: true
-    weight: 3.0
-    description: "Craft selected item at correct workshop using available materials"
+      equipment_status:
+        item_crafted: true
+      inventory:
+        updated: true
+    weight: 3
     
-    
-  lookup_item_info:
-    conditions:
-      character_alive: true
-      need_equipment: true
-      equipment_info_unknown: true
-    reactions:
-      equipment_info_known: true
-      craft_plan_available: true
-      recipe_known: true
-    weight: 1.0
-    description: "Look up item information and crafting recipes"
-    
+  # Equip actions
   equip_item:
     conditions:
-      character_alive: true
-      character_safe: true
-      has_equipment: true
-      inventory_updated: true
-      best_recipe_selected: true
+      equipment_status:
+        item_crafted: true
+        equipped: false
+      character_status:
+        alive: true
+        cooldown_active: false
     reactions:
-      equipment_equipped: true
-      character_stats_improved: true
-      has_complete_equipment_set: true
-      all_slots_equipped: true
-      has_better_weapon: true
-      has_better_armor: true
-    weight: 4.0
-    description: "Equip the crafted item to improve character effectiveness"
+      equipment_status:
+        equipped: true
+        upgrade_status: 'completed'
+    weight: 2
     
-  unequip_item:
+  # Resource gathering
+  find_resources:
     conditions:
-      character_alive: true
-      character_safe: true
-      equipment_equipped: true
+      materials:
+        status: 'needed'
+      resource_availability:
+        resources: false
+      character_status:
+        alive: true
     reactions:
-      inventory_updated: true
-      equipment_equipped: false
-    weight: 1.0
-    description: "Unequip an item from an equipment slot to inventory"
+      resource_availability:
+        resources: true
+      location_context:
+        at_resource: true
+    weight: 2
     
-  explore_map:
+  gather_resources:
     conditions:
-      character_alive: true
-      character_safe: true
-      need_combat: true
-      monsters_available: false
+      location_context:
+        at_resource: true
+      character_status:
+        alive: true
+        cooldown_active: false
     reactions:
-      map_explored: true
-      exploration_data_available: true
-    weight: 2.5
-    description: "Explore the map to find monsters, resources, and strategic locations"
+      materials:
+        gathered: true
+      inventory:
+        updated: true
+    weight: 2
     
-  analyze_resources:
+  # Combat Flow Bridge Actions
+  reset_combat_context:
     conditions:
-      character_alive: true
-      character_safe: true
-      need_equipment: true
-      map_explored: true
+      combat_context:
+        status: 'completed'
     reactions:
-      equipment_analysis_available: true
-      crafting_opportunities_known: true
-    weight: 2.0
-    description: "Analyze nearby resources for equipment crafting opportunities"
+      combat_context:
+        status: 'idle'
+        target: null
+        location: null
+    weight: 1
     
-  # Equipment progression actions
-  find_workshops:
+  abort_combat_search:
     conditions:
-      character_alive: true
-      character_safe: true
-      need_workshop_discovery: true
-      at_workshop: false
+      combat_context:
+        status: 'searching'
+      resource_availability:
+        monsters: false
     reactions:
-      workshops_discovered: true
-      at_workshop: false
-      workshop_location_known: true
-    weight: 2.5
-    
-  find_correct_workshop:
-    conditions:
-      character_alive: true
-      character_safe: true
-      need_specific_workshop: true
-      at_correct_workshop: false
-    reactions:
-      at_correct_workshop: true
-      workshops_discovered: true
-      workshop_location_known: true
-    weight: 3.0
-    description: "Find and catalog available crafting workshops"
-    
-  move_to_workshop:
-    conditions:
-      character_alive: true
-      character_safe: true
-      workshop_location_known: true
-      at_workshop: false
-      can_move: true
-    reactions:
-      at_workshop: true
-      at_target_location: true
-      at_resource_location: false
+      combat_context:
+        status: 'idle'
+        target: null
+        location: null
     weight: 1.5
-    description: "Move to a known workshop location for crafting"
     
-  move_to_resource:
+  mark_combat_not_viable:
     conditions:
-      character_alive: true
-      character_safe: true
-      resource_location_known: true
-      at_resource_location: false
-      can_move: true
+      combat_context:
+        recent_win_rate: '<0.2'
+      character_status:
+        alive: true
     reactions:
-      at_resource_location: true
-      at_target_location: true
-      at_workshop: false
-    weight: 1.5
-    description: "Move to a known resource location for gathering"
+      combat_context:
+        status: 'not_viable'
+    weight: 2
     
-  # Missing crafting-related actions that are implemented but not in GOAP
-  gather_crafting_materials:
+  recover_combat_viability:
     conditions:
-      character_alive: true
-      character_safe: true
-      need_crafting_materials: true
-      workshops_discovered: true
+      combat_context:
+        status: 'not_viable'
+      equipment_status:
+        upgrade_status: 'completed'
     reactions:
-      has_crafting_materials: true
-      materials_sufficient: true
-      inventory_updated: true
+      combat_context:
+        status: 'idle'
+        recent_win_rate: 1.0
     weight: 2.5
-    description: "Collect resources needed for equipment crafting"
     
-  check_inventory:
+  # Equipment Flow Bridge Actions
+  initiate_equipment_analysis:
     conditions:
-      character_alive: true
+      equipment_status:
+        upgrade_status: 'none'
+      character_status:
+        alive: true
     reactions:
-      has_crafting_materials: true
-      materials_sufficient: true
-      has_raw_materials: true
-      has_refined_materials: true
-      inventory_updated: true
-    weight: 1.0
-    description: "Check character inventory for specific items and update world state accordingly"
+      equipment_status:
+        upgrade_status: 'analyzing'
+    weight: 1.5
     
-  check_location:
+  mark_equipment_crafting:
     conditions:
-      character_alive: true
+      equipment_status:
+        upgrade_status: 'analyzing'
+        selected_item: '!null'
     reactions:
-      location_known: true
-      at_target_location: true
-      spatial_context_updated: true
-    weight: 1.0
-    description: "Check current location and provide spatial context for planning decisions"
-
-# Goal configurations for common scenarios
-goal_templates:
-  level_up:
-    description: "Reach a target level through monster hunting, exploration, and equipment upgrades"
-    goal_state:
-      character_level: 2        # Target level (can be overridden)
-      character_safe: true      # Must stay safe
-      character_alive: true     # Must survive
-    strategy:
-      priority_actions: ["wait", "rest", "find_monsters", "attack", "explore_map", "analyze_resources", "gather_resources", "craft_item", "equip_item"]
-      xp_target: 150           # XP needed for level 2
-      min_safe_hp_percent: 30  # Rest when HP < 30%
-      hunt_radius: 15          # Initial search radius for monsters
-      max_hunt_radius: 30      # Maximum search radius with exponential expansion
-      exploration_radius: 15   # Radius for map exploration
-      use_exponential_search: true  # Enable exponential search radius expansion
+      equipment_status:
+        upgrade_status: 'crafting'
+    weight: 1.5
     
-  survive:
-    description: "Maintain character safety and health"
-    goal_state:
-      character_alive: true
-      character_safe: true
-      needs_rest: false
-      
-  hunt_and_explore:
-    description: "Actively hunt monsters across the map for XP"
-    goal_state:
-      has_hunted_monsters: true
-      character_safe: true
-      character_alive: true
-    strategy:
-      hunt_radius: 20
-      min_safe_hp_percent: 25
-      
-  get_better_equipment:
-    description: "Craft better equipment to improve combat effectiveness through strategic resource analysis"
-    goal_state:
-      has_equipment: true
-      character_safe: true
-      character_alive: true
-      equipment_equipped: true
-    strategy:
-      priority_actions: ["wait", "analyze_resources", "explore_map", "lookup_item_info", "find_resources", "gather_resources", "craft_item", "equip_item"]
-      equipment_types: ["weapon", "armor"]
-      max_search_radius: 25
-      exploration_radius: 20
-      target_level_range: 3  # Look for equipment within 3 levels
-      use_exponential_search: true
-      
-  gather_crafting_materials:
-    description: "Collect resources needed for crafting"
-    goal_state:
-      has_resources: true
-      character_safe: true
-      character_alive: true
-    strategy:
-      priority_actions: ["wait", "find_resources", "gather_resources"]
-      resource_types: ["copper", "ash_wood", "iron"]  # Common materials
-      search_radius: 15
-      min_safe_hp_percent: 40
+  mark_equipment_ready:
+    conditions:
+      equipment_status:
+        upgrade_status: 'crafting'
+        item_crafted: true
+    reactions:
+      equipment_status:
+        upgrade_status: 'ready'
+    weight: 1.5
+    
+  complete_equipment_upgrade:
+    conditions:
+      equipment_status:
+        upgrade_status: 'ready'
+        equipped: true
+    reactions:
+      equipment_status:
+        upgrade_status: 'completed'
+    weight: 2
+    
+  reset_equipment_upgrade:
+    conditions:
+      equipment_status:
+        upgrade_status: 'completed'
+    reactions:
+      equipment_status:
+        upgrade_status: 'none'
+        selected_item: null
+        target_slot: null
+    weight: 1

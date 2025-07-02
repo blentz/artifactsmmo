@@ -21,8 +21,18 @@ class TestFindWorkshopsAction(unittest.TestCase):
         self.assertIsInstance(self.action, FindWorkshopsAction)
         
         # Test GOAP parameters
-        self.assertEqual(self.action.conditions, {"character_alive": True, "can_move": True})
-        self.assertEqual(self.action.reactions, {"workshops_discovered": True, "at_target_location": False})
+        self.assertEqual(self.action.conditions, {
+            'character_status': {
+                'alive': True,
+                'cooldown_active': False,
+            },
+        })
+        self.assertEqual(self.action.reactions, {
+            'workshops_discovered': True,
+            'location_context': {
+                'at_target': False,
+            },
+        })
         self.assertEqual(self.action.weights, {"workshops_discovered": 15})
     
     def test_repr_default_values(self):

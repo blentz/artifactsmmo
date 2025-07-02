@@ -5,14 +5,13 @@ This action analyzes combat effectiveness and viability in the current area,
 providing strategic guidance for combat engagement decisions.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
-from .base import ActionBase
+from src.lib.action_context import ActionContext
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from .base import ActionBase
 
 
 class AnalyzeCombatViabilityAction(ActionBase):
@@ -25,13 +24,21 @@ class AnalyzeCombatViabilityAction(ActionBase):
     """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
-        "combat_viability_known": True,
-        "combat_not_viable": True,
-        "need_combat": True,
-        "has_hunted_monsters": True
-    }
+            'combat_viability_known': True,
+            'combat_not_viable': True,
+            'combat_context': {
+                'status': True,
+            },
+            'goal_progress': {
+                'monsters_hunted': 1,
+            },
+        }
     weights = {"combat_viability_known": 12}
 
     def __init__(self):
@@ -42,9 +49,6 @@ class AnalyzeCombatViabilityAction(ActionBase):
 
     def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """Analyze combat viability in current area."""
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-            
         # Get character name from context
         character_name = context.character_name
         if not character_name:
@@ -489,23 +493,35 @@ class AnalyzeCombatViabilityAction(ActionBase):
             
             # Determine combat state flags
             combat_not_viable = not combat_viable or not ready_for_combat
-            need_combat = (primary_rec in ['engage_combat', 'cautious_combat'] and 
-                          ready_for_combat and combat_viable)
             
-            # Has hunted monsters if we have combat data
-            has_hunted_monsters = viability_results.get('monsters_with_data', 0) > 0
+            # Determine combat context status
+            if combat_not_viable:
+                combat_status = 'not_viable'
+            elif primary_rec in ['engage_combat', 'cautious_combat'] and ready_for_combat:
+                combat_status = 'searching'
+            else:
+                combat_status = 'idle'
             
+            # Return consolidated state format
             return {
-                'combat_not_viable': combat_not_viable,
-                'need_combat': need_combat,
-                'has_hunted_monsters': has_hunted_monsters,
-                'combat_recommendation': primary_rec,
-                'combat_risk_level': recommendations.get('risk_level', 'medium')
+                'combat_context': {
+                    'status': combat_status,
+                    'recommendation': primary_rec,
+                    'risk_level': recommendations.get('risk_level', 'medium'),
+                    'recent_win_rate': viability_results.get('area_win_rate', 0.0)
+                },
+                'goal_progress': {
+                    'monsters_analyzed': viability_results.get('monsters_with_data', 0)
+                }
             }
             
         except Exception as e:
             self.logger.warning(f"Combat state update determination failed: {e}")
-            return {'combat_not_viable': True, 'need_combat': False}
+            return {
+                'combat_context': {
+                    'status': 'not_viable'
+                }
+            }
 
     def __repr__(self):
         return "AnalyzeCombatViabilityAction()"

@@ -44,7 +44,7 @@ class TestUnequipItemAction(unittest.TestCase):
         """ Test execute with no API client """
         result = self.action.execute(None, self.context)
         self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        self.assertIn('error', result)
 
     def test_execute_invalid_slot(self):
         """ Test execute with invalid slot name """

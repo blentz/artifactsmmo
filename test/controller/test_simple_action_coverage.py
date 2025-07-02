@@ -144,10 +144,11 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test repr
         self.assertEqual("CheckInventoryAction()", repr(action))
         
-        # Test no client
+        # Test no client - CheckInventoryAction returns success with empty inventory
         context = MockActionContext(character_name="player")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertTrue(result['success'])  # Returns success with empty inventory
+        self.assertEqual(result['inventory'], {})  # But inventory is empty
 
     def test_check_location_basic(self):
         """Test CheckLocationAction basic functionality."""

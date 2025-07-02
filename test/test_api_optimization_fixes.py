@@ -109,7 +109,7 @@ class TestCooldownDetectionFixes(TestAPIOptimizationFixes):
         # Test that cooldown is detected correctly
         with patch.object(self.controller, '_refresh_character_state'):
             state = self.controller.get_current_world_state()
-            self.assertTrue(state.get('is_on_cooldown', False))
+            self.assertTrue(state['character_status']['cooldown_active'])
     
     def test_expired_cooldown_detection(self):
         """Test that expired cooldowns are detected correctly."""
@@ -120,7 +120,7 @@ class TestCooldownDetectionFixes(TestAPIOptimizationFixes):
         # Test that cooldown is not detected
         with patch.object(self.controller, '_refresh_character_state'):
             state = self.controller.get_current_world_state()
-            self.assertFalse(state.get('is_on_cooldown', False))
+            self.assertFalse(state['character_status']['cooldown_active'])
     
     def test_cooldown_wait_duration_calculation(self):
         """Test that wait duration is calculated correctly based on cooldown expiration."""

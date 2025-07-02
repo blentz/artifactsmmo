@@ -24,9 +24,6 @@ class UnequipItemAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Unequip an item from the specified equipment slot to inventory """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         slot = context.get('slot')

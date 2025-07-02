@@ -2,28 +2,28 @@
 
 import time
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import Dict, Optional
+
+from src.lib.action_context import ActionContext
 
 from .base import ActionBase
-
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
 
 
 class WaitAction(ActionBase):
     """ Wait action for handling cooldown periods """
     
-    # GOAP parameters - can be overridden by configuration
+    # GOAP parameters - consolidated state format
     conditions = {
-        'character_alive': True,
-        'is_on_cooldown': True
+        "character_status": {
+            "cooldown_active": True
+        }
     }
     reactions = {
-        'is_on_cooldown': False,
-        'can_move': True,
-        'can_attack': True
+        "character_status": {
+            "cooldown_active": False
+        }
     }
-    weights = {'wait': 0.1}  # Lowest priority - only when we have to wait
+    weight = 1
 
     def __init__(self):
         """

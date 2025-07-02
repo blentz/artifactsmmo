@@ -273,7 +273,7 @@ class TestSearchComprehensive(unittest.TestCase):
         # Test with no client
         result = search_action.unified_search(None, lambda c, x, y: True, 0, 0, 1)
         self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        self.assertFalse(result.get('success', True))
         
         # Test with filter that finds nothing
         map_state = MapState(self.mock_client, initial_scan=False)

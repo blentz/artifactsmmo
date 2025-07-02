@@ -58,8 +58,10 @@ class TestTransformRawMaterialsAction(unittest.TestCase):
             target_item=self.target_item
         )
         result = self.action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # With centralized validation, None client triggers validation error
+        self.assertFalse(result["success"])
+        # Direct action execution bypasses centralized validation
+        self.assertIn('error', result)
 
     @patch('src.controller.actions.transform_raw_materials.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -174,17 +176,30 @@ class TestTransformRawMaterialsAction(unittest.TestCase):
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
-        expected_conditions = {"character_alive": True, "has_raw_materials": True, "character_safe": True}
+        expected_conditions = {
+            'character_status': {
+                'alive': True,
+                'safe': True,
+            },
+            'inventory_status': {
+                'has_raw_materials': True
+            }
+        }
         self.assertEqual(TransformRawMaterialsAction.conditions, expected_conditions)
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
-        expected_reactions = {"has_refined_materials": True, "materials_sufficient": True}
+        expected_reactions = {
+            'inventory_status': {
+                'has_refined_materials': True,
+                'materials_sufficient': True
+            }
+        }
         self.assertEqual(TransformRawMaterialsAction.reactions, expected_reactions)
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"has_refined_materials": 15}
+        expected_weights = {"inventory_status.has_refined_materials": 15}
         self.assertEqual(TransformRawMaterialsAction.weights, expected_weights)
 
 

@@ -60,7 +60,7 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
         world_state = self.goal_manager.calculate_world_state(mock_character_state)
         
         # Should not be on cooldown since expiration time has passed
-        self.assertFalse(world_state.get('is_on_cooldown', True), 
+        self.assertFalse(world_state['character_status']['cooldown_active'], 
                         "Expired cooldown should return False even with legacy cooldown field set")
     
     def test_active_cooldown_with_future_expiration_returns_true(self):
@@ -87,7 +87,7 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
         world_state = self.goal_manager.calculate_world_state(mock_character_state)
         
         # Should be on cooldown since expiration time is in the future
-        self.assertTrue(world_state.get('is_on_cooldown', False),
+        self.assertTrue(world_state['character_status']['cooldown_active'],
                        "Active cooldown should return True when expiration is in the future")
     
     def test_no_expiration_time_uses_legacy_field(self):
@@ -113,7 +113,7 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
         world_state = self.goal_manager.calculate_world_state(mock_character_state)
         
         # Should be on cooldown based on legacy field
-        self.assertTrue(world_state.get('is_on_cooldown', False),
+        self.assertTrue(world_state['character_status']['cooldown_active'],
                        "Should use legacy cooldown field when no expiration time available")
     
     def test_no_cooldown_data_returns_false(self):
@@ -139,7 +139,7 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
         world_state = self.goal_manager.calculate_world_state(mock_character_state)
         
         # Should not be on cooldown
-        self.assertFalse(world_state.get('is_on_cooldown', True),
+        self.assertFalse(world_state['character_status']['cooldown_active'],
                         "No cooldown data should return False")
     
     def test_direct_cooldown_check_method(self):

@@ -14,6 +14,25 @@ from .base import ActionBase
 class EquipItemAction(ActionBase):
     """ Action to equip items from inventory to equipment slots """
 
+    # GOAP parameters
+    conditions = {
+        'equipment_status': {
+            'item_crafted': True,
+            'equipped': False
+        },
+        'character_status': {
+            'alive': True,
+            'cooldown_active': False
+        }
+    }
+    reactions = {
+        'equipment_status': {
+            'equipped': True,
+            'upgrade_status': 'completed'
+        }
+    }
+    weight = 2
+
     def __init__(self):
         """
         Initialize the equip item action.
@@ -22,9 +41,6 @@ class EquipItemAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Equip the specified item """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         item_code = context.get('item_code')

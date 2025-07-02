@@ -1,13 +1,10 @@
 """ AttackAction module """
 
-from typing import TYPE_CHECKING
-
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import sync as fight_character_api
 
-from .base import ActionBase
+from src.lib.action_context import ActionContext
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from .base import ActionBase
 
 
 class AttackAction(ActionBase):
@@ -15,15 +12,19 @@ class AttackAction(ActionBase):
     
     # GOAP parameters - can be overridden by configuration  
     conditions = {
-        'monster_present': True,
-        'can_attack': True,
-        'character_safe': True,
-        'character_alive': True
-    }
+            'combat_context': {
+                'status': 'ready',
+            },
+            'character_status': {
+                'safe': True,
+                'alive': True,
+            },
+        }
     reactions = {
-        'monster_present': False,  # Monster defeated or fled
-        'has_hunted_monsters': True
-    }
+            'combat_context': {
+                'status': 'completed',
+            },
+        }
     weights = {'attack': 3.0}  # Higher weight since it's a goal action
 
     def __init__(self):
@@ -32,8 +33,6 @@ class AttackAction(ActionBase):
 
     def execute(self, client, context: 'ActionContext'):
         """ Execute the attack action """
-        if not client:
-            return self.get_error_response("No API client provided")
             
         # Get character name from context
         character_name = context.character_name
@@ -83,8 +82,7 @@ class AttackAction(ActionBase):
                 xp_gained=xp_gained,
                 gold_gained=gold_gained,
                 drops=drops,
-                monster_defeated=monster_defeated,
-                has_hunted_monsters=True
+                monster_defeated=monster_defeated
             )
             
         except Exception as e:

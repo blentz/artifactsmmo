@@ -272,23 +272,42 @@ class BulkDataLoader:
         try:
             self.logger.info("⚔️ Loading all items...")
             
+            # Ensure items structure exists
+            if 'items' not in knowledge_base.data:
+                knowledge_base.data['items'] = {}
+                self.logger.info("Initialized items structure in knowledge base")
+            
             page = 1
             item_count = 0
+            max_pages = 10  # Safety limit to prevent infinite loops
             
-            while True:
-                response = get_all_items_api(client=client, page=page, size=100)
-                if not response or not response.data:
+            while page <= max_pages:
+                self.logger.debug(f"Requesting items page {page}...")
+                try:
+                    response = get_all_items_api(client=client, page=page, size=100)
+                except Exception as api_error:
+                    self.logger.error(f"API error loading items page {page}: {api_error}")
                     break
                     
+                if not response or not response.data:
+                    self.logger.debug(f"No more items data on page {page}")
+                    break
+                    
+                self.logger.debug(f"Processing {len(response.data)} items from page {page}")
                 for item in response.data:
+                    if not hasattr(item, 'code'):
+                        self.logger.warning(f"Item missing 'code' attribute: {item}")
+                        continue
                     if item.code not in knowledge_base.data['items']:
+                        self.logger.debug(f"Adding item {item.code} to knowledge base")
                         knowledge_base.data['items'][item.code] = {
                             'code': item.code,
                             'name': getattr(item, 'name', item.code),
-                            'item_type': getattr(item, 'type', 'unknown'),
+                            'type': getattr(item, 'type', 'unknown'),
+                            'subtype': getattr(item, 'subtype', ''),
                             'level': getattr(item, 'level', 1),
                             'tradeable': getattr(item, 'tradeable', False),
-                            'craft_data': getattr(item, 'craft', None),
+                            'craft': getattr(item, 'craft', None),
                             'effects': getattr(item, 'effects', []),
                             'first_discovered': datetime.now().isoformat(),
                             'discovery_count': 1,
@@ -298,10 +317,16 @@ class BulkDataLoader:
                         }
                         item_count += 1
                 
+                self.logger.debug(f"Processed {len(response.data)} items from page {page}")
+                
                 if len(response.data) < 100:
+                    self.logger.debug(f"Last page reached (page {page} had {len(response.data)} items)")
                     break
                 page += 1
                 time.sleep(0.1)
+            
+            if page > max_pages:
+                self.logger.warning(f"⚠️ Reached maximum page limit ({max_pages}) while loading items")
             
             self.logger.info(f"⚔️ Loaded {item_count} items")
             return True

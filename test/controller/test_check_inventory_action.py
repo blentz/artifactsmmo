@@ -58,11 +58,14 @@ class TestCheckInventoryAction(unittest.TestCase):
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
-        """Test execute fails without client."""
+        """Test execute succeeds without client, returns empty inventory."""
         context = MockActionContext(character_name=self.character_name, required_items=self.required_items)
         result = self.action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # CheckInventoryAction handles None client gracefully by returning empty inventory
+        self.assertTrue(result["success"])
+        self.assertEqual(result["inventory"], {})
+        self.assertEqual(result["total_items"], 0)
+        self.assertIn("inventory_analysis", result)
 
     @patch('src.controller.actions.check_inventory.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -262,8 +265,8 @@ class TestCheckInventoryAction(unittest.TestCase):
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
-        expected_conditions = {"character_alive": True}
-        self.assertEqual(CheckInventoryAction.conditions, expected_conditions)
+        self.assertIn('character_status', CheckInventoryAction.conditions)
+        self.assertTrue(CheckInventoryAction.conditions['character_status']['alive'])
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""

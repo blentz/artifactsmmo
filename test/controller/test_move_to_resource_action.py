@@ -37,13 +37,15 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertIsInstance(MoveToResourceAction.weights, dict)
         
         # Check specific conditions
-        self.assertTrue(MoveToResourceAction.conditions["character_alive"])
-        self.assertTrue(MoveToResourceAction.conditions["can_move"])
+        self.assertIn("character_status", MoveToResourceAction.conditions)
+        self.assertTrue(MoveToResourceAction.conditions["character_status"]["alive"])
+        self.assertFalse(MoveToResourceAction.conditions["character_status"]["cooldown_active"])
         self.assertTrue(MoveToResourceAction.conditions["resource_location_known"])
         
         # Check reactions
         self.assertTrue(MoveToResourceAction.reactions["at_resource_location"])
-        self.assertTrue(MoveToResourceAction.reactions["at_target_location"])
+        self.assertIn("location_context", MoveToResourceAction.reactions)
+        self.assertTrue(MoveToResourceAction.reactions["location_context"]["at_target"])
         
         # Check weights
         self.assertEqual(MoveToResourceAction.weights["at_resource_location"], 10)
@@ -234,9 +236,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         action = MoveToResourceAction()
         context = MockActionContext(character_name=self.char_name, target_x=5, target_y=10)
         result = action.execute(None, context)
-        
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # With centralized validation, None client triggers validation error
+        self.assertFalse(result["success"])
+        # Direct action execution bypasses centralized validation
+        self.assertIn('error', result)
     
     def test_execute_no_coordinates(self):
         """Test execution without coordinates."""

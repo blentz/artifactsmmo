@@ -9,12 +9,12 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 ## Core Project Principles
 
 1. **Prioritize general-case solutions** over special-case handling
-2. **Avoid code duplication** - maximize code reuse
-3. **Ignore backward compatibility** - refactor freely for better solutions
-4. **No hard-coded values** - use configuration and dynamic discovery
+2. **ALWAYS avoid code duplication** - maximize code reuse
+3. **NEVER add backward compatibility** - refactor freely for better solutions
+4. **NEVER hard-code values or mappings** - use configuration and dynamic discovery
 5. **Behavior-based solutions** over hard-coded logic
 6. **API responses are authoritative** - the only source for data
-7. **Test-driven development** - all changes must have tests
+7. **Test-driven development** - all changes must have tests and all tests must pass
 
 ## Architecture
 
@@ -22,8 +22,7 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 
 1. **Modular Manager Architecture**
    - AIPlayerController: Orchestration only (no business logic)
-   - Specialized managers handle specific concerns
-   - Functionality added through managers, not the controller
+   - Specialized managers handle specific concerns not suitable for Actions
 
 2. **Metaprogramming & YAML-Driven Configuration**
    - Actions created dynamically via ActionFactory

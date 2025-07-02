@@ -188,6 +188,7 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
+        executor.validation_enabled = False  # Disable validation to test exception handling
         client = create_mock_client()
         
         result = executor.execute_action('move', {}, client)

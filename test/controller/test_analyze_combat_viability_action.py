@@ -49,11 +49,14 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         self.assertEqual(repr(self.action), expected)
 
     def test_execute_no_client(self):
-        """Test execute fails without client."""
+        """Test execute succeeds without client when character_state is available in context."""
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # AnalyzeCombatViabilityAction can work without client if character_state is in context
+        self.assertTrue(result["success"])
+        self.assertTrue(result.get("combat_viability_known"))
+        self.assertIn("combat_viable", result)
+        self.assertIn("ready_for_combat", result)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -167,16 +170,16 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
         self.assertIsInstance(AnalyzeCombatViabilityAction.conditions, dict)
-        self.assertIn('character_alive', AnalyzeCombatViabilityAction.conditions)
+        self.assertIn('character_status', AnalyzeCombatViabilityAction.conditions)
+        self.assertTrue(AnalyzeCombatViabilityAction.conditions['character_status']['alive'])
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
         self.assertIsInstance(AnalyzeCombatViabilityAction.reactions, dict)
-        expected_reactions = [
-            'combat_viability_known', 'combat_not_viable', 'need_combat', 'has_hunted_monsters'
-        ]
-        for reaction in expected_reactions:
-            self.assertIn(reaction, AnalyzeCombatViabilityAction.reactions)
+        self.assertIn('combat_viability_known', AnalyzeCombatViabilityAction.reactions)
+        self.assertIn('combat_not_viable', AnalyzeCombatViabilityAction.reactions)
+        self.assertIn('combat_context', AnalyzeCombatViabilityAction.reactions)
+        self.assertIn('goal_progress', AnalyzeCombatViabilityAction.reactions)
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""

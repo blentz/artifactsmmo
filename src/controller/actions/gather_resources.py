@@ -24,9 +24,7 @@ class GatherResourcesAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Gather resources from the current location """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
+            
         # Get parameters from context
         character_name = context.character_name
         target_resource = context.get('target_resource')
@@ -49,7 +47,8 @@ class GatherResourcesAction(ActionBase):
                 character_x = character_response.data.x
                 character_y = character_response.data.y
             
-            # Get map information to see what resource is available
+            # Get map information for resource details
+            # Note: Resource presence and match are now validated by ActionValidator
             map_response = get_map_api(x=character_x, y=character_y, client=client)
             if not map_response or not map_response.data:
                 error_response = self.get_error_response("Could not get map information", location=(character_x, character_y))
@@ -57,29 +56,7 @@ class GatherResourcesAction(ActionBase):
                 return error_response
                 
             map_data = map_response.data
-            
-            # Check if there's a resource at this location
-            has_content = hasattr(map_data, 'content') and map_data.content
-            is_resource = (has_content and 
-                          hasattr(map_data.content, 'type_') and 
-                          map_data.content.type_ == 'resource')
-            
-            if not is_resource:
-                error_response = self.get_error_response('No resource available at current location', location=(character_x, character_y))
-                self.log_execution_result(error_response)
-                return error_response
-            
-            resource_code = map_data.content.code
-            
-            # Check if this matches our target resource (if specified)
-            if target_resource and resource_code != target_resource:
-                error_response = self.get_error_response(
-                    f'Resource {resource_code} does not match target {target_resource}',
-                    location=(character_x, character_y),
-                    available_resource=resource_code
-                )
-                self.log_execution_result(error_response)
-                return error_response
+            resource_code = map_data.content.code if hasattr(map_data, 'content') and map_data.content else 'unknown'
             
             # Get resource details for validation
             resource_details = get_resource_api(code=resource_code, client=client)

@@ -5,8 +5,6 @@ import argparse
 import logging
 from typing import List, Optional
 
-from src.lib.log import JSONFormatter
-
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
@@ -172,16 +170,9 @@ def setup_logging(log_level: str) -> None:
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Create a console handler with JSON formatter
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(numeric_level)
-    
-    # Set the JSON formatter
-    json_formatter = JSONFormatter()
-    console_handler.setFormatter(json_formatter)
-    
-    # Add the handler to the root logger
-    root_logger.addHandler(console_handler)
+    # Don't add a handler here - the async logger will handle it
+    # This prevents duplicate log entries
+    # The async logger in lib/log.py will set up the proper handler
 
 
 def get_character_list(args: argparse.Namespace) -> Optional[List[str]]:

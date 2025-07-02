@@ -205,7 +205,61 @@ class Action_List:
         self.weights[key] = value
 
 
+def _states_match(value1, value2):
+    """Check if two state values match, supporting complex types.
+    
+    Args:
+        value1: First value to compare
+        value2: Second value to compare
+        
+    Returns:
+        bool: True if values match according to type-specific rules
+    """
+    # Handle -1 (unspecified) values
+    if value1 == -1 or value2 == -1:
+        return True
+    
+    # Handle None values
+    if value1 is None or value2 is None:
+        return value1 == value2
+    
+    # String comparison - exact match
+    if isinstance(value1, str) and isinstance(value2, str):
+        return value1 == value2
+    
+    # List comparison - exact match
+    if isinstance(value1, list) and isinstance(value2, list):
+        return value1 == value2
+    
+    # Dict comparison - value2 can be a subset of value1
+    if isinstance(value1, dict) and isinstance(value2, dict):
+        # Check if all keys in value2 exist in value1 with matching values
+        for key, val in value2.items():
+            if key not in value1 or value1[key] != val:
+                return False
+        return True
+    
+    # Numeric comparison - handle both int and float
+    if isinstance(value1, (int, float)) and isinstance(value2, (int, float)):
+        return value1 == value2
+    
+    # Boolean comparison
+    if isinstance(value1, bool) and isinstance(value2, bool):
+        return value1 == value2
+    
+    # Default: direct comparison
+    return value1 == value2
+
+
 def distance_to_state(state_1, state_2):
+    """Calculate the distance between two states.
+    
+    Now supports complex types:
+    - Strings: exact match required
+    - Lists: exact match required
+    - Dicts: exact match or subset matching
+    - Booleans: traditional true/false matching
+    """
     _scored_keys = set()
     _score = 0
 
@@ -215,7 +269,11 @@ def distance_to_state(state_1, state_2):
         if _value == -1:
             continue
 
-        if not _value == state_1[key]:
+        # Get corresponding value from state_1
+        state_1_value = state_1.get(key, -1)
+        
+        # Compare values based on type
+        if not _states_match(state_1_value, _value):
             _score += 1
 
         _scored_keys.add(key)
@@ -229,13 +287,21 @@ def distance_to_state(state_1, state_2):
         if _value == -1:
             continue
 
-        if not _value == state_2[key]:
+        # Get corresponding value from state_2
+        state_2_value = state_2.get(key, -1)
+        
+        # Compare values based on type
+        if not _states_match(_value, state_2_value):
             _score += 1
 
     return _score
 
 
 def conditions_are_met(state_1, state_2):
+    """Check if conditions in state_2 are met by state_1.
+    
+    Now supports complex types with type-specific matching rules.
+    """
     # print state_1, state_2
     for key in state_2.keys():
         _value = state_2[key]
@@ -243,7 +309,11 @@ def conditions_are_met(state_1, state_2):
         if _value == -1:
             continue
 
-        if not state_1[key] == state_2[key]:
+        # Get corresponding value from state_1
+        state_1_value = state_1.get(key, -1)
+        
+        # Use type-aware matching
+        if not _states_match(state_1_value, _value):
             return False
 
     return True
@@ -302,8 +372,17 @@ def walk_path(path):
 
     _clist = path["clist"]
     _olist = path["olist"]
+    
+    # Add iteration limit to prevent infinite loops
+    max_iterations = 10000
+    iterations = 0
+    
+    # Log entry to walk_path
+    logger = logging.getLogger(__name__)
+    logger.debug(f"GOAP A* walk_path started. Goal: {path.get('goal', {})}")
 
-    while len(_olist):
+    while len(_olist) and iterations < max_iterations:
+        iterations += 1
         ####################
         ##Find lowest node##
         ####################
@@ -398,5 +477,13 @@ def walk_path(path):
                 next_node["p_id"] = node["id"]
 
                 _olist[next_node["id"]] = next_node
+    
+    # Log if we hit the iteration limit
+    if iterations >= max_iterations:
+        logger = logging.getLogger(__name__)
+        logger.error(f"GOAP A* search hit iteration limit ({max_iterations}). Open list size: {len(_olist)}, Closed list size: {len(_clist)}")
+        logger.error(f"Goal state: {path['goal']}")
+        # Return empty list to indicate no path found
+        return []
 
     return []

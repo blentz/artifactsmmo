@@ -26,16 +26,27 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
 
     # GOAP parameters
     conditions = {
-        "character_alive": True,
-        "at_workshop": True,
-        "has_materials": True
-    }
+            'character_status': {
+                'alive': True,
+                'safe': True,
+            },
+            'workshop_status': {
+                'at_workshop': True
+            },
+            'inventory_status': {
+                'has_materials': True
+            }
+        }
     reactions = {
-        "weaponcrafting_level_sufficient": True,
-        "skill_xp_gained": True,
-        "character_stats_improved": True
+        'skill_status': {
+            'weaponcrafting_level_sufficient': True,
+            'xp_gained': True
+        },
+        'character_status': {
+            'stats_improved': True
+        }
     }
-    weights = {"weaponcrafting_level_sufficient": 30}
+    weights = {"skill_status.weaponcrafting_level_sufficient": 30}
 
     def __init__(self):
         """
@@ -46,9 +57,6 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """Execute weaponcrafting skill upgrade through item crafting."""
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         target_level = context.get('target_level', 1)

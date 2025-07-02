@@ -2,7 +2,6 @@
 Tests for SelectOptimalSlotAction
 """
 
-import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -122,14 +121,14 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertIn('Equipment gap analysis not available', result['error'])
         
-    def test_error_handling_missing_target_skill(self):
-        """Test error when target craft skill is missing"""
+    def test_error_handling_missing_gap_analysis_data(self):
+        """Test error when gap analysis is empty"""
         self.action_context.set_parameter('equipment_gap_analysis', {})
         
         result = self.action.execute(self.mock_client, self.action_context)
         
         self.assertFalse(result['success'])
-        self.assertIn('Target craft skill not specified', result['error'])
+        self.assertIn('Equipment gap analysis not available', result['error'])
         
     def test_error_handling_unknown_skill(self):
         """Test error when target skill has no mapped slots"""
@@ -206,6 +205,220 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             # Should still work with fallback configuration
             self.assertTrue(result['success'])
             
+    def test_determine_default_craft_skill_from_knowledge_base(self):
+        """Test automatic craft skill determination from knowledge base"""
+        # Mock knowledge base with items data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.data = {
+            'items': {
+                'iron_helmet': {
+                    'type': 'helmet',
+                    'subtype': 'armor',
+                    'craft': {
+                        'skill': 'gearcrafting',
+                        'level': 5
+                    }
+                },
+                'copper_sword': {
+                    'type': 'weapon',
+                    'subtype': 'sword',
+                    'craft': {
+                        'skill': 'weaponcrafting',
+                        'level': 3
+                    }
+                }
+            }
+        }
+        
+        gap_analysis = {
+            'helmet': {'urgency_score': 85, 'missing': True, 'reason': 'empty_slot'},
+            'weapon': {'urgency_score': 70, 'missing': False, 'reason': 'adequate'}
+        }
+        
+        self.action_context.set_parameter('equipment_gap_analysis', gap_analysis)
+        self.action_context.knowledge_base = mock_knowledge_base
+        
+        with patch('src.lib.yaml_data.YamlData') as mock_yaml:
+            mock_yaml.return_value.data = self._get_test_config()
+            
+            result = self.action.execute(self.mock_client, self.action_context)
+            
+            self.assertTrue(result['success'])
+            
+            # Should determine gearcrafting as the default skill for helmet
+            reasoning = self.action_context.get_parameter('slot_selection_reasoning')
+            self.assertEqual(reasoning['target_skill'], 'gearcrafting')
+    
+    def test_get_craft_skills_for_slot(self):
+        """Test craft skill extraction from knowledge base for specific slots"""
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.data = {
+            'items': {
+                'iron_helmet': {
+                    'type': 'helmet',
+                    'craft': {
+                        'skill': 'gearcrafting'
+                    }
+                },
+                'steel_helmet': {
+                    'type': 'helmet',
+                    'craft': {
+                        'skill': 'gearcrafting'
+                    }
+                },
+                'copper_sword': {
+                    'type': 'weapon',
+                    'craft': {
+                        'skill': 'weaponcrafting'
+                    }
+                },
+                'magic_ring': {
+                    'type': 'ring',
+                    'craft': {
+                        'skill': 'jewelrycrafting'
+                    }
+                }
+            }
+        }
+        
+        # Test helmet slot should return gearcrafting
+        skills = self.action._get_craft_skills_for_slot(mock_knowledge_base, 'helmet')
+        self.assertEqual(skills, ['gearcrafting'])
+        
+        # Test weapon slot should return weaponcrafting
+        skills = self.action._get_craft_skills_for_slot(mock_knowledge_base, 'weapon')
+        self.assertEqual(skills, ['weaponcrafting'])
+        
+        # Test ring slot should return jewelrycrafting
+        skills = self.action._get_craft_skills_for_slot(mock_knowledge_base, 'ring1')
+        self.assertEqual(skills, ['jewelrycrafting'])
+        
+        # Test empty knowledge base
+        mock_knowledge_base.data = {'items': {}}
+        skills = self.action._get_craft_skills_for_slot(mock_knowledge_base, 'weapon')
+        self.assertEqual(skills, [])
+        
+        # Test missing items key
+        mock_knowledge_base.data = {}
+        skills = self.action._get_craft_skills_for_slot(mock_knowledge_base, 'weapon')
+        self.assertEqual(skills, [])
+    
+    def test_item_fits_slot_string_matching(self):
+        """Test item-to-slot matching using string patterns"""
+        # Test direct type matching
+        item_data = {'type': 'helmet', 'subtype': 'armor'}
+        self.assertTrue(self.action._item_fits_slot(item_data, 'helmet'))
+        
+        # Test subtype matching
+        item_data = {'type': 'armor', 'subtype': 'helmet'}
+        self.assertTrue(self.action._item_fits_slot(item_data, 'helmet'))
+        
+        # Test reverse matching (item type in slot name)
+        item_data = {'type': 'weapon', 'subtype': 'sword'}
+        self.assertTrue(self.action._item_fits_slot(item_data, 'weapon'))
+        
+        # Test no match
+        item_data = {'type': 'consumable', 'subtype': 'food'}
+        self.assertFalse(self.action._item_fits_slot(item_data, 'helmet'))
+        
+        # Test effects-based matching
+        item_data = {
+            'type': 'equipment',
+            'subtype': 'gear',
+            'effects': [
+                {'name': 'helmet_defense_bonus', 'value': 10}
+            ]
+        }
+        self.assertTrue(self.action._item_fits_slot(item_data, 'helmet'))
+    
+    def test_check_derived_slot_patterns(self):
+        """Test derived pattern matching for complex slot relationships"""
+        # Test ring pattern matching
+        result = self.action._check_derived_slot_patterns('ring', 'jewelry', 'ring1')
+        self.assertTrue(result)
+        
+        result = self.action._check_derived_slot_patterns('ring', 'jewelry', 'ring2')
+        self.assertTrue(result)
+        
+        # Test armor pattern matching
+        result = self.action._check_derived_slot_patterns('armor', 'chest_armor', 'body_armor')
+        self.assertTrue(result)
+        
+        result = self.action._check_derived_slot_patterns('helmet', 'head_armor', 'helmet')
+        self.assertTrue(result)
+        
+        # Test no match
+        result = self.action._check_derived_slot_patterns('consumable', 'food', 'weapon')
+        self.assertFalse(result)
+    
+    def test_fallback_when_knowledge_base_empty(self):
+        """Test skill selection when knowledge base has no relevant data"""
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.data = {'items': {}}
+        
+        gap_analysis = {
+            'helmet': {'urgency_score': 85, 'missing': True, 'reason': 'empty_slot'}
+        }
+        
+        self.action_context.set_parameter('equipment_gap_analysis', gap_analysis)
+        self.action_context.knowledge_base = mock_knowledge_base
+        
+        with patch('src.lib.yaml_data.YamlData') as mock_yaml:
+            mock_yaml.return_value.data = self._get_test_config()
+            
+            result = self.action.execute(self.mock_client, self.action_context)
+            
+            self.assertTrue(result['success'])
+            
+            # Should intelligently select a skill that works with available equipment slots
+            reasoning = self.action_context.get_parameter('slot_selection_reasoning')
+            self.assertEqual(reasoning['target_skill'], 'gearcrafting')  # gearcrafting includes helmet
+    
+    def test_multiple_craft_skills_random_selection(self):
+        """Test skill selection when multiple craft skills are possible for a slot"""
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.data = {
+            'items': {
+                'item1': {
+                    'type': 'helmet',
+                    'craft': {'skill': 'gearcrafting'}
+                },
+                'item2': {
+                    'type': 'helmet', 
+                    'craft': {'skill': 'jewelrycrafting'}  # Use a skill that exists in test config
+                }
+            }
+        }
+        
+        gap_analysis = {
+            'helmet': {'urgency_score': 85, 'missing': True, 'reason': 'empty_slot'}
+        }
+        
+        self.action_context.set_parameter('equipment_gap_analysis', gap_analysis)
+        self.action_context.knowledge_base = mock_knowledge_base
+        
+        with patch('src.lib.yaml_data.YamlData') as mock_yaml:
+            mock_yaml.return_value.data = self._get_test_config()
+            
+            # Run multiple times to test different selections
+            skills_found = set()
+            for _ in range(10):
+                result = self.action.execute(self.mock_client, self.action_context)
+                self.assertTrue(result['success'])
+                
+                reasoning = self.action_context.get_parameter('slot_selection_reasoning')
+                self.assertIsNotNone(reasoning)
+                skills_found.add(reasoning['target_skill'])
+                
+                # Reset context for next iteration
+                if 'slot_selection_reasoning' in self.action_context.action_results:
+                    del self.action_context.action_results['slot_selection_reasoning']
+            
+            # Should intelligently select a skill that works with the available slots
+            # Since helmet is available and gearcrafting maps to helmet, it should select gearcrafting
+            self.assertTrue(len(skills_found) >= 1)
+            self.assertIn('gearcrafting', skills_found)  # gearcrafting includes helmet in mapping
+    
     def _get_test_config(self):
         """Get test configuration data"""
         return {

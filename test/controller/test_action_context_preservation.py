@@ -8,8 +8,8 @@ for subsequent actions to use.
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
-from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
 from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
+from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
 from src.lib.action_context import ActionContext
 
 
@@ -102,13 +102,22 @@ class TestActionContextPreservation(unittest.TestCase):
         context.action_results['target_item'] = 'wooden_staff'  # Set by previous action
         context.action_results['item_code'] = 'wooden_staff'
         
-        # Mock knowledge base
+        # Mock knowledge base with proper data structure
         knowledge_base = Mock()
-        knowledge_base.data = {'items': {}}  # Add data attribute to avoid iteration error
+        # Create a Mock for data that behaves like a dict
+        mock_data = Mock()
+        mock_data.get = Mock(return_value={'wooden_staff': {
+            'code': 'wooden_staff',
+            'name': 'Wooden Staff',
+            'craft_data': {
+                'items': [{'code': 'ash_wood', 'quantity': 2}]
+            }
+        }})  # Return dict with the item when accessing items
+        knowledge_base.data = mock_data
         knowledge_base.get_item_data = MagicMock(return_value={
             'code': 'wooden_staff',
             'name': 'Wooden Staff',
-            'craft': {
+            'craft_data': {
                 'items': [{'code': 'ash_wood', 'quantity': 2}]
             }
         })

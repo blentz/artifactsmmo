@@ -1,0 +1,81 @@
+# Consolidated State Default Values
+# This file defines the default initial state structure for the GOAP system
+# All fields required by actions must be present in the initial state
+
+state_defaults:
+  equipment_status:
+    weapon: null
+    armor: null
+    shield: null
+    helmet: null
+    boots: null
+    target_slot: null
+    upgrade_status: "none"
+    selected_item: null
+    gaps_analyzed: false
+    item_crafted: false
+    equipped: false
+    recipe_evaluated: false
+    
+  location_context:
+    current:
+      x: 0
+      y: 0
+      type: "spawn"
+    workshop: null
+    target: null
+    at_workshop: false
+    at_resource: false
+    at_target: false
+    workshop_known: false
+    
+  materials:
+    inventory: {}
+    required: {}
+    status: "unknown"
+    gathered: false
+    
+  combat_context:
+    status: "idle"
+    target: null
+    location: null
+    recent_win_rate: 1.0
+    
+  skills:
+    # Skills are dynamically populated from character data
+    # This is just the default structure for each skill
+    _default_skill:
+      level: 1
+      required: 0
+      xp: 0
+      
+  character_status:
+    level: 1
+    hp_percentage: 100.0
+    xp_percentage: 0.0
+    alive: true
+    safe: true
+    cooldown_active: false
+    
+  goal_progress:
+    current_goal: null
+    phase: "planning"
+    steps_completed: 0
+    total_steps: 0
+    blocked_by: null
+    monsters_hunted: 0
+    
+  resource_availability:
+    monsters: false
+    resources: false
+    
+  workshop_status:
+    discovered: false
+    locations: {}
+    
+  skill_status:
+    checked: false
+    sufficient: false
+    
+  inventory:
+    updated: false

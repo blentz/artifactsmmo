@@ -275,7 +275,7 @@ class TestBulkDataLoader(unittest.TestCase):
         self.assertIn('iron_sword', self.mock_knowledge_base.data['items'])
         item_data = self.mock_knowledge_base.data['items']['iron_sword']
         self.assertEqual(item_data['name'], 'Iron Sword')
-        self.assertEqual(item_data['item_type'], 'weapon')
+        self.assertEqual(item_data['type'], 'weapon')
         self.assertEqual(item_data['level'], 10)
         self.assertTrue(item_data['tradeable'])
     

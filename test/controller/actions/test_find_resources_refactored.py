@@ -62,20 +62,6 @@ class TestFindResourcesAction(unittest.TestCase):
             }
         }
     
-    def test_initialization(self):
-        """Test action initialization."""
-        self.assertIsInstance(self.action, FindResourcesAction)
-        self.assertEqual(repr(self.action), "FindResourcesAction()")
-    
-    def test_execute_calls_validate_and_execute(self):
-        """Test that execute method calls validate_and_execute."""
-        context = MockActionContext(character_name=self.character_name)
-        
-        with patch.object(self.action, 'validate_and_execute', return_value={'success': True}) as mock_validate:
-            result = self.action.execute(self.mock_client, context)
-            
-            mock_validate.assert_called_once_with(self.mock_client, context)
-            self.assertTrue(result['success'])
     
     def test_determine_target_resource_codes_with_types(self):
         """Test target resource code determination with provided types."""

@@ -24,7 +24,11 @@ class AnalyzeKnowledgeStateAction(ActionBase):
     """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
         "knowledge_state_analyzed": True,
         "map_explored": True,
@@ -45,9 +49,6 @@ class AnalyzeKnowledgeStateAction(ActionBase):
         # Call superclass to set self._context
         super().execute(client, context)
         
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-            
         # Get parameters from context
         character_name = context.character_name
         analysis_scope = context.get('analysis_scope', 'comprehensive')

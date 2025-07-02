@@ -5,13 +5,12 @@ This module implements a configuration-driven goal management system that replac
 hardcoded goal logic with YAML-defined templates and state-driven goal selection.
 """
 
+import copy
 import logging
 import random
-import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.controller.state_engine import StateCalculationEngine
 from src.game.globals import CONFIG_PREFIX
 from src.lib.yaml_data import YamlData
 
@@ -35,8 +34,11 @@ class GOAPGoalManager:
         self.config_data = YamlData(config_file)
         self._load_configuration()
         
-        # Initialize state calculation engine for computed states
-        self.state_engine = StateCalculationEngine()
+        # Load state defaults configuration
+        self.state_defaults_config = YamlData(f"{CONFIG_PREFIX}/consolidated_state_defaults.yaml")
+        self.state_defaults = self.state_defaults_config.data.get('state_defaults', {})
+        
+        self.logger.info("Goal manager initialized with consolidated state system")
         
     def _load_configuration(self) -> None:
         """Load goal templates and rules from YAML configuration."""
@@ -45,10 +47,9 @@ class GOAPGoalManager:
             self.goal_selection_rules = self.config_data.data.get('goal_selection_rules', {})
             self.state_calculation_rules = self.config_data.data.get('state_calculation_rules', {})
             self.thresholds = self.config_data.data.get('thresholds', {})
-            self.content_classification = self.config_data.data.get('content_classification', {})
             
-            self.logger.info(f"Loaded {len(self.goal_templates)} goal templates")
-            self.logger.info(f"Loaded {len(self.goal_selection_rules)} goal selection rule categories")
+            self.logger.debug(f"Loaded {len(self.goal_templates)} goal templates")
+            self.logger.debug(f"Loaded {len(self.goal_selection_rules)} goal selection rule categories")
             
         except Exception as e:
             self.logger.error(f"Failed to load goal configuration: {e}")
@@ -57,14 +58,14 @@ class GOAPGoalManager:
             self.goal_selection_rules = {}
             self.state_calculation_rules = {}
             self.thresholds = {}
-            self.content_classification = {}
     
     def calculate_world_state(self, character_state: Any, map_state: Any = None, 
                             knowledge_base: Any = None) -> Dict[str, Any]:
         """
-        Calculate current world state using configuration-driven rules.
+        Calculate current world state using consolidated state system.
         
-        Replaces the hardcoded get_current_world_state() method with rule-based computation.
+        This returns a dramatically simplified state representation using
+        complex data types instead of numerous boolean flags.
         
         Args:
             character_state: Current character state object
@@ -72,9 +73,14 @@ class GOAPGoalManager:
             knowledge_base: Optional knowledge base for learned data
             
         Returns:
-            Dictionary representing current world state
+            Dictionary with consolidated state structure
         """
-        state = {}
+        # Initialize consolidated state structure from YAML configuration
+        state = copy.deepcopy(self.state_defaults)
+        
+        # Initialize skills with empty dict if not loaded from config
+        if 'skills' not in state:
+            state['skills'] = {}
         
         if not character_state or not hasattr(character_state, 'data'):
             self.logger.warning("No character state available for world state calculation")
@@ -82,7 +88,7 @@ class GOAPGoalManager:
             
         char_data = character_state.data
         
-        # Basic character data
+        # Update character status
         current_hp = char_data.get('hp', 100)
         max_hp = char_data.get('max_hp', 100)
         hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
@@ -92,336 +98,73 @@ class GOAPGoalManager:
         max_xp = char_data.get('max_xp', 150)
         xp_percentage = (current_xp / max_xp * 100) if max_xp > 0 else 0
         
-        # Compute cooldown status
-        is_on_cooldown = self._check_cooldown_status(char_data)
-        
-        # Base state values
-        base_state = {
-            'character_x': char_data.get('x', 0),
-            'character_y': char_data.get('y', 0),
-            'character_level': current_level,
-            'character_hp': current_hp,
-            'character_max_hp': max_hp,
-            'character_xp': current_xp,
-            'character_max_xp': max_xp,
-            'character_alive': current_hp > 0,
+        state['character_status'] = {
+            'level': current_level,
             'hp_percentage': hp_percentage,
             'xp_percentage': xp_percentage,
-            'is_on_cooldown': is_on_cooldown,
-            
-            # Equipment slots for equipment status checks
-            'weapon_slot': char_data.get('weapon_slot', ''),
-            'helmet_slot': char_data.get('helmet_slot', ''),
-            'body_armor_slot': char_data.get('body_armor_slot', ''),
-            'leg_armor_slot': char_data.get('leg_armor_slot', ''),
-            'boots_slot': char_data.get('boots_slot', ''),
-            'shield_slot': char_data.get('shield_slot', ''),
-            'ring1_slot': char_data.get('ring1_slot', ''),
-            'ring2_slot': char_data.get('ring2_slot', ''),
-            'amulet_slot': char_data.get('amulet_slot', ''),
-            
-            # Skill levels for crafting viability checks
-            'mining_level': char_data.get('mining_level', 1),
-            'woodcutting_level': char_data.get('woodcutting_level', 1),
-            'fishing_level': char_data.get('fishing_level', 1),
-            'weaponcrafting_level': char_data.get('weaponcrafting_level', 1),
-            'gearcrafting_level': char_data.get('gearcrafting_level', 1),
-            'jewelrycrafting_level': char_data.get('jewelrycrafting_level', 1),
-            'cooking_level': char_data.get('cooking_level', 1),
-            'alchemy_level': char_data.get('alchemy_level', 1),
-            
-            # Character inventory for material checks
-            'character_inventory': char_data.get('inventory', []),
-            'inventory': char_data.get('inventory', []),
-            
-            # Default state flags (may be overridden by rules)
-            'has_hunted_monsters': False,
-            'monsters_available': False,
-            'monster_present': False,
-            'monster_defeated': False,  # Required by GOAP actions
-            'at_target_location': False,
-            'has_resources': False,
-            'has_materials': False,
-            'has_equipment': False,
-            'need_exploration': False,
-            'at_resource_location': False,
-            'at_workshop': False,
-            'equipment_info_unknown': True,  # Always start unknown to trigger lookup_item_info 
-            'resource_location_known': False,
-            'workshop_location_known': False,
-            'equipment_info_known': False,  # Will be set by lookup_item_info action
-            'craft_plan_available': False,
-            'inventory_updated': False,
-            'equipment_equipped': False,  # Should be computed based on actual equipment
-            'character_stats_improved': False,  # Should be computed based on equipment improvements
-            'map_explored': False,
-            'exploration_data_available': False,
-            'equipment_analysis_available': False,
-            'crafting_opportunities_known': False,
-            'workshops_discovered': False,  # Required by crafting goals
-            'has_crafting_materials': False,  # Required by crafting goals
-            'materials_sufficient': False,  # Required by crafting goals
-            'need_crafting_materials': current_level >= 2,  # Need materials for crafting at level 2+
-            'recipe_known': False,  # Will be set by lookup_item_info action
-            'resource_found': False,  # Will be set by find_resources action
-            'has_better_weapon': False,  # Required by upgrade goals
-            'has_better_armor': False,  # Required by upgrade goals
-            'has_complete_equipment_set': False,  # Required by equipment goals
-            'all_slots_equipped': False,  # Required by equipment goals
-            'need_workshop_discovery': current_level >= 2,  # Need workshops at level 2+
-            'need_combat': current_level < 40,  # Need combat XP until max level
-            'need_equipment': current_level < 10,  # Need better equipment at low levels
-            'need_resources': current_level < 15,  # Need resources for crafting
-            
-            # Equipment analysis and slot selection states
-            'equipment_gaps_analyzed': False,  # Will be set by AnalyzeEquipmentGapsAction
-            'optimal_slot_selected': False,  # Will be set by SelectOptimalSlotAction
-            'target_slot_specified': False,  # Will be set by SelectOptimalSlotAction
-            'best_recipe_selected': False,  # Will be set by EvaluateRecipesAction
-            'craftable_item_identified': False,  # Will be set by EvaluateRecipesAction
-            'item_crafted': False,  # Will be set by crafting actions
-            
-            '_knowledge_base': knowledge_base,  # Store reference for computed state methods
+            'alive': current_hp > 0,
+            'safe': hp_percentage >= 30,
+            'cooldown_active': self._check_cooldown_status(char_data)
         }
         
-        # Apply configuration-driven state calculation rules
-        calculated_state = self._apply_state_calculation_rules(base_state)
-        state.update(calculated_state)
+        # Update equipment status
+        state['equipment_status']['weapon'] = char_data.get('weapon_slot') or None
+        state['equipment_status']['armor'] = char_data.get('body_armor_slot') or None
+        state['equipment_status']['shield'] = char_data.get('shield_slot') or None
+        state['equipment_status']['helmet'] = char_data.get('helmet_slot') or None
+        state['equipment_status']['boots'] = char_data.get('boots_slot') or None
         
-        # Apply state engine computed states (preserve critical base calculations)
-        # Preserve existing critical state calculations that should not be overridden
-        critical_states = {
-            'is_on_cooldown': state.get('is_on_cooldown'),
-            'character_alive': state.get('character_alive'),
-            'character_safe': state.get('character_safe'),
-            'needs_rest': state.get('needs_rest'),
-            'can_attack': state.get('can_attack'),
-            'can_move': state.get('can_move'),
-            'need_equipment': state.get('need_equipment'),
-            'need_combat': state.get('need_combat'),
-            'hp_percentage': state.get('hp_percentage'),
-            'character_level': state.get('character_level'),
-            'character_hp': state.get('character_hp'),
-            'character_max_hp': state.get('character_max_hp')
+        # Update location context
+        state['location_context']['current'] = {
+            'x': char_data.get('x', 0),
+            'y': char_data.get('y', 0),
+            'type': self._determine_location_type(char_data, map_state)
         }
         
-        computed_state = self.state_engine.calculate_derived_state(state, self.thresholds)
+        # Update materials from inventory
+        inventory = {}
+        for item in char_data.get('inventory', []):
+            if item.get('code'):
+                inventory[item['code']] = item.get('quantity', 0)
+        state['materials']['inventory'] = inventory
         
-        # Don't override critical base calculations if they were already computed correctly
-        for key, value in critical_states.items():
-            if key in computed_state and value is not None:
-                computed_state[key] = value
-                
-        state.update(computed_state)
+        # Update skills dynamically from character data
+        # Look for any keys ending with '_level' to identify skills
+        for key in char_data:
+            if key.endswith('_level') and key != 'level':
+                skill_name = key[:-6]  # Remove '_level' suffix
+                state['skills'][skill_name] = {
+                    'level': char_data.get(key, 1),
+                    'required': 0,  # Will be set by actions
+                    'xp': char_data.get(f'{skill_name}_xp', 0)
+                }
         
-        # Debug: Log critical state values for get_to_safety goal
-        self.logger.debug(f"🩺 HP state: hp={current_hp}/{max_hp} ({hp_percentage:.1f}%), needs_rest={state.get('needs_rest')}, character_safe={state.get('character_safe')}, is_on_cooldown={state.get('is_on_cooldown')}")
+        # Log the consolidated state structure
+        self.logger.debug(f"📊 Consolidated state keys: {list(state.keys())}")
+        self.logger.debug(f"🔧 Equipment: {state['equipment_status']}")
+        self.logger.debug(f"📍 Location: {state['location_context']['current']}")
+        self.logger.debug(f"💰 Materials: {len(state['materials']['inventory'])} types")
+        self.logger.debug(f"🎓 Skills: {list(state['skills'].keys())}")
         
-        # Debug: Log equipment and computed state values 
-        equipment_states = {k: v for k, v in state.items() if 'armor' in k or 'weapon' in k or 'equipment' in k}
-        if equipment_states:
-            self.logger.debug(f"🔧 Equipment states: {equipment_states}")
-        
-        # Debug: Log key computed states from state engine
-        computed_states = {k: v for k, v in state.items() if k in [
-            'has_raw_materials', 'has_refined_materials', 'at_correct_workshop',
-            'workshops_discovered', 'has_crafting_materials', 'materials_sufficient',
-            'best_weapon_selected', 'craftable_weapon_identified', 'material_requirements_known',
-            'need_workshop_discovery', 'need_specific_workshop', 'at_workshop', 'combat_not_viable'
-        ]}
-        if computed_states:
-            self.logger.debug(f"🔧 Computed states: {computed_states}")
+        # Return consolidated state only - no backward compatibility
+        self.logger.debug(f"🔄 Using consolidated state format with {len(state)} state groups")
         
         return state
     
-    def _compute_state_method(self, method_name: str, state: Dict[str, Any]) -> bool:
-        """Compute state values using specific methods."""
-        try:
-            if method_name == 'check_armor_improved':
-                # For now, always return False since we don't have armor comparison logic
-                return False
-            elif method_name == 'check_weapon_improved':
-                # For now, always return False since we don't have weapon comparison logic  
-                return False
-            elif method_name == 'check_equipment_set_complete':
-                # Check if all major equipment slots are filled
-                # This would need character data to check actual slots
-                return False
-            elif method_name == 'check_workshops_known':
-                # For now, assume workshops are not discovered initially
-                return False
-            elif method_name == 'check_at_workshop':
-                # Would need to check if current location is a workshop
-                return False
-            elif method_name == 'check_at_resource_location':
-                # Would need to check if current location has resources
-                return False
-            elif method_name == 'check_required_materials':
-                # Would need to check inventory for required materials
-                return False
-            elif method_name == 'check_weapon_upgrade_needed':
-                # For low-level characters, always need weapon upgrades
-                character_level = state.get('character_level', 1)
-                return character_level < 5
-            elif method_name == 'check_armor_upgrade_needed':
-                # For low-level characters, always need armor upgrades
-                character_level = state.get('character_level', 1)
-                return character_level < 5
-            elif method_name == 'check_complete_equipment_needed':
-                # For characters below level 3, need complete equipment
-                character_level = state.get('character_level', 1)
-                return character_level < 3
-            elif method_name == 'check_workshop_discovery_needed':
-                # Need workshop discovery at level 2+
-                character_level = state.get('character_level', 1)
-                return character_level >= 2
-            elif method_name == 'check_combat_viability':
-                # Delegate to state engine which has the weighted calculation
-                try:
-                    config = {'type': 'computed', 'method': method_name}
-                    result = self.state_engine._dispatch_computed_method(method_name, config, state, self.thresholds)
-                    return result
-                except Exception as e:
-                    self.logger.warning(f"Error delegating combat viability check to state engine: {e}")
-                    return False  # Assume combat is viable if error
-            else:
-                # Delegate to state engine for all computed state methods
-                try:
-                    config = {'type': 'computed', 'method': method_name}
-                    result = self.state_engine._dispatch_computed_method(method_name, config, state, self.thresholds)
-                    return result
-                except Exception as e:
-                    self.logger.warning(f"Error delegating to state engine for '{method_name}': {e}")
-                    return False
-                
-        except Exception as e:
-            self.logger.warning(f"Error computing state method '{method_name}': {e}")
-            return False
-    
-    def _apply_state_calculation_rules(self, base_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply YAML-defined state calculation rules to compute derived state."""
-        calculated_state = base_state.copy()
-        
-        # Apply each state calculation rule
-        for state_key, rule_config in self.state_calculation_rules.items():
-            try:
-                if isinstance(rule_config, dict):
-                    if rule_config.get('type') == 'computed':
-                        # Special computed values (like cooldown checking)
-                        method_name = rule_config.get('method')
-                        if method_name == 'check_cooldown_expiration':
-                            # Already computed in base_state as 'is_on_cooldown'
-                            continue
-                        else:
-                            # Try to compute the state using the specified method
-                            computed_value = self._compute_state_method(method_name, calculated_state)
-                            calculated_state[state_key] = computed_value
-                    elif 'formula' in rule_config:
-                        # Formula-based calculation
-                        formula = rule_config['formula']
-                        result = self._evaluate_formula(formula, calculated_state)
-                        calculated_state[state_key] = result
-                elif isinstance(rule_config, str):
-                    # Simple formula string
-                    result = self._evaluate_formula(rule_config, calculated_state)
-                    calculated_state[state_key] = result
-                    
-            except Exception as e:
-                self.logger.warning(f"Failed to calculate state '{state_key}': {e}")
-                # Use safe default
-                calculated_state[state_key] = False
-                
-        return calculated_state
-    
-    def _evaluate_formula(self, formula: str, state: Dict[str, Any]) -> bool:
-        """
-        Safely evaluate a state calculation formula.
-        
-        Supports simple comparisons and boolean operations using threshold substitution.
-        """
-        try:
-            # First handle complex boolean expressions with 'and'/'or'
-            if " and " in formula:
-                parts = formula.split(" and ")
-                return all(self._evaluate_single_condition(part.strip(), state) for part in parts)
-            elif " or " in formula:
-                parts = formula.split(" or ")
-                return any(self._evaluate_single_condition(part.strip(), state) for part in parts)
-            else:
-                return self._evaluate_single_condition(formula, state)
-                
-        except Exception as e:
-            self.logger.warning(f"Formula evaluation failed for '{formula}': {e}")
-            return False
-    
-    def _evaluate_single_condition(self, condition: str, state: Dict[str, Any]) -> bool:
-        """Evaluate a single condition (no and/or operators)."""
-        try:
-            # Substitute threshold values
-            evaluated_condition = condition
-            for key, value in self.thresholds.items():
-                placeholder = f"${{thresholds.{key}}}"
-                if placeholder in evaluated_condition:
-                    evaluated_condition = evaluated_condition.replace(placeholder, str(value))
+    def _determine_location_type(self, char_data: Dict, map_state: Any) -> str:
+        """Determine the type of current location from map data."""
+        if not map_state:
+            return "unknown"
             
-            # Handle negation
-            if evaluated_condition.startswith("not "):
-                inner_condition = evaluated_condition[4:].strip()
-                return not self._evaluate_single_condition(inner_condition, state)
-            
-            # Handle comparison operators
-            for op in [">=", "<=", ">", "<", "==", "!="]:
-                if op in evaluated_condition:
-                    left, right = evaluated_condition.split(op, 1)
-                    left_val = self._resolve_value(left.strip(), state)
-                    right_val = self._resolve_value(right.strip(), state)
-                    
-                    if op == ">=":
-                        return left_val >= right_val
-                    elif op == "<=":
-                        return left_val <= right_val
-                    elif op == ">":
-                        return left_val > right_val
-                    elif op == "<":
-                        return left_val < right_val
-                    elif op == "==":
-                        return left_val == right_val
-                    elif op == "!=":
-                        return left_val != right_val
-            
-            # Simple boolean state reference
-            return bool(self._resolve_value(evaluated_condition, state))
-            
-        except Exception as e:
-            self.logger.warning(f"Single condition evaluation failed for '{condition}': {e}")
-            return False
-    
-    def _resolve_value(self, value_str: str, state: Dict[str, Any]) -> Any:
-        """Resolve a value string to actual value."""
-        value_str = value_str.strip()
+        x = char_data.get('x', 0)
+        y = char_data.get('y', 0)
         
-        # Check if it's a number
-        try:
-            if '.' in value_str:
-                return float(value_str)
-            else:
-                return int(value_str)
-        except ValueError:
-            pass
+        # Use map state to determine location type
+        location_data = getattr(map_state, 'get_location', lambda x, y: None)(x, y)
+        if location_data:
+            return location_data.get('type', 'unknown')
         
-        # Check if it's a boolean
-        if value_str.lower() == 'true':
-            return True
-        elif value_str.lower() == 'false':
-            return False
-        
-        # Check if it's a state reference
-        if value_str in state:
-            return state[value_str]
-        
-        # Return as string literal
-        return value_str
-    
+        return "unknown"
     
     def _check_cooldown_status(self, char_data: Dict[str, Any]) -> bool:
         """Check if character is currently on cooldown."""
@@ -442,19 +185,14 @@ class GOAPGoalManager:
                     if remaining > 0.5:  # Only consider significant cooldowns
                         return True
                 else:
-                    # Cooldown has expired - ignore legacy cooldown field
+                    # Cooldown has expired
                     return False
                         
             except Exception as e:
                 self.logger.warning(f"Error parsing cooldown expiration: {e}")
         
-        # Only check legacy cooldown field if no expiration time is available
-        # When expiration time exists but has passed, we already returned False above
-        if cooldown_expiration is None:
-            return cooldown_seconds > 0.5
-        
-        # If we have expiration time but it's expired, cooldown is not active
-        return False
+        # Check legacy cooldown field if no expiration time
+        return cooldown_seconds > 0.5
     
     def select_goal(self, current_state: Dict[str, Any], 
                    available_goals: List[str] = None,
@@ -544,7 +282,7 @@ class GOAPGoalManager:
                             if goal_weights and goal_name in goal_weights:
                                 persistence_bonus = goal_weights[goal_name]
                                 weighted_priority = priority + persistence_bonus
-                                self.logger.info(f"🎯 Applied persistence bonus to safety goal '{goal_name}': "
+                                self.logger.debug(f"🎯 Applied persistence bonus to safety goal '{goal_name}': "
                                                f"{priority} + {persistence_bonus:.2f} = {weighted_priority:.2f}")
                             else:
                                 weighted_priority = priority
@@ -552,7 +290,7 @@ class GOAPGoalManager:
                             if weighted_priority > best_priority:
                                 best_goal = (goal_name, goal_config)
                                 best_priority = weighted_priority
-                                self.logger.info(f"🛡️ Selected safety goal '{goal_name}' (priority {weighted_priority:.2f}) "
+                                self.logger.debug(f"🛡️ Selected safety goal '{goal_name}' (priority {weighted_priority:.2f}) "
                                                f"from category '{category_name}'")
         return best_goal
     
@@ -573,7 +311,8 @@ class GOAPGoalManager:
             XP-gaining goal or None
         """
         # Check if character is safe for XP activities
-        if not current_state.get('character_safe', False) or not current_state.get('character_alive', False):
+        char_status = current_state.get('character_status', {})
+        if not char_status.get('safe', False) or not char_status.get('alive', False):
             return None
         
         xp_goals = []
@@ -593,12 +332,12 @@ class GOAPGoalManager:
                 })
                 
                 if persistence_bonus > 0:
-                    self.logger.info(f"🎯 Applied persistence bonus to combat: "
+                    self.logger.debug(f"🎯 Applied persistence bonus to combat: "
                                    f"{combat_weight} + {persistence_bonus:.2f} = {total_weight:.2f}")
         
         # Crafting XP goals (all crafting skills with lower base weight)
         crafting_skills = ['weaponcrafting', 'gearcrafting', 'jewelrycrafting', 'cooking', 'alchemy']
-        crafting_goals = ['upgrade_weapon', 'upgrade_armor', 'complete_equipment_set', 'craft_selected_weapon']
+        crafting_goals = ['upgrade_weapon', 'upgrade_armor', 'complete_equipment_set', 'craft_selected_item']
         
         for goal_name in crafting_goals:
             if goal_name in available_goals and self._is_crafting_goal_viable(goal_name, current_state):
@@ -616,7 +355,7 @@ class GOAPGoalManager:
                     })
                     
                     if persistence_bonus > 0:
-                        self.logger.info(f"🎯 Applied persistence bonus to crafting '{goal_name}': "
+                        self.logger.debug(f"🎯 Applied persistence bonus to crafting '{goal_name}': "
                                        f"{crafting_weight} + {persistence_bonus:.2f} = {total_weight:.2f}")
         
         if not xp_goals:
@@ -630,7 +369,7 @@ class GOAPGoalManager:
         for goal in xp_goals:
             cumulative_weight += goal['weight']
             if random_value <= cumulative_weight:
-                self.logger.info(f"⚡ Selected XP goal '{goal['goal_name']}' "
+                self.logger.debug(f"⚡ Selected XP goal '{goal['goal_name']}' "
                                f"(weight {goal['weight']:.2f}, type {goal['type']})")
                 return (goal['goal_name'], goal['goal_config'])
         
@@ -670,7 +409,7 @@ class GOAPGoalManager:
                             if goal_weights and goal_name in goal_weights:
                                 persistence_bonus = goal_weights[goal_name]
                                 weighted_priority = priority + persistence_bonus
-                                self.logger.info(f"🎯 Applied persistence bonus to support goal '{goal_name}': "
+                                self.logger.debug(f"🎯 Applied persistence bonus to support goal '{goal_name}': "
                                                f"{priority} + {persistence_bonus:.2f} = {weighted_priority:.2f}")
                             else:
                                 weighted_priority = priority
@@ -678,7 +417,7 @@ class GOAPGoalManager:
                             if weighted_priority > best_priority:
                                 best_goal = (goal_name, goal_config)
                                 best_priority = weighted_priority
-                                self.logger.info(f"🔧 Selected support goal '{goal_name}' (priority {weighted_priority:.2f}) "
+                                self.logger.debug(f"🔧 Selected support goal '{goal_name}' (priority {weighted_priority:.2f}) "
                                                f"from category '{category_name}'")
                                 break
             
@@ -702,63 +441,102 @@ class GOAPGoalManager:
         Returns:
             True if crafting goal is viable
         """
-        character_level = current_state.get('character_level', 1)
+        char_status = current_state.get('character_status', {})
+        character_level = char_status.get('level', 1)
         
         # Basic viability check
         if character_level < 2:  # Need level 2+ for most crafting
             return False
         
         # Specific goal checks
-        if goal_name == 'craft_selected_weapon':
-            return current_state.get('best_weapon_selected', False) and not current_state.get('weapon_crafted', True)
+        if goal_name == 'craft_selected_item':
+            equipment_status = current_state.get('equipment_status', {})
+            return (equipment_status.get('selected_item') is not None and 
+                    equipment_status.get('upgrade_status') != 'completed')
         
         return True
     
     def _is_combat_viable(self, current_state: Dict[str, Any]) -> bool:
         """Check if combat is viable based on character state and monster availability."""
+        char_status = current_state.get('character_status', {})
+        combat_context = current_state.get('combat_context', {})
+        
         # Basic combat requirements
-        if not current_state.get('can_attack', False):
+        if char_status.get('hp_percentage', 0) < 15:  # Need at least 15% HP
             return False
         
-        if current_state.get('is_on_cooldown', False):
+        if char_status.get('cooldown_active', False):
             return False
         
-        character_level = current_state.get('character_level', 1)
+        character_level = char_status.get('level', 1)
         if character_level < 1:  # Safety check
             return False
         
         # Check if combat is explicitly marked as not viable
-        if current_state.get('combat_not_viable', False):
+        if combat_context.get('recent_win_rate', 1.0) < 0.2:
             return False
         
         return True
     
     def _check_goal_condition(self, condition: Dict[str, Any], state: Dict[str, Any]) -> bool:
-        """Check if a goal selection condition is met by current state."""
+        """Check if a goal selection condition is met by current state.
+        
+        Now supports nested dictionary access for consolidated states.
+        """
         try:
             for key, expected_value in condition.items():
-                actual_value = state.get(key)
+                # Get actual value - now supports nested access
+                actual_value = self._get_nested_value(state, key)
                 
-                if isinstance(expected_value, str) and expected_value.startswith('<='):
-                    # Handle numeric comparisons like "<=15"
-                    threshold = float(expected_value[2:])
-                    if actual_value is None or actual_value > threshold:
+                # Handle dict conditions (for consolidated states)
+                if isinstance(expected_value, dict) and isinstance(actual_value, dict):
+                    # Recursively check nested conditions
+                    if not self._check_goal_condition(expected_value, actual_value):
                         return False
-                elif isinstance(expected_value, str) and expected_value.startswith('>='):
-                    # Handle numeric comparisons like ">=10"  
-                    threshold = float(expected_value[2:])
-                    if actual_value is None or actual_value < threshold:
-                        return False
-                elif isinstance(expected_value, str) and expected_value.startswith('<'):
-                    # Handle numeric comparisons like "<15"
-                    threshold = float(expected_value[1:])
-                    if actual_value is None or actual_value >= threshold:
-                        return False
-                elif isinstance(expected_value, str) and expected_value.startswith('>'):
-                    # Handle numeric comparisons like ">10"  
-                    threshold = float(expected_value[1:])
-                    if actual_value is None or actual_value <= threshold:
-                        return False
+                    continue
+                
+                # Handle string comparison operators
+                if isinstance(expected_value, str):
+                    # Special values
+                    if expected_value == "!null":
+                        if actual_value is None:
+                            return False
+                        continue
+                    elif expected_value == "null":
+                        if actual_value is not None:
+                            return False
+                        continue
+                    
+                    # Numeric comparisons
+                    if expected_value.startswith('<='):
+                        threshold = float(expected_value[2:])
+                        if actual_value is None or actual_value > threshold:
+                            return False
+                    elif expected_value.startswith('>='):
+                        threshold = float(expected_value[2:])
+                        if actual_value is None or actual_value < threshold:
+                            return False
+                    elif expected_value.startswith('<'):
+                        threshold = float(expected_value[1:])
+                        if actual_value is None or actual_value >= threshold:
+                            return False
+                    elif expected_value.startswith('>'):
+                        threshold = float(expected_value[1:])
+                        if actual_value is None or actual_value <= threshold:
+                            return False
+                    elif expected_value.startswith('!='):
+                        value = expected_value[2:].strip()
+                        # Special handling for != null
+                        if value == "null":
+                            if actual_value is None:
+                                return False
+                        else:
+                            if str(actual_value) == value:
+                                return False
+                    else:
+                        # Direct string equality
+                        if actual_value != expected_value:
+                            return False
                 else:
                     # Direct equality check
                     if actual_value != expected_value:
@@ -769,6 +547,106 @@ class GOAPGoalManager:
         except Exception as e:
             self.logger.warning(f"Goal condition check failed: {e}")
             return False
+    
+    def _get_nested_value(self, data: Dict[str, Any], key: str) -> Any:
+        """Get value from nested dictionary using dot notation.
+        
+        Example: 'character_status.level' returns data['character_status']['level']
+        """
+        if '.' not in key:
+            return data.get(key)
+        
+        parts = key.split('.')
+        current = data
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return None
+        return current
+    
+    def _resolve_comparison_operators(self, target_state: Dict[str, Any], current_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert comparison operators in target state to concrete GOAP target values.
+        
+        This traverses nested state structures and converts string comparisons like '>0'
+        to actual target values that the GOAP planner can work with.
+        
+        Args:
+            target_state: Target state potentially containing comparison operators
+            current_state: Current state for determining appropriate target values
+            
+        Returns:
+            Updated target state with comparison operators resolved to concrete values
+        """
+        def _resolve_nested_value(key_path: str, value: Any) -> Any:
+            """Resolve a single nested value, handling comparison operators."""
+            if not isinstance(value, str):
+                return value
+                
+            # Get current value using nested key access
+            current_value = self._get_nested_value(current_state, key_path)
+            if current_value is None:
+                current_value = 0  # Default for numeric comparisons
+                
+            # Handle comparison operators
+            if value.startswith('>='):
+                try:
+                    threshold = float(value[2:])
+                    # Target should be at least the threshold
+                    target = max(current_value + 1, int(threshold)) if isinstance(current_value, (int, float)) else int(threshold)
+                    self.logger.debug(f"Resolved goal {key_path}: '{value}' -> {target} (current: {current_value})")
+                    return target
+                except ValueError:
+                    return value
+                    
+            elif value.startswith('>'):
+                try:
+                    threshold = float(value[1:])
+                    # Target should be greater than threshold
+                    target = max(current_value + 1, int(threshold) + 1) if isinstance(current_value, (int, float)) else int(threshold) + 1
+                    self.logger.debug(f"Resolved goal {key_path}: '{value}' -> {target} (current: {current_value})")
+                    return target
+                except ValueError:
+                    return value
+                    
+            elif value.startswith('<='):
+                try:
+                    threshold = float(value[2:])
+                    # Target should be at most the threshold
+                    target = min(current_value - 1, int(threshold)) if isinstance(current_value, (int, float)) else int(threshold)
+                    self.logger.debug(f"Resolved goal {key_path}: '{value}' -> {target} (current: {current_value})")
+                    return target
+                except ValueError:
+                    return value
+                    
+            elif value.startswith('<'):
+                try:
+                    threshold = float(value[1:])
+                    # Target should be less than threshold
+                    target = min(current_value - 1, int(threshold) - 1) if isinstance(current_value, (int, float)) else int(threshold) - 1
+                    self.logger.debug(f"Resolved goal {key_path}: '{value}' -> {target} (current: {current_value})")
+                    return target
+                except ValueError:
+                    return value
+            
+            return value
+        
+        def _resolve_recursive(state_dict: Dict[str, Any], prefix: str = '') -> Dict[str, Any]:
+            """Recursively resolve comparison operators in nested dictionaries."""
+            resolved = {}
+            for key, value in state_dict.items():
+                full_key = f"{prefix}.{key}" if prefix else key
+                
+                if isinstance(value, dict):
+                    # Recursively process nested dictionaries
+                    resolved[key] = _resolve_recursive(value, full_key)
+                else:
+                    # Resolve leaf values
+                    resolved[key] = _resolve_nested_value(full_key, value)
+            return resolved
+        
+        return _resolve_recursive(target_state)
     
     def generate_goal_state(self, goal_name: str, goal_config: Dict[str, Any], 
                           current_state: Dict[str, Any], **parameters) -> Dict[str, Any]:
@@ -807,8 +685,10 @@ class GOAPGoalManager:
                     if resolved_value is not None:
                         target_state[key] = resolved_value
         
+        # Convert comparison operators to concrete GOAP target values
+        target_state = self._resolve_comparison_operators(target_state, current_state)
         
-        self.logger.info(f"Generated goal state for '{goal_name}': {target_state}")
+        self.logger.debug(f"Generated goal state for '{goal_name}': {target_state}")
         return target_state
     
     def get_goal_strategy(self, goal_name: str, goal_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -822,79 +702,6 @@ class GOAPGoalManager:
         
         return strategy
     
-    def classify_content(self, content_code: str, content_data: Dict[str, Any], 
-                        raw_content_type: str = None) -> str:
-        """
-        Classify content using YAML-defined rules instead of hardcoded logic.
-        
-        Replaces the complex _categorize_content_by_attributes() method chain.
-        """
-        # Check raw content type first
-        if raw_content_type and raw_content_type != 'unknown':
-            # Try direct mapping
-            type_mappings = {
-                'monster': 'monster',
-                'resource': 'resource',
-                'npc': 'npc', 
-                'workshop': 'workshop',
-                'bank': 'facility',
-                'grand_exchange': 'facility',
-                'tasks_master': 'npc'
-            }
-            if raw_content_type in type_mappings:
-                return type_mappings[raw_content_type]
-        
-        # Apply classification rules
-        for content_type, rules in self.content_classification.items():
-            if self._matches_classification_rules(content_code, content_data, rules):
-                return content_type
-        
-        # Default fallback
-        self.logger.warning(f"Unknown content type for '{content_code}' "
-                          f"(raw_type: '{raw_content_type}'), defaulting to 'resource'")
-        return 'resource'
-    
-    def _matches_classification_rules(self, content_code: str, content_data: Dict[str, Any], 
-                                    rules: Dict[str, Any]) -> bool:
-        """Check if content matches classification rules."""
-        # Check required attributes first (must all be present)
-        required_attrs = rules.get('required_attributes', [])
-        for attr in required_attrs:
-            if attr not in content_data:
-                return False
-        
-        # At least one of the following conditions must be true:
-        # 1. Type pattern matches
-        # 2. Name pattern matches
-        # 3. Optional attributes match (if no type/name patterns defined)
-        
-        has_type_match = False
-        has_name_match = False
-        has_attr_match = False
-        
-        # Check type patterns
-        type_patterns = rules.get('type_patterns', [])
-        if type_patterns:
-            content_type = content_data.get('type_', '').lower()
-            has_type_match = any(pattern in content_type for pattern in type_patterns)
-        
-        # Check name patterns
-        name_patterns = rules.get('name_patterns', [])
-        if name_patterns:
-            content_name = content_code.lower()
-            has_name_match = any(re.match(pattern, content_name) for pattern in name_patterns)
-        
-        # Check optional attributes (if present, indicates a possible match)
-        optional_attrs = rules.get('optional_attributes', [])
-        if optional_attrs:
-            has_attr_match = any(attr in content_data for attr in optional_attrs)
-        
-        # Must match at least one pattern type or have attributes if no patterns defined
-        if type_patterns or name_patterns:
-            return has_type_match or has_name_match
-        else:
-            # If no patterns defined, require attribute match
-            return has_attr_match
     
     def get_threshold(self, key: str, default: Any = None) -> Any:
         """Get a configuration threshold value."""

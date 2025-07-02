@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from ..game.globals import CONFIG_PREFIX
 from ..lib.yaml_data import YamlData
 from .action_factory import ActionFactory
+from .action_validator import ActionValidator, ValidationResult
 
 
 @dataclass
@@ -56,9 +57,15 @@ class ActionExecutor:
         self.factory = ActionFactory(self.config_data)
         self._load_configurations()
         
+        # Initialize action validator
+        self.validator = ActionValidator()
+        
         # Special handling for composite actions and learning
         self.learning_callbacks = {}
         self.state_updaters = {}
+        
+        # Feature flag for validation (can be configured)
+        self.validation_enabled = True
     
     def _load_configurations(self) -> None:
         """Load action configurations from YAML."""
@@ -104,13 +111,35 @@ class ActionExecutor:
             if result:
                 return result
             
-            # Standard action execution through factory
-            success, response = self.factory.execute_action(action_name, action_data, client, context)
+            # Phase 1 - Pre-execution: Resolve template parameters
+            resolved_action_data = self._resolve_action_parameters(action_name, action_data, context)
             
-            # Post-execution processing
-            if success:
-                self._handle_learning_callbacks(action_name, response, context)
-                self._update_state(action_name, response, context)
+            # Phase 2 - Validation: Validate action parameters and preconditions
+            if self.validation_enabled:
+                validation_result = self._validate_action(action_name, resolved_action_data, context, client)
+                if not validation_result.is_valid:
+                    execution_time = time.time() - start_time if start_time else None
+                    return ActionResult(
+                        success=False,
+                        response={'validation_errors': [e.__dict__ for e in validation_result.errors]},
+                        action_name=action_name,
+                        execution_time=execution_time,
+                        error_message=f"Validation failed: {validation_result.summary}",
+                        metadata={'validation_failed': True}
+                    )
+            
+            # Phase 3 - Execution: Standard action execution through factory
+            success, response = self.factory.execute_action(action_name, resolved_action_data, client, context)
+            
+            # Convert response to dict if needed
+            if not isinstance(response, dict):
+                response = {'data': response, 'success': success}
+            
+            # Phase 4 - Post-execution processing - UNIFIED handler
+            # Always get controller from context (ActionContext has controller attribute)
+            controller = context.controller if hasattr(context, 'controller') else context.get('controller') if isinstance(context, dict) else None
+            if controller:
+                self.apply_post_execution_updates(action_name, response, controller, context)
             
             execution_time = time.time() - start_time if start_time else None
             
@@ -136,8 +165,12 @@ class ActionExecutor:
     
     def _is_composite_action(self, action_name: str) -> bool:
         """Check if an action is defined as composite."""
-        composite_actions = self.config_data.data.get('composite_actions', {})
-        return action_name in composite_actions
+        try:
+            composite_actions = self.config_data.data.get('composite_actions', {})
+            return action_name in composite_actions
+        except TypeError:
+            # Handle case where config_data.data is a Mock
+            return False
     
     def _execute_composite_action(self, action_name: str, action_data: Dict[str, Any],
                                  client, context: Dict[str, Any]) -> ActionResult:
@@ -522,11 +555,269 @@ class ActionExecutor:
         except Exception as e:
             self.logger.warning(f"Learning callback failed for {action_name}: {e}")
     
-    def _update_state(self, action_name: str, response: Any, context: Dict[str, Any]) -> None:
-        """Update world state based on action response."""
+    
+    def apply_post_execution_updates(self, action_name: str, action_result: Dict, 
+                                    controller, context) -> None:
+        """
+        Unified handler for ALL state updates after action execution.
+        This is the ONLY place where state should be modified.
+        """
+        
+        if not action_result.get('success', False):
+            self.logger.debug(f"Skipping state updates for failed action {action_name}")
+            return
+            
+        # 1. Apply GOAP reactions from action class
+        self._apply_goap_reactions(action_name, action_result, controller, context)
+        
+        # 2. Update action context for inter-action data flow
+        self._update_action_context(action_name, action_result, controller)
+        
+        # 3. Process any state changes returned by the action
+        self._apply_action_state_changes(action_name, action_result, controller)
+        
+        # 4. Handle learning callbacks (existing functionality)
+        self._handle_learning_callbacks(action_name, action_result, {'controller': controller})
+        
+        # 5. Persist state changes (if needed)
+        self._persist_state_changes(controller)
+        
+        self.logger.debug(f"✓ Post-execution updates completed for {action_name}")
+    
+    def _apply_goap_reactions(self, action_name: str, action_result: Dict, 
+                             controller, context) -> None:
+        """Apply GOAP reactions with proper template resolution."""
+        
+        # Get action class to access reactions
+        action_class = self._get_action_class(action_name)
+        if not action_class:
+            return
+            
+        reactions = getattr(action_class, 'reactions', {})
+        if not reactions:
+            return
+            
+        # Get current world state
+        world_state = controller.get_current_world_state()
+        
+        # Resolve templates and apply reactions
+        for state_group, group_reactions in reactions.items():
+            if isinstance(group_reactions, dict):
+                # Handle nested state groups (e.g., equipment_status)
+                if state_group not in world_state:
+                    world_state[state_group] = {}
+                    
+                for key, value in group_reactions.items():
+                    resolved_key = self._resolve_template(key, context, action_result)
+                    resolved_value = self._resolve_template(value, context, action_result)
+                    
+                    # Handle increment operations for counter fields
+                    if resolved_key in ['steps_completed'] and resolved_value == 1:
+                        # Get current value and increment
+                        current_val = world_state.get(state_group, {}).get(resolved_key, 0)
+                        resolved_value = current_val + 1
+                        self.logger.debug(f"Incrementing {state_group}.{resolved_key}: {current_val} -> {resolved_value}")
+                    
+                    # Update nested state
+                    world_state[state_group][resolved_key] = resolved_value
+                    
+                    self.logger.debug(f"Applied reaction: {state_group}.{resolved_key} = {resolved_value}")
+            else:
+                # Handle flat state values
+                resolved_value = self._resolve_template(group_reactions, context, action_result)
+                world_state[state_group] = resolved_value
+                
+        # Update world state in controller
+        controller.update_world_state(world_state)
+        self.logger.debug(f"Updated world state via reactions: {world_state}")
+    
+    def _resolve_template(self, template: Any, context, action_result: Dict) -> Any:
+        """Resolve template variables in reaction values."""
+        
+        if not isinstance(template, str):
+            return template
+            
+        if not template.startswith('${'):
+            return template
+            
+        # Extract variable name
+        var_name = template[2:-1]  # Remove ${ and }
+        
+        # Resolution priority order:
+        # 1. Check action result
+        if var_name in action_result:
+            return action_result[var_name]
+            
+        # 2. Check action context
+        if hasattr(context, var_name):
+            return getattr(context, var_name)
+            
+        # 3. Check controller from context
+        controller = context.controller if hasattr(context, 'controller') else context.get('controller') if isinstance(context, dict) else None
+        if controller:
+            world_state = controller.get_current_world_state()
+            for state_group, group_data in world_state.items():
+                if isinstance(group_data, dict) and var_name in group_data:
+                    return group_data[var_name]
+                    
+        # 4. Check action context results from previous actions
+        if hasattr(context, 'action_results') and context.action_results:
+            for prev_action, prev_result in context.action_results.items():
+                if isinstance(prev_result, dict) and var_name in prev_result:
+                    return prev_result[var_name]
+                    
+        self.logger.warning(f"Could not resolve template variable: {template}")
+        return None
+    
+    def _update_action_context(self, action_name: str, action_result: Dict, controller) -> None:
+        """Update action context for inter-action data flow."""
+        
+        # Store action result in controller's action context
+        if not hasattr(controller, 'action_context'):
+            controller.action_context = {}
+            
+        controller.action_context[action_name] = {
+            'result': action_result,
+            'timestamp': time.time()
+        }
+        
+        # Also store specific values that might be used as template variables
+        if 'selected_item' in action_result:
+            controller.action_context['selected_item'] = action_result['selected_item']
+        if 'target_slot' in action_result:
+            controller.action_context['target_slot'] = action_result['target_slot']
+            
+        self.logger.debug(f"Updated action context with results from {action_name}")
+    
+    def _apply_action_state_changes(self, action_name: str, action_result: Dict, 
+                                   controller) -> None:
+        """Apply any explicit state changes returned by the action."""
+        
+        # Check for state changes in standard locations
+        state_changes = {}
+        
+        # 1. Check 'state_changes' key (preferred)
+        if 'state_changes' in action_result:
+            state_changes.update(action_result['state_changes'])
+            
+        # 2. Check specific state keys (backward compatibility)
+        state_keys = ['equipment_status', 'character_status', 'location_context', 
+                      'combat_context', 'materials', 'skills', 'goal_progress']
+        
+        for key in state_keys:
+            if key in action_result and isinstance(action_result[key], dict):
+                state_changes[key] = action_result[key]
+                
+        # Apply all state changes
+        if state_changes:
+            world_state = controller.get_current_world_state()
+            for key, value in state_changes.items():
+                if isinstance(value, dict) and key in world_state and isinstance(world_state[key], dict):
+                    # Merge nested dictionaries
+                    world_state[key].update(value)
+                else:
+                    # Replace value
+                    world_state[key] = value
+                    
+            controller.update_world_state(world_state)
+            self.logger.debug(f"Applied {len(state_changes)} state changes from {action_name}")
+    
+    def _persist_state_changes(self, controller) -> None:
+        """Persist state changes if needed."""
+        # This is a placeholder for future state persistence needs
+        # Currently, state is persisted by the controller when needed
+        pass
+    
+    def _validate_action(self, action_name: str, action_data: Dict[str, Any], 
+                        context: Any, client: Any = None) -> ValidationResult:
+        """
+        Validate action parameters and preconditions.
+        
+        Args:
+            action_name: Name of the action to validate
+            action_data: Resolved action parameters
+            context: Execution context
+            
+        Returns:
+            ValidationResult indicating if action is valid to execute
+        """
+        # Extract parameters for validation
+        # Some actions have params nested, others have them at top level
+        params = action_data.copy()
+        
+        # If params are nested under 'params' key, merge them to top level for validation
+        if 'params' in params and isinstance(params['params'], dict):
+            nested_params = params.pop('params')
+            params.update(nested_params)
+        
+        # Run validation
+        return self.validator.validate_action(action_name, params, context, client)
+    
+    def _resolve_action_parameters(self, action_name: str, action_data: Dict, context: Dict) -> Dict:
+        """Resolve template parameters in action data before execution."""
+        
+        resolved_data = action_data.copy()
+        
+        # Get controller from context for world state access
         controller = context.get('controller')
-        if controller and hasattr(controller, 'update_world_state_from_response'):
-            controller.update_world_state_from_response(action_name, response)
+        if not controller:
+            return resolved_data
+            
+        # Special handling for equip action
+        if action_name == 'equip' and 'params' not in resolved_data:
+            resolved_data['params'] = {}
+            
+            # Get world state to find selected_item
+            world_state = controller.get_current_world_state()
+            equipment_status = world_state.get('equipment_status', {})
+            
+            # Try to get item_code from various sources
+            item_code = None
+            
+            # 1. Check equipment_status.selected_item
+            if 'selected_item' in equipment_status:
+                item_code = equipment_status['selected_item']
+                
+            # 2. Check action context
+            if not item_code and hasattr(controller, 'action_context'):
+                item_code = controller.action_context.get('selected_item')
+                
+            # Set parameters for equip action
+            if item_code:
+                resolved_data['params']['item_code'] = item_code
+                resolved_data['params']['slot'] = equipment_status.get('target_slot', 'weapon')
+                self.logger.debug(f"Resolved equip parameters: item_code={item_code}, slot={resolved_data['params']['slot']}")
+        
+        # General template resolution for params
+        if 'params' in resolved_data:
+            for key, value in resolved_data['params'].items():
+                if isinstance(value, str) and value.startswith('${'):
+                    resolved_value = self._resolve_template(value, context, {})
+                    if resolved_value is not None:
+                        resolved_data['params'][key] = resolved_value
+                        
+        return resolved_data
+    
+    def _get_action_class(self, action_name: str):
+        """Get action class by name for accessing GOAP metadata."""
+        
+        # Try to get from factory's action map
+        if hasattr(self.factory, 'action_class_map'):
+            action_class = self.factory.action_class_map.get(action_name)
+            if action_class:
+                return action_class
+                
+        # Try to import dynamically from action configurations
+        action_config = self.config_data.data.get('action_classes', {}).get(action_name)
+        if action_config:
+            try:
+                module_path, class_name = action_config.rsplit('.', 1)
+                module = __import__(module_path, fromlist=[class_name])
+                return getattr(module, class_name)
+            except Exception as e:
+                self.logger.debug(f"Could not import action class {action_name}: {e}")
+                
+        return None
     
     def register_learning_callback(self, action_name: str, callback) -> None:
         """Register a learning callback for an action."""
@@ -546,4 +837,5 @@ class ActionExecutor:
         """Reload action configurations from YAML."""
         self.config_data.load()
         self._load_configurations()
-        self.logger.info("Action configurations reloaded")
+        self.validator.reload_configuration()
+        self.logger.info("Action configurations and validation rules reloaded")

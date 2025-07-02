@@ -16,30 +16,7 @@ class TestActionBase(unittest.TestCase):
         self.mock_client = create_mock_client()
         self.mock_context = MockActionContext(character_name="test_character")
 
-    def test_action_base_initialization(self):
-        """Test ActionBase initialization."""
-        # Check that logger is set up
-        self.assertIsNotNone(self.action.logger)
-        self.assertEqual(self.action.logger.name, 'ActionBase')
-
-    def test_execute_not_implemented(self):
-        """Test that validate_and_execute method returns error for NotImplementedError."""
-        result = self.action.validate_and_execute(self.mock_client, self.mock_context)
-        
-        self.assertIsInstance(result, dict)
-        self.assertFalse(result['success'])
-        self.assertIn("Subclasses must implement perform_action method", result['error'])
-
-    def test_validate_execution_context_with_client(self):
-        """Test validate_execution_context with valid client."""
-        result = self.action.validate_execution_context(self.mock_client, self.mock_context)
-        self.assertTrue(result)
-
-    def test_validate_execution_context_without_client(self):
-        """Test validate_execution_context with None client."""
-        result = self.action.validate_execution_context(None, self.mock_context)
-        self.assertFalse(result)
-
+    
     def test_get_error_response_basic(self):
         """Test get_error_response with basic error message."""
         error_msg = "Test error"

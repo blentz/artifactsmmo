@@ -5,14 +5,13 @@ This action analyzes what materials are needed for a selected item and sets
 appropriate GOAP states to trigger material gathering and crafting.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
-from .base import ActionBase
+from src.lib.action_context import ActionContext
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from .base import ActionBase
 
 
 class PlanCraftingMaterialsAction(ActionBase):
@@ -27,17 +26,19 @@ class PlanCraftingMaterialsAction(ActionBase):
     
     # GOAP parameters
     conditions = {
-        "character_alive": True,
-        "best_weapon_selected": True,  # Or any item selected for crafting
-        "craft_plan_available": False  # Haven't planned materials yet
-    }
+            'character_status': {
+                'alive': True,
+            },
+            'best_weapon_selected': True,
+            'craft_plan_available': False,
+        }
     reactions = {
         "craft_plan_available": True,
         "need_resources": True,  # If materials are missing
-        "materials_sufficient": True,  # If we have everything
-        "material_requirements_known": True
+        "materials_sufficient": True  # If we have everything
+        # Removed: "material_requirements_known": True - not used as condition by any action
     }
-    weights = {"material_requirements_known": 10}
+    weights = {"craft_plan_available": 10}  # Changed from material_requirements_known
     
     def __init__(self):
         """
@@ -50,9 +51,6 @@ class PlanCraftingMaterialsAction(ActionBase):
         # Call superclass to set self._context
         super().execute(client, context)
         
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-            
         # Get parameters from context
         character_name = context.character_name
         target_item = context.get('target_item')

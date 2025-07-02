@@ -5,22 +5,29 @@ This action recursively examines the entire crafting dependency chain from raw m
 to final equipment, mapping out resource nodes, workshops, and intermediate steps.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
-from .base import ActionBase
+from src.lib.action_context import ActionContext
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from .base import ActionBase
 
 
 class AnalyzeCraftingChainAction(ActionBase):
     """ Action to analyze complete crafting dependency chains """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
-    reactions = {"craft_plan_available": True, "material_requirements_known": True, "crafting_opportunities_known": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
+    reactions = {
+        "craft_plan_available": True, 
+        # Removed: "material_requirements_known": True - not used as condition by any action
+        "crafting_opportunities_known": True
+    }
     weights = {"craft_plan_available": 20}
 
     def __init__(self):
@@ -38,9 +45,6 @@ class AnalyzeCraftingChainAction(ActionBase):
 
     def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """ Analyze the complete crafting chain for the target item """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-            
         # Get character name and target item from context
         character_name = context.character_name
         if not character_name:
@@ -112,10 +116,17 @@ class AnalyzeCraftingChainAction(ActionBase):
         
         # If not in knowledge base, make API call
         if not item_data:
-            item_response = get_item_api(code=item_code, client=client)
-            if not item_response or not item_response.data:
+            self.logger.info(f"📦 Item '{item_code}' not in knowledge base, fetching from API...")
+            try:
+                item_response = get_item_api(code=item_code, client=client)
+                if not item_response or not item_response.data:
+                    self.logger.warning(f"❌ No data returned from API for item '{item_code}'")
+                    return None
+                item_data = item_response.data
+                self.logger.info(f"✅ Successfully fetched item '{item_code}' from API")
+            except Exception as e:
+                self.logger.error(f"❌ API call failed for item '{item_code}': {e}")
                 return None
-            item_data = item_response.data
         
         # Check if this is a craftable item (handle both API objects and knowledge base dictionaries)
         craft_data = None

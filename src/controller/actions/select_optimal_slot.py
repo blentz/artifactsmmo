@@ -7,8 +7,7 @@ This action selects the optimal equipment slot for crafting based on:
 - Slot priority weights from configuration
 """
 
-import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from src.controller.actions.base import ActionBase
 from src.game.globals import CONFIG_PREFIX
@@ -26,13 +25,19 @@ class SelectOptimalSlotAction(ActionBase):
     
     # GOAP parameters
     conditions = {
-        'equipment_gaps_analyzed': True,
-        'character_alive': True
-    }
+            'equipment_status': {
+                'gaps_analyzed': True,
+                'target_slot': None
+            },
+            'character_status': {
+                'alive': True,
+            },
+        }
     
     reactions = {
-        'optimal_slot_selected': True,
-        'target_slot_specified': True
+        'equipment_status': {
+            'target_slot': 'weapon'
+        }
     }
     
     weight = 1.5
@@ -94,8 +99,18 @@ class SelectOptimalSlotAction(ActionBase):
         gap_analysis = context.get_parameter('equipment_gap_analysis')
         target_skill = context.get_parameter('target_craft_skill')
         
+        # If no target skill specified, determine from character equipment priorities
         if not target_skill:
-            return self.get_error_response("Target craft skill not specified")
+            try:
+                target_skill = self._determine_default_craft_skill(context, gap_analysis)
+                if not target_skill:
+                    self.logger.error("_determine_default_craft_skill returned None despite fallbacks - using weaponcrafting")
+                    target_skill = 'weaponcrafting'
+                self.logger.info(f"🎯 No target_craft_skill specified, defaulting to {target_skill} based on equipment priorities")
+            except Exception as e:
+                self.logger.error(f"Exception in _determine_default_craft_skill: {e}")
+                target_skill = 'weaponcrafting'
+                self.logger.info(f"🎯 Exception occurred, defaulting to {target_skill}")
             
         if not gap_analysis:
             return self.get_error_response("Equipment gap analysis not available - run AnalyzeEquipmentGapsAction first")
@@ -110,9 +125,32 @@ class SelectOptimalSlotAction(ActionBase):
             
         self.logger.info(f"🎯 Selecting optimal slot for {target_skill} from {len(applicable_slots)} options")
         
-        # Calculate combined scores for each applicable slot
+        # Filter applicable slots to only include those present in gap analysis
+        available_slots = [slot for slot in applicable_slots if slot in gap_analysis]
+        
+        if not available_slots:
+            # If we have no overlap between skill slots and gap analysis, try to find a skill that does
+            available_gap_slots = list(gap_analysis.keys())
+            skill_mappings = config.data.get('skill_slot_mappings', {})
+            
+            for skill, slots in skill_mappings.items():
+                if any(slot in available_gap_slots for slot in slots):
+                    self.logger.info(f"🔄 No available slots for {target_skill}, switching to {skill} which has available slots")
+                    target_skill = skill
+                    applicable_slots = slots
+                    available_slots = [slot for slot in slots if slot in gap_analysis]
+                    break
+            
+            if not available_slots:
+                self.logger.warning(f"No applicable slots for {target_skill} found in gap analysis. "
+                                   f"Applicable: {applicable_slots}, Available: {list(gap_analysis.keys())}")
+                return self.get_error_response(f"No valid slots found for skill {target_skill}")
+        
+        self.logger.debug(f"Filtered to {len(available_slots)} available slots: {available_slots}")
+        
+        # Calculate combined scores for each available slot
         slot_scores = []
-        for slot in applicable_slots:
+        for slot in available_slots:
             score_data = self._calculate_slot_score(slot, gap_analysis, config)
             if score_data:
                 slot_scores.append(score_data)
@@ -146,9 +184,7 @@ class SelectOptimalSlotAction(ActionBase):
             ]
         })
         
-        # Set additional context flags
-        context.set_result('optimal_slot_selected', True)
-        context.set_result('target_slot_specified', True)
+        # Context results are already set above via 'target_equipment_slot'
         
         self.logger.info(f"✅ Selected '{best_slot_data['slot_name']}' for {target_skill} crafting "
                         f"(score: {best_slot_data['combined_score']:.2f}, reason: {best_slot_data['urgency_reason']})")
@@ -221,3 +257,196 @@ class SelectOptimalSlotAction(ActionBase):
             'selection_reason': reasoning.get('urgency_reason'),
             'alternatives': reasoning.get('alternatives', [])
         }
+    
+    def _determine_default_craft_skill(self, context: ActionContext, gap_analysis: Dict) -> str:
+        """
+        Determine the default crafting skill based on craftable items for equipment slots.
+        
+        Uses knowledge base to find what items can be crafted for slots with gaps,
+        then determines what skills are needed to craft those items.
+        
+        Args:
+            context: ActionContext with character information and knowledge base
+            gap_analysis: Equipment gap analysis data
+            
+        Returns:
+            Default crafting skill name, always returns a valid skill (never None)
+        """
+        try:
+            self.logger.debug(f"Determining default craft skill. Gap analysis: {bool(gap_analysis)}, slots: {list(gap_analysis.keys()) if gap_analysis else 'None'}")
+            
+            if not gap_analysis:
+                self.logger.warning("No gap analysis provided, defaulting to weaponcrafting")
+                return 'weaponcrafting'
+                
+            knowledge_base = context.knowledge_base
+            if not knowledge_base:
+                self.logger.warning("No knowledge base available for determining craft skill")
+                return 'weaponcrafting'  # Safe fallback
+                
+            # Find the slot with the highest urgency score
+            best_slot = None
+            highest_urgency = 0
+            
+            for slot, gap_data in gap_analysis.items():
+                urgency_score = gap_data.get('urgency_score', 0)
+                if urgency_score > highest_urgency:
+                    highest_urgency = urgency_score
+                    best_slot = slot
+                    
+            if not best_slot:
+                self.logger.warning("No equipment gaps found, defaulting to weaponcrafting")
+                return 'weaponcrafting'
+                
+            self.logger.debug(f"Determining craft skill for slot '{best_slot}' with urgency {highest_urgency}")
+            
+            # Get craftable items that can be equipped in this slot
+            craft_skills = self._get_craft_skills_for_slot(knowledge_base, best_slot)
+            
+            if not craft_skills:
+                self.logger.warning(f"No craft skills found for slot '{best_slot}', defaulting to weaponcrafting")
+                return 'weaponcrafting'
+                
+            if len(craft_skills) == 1:
+                selected_skill = craft_skills[0]
+                self.logger.info(f"Selected craft skill '{selected_skill}' for slot '{best_slot}'")
+                return selected_skill
+            else:
+                # Multiple skills possible, select randomly from the list
+                import random
+                selected_skill = random.choice(craft_skills)
+                self.logger.info(f"Multiple craft skills {craft_skills} found for slot '{best_slot}', randomly selected '{selected_skill}'")
+                return selected_skill
+                
+        except Exception as e:
+            self.logger.error(f"Error determining default craft skill: {e}")
+            self.logger.error(f"Gap analysis type: {type(gap_analysis)}, Knowledge base type: {type(getattr(context, 'knowledge_base', None))}")
+            return 'weaponcrafting'  # Safe fallback in case of any errors
+    
+    def _get_craft_skills_for_slot(self, knowledge_base, slot_name: str) -> List[str]:
+        """
+        Get list of crafting skills needed to craft items for a specific equipment slot.
+        
+        Args:
+            knowledge_base: KnowledgeBase instance with item data
+            slot_name: Equipment slot name (e.g., 'weapon', 'helmet')
+            
+        Returns:
+            List of crafting skill names that can create items for this slot
+        """
+        craft_skills = set()
+        
+        try:
+            # Get all items from knowledge base
+            items_data = knowledge_base.data.get('items', {})
+            
+            if not items_data:
+                self.logger.debug("No items data in knowledge base")
+                return []
+                
+            # Look through all items to find ones that can be equipped in this slot
+            for item_code, item_data in items_data.items():
+                if not isinstance(item_data, dict):
+                    continue
+                    
+                # Check if this item can be equipped in the target slot
+                if self._item_fits_slot(item_data, slot_name):
+                    # Check if this item has crafting information
+                    craft_info = item_data.get('craft')
+                    if craft_info and isinstance(craft_info, dict):
+                        skill = craft_info.get('skill')
+                        if skill:
+                            craft_skills.add(skill)
+                            self.logger.debug(f"Item '{item_code}' for slot '{slot_name}' requires skill '{skill}'")
+                            
+        except Exception as e:
+            self.logger.warning(f"Error querying knowledge base for slot '{slot_name}': {e}")
+            
+        return list(craft_skills)
+    
+    def _item_fits_slot(self, item_data: Dict, slot_name: str) -> bool:
+        """
+        Check if an item can be equipped in a specific slot using knowledge base data.
+        
+        Examines item type, subtype, and effects to determine if it fits the slot.
+        Uses string matching to avoid hardcoded mappings.
+        
+        Args:
+            item_data: Item data dictionary from knowledge base
+            slot_name: Equipment slot name
+            
+        Returns:
+            True if the item fits the slot, False otherwise
+        """
+        # Get basic item information
+        item_type = item_data.get('type', '').lower()
+        item_subtype = item_data.get('subtype', '').lower()
+        
+        # Check if slot name appears in item type or subtype
+        slot_lower = slot_name.lower()
+        
+        if slot_lower in item_type or slot_lower in item_subtype:
+            self.logger.debug(f"Slot '{slot_name}' matches item type/subtype: {item_type}/{item_subtype}")
+            return True
+            
+        # Check reverse - if item type appears in slot name
+        if item_type and item_type in slot_lower:
+            self.logger.debug(f"Item type '{item_type}' appears in slot name '{slot_name}'")
+            return True
+            
+        if item_subtype and item_subtype in slot_lower:
+            self.logger.debug(f"Item subtype '{item_subtype}' appears in slot name '{slot_name}'")
+            return True
+            
+        # Check effects for slot indicators
+        effects = item_data.get('effects', [])
+        for effect in effects:
+            if not isinstance(effect, dict):
+                continue
+                
+            effect_name = effect.get('name', '').lower()
+            
+            # Check if slot name appears in effect name
+            if slot_lower in effect_name:
+                self.logger.debug(f"Slot '{slot_name}' found in effect name '{effect_name}'")
+                return True
+                
+        # Special case handling for common patterns we can derive from the data
+        return self._check_derived_slot_patterns(item_type, item_subtype, slot_name)
+    
+    def _check_derived_slot_patterns(self, item_type: str, item_subtype: str, slot_name: str) -> bool:
+        """
+        Check for slot patterns that can be derived without hardcoding.
+        
+        This handles cases where the relationship between item and slot
+        isn't directly obvious from string matching.
+        
+        Args:
+            item_type: Item type from knowledge base
+            item_subtype: Item subtype from knowledge base  
+            slot_name: Equipment slot name
+            
+        Returns:
+            True if patterns suggest the item fits the slot, False otherwise
+        """
+        # Handle ring slots - both ring1 and ring2 can accept ring items
+        if item_type == 'ring' and slot_name.startswith('ring'):
+            self.logger.debug(f"Ring item type matches ring slot '{slot_name}'")
+            return True
+            
+        # Handle armor subtypes - if item_subtype contains armor-related words
+        # and slot_name contains armor-related words, they might match
+        armor_indicators = ['armor', 'helmet', 'boots', 'chest', 'leg']
+        if (any(indicator in item_type for indicator in armor_indicators) and
+            any(indicator in slot_name for indicator in armor_indicators)):
+            # Check if both contain similar armor-type words
+            type_words = set(item_type.replace('_', ' ').split())
+            subtype_words = set(item_subtype.replace('_', ' ').split())
+            slot_words = set(slot_name.replace('_', ' ').split())
+            
+            # If there's any overlap in words, consider it a match
+            if type_words.intersection(slot_words) or subtype_words.intersection(slot_words):
+                self.logger.debug(f"Armor-related word overlap: type={item_type}, subtype={item_subtype}, slot={slot_name}")
+                return True
+                
+        return False

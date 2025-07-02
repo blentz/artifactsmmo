@@ -20,11 +20,9 @@ class TestWaitAction(unittest.TestCase):
     def test_init(self):
         """ Test WaitAction initialization """
         action = WaitAction()
-        self.assertEqual(action.conditions['character_alive'], True)
-        self.assertEqual(action.conditions['is_on_cooldown'], True)
-        self.assertEqual(action.reactions['is_on_cooldown'], False)
-        self.assertEqual(action.reactions['can_move'], True)
-        self.assertEqual(action.reactions['can_attack'], True)
+        self.assertEqual(action.conditions['character_status']['cooldown_active'], True)
+        self.assertEqual(action.reactions['character_status']['cooldown_active'], False)
+        self.assertEqual(action.weight, 1)
 
     def test_init_no_params(self):
         """ Test WaitAction initialization with no parameters """

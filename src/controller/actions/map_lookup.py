@@ -12,12 +12,16 @@ class MapLookupAction(ActionBase):
     
     # GOAP parameters - can be overridden by configuration
     conditions = {
-        'character_alive': True,
-        'can_move': True
-    }
+            'character_status': {
+                'alive': True,
+                'cooldown_active': False,
+            },
+        }
     reactions = {
-        'at_target_location': True  # Assumes we move to lookup location
-    }
+            'location_context': {
+                'at_target': True,
+            },
+        }
     weights = {'map_lookup': 1.0}  # Low priority utility action
 
     def __init__(self):
@@ -25,9 +29,6 @@ class MapLookupAction(ActionBase):
 
     def execute(self, client, context: ActionContext):
         """ Get map information for the specified coordinates """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get coordinates from context
         x = context.get('x')
         y = context.get('y')

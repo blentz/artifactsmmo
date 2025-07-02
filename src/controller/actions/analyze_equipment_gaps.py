@@ -5,7 +5,6 @@ This action performs comprehensive equipment analysis for all slots,
 calculating upgrade urgency scores and identifying equipment priorities.
 """
 
-import logging
 from typing import Any, Dict, Optional
 
 from src.controller.actions.base import ActionBase
@@ -26,12 +25,16 @@ class AnalyzeEquipmentGapsAction(ActionBase):
     
     # GOAP parameters
     conditions = {
-        'character_alive': True
-    }
+            'character_status': {
+                'alive': True,
+            },
+        }
     
     reactions = {
-        'equipment_gaps_analyzed': True,
-        'equipment_analysis_available': True
+        'equipment_status': {
+            'upgrade_status': 'analyzing',
+            'gaps_analyzed': True
+        }
     }
     
     weight = 1.0

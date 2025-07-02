@@ -41,7 +41,7 @@ class LearningManager:
         if client:
             self.capability_analyzer = CapabilityAnalyzer(client)
         
-        # Load configuration
+        # Load configuration - using clean templates for testing
         if config_file is None:
             config_file = f"{CONFIG_PREFIX}/goal_templates.yaml"
         

@@ -14,7 +14,12 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
     """ Action to find the correct workshop type for a specific item """
 
     # GOAP parameters
-    conditions = {"character_alive": True, "can_move": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+                'cooldown_active': False,
+            },
+        }
     reactions = {"at_correct_workshop": True, "workshops_discovered": True}
     weights = {"at_correct_workshop": 20}
 
@@ -27,14 +32,11 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find the correct workshop for the specified item and move there """        
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
         character_y = context.get('character_y', context.character_y)
         search_radius = context.get('search_radius', 10)
-        item_code = context.get('item_code')
+        item_code = context.get('item_code') or context.get('selected_item_code')
         character_name = context.character_name
         
         # Parameters will be passed directly to helper methods via context

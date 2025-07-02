@@ -60,8 +60,6 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
         Returns:
             Dictionary with search results or None if nothing found
         """
-        if not client:
-            return self.get_error_response("No API client provided")
         
         # Search results
         found_locations = []

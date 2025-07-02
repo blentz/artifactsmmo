@@ -24,10 +24,14 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
     """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
         "workshop_requirements_known": True,
-        "need_workshop_discovery": True,
+        # Removed: "need_workshop_discovery": True - not used as condition by any action
         "workshops_discovered": True,
         "at_correct_workshop": True
     }
@@ -43,9 +47,6 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
         """Analyze workshop requirements and discovery needs."""
         # Call superclass to set self._context
         super().execute(client, context)
-        
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
         
         # Get parameters from context
         character_name = context.character_name

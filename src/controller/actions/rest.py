@@ -1,13 +1,10 @@
 """ RestAction module """
 
-from typing import TYPE_CHECKING
-
 from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import sync as rest_character_api
 
-from .character_base import CharacterActionBase
+from src.lib.action_context import ActionContext
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from .character_base import CharacterActionBase
 
 # Import to support testing with character state
 try:
@@ -16,22 +13,23 @@ except ImportError:
     # Handle import for testing scenarios
     CharacterState = None
 
-
 class RestAction(CharacterActionBase):
     """ Rest action for recovering HP when character is critically low """
     
-    # GOAP parameters - can be overridden by configuration
+    # GOAP parameters - consolidated state format
     conditions = {
-        'character_alive': True,
-        'needs_rest': True,
-        'character_safe': False  # Need rest when not safe (low HP)
+        "character_status": {
+            "hp_percentage": "<100",
+            "alive": True
+        }
     }
     reactions = {
-        'character_safe': True,
-        'needs_rest': False,
-        'can_attack': True
+        "character_status": {
+            "hp_percentage": 100,
+            "safe": True
+        }
     }
-    weights = {'rest': 1.5}  # Medium priority - important for survival
+    weight = 1
 
     def __init__(self):
         """
@@ -41,11 +39,6 @@ class RestAction(CharacterActionBase):
 
     def execute(self, client, context: 'ActionContext'):
         """ Execute the rest action """
-        if not client:
-            return self.get_error_response("No API client provided")
-            
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No character name provided")
             
         # Get character name from context
         character_name = context.character_name
@@ -87,10 +80,7 @@ class RestAction(CharacterActionBase):
                 hp_recovered=hp_recovered,
                 current_hp=current_hp,
                 max_hp=max_hp,
-                hp_percentage=hp_percentage,
-                character_safe=hp_percentage >= 50,  # Consider safe at 50%+ HP
-                needs_rest=hp_percentage < 30,       # Still needs rest if below 30%
-                character_alive=current_hp > 0
+                hp_percentage=hp_percentage
             )
             
         except Exception as e:

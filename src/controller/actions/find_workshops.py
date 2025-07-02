@@ -12,8 +12,20 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
     """ Action to find the nearest workshop location """
 
     # GOAP parameters
-    conditions = {"character_alive": True, "can_move": True}
-    reactions = {"workshops_discovered": True, "at_target_location": False}
+    conditions = {
+            'character_status': {
+                'alive': True,
+                'cooldown_active': False,
+            },
+        }
+    reactions = {
+        'workshop_status': {
+            'discovered': True
+        },
+        'location_context': {
+            'workshop_known': True
+        }
+    }
     weights = {"workshops_discovered": 15}
 
     def __init__(self):

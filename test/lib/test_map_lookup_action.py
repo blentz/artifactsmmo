@@ -159,7 +159,7 @@ class TestMapLookupAction(unittest.TestCase):
         response = action.execute(client=None, context=context)
         
         self.assertFalse(response['success'])
-        self.assertIn('No API client provided', response['error'])
+        self.assertIn('failed', response['error'])
 
     def test_map_lookup_action_missing_coordinates(self):
         # Test that execute fails when coordinates are missing

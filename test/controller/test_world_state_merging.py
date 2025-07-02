@@ -62,10 +62,10 @@ class TestWorldStateMerging(unittest.TestCase):
             'equipment_info_known': True,
             'recipe_known': True,
             'craftable_weapon_identified': True,
-            'monsters_available': False,
-            'at_target_location': False,
+            'resource_availability': {'monsters': False},
+            'location_context': {'at_target': False},
             'monster_present': False,
-            'has_hunted_monsters': True,
+            'goal_progress': {'monsters_hunted': '>0'},
         }
         
     def tearDown(self):
@@ -77,11 +77,12 @@ class TestWorldStateMerging(unittest.TestCase):
         # Mock the goal manager's calculate_world_state to return minimal state
         with patch.object(self.controller.goal_manager, 'calculate_world_state') as mock_calc:
             mock_calc.return_value = {
-                'character_alive': True,
-                'character_safe': True,
-                'can_move': True,
-                'can_attack': True,
-                'is_on_cooldown': False,
+                'character_status': {
+                    'alive': True,
+                    'safe': True,
+                    'cooldown_active': False
+                },
+                'combat_context': {'status': 'ready'}
             }
             
             # Get current world state
@@ -102,33 +103,37 @@ class TestWorldStateMerging(unittest.TestCase):
             self.assertTrue(world_state.get('recipe_known'))
             self.assertTrue(world_state.get('craftable_weapon_identified'))
             
-            # Verify calculated states are not overridden
-            self.assertTrue(world_state.get('character_alive'))
-            self.assertTrue(world_state.get('character_safe'))
-            self.assertTrue(world_state.get('can_move'))
-            self.assertTrue(world_state.get('can_attack'))
-            self.assertFalse(world_state.get('is_on_cooldown'))
+            # Verify calculated states are present in consolidated format
+            self.assertIn('character_status', world_state)
+            self.assertTrue(world_state['character_status'].get('alive'))
+            self.assertTrue(world_state['character_status'].get('safe'))
+            self.assertFalse(world_state['character_status'].get('cooldown_active'))
             
     def test_calculated_states_override_persisted_states(self):
         """Test that calculated states take precedence over persisted states"""
         # Add conflicting state to persisted data
-        self.controller.world_state.data['character_alive'] = False
-        self.controller.world_state.data['can_move'] = False
+        self.controller.world_state.data['character_status'] = {
+            'alive': False,
+            'safe': False,
+            'cooldown_active': True
+        }
         
         # Mock the goal manager to return conflicting values
         with patch.object(self.controller.goal_manager, 'calculate_world_state') as mock_calc:
             mock_calc.return_value = {
-                'character_alive': True,  # Override persisted False
-                'character_safe': True,
-                'can_move': True,  # Override persisted False
+                'character_status': {
+                    'alive': True,  # Override persisted False
+                    'safe': True,
+                    'cooldown_active': False  # Override persisted False
+                }
             }
             
             # Get current world state
             world_state = self.controller.get_current_world_state()
             
             # Verify calculated states override persisted ones
-            self.assertTrue(world_state.get('character_alive'))
-            self.assertTrue(world_state.get('can_move'))
+            self.assertTrue(world_state.get('character_status', {}).get('alive'))
+            self.assertFalse(world_state.get('character_status', {}).get('cooldown_active'))
             
             # Verify persisted states are still included for non-conflicting keys
             self.assertTrue(world_state.get('inventory_updated'))
@@ -141,17 +146,20 @@ class TestWorldStateMerging(unittest.TestCase):
         
         with patch.object(self.controller.goal_manager, 'calculate_world_state') as mock_calc:
             mock_calc.return_value = {
-                'character_alive': True,
-                'character_safe': True,
+                'character_status': {
+                    'alive': True,
+                    'safe': True
+                }
             }
             
             # Should not raise an exception
             world_state = self.controller.get_current_world_state()
             
-            # Should only have calculated states
-            self.assertTrue(world_state.get('character_alive'))
-            self.assertTrue(world_state.get('character_safe'))
-            self.assertEqual(len(world_state), 2)
+            # Should have calculated states in consolidated format
+            self.assertTrue(world_state.get('character_status', {}).get('alive'))
+            self.assertTrue(world_state.get('character_status', {}).get('safe'))
+            # Check that we have the expected consolidated state groups
+            self.assertIn('character_status', world_state)
             
         # Test with None world_state
         self.controller.world_state = None
@@ -159,9 +167,9 @@ class TestWorldStateMerging(unittest.TestCase):
         # Should not raise an exception
         world_state = self.controller.get_current_world_state()
         
-        # Should only have calculated states
-        self.assertTrue(world_state.get('character_alive'))
-        self.assertTrue(world_state.get('character_safe'))
+        # Should only have calculated states (now in consolidated format)
+        self.assertTrue(world_state['character_status']['alive'])
+        self.assertTrue(world_state['character_status']['safe'])
 
 
 if __name__ == '__main__':

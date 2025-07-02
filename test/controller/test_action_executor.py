@@ -68,7 +68,7 @@ class TestActionExecutor(unittest.TestCase):
     def test_execute_simple_action(self) -> None:
         """Test executing a simple action through executor."""
         action_data = {'character_name': 'test_char', 'x': 5, 'y': 10}
-        context = {'character_state': Mock(name='test_char')}
+        context = {'character_state': Mock(name='test_char'), 'character_name': 'test_char'}
         
         # Mock the factory execution
         with patch.object(self.executor.factory, 'execute_action') as mock_execute:
@@ -252,13 +252,21 @@ class TestActionExecutor(unittest.TestCase):
         self.assertIn('turns', fight_data)
     
     def test_update_state(self) -> None:
-        """Test state update handling."""
+        """Test state update handling via post-execution updates."""
         mock_controller = Mock()
-        mock_response = {'success': True}
-        context = {'controller': mock_controller}
+        mock_controller.get_current_world_state.return_value = {}
+        mock_controller.update_world_state = Mock()
+        mock_controller.action_context = {}  # Initialize as empty dict
         
-        self.executor._update_state('move', mock_response, context)
-        mock_controller.update_world_state_from_response.assert_called_once_with('move', mock_response)
+        action_result = {'success': True}
+        context = {}
+        
+        # Test the new unified post-execution handler
+        self.executor.apply_post_execution_updates('move', action_result, mock_controller, context)
+        
+        # Verify action context was updated
+        self.assertIn('move', mock_controller.action_context)
+        self.assertEqual(mock_controller.action_context['move']['result'], action_result)
     
     def test_get_available_actions(self) -> None:
         """Test getting available actions (simple + composite)."""

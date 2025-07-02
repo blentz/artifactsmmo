@@ -25,7 +25,7 @@ class CooldownManager:
         """Initialize cooldown manager with configuration."""
         self.logger = logging.getLogger(__name__)
         
-        # Load configuration
+        # Load configuration - using clean templates for testing
         if config_file is None:
             config_file = f"{CONFIG_PREFIX}/goal_templates.yaml"
         

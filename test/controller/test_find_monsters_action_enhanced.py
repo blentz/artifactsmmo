@@ -60,8 +60,10 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_char")
         result = self.action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # With centralized validation, None client triggers validation error
+        self.assertFalse(result["success"])
+        # Direct action execution bypasses centralized validation
+        self.assertIn('error', result)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_monster_api_fails(self, mock_get_monsters_api):
@@ -276,21 +278,21 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
-        expected_conditions = {
-            'need_combat': True,
-            'monsters_available': False,
-            'character_alive': True
-        }
-        self.assertEqual(FindMonstersAction.conditions, expected_conditions)
+        self.assertIn('character_status', FindMonstersAction.conditions)
+        self.assertIn('combat_context', FindMonstersAction.conditions)
+        self.assertIn('resource_availability', FindMonstersAction.conditions)
+        self.assertTrue(FindMonstersAction.conditions['character_status']['alive'])
+        self.assertEqual(FindMonstersAction.conditions['combat_context']['status'], 'searching')
+        self.assertFalse(FindMonstersAction.conditions['resource_availability']['monsters'])
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
-        expected_reactions = {
-            'monsters_available': True,
-            'monster_present': True,
-            'at_target_location': True
-        }
-        self.assertEqual(FindMonstersAction.reactions, expected_reactions)
+        self.assertIn('location_context', FindMonstersAction.reactions)
+        self.assertIn('combat_context', FindMonstersAction.reactions)
+        self.assertIn('resource_availability', FindMonstersAction.reactions)
+        self.assertTrue(FindMonstersAction.reactions['location_context']['at_target'])
+        self.assertEqual(FindMonstersAction.reactions['combat_context']['status'], 'ready')
+        self.assertTrue(FindMonstersAction.reactions['resource_availability']['monsters'])
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""

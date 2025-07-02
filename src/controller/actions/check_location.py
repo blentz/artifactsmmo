@@ -19,12 +19,18 @@ class CheckLocationAction(ActionBase):
     """ Action to check current location and update spatial context """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
-        "location_known": True,
-        "at_target_location": True,
-        "spatial_context_updated": True
-    }
+            'location_known': True,
+            'location_context': {
+                'at_target': True,
+            },
+            'spatial_context_updated': True,
+        }
     weights = {"location_known": 1.0}
 
     def __init__(self):
@@ -35,9 +41,6 @@ class CheckLocationAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Check current location and update spatial context """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
             

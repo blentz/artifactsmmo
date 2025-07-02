@@ -34,22 +34,22 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.assertTrue(hasattr(AttackAction, 'conditions'))
         self.assertTrue(hasattr(AttackAction, 'reactions'))
         self.assertTrue(hasattr(AttackAction, 'weights'))
-        self.assertIn('monster_present', AttackAction.conditions)
-        self.assertIn('can_attack', AttackAction.conditions)
+        self.assertIn('combat_context', AttackAction.conditions)
+        self.assertIn('character_status', AttackAction.conditions)
         
-        # Test RestAction
+        # Test RestAction (consolidated state format)
         self.assertTrue(hasattr(RestAction, 'conditions'))
         self.assertTrue(hasattr(RestAction, 'reactions'))
-        self.assertTrue(hasattr(RestAction, 'weights'))
-        self.assertIn('needs_rest', RestAction.conditions)
-        self.assertIn('character_safe', RestAction.reactions)
+        self.assertTrue(hasattr(RestAction, 'weight'))
+        self.assertIn('character_status', RestAction.conditions)
+        self.assertIn('character_status', RestAction.reactions)
         
         # Test FindMonstersAction
         self.assertTrue(hasattr(FindMonstersAction, 'conditions'))
         self.assertTrue(hasattr(FindMonstersAction, 'reactions'))
         self.assertTrue(hasattr(FindMonstersAction, 'weights'))
-        self.assertIn('need_combat', FindMonstersAction.conditions)
-        self.assertIn('monsters_available', FindMonstersAction.reactions)
+        self.assertIn('combat_context', FindMonstersAction.conditions)
+        self.assertIn('resource_availability', FindMonstersAction.reactions)
 
     def test_get_action_class_defaults_move(self) -> None:
         """Test getting default GOAP parameters for move action through ActionExecutor."""
@@ -67,10 +67,12 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.assertTrue(hasattr(action_class, 'reactions'))
         self.assertTrue(hasattr(action_class, 'weights'))
         
-        # Check specific move action defaults
-        self.assertEqual(action_class.conditions['can_move'], True)
-        self.assertEqual(action_class.conditions['character_alive'], True)
-        self.assertEqual(action_class.reactions['at_target_location'], True)
+        # Check specific move action defaults - consolidated format
+        self.assertIn('character_status', action_class.conditions)
+        self.assertEqual(action_class.conditions['character_status']['cooldown_active'], False)
+        self.assertEqual(action_class.conditions['character_status']['alive'], True)
+        self.assertIn('location_context', action_class.reactions)
+        self.assertEqual(action_class.reactions['location_context']['at_target'], True)
         # Weights might be a dict with action name as key
         if isinstance(action_class.weights, dict):
             self.assertEqual(action_class.weights['move'], 1.0)
@@ -124,14 +126,14 @@ class TestActionGoapIntegration(unittest.TestCase):
 
     def test_create_planner_uses_class_defaults(self) -> None:
         """Test that GOAP world creation works through GOAPExecutionManager."""
-        start_state = {'character_alive': True, 'can_move': True}
-        goal_state = {'at_target_location': True}
+        start_state = {'character_status': {'alive': True}, 'character_status': {'cooldown_active': False}}
+        goal_state = {'location_context': {'at_target': True}}
         
         # Minimal config that uses defaults
         actions_config = {
             'move': {
-                'conditions': {'can_move': True, 'character_alive': True},
-                'reactions': {'at_target_location': True},
+                'conditions': {'character_status': {'cooldown_active': False}, 'character_status': {'alive': True}},
+                'reactions': {'location_context': {'at_target': True}},
                 'weight': 1.0
             }
         }
@@ -147,14 +149,14 @@ class TestActionGoapIntegration(unittest.TestCase):
 
     def test_create_planner_config_overrides_defaults(self) -> None:
         """Test that GOAP execution manager properly handles action configurations."""
-        start_state = {'character_alive': True, 'custom_condition': True}
-        goal_state = {'at_target_location': True}
+        start_state = {'character_status': {'alive': True}, 'custom_condition': True}
+        goal_state = {'location_context': {'at_target': True}}
         
         # Config with custom values
         actions_config = {
             'move': {
                 'conditions': {'custom_condition': True},
-                'reactions': {'at_target_location': True, 'custom_reaction': True},
+                'reactions': {'location_context': {'at_target': True}, 'custom_reaction': True},
                 'weight': 2.5
             }
         }
@@ -171,26 +173,26 @@ class TestActionGoapIntegration(unittest.TestCase):
     def test_create_planner_with_multiple_actions(self) -> None:
         """Test GOAP execution manager handles multiple actions."""
         start_state = {
-            'character_alive': True,
-            'can_move': True,
-            'character_safe': True,
-            'need_combat': True
+            'character_status': {'alive': True},
+            'character_status': {'cooldown_active': False},
+            'character_status': {'safe': True},
+            'combat_context': {'status': 'searching'}
         }
         goal_state = {
-            'has_hunted_monsters': True,
-            'character_safe': True
+            'combat_context': {'status': 'completed'},
+            'character_status': {'safe': True}
         }
         
         # Config for multiple actions
         actions_config = {
             'move': {
-                'conditions': {'can_move': True, 'character_alive': True},
-                'reactions': {'at_target_location': True},
+                'conditions': {'character_status': {'cooldown_active': False}, 'character_status': {'alive': True}},
+                'reactions': {'location_context': {'at_target': True}},
                 'weight': 1.0
             },
             'attack': {
-                'conditions': {'monster_present': True, 'character_safe': True},
-                'reactions': {'monster_defeated': True},
+                'conditions': {'combat_context': {'status': 'ready'}, 'character_status': {'safe': True}},
+                'reactions': {'combat_context': {'status': 'completed'}},
                 'weight': 3.0
             }
         }

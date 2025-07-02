@@ -24,9 +24,6 @@ class LookupItemInfoAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Lookup item information and crafting requirements """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         item_code = context.get('item_code')
         search_term = context.get('search_term')

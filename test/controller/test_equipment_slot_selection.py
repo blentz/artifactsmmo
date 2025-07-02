@@ -10,8 +10,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.analyze_equipment_gaps import AnalyzeEquipmentGapsAction
-from src.controller.actions.select_optimal_slot import SelectOptimalSlotAction
 from src.controller.actions.evaluate_recipes import EvaluateRecipesAction
+from src.controller.actions.select_optimal_slot import SelectOptimalSlotAction
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
@@ -234,18 +234,26 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             
     def test_error_handling_missing_dependencies(self):
         """Test error handling when action dependencies are missing"""
-        # Try to select slot without target skill (checked first)
-        result = self.select_action.execute(self.mock_client, self.action_context)
-        self.assertFalse(result['success'])
-        self.assertIn('Target craft skill not specified', result['error'])
-        
-        # Try to select slot without gap analysis (checked second)
-        self.action_context.set_parameter('target_craft_skill', 'weaponcrafting')
+        # Try to select slot without gap analysis (now checked first)
         result = self.select_action.execute(self.mock_client, self.action_context)
         self.assertFalse(result['success'])
         self.assertIn('Equipment gap analysis not available', result['error'])
         
-        # Try to evaluate recipes without target slot
+        # Try to select slot with gap analysis but no target skill (should work with fallback)
+        self.action_context.set_parameter('equipment_gap_analysis', {'weapon': {'urgency_score': 50, 'missing': False}})
+        with patch('src.lib.yaml_data.YamlData') as mock_yaml:
+            # Provide test config for the action
+            mock_yaml.return_value.data = {
+                'slot_priorities': {'weapon': 100},
+                'skill_slot_mappings': {'weaponcrafting': ['weapon']}
+            }
+            result = self.select_action.execute(self.mock_client, self.action_context)
+            self.assertTrue(result['success'])  # Should succeed with fallback skill
+        
+        # Try to evaluate recipes without target slot (clear the slot set by previous action)
+        self.action_context.set_parameter('target_equipment_slot', None)
+        if 'target_equipment_slot' in self.action_context.action_results:
+            del self.action_context.action_results['target_equipment_slot']
         result = self.evaluate_action.execute(self.mock_client, self.action_context)
         self.assertFalse(result['success'])
         self.assertIn('No target equipment slot specified', result['error'])

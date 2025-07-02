@@ -1,5 +1,5 @@
-# GOAP Goal Templates Configuration
-# This file defines reusable goal templates that drive AI behavior through configurable objectives
+# GOAP Goal Templates Configuration - Consolidated State Version
+# Uses the new consolidated state system with richer data types
 
 goal_templates:
   # Core character progression goals
@@ -7,10 +7,12 @@ goal_templates:
     description: "Advance character to next level through combat and experience gain"
     objective_type: "progression"
     target_state:
-      character_level: "${current_level + 1}"
-      character_safe: true
-      character_alive: true
-      has_hunted_monsters: true
+      character_status:
+        level: "${current_level + 1}"
+        safe: true
+        alive: true
+      goal_progress:
+        monsters_hunted: ">0"
     strategy:
       max_iterations: 20
       hunt_radius: 4
@@ -25,910 +27,128 @@ goal_templates:
       - type: "character_alive"
         operator: "=="
         value: true
-    failure_conditions:
-      - type: "max_iterations_exceeded"
-        value: "${strategy.max_iterations}"
-      - type: "character_dead"
-        operator: "=="
-        value: false
         
-  reach_level:
-    description: "Reach a specific character level"
-    objective_type: "progression"
-    target_state:
-      character_level: "${target_level}"
-      character_safe: true
-      character_alive: true
-    strategy:
-      max_iterations: 50
-      hunt_radius: 4
-      adaptive_search: true
-      safety_priority: true
-    parameters:
-      required: ["target_level"]
-      optional: ["hunt_radius", "max_iterations"]
-      
-  reach_max_level:
-    description: "Reach the maximum character level through sustained progression"
-    objective_type: "progression"
-    target_state:
-      character_level: 45  # Assumed max level for ArtifactsMMO
-      character_safe: true
-      character_alive: true
-      has_hunted_monsters: true
-    strategy:
-      max_iterations: 200  # Much higher for long-term goal
-      hunt_radius: 25
-      adaptive_search: true
-      safety_priority: true
-      progressive_difficulty: true
-      level_scaling: true
-    success_conditions:
-      - type: "character_level"
-        operator: ">="
-        value: 45
-      - type: "character_alive"
-        operator: "=="
-        value: true
-    parameters:
-      optional: ["hunt_radius", "max_iterations", "target_level"]
-      
-  # Combat and hunting goals
   hunt_monsters:
     description: "Hunt monsters for experience and loot"
     objective_type: "combat"
     target_state:
-      has_hunted_monsters: true
-      monster_defeated: true
-      character_safe: true
+      combat_context:
+        status: "completed"
+      character_status:
+        safe: true
     strategy:
       search_radius: 4
       max_search_attempts: 5
       level_range: 2
       prioritize_known_monsters: true
-    success_conditions:
-      - type: "has_hunted_monsters"
-        operator: "=="
-        value: true
-        
-  safe_exploration:
-    description: "Explore the map while maintaining character safety"
-    objective_type: "exploration"
-    target_state:
-      map_explored: true
-      character_safe: true
-      character_alive: true
-    strategy:
-      exploration_radius: 10
-      max_exploration_time: 300  # seconds
-      retreat_on_danger: true
       
-  # Resource and crafting goals  
-  gather_resources:
-    description: "Collect specific resources from the environment"
-    objective_type: "resource_gathering"
+  bootstrap_character:
+    description: "Get low-level character to viable state through equipment progression"
+    objective_type: "equipment_progression"
     target_state:
-      has_target_resource: true
-      inventory_space_available: true
-      character_safe: true
+      character_status:
+        level: 3
+        safe: true
+      equipment_status:
+        weapon: "!null"
+        upgrade_status: "completed"
     strategy:
-      search_radius: 4
-      resource_priority: ["ore", "wood", "food"]
-      max_gather_attempts: 5
-    parameters:
-      required: ["resource_type"]
-      optional: ["quantity", "search_radius"]
+      max_iterations: 30
+      equipment_priority: ["weapon", "shield"]
+      focus_combat_effectiveness: true
+      multi_step_thinking: true
       
-  # Equipment progression goals
   upgrade_weapon:
     description: "Craft and equip a better weapon for improved combat effectiveness"
     objective_type: "equipment_progression"
     target_state:
-      has_better_weapon: true
-      equipment_equipped: true
-      character_stats_improved: true
-      character_safe: true
-      # Equipment analysis states
-      equipment_gaps_analyzed: true
-      optimal_slot_selected: true
-      target_slot_specified: true
-      best_recipe_selected: true
-      craftable_item_identified: true
+      equipment_status:
+        weapon: "!null"
+        upgrade_status: "completed"
+      character_status:
+        safe: true
     strategy:
       equipment_type: "weapon"
-      level_improvement_threshold: 1  # At least 1 level better
-      search_radius: 4
-      max_craft_attempts: 5
-      resource_gathering_enabled: true
-      workshop_discovery_enabled: true
-      multi_step_thinking: true
-      prerequisite_goals: ["discover_workshops", "gather_crafting_materials"]
-      fallback_strategy: "hunt_weaker_monsters"
-    parameters:
-      optional: ["target_weapon_type", "max_level_diff", "search_radius"]
-    success_conditions:
-      - type: "equipment_equipped"
-        operator: "=="
-        value: true
-      - type: "weapon_level_improved"
-        operator: "=="
-        value: true
-        
-  craft_selected_item:
-    description: "Craft the item that was selected by evaluate_recipes"
-    objective_type: "equipment_progression"
-    target_state:
-      has_equipment: true
-      item_crafted: true
-      inventory_updated: true
-      character_safe: true
-    strategy:
-      priority_actions: ["plan_crafting_materials", "execute_crafting_plan", "equip_item"]
-      requires_recipe_selection: true
-      max_craft_attempts: 3
-    prerequisites:
-      - best_recipe_selected: true
-    success_conditions:
-      - type: "item_crafted"
-        operator: "=="
-        value: true
-    dependency_chain:
-      - step: "workshop_discovery"
-        required_state: {"workshops_discovered": true}
-        fallback_goal: "discover_workshops"
-      - step: "material_gathering" 
-        required_state: {"has_crafting_materials": true}
-        fallback_goal: "gather_crafting_materials"
-      - step: "crafting_execution"
-        required_state: {"at_workshop": true, "has_materials": true}
-        
-  level_crafting_skill:
-    description: "Level up any crafting skill by creating optimal equipment upgrades"
-    objective_type: "skill_progression"
-    target_state:
-      skill_xp_gained: true
-      equipment_equipped: true
-      character_safe: true
-      item_crafted: true
-      # Equipment analysis states
-      equipment_gaps_analyzed: true
-      optimal_slot_selected: true
-      target_slot_specified: true
-      best_recipe_selected: true
-      craftable_item_identified: true
-    strategy:
-      priority_actions: [
-        "analyze_equipment_gaps",
-        "select_optimal_slot", 
-        "evaluate_recipes",
-        "plan_crafting_materials",
-        "execute_crafting_plan",
-        "equip_item"
-      ]
-      auto_slot_selection: true
-      prioritize_equipment_gaps: true
-      level_improvement_threshold: 1
-      max_craft_attempts: 3
-    parameters:
-      required: ["target_craft_skill"]
-      optional: ["min_xp_gain", "max_iterations", "equipment_priority_override"]
-    success_conditions:
-      - type: "skill_xp_gained"
-        operator: "=="
-        value: true
-      - type: "item_crafted"
-        operator: "=="
-        value: true
-        
-  upgrade_equipment:
-    description: "Craft and equip better equipment for the specified slot"
-    objective_type: "equipment_progression"
-    target_state:
-      has_better_equipment: true
-      equipment_equipped: true
-      character_stats_improved: true
-      character_safe: true
-      # Equipment analysis states
-      equipment_gaps_analyzed: true
-      optimal_slot_selected: true
-      target_slot_specified: true
-      best_recipe_selected: true
-      craftable_item_identified: true
-    strategy:
       level_improvement_threshold: 1
       search_radius: 4
       max_craft_attempts: 5
-      resource_gathering_enabled: true
-      workshop_discovery_enabled: true
-      slot_based_evaluation: true
-    parameters:
-      required: ["target_equipment_slot"]
-      optional: ["max_level_diff", "search_radius", "craft_skill_override"]
-    success_conditions:
-      - type: "equipment_equipped"
-        operator: "=="
-        value: true
-      - type: "equipment_level_improved"
-        operator: "=="
-        value: true
-
-  # Specific skill XP goals using the generic template
-  level_weaponcrafting:
-    extends: "level_crafting_skill"
-    description: "Level weaponcrafting by creating optimal weapon/shield upgrades"
-    objective_type: "skill_progression"
-    parameters:
-      target_craft_skill: "weaponcrafting"
-    strategy:
-      equipment_priority: ["weapon", "shield"]
-      focus_combat_effectiveness: true
-
-  level_gearcrafting:
-    extends: "level_crafting_skill"  
-    description: "Level gearcrafting by creating optimal armor upgrades"
-    objective_type: "skill_progression"
-    parameters:
-      target_craft_skill: "gearcrafting"
-    strategy:
-      equipment_priority: ["body_armor", "helmet", "leg_armor", "boots"]
-      focus_defense: true
-
-  level_jewelrycrafting:
-    extends: "level_crafting_skill"
-    description: "Level jewelrycrafting by creating optimal accessory upgrades"
-    objective_type: "skill_progression"
-    parameters:
-      target_craft_skill: "jewelrycrafting"
-    strategy:
-      equipment_priority: ["amulet", "ring1", "ring2"]
-      focus_special_effects: true
-
-  level_cooking:
-    extends: "level_crafting_skill"
-    description: "Level cooking by creating useful consumables"
-    objective_type: "skill_progression"
-    parameters:
-      target_craft_skill: "cooking"
-    strategy:
-      equipment_priority: ["consumable"]
-      focus_utility: true
-
-  level_alchemy:
-    extends: "level_crafting_skill"
-    description: "Level alchemy by creating powerful potions"
-    objective_type: "skill_progression"
-    parameters:
-      target_craft_skill: "alchemy"
-    strategy:
-      equipment_priority: ["potion"]
-      focus_temporary_boosts: true
-        
-  upgrade_armor:
-    description: "Craft and equip better armor pieces for increased survivability"
-    objective_type: "equipment_progression"
-    target_state:
-      has_better_armor: true
-      equipment_equipped: true
-      character_stats_improved: true
-      character_safe: true
-      # Equipment analysis states
-      equipment_gaps_analyzed: true
-      optimal_slot_selected: true
-      target_slot_specified: true
-      best_recipe_selected: true
-      craftable_item_identified: true
-    strategy:
-      equipment_types: ["helmet", "body_armor", "leg_armor", "boots"]
-      level_improvement_threshold: 1
-      search_radius: 4
-      max_craft_attempts: 5
-      resource_gathering_enabled: true
-      workshop_discovery_enabled: true
-      prioritize_by_level: true
-    parameters:
-      optional: ["target_armor_types", "max_level_diff", "search_radius"]
-    success_conditions:
-      - type: "equipment_equipped"
-        operator: "=="
-        value: true
-      - type: "armor_level_improved"
-        operator: "=="
-        value: true
-        
-  complete_equipment_set:
-    description: "Obtain a complete set of level-appropriate equipment"
-    objective_type: "equipment_progression"
-    target_state:
-      has_complete_equipment_set: true
-      all_slots_equipped: true
-      character_stats_improved: true
-      character_safe: true
-      # Equipment analysis states
-      equipment_gaps_analyzed: true
-      optimal_slot_selected: true
-      target_slot_specified: true
-      best_recipe_selected: true
-      craftable_item_identified: true
-    strategy:
-      equipment_slots: ["weapon", "helmet", "body_armor", "leg_armor", "boots"]
-      level_improvement_threshold: 1
-      search_radius: 5
-      max_craft_attempts: 5
-      resource_gathering_enabled: true
-      workshop_discovery_enabled: true
-      prioritize_missing_slots: true
-      allow_partial_completion: true
-    parameters:
-      optional: ["target_level_range", "equipment_slots", "search_radius"]
-    success_conditions:
-      - type: "equipment_coverage"
-        operator: ">="
-        value: 80  # 80% of slots equipped with appropriate level gear
-
-  gather_crafting_materials:
-    description: "Collect resources needed for equipment crafting"
-    objective_type: "resource_gathering"
-    target_state:
-      has_crafting_materials: true
-      materials_sufficient: true
-      character_safe: true
-    strategy:
-      search_radius: 4
-      resource_types: ["copper", "iron_ore", "ash_wood", "spruce_wood", "coal"]
-      prioritize_by_need: true
-      level_appropriate_only: true
-      max_gather_attempts: 5
-      adaptive_gathering: true
-      equipment_focused: true
-      level_2_priority_materials: ["copper", "ash_wood"]  # Focus materials for level 2 characters
-      level_3_priority_materials: ["iron_ore", "spruce_wood", "coal"]
-    parameters:
-      required: ["target_item_type"]
-      optional: ["specific_materials", "search_radius", "quantity_multiplier"]
-    success_conditions:
-      - type: "materials_sufficient"
-        operator: "=="
-        value: true
-    material_requirements:
-      weapon_crafting:
-        basic_weapon: ["copper": 3, "ash_wood": 2]
-        improved_weapon: ["iron_ore": 3, "spruce_wood": 2, "coal": 1]
-      armor_crafting:
-        basic_armor: ["copper": 2, "ash_wood": 1]
-        improved_armor: ["iron_ore": 2, "spruce_wood": 1]
-        
-  discover_workshops:
-    description: "Find and catalog available crafting workshops"
-    objective_type: "exploration"
-    target_state:
-      workshops_discovered: true
-      crafting_opportunities_known: true
-      character_safe: true
-    strategy:
-      search_radius: 30
-      workshop_types: ["weaponcrafting", "gearcrafting", "jewelrycrafting", "cooking", "alchemy"]
-      catalog_all_types: true
-      prioritize_by_character_level: true
-    parameters:
-      optional: ["workshop_types", "search_radius", "level_range"]
-    success_conditions:
-      - type: "workshops_discovered"
-        operator: "=="
-        value: true
-      
-  # Skill progression goals
-  upgrade_skill:
-    description: "Level up a specific skill to meet crafting requirements"
-    objective_type: "skill_progression"
-    target_state:
-      skill_level_sufficient: true
-      character_safe: true
-      character_alive: true
-    strategy:
-      skill_type: "${skill_name}"
-      target_level: "${required_level}"
-      use_appropriate_actions: true
-      gather_required_materials: true
-      find_skill_locations: true
-      progressive_skill_building: true
-    parameters:
-      required: ["skill_name", "required_level"]
-      optional: ["current_level", "materials_needed"]
-    success_conditions:
-      - type: "skill_level"
-        skill: "${skill_name}"
-        operator: ">="
-        value: "${required_level}"
-      - type: "character_alive"
-        operator: "=="
-        value: true
-
-  upgrade_weaponcrafting:
-    description: "Level up weaponcrafting skill through basic weapon creation"
-    objective_type: "skill_progression"
-    target_state:
-      weaponcrafting_level_sufficient: true
-      character_safe: true
-      character_alive: true
-      at_workshop: true
-    strategy:
-      skill_type: "weaponcrafting"
-      target_level: "${required_level}"
-      basic_recipes: ["copper_dagger", "wooden_staff"]
-      materials_needed: ["copper", "ash_wood"]
-      workshop_type: "weaponcrafting"
-      progressive_crafting: true
-      gather_materials_first: true
-    parameters:
-      required: ["required_level"]
-      optional: ["current_level", "target_recipes"]
-    success_conditions:
-      - type: "weaponcrafting_level"
-        operator: ">="
-        value: "${required_level}"
-      - type: "character_alive"
-        operator: "=="
-        value: true
-
-
-  # Survival and maintenance goals
-  get_to_safety:
-    description: "Emergency recovery to restore HP to 100% after combat loss"
-    objective_type: "survival"
-    target_state:
-      character_safe: true
-      needs_rest: false
-      character_alive: true
-    strategy:
-      rest_priority: "immediate"
-      safe_location_required: false  # Can rest anywhere after combat
-      target_hp_percentage: 100  # Fully recover
-      max_rest_cycles: 10  # Allow multiple rest actions if needed
-    success_conditions:
-      - type: "hp_percentage"
-        operator: ">="
-        value: 100
-      - type: "character_safe"
-        operator: "=="
-        value: true
-    parameters:
-      optional: ["target_hp_percentage"]
-        
-  recover_health:
-    description: "Restore character health to safe levels"
-    objective_type: "survival"
-    target_state:
-      character_safe: true
-      needs_rest: false
-      can_attack: true
-    strategy:
-      rest_priority: "immediate"
-      safe_location_required: true
-      min_hp_percentage: 50
-    success_conditions:
-      - type: "character_safe"
-        operator: "=="
-        value: true
-      - type: "hp_percentage"
-        operator: ">="
-        value: "${strategy.min_hp_percentage}"
-        
-  wait_for_cooldown:
-    description: "Wait for character cooldown to expire"
-    objective_type: "timing"
-    target_state:
-      is_on_cooldown: false
-      can_move: true
-      can_attack: true
-    strategy:
-      max_wait_duration: 65  # seconds
-      periodic_status_check: true
-      check_interval: 5  # seconds
       
 # Goal selection rules - determines which goals to pursue based on current state
 goal_selection_rules:
   # Emergency priorities (highest priority)
   emergency:
     - condition:
-        character_alive: false
+        character_status:
+          alive: false
       goal: "revive_character"
       priority: 100
       
-    # HP-based safety should be the highest priority for living characters
     - condition:
-        hp_percentage: "<30"
-        character_alive: true
-        is_on_cooldown: false
+        character_status:
+          hp_percentage: "<30"
+          alive: true
       goal: "get_to_safety"
       priority: 99
       
     - condition:
-        hp_percentage: "<50"
-        character_alive: true
-        is_on_cooldown: false
-        has_hunted_monsters: true  # Just finished combat, need recovery
-      goal: "get_to_safety"
-      priority: 98
-      
-      
-    # When combat is not viable, prioritize weapon upgrades for low-level characters
-    # BUT only if character is at safe HP levels
-    - condition:
-        combat_not_viable: true
-        character_safe: true
-        character_alive: true
-        character_level: "<=5"  # Low-level characters need better weapons
-        need_equipment: true
-        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
-      goal: "upgrade_weapon"
+        combat_context:
+          status: "not_viable"
+        character_status:
+          level: "<=5"
+          safe: true
+      goal: "bootstrap_character"
       priority: 96
       
-    - condition:
-        combat_not_viable: true
-        character_safe: true
-        character_alive: true
-        character_level: ">=2"  # Level 2+ characters can upgrade weapon when combat fails
-        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
-      goal: "upgrade_weapon"
-      priority: 95
-      
-    - condition:
-        combat_not_viable: true
-        character_safe: true
-        character_alive: true
-        character_level: ">=2"  # Level 2+ characters can upgrade armor when combat fails
-        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
-      goal: "upgrade_armor"
-      priority: 94
-      
-    - condition:
-        combat_not_viable: true
-        character_safe: true
-        character_alive: true
-        character_level: ">=3"  # Level 3+ characters can get complete equipment when combat fails
-        hp_percentage: ">=50"  # Only upgrade equipment when HP is safe
-      goal: "complete_equipment_set"
-      priority: 93
-      
-  # Maintenance priorities (medium-high priority)
+  # Maintenance priorities
   maintenance:
     - condition:
-        is_on_cooldown: true
+        character_status:
+          cooldown_active: true
       goal: "wait_for_cooldown"
       priority: 80
       
-    # Health recovery for characters that are not in immediate danger (hp > 30%) but still need rest
-    - condition:
-        needs_rest: true
-        character_alive: true
-        hp_percentage: ">=30"
-        hp_percentage: "<80"
-      goal: "recover_health"
-      priority: 75
-      
-  # Progression priorities (medium priority)
+  # Progression priorities
   progression:
-    # High-level character progression 
     - condition:
-        character_level: ">35"
-        character_safe: true
-        can_attack: true
-        hp_percentage: ">=80"  # High-level progression requires good HP
-      goal: "reach_max_level"
-      priority: 65
-      
-    - condition:
-        need_combat: true
-        character_safe: true
-        can_attack: true
-        hp_percentage: ">=80"  # Only hunt when HP is at safe levels
+        character_status:
+          safe: true
+          hp_percentage: ">=80"
+        combat_context:
+          status: "idle"
       goal: "hunt_monsters"
       priority: 60
-      
-    - condition:
-        needs_xp: true
-        character_level: "<10"
-        character_safe: true
-        hp_percentage: ">=80"  # Only attempt leveling when HP is safe
-      goal: "level_up"
-      priority: 50
-      
-  # Skill progression priorities (very high priority for crafting requirements)
-  skill_progression:
-    # Weaponcrafting skill upgrade - required for weapon crafting
-    - condition:
-        need_weaponcrafting_upgrade: true
-        character_safe: true
-        character_level: ">=1"
-      goal: "upgrade_weaponcrafting"
-      priority: 85
-      parameters:
-        required_level: 1
 
-    # General skill upgrade for any skill requirement
-    - condition:
-        need_skill_upgrade: true
-        character_safe: true
-        character_level: ">=1"
-      goal: "upgrade_skill"
-      priority: 83
-      parameters:
-        skill_name: "${required_skill}"
-        required_level: "${required_skill_level}"
-
-  # Equipment progression priorities (high priority for low-level characters)
-  equipment:
-    # Craft already selected weapon (highest equipment priority)
-    - condition:
-        best_weapon_selected: true
-        character_safe: true
-        weapon_crafted: false
-      goal: "craft_selected_weapon"
-      priority: 78
-      
-    # Weapon upgrade goal for new characters needing equipment
-    - condition:
-        character_level: "<=5"
-        character_safe: true
-        need_equipment: true
-        need_weapon_upgrade: true
-      goal: "upgrade_weapon"
-      priority: 75
-      
-    # Workshop discovery should come first for new players
-    - condition:
-        need_workshop_discovery: true
-        character_safe: true
-        character_level: ">=2"
-      goal: "discover_workshops"
-      priority: 75
-      
-    # Weapon upgrade is critical for combat effectiveness
-    - condition:
-        need_weapon_upgrade: true
-        character_safe: true
-        character_level: ">=2"
-      goal: "upgrade_weapon"
-      priority: 70
-      
-    # Material gathering enables crafting
-    - condition:
-        need_crafting_materials: true
-        character_safe: true
-        workshops_discovered: true
-      goal: "gather_crafting_materials"
-      priority: 68
-      
-    # Armor upgrade for survivability  
-    - condition:
-        need_armor_upgrade: true
-        character_safe: true
-        character_level: ">=2"
-      goal: "upgrade_armor"
-      priority: 65
-      
-    # Complete equipment set for well-rounded improvement
-    - condition:
-        need_complete_equipment: true
-        character_safe: true
-        character_level: ">=3"
-      goal: "complete_equipment_set"
-      priority: 62
-      
-  # Exploration priorities (lower priority)
-  exploration:
-    - condition:
-        character_safe: true
-        need_exploration: true
-      goal: "safe_exploration"
-      priority: 30
-      
-    - condition:
-        need_resources: true
-        character_safe: true
-      goal: "gather_resources"
-      priority: 25
-
-# State calculation rules - replaces hardcoded state computation
+# State calculation rules
 state_calculation_rules:
-  # Character health and safety
-  character_safe:
-    formula: "hp_percentage >= ${thresholds.safe_hp_percentage}"
+  # Character status computations
+  character_status.safe:
+    formula: "character_status.hp_percentage >= 30"
     
-  needs_rest:
-    formula: "hp_percentage < ${thresholds.rest_hp_percentage} and not is_on_cooldown"
-    
-  can_attack:
-    formula: "hp_percentage >= ${thresholds.attack_hp_percentage} and not is_on_cooldown"
-    
-  # Character progression  
-  need_combat:
-    formula: "character_level < ${thresholds.combat_level_threshold}"
-    
-  needs_xp:
-    formula: "xp_percentage < 100"
-    
-  close_to_levelup:
-    formula: "xp_percentage >= ${thresholds.levelup_xp_percentage}"
-    
-  # Resource and equipment states
-  need_resources:
-    formula: "character_level < ${thresholds.resource_level_threshold}"
-    
-  need_equipment:
-    formula: "character_level < ${thresholds.equipment_level_threshold}"
-    
-  # Equipment progression states
-  need_weapon_upgrade:
-    type: "computed"
-    method: "check_weapon_upgrade_needed"
-    
-  need_armor_upgrade:
-    type: "computed"
-    method: "check_armor_upgrade_needed"
-    
-  need_complete_equipment:
-    type: "computed"
-    method: "check_complete_equipment_needed"
-    
-  need_crafting_materials:
-    formula: "character_level >= 2 and not has_crafting_materials"
-    
-  need_workshop_discovery:
-    type: "computed"
-    method: "check_workshop_discovery_needed"
-    
-  combat_not_viable:
-    type: "computed"
-    method: "check_combat_viability"
-    description: "True when nearby monsters have consistently poor win rates"
-    
-  # Skill progression states (set by CheckSkillRequirementAction)
-  # These states are set by actions, not computed by the state engine
-  # need_weaponcrafting_upgrade - set by CheckSkillRequirementAction
-  # need_skill_upgrade - set by CheckSkillRequirementAction  
-  # weaponcrafting_level_sufficient - set by CheckSkillRequirementAction
-    
-  skill_requirements_checked:
-    formula: "character_level >= 1"  # Default to false initially
-    description: "True when skill requirements have been checked for current task"
-    
-  # Equipment status states
-  has_better_weapon:
-    type: "computed"
-    method: "check_weapon_improved"
-    
-  has_better_armor:
-    type: "computed"
-    method: "check_armor_improved"
-    
-  has_complete_equipment_set:
-    type: "computed"
-    method: "check_equipment_set_complete"
-    
-  has_crafting_materials:
-    formula: "character_level >= 1"  # Simplified: assume basic materials available at level 1+
-    
-  workshops_discovered:
-    type: "computed"
-    method: "check_workshops_known"
-    
-  # Workshop and crafting states
-  at_workshop:
-    type: "computed"
-    method: "check_at_workshop"
-    
-  at_resource_location:
-    type: "computed"
-    method: "check_at_resource_location"
-    
-  has_materials:
-    type: "computed"
-    method: "check_required_materials"
-    
-  materials_sufficient:
-    formula: "has_crafting_materials and workshops_discovered"
-    
-  # Composite action state variables
-  recipe_known:
-    formula: "character_level >= 1"  # Simplified: assume basic recipes known
-    
-  resource_found:
-    formula: "character_level >= 1"  # Simplified: assume resources can be found
-    
-  # Movement and actions
-  can_move:
-    formula: "character_hp > 0 and not is_on_cooldown"
-    
-  # Cooldown status (computed from API data)
-  is_on_cooldown:
+  character_status.cooldown_active:
     type: "computed"
     method: "check_cooldown_expiration"
     
-# Configuration thresholds - replaces hardcoded magic numbers
+  # Combat context computations
+  combat_context.status:
+    type: "computed"
+    method: "compute_combat_context_status"
+    
+  combat_context.recent_win_rate:
+    type: "computed"
+    method: "compute_recent_win_rate"
+    
+# Configuration thresholds
 thresholds:
   # Health and safety thresholds (percentages)
   safe_hp_percentage: 30
   rest_hp_percentage: 30
   attack_hp_percentage: 15
-  levelup_xp_percentage: 80
   
-  # Character progression thresholds
-  combat_level_threshold: 10
-  resource_level_threshold: 5
-  equipment_level_threshold: 3
-  
-  # Equipment progression thresholds
-  weapon_upgrade_level_threshold: 1  # Start looking for weapon upgrades at level 1
-  armor_upgrade_level_threshold: 1   # Start looking for armor upgrades at level 1
-  equipment_level_difference: 1      # Consider upgrade if equipment is 1+ levels behind
-  min_equipment_slots: 2            # Minimum slots to consider "complete" equipment
-  workshop_discovery_radius: 5     # Radius to search for workshops
-  material_gathering_multiplier: 2.0 # Gather extra materials for safety
-  equipment_priority_level_threshold: 5  # Equipment should be high priority for levels 1-5
+  # Combat viability thresholds
+  min_combat_win_rate: 0.2
+  recency_decay_factor: 0.9
   
   # Search and exploration parameters
   default_search_radius: 2
   max_search_radius: 4
   level_matching_range: 2
-  
-  # Timing and iteration limits
-  max_goap_iterations: 10
-  max_hunt_cycles: 20
-  default_wait_duration: 65
-  cache_duration_minutes: 5
-  
-  # Cooldown management thresholds
-  cooldown_detection_threshold: 0.5  # Minimum seconds to consider significant
-  max_cooldown_wait: 65  # Maximum seconds to wait for cooldown
-  min_cooldown_wait: 0.5  # Minimum wait time
-  character_refresh_cache_duration: 5.0  # Seconds between character state refreshes
-  
-  # Learning management thresholds
-  min_monsters_for_recommendations: 3  # Minimum monsters before recommending exploration
-  min_locations_for_exploration: 20  # Minimum locations before suggesting more exploration
-  good_success_rate_threshold: 0.7  # Threshold for considering a monster "safe"
-  dangerous_success_rate_threshold: 0.3  # Threshold for warning about dangerous monsters
-  optimization_distance_radius: 20  # Radius for optimization suggestions
-  
-  # Combat viability thresholds
-  min_combat_win_rate: 0.2  # Minimum weighted win rate to consider combat viable (20%)
-  recency_decay_factor: 0.9  # Weight decay for older combats (each older combat worth 90% of the next)
-  
-# Content classification rules - replaces hardcoded categorization logic
-content_classification:
-  monster:
-    required_attributes: []  # Don't require specific attributes for pattern matching
-    optional_attributes: ["level", "hp", "attack", "defense", "speed"]
-    type_patterns: ["monster", "creature", "beast"]
-    name_patterns: [".*slime.*", ".*goblin.*", ".*wolf.*", ".*orc.*", ".*cyclops.*", ".*chicken.*", ".*bird.*", ".*cow.*", ".*pig.*", ".*serpent.*", ".*skeleton.*", ".*death_knight.*", ".*bat.*", ".*lich.*", ".*owlbear.*", ".*vampire.*", ".*ogre.*", ".*highwayman.*"]
-    
-  resource:
-    required_attributes: []  # Don't require specific attributes for pattern matching
-    optional_attributes: ["skill", "level", "experience"]
-    type_patterns: ["resource", "deposit", "node"]
-    name_patterns: [".*_rocks", ".*_tree", ".*_fishing_spot", ".*_field", ".*mushmush.*", ".*glowstem.*"]
-    
-  npc:
-    required_attributes: []
-    optional_attributes: ["services", "dialogue", "trades"]
-    type_patterns: ["npc", "merchant", "trainer"]
-    name_patterns: [".*_merchant", ".*merchant.*"]
-    
-  workshop:
-    required_attributes: []
-    optional_attributes: ["craft_skill", "recipes", "level"]
-    type_patterns: ["workshop", "crafting"]
-    name_patterns: [".*crafting", ".*smithy", ".*workshop"]
-    
-  facility:
-    required_attributes: []
-    optional_attributes: ["services"]
-    type_patterns: ["bank", "exchange", "market"]
-    name_patterns: ["bank", "grand_exchange", "market"]
-    
-  skill_station:
-    required_attributes: []
-    optional_attributes: ["skill", "requirements"]
-    type_patterns: ["skill", "training"]
-    name_patterns: [".*cooking.*", ".*alchemy.*", ".*mining.*", ".*woodcutting.*", ".*fishing.*", ".*weaponcrafting.*", ".*gearcrafting.*", ".*jewelrycrafting.*"]

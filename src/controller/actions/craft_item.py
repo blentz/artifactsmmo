@@ -18,6 +18,32 @@ from .coordinate_mixin import CoordinateStandardizationMixin
 class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
     """ Action to craft items at workshop locations """
 
+    # GOAP parameters
+    conditions = {
+        'location_context': {
+            'at_workshop': True
+        },
+        'materials': {
+            'status': 'sufficient'
+        },
+        'skill_status': {
+            'sufficient': True
+        },
+        'character_status': {
+            'alive': True,
+            'cooldown_active': False
+        }
+    }
+    reactions = {
+        'equipment_status': {
+            'item_crafted': True
+        },
+        'inventory': {
+            'updated': True
+        }
+    }
+    weight = 3
+
     def __init__(self):
         """
         Initialize the craft item action.
@@ -26,17 +52,12 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Craft the specified item """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
+            
         # Get parameters from context
         character_name = context.character_name
         item_code = context.get('item_code')
         quantity = context.get('quantity', 1)
         
-        if not item_code:
-            return self.get_error_response("No item code provided")
-            
         self.log_execution_start(character_name=character_name, item_code=item_code, quantity=quantity)
         
         try:
@@ -56,7 +77,8 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                 character_x = character_response.data.x
                 character_y = character_response.data.y
             
-            # Get map information to verify workshop
+            # Get map information for workshop details
+            # Note: Workshop presence and compatibility are now validated by ActionValidator
             map_response = get_map_api(x=character_x, y=character_y, client=client)
             if not map_response or not map_response.data:
                 error_data = self.create_coordinate_response(
@@ -67,25 +89,9 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                 return error_data
                 
             map_data = map_response.data
+            workshop_code = getattr(map_data.content, 'code', 'unknown') if hasattr(map_data, 'content') else 'unknown'
             
-            # Check if there's a workshop at this location
-            has_content = hasattr(map_data, 'content') and map_data.content
-            is_workshop = (has_content and 
-                          hasattr(map_data.content, 'type_') and 
-                          map_data.content.type_ == 'workshop')
-            
-            if not is_workshop:
-                error_data = self.create_coordinate_response(
-                    character_x, character_y,
-                    success=False,
-                    error='No workshop available at current location',
-                    map_content_type=getattr(map_data.content, 'type_', 'none') if has_content else 'none'
-                )
-                return error_data
-            
-            workshop_code = getattr(map_data.content, 'code', 'unknown')
-            
-            # Get item details for validation
+            # Get item details for response enrichment
             item_details = get_item_api(code=item_code, client=client)
             if not item_details or not item_details.data:
                 error_data = self.create_coordinate_response(
@@ -95,24 +101,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                 )
                 return error_data
             
-            # Check workshop compatibility with item crafting requirements
             item_data = item_details.data
-            required_skill = None
-            if hasattr(item_data, 'craft') and item_data.craft:
-                required_skill = getattr(item_data.craft, 'skill', None)
-                if required_skill:
-                    # Skills and workshops have the same names, so direct comparison
-                    if workshop_code != required_skill:
-                        error_data = self.create_coordinate_response(
-                            character_x, character_y,
-                            success=False,
-                            error=f'Workshop type mismatch: item requires {required_skill} skill but at {workshop_code} workshop',
-                            workshop_code=workshop_code,
-                            required_skill=required_skill,
-                            expected_workshop=required_skill,
-                            item_code=item_code
-                        )
-                        return error_data
             
             # Prepare crafting schema
             crafting_schema = CraftingSchema(
@@ -144,7 +133,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                             error_data = self.create_coordinate_response(
                                 character_x, character_y,
                                 success=False,
-                                error=f'Workshop not found on map - API returned HTTP 598. Expected {required_skill or "unknown"} workshop, found {workshop_code}',
+                                error=f'Workshop not found on map - API returned HTTP 598. Found {workshop_code} workshop',
                                 workshop_code=workshop_code,
                                 api_error=error_msg,
                                 item_code=item_code,

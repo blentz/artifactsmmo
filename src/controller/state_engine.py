@@ -283,9 +283,9 @@ class StateCalculationEngine:
     def process_action_response(self, action_name: str, response: Any, 
                               current_state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process action response using configuration-driven handlers.
+        DEPRECATED: This functionality is now handled by the unified post-execution handler.
         
-        Replaces the hardcoded update_world_state_from_response() method.
+        Process action response using configuration-driven handlers.
         
         Args:
             action_name: Name of the executed action

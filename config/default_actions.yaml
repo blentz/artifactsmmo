@@ -1,81 +1,92 @@
-# Default GOAP Actions Configuration
+# Default GOAP Actions Configuration - Consolidated State Version
 # This file defines the default set of actions available to the AI player's Goal-Oriented Action Planning system
 
 actions:
+  # Movement actions
   move:
     conditions:
-      can_move: true
-      at_target_location: false
+      character_status:
+        alive: true
+        cooldown_active: false
     reactions:
-      at_target_location: true
+      location_context:
+        at_target: true
     weight: 1.0
     description: "Move character to a target location"
     
+  # Combat actions
+  initiate_combat_search:
+    conditions:
+      combat_context:
+        status: 'idle'
+      character_status:
+        alive: true
+        cooldown_active: false
+    reactions:
+      combat_context:
+        status: 'searching'
+    weight: 2.0
+    description: "Begin searching for monsters"
+    
   find_monsters:
     conditions:
-      need_combat: true
-      monsters_available: false
-      can_attack: true
+      combat_context:
+        status: 'searching'
+      resource_availability:
+        monsters: false
+      character_status:
+        alive: true
     reactions:
-      monsters_available: true
-      monster_present: true
-      at_target_location: false
+      resource_availability:
+        monsters: true
+      combat_context:
+        status: 'ready'
+      location_context:
+        at_target: true
     weight: 2.0
     description: "Find nearby monsters suitable for combat"
     
   attack:
     conditions:
-      monster_present: true
-      can_attack: true
-      character_safe: true
+      combat_context:
+        status: 'ready'
+      character_status:
+        safe: true
+        alive: true
     reactions:
-      monster_present: false
-      has_hunted_monsters: true
-      monster_defeated: true
-      character_safe: true
+      combat_context:
+        status: 'completed'
+      goal_progress:
+        monsters_hunted: '+1'
     weight: 3.0
     description: "Attack a monster in combat"
     
+  # Recovery actions
   rest:
     conditions:
-      character_alive: true
-      character_safe: false
-      needs_rest: true
+      character_status:
+        hp_percentage: '<100'
+        alive: true
     reactions:
-      character_safe: true
-      needs_rest: false
-      can_attack: true
+      character_status:
+        hp_percentage: 100
+        safe: true
     weight: 1.5
-    description: "Rest to recover HP when critically low"
+    description: "Rest to recover HP when needed"
     
   wait:
     conditions:
-      character_alive: true
-      is_on_cooldown: true
+      character_status:
+        cooldown_active: true
     reactions:
-      is_on_cooldown: false
-      can_move: true
-      can_attack: true
+      character_status:
+        cooldown_active: false
     weight: 0.1
     description: "Wait for cooldown to expire before taking other actions"
 
-# Goal configurations for common scenarios
-goal_templates:
-  level_up:
-    description: "Reach a target level through monster hunting and XP collection"
-    goal_state:
-      character_level: 2        # Target level (can be overridden)
-      character_safe: true      # Must stay safe
-      character_alive: true     # Must survive
-    strategy:
-      priority_actions: ["rest", "find_monsters", "attack"]  # Rest first when needed
-      xp_target: 150           # XP needed for level 2
-      min_safe_hp_percent: 30  # Rest when HP < 30%
-      hunt_radius: 15          # Search radius for monsters
-
 # Default configuration metadata
 metadata:
-  version: "1.1"
-  description: "Default action set for GOAP-based AI player with level_up goal"
+  version: "2.0"
+  description: "Default action set for GOAP-based AI player using consolidated state system"
   created_by: "Claude Code"
-  last_updated: "2024-06-24"
+  last_updated: "2025-07-01"

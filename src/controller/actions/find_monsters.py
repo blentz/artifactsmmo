@@ -15,15 +15,27 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
     
     # GOAP parameters - can be overridden by configuration
     conditions = {
-        'need_combat': True,
-        'monsters_available': False,
-        'character_alive': True
-    }
+            'combat_context': {
+                'status': 'searching',
+            },
+            'resource_availability': {
+                'monsters': False,
+            },
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
-        'monsters_available': True,
-        'monster_present': True,
-        'at_target_location': True
-    }
+            'resource_availability': {
+                'monsters': True,
+            },
+            'combat_context': {
+                'status': 'ready',
+            },
+            'location_context': {
+                'at_target': True,
+            },
+        }
     weights = {'find_monsters': 2.0}  # Medium-high priority for exploration
 
     def __init__(self):
@@ -53,8 +65,8 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             monster_types=monster_types
         )
         
-        # Validate client is provided
-        if not self.validate_execution_context(client, context):
+        # Validation is now handled by centralized ActionValidator
+        if client is None:
             error_response = self.get_error_response("No API client provided")
             self.log_execution_result(error_response)
             return error_response

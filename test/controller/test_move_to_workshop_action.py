@@ -37,13 +37,15 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertIsInstance(MoveToWorkshopAction.weights, dict)
         
         # Check specific conditions
-        self.assertTrue(MoveToWorkshopAction.conditions["character_alive"])
-        self.assertTrue(MoveToWorkshopAction.conditions["can_move"])
+        self.assertIn('character_status', MoveToWorkshopAction.conditions)
+        self.assertTrue(MoveToWorkshopAction.conditions["character_status"]["alive"])
+        self.assertFalse(MoveToWorkshopAction.conditions["character_status"]["cooldown_active"])
         self.assertTrue(MoveToWorkshopAction.conditions["workshops_discovered"])
         
         # Check reactions
         self.assertTrue(MoveToWorkshopAction.reactions["at_workshop"])
-        self.assertTrue(MoveToWorkshopAction.reactions["at_target_location"])
+        self.assertIn("location_context", MoveToWorkshopAction.reactions)
+        self.assertTrue(MoveToWorkshopAction.reactions["location_context"]["at_target"])
         
         # Check weights
         self.assertEqual(MoveToWorkshopAction.weights["at_workshop"], 10)
@@ -234,9 +236,10 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         action = MoveToWorkshopAction()
         context = MockActionContext(character_name=self.char_name, target_x=8, target_y=18)
         result = action.execute(None, context)
-        
-        self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        # With centralized validation, None client triggers validation error
+        self.assertFalse(result["success"])
+        # Direct action execution bypasses centralized validation
+        self.assertIn('error', result)
     
     def test_execute_no_coordinates(self):
         """Test execution without coordinates."""

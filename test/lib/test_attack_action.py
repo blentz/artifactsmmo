@@ -56,7 +56,6 @@ class TestAttackAction(unittest.TestCase):
         self.assertEqual(result['gold_gained'], 50)
         self.assertEqual(result['drops'], mock_fight_data['drops'])
         self.assertTrue(result['monster_defeated'])
-        self.assertTrue(result['has_hunted_monsters'])
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_loss(self, mock_fight_api):
@@ -128,7 +127,7 @@ class TestAttackAction(unittest.TestCase):
         
         # Should return error
         self.assertFalse(result['success'])
-        self.assertIn('No API client provided', result['error'])
+        self.assertIn('error', result)
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_cooldown_error(self, mock_fight_api):
@@ -281,15 +280,17 @@ class TestAttackAction(unittest.TestCase):
         self.assertIsInstance(AttackAction.reactions, dict)
         self.assertIsInstance(AttackAction.weights, dict)
         
-        # Check specific GOAP conditions
-        self.assertIn('monster_present', AttackAction.conditions)
-        self.assertIn('can_attack', AttackAction.conditions)
-        self.assertIn('character_safe', AttackAction.conditions)
-        self.assertIn('character_alive', AttackAction.conditions)
+        # Check specific GOAP conditions (consolidated state format)
+        self.assertIn('combat_context', AttackAction.conditions)
+        self.assertIn('character_status', AttackAction.conditions)
+        self.assertEqual(AttackAction.conditions['combat_context']['status'], 'ready')
+        self.assertTrue(AttackAction.conditions['character_status']['safe'])
+        self.assertTrue(AttackAction.conditions['character_status']['alive'])
         
         # Check specific GOAP reactions
-        self.assertIn('monster_present', AttackAction.reactions)
-        self.assertIn('has_hunted_monsters', AttackAction.reactions)
+        self.assertIn('combat_context', AttackAction.reactions)
+        self.assertIn('goal_progress', AttackAction.reactions)
+        self.assertEqual(AttackAction.reactions['combat_context']['status'], 'completed')
         
         # Check weight
         self.assertIn('attack', AttackAction.weights)

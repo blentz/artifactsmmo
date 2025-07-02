@@ -37,7 +37,7 @@ class MissionExecutor:
         self.last_goal_progress = 0.0
         self.goal_persistence_bonus = 0.5  # Weight bonus for recently progressed goals
         
-        # Load mission configuration
+        # Load mission configuration - using clean templates for testing
         if config_file is None:
             config_file = f"{CONFIG_PREFIX}/goal_templates.yaml"
         
@@ -83,7 +83,8 @@ class MissionExecutor:
     def _get_available_goals(self) -> List[str]:
         """Get list of goals available for selection, excluding failed goals."""
         all_goals = list(self.goal_templates.keys())
-        available_goals = [goal for goal in all_goals if goal not in self.failed_goals]
+        # TEMPORARY: Disable failed goal exclusion for testing fixes
+        available_goals = all_goals  # [goal for goal in all_goals if goal not in self.failed_goals]
         
         if len(available_goals) < len(all_goals):
             excluded_count = len(all_goals) - len(available_goals)
@@ -114,7 +115,7 @@ class MissionExecutor:
         """
         try:
             # Generate the target state for this goal
-            goal_state = self.goal_manager.generate_goal_state(goal_name, current_state)
+            goal_state = self.goal_manager.generate_goal_state(goal_name, goal_config, current_state)
             if not goal_state:
                 return 0.0
             
@@ -403,9 +404,17 @@ class MissionExecutor:
             # Get current state for goal state generation
             current_state = self.controller.get_current_world_state()
             
+            # Extract goal parameters from configuration and merge with mission parameters
+            goal_parameters = goal_config.get('parameters', {}).copy()
+            goal_parameters.update(mission_parameters)
+            
+            # Store goal parameters in controller for action access
+            self.controller.current_goal_parameters = goal_parameters
+            self.logger.debug(f"Set goal parameters for '{goal_name}': {goal_parameters}")
+            
             # Generate goal state with mission parameters and current state
             goal_state = self.goal_manager.generate_goal_state(
-                goal_name, goal_config, current_state, **mission_parameters
+                goal_name, goal_config, current_state, **goal_parameters
             )
             
             # Track progress before execution
@@ -439,3 +448,8 @@ class MissionExecutor:
         except Exception as e:
             self.logger.error(f"Error executing goal template '{goal_name}': {e}")
             return False
+        finally:
+            # Clear goal parameters when execution completes
+            if hasattr(self.controller, 'current_goal_parameters'):
+                self.controller.current_goal_parameters = {}
+                self.logger.debug(f"Cleared goal parameters after executing '{goal_name}'")

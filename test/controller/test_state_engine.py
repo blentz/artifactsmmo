@@ -80,11 +80,11 @@ class TestStateCalculationEngine(unittest.TestCase):
     def test_calculate_derived_state_simple_formula(self):
         """Test calculation of derived state with simple formulas."""
         base_state = {
-            'character_hp': 60,
-            'character_level': 8,
-            'hp_percentage': 75,
-            'xp_percentage': 50,
-            'is_on_cooldown': False
+            'character_status.hp': 60,
+            'character_status.level': 8,
+            'character_status.hp_percentage': 75,
+            'character_status.xp_percentage': 50,
+            'character_status.cooldown_active': False
         }
         
         thresholds = {
@@ -95,19 +95,19 @@ class TestStateCalculationEngine(unittest.TestCase):
         
         result = self.engine.calculate_derived_state(base_state, thresholds)
         
-        # Test some actual state rules from the real config
-        self.assertFalse(result['character_safe'])  # 75 < 80
-        self.assertFalse(result['needs_rest'])  # 75 > 20
-        self.assertTrue(result['can_attack'])  # 75 >= 30 and not on cooldown
+        # Test some actual state rules from the real config (consolidated format)
+        self.assertFalse(result['character_status.safe'])  # 75 < 80
+        self.assertFalse(result['character_status.needs_rest'])  # 75 > 20
+        self.assertTrue(result['action_capabilities.can_attack'])  # 75 >= 30 and not on cooldown
     
     def test_calculate_derived_state_with_thresholds(self):
         """Test calculation with threshold substitution."""
         base_state = {
-            'character_hp': 40,
-            'character_level': 12,
-            'hp_percentage': 95,
-            'xp_percentage': 80,
-            'is_on_cooldown': True
+            'character_status.hp': 40,
+            'character_status.level': 12,
+            'character_status.hp_percentage': 95,
+            'character_status.xp_percentage': 80,
+            'character_status.cooldown_active': True
         }
         
         thresholds = {
@@ -117,9 +117,9 @@ class TestStateCalculationEngine(unittest.TestCase):
         
         result = self.engine.calculate_derived_state(base_state, thresholds)
         
-        # Test threshold substitution
-        self.assertTrue(result['character_safe'])  # 95 >= 90
-        self.assertFalse(result['can_attack'])  # On cooldown should prevent attack
+        # Test threshold substitution (consolidated format)
+        self.assertTrue(result['character_status.safe'])  # 95 >= 90
+        self.assertFalse(result['action_capabilities.can_attack'])  # On cooldown should prevent attack
     
     def test_evaluate_formula_with_boolean_logic(self):
         """Test formula evaluation with AND/OR logic."""

@@ -11,8 +11,19 @@ class MoveToWorkshopAction(MovementActionBase):
     """ Action to move character to a workshop location """
 
     # GOAP parameters
-    conditions = {"character_alive": True, "can_move": True, "workshops_discovered": True}
-    reactions = {"at_workshop": True, "at_target_location": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+                'cooldown_active': False,
+            },
+            'workshops_discovered': True,
+        }
+    reactions = {
+            'at_workshop': True,
+            'location_context': {
+                'at_target': True,
+            },
+        }
     weights = {"at_workshop": 10}
 
     def __init__(self):

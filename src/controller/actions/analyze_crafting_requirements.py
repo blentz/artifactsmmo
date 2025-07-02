@@ -25,13 +25,17 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
     """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
         "crafting_requirements_known": True,
         "need_crafting_materials": True,
         "has_crafting_materials": True,
-        "materials_sufficient": True,
-        "material_requirements_known": True
+        "materials_sufficient": True
+        # Removed: "material_requirements_known": True - not used as condition by any action
     }
     weights = {"crafting_requirements_known": 12}
 
@@ -46,9 +50,6 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
         # Call superclass to set self._context
         super().execute(client, context)
         
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-            
         # Get parameters from context
         character_name = context.character_name
         target_items = context.get('target_items', [])

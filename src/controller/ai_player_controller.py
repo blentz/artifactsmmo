@@ -18,10 +18,10 @@ from src.game.character.state import CharacterState
 from src.game.globals import CONFIG_PREFIX
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
-from src.lib.yaml_data import YamlData
 
 # GOAP functionality now handled by GOAPExecutionManager
 from src.lib.state_loader import StateManagerMixin
+from src.lib.yaml_data import YamlData
 
 # Metaprogramming components
 from .action_executor import ActionExecutor, ActionResult
@@ -33,7 +33,6 @@ from .goap_execution_manager import GOAPExecutionManager
 from .learning_manager import LearningManager
 from .mission_executor import MissionExecutor
 from .skill_goal_manager import SkillGoalManager, SkillType
-from .state_engine import StateCalculationEngine
 
 
 class AIPlayerController(StateManagerMixin):
@@ -53,9 +52,6 @@ class AIPlayerController(StateManagerMixin):
         self.goal_manager = goal_manager
         if self.goal_manager is None:
             self.goal_manager = GOAPGoalManager()
-        
-        # Initialize state calculation engine
-        self.state_engine = StateCalculationEngine()
         
         # Initialize metaprogramming components
         self.action_executor = ActionExecutor()
@@ -88,6 +84,9 @@ class AIPlayerController(StateManagerMixin):
         
         # Action context for passing data between actions
         self.action_context: Dict[str, Any] = {}
+        
+        # Current goal parameters for passing to actions
+        self.current_goal_parameters: Dict[str, Any] = {}
         
     def set_client(self, client) -> None:
         """
@@ -134,16 +133,15 @@ class AIPlayerController(StateManagerMixin):
             # Fallback to essential states if config can't be loaded
             location_states = ['at_correct_workshop', 'at_target_location', 'at_resource_location']
         
-        # Invalidate each location-based state
-        invalidated_count = 0
+        # Invalidate each location-based state using unified API
+        state_updates = {}
         for state in location_states:
             if state in self.world_state.data:
-                self.world_state.data[state] = False
-                invalidated_count += 1
+                state_updates[state] = False
                 
-        if invalidated_count > 0:
-            self.world_state.save()
-            self.logger.debug(f"Invalidated {invalidated_count} location-based world states")
+        if state_updates:
+            self.update_world_state(state_updates)
+            self.logger.debug(f"Invalidated {len(state_updates)} location-based world states")
         
     def set_map_state(self, map_state: MapState) -> None:
         """
@@ -379,6 +377,18 @@ class AIPlayerController(StateManagerMixin):
                             'resource_y': location[1]
                         })
                         self.logger.info(f"Found resource location: {location}")
+                elif action_name == 'attack' and hasattr(result.response, 'get'):
+                    # Track monster kills internally for goal progress
+                    if result.response.get('success') and result.response.get('monster_defeated'):
+                        # Update internal goal progress tracking
+                        current_state = self.get_current_world_state()
+                        goal_progress = current_state.get('goal_progress', {})
+                        current_count = goal_progress.get('monsters_hunted', 0)
+                        goal_progress['monsters_hunted'] = current_count + 1
+                        
+                        # Update the world state with the new count
+                        self.update_world_state({'goal_progress': goal_progress})
+                        self.logger.info(f"⚔️ Monster defeated! Total monsters hunted: {goal_progress['monsters_hunted']}")
             
             # Log execution result
             if result.success:
@@ -474,11 +484,23 @@ class AIPlayerController(StateManagerMixin):
         # Create unified context from controller state
         context = ActionContext.from_controller(self, action_data)
         
+        # Add shared action context data from previous actions
+        if hasattr(self, 'action_context') and self.action_context:
+            for key, value in self.action_context.items():
+                context.set_result(key, value)
+                self.logger.debug(f"Added shared action data to context: {key}")
+        
         # Add action configurations if available
         if hasattr(self.action_executor, 'config_data') and self.action_executor.config_data:
             eval_config = self.action_executor.config_data.data.get('evaluate_weapon_recipes', {})
             if eval_config:
                 context.set_parameter('action_config', eval_config)
+        
+        # Include current goal parameters if available
+        if hasattr(self, 'current_goal_parameters') and self.current_goal_parameters:
+            for param_name, param_value in self.current_goal_parameters.items():
+                context.set_parameter(param_name, param_value)
+                self.logger.debug(f"Added goal parameter to action context: {param_name} = {param_value}")
         
         return context
     
@@ -550,6 +572,10 @@ class AIPlayerController(StateManagerMixin):
                 if hasattr(result, 'response') and result.response:
                     self._update_action_context_from_response(action_name, result.response)
                 
+                # Also capture data stored in the action context results
+                if hasattr(context, 'action_results') and context.action_results:
+                    self._update_action_context_from_results(action_name, context.action_results)
+                
                 return True
             else:
                 self.logger.warning(f"Action {action_name} failed: {result}")
@@ -580,6 +606,32 @@ class AIPlayerController(StateManagerMixin):
                 self.logger.info(f"Extracted coordinates from {action_name}: ({response['location'][0]}, {response['location'][1]})")
             
             # Log coordinate updates if present
+    
+    def _update_action_context_from_results(self, action_name: str, action_results: Dict) -> None:
+        """
+        Update action context based on action context results.
+        Used to pass data stored via context.set_result() between actions in a plan.
+        """
+        if not action_results:
+            return
+            
+        if not hasattr(self, 'action_context'):
+            self.action_context = {}
+        
+        # Merge action results into shared context
+        self.action_context.update(action_results)
+        self.logger.debug(f"Updated shared action context from {action_name} with {len(action_results)} items")
+        
+        # Log key data transfers for important actions
+        if action_name == 'analyze_equipment_gaps' and 'equipment_gap_analysis' in action_results:
+            gap_count = len(action_results['equipment_gap_analysis']) if action_results['equipment_gap_analysis'] else 0
+            self.logger.info(f"📊 Captured equipment gap analysis from {action_name}: {gap_count} slots analyzed")
+        elif action_name == 'select_optimal_slot' and 'target_equipment_slot' in action_results:
+            slot = action_results['target_equipment_slot']
+            self.logger.info(f"🎯 Captured slot selection from {action_name}: {slot}")
+        elif action_name == 'evaluate_recipes' and 'selected_item' in action_results:
+            item = action_results['selected_item']
+            self.logger.info(f"🔧 Captured recipe selection from {action_name}: {item}")
             if 'target_x' in response and 'target_y' in response:
                 self.logger.info(f"Updated coordinates from {action_name}: ({response['target_x']}, {response['target_y']})")
         
@@ -648,48 +700,41 @@ class AIPlayerController(StateManagerMixin):
             # This ensures states like inventory_updated, materials_sufficient, etc. are preserved
             world_data = self.world_state.data
             for key, value in world_data.items():
-                # Only update if the key doesn't already exist in the calculated state
-                # This allows calculated states to override persisted states when needed
-                if key not in state:
+                # Handle nested state merging (e.g., goal_progress)
+                if isinstance(value, dict) and key in state and isinstance(state[key], dict):
+                    # Merge nested dictionaries
+                    state[key].update(value)
+                    self.logger.debug(f"Merged nested state for {key}: {state[key]}")
+                elif key not in state:
+                    # Only update if the key doesn't already exist in the calculated state
+                    # This allows calculated states to override persisted states when needed
                     state[key] = value
         
         self.logger.debug(f"Current world state: {state}")
         return state
 
-    def update_world_state_from_response(self, action_name: str, response) -> None:
+    def update_world_state(self, state_updates: Dict[str, Any]) -> None:
         """
-        Update world state based on action response using configuration-driven processing.
+        Update world state with new values.
+        
+        This is the UNIFIED method for all state updates, called by the
+        post-execution handler in ActionExecutor.
         
         Args:
-            action_name: Name of the action that was executed
-            response: Response from the action execution
+            state_updates: Dictionary of state updates to apply
         """
-        if not response:
+        if not self.world_state:
+            self.logger.error("World state not initialized")
             return
             
-        try:
-            # Update character state if response contains character data
-            if hasattr(response, 'data') and hasattr(response.data, 'character'):
-                char_data = response.data.character
-                if self.character_state:
-                    self.character_state.update_from_api_response(char_data)
-                    self.character_state.save()
-                    self.logger.debug("Updated character state from action response")
-            
-            # Use state engine for configuration-driven response processing
-            current_state = self.get_current_world_state()
-            state_updates = self.state_engine.process_action_response(
-                action_name, response, current_state
-            )
-            
-            # Apply updates to world state
-            if state_updates:
-                self.world_state.data.update(state_updates)
-                self.world_state.save()
-                self.logger.debug(f"Applied state updates: {state_updates}")
-            
-        except Exception as e:
-            self.logger.error(f"Error updating world state from response: {e}")
+        # Apply updates to world state
+        self.world_state.data.update(state_updates)
+        self.world_state.save()
+        
+        self.logger.debug(f"Updated world state with {len(state_updates)} changes")
+
+    # DEPRECATED: Use update_world_state() instead
+    # This method is replaced by the unified post-execution handler in ActionExecutor
 
     # load_actions_from_config and achieve_goal_with_goap moved to GOAPExecutionManager
 
@@ -830,8 +875,8 @@ class AIPlayerController(StateManagerMixin):
                     raw_content_type = content.get('type', content.get('type_', 'unknown'))
                     content_code = content.get('code', 'unknown')
                     
-                    # Use configuration-driven content classification
-                    content_type = self.goal_manager.classify_content(content_code, content, raw_content_type)
+                    # Use raw content type directly - knowledge base handles categorization
+                    content_type = raw_content_type if raw_content_type != 'unknown' else 'resource'
                     
                     # Learn from content discovery
                     self.logger.debug(f"🔍 About to learn {content_type} '{content_code}' at ({x}, {y})")

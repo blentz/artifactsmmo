@@ -15,7 +15,11 @@ class AnalyzeResourcesAction(ActionBase):
     """ Action to analyze nearby resources for equipment crafting opportunities """
 
     # GOAP parameters
-    conditions = {"character_alive": True}
+    conditions = {
+            'character_status': {
+                'alive': True,
+            },
+        }
     reactions = {
         "resource_analysis_complete": True,
         "nearby_resources_known": True,
@@ -34,9 +38,6 @@ class AnalyzeResourcesAction(ActionBase):
         """ Analyze nearby resources for crafting opportunities """
         # Call superclass to set self._context
         super().execute(client, context)
-        
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
         
         # Get parameters from context
         character_x = context.get('character_x', 0)

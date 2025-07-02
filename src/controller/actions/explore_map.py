@@ -21,9 +21,6 @@ class ExploreMapAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Explore the map to find interesting locations """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
         character_y = context.get('character_y', context.character_y)
@@ -288,7 +285,6 @@ class ExploreMapAction(ActionBase):
     def __repr__(self):
         return "ExploreMapAction()"
 
-
 def cos_approximation(angle_rad: float) -> float:
     """Simple cosine approximation for angles in radians."""
     # Simple lookup table for common angles
@@ -298,7 +294,6 @@ def cos_approximation(angle_rad: float) -> float:
         180: -1.0, 225: -0.707, 270: 0.0, 315: 0.707
     }
     return cos_values.get(angle_degrees % 360, 0.0)
-
 
 def sin_approximation(angle_rad: float) -> float:
     """Simple sine approximation for angles in radians."""

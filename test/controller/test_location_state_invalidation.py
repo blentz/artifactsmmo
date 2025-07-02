@@ -10,7 +10,6 @@ from unittest.mock import Mock, patch
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.world.state import WorldState
 from src.game.character.state import CharacterState
-from src.lib.yaml_data import YamlData
 
 
 class TestLocationStateInvalidation(unittest.TestCase):

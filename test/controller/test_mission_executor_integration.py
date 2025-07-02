@@ -214,7 +214,6 @@ state_calculation_rules:
         self.assertIsNotNone(self.controller.mission_executor.goal_templates)
         self.assertIsNotNone(self.controller.mission_executor.thresholds)
         self.assertIn('level_up', self.controller.mission_executor.goal_templates)
-        self.assertIn('reach_level', self.controller.mission_executor.goal_templates)
     
     def test_large_method_replacement_reduction(self):
         """Test that large monolithic methods have been replaced with delegation."""

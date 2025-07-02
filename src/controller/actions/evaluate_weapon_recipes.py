@@ -34,9 +34,6 @@ class EvaluateWeaponRecipesAction(ActionBase):
         # Call superclass to set self._context
         super().execute(client, context)
         
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         character_name = context.character_name
         current_weapon = context.get('current_weapon')
@@ -812,8 +809,7 @@ class EvaluateWeaponRecipesAction(ActionBase):
         
         # Convert to sorted list for consistency
         stat_fields_list = sorted(list(stat_fields))
-        
-        
+
         self.logger.debug(f"Discovered weapon stat fields: {stat_fields_list}")
         return stat_fields_list
 

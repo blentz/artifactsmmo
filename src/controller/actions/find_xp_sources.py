@@ -25,9 +25,6 @@ class FindXpSourcesAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> Optional[Dict]:
         """ Find all XP sources for the target skill """
-        if not self.validate_execution_context(client, context):
-            return self.get_error_response("No API client provided")
-        
         # Get parameters from context
         skill = context.get('skill')
         if not skill:

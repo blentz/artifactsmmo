@@ -469,6 +469,22 @@ class ActionFactory:
         """Check if an action is registered."""
         return action_name in self._action_registry
     
+    @property
+    def action_class_map(self) -> Dict[str, Type[ActionBase]]:
+        """
+        Get a mapping of action names to their action classes.
+        
+        This property extracts action classes from the action registry to provide
+        compatibility with code that expects direct access to action classes.
+        
+        Returns:
+            Dictionary mapping action names to their corresponding action classes
+        """
+        class_map = {}
+        for action_name, config in self._action_registry.items():
+            class_map[action_name] = config.action_class
+        return class_map
+    
     def _determine_material_transformation(self, context: Dict[str, Any]) -> str:
         """
         Determine what material needs to be transformed based on available raw materials.
