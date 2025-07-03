@@ -6,6 +6,7 @@ Tests the integration between CLI arguments and diagnostic tools.
 
 import argparse
 import json
+import logging
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, patch
 
@@ -19,28 +20,37 @@ class TestCLIDiagnosticIntegration(TestCase):
         """Set up test fixtures."""
         self.parser = create_parser()
         
+        # Capture initial logging state
+        self.original_handlers = logging.root.handlers[:]
+        self.original_level = logging.root.level
+        
+        # Set up isolated logger for testing
+        logging.root.handlers.clear()
+        self.test_handler = logging.StreamHandler()
+        self.test_handler.setLevel(logging.ERROR)
+        logging.root.addHandler(self.test_handler)
+        logging.root.setLevel(logging.ERROR)
+        
+    def tearDown(self):
+        """Clean up test fixtures.""" 
+        # Restore original logging state
+        logging.root.handlers.clear()
+        logging.root.handlers.extend(self.original_handlers)
+        logging.root.setLevel(self.original_level)
+        
     def test_diagnostic_flags_offline_default(self):
         """Test diagnostic flags default to offline mode."""
         args = self.parser.parse_args(['-g', 'test_goal'])
         
-        self.assertTrue(hasattr(args, 'offline'))
-        self.assertTrue(hasattr(args, 'live'))
-        self.assertFalse(args.offline)  # Not explicitly set
-        self.assertFalse(args.live)
+        self.assertTrue(hasattr(args, 'online'))
+        self.assertFalse(args.online)  # Default is offline (online=False)
         
-    def test_diagnostic_flags_offline_explicit(self):
-        """Test explicit offline flag."""
-        args = self.parser.parse_args(['-g', 'test_goal', '--offline'])
-        
-        self.assertTrue(args.offline)
-        self.assertFalse(args.live)
         
     def test_diagnostic_flags_live(self):
-        """Test live execution flag."""
-        args = self.parser.parse_args(['-e', 'move->attack', '--live'])
+        """Test online execution flag."""
+        args = self.parser.parse_args(['-e', 'move->attack', '--online'])
         
-        self.assertFalse(args.offline)
-        self.assertTrue(args.live)
+        self.assertTrue(args.online)
         
     def test_clean_state_flag(self):
         """Test clean state flag."""
@@ -55,30 +65,12 @@ class TestCLIDiagnosticIntegration(TestCase):
         
         self.assertEqual(args.state, custom_state)
         
-    def test_validate_args_offline_live_conflict(self):
-        """Test validation catches offline/live conflict."""
-        args = argparse.Namespace(
-            offline=True,
-            live=True,
-            goal_planner='test',
-            evaluate_plan=None,
-            daemon=False,
-            clean=False,
-            create_character=None,
-            delete_character=None,
-            parallel=None,
-            state=None,
-            clean_state=False
-        )
         
-        result = validate_args(args)
-        self.assertFalse(result)
-        
-    def test_validate_args_live_requires_action(self):
-        """Test validation ensures live mode has action."""
+    @patch('src.cli.logging.error')
+    def test_validate_args_live_requires_action(self, mock_error):
+        """Test validation ensures online mode has action."""
         args = argparse.Namespace(
-            offline=False,
-            live=True,
+            online=True,
             goal_planner=None,
             evaluate_plan=None,
             daemon=False,
@@ -92,12 +84,13 @@ class TestCLIDiagnosticIntegration(TestCase):
         
         result = validate_args(args)
         self.assertFalse(result)
+        mock_error.assert_called_with("--online mode requires either --goal-planner or --evaluate-plan")
         
-    def test_validate_args_state_requires_diagnostic(self):
+    @patch('src.cli.logging.error')
+    def test_validate_args_state_requires_diagnostic(self, mock_error):
         """Test validation ensures state flag has diagnostic mode."""
         args = argparse.Namespace(
-            offline=False,
-            live=False,
+            online=False,
             goal_planner=None,
             evaluate_plan=None,
             state='{"test": true}',
@@ -105,18 +98,19 @@ class TestCLIDiagnosticIntegration(TestCase):
             clean=False,
             create_character=None,
             delete_character=None,
-            parallel=None
+            parallel=None,
+            clean_state=False
         )
         
         result = validate_args(args)
         self.assertFalse(result)
+        mock_error.assert_called_with("--state requires either --goal-planner or --evaluate-plan")
         
     def test_validate_args_valid_diagnostic_combo(self):
         """Test valid diagnostic argument combinations."""
-        # Valid offline goal planning
+        # Valid offline goal planning (default)
         args = argparse.Namespace(
-            offline=True,
-            live=False,
+            online=False,
             goal_planner='test_goal',
             evaluate_plan=None,
             state=None,
@@ -131,9 +125,8 @@ class TestCLIDiagnosticIntegration(TestCase):
         result = validate_args(args)
         self.assertTrue(result)
         
-        # Valid live plan evaluation
-        args.offline = False
-        args.live = True
+        # Valid online plan evaluation
+        args.online = True
         args.goal_planner = None
         args.evaluate_plan = 'move->attack'
         
@@ -147,7 +140,7 @@ class TestCLIDiagnosticIntegration(TestCase):
         from src.main import show_goal_plan
         
         args = argparse.Namespace(
-            live=True,
+            online=True,
             clean_state=True,
             state='{"test": true}'
         )
@@ -158,9 +151,10 @@ class TestCLIDiagnosticIntegration(TestCase):
         # Verify DiagnosticTools was created with correct parameters
         mock_tools.assert_called_once_with(
             client=client,
-            offline=False,  # live=True means offline=False
+            offline=False,  # online=True means offline=False
             clean_state=True,
-            custom_state='{"test": true}'
+            custom_state='{"test": true}',
+            args=args
         )
         
         # Verify show_goal_plan was called
@@ -173,8 +167,7 @@ class TestCLIDiagnosticIntegration(TestCase):
         from src.main import evaluate_user_plan
         
         args = argparse.Namespace(
-            live=False,
-            offline=True,
+            online=False,
             clean_state=False,
             state=None
         )
@@ -187,7 +180,8 @@ class TestCLIDiagnosticIntegration(TestCase):
             client=client,
             offline=True,
             clean_state=False,
-            custom_state=None
+            custom_state=None,
+            args=args
         )
         
         # Verify evaluate_user_plan was called
@@ -197,19 +191,37 @@ class TestCLIDiagnosticIntegration(TestCase):
 class TestCLIHelpOutput(TestCase):
     """Test CLI help and documentation."""
     
+    def setUp(self):
+        """Set up test fixtures."""
+        # Capture initial logging state
+        self.original_handlers = logging.root.handlers[:]
+        self.original_level = logging.root.level
+        
+        # Set up isolated logger for testing
+        logging.root.handlers.clear()
+        self.test_handler = logging.StreamHandler()
+        self.test_handler.setLevel(logging.ERROR)
+        logging.root.addHandler(self.test_handler)
+        logging.root.setLevel(logging.ERROR)
+        
+    def tearDown(self):
+        """Clean up test fixtures.""" 
+        # Restore original logging state
+        logging.root.handlers.clear()
+        logging.root.handlers.extend(self.original_handlers)
+        logging.root.setLevel(self.original_level)
+    
     def test_help_includes_diagnostic_options(self):
         """Test that help text includes diagnostic options."""
         parser = create_parser()
         help_text = parser.format_help()
         
         # Check for diagnostic flags
-        self.assertIn('--offline', help_text)
-        self.assertIn('--live', help_text)
+        self.assertIn('--online', help_text)
         self.assertIn('--clean-state', help_text)
         self.assertIn('--state', help_text)
         
         # Check descriptions - use actual text from CLI
-        self.assertIn('offline mode without API', help_text)
         self.assertIn('Execute diagnostic plans with live API', help_text)
         self.assertIn('clean default state', help_text)
         self.assertIn('custom state (JSON format)', help_text)
@@ -220,7 +232,6 @@ class TestCLIHelpOutput(TestCase):
         help_text = parser.format_help()
         
         # Check for diagnostic examples
-        self.assertIn('--live', help_text)
+        self.assertIn('--online', help_text)
         self.assertIn('Execute goal plan with live API', help_text)
-        self.assertIn('--offline', help_text)
         self.assertIn('Evaluate plan in offline mode', help_text)

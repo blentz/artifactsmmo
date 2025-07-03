@@ -19,19 +19,25 @@ class CompleteEquipmentUpgradeAction(ActionBase):
     after the item has been successfully equipped.
     """
 
-    # GOAP parameters
+    # GOAP parameters - must match default_actions.yaml
     conditions = {
-        'equipment_status': {
-            'upgrade_status': 'crafting',
-            'equipped': True,
+        'skill_requirements': {
+            'verified': True,
+            'sufficient': True
         },
+        'materials': {
+            'status': 'sufficient'
+        },
+        'character_status': {
+            'alive': True
+        }
     }
     reactions = {
         'equipment_status': {
             'upgrade_status': 'completed',
         },
     }
-    weights = {'equipment_status.upgrade_status': 2.0}
+    weight = 3.0
 
     def __init__(self):
         """Initialize complete equipment upgrade action."""

@@ -60,26 +60,15 @@ class SelectOptimalSlotAction(ActionBase):
         return self.config
         
     def _get_fallback_config(self) -> YamlData:
-        """Provide fallback configuration if YAML loading fails."""
+        """Provide minimal fallback configuration if YAML loading fails."""
+        # Only provide empty structure - actual mappings should come from config files
         fallback_data = {
-            'skill_slot_mappings': {
-                'weaponcrafting': ['weapon'],
-                'gearcrafting': ['helmet', 'body_armor', 'leg_armor', 'boots'],
-                'jewelrycrafting': ['amulet', 'ring1', 'ring2']
-            },
-            'slot_priorities': {
-                'weapon': 100,
-                'helmet': 80,
-                'body_armor': 85,
-                'leg_armor': 75,
-                'boots': 70,
-                'amulet': 60,
-                'ring1': 50,
-                'ring2': 50
-            }
+            'skill_slot_mappings': {},
+            'slot_priorities': {}
         }
         config = YamlData.__new__(YamlData)
         config.data = fallback_data
+        self.logger.error("Using empty fallback config - equipment_analysis.yaml should be configured")
         return config
         
     def execute(self, client, context: ActionContext) -> Dict:
@@ -167,6 +156,7 @@ class SelectOptimalSlotAction(ActionBase):
         
         # Store results in context for next action
         context.set_result('target_equipment_slot', best_slot_data['slot_name'])
+        context.set_result('target_craft_skill', target_skill)  # Pass the skill forward
         context.set_result('slot_selection_reasoning', {
             'selected_slot': best_slot_data['slot_name'],
             'target_skill': target_skill,
@@ -400,6 +390,42 @@ class SelectOptimalSlotAction(ActionBase):
             
         # Check effects for slot indicators
         effects = item_data.get('effects', [])
+        
+        # For weapon slot, check if item name suggests it's a weapon
+        if slot_lower == 'weapon':
+            item_code = item_data.get('code', '').lower()
+            # Check for weapon-related keywords in item code
+            weapon_keywords = ['sword', 'bow', 'staff', 'axe', 'dagger', 'mace', 'spear', 'hammer', 'club', 'stick']
+            if any(keyword in item_code for keyword in weapon_keywords):
+                self.logger.debug(f"Item code '{item_code}' contains weapon keyword, matches weapon slot")
+                return True
+            
+            # Also check for items that are explicitly NOT weapons (rings, armor, etc)
+            non_weapon_keywords = ['ring', 'amulet', 'helmet', 'armor', 'boots', 'shield', 'gloves', 'legs']
+            if any(keyword in item_code for keyword in non_weapon_keywords):
+                return False
+                
+            # If no clear indication from name, check if it has primarily attack effects
+            # but exclude items with many non-weapon effects
+            attack_effects = ['attack_earth', 'attack_fire', 'attack_water', 'attack_air']
+            has_attack = False
+            non_weapon_effect_count = 0
+            
+            for effect in effects:
+                if not isinstance(effect, dict):
+                    continue
+                effect_code = effect.get('code', '').lower()
+                if effect_code in attack_effects:
+                    has_attack = True
+                # Count effects that suggest non-weapon items
+                elif effect_code in ['haste', 'wisdom', 'prospecting', 'critical_strike']:
+                    non_weapon_effect_count += 1
+                    
+            # Only consider it a weapon if it has attack effects and not too many non-weapon effects
+            if has_attack and non_weapon_effect_count < 2:
+                self.logger.debug(f"Item has weapon effects without many accessory effects, matches weapon slot")
+                return True
+        
         for effect in effects:
             if not isinstance(effect, dict):
                 continue
@@ -412,9 +438,9 @@ class SelectOptimalSlotAction(ActionBase):
                 return True
                 
         # Special case handling for common patterns we can derive from the data
-        return self._check_derived_slot_patterns(item_type, item_subtype, slot_name)
+        return self._check_derived_slot_patterns(item_type, item_subtype, slot_name, item_data)
     
-    def _check_derived_slot_patterns(self, item_type: str, item_subtype: str, slot_name: str) -> bool:
+    def _check_derived_slot_patterns(self, item_type: str, item_subtype: str, slot_name: str, item_data: Dict) -> bool:
         """
         Check for slot patterns that can be derived without hardcoding.
         
@@ -425,6 +451,7 @@ class SelectOptimalSlotAction(ActionBase):
             item_type: Item type from knowledge base
             item_subtype: Item subtype from knowledge base  
             slot_name: Equipment slot name
+            item_data: Complete item data dictionary
             
         Returns:
             True if patterns suggest the item fits the slot, False otherwise

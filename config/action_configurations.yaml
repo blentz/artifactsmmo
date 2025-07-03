@@ -68,6 +68,9 @@ action_classes:
   upgrade_weaponcrafting_skill: "src.controller.actions.upgrade_weaponcrafting_skill.UpgradeWeaponcraftingSkillAction"
   check_skill_requirement: "src.controller.actions.check_skill_requirement.CheckSkillRequirementAction"
   find_xp_sources: "src.controller.actions.find_xp_sources.FindXpSourcesAction"
+  determine_material_requirements: "src.controller.actions.determine_material_requirements.DetermineMaterialRequirementsAction"
+  check_material_availability: "src.controller.actions.check_material_availability.CheckMaterialAvailabilityAction"
+  verify_skill_requirements: "src.controller.actions.verify_skill_requirements.VerifySkillRequirementsAction"
 
 action_configurations:
   # Core consolidated actions
@@ -78,6 +81,18 @@ action_configurations:
   select_recipe:
     type: "builtin"
     description: "Select optimal recipe for equipment crafting"
+    
+  determine_material_requirements:
+    type: "builtin"
+    description: "Determine what materials are needed for the selected recipe"
+    
+  check_material_availability:
+    type: "builtin"
+    description: "Check if required materials are available in inventory"
+    
+  verify_skill_requirements:
+    type: "builtin"
+    description: "Verify character has sufficient skill level for crafting"
     
   fight:
     type: "builtin"

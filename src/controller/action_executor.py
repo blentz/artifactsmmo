@@ -567,14 +567,11 @@ class ActionExecutor:
             self.logger.debug(f"Skipping state updates for failed action {action_name}")
             return
             
-        # 1. Apply GOAP reactions from action class
-        self._apply_goap_reactions(action_name, action_result, controller, context)
+        # 1. Apply unified state changes (GOAP reactions + action context)
+        self._apply_unified_state_changes(action_name, action_result, controller, context)
         
         # 2. Update action context for inter-action data flow
         self._update_action_context(action_name, action_result, controller)
-        
-        # 3. Process any state changes returned by the action
-        self._apply_action_state_changes(action_name, action_result, controller)
         
         # 4. Handle learning callbacks (existing functionality)
         self._handle_learning_callbacks(action_name, action_result, {'controller': controller})
@@ -584,9 +581,41 @@ class ActionExecutor:
         
         self.logger.debug(f"✓ Post-execution updates completed for {action_name}")
     
-    def _apply_goap_reactions(self, action_name: str, action_result: Dict, 
-                             controller, context) -> None:
-        """Apply GOAP reactions with proper template resolution."""
+    def _apply_unified_state_changes(self, action_name: str, action_result: Dict, 
+                                    controller, context) -> None:
+        """Apply unified state changes from GOAP reactions and action context."""
+        
+        # Get current world state for reference
+        world_state = controller.get_current_world_state()
+        
+        # Track only the changes to pass to update_world_state
+        state_changes = {}
+        
+        # 1. Apply GOAP reactions from action class
+        self._collect_goap_reactions(action_name, action_result, controller, context, state_changes)
+        
+        # 2. Apply action context results (equipment workflow)
+        self._collect_action_context_results(action_name, action_result, state_changes)
+        
+        # 3. Apply explicit state changes from action result
+        self._collect_explicit_state_changes(action_result, state_changes)
+        
+        # Apply all collected state changes in one operation
+        if state_changes:
+            self.logger.debug(f"About to update world state with unified changes: {state_changes}")
+            controller.update_world_state(state_changes)
+            
+            # Get updated world state for boolean flag recalculation
+            updated_world_state = controller.get_current_world_state()
+            
+            # Recalculate boolean flags after state changes to maintain consistency
+            self._recalculate_boolean_flags(updated_world_state)
+            
+            self.logger.debug(f"Updated world state via unified changes: {state_changes}")
+    
+    def _collect_goap_reactions(self, action_name: str, action_result: Dict, 
+                               controller, context, state_changes: Dict) -> None:
+        """Collect GOAP reactions into state changes."""
         
         # Get action class to access reactions
         action_class = self._get_action_class(action_name)
@@ -608,15 +637,15 @@ class ActionExecutor:
         if not reactions:
             return
             
-        # Get current world state
+        # Get current world state for reference
         world_state = controller.get_current_world_state()
         
-        # Resolve templates and apply reactions
+        # Resolve templates and collect reactions
         for state_group, group_reactions in reactions.items():
             if isinstance(group_reactions, dict):
                 # Handle nested state groups (e.g., equipment_status)
-                if state_group not in world_state:
-                    world_state[state_group] = {}
+                if state_group not in state_changes:
+                    state_changes[state_group] = {}
                     
                 for key, value in group_reactions.items():
                     resolved_key = self._resolve_template(key, context, action_result)
@@ -629,18 +658,57 @@ class ActionExecutor:
                         resolved_value = current_val + 1
                         self.logger.debug(f"Incrementing {state_group}.{resolved_key}: {current_val} -> {resolved_value}")
                     
-                    # Update nested state
-                    world_state[state_group][resolved_key] = resolved_value
+                    # Track this change (include None values for proper state updates)
+                    state_changes[state_group][resolved_key] = resolved_value
                     
                     self.logger.debug(f"Applied reaction: {state_group}.{resolved_key} = {resolved_value}")
             else:
                 # Handle flat state values
                 resolved_value = self._resolve_template(group_reactions, context, action_result)
-                world_state[state_group] = resolved_value
-                
-        # Update world state in controller
-        controller.update_world_state(world_state)
-        self.logger.debug(f"Updated world state via reactions: {world_state}")
+                state_changes[state_group] = resolved_value
+    
+    def _collect_action_context_results(self, action_name: str, action_result: Dict, 
+                                       state_changes: Dict) -> None:
+        """Collect action context results into state changes."""
+        
+        # Apply equipment-related results to world state
+        if 'selected_slot' in action_result:
+            if 'equipment_status' not in state_changes:
+                state_changes['equipment_status'] = {}
+            state_changes['equipment_status']['target_slot'] = action_result['selected_slot']
+            self.logger.debug(f"Collected target_slot: {action_result['selected_slot']}")
+        
+        if 'selected_item' in action_result:
+            if 'equipment_status' not in state_changes:
+                state_changes['equipment_status'] = {}
+            state_changes['equipment_status']['selected_item'] = action_result['selected_item']
+            self.logger.debug(f"Collected selected_item: {action_result['selected_item']}")
+    
+    def _collect_explicit_state_changes(self, action_result: Dict, state_changes: Dict) -> None:
+        """Collect explicit state changes from action result."""
+        
+        # 1. Check 'state_changes' key (preferred)
+        if 'state_changes' in action_result:
+            for key, value in action_result['state_changes'].items():
+                if key not in state_changes:
+                    state_changes[key] = {}
+                if isinstance(value, dict) and isinstance(state_changes[key], dict):
+                    state_changes[key].update(value)
+                else:
+                    state_changes[key] = value
+            
+        # 2. Check specific state keys (backward compatibility)
+        state_keys = ['equipment_status', 'character_status', 'location_context', 
+                      'combat_context', 'materials', 'skills', 'goal_progress']
+        
+        for key in state_keys:
+            if key in action_result and isinstance(action_result[key], dict):
+                if key not in state_changes:
+                    state_changes[key] = {}
+                if isinstance(state_changes[key], dict):
+                    state_changes[key].update(action_result[key])
+                else:
+                    state_changes[key] = action_result[key]
     
     def _resolve_template(self, template: Any, context, action_result: Dict) -> Any:
         """Resolve template variables in reaction values."""
@@ -697,47 +765,42 @@ class ActionExecutor:
             controller.action_context['selected_item'] = action_result['selected_item']
         if 'target_slot' in action_result:
             controller.action_context['target_slot'] = action_result['target_slot']
+        # Handle SelectOptimalSlotAction naming convention
+        if 'selected_slot' in action_result:
+            controller.action_context['target_slot'] = action_result['selected_slot']
             
         self.logger.debug(f"Updated action context with results from {action_name}")
     
-    def _apply_action_state_changes(self, action_name: str, action_result: Dict, 
-                                   controller) -> None:
-        """Apply any explicit state changes returned by the action."""
-        
-        # Check for state changes in standard locations
-        state_changes = {}
-        
-        # 1. Check 'state_changes' key (preferred)
-        if 'state_changes' in action_result:
-            state_changes.update(action_result['state_changes'])
-            
-        # 2. Check specific state keys (backward compatibility)
-        state_keys = ['equipment_status', 'character_status', 'location_context', 
-                      'combat_context', 'materials', 'skills', 'goal_progress']
-        
-        for key in state_keys:
-            if key in action_result and isinstance(action_result[key], dict):
-                state_changes[key] = action_result[key]
-                
-        # Apply all state changes
-        if state_changes:
-            world_state = controller.get_current_world_state()
-            for key, value in state_changes.items():
-                if isinstance(value, dict) and key in world_state and isinstance(world_state[key], dict):
-                    # Merge nested dictionaries
-                    world_state[key].update(value)
-                else:
-                    # Replace value
-                    world_state[key] = value
-                    
-            controller.update_world_state(world_state)
-            self.logger.debug(f"Applied {len(state_changes)} state changes from {action_name}")
     
     def _persist_state_changes(self, controller) -> None:
         """Persist state changes if needed."""
         # This is a placeholder for future state persistence needs
         # Currently, state is persisted by the controller when needed
         pass
+    
+    def _recalculate_boolean_flags(self, world_state: Dict[str, Any]) -> None:
+        """
+        Recalculate boolean flags after state changes to maintain consistency.
+        
+        This ensures boolean flags like has_target_slot, has_selected_item, etc.
+        are always consistent with their underlying state values.
+        """
+        # Calculate equipment status boolean flags
+        if 'equipment_status' in world_state and isinstance(world_state['equipment_status'], dict):
+            equipment = world_state['equipment_status']
+            equipment['has_target_slot'] = equipment.get('target_slot') is not None
+            equipment['has_selected_item'] = equipment.get('selected_item') is not None
+            self.logger.debug(f"Recalculated equipment flags: has_target_slot={equipment['has_target_slot']}, has_selected_item={equipment['has_selected_item']}")
+        
+        # Calculate combat context boolean flags
+        if 'combat_context' in world_state and isinstance(world_state['combat_context'], dict):
+            combat = world_state['combat_context']
+            win_rate = combat.get('recent_win_rate', 1.0)
+            combat['low_win_rate'] = win_rate < 0.2
+            self.logger.debug(f"Recalculated combat flags: low_win_rate={combat['low_win_rate']} (win_rate={win_rate})")
+        
+        # Add more boolean flag calculations here as needed
+    
     
     def _validate_action(self, action_name: str, action_data: Dict[str, Any], 
                         context: Any, client: Any = None) -> ValidationResult:

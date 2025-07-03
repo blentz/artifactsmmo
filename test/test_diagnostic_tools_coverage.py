@@ -73,13 +73,16 @@ class TestDiagnosticToolsAdditionalCoverage(TestCase):
             'test_action': {}
         }
         
-        tools = DiagnosticTools(offline=False, clean_state=True)
+        # Provide a mock client for live mode
+        from unittest.mock import MagicMock
+        mock_client = MagicMock()
+        tools = DiagnosticTools(client=mock_client, offline=False, clean_state=True)
         tools._execute_action_live = MagicMock(return_value=False)
         
         tools.evaluate_user_plan('test_action')
         
-        # Should show plan as invalid
-        self.assertTrue(any('Plan is INVALID' in str(call) for call in mock_info.call_args_list))
+        # Should show plan execution failed
+        self.assertTrue(any('Plan execution failed' in str(call) for call in mock_info.call_args_list))
         
     @patch('src.diagnostic_tools.AIPlayerController')
     def test_execute_plan_live_exception_handling(self, mock_controller):

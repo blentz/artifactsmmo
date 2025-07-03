@@ -27,7 +27,7 @@ class ResetEquipmentUpgradeAction(ActionBase):
     }
     reactions = {
         'equipment_status': {
-            'upgrade_status': 'none',
+            'upgrade_status': 'needs_analysis',
             'selected_item': None,
             'target_slot': None,
         },

@@ -40,20 +40,9 @@ class TestEquipmentSlotSelection(unittest.TestCase):
         # Mock character data with mixed equipment
         self.character_state.data = {
             'level': 5,
-            'equipment': {
-                'weapon': {
-                    'code': 'wooden_stick',
-                    'level': 1,
-                    'effects': {'attack_fire': 10}
-                },
-                # Missing helmet (should have high urgency)
-                'body_armor': {
-                    'code': 'leather_armor',
-                    'level': 2,
-                    'effects': {'hp': 20, 'res_fire': 5}
-                }
-                # Missing other slots
-            },
+            'weapon_slot': 'wooden_stick',
+            'body_armor_slot': 'leather_armor',
+            # Missing helmet (should have high urgency)
             'inventory': [
                 {'code': 'ash_wood', 'quantity': 10},
                 {'code': 'copper_ore', 'quantity': 8},
@@ -65,6 +54,13 @@ class TestEquipmentSlotSelection(unittest.TestCase):
                 'jewelrycrafting': 2
             }
         }
+        
+        # Set equipment status in world state
+        self.action_context.set_result('equipment_status', {
+            'weapon': 'wooden_stick',
+            'body_armor': 'leather_armor'
+            # helmet is missing
+        })
         
     def test_complete_action_chain_weaponcrafting(self):
         """Test complete chain for weaponcrafting skill XP"""

@@ -30,6 +30,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import copy
 import logging
 
 
@@ -723,7 +724,8 @@ def walk_path(path):
             path["node_id"] += 1
 
             _c_node = node.copy()
-            _c_node["state"] = node["state"].copy()
+            # Deep copy state to avoid modifying the original node
+            _c_node["state"] = copy.deepcopy(node["state"])
             _c_node["id"] = path["node_id"]
             _c_node["name"] = action_name
 
@@ -733,7 +735,13 @@ def walk_path(path):
                 if _value == -1:
                     continue
 
-                _c_node["state"][key] = _value
+                # Handle nested dictionary reactions properly
+                if isinstance(_value, dict) and key in _c_node["state"] and isinstance(_c_node["state"][key], dict):
+                    # Deep merge nested dictionaries instead of replacing
+                    for nested_key, nested_value in _value.items():
+                        _c_node["state"][key][nested_key] = nested_value
+                else:
+                    _c_node["state"][key] = _value
 
             path["nodes"][_c_node["id"]] = _c_node
             _neighbors.append(_c_node)

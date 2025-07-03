@@ -36,6 +36,8 @@ state_defaults:
     required: {}
     status: "unknown"
     gathered: false
+    requirements_determined: false
+    availability_checked: false
     
   combat_context:
     status: "idle"
@@ -78,6 +80,10 @@ state_defaults:
     
   skill_status:
     checked: false
+    sufficient: false
+    
+  skill_requirements:
+    verified: false
     sufficient: false
     
   inventory:

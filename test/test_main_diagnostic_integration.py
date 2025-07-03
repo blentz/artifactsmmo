@@ -29,9 +29,10 @@ class TestMainDiagnosticIntegration(TestCase):
         # Verify DiagnosticTools was created with defaults
         mock_diagnostic_tools.assert_called_once_with(
             client=mock_client,
-            offline=True,  # Default when live not specified
+            offline=True,  # Default when online not specified
             clean_state=False,
-            custom_state=None
+            custom_state=None,
+            args=args
         )
         
         # Verify show_goal_plan was called
@@ -43,19 +44,20 @@ class TestMainDiagnosticIntegration(TestCase):
         mock_client = MagicMock()
         
         args = argparse.Namespace(
-            live=True,
+            online=True,
             clean_state=False,
             state=None
         )
         
         show_goal_plan('reach_level_10', mock_client, args)
         
-        # Verify offline=False when live=True
+        # Verify offline=False when online=True
         mock_diagnostic_tools.assert_called_once_with(
             client=mock_client,
             offline=False,
             clean_state=False,
-            custom_state=None
+            custom_state=None,
+            args=args
         )
         
     @patch('src.main.DiagnosticTools')
@@ -64,7 +66,7 @@ class TestMainDiagnosticIntegration(TestCase):
         mock_client = MagicMock()
         
         args = argparse.Namespace(
-            live=False,
+            online=False,
             clean_state=True,
             state=None
         )
@@ -75,7 +77,8 @@ class TestMainDiagnosticIntegration(TestCase):
             client=mock_client,
             offline=True,
             clean_state=True,
-            custom_state=None
+            custom_state=None,
+            args=args
         )
         
     @patch('src.main.DiagnosticTools')
@@ -85,7 +88,7 @@ class TestMainDiagnosticIntegration(TestCase):
         
         custom_state_json = '{"character_status": {"level": 5}}'
         args = argparse.Namespace(
-            live=False,
+            online=False,
             clean_state=False,
             state=custom_state_json
         )
@@ -96,7 +99,8 @@ class TestMainDiagnosticIntegration(TestCase):
             client=mock_client,
             offline=True,
             clean_state=False,
-            custom_state=custom_state_json
+            custom_state=custom_state_json,
+            args=args
         )
         
     @patch('src.main.DiagnosticTools')
@@ -112,7 +116,8 @@ class TestMainDiagnosticIntegration(TestCase):
             client=mock_client,
             offline=True,
             clean_state=False,
-            custom_state=None
+            custom_state=None,
+            args=args
         )
         
         mock_diagnostic_tools.return_value.evaluate_user_plan.assert_called_once_with('move->attack')
@@ -124,7 +129,7 @@ class TestMainDiagnosticIntegration(TestCase):
         
         custom_state = '{"test": "state"}'
         args = argparse.Namespace(
-            live=True,
+            online=True,
             clean_state=True,
             state=custom_state
         )
@@ -133,9 +138,10 @@ class TestMainDiagnosticIntegration(TestCase):
         
         mock_diagnostic_tools.assert_called_once_with(
             client=mock_client,
-            offline=False,  # live=True
+            offline=False,  # online=True
             clean_state=True,
-            custom_state=custom_state
+            custom_state=custom_state,
+            args=args
         )
         
     def test_attribute_handling_missing_attributes(self):
@@ -144,11 +150,11 @@ class TestMainDiagnosticIntegration(TestCase):
         args = argparse.Namespace()
         
         # These should not exist
-        self.assertFalse(hasattr(args, 'live'))
+        self.assertFalse(hasattr(args, 'online'))
         self.assertFalse(hasattr(args, 'clean_state'))
         self.assertFalse(hasattr(args, 'state'))
         
         # Add one attribute
-        args.live = True
-        self.assertTrue(hasattr(args, 'live'))
+        args.online = True
+        self.assertTrue(hasattr(args, 'online'))
         self.assertFalse(hasattr(args, 'clean_state'))

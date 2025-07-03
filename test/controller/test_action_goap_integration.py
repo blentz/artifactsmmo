@@ -26,7 +26,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         from src.lib.yaml_data import YamlData
         from src.game.globals import CONFIG_PREFIX
         
-        actions_config = YamlData(f"{CONFIG_PREFIX}/actions.yaml")
+        actions_config = YamlData(f"{CONFIG_PREFIX}/default_actions.yaml")
         actions = actions_config.data.get('actions', {})
         
         # Test key actions have GOAP parameters in YAML

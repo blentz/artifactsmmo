@@ -206,190 +206,156 @@ class TestDataFileOperations(unittest.TestCase):
 class TestGoalPlanning(unittest.TestCase):
     """Test cases for GOAP planning functionality."""
     
-    @patch('src.main.logging')
-    @patch('src.main.GOAPGoalManager')
-    @patch('src.main.GOAPExecutionManager')
-    @patch('src.main.ActionsData')
-    @patch('src.main.GoapData')
-    def test_show_goal_plan_template(self, mock_goap_data, mock_actions_data,
-                                   mock_executor, mock_goal_manager, mock_logging):
+    @patch('src.main.DiagnosticTools')
+    def test_show_goal_plan_template(self, mock_diagnostic_tools):
         """Test showing plan for a goal template."""
         # Set up mocks
-        mock_goal_manager_instance = Mock()
-        mock_goal_manager_instance.goal_templates = {
-            'test_goal': {
-                'target_state': {'has_xp': True, 'character_alive': True}
-            }
-        }
-        mock_goal_manager.return_value = mock_goal_manager_instance
+        mock_tools_instance = Mock()
+        mock_diagnostic_tools.return_value = mock_tools_instance
         
-        mock_actions_instance = Mock()
-        mock_actions_instance.get_actions.return_value = {
-            'fight': {'conditions': {'character_alive': True}, 
-                     'reactions': {'has_xp': True}, 'weight': 2.0}
-        }
-        mock_actions_data.return_value = mock_actions_instance
-        
-        mock_goap_instance = Mock()
-        mock_goap_instance.data = {'character_alive': True}
-        mock_goap_data.return_value = mock_goap_instance
-        
-        mock_executor_instance = Mock()
-        mock_executor_instance.create_plan.return_value = [{'name': 'fight'}]
-        mock_executor.return_value = mock_executor_instance
+        # Create mock args
+        mock_args = Mock(live=False, clean_state=False, state=None)
         
         # Run function
-        show_goal_plan('test_goal', Mock())
+        show_goal_plan('test_goal', Mock(), mock_args)
         
-        # Verify plan creation
-        mock_executor_instance.create_plan.assert_called_once()
+        # Verify DiagnosticTools was created
+        mock_diagnostic_tools.assert_called_once()
         
-        # Verify logging of plan
-        log_calls = [str(call) for call in mock_logging.info.call_args_list]
-        assert any('Plan found' in call for call in log_calls)
+        # Verify show_goal_plan was called
+        mock_tools_instance.show_goal_plan.assert_called_once_with('test_goal')
     
-    @patch('src.main.logging')
-    @patch('src.main.GOAPGoalManager')
-    @patch('src.main.GOAPExecutionManager')
-    @patch('src.main.ActionsData')
-    @patch('src.main.GoapData')
-    def test_show_goal_plan_level(self, mock_goap_data, mock_actions_data,
-                                 mock_executor, mock_goal_manager, mock_logging):
+    @patch('src.main.DiagnosticTools')
+    def test_show_goal_plan_level(self, mock_diagnostic_tools):
         """Test showing plan for level goal."""
         # Set up mocks
-        mock_goal_manager.return_value = Mock(goal_templates={})
-        mock_actions_data.return_value = Mock(get_actions=Mock(return_value={}))
-        mock_goap_data.return_value = Mock(data={})
-        mock_executor.return_value = Mock(create_plan=Mock(return_value=None))
+        mock_tools_instance = Mock()
+        mock_diagnostic_tools.return_value = mock_tools_instance
+        
+        # Create mock args
+        mock_args = Mock(live=False, clean_state=False, state=None)
         
         # Run function with level goal
-        show_goal_plan('level 10', Mock())
+        show_goal_plan('level 10', Mock(), mock_args)
         
-        # Verify goal state parsing
-        create_plan_call = mock_executor.return_value.create_plan.call_args
-        goal_state = create_plan_call[0][1]
-        assert 'character_level_ge' in goal_state
-        assert goal_state['character_level_ge'] == 10
+        # Verify DiagnosticTools was created with correct params
+        mock_diagnostic_tools.assert_called_once()
+        
+        # Verify show_goal_plan was called on the instance
+        mock_tools_instance.show_goal_plan.assert_called_once_with('level 10')
     
-    @patch('src.main.logging')
-    def test_show_goal_plan_no_plan_found(self, mock_logging):
+    @patch('src.main.DiagnosticTools')
+    def test_show_goal_plan_no_plan_found(self, mock_diagnostic_tools):
         """Test when no plan can be found."""
-        with patch('src.main.GOAPGoalManager'):
-            with patch('src.main.GOAPExecutionManager') as mock_executor:
-                with patch('src.main.ActionsData'):
-                    with patch('src.main.GoapData'):
-                        # Make plan creation return None
-                        mock_executor.return_value.create_plan.return_value = None
-                        
-                        show_goal_plan('impossible_goal', Mock())
-                        
-                        # Verify "no plan" logging
-                        log_calls = [str(call) for call in mock_logging.info.call_args_list]
-                        assert any('No plan found' in call for call in log_calls)
+        # Set up mocks
+        mock_tools_instance = Mock()
+        mock_diagnostic_tools.return_value = mock_tools_instance
+        
+        # Create mock args
+        mock_args = Mock(live=False, clean_state=False, state=None)
+        
+        # Run function
+        show_goal_plan('impossible_goal', Mock(), mock_args)
+        
+        # Verify show_goal_plan was called
+        mock_tools_instance.show_goal_plan.assert_called_once_with('impossible_goal')
 
 
 class TestPlanEvaluation(unittest.TestCase):
     """Test cases for plan evaluation functionality."""
     
-    @patch('src.main.logging')
-    @patch('src.main.ActionsData')
-    @patch('src.main.GoapData')
-    def test_evaluate_user_plan_valid(self, mock_goap_data, mock_actions_data, mock_logging):
+    @patch('src.main.DiagnosticTools')
+    def test_evaluate_user_plan_valid(self, mock_diagnostic_tools):
         """Test evaluating a valid user plan."""
         # Set up mocks
-        mock_actions_instance = Mock()
-        mock_actions_instance.get_actions.return_value = {
-            'move': {
-                'conditions': {'character_alive': True},
-                'reactions': {'at_location': True},
-                'weight': 1.0
-            },
-            'fight': {
-                'conditions': {'at_location': True, 'character_alive': True},
-                'reactions': {'has_xp': True},
-                'weight': 2.0
-            }
-        }
-        mock_actions_data.return_value = mock_actions_instance
+        mock_tools_instance = Mock()
+        mock_diagnostic_tools.return_value = mock_tools_instance
         
-        mock_goap_instance = Mock()
-        mock_goap_instance.data = {'character_alive': True}
-        mock_goap_data.return_value = mock_goap_instance
+        # Create mock args
+        mock_args = Mock(live=False, clean_state=False, state=None)
         
         # Evaluate plan
-        evaluate_user_plan('move->fight', Mock())
+        evaluate_user_plan('move->fight', Mock(), mock_args)
         
-        # Verify successful evaluation
-        log_calls = [str(call) for call in mock_logging.info.call_args_list]
-        assert any('Plan is VALID' in call for call in log_calls)
+        # Verify DiagnosticTools was created
+        mock_diagnostic_tools.assert_called_once()
+        
+        # Verify evaluate_user_plan was called
+        mock_tools_instance.evaluate_user_plan.assert_called_once_with('move->fight')
     
-    @patch('src.main.logging')
-    @patch('src.main.ActionsData')
-    @patch('src.main.GoapData')
-    def test_evaluate_user_plan_unknown_action(self, mock_goap_data, mock_actions_data, mock_logging):
+    @patch('src.main.DiagnosticTools')
+    def test_evaluate_user_plan_unknown_action(self, mock_diagnostic_tools):
         """Test evaluating plan with unknown action."""
         # Set up mocks
-        mock_actions_instance = Mock()
-        mock_actions_instance.get_actions.return_value = {'move': {}}
-        mock_actions_data.return_value = mock_actions_instance
+        mock_tools_instance = Mock()
+        mock_diagnostic_tools.return_value = mock_tools_instance
         
-        mock_goap_data.return_value = Mock(data={})
+        # Create mock args
+        mock_args = Mock(live=False, clean_state=False, state=None)
         
         # Evaluate plan with unknown action
-        evaluate_user_plan('move->unknown_action', Mock())
+        evaluate_user_plan('move->unknown_action', Mock(), mock_args)
         
-        # Verify error logging
-        error_calls = [str(call) for call in mock_logging.error.call_args_list]
-        assert any('Unknown action' in call for call in error_calls)
+        # Verify DiagnosticTools was created
+        mock_diagnostic_tools.assert_called_once()
+        
+        # Verify evaluate_user_plan was called
+        mock_tools_instance.evaluate_user_plan.assert_called_once_with('move->unknown_action')
     
-    @patch('src.main.logging')
-    @patch('src.main.ActionsData')
-    @patch('src.main.GoapData')
-    def test_evaluate_user_plan_conditions_not_met(self, mock_goap_data, mock_actions_data, mock_logging):
+    @patch('src.main.DiagnosticTools')
+    def test_evaluate_user_plan_conditions_not_met(self, mock_diagnostic_tools):
         """Test evaluating plan where conditions aren't met."""
         # Set up mocks
-        mock_actions_instance = Mock()
-        mock_actions_instance.get_actions.return_value = {
-            'fight': {
-                'conditions': {'has_weapon': True, 'character_alive': True},
-                'reactions': {'has_xp': True},
-                'weight': 2.0
-            }
-        }
-        mock_actions_data.return_value = mock_actions_instance
+        mock_tools_instance = Mock()
+        mock_diagnostic_tools.return_value = mock_tools_instance
         
-        mock_goap_instance = Mock()
-        mock_goap_instance.data = {'character_alive': True}  # Missing has_weapon
-        mock_goap_data.return_value = mock_goap_instance
+        # Create mock args
+        mock_args = Mock(live=False, clean_state=False, state=None)
         
         # Evaluate plan
-        evaluate_user_plan('fight', Mock())
+        evaluate_user_plan('fight', Mock(), mock_args)
         
-        # Verify conditions not met
-        error_calls = [str(call) for call in mock_logging.error.call_args_list]
-        assert any('conditions not met' in call for call in error_calls)
+        # Verify DiagnosticTools was created
+        mock_diagnostic_tools.assert_called_once()
+        
+        # Verify evaluate_user_plan was called
+        mock_tools_instance.evaluate_user_plan.assert_called_once_with('fight')
 
 
 class TestCharacterManagement(unittest.TestCase):
     """Test cases for character management functions."""
     
-    @patch('src.main.logging')
-    def test_create_character(self, mock_logging):
-        """Test character creation (currently not implemented)."""
-        create_character('NewChar', Mock())
+    @patch('src.main.create_character_sync')
+    @patch('src.main.generate_random_character_name')
+    def test_create_character(self, mock_generate_name, mock_api_call):
+        """Test character creation with new implementation."""
+        # Setup
+        mock_client = Mock(spec=Mock)  # Use mock for AuthenticatedClient check
+        mock_client.__class__.__name__ = 'AuthenticatedClient'
+        mock_generate_name.return_value = "TestChar"
+        mock_api_call.return_value = Mock()
         
-        # Verify logging of not implemented
-        log_calls = [str(call) for call in mock_logging.info.call_args_list]
-        assert any('not yet implemented' in call for call in log_calls)
+        # Execute
+        result = create_character(mock_client)
+        
+        # Verify it works with authenticated client
+        assert result is True
+        mock_api_call.assert_called_once()
     
-    @patch('src.main.logging')
-    def test_delete_character(self, mock_logging):
-        """Test character deletion (currently not implemented)."""
-        delete_character('OldChar', Mock())
+    @patch('src.main.delete_character_sync')
+    def test_delete_character(self, mock_api_call):
+        """Test character deletion with new implementation."""
+        # Setup
+        mock_client = Mock(spec=Mock)  # Use mock for AuthenticatedClient check
+        mock_client.__class__.__name__ = 'AuthenticatedClient'
+        mock_api_call.return_value = Mock()
         
-        # Verify logging of not implemented
-        log_calls = [str(call) for call in mock_logging.info.call_args_list]
-        assert any('not yet implemented' in call for call in log_calls)
+        # Execute
+        result = delete_character('TestChar', mock_client)
+        
+        # Verify it works with authenticated client
+        assert result is True
+        mock_api_call.assert_called_once()
 
 
 class TestSignalHandling(unittest.TestCase):
@@ -408,7 +374,8 @@ class TestSignalHandling(unittest.TestCase):
         mock_exit.assert_called_once_with(0)
 
 
-class TestMainFunction(unittest.TestCase):
+@pytest.mark.asyncio
+class TestMainFunction:
     """Test cases for the main function."""
     
     @patch('src.main.parse_args')
@@ -426,7 +393,7 @@ class TestMainFunction(unittest.TestCase):
         mock_args = Mock(
             daemon=False, clean=False, create_character=None,
             delete_character=None, goal_planner=None, evaluate_plan=None,
-            log_level='INFO', character=None, characters=None
+            log_level='INFO', character=None, characters=None, parallel=None
         )
         mock_parse_args.return_value = mock_args
         mock_validate.return_value = True
@@ -503,7 +470,7 @@ class TestMainFunction(unittest.TestCase):
         mock_args = Mock(
             daemon=True, clean=False, create_character=None,
             delete_character=None, goal_planner=None, evaluate_plan=None,
-            log_level='INFO', character=None, characters=None
+            log_level='INFO', character=None, characters=None, parallel=None
         )
         mock_parse_args.return_value = mock_args
         mock_validate.return_value = True
@@ -556,10 +523,20 @@ class TestMainFunction(unittest.TestCase):
         # Verify tasks created for each character
         assert mock_group_instance.create_task.call_count == 3
         
-        # Verify task was called with character names
-        task_calls = mock_group_instance.create_task.call_args_list
-        char_names = [call[0][0].cr_frame.f_locals['character_name'] for call in task_calls]
-        assert set(char_names) == {'Char1', 'Char2', 'Char3'}
+        # Verify task was called with correct character names
+        expected_calls = [
+            (('Char1',), {'args': mock_args}),
+            (('Char2',), {'args': mock_args}),
+            (('Char3',), {'args': mock_args})
+        ]
+        
+        # Get the actual calls to task()
+        task_calls = mock_task.call_args_list
+        assert len(task_calls) == 3
+        
+        # Extract character names from task calls
+        actual_char_names = [call[1]['character_name'] for call in task_calls]
+        assert set(actual_char_names) == {'Char1', 'Char2', 'Char3'}
 
 
 if __name__ == '__main__':

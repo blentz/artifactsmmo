@@ -201,23 +201,18 @@ class GOAPExecutionManager:
         # Load default start state configuration first to get all possible state keys
         start_state_defaults = self._load_start_state_defaults()
         
-        # Get all keys from states
-        all_keys = set(start_state.keys()) | set(goal_state.keys())
+        # Get top-level keys only (not nested keys) for planner initialization
+        # GOAP library handles nested dictionaries properly when given top-level keys
+        top_level_keys = set(start_state.keys()) | set(goal_state.keys())
         if start_state_defaults:
-            all_keys.update(start_state_defaults.keys())
+            top_level_keys.update(start_state_defaults.keys())
         
-        # Extract all state variables used in action conditions and reactions
-        for action_name, action_config in actions_config.items():
-            # Add condition variables
-            conditions = action_config.get('conditions', {})
-            all_keys.update(conditions.keys())
-            
-            # Add reaction variables
-            reactions = action_config.get('reactions', {})
-            all_keys.update(reactions.keys())
+        # Don't flatten nested keys - GOAP library handles nested dictionaries natively
+        # Only collect top-level state categories like 'equipment_status', 'combat_context', etc.
         
-        # Create planner with all required state keys
-        planner = Planner(*all_keys)
+        # Create planner with only top-level state keys
+        self.logger.debug(f"Creating planner with top-level keys: {sorted(top_level_keys)}")
+        planner = Planner(*top_level_keys)
         
         # Override the planner's default -1 values with proper defaults
         # This is crucial for nested dictionary states
@@ -228,19 +223,18 @@ class GOAPExecutionManager:
         
         # Build complete start state with proper precedence:
         # 1. Start with configuration defaults
-        # 2. Add any additional keys from actions with False defaults  
-        # 3. Override with actual start_state values
+        # 2. Override with actual start_state values
         complete_start_state = start_state_defaults.copy() if start_state_defaults else {}
         
-        # Add any missing action-required keys with appropriate defaults
-        for key in all_keys:
+        # Add any missing top-level keys with appropriate defaults
+        for key in top_level_keys:
             if key not in complete_start_state:
                 # Check if this is a nested state key from defaults
                 if start_state_defaults and key in start_state_defaults:
                     complete_start_state[key] = start_state_defaults[key]
                 else:
-                    # Only set to False if it's not a dictionary state
-                    complete_start_state[key] = False
+                    # Set empty dict for nested states, False for simple states
+                    complete_start_state[key] = {} if key.endswith('_status') or key.endswith('_context') else False
         
         # Override with actual runtime state values
         # Need to do a deep merge for nested dictionaries
@@ -252,8 +246,14 @@ class GOAPExecutionManager:
             else:
                 complete_start_state[key] = value
         
+        # Calculate boolean flags for initial state (GOAP planning needs them)
+        # The post-execution pipeline will maintain consistency after each action
+        self._calculate_initial_boolean_flags(complete_start_state)
+        
         # Set start and goal states on the planner
         planner.set_start_state(**complete_start_state)
+        self.logger.debug(f"Planner start state after setting: {planner.start_state}")
+        self.logger.debug(f"Equipment status in planner: {planner.start_state.get('equipment_status', 'MISSING')}")
         
         # The planner might not handle nested dicts properly, so we need to restore them
         for key, value in complete_start_state.items():
@@ -306,7 +306,7 @@ class GOAPExecutionManager:
         self.current_world = world
         self.current_planner = planner
         
-        self.logger.debug(f"Created GOAP world with {len(actions_config)} actions and {len(all_keys)} state variables")
+        self.logger.debug(f"Created GOAP world with {len(actions_config)} actions and {len(top_level_keys)} state variables")
         return world
     
     def create_plan(self, start_state: Dict[str, Any], goal_state: Dict[str, Any], 
@@ -485,7 +485,9 @@ class GOAPExecutionManager:
             # Check for cooldown and handle by inserting wait action and replanning
             # Force refresh to ensure we have accurate cooldown status
             current_state = controller.get_current_world_state(force_refresh=True)
-            if current_state.get('is_on_cooldown', False):
+            # Check nested state structure for cooldown status
+            character_status = current_state.get('character_status', {})
+            if character_status.get('cooldown_active', False):
                 # Only insert wait action if current action isn't already a wait action
                 if action_index < len(current_plan):
                     current_action = current_plan[action_index]
@@ -577,7 +579,9 @@ class GOAPExecutionManager:
             # Move and attack actions can put character on cooldown
             if action_name in ['move', 'attack', 'gather_resources', 'craft_item', 'rest']:
                 current_state = controller.get_current_world_state(force_refresh=True)
-                if current_state.get('is_on_cooldown', False):
+                # Check nested state structure for cooldown status
+                character_status = current_state.get('character_status', {})
+                if character_status.get('cooldown_active', False):
                     # Insert wait action at next position if not already present
                     if action_index < len(current_plan) and current_plan[action_index].get('name') != 'wait':
                         self.logger.info("🕐 Cooldown detected after action - inserting wait action")
@@ -1195,3 +1199,47 @@ class GOAPExecutionManager:
         except Exception as e:
             self.logger.error(f"Error creating recovery plan: {e}")
             return None
+    
+    def _calculate_initial_boolean_flags(self, world_state: Dict[str, Any]) -> None:
+        """
+        Calculate boolean flags for initial state to maintain consistency with post-execution pipeline.
+        
+        This ensures boolean flags like has_target_slot, has_selected_item, etc.
+        are calculated correctly for the initial state passed to GOAP planning.
+        
+        Mirrors the logic in ActionExecutor._recalculate_boolean_flags to maintain consistency.
+        """
+        # Calculate equipment status boolean flags
+        if 'equipment_status' in world_state and isinstance(world_state['equipment_status'], dict):
+            equipment = world_state['equipment_status']
+            equipment['has_target_slot'] = equipment.get('target_slot') is not None
+            equipment['has_selected_item'] = equipment.get('selected_item') is not None
+            self.logger.debug(f"Calculated initial equipment flags: has_target_slot={equipment['has_target_slot']}, has_selected_item={equipment['has_selected_item']}")
+        
+        # Calculate combat context boolean flags
+        if 'combat_context' in world_state and isinstance(world_state['combat_context'], dict):
+            combat = world_state['combat_context']
+            win_rate = combat.get('recent_win_rate', 1.0)
+            combat['low_win_rate'] = win_rate < 0.2
+            self.logger.debug(f"Calculated initial combat flags: low_win_rate={combat['low_win_rate']} (win_rate={win_rate})")
+        
+        # Calculate materials boolean flags
+        if 'materials' in world_state and isinstance(world_state['materials'], dict):
+            materials = world_state['materials']
+            # Set default boolean flags if not present
+            if 'requirements_determined' not in materials:
+                materials['requirements_determined'] = False
+            if 'availability_checked' not in materials:
+                materials['availability_checked'] = False
+            self.logger.debug(f"Calculated initial materials flags: requirements_determined={materials['requirements_determined']}, availability_checked={materials['availability_checked']}")
+        
+        # Calculate skill requirements boolean flags
+        if 'skill_requirements' in world_state and isinstance(world_state['skill_requirements'], dict):
+            skill_req = world_state['skill_requirements']
+            if 'verified' not in skill_req:
+                skill_req['verified'] = False
+            if 'sufficient' not in skill_req:
+                skill_req['sufficient'] = False
+            self.logger.debug(f"Calculated initial skill requirement flags: verified={skill_req['verified']}, sufficient={skill_req['sufficient']}")
+        
+        # Add more boolean flag calculations here as needed

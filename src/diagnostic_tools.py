@@ -23,7 +23,7 @@ from src.lib.yaml_data import YamlData
 class DiagnosticTools:
     """Enhanced diagnostic tools for GOAP planning and action evaluation."""
     
-    def __init__(self, client=None, offline=True, clean_state=False, custom_state=None):
+    def __init__(self, client=None, offline=True, clean_state=False, custom_state=None, args=None):
         """
         Initialize diagnostic tools.
         
@@ -32,10 +32,12 @@ class DiagnosticTools:
             offline: Whether to run in offline simulation mode
             clean_state: Whether to start with clean default state
             custom_state: Custom initial state (JSON string or dict)
+            args: CLI arguments to pass through to execution pipeline
         """
         self.logger = logging.getLogger(__name__)
         self.client = client
         self.offline = offline
+        self.args = args
         self.goap_executor = GOAPExecutionManager()
         self.goal_manager = GOAPGoalManager()
         
@@ -60,95 +62,46 @@ class DiagnosticTools:
                 self.controller.set_map_state(MapState(client, name="test_map"))
     
     def _get_clean_state(self) -> Dict[str, Any]:
-        """Get a clean default state for testing."""
-        return {
-            'character_status': {
-                'alive': True,
-                'cooldown_active': False,
-                'hp_percentage': 100.0,
-                'level': 1,
-                'safe': True,
-                'xp_percentage': 0.0
-            },
-            'combat_context': {
-                'location': None,
-                'recent_win_rate': 1.0,
-                'status': 'idle',
-                'target': None
-            },
-            'equipment_status': {
-                'armor': None,
-                'boots': None,
-                'equipped': False,
-                'gaps_analyzed': False,
-                'helmet': None,
-                'item_crafted': False,
-                'recipe_evaluated': False,
-                'selected_item': None,
-                'shield': None,
-                'target_slot': None,
-                'upgrade_status': 'needs_analysis',
-                'weapon': None
-            },
-            'goal_progress': {
-                'blocked_by': None,
-                'current_goal': None,
-                'monsters_hunted': 0,
-                'phase': 'planning',
-                'steps_completed': 0,
-                'total_steps': 0
-            },
-            'healing_context': {
-                'healing_method': None,
-                'healing_needed': False,
-                'healing_status': 'idle'
-            },
-            'inventory': {
-                'updated': False
-            },
-            'location_context': {
-                'at_resource': False,
-                'at_target': False,
-                'at_workshop': False,
-                'current': {
-                    'type': 'spawn',
-                    'x': 0,
-                    'y': 0
-                },
-                'target': None,
-                'workshop': None,
-                'workshop_known': False
-            },
-            'materials': {
-                'gathered': False,
-                'inventory': {},
-                'required': {},
-                'status': 'unknown'
-            },
-            'resource_availability': {
-                'monsters': False,
-                'resources': False
-            },
-            'skill_status': {
-                'checked': False,
-                'sufficient': False
-            },
-            'skills': {}
-        }
+        """Get a clean default state for testing using the existing GOAP planner facilities."""
+        # Use the GOAP execution manager to get the canonical clean state
+        # This ensures we use exactly the same state initialization logic
+        return self.goap_executor._load_start_state_defaults()
     
     def _parse_custom_state(self, custom_state) -> Dict[str, Any]:
-        """Parse custom state from JSON string or dict."""
+        """Parse custom state from JSON string or dict and merge with clean state."""
+        import copy
+        
+        # Start with clean state as base
+        merged_state = copy.deepcopy(self._get_clean_state())
+        
+        # Parse the custom state
         if isinstance(custom_state, str):
             try:
-                return json.loads(custom_state)
+                custom_dict = json.loads(custom_state)
             except json.JSONDecodeError as e:
                 self.logger.error(f"Invalid JSON state: {e}")
-                return self._get_clean_state()
+                return merged_state
         elif isinstance(custom_state, dict):
-            return custom_state
+            custom_dict = custom_state
         else:
             self.logger.warning("Invalid custom state format, using clean state")
-            return self._get_clean_state()
+            return merged_state
+        
+        # Deep merge custom state into clean state
+        self._deep_merge_dict(merged_state, custom_dict)
+        
+        # Calculate boolean flags after merging, just like GOAP planner does
+        self.goap_executor._calculate_initial_boolean_flags(merged_state)
+        
+        return merged_state
+    
+    def _deep_merge_dict(self, target: Dict, source: Dict):
+        """Deep merge source dict into target dict."""
+        for key, value in source.items():
+            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+                self._deep_merge_dict(target[key], value)
+            else:
+                target[key] = value
     
     def show_goal_plan(self, goal_string: str):
         """
@@ -161,7 +114,7 @@ class DiagnosticTools:
         self.logger.info(f"Mode: {'OFFLINE simulation' if self.offline else 'LIVE execution'}")
         
         # Load actions configuration
-        actions_data = ActionsData("config/actions.yaml")
+        actions_data = ActionsData("config/default_actions.yaml")
         actions_config = actions_data.get_actions()
         self.logger.info(f"Loaded {len(actions_config)} available actions")
         
@@ -195,7 +148,7 @@ class DiagnosticTools:
     
     def evaluate_user_plan(self, plan_string: str):
         """
-        Evaluate or execute a user-defined plan.
+        Evaluate or execute a user-defined plan using the same mechanisms as the GOAP planner.
         
         Args:
             plan_string: Plan specification (e.g., "move->fight->rest")
@@ -207,16 +160,26 @@ class DiagnosticTools:
         plan_actions = self._parse_plan_string(plan_string)
         self.logger.info(f"\nPlan contains {len(plan_actions)} actions: {plan_actions}")
         
-        # Load actions configuration
-        actions_data = ActionsData("config/actions.yaml")
+        # Load actions configuration using same mechanism as GOAP planner
+        actions_data = ActionsData("config/default_actions.yaml")
         actions_config = actions_data.get_actions()
         
         self.logger.info(f"\nStarting state summary:")
         self._display_state_summary(self.current_state)
         
-        # Evaluate/execute each action
+        if self.offline:
+            # Use GOAP execution manager for consistent state handling
+            self._evaluate_plan_offline(plan_actions, actions_config)
+        else:
+            # Use live execution through controller
+            self._evaluate_plan_online(plan_actions, actions_config)
+    
+    def _evaluate_plan_offline(self, plan_actions: List[str], actions_config: Dict):
+        """Evaluate plan using GOAP execution manager for consistent state handling."""
         plan_valid = True
         total_cost = 0
+        
+        # Create a copy of current state for simulation
         simulated_state = self.current_state.copy()
         
         for i, action_name in enumerate(plan_actions, 1):
@@ -230,21 +193,88 @@ class DiagnosticTools:
             
             action_cfg = actions_config[action_name]
             
-            if self.offline:
-                # Offline simulation
-                valid, cost = self._simulate_action(action_name, action_cfg, simulated_state)
-                if not valid:
-                    plan_valid = False
-                    break
-                total_cost += cost
-            else:
-                # Live execution
-                if not self._execute_action_live(action_name, action_cfg):
-                    plan_valid = False
-                    break
+            # Use GOAP execution manager's condition checking logic
+            valid, cost = self._simulate_action_with_goap_logic(action_name, action_cfg, simulated_state)
+            if not valid:
+                plan_valid = False
+                break
+            total_cost += cost
         
         # Summary
         self._display_plan_summary(plan_valid, total_cost, self.current_state, simulated_state)
+    
+    def _evaluate_plan_online(self, plan_actions: List[str], actions_config: Dict):
+        """Evaluate plan using live execution through controller."""
+        if not self.controller:
+            self.logger.error("Online execution requires controller initialization")
+            return
+        
+        plan_valid = True
+        
+        for i, action_name in enumerate(plan_actions, 1):
+            self.logger.info(f"\n{i}. Executing action: {action_name}")
+            
+            if action_name not in actions_config:
+                self.logger.error(f"   ❌ ERROR: Unknown action '{action_name}'")
+                plan_valid = False
+                break
+            
+            # Execute through controller using same pipeline as normal execution
+            if not self._execute_action_live(action_name, actions_config[action_name]):
+                plan_valid = False
+                break
+        
+        self.logger.info(f"\n=== Plan Execution Summary ===")
+        if plan_valid:
+            self.logger.info("✅ Plan executed successfully")
+        else:
+            self.logger.info("❌ Plan execution failed")
+    
+    def _simulate_action_with_goap_logic(self, action_name: str, action_cfg: Dict, state: Dict) -> Tuple[bool, float]:
+        """
+        Simulate action using the same logic as GOAP execution manager.
+        This ensures consistency between diagnostic tool and planner.
+        """
+        conditions = action_cfg.get('conditions', {})
+        reactions = action_cfg.get('reactions', {})
+        weight = action_cfg.get('weight', 1.0)
+        
+        # Use GOAP execution manager's condition checking logic
+        conditions_met = True
+        failures = []
+        
+        for cond_key, cond_value in conditions.items():
+            if not self.goap_executor._check_condition_matches(state, cond_key, cond_value):
+                conditions_met = False
+                current_value = state.get(cond_key, None)
+                failures.append(f"{cond_key}: required={cond_value}, current={current_value}")
+        
+        if conditions_met:
+            self.logger.info("   ✓ All conditions met")
+        else:
+            self.logger.error("   ❌ Conditions not met:")
+            for failure in failures:
+                self.logger.error(f"     - {failure}")
+            return False, 0
+        
+        # Apply reactions using same logic as GOAP
+        self.logger.info("   Applying effects:")
+        for key, value in reactions.items():
+            old_value = state.get(key, None)
+            
+            # Handle nested reactions
+            if isinstance(value, dict) and key in state and isinstance(state[key], dict):
+                # Merge nested dictionaries
+                for nested_key, nested_value in value.items():
+                    old_nested = state[key].get(nested_key, None)
+                    state[key][nested_key] = nested_value
+                    self.logger.info(f"     - {key}.{nested_key}: {old_nested} → {nested_value}")
+            else:
+                state[key] = value
+                self.logger.info(f"     - {key}: {old_value} → {value}")
+        
+        self.logger.info(f"   ✓ Action executable (cost: {weight})")
+        return True, weight
     
     def _parse_goal_string(self, goal_string: str) -> Dict[str, Any]:
         """Parse goal string into goal state dictionary."""

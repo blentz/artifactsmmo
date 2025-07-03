@@ -220,24 +220,58 @@ class AnalyzeEquipmentGapsAction(ActionBase):
         
     def _get_current_equipment(self, character_state: CharacterState, slot: str) -> Optional[Dict]:
         """Get the current equipment in the specified slot."""
-        if not character_state.data or 'equipment' not in character_state.data:
+        # Get equipment from world state via context, not character state
+        if hasattr(self, '_context') and self._context:
+            equipment_status = self._context.get('equipment_status', {})
+            item_code = equipment_status.get(slot)
+            
+            if item_code:
+                # Return equipment info with proper level
+                item_level = self._get_item_level(item_code)
+                return {'code': item_code, 'level': item_level}
+            return None
+        
+        # Fallback to checking character slots directly from character data
+        if not character_state.data:
             return None
             
-        equipment = character_state.data.get('equipment', {})
+        # Check slot fields in character data (e.g., weapon_slot, helmet_slot)
+        slot_field = f"{slot}_slot"
+        item_code = character_state.data.get(slot_field)
         
-        # Handle special cases for rings
-        if slot in ['ring1', 'ring2']:
-            # Check if there's ring equipment and determine which ring slot
-            ring_equipment = equipment.get('ring')
-            if ring_equipment:
-                # For now, assume single ring goes to ring1, future rings to ring2
-                if slot == 'ring1':
-                    return ring_equipment
-                # ring2 would be None unless there are multiple rings
-                return None
-            return None
-        else:
-            return equipment.get(slot)
+        if item_code:
+            # Return basic item info with proper level
+            item_level = self._get_item_level(item_code)
+            return {'code': item_code, 'level': item_level}
+            
+        return None
+    
+    def _get_item_level(self, item_code: str) -> int:
+        """Get the level of an item by its code."""
+        # Known item levels for common equipment
+        item_levels = {
+            # Starter weapons
+            'wooden_stick': 1,
+            'wooden_staff': 1,
+            
+            # Basic weapons
+            'copper_dagger': 1,
+            'iron_sword': 5,
+            'iron_shield': 4,
+            
+            # Basic armor
+            'leather_armor': 1,
+            'leather_helmet': 1,
+            'iron_helmet': 4,
+            'iron_armor': 5,
+            'iron_boots': 3,
+            
+            # Accessories
+            'silver_ring': 4,
+            'copper_ring': 1,
+        }
+        
+        return item_levels.get(item_code, 1)  # Default to level 1 if unknown
             
     def _calculate_urgency_score(self, level_diff: int, config: YamlData) -> float:
         """Calculate urgency score based on level difference."""

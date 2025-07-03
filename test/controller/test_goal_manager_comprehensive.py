@@ -25,11 +25,13 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
             'goal_templates': {
                 'hunt_monsters': {
                     'description': 'Hunt monsters for XP',
+                    'objective_type': 'combat',
                     'target_state': {'character_status': {'level': '>1'}},
                     'strategy': {'max_iterations': 10}
                 },
                 'craft_selected_item': {
                     'description': 'Craft selected item',
+                    'objective_type': 'equipment_progression',
                     'target_state': {'equipment_status': {'upgrade_status': 'completed'}},
                     'parameters': {'target_level': 5}
                 },
@@ -56,14 +58,14 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
                 ],
                 'equipment': [
                     {
-                        'condition': {'equipment_status': {'weapon': '!null'}},
+                        'condition': {'equipment_status': {'has_weapon': True}},
                         'goal': 'craft_selected_item',
                         'priority': 60
                     }
                 ],
                 'skill_progression': [
                     {
-                        'condition': {'skills': {'weaponcrafting': {'level': '>=2'}}},
+                        'condition': {'skills': {'weaponcrafting': {'level': 2}}},
                         'goal': 'craft_selected_item',
                         'priority': 50
                     }
@@ -73,6 +75,23 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
                         'condition': {'location_context': {'current': {'type': 'unknown'}}},
                         'goal': 'hunt_monsters',
                         'priority': 40
+                    }
+                ],
+                'progression': [
+                    {
+                        'condition': {
+                            'character_status': {'safe': True, 'hp_sufficient_for_combat': True},
+                            'combat_context': {'status': 'idle'}
+                        },
+                        'goal': 'hunt_monsters',
+                        'priority': 60
+                    },
+                    {
+                        'condition': {
+                            'equipment_status': {'has_selected_item': True, 'upgrade_status': 'in_progress'}
+                        },
+                        'goal': 'craft_selected_item',
+                        'priority': 50
                     }
                 ]
             },
@@ -339,6 +358,8 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
         current_state['character_status']['hp_percentage'] = 50
         current_state['character_status']['cooldown_active'] = False
         current_state['character_status']['level'] = 2
+        current_state['character_status']['hp_sufficient_for_combat'] = True
+        current_state['combat_context']['status'] = 'idle'
         
         # Mock random to ensure deterministic result
         with patch('random.uniform', return_value=1.0):
@@ -355,6 +376,7 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
         current_state['character_status']['cooldown_active'] = False
         current_state['equipment_status']['selected_item'] = 'wooden_sword'
         current_state['equipment_status']['upgrade_status'] = 'in_progress'  # Not completed
+        current_state['equipment_status']['has_selected_item'] = True
         
         # Mock random to ensure we select crafting goal
         with patch('random.uniform', return_value=0.5):  # Low value to select first available goal

@@ -321,9 +321,10 @@ class GOAPGoalManager:
                                     available_goals: List[str],
                                     goal_weights: Dict[str, float] = None) -> Optional[Tuple[str, Dict[str, Any]]]:
         """
-        Select XP-gaining goals with hierarchical combat vs crafting balance.
+        Select XP-gaining goals using rule-based system from configuration.
         
-        Combat XP is weighted slightly higher than crafting XP as requested.
+        Evaluates progression category goals from goal_selection_rules with
+        weighted selection based on goal types and persistence bonuses.
         
         Args:
             current_state: Current world state
@@ -338,61 +339,70 @@ class GOAPGoalManager:
         if not char_status.get('safe', False) or not char_status.get('alive', False):
             return None
         
-        xp_goals = []
+        # Use rule-based evaluation for progression goals
+        progression_goals = []
         
-        # Combat XP goals (weighted higher as requested)
-        if self._is_combat_viable(current_state):
-            combat_weight = 3.0  # Higher weight for combat as requested
-            persistence_bonus = goal_weights.get('hunt_monsters', 0.0) if goal_weights else 0.0
-            total_weight = combat_weight + persistence_bonus
-            
-            if 'hunt_monsters' in available_goals and self.goal_templates.get('hunt_monsters'):
-                xp_goals.append({
-                    'goal_name': 'hunt_monsters',
-                    'goal_config': self.goal_templates['hunt_monsters'],
-                    'weight': total_weight,
-                    'type': 'combat'
-                })
-                
-                if persistence_bonus > 0:
-                    self.logger.debug(f"🎯 Applied persistence bonus to combat: "
-                                   f"{combat_weight} + {persistence_bonus:.2f} = {total_weight:.2f}")
+        if 'progression' in self.goal_selection_rules:
+            for rule in self.goal_selection_rules['progression']:
+                if self._check_goal_condition(rule.get('condition', {}), current_state):
+                    goal_name = rule.get('goal')
+                    if goal_name in available_goals:
+                        goal_config = self.goal_templates.get(goal_name)
+                        if goal_config:
+                            # Base priority from rule
+                            base_priority = rule.get('priority', 50)
+                            
+                            # Determine goal type and apply type-based weight
+                            goal_type = 'other'
+                            type_weight = 1.0
+                            
+                            # Check goal objective type from config
+                            objective_type = goal_config.get('objective_type', '')
+                            if objective_type == 'combat' or 'hunt' in goal_name.lower():
+                                goal_type = 'combat'
+                                type_weight = 3.0  # Higher weight for combat
+                            elif (objective_type in ['equipment_progression', 'crafting'] or 
+                                  any(skill in goal_name.lower() for skill in ['craft', 'weapon', 'armor', 'equipment'])):
+                                goal_type = 'crafting'
+                                type_weight = 2.0  # Lower weight for crafting
+                            
+                            # Apply persistence bonus if available
+                            persistence_bonus = goal_weights.get(goal_name, 0.0) if goal_weights else 0.0
+                            
+                            # Calculate total weight
+                            total_weight = (base_priority / 10.0) * type_weight + persistence_bonus
+                            
+                            progression_goals.append({
+                                'goal_name': goal_name,
+                                'goal_config': goal_config,
+                                'weight': total_weight,
+                                'type': goal_type,
+                                'base_priority': base_priority
+                            })
+                            
+                            self.logger.debug(f"📊 Evaluated progression goal '{goal_name}': "
+                                           f"priority={base_priority}, type={goal_type}, "
+                                           f"weight={total_weight:.2f}")
+                            
+                            if persistence_bonus > 0:
+                                self.logger.debug(f"🎯 Applied persistence bonus: +{persistence_bonus:.2f}")
         
-        # Crafting XP goals (all crafting skills with lower base weight)
-        crafting_skills = ['weaponcrafting', 'gearcrafting', 'jewelrycrafting', 'cooking', 'alchemy']
-        crafting_goals = ['upgrade_weapon', 'upgrade_armor', 'complete_equipment_set', 'craft_selected_item']
-        
-        for goal_name in crafting_goals:
-            if goal_name in available_goals and self._is_crafting_goal_viable(goal_name, current_state):
-                goal_config = self.goal_templates.get(goal_name)
-                if goal_config:
-                    crafting_weight = 2.0  # Lower than combat (3.0)
-                    persistence_bonus = goal_weights.get(goal_name, 0.0) if goal_weights else 0.0
-                    total_weight = crafting_weight + persistence_bonus
-                    
-                    xp_goals.append({
-                        'goal_name': goal_name,
-                        'goal_config': goal_config,
-                        'weight': total_weight,
-                        'type': 'crafting'
-                    })
-                    
-                    if persistence_bonus > 0:
-                        self.logger.debug(f"🎯 Applied persistence bonus to crafting '{goal_name}': "
-                                       f"{crafting_weight} + {persistence_bonus:.2f} = {total_weight:.2f}")
-        
-        if not xp_goals:
+        if not progression_goals:
+            self.logger.debug("No progression goals available for current state")
             return None
         
+        # Log all available progression goals
+        self.logger.debug(f"Available progression goals: {[g['goal_name'] for g in progression_goals]}")
+        
         # Weighted random selection
-        total_weight = sum(goal['weight'] for goal in xp_goals)
+        total_weight = sum(goal['weight'] for goal in progression_goals)
         random_value = random.uniform(0, total_weight)
         
         cumulative_weight = 0
-        for goal in xp_goals:
+        for goal in progression_goals:
             cumulative_weight += goal['weight']
             if random_value <= cumulative_weight:
-                self.logger.debug(f"⚡ Selected XP goal '{goal['goal_name']}' "
+                self.logger.debug(f"⚡ Selected progression goal '{goal['goal_name']}' "
                                f"(weight {goal['weight']:.2f}, type {goal['type']})")
                 return (goal['goal_name'], goal['goal_config'])
         

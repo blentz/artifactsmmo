@@ -4,12 +4,19 @@
 import asyncio
 import logging
 import os
+import random
 import re
 import signal
+import string
 import sys
 from pathlib import Path
 
 from artifactsmmo_api_client.client import AuthenticatedClient, Client
+from artifactsmmo_api_client.api.characters.create_character_characters_create_post import sync as create_character_sync
+from artifactsmmo_api_client.api.characters.delete_character_characters_delete_post import sync as delete_character_sync
+from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
+from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
+from artifactsmmo_api_client.models.character_skin import CharacterSkin
 
 from src.cli import get_character_list, parse_args, setup_logging, validate_args
 from src.diagnostic_tools import DiagnosticTools
@@ -159,7 +166,7 @@ def clean_data_files():
 def show_goal_plan(goal_string, client, args):
     """Show the GOAP plan for achieving a specified goal."""
     # Use new diagnostic tools
-    offline = not args.live if hasattr(args, 'live') else True
+    offline = not args.online if hasattr(args, 'online') else True
     clean_state = args.clean_state if hasattr(args, 'clean_state') else False
     custom_state = args.state if hasattr(args, 'state') else None
     
@@ -167,7 +174,8 @@ def show_goal_plan(goal_string, client, args):
         client=client,
         offline=offline,
         clean_state=clean_state,
-        custom_state=custom_state
+        custom_state=custom_state,
+        args=args
     )
     
     tools.show_goal_plan(goal_string)
@@ -176,7 +184,7 @@ def show_goal_plan(goal_string, client, args):
 def evaluate_user_plan(plan_string, client, args):
     """Evaluate a user-defined plan."""
     # Use new diagnostic tools
-    offline = not args.live if hasattr(args, 'live') else True
+    offline = not args.online if hasattr(args, 'online') else True
     clean_state = args.clean_state if hasattr(args, 'clean_state') else False
     custom_state = args.state if hasattr(args, 'state') else None
     
@@ -184,24 +192,89 @@ def evaluate_user_plan(plan_string, client, args):
         client=client,
         offline=offline,
         clean_state=clean_state,
-        custom_state=custom_state
+        custom_state=custom_state,
+        args=args
     )
     
     tools.evaluate_user_plan(plan_string)
 
 
-def create_character(character_name, client):
-    """Create a new character."""
-    logging.info(f"Creating character: {character_name}")
-    # TODO: Implement character creation via API
-    logging.info("Character creation not yet implemented")
+def generate_random_character_name() -> str:
+    """Generate a random 8-character name using a-zA-Z."""
+    return ''.join(random.choices(string.ascii_letters, k=8))
+
+
+def create_character(client):
+    """Create a new character with a randomly generated name."""
+    # Check if client is authenticated (works with mocks and real clients)
+    if hasattr(client, '__class__') and client.__class__.__name__ != 'AuthenticatedClient':
+        logging.error("Character creation requires an authenticated client")
+        return False
+    
+    # Generate random character name
+    character_name = generate_random_character_name()
+    logging.info(f"Creating character with randomly generated name: {character_name}")
+    
+    try:
+        # Choose a random skin from available options
+        available_skins = list(CharacterSkin)
+        selected_skin = random.choice(available_skins)
+        logging.info(f"Selected skin: {selected_skin.value}")
+        
+        # Create the character schema
+        character_schema = AddCharacterSchema(
+            name=character_name,
+            skin=selected_skin
+        )
+        
+        # Make the API call
+        response = create_character_sync(client=client, body=character_schema)
+        
+        if response:
+            logging.info(f"✅ Character '{character_name}' created successfully!")
+            logging.info(f"Character details: {response}")
+            return True
+        else:
+            logging.error(f"❌ Failed to create character '{character_name}' - no response received")
+            return False
+            
+    except Exception as e:
+        logging.error(f"❌ Error creating character '{character_name}': {e}")
+        return False
 
 
 def delete_character(character_name, client):
     """Delete an existing character."""
+    # Check if client is authenticated (works with mocks and real clients)
+    if hasattr(client, '__class__') and client.__class__.__name__ != 'AuthenticatedClient':
+        logging.error("Character deletion requires an authenticated client")
+        return False
+    
+    if not character_name or not character_name.strip():
+        logging.error("Character name cannot be empty")
+        return False
+    
+    character_name = character_name.strip()
     logging.info(f"Deleting character: {character_name}")
-    # TODO: Implement character deletion via API
-    logging.info("Character deletion not yet implemented")
+    
+    try:
+        # Create the delete character schema
+        delete_schema = DeleteCharacterSchema(name=character_name)
+        
+        # Make the API call
+        response = delete_character_sync(client=client, body=delete_schema)
+        
+        if response:
+            logging.info(f"✅ Character '{character_name}' deleted successfully!")
+            logging.info(f"Deletion response: {response}")
+            return True
+        else:
+            logging.error(f"❌ Failed to delete character '{character_name}' - no response received")
+            return False
+            
+    except Exception as e:
+        logging.error(f"❌ Error deleting character '{character_name}': {e}")
+        return False
 
 
 def handle_shutdown(signum, frame):
@@ -254,7 +327,7 @@ async def main():
             return
         
         if args.create_character:
-            create_character(args.create_character, client)
+            create_character(client)
             return
         
         if args.delete_character:

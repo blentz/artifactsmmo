@@ -71,11 +71,14 @@ class TestEquipmentUpgradeChain(unittest.TestCase):
         # Mock character state with good equipment
         context.character_state = MagicMock()
         context.character_state.data = {
-            'level': 2,
-            'equipment': {
-                'weapon': {'code': 'wooden_stick', 'level': 2}  # Same level as character
-            }
+            'level': 1,
+            'weapon_slot': 'wooden_stick'  # Character data has equipment slots
         }
+        
+        # Set equipment status in world state
+        context.set_result('equipment_status', {
+            'weapon': 'wooden_stick'
+        })
         
         # Act
         result = action.execute(self.mock_client, context)

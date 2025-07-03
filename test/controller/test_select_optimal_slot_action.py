@@ -334,21 +334,25 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
     def test_check_derived_slot_patterns(self):
         """Test derived pattern matching for complex slot relationships"""
         # Test ring pattern matching
-        result = self.action._check_derived_slot_patterns('ring', 'jewelry', 'ring1')
+        item_data = {'type': 'ring', 'subtype': 'jewelry'}
+        result = self.action._check_derived_slot_patterns('ring', 'jewelry', 'ring1', item_data)
         self.assertTrue(result)
         
-        result = self.action._check_derived_slot_patterns('ring', 'jewelry', 'ring2')
+        result = self.action._check_derived_slot_patterns('ring', 'jewelry', 'ring2', item_data)
         self.assertTrue(result)
         
         # Test armor pattern matching
-        result = self.action._check_derived_slot_patterns('armor', 'chest_armor', 'body_armor')
+        armor_item_data = {'type': 'armor', 'subtype': 'chest_armor'}
+        result = self.action._check_derived_slot_patterns('armor', 'chest_armor', 'body_armor', armor_item_data)
         self.assertTrue(result)
         
-        result = self.action._check_derived_slot_patterns('helmet', 'head_armor', 'helmet')
+        helmet_item_data = {'type': 'helmet', 'subtype': 'head_armor'}
+        result = self.action._check_derived_slot_patterns('helmet', 'head_armor', 'helmet', helmet_item_data)
         self.assertTrue(result)
         
         # Test no match
-        result = self.action._check_derived_slot_patterns('consumable', 'food', 'weapon')
+        consumable_item_data = {'type': 'consumable', 'subtype': 'food'}
+        result = self.action._check_derived_slot_patterns('consumable', 'food', 'weapon', consumable_item_data)
         self.assertFalse(result)
     
     def test_fallback_when_knowledge_base_empty(self):

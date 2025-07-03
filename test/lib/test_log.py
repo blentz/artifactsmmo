@@ -155,6 +155,24 @@ class TestJSONFormatter(unittest.TestCase):
 class TestLoggerInitialization(unittest.IsolatedAsyncioTestCase):
     """Test cases for logger initialization."""
     
+    def setUp(self):
+        """Set up test fixtures and save logger state."""
+        # Save the original logger state
+        self.root_logger = logging.getLogger()
+        self.original_handlers = self.root_logger.handlers.copy()
+        self.original_level = self.root_logger.level
+        
+    def tearDown(self):
+        """Clean up test fixtures and restore logger state."""
+        # Remove any handlers that were added during tests
+        for handler in self.root_logger.handlers[:]:
+            self.root_logger.removeHandler(handler)
+        
+        # Restore original handlers and level
+        for handler in self.original_handlers:
+            self.root_logger.addHandler(handler)
+        self.root_logger.setLevel(self.original_level)
+    
     @patch('src.lib.log.QueueListener')
     @patch('src.lib.log.StreamHandler')
     @patch('src.lib.log.QueueHandler')

@@ -436,6 +436,11 @@ class MissionExecutor:
         self.logger.info("🚀 Starting goal-driven mission execution")
         self.logger.info(f"📋 Mission parameters: {mission_parameters}")
         
+        # Reset failed goals for this mission - allow retrying goals that failed in previous missions
+        self.failed_goals.clear()
+        self.goal_failure_counts.clear()
+        self.logger.debug("🔄 Cleared failed goals tracking for new mission")
+        
         # Initialize clean session state for XP-seeking goal achievement
         if hasattr(self.controller, 'goap_execution_manager'):
             self.controller.goap_execution_manager.initialize_session_state(self.controller)
@@ -660,7 +665,7 @@ class MissionExecutor:
             goal_success = self.controller.goap_execution_manager.achieve_goal_with_goap(
                 goal_state, 
                 self.controller,
-                config_file=f"{CONFIG_PREFIX}/actions.yaml",
+                config_file=f"{CONFIG_PREFIX}/default_actions.yaml",
                 max_iterations=self.max_goal_iterations
             )
             

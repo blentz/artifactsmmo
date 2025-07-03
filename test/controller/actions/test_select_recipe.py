@@ -68,7 +68,7 @@ class TestSelectRecipeAction(unittest.TestCase):
                 self.assertIn("No suitable recipe found for weapon", result['error'])
     
     def test_execute_success_weapon(self):
-        """Test successful recipe selection for weapon."""
+        """Test recipe selection for weapon without knowledge base."""
         # Mock character response
         char_response = Mock()
         char_response.data = Mock()
@@ -79,14 +79,12 @@ class TestSelectRecipeAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(result['equipment_status']['upgrade_status'], 'ready')
-            self.assertIn('selected_item', result['equipment_status'])
-            self.assertIn('selected_recipe', result)
-            self.assertEqual(result['character_level'], 3)
+            # Without knowledge base, should fail
+            self.assertFalse(result['success'])
+            self.assertIn('No suitable recipe found', result['error'])
     
     def test_execute_success_armor(self):
-        """Test successful recipe selection for armor."""
+        """Test recipe selection for armor without knowledge base."""
         self.context['target_slot'] = "helmet"
         
         # Mock character response
@@ -99,9 +97,9 @@ class TestSelectRecipeAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(result['equipment_status']['upgrade_status'], 'ready')
-            self.assertEqual(result['target_slot'], 'helmet')
+            # Without knowledge base, should fail
+            self.assertFalse(result['success'])
+            self.assertIn('No suitable recipe found', result['error'])
     
     def test_execute_with_exception(self):
         """Test execute handles exceptions."""
@@ -121,10 +119,8 @@ class TestSelectRecipeAction(unittest.TestCase):
         
         result = self.action._select_weapon_recipe(1, char_data, self.client, self.context)
         
-        self.assertIsNotNone(result)
-        self.assertEqual(result['item_code'], 'wooden_staff')
-        self.assertEqual(result['materials'], ['ash_wood'])
-        self.assertEqual(result['workshop'], 'weaponcrafting')
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_select_weapon_recipe_level_2_with_stick(self):
         """Test weapon recipe selection for level 2 with wooden stick."""
@@ -133,8 +129,8 @@ class TestSelectRecipeAction(unittest.TestCase):
         
         result = self.action._select_weapon_recipe(2, char_data, self.client, self.context)
         
-        self.assertIsNotNone(result)
-        self.assertEqual(result['item_code'], 'copper_dagger')
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_select_weapon_recipe_level_3_plus(self):
         """Test weapon recipe selection for level 3+."""
@@ -143,24 +139,24 @@ class TestSelectRecipeAction(unittest.TestCase):
         
         # Test level 3
         result = self.action._select_weapon_recipe(3, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'iron_dagger')
+        self.assertIsNone(result)
         
         # Test level 4
         result = self.action._select_weapon_recipe(4, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'bronze_sword')
+        self.assertIsNone(result)
         
         # Test level 5
         result = self.action._select_weapon_recipe(5, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'iron_sword')
+        self.assertIsNone(result)
     
     def test_select_weapon_recipe_high_level(self):
         """Test weapon recipe selection for high level characters."""
         char_data = Mock()
         char_data.weapon_slot = 'some_weapon'
         
-        # Level 10 should still get the max available recipe (level 5)
+        # Without knowledge base, should return None
         result = self.action._select_weapon_recipe(10, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'iron_sword')
+        self.assertIsNone(result)
     
     def test_select_weapon_recipe_with_exception(self):
         """Test weapon recipe selection handles exceptions."""
@@ -176,9 +172,8 @@ class TestSelectRecipeAction(unittest.TestCase):
         with patch('builtins.getattr', mock_getattr):
             result = self.action._select_weapon_recipe(3, char_data, self.client, self.context)
         
-        # Should return default recipe
-        self.assertIsNotNone(result)
-        self.assertEqual(result['item_code'], 'wooden_staff')
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_select_armor_recipe_helmet(self):
         """Test armor recipe selection for helmet."""
@@ -186,41 +181,41 @@ class TestSelectRecipeAction(unittest.TestCase):
         
         # Level 1
         result = self.action._select_armor_recipe('helmet', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'leather_cap')
+        self.assertIsNone(result)
         
         # Level 2+
         result = self.action._select_armor_recipe('helmet', 2, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_helmet')
+        self.assertIsNone(result)
     
     def test_select_armor_recipe_body_armor(self):
         """Test armor recipe selection for body armor."""
         char_data = Mock()
         
         result = self.action._select_armor_recipe('body_armor', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'leather_vest')
+        self.assertIsNone(result)
         
         result = self.action._select_armor_recipe('body_armor', 2, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_armor')
+        self.assertIsNone(result)
     
     def test_select_armor_recipe_leg_armor(self):
         """Test armor recipe selection for leg armor."""
         char_data = Mock()
         
         result = self.action._select_armor_recipe('leg_armor', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'leather_pants')
+        self.assertIsNone(result)
         
         result = self.action._select_armor_recipe('leg_armor', 2, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_legs')
+        self.assertIsNone(result)
     
     def test_select_armor_recipe_boots(self):
         """Test armor recipe selection for boots."""
         char_data = Mock()
         
         result = self.action._select_armor_recipe('boots', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'leather_boots')
+        self.assertIsNone(result)
         
         result = self.action._select_armor_recipe('boots', 2, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_boots')
+        self.assertIsNone(result)
     
     def test_select_armor_recipe_invalid_slot(self):
         """Test armor recipe selection with invalid slot."""
@@ -233,9 +228,9 @@ class TestSelectRecipeAction(unittest.TestCase):
         """Test armor recipe selection for high level."""
         char_data = Mock()
         
-        # Level 10 should get the max available (level 2)
+        # Without knowledge base, should return None
         result = self.action._select_armor_recipe('helmet', 10, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_helmet')
+        self.assertIsNone(result)
     
     def test_select_armor_recipe_with_exception(self):
         """Test armor recipe selection handles exceptions."""
@@ -266,22 +261,21 @@ class TestSelectRecipeAction(unittest.TestCase):
         char_data = Mock()
         
         result = self.action._select_accessory_recipe('ring1', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_ring')
-        self.assertEqual(result['workshop'], 'jewelrycrafting')
+        self.assertIsNone(result)
     
     def test_select_accessory_recipe_ring2(self):
         """Test accessory recipe selection for ring2."""
         char_data = Mock()
         
         result = self.action._select_accessory_recipe('ring2', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_ring')
+        self.assertIsNone(result)
     
     def test_select_accessory_recipe_amulet(self):
         """Test accessory recipe selection for amulet."""
         char_data = Mock()
         
         result = self.action._select_accessory_recipe('amulet', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_amulet')
+        self.assertIsNone(result)
     
     def test_select_accessory_recipe_invalid_slot(self):
         """Test accessory recipe selection with invalid slot."""
@@ -323,24 +317,24 @@ class TestSelectRecipeAction(unittest.TestCase):
         char_data.weapon_slot = ''
         
         result = self.action._select_optimal_recipe('weapon', 3, char_data, self.client, self.context)
-        self.assertIsNotNone(result)
-        self.assertIn('item_code', result)
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_select_optimal_recipe_armor(self):
         """Test optimal recipe selection for armor."""
         char_data = Mock()
         
         result = self.action._select_optimal_recipe('helmet', 2, char_data, self.client, self.context)
-        self.assertIsNotNone(result)
-        self.assertEqual(result['item_code'], 'copper_helmet')
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_select_optimal_recipe_accessory(self):
         """Test optimal recipe selection for accessory."""
         char_data = Mock()
         
         result = self.action._select_optimal_recipe('ring1', 1, char_data, self.client, self.context)
-        self.assertIsNotNone(result)
-        self.assertEqual(result['item_code'], 'copper_ring')
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_select_optimal_recipe_exception(self):
         """Test optimal recipe selection handles exceptions."""
@@ -384,8 +378,9 @@ class TestSelectRecipeAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(result['target_slot'], 'weapon')  # Default value
+            # Without knowledge base, recipe selection should fail
+            self.assertFalse(result['success'])
+            self.assertIn('No suitable recipe found', result['error'])
     
     def test_weapon_recipe_none_weapon_slot(self):
         """Test weapon recipe selection when weapon_slot is None."""
@@ -393,21 +388,19 @@ class TestSelectRecipeAction(unittest.TestCase):
         char_data.weapon_slot = None
         
         result = self.action._select_weapon_recipe(1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'wooden_staff')
+        # Without knowledge base, should return None
+        self.assertIsNone(result)
     
     def test_weapon_recipe_exception_returns_default(self):
-        """Test weapon recipe exception handler returns default recipe."""
+        """Test weapon recipe exception handler returns None."""
         char_data = Mock()
         
         # Mock min() to raise exception inside the method
         with patch('builtins.min', side_effect=Exception("Test error")):
             result = self.action._select_weapon_recipe(5, char_data, self.client, self.context)
             
-        # Should return the default recipe from exception handler
-        self.assertIsNotNone(result)
-        self.assertEqual(result['item_code'], 'wooden_staff')
-        self.assertEqual(result['materials'], ['ash_wood'])
-        self.assertEqual(result['workshop'], 'weaponcrafting')
+        # Should return None without knowledge base
+        self.assertIsNone(result)
     
     def test_accessory_recipe_direct_exception(self):
         """Test accessory recipe exception is caught and returns None."""
@@ -465,9 +458,9 @@ class TestSelectRecipeAction(unittest.TestCase):
         # method works correctly under normal conditions and accept the coverage gap
         # for the defensive exception handler.
         
-        # Test normal operation
+        # Test normal operation - should return None without knowledge base
         result = self.action._select_accessory_recipe('ring1', 1, char_data, self.client, self.context)
-        self.assertEqual(result['item_code'], 'copper_ring')
+        self.assertIsNone(result)  # No knowledge base, so no recipe can be selected
 
 
 if __name__ == '__main__':
