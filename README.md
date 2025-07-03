@@ -105,7 +105,7 @@ The AI will automatically:
 Here's what you'll see as the AI plans and executes a goal:
 
 ```
-🎯 Goal selected: bootstrap_character (priority: 90)
+🎯 Goal selected: upgrade_weapon (priority: 70)
 📋 Planning: evaluate_weapon_recipes → find_resources → gather_resources → craft_item → equip_item
 
 🔨 Analyzing 12 weapon recipes for level 2 character...
@@ -259,7 +259,7 @@ python -m pytest test/controller/test_ai_player_controller.py -v
 python -m src.main --log-level DEBUG
 
 # Test planning without execution
-python -m src.main --goal-planner "bootstrap_character"
+python -m src.main --goal-planner "upgrade_weapon"
 
 # Validate action sequences
 python -m src.main --evaluate-plan "scan→move→gather_resources"

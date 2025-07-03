@@ -35,9 +35,22 @@ from .actions.move_to_resource import MoveToResourceAction
 from .actions.move_to_workshop import MoveToWorkshopAction
 from .actions.plan_crafting_materials import PlanCraftingMaterialsAction
 from .actions.rest import RestAction
-from .actions.transform_raw_materials import TransformRawMaterialsAction
+from .actions.transform_materials_coordinator import TransformMaterialsCoordinatorAction
+# Bridge actions for material transformation
+from .actions.analyze_materials_for_transformation import AnalyzeMaterialsForTransformationAction
+from .actions.determine_workshop_requirements import DetermineWorkshopRequirementsAction
+from .actions.navigate_to_workshop import NavigateToWorkshopAction
+from .actions.execute_material_transformation import ExecuteMaterialTransformationAction
+from .actions.verify_transformation_results import VerifyTransformationResultsAction
 from .actions.unequip_item import UnequipItemAction
 from .actions.wait import WaitAction
+# Equipment upgrade actions
+from .actions.initiate_equipment_analysis import InitiateEquipmentAnalysisAction
+from .actions.analyze_equipment_gaps import AnalyzeEquipmentGapsAction
+from .actions.select_optimal_slot import SelectOptimalSlotAction
+from .actions.select_recipe import SelectRecipeAction
+from .actions.mark_equipment_crafting import MarkEquipmentCraftingAction
+from .actions.complete_equipment_upgrade import CompleteEquipmentUpgradeAction
 
 
 @dataclass
@@ -106,7 +119,7 @@ class ActionFactory:
         ))
         
         self.register_action('transform_raw_materials', ActionExecutorConfig(
-            action_class=TransformRawMaterialsAction,
+            action_class=TransformMaterialsCoordinatorAction,
             constructor_params={}
         ))
         
@@ -146,7 +159,7 @@ class ActionFactory:
         ))
         
         self.register_action('transform_material', ActionExecutorConfig(
-            action_class=TransformRawMaterialsAction,  # Specialized raw material transformation action
+            action_class=TransformMaterialsCoordinatorAction,  # Specialized raw material transformation action
             constructor_params={}
         ))
         
@@ -194,6 +207,33 @@ class ActionFactory:
             action_class=ExecuteCraftingPlanAction,
             constructor_params={}
         ))
+        
+        # Equipment upgrade actions
+        self.register_action('initiate_equipment_analysis', ActionExecutorConfig(
+            action_class=InitiateEquipmentAnalysisAction,
+            constructor_params={}
+        ))
+        
+        self.register_action('analyze_equipment_gaps', ActionExecutorConfig(
+            action_class=AnalyzeEquipmentGapsAction,
+            constructor_params={}
+        ))
+        
+        self.register_action('select_optimal_slot', ActionExecutorConfig(
+            action_class=SelectOptimalSlotAction,
+            constructor_params={}
+        ))
+        
+        self.register_action('select_recipe', ActionExecutorConfig(
+            action_class=SelectRecipeAction,
+            constructor_params={}
+        ))
+        
+        self.register_action('mark_equipment_crafting', ActionExecutorConfig(
+            action_class=MarkEquipmentCraftingAction,
+            constructor_params={}
+        ))
+        
     
     def _load_action_classes_from_yaml(self) -> None:
         """Load action class mappings from YAML configuration."""

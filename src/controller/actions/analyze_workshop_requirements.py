@@ -31,7 +31,6 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
         }
     reactions = {
         "workshop_requirements_known": True,
-        # Removed: "need_workshop_discovery": True - not used as condition by any action
         "workshops_discovered": True,
         "at_correct_workshop": True
     }

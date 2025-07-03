@@ -117,7 +117,7 @@ elif isinstance(expected_value, str) and expected_value.startswith('<'):
 
 **Symptoms**:
 ```
-Error executing goal template 'bootstrap_character': invalid literal for int() with base 10: '=3'
+Error executing goal template 'upgrade_weapon': invalid literal for int() with base 10: '=3'
 🚨 Selected emergency goal 'emergency_equipment_upgrade' (priority 98) - TERMINATES
 ```
 
@@ -130,7 +130,7 @@ Error executing goal template 'bootstrap_character': invalid literal for int() w
 **Goal Design Patterns**:
 ```yaml
 # CORRECT - Numeric target state for GOAP
-bootstrap_character:
+upgrade_weapon:
   target_state:
     character_level: 3  # Numeric value, not ">=3"
     has_better_weapon: true
@@ -142,7 +142,7 @@ goal_selection_rules:
     - condition:
         combat_not_viable: true
         character_level: "<=5"  # Condition parsing (OK here)
-      goal: "bootstrap_character"  # Reuse existing goal
+      goal: "upgrade_weapon"  # Reuse existing goal
       priority: 96  # High priority for emergency
 ```
 

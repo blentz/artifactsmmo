@@ -164,11 +164,11 @@ class ExecuteCraftingPlanAction(ActionBase):
             
             find_context = ActionContext(
                 character_name=character_name,
-                workshop_type=workshop_type,
-                item_code=item_code,
                 knowledge_base=context.knowledge_base,
                 map_state=context.map_state
             )
+            find_context['workshop_type'] = workshop_type
+            find_context['item_code'] = item_code
             
             find_result = find_action.execute(client, find_context)
             if not find_result or not find_result.get('success'):
@@ -231,9 +231,9 @@ class ExecuteCraftingPlanAction(ActionBase):
                                 
                                 unequip_context = ActionContext(
                                     character_name=character_name,
-                                    slot=attr_name.replace('_slot', ''),  # Remove _slot suffix
                                     knowledge_base=context.knowledge_base
                                 )
+                                unequip_context['slot'] = attr_name.replace('_slot', '')  # Remove _slot suffix
                                 
                                 unequip_result = unequip_action.execute(client, unequip_context)
                                 unequip_results.append({

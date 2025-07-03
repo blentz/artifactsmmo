@@ -35,7 +35,6 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
         "need_crafting_materials": True,
         "has_crafting_materials": True,
         "materials_sufficient": True
-        # Removed: "material_requirements_known": True - not used as condition by any action
     }
     weights = {"crafting_requirements_known": 12}
 

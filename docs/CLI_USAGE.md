@@ -5,6 +5,7 @@ This guide provides comprehensive documentation for using the ArtifactsMMO AI Pl
 ## Table of Contents
 - [Basic Usage](#basic-usage)
 - [Command-Line Arguments](#command-line-arguments)
+- [Diagnostic Tools](#diagnostic-tools)
 - [Examples](#examples)
 - [Advanced Usage](#advanced-usage)
 
@@ -97,27 +98,25 @@ python -m src.main --clean
 ### Planning and Debugging
 
 #### `-g, --goal-planner GOAL_STRING`
-Show the GOAP (Goal-Oriented Action Planning) plan for achieving a specified goal without executing it. This is useful for debugging planning issues.
+Show the GOAP (Goal-Oriented Action Planning) plan for achieving a specified goal. Can run in offline simulation mode or execute with live API calls.
 
 **Goal String Formats**:
-- Level goals: `"level_N"` where N is the target level
-- XP goals: `"has_xp"` or `"xp"`
-- Skill goals: `"SKILL_skill"` where SKILL is one of: combat, woodcutting, mining, fishing, weaponcrafting, gearcrafting, jewelrycrafting, cooking, alchemy
-- State variables: `"variable_name=value"` or just `"variable_name"` (assumes true)
+- Goal templates: Predefined goals from goal_templates.yaml
+- State expressions: `"path.to.state=value"` (e.g., `"character_status.level=5"`)
+- Nested paths: `"category.subcategory.field=value"`
+- Simple flags: `"flag_name"` (assumes true)
+- Level patterns: `"reach level N"` or `"level_N"`
 
 **Examples**:
 ```bash
-# Show plan to reach level 10
-python -m src.main -g "level_10"
+# Show plan to reach level 5
+python -m src.main -g "character_status.level=5"
 
-# Show plan to gain XP
-python -m src.main -g "has_xp"
+# Show plan for combat readiness
+python -m src.main -g "combat_context.status=ready"
 
-# Show plan to advance mining skill
-python -m src.main -g "mining_skill"
-
-# Show plan for custom goal state
-python -m src.main -g "has_iron_ore=true"
+# Use a goal template
+python -m src.main -g "hunt_monsters"
 ```
 
 #### `-e, --evaluate-plan PLAN_STRING`
@@ -138,7 +137,7 @@ python -m src.main -e "find_monsters->attack->rest"
 python -m src.main -e "find_resources,gather_resources,craft_item"
 
 # Evaluate a simple action
-python -m src.main -e "wait"
+python -m src.main -e "rest"
 ```
 
 ### Other Options
@@ -157,6 +156,116 @@ Show help message with all available options.
 python -m src.main --help
 ```
 
+## Diagnostic Tools
+
+The diagnostic tools provide powerful debugging capabilities for GOAP planning and action evaluation. They support both offline simulation and live API execution.
+
+### Diagnostic Options
+
+#### `--offline`
+Run diagnostic tools in offline mode without API access (default). This simulates action execution without making real API calls.
+
+#### `--live`
+Execute diagnostic plans with live API calls (requires authentication). Actions are actually executed against the game API.
+
+#### `--clean-state`
+Start diagnostics with a clean default state instead of loading existing world data. Useful for testing from known conditions.
+
+#### `--state STATE_JSON`
+Initialize diagnostics with custom state (JSON format). Allows testing specific scenarios.
+
+### Diagnostic Examples
+
+#### Offline Goal Planning with Clean State
+```bash
+$ python -m src.main -g "character_status.level=5" --clean-state
+
+=== GOAP Plan Analysis for Goal: character_status.level=5 ===
+Mode: OFFLINE simulation
+Loaded 29 available actions
+Goal state: {character_status: {level: 5}}
+
+Current state summary:
+character_status:
+  level: 1
+
+Generating GOAP plan...
+
+❌ No plan found!
+
+Possible reasons:
+- Goal is already satisfied in current state
+- No action sequence can achieve the goal
+- Missing prerequisite states
+```
+
+#### Goal Planning with Custom State
+```bash
+$ python -m src.main -g "combat_context.status=ready" --state '{"combat_context": {"status": "searching"}}'
+
+=== GOAP Plan Analysis for Goal: combat_context.status=ready ===
+Mode: OFFLINE simulation
+
+✅ Plan found with 1 actions:
+
+1. find_monsters (weight: 2)
+   Requires:
+     - combat_context:
+         status: searching
+     - character_status:
+         alive: True
+   Effects:
+     - resource_availability:
+         monsters: True
+     - combat_context:
+         status: ready
+     - location_context:
+         at_target: True
+
+Total plan cost: 2.00
+```
+
+#### Plan Evaluation with Clean State
+```bash
+$ python -m src.main -e "rest" --clean-state
+
+=== Evaluating User Plan: rest ===
+Mode: OFFLINE simulation
+
+Starting state summary:
+Character: Level 1, HP: 100.0%, Alive: True
+Combat: Status=idle, Win rate=1.0
+Location: (0, 0) Type: spawn
+
+1. Evaluating action: rest
+   ❌ Conditions not met:
+     - healing_context.healing_status: required=in_progress, current=idle
+
+=== Plan Evaluation Summary ===
+❌ Plan is INVALID and cannot be executed
+Fix the issues above before the plan can work
+```
+
+#### Live Execution Mode
+```bash
+# Execute a goal plan with live API calls
+python -m src.main -g "hunt_monsters" --live
+
+# Evaluate and execute a plan with live API
+python -m src.main -e "move->attack" --live
+```
+
+#### Complex State Initialization
+```bash
+# Test with specific game state
+python -m src.main -g "equipment_status.equipped=true" \
+  --state '{
+    "character_status": {"alive": true, "level": 5},
+    "equipment_status": {"item_crafted": true, "equipped": false},
+    "location_context": {"at_workshop": true}
+  }'
+```
+
 ## Examples
 
 ### Common Usage Patterns
@@ -165,15 +274,22 @@ python -m src.main --help
    ```bash
    # Run with debug logging and clean data
    python -m src.main --clean -l DEBUG
+   
+   # Test with clean state and offline diagnostics
+   python -m src.main -g "character_status.level=10" --clean-state -l DEBUG
    ```
 
 2. **Planning Analysis**
    ```bash
-   # Check what actions are needed to reach level 20
-   python -m src.main -g "level_20"
+   # Check what actions are needed to reach level 5
+   python -m src.main -g "character_status.level=5" --clean-state
    
    # Verify a combat strategy is valid
-   python -m src.main -e "find_monsters->move->attack->rest->move"
+   python -m src.main -e "find_monsters->attack->rest"
+   
+   # Test with custom initial state
+   python -m src.main -g "combat_context.status=completed" \
+     --state '{"combat_context": {"status": "ready"}}'
    ```
 
 3. **Production Run**
@@ -190,8 +306,11 @@ python -m src.main --help
    # Clear data and run with verbose logging
    python -m src.main --clean -l DEBUG
    
-   # Test specific goal planning
-   python -m src.main -g "combat_skill_ge"
+   # Debug why a plan isn't working
+   python -m src.main -e "rest" --clean-state -l DEBUG
+   
+   # Test goal planning with existing world state
+   python -m src.main -g "equipment_status.equipped=true"
    ```
 
 ## Advanced Usage
@@ -200,6 +319,9 @@ python -m src.main --help
 Options can be combined, but some are mutually exclusive:
 - Cannot use `--daemon` with planning options (`-g`, `-e`)
 - Cannot use `--clean` with character management (`-c`, `-d`)
+- Cannot use both `--offline` and `--live` modes
+- `--live` mode requires either `--goal-planner` or `--evaluate-plan`
+- `--state` requires either `--goal-planner` or `--evaluate-plan`
 - Character management options (`-c`, `-d`) are mutually exclusive
 - Planning options (`-g`, `-e`) are mutually exclusive
 
@@ -219,7 +341,59 @@ When running with `--daemon`, the program responds to:
 - API rate limiting (180 requests/minute) is shared across all characters
 
 ### Debugging Tips
-1. Use `-l DEBUG` to see detailed action execution
-2. Use `-g` to understand why certain goals aren't being achieved
-3. Use `-e` to validate custom action sequences before implementation
-4. Check data files in `data/` directory for current world state
+
+1. **Use Diagnostic Tools for Planning Issues**
+   - Use `--clean-state` to test from a known state
+   - Use `--state` to set up specific test scenarios
+   - Start with `--offline` mode to validate plans before live execution
+
+2. **Understanding Plan Failures**
+   - "No plan found" - The goal may be impossible from current state
+   - "Conditions not met" - Check the action's required preconditions
+   - Use `-l DEBUG` for detailed execution logs
+
+3. **Common Diagnostic Workflows**
+   ```bash
+   # Test why a goal isn't achievable
+   python -m src.main -g "your_goal" --clean-state
+   
+   # Validate a specific action sequence
+   python -m src.main -e "action1->action2" --clean-state
+   
+   # Debug with custom state
+   python -m src.main -g "goal" --state '{"key": "value"}' -l DEBUG
+   ```
+
+4. **Check State Files**
+   - `data/world.yaml` - Current GOAP world state
+   - `data/map.yaml` - Discovered map locations
+   - `data/knowledge.yaml` - Learned game data
+
+### State Format Reference
+
+The `--state` parameter accepts JSON with the consolidated state structure:
+
+```json
+{
+  "character_status": {
+    "alive": true,
+    "level": 1,
+    "hp_percentage": 100.0,
+    "cooldown_active": false
+  },
+  "combat_context": {
+    "status": "idle",
+    "target": null,
+    "recent_win_rate": 1.0
+  },
+  "equipment_status": {
+    "equipped": false,
+    "selected_item": null
+  },
+  "location_context": {
+    "at_target": false,
+    "at_workshop": false,
+    "current": {"x": 0, "y": 0, "type": "spawn"}
+  }
+}
+```

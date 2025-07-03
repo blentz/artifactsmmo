@@ -15,14 +15,14 @@ class CompleteEquipmentUpgradeAction(ActionBase):
     """
     Bridge action to complete equipment upgrade process.
     
-    This action transitions the equipment_status.upgrade_status from 'ready' to 'completed'
+    This action transitions the equipment_status.upgrade_status from 'crafting' to 'completed'
     after the item has been successfully equipped.
     """
 
     # GOAP parameters
     conditions = {
         'equipment_status': {
-            'upgrade_status': 'ready',
+            'upgrade_status': 'crafting',
             'equipped': True,
         },
     }

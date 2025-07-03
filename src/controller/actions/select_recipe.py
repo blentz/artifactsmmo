@@ -27,13 +27,13 @@ class SelectRecipeAction(ActionBase):
     conditions = {
         "equipment_status": {
             "upgrade_status": "analyzing",
-            "target_slot": "!null"
+            "has_target_slot": True
         }
     }
     reactions = {
         "equipment_status": {
             "upgrade_status": "ready",
-            "selected_item": "${selected_item}"
+            "has_selected_item": True
         }
     }
     weight = 2

@@ -14,7 +14,7 @@ from src.controller.actions.find_correct_workshop import FindCorrectWorkshopActi
 from src.controller.actions.find_xp_sources import FindXpSourcesAction
 from src.controller.actions.move_to_resource import MoveToResourceAction
 from src.controller.actions.move_to_workshop import MoveToWorkshopAction
-from src.controller.actions.transform_raw_materials import TransformRawMaterialsAction
+from src.controller.actions.transform_materials_coordinator import TransformMaterialsCoordinatorAction
 
 from test.fixtures import MockActionContext
 
@@ -107,13 +107,13 @@ class TestSimpleActionCoverage(unittest.TestCase):
         self.assertFalse(result['success'])
 
     def test_transform_raw_materials_basic(self):
-        """Test TransformRawMaterialsAction basic functionality."""
-        action = TransformRawMaterialsAction()
+        """Test TransformMaterialsCoordinatorAction basic functionality."""
+        action = TransformMaterialsCoordinatorAction()
         # Action no longer stores character_name as instance attribute
         self.assertFalse(hasattr(action, 'character_name'))
         
         # Test repr
-        self.assertEqual("TransformRawMaterialsAction()", repr(action))
+        self.assertEqual("TransformMaterialsCoordinatorAction()", repr(action))
         
         # Test no client
         context = MockActionContext(character_name="player")
@@ -204,7 +204,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
             EvaluateWeaponRecipesAction(),
             FindCorrectWorkshopAction(),
             AnalyzeCraftingChainAction(),
-            TransformRawMaterialsAction(),
+            TransformMaterialsCoordinatorAction(),
             AnalyzeResourcesAction(),
             CheckInventoryAction(),
             CheckLocationAction(),

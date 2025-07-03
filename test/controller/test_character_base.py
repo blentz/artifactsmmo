@@ -48,6 +48,12 @@ class TestCharacterActionBase(unittest.TestCase):
         # They would get character names from context during execution
         self.assertIsInstance(action1, CharacterActionBase)
         self.assertIsInstance(action2, CharacterActionBase)
+    
+    def test_repr(self):
+        """Test string representation of CharacterActionBase."""
+        action = CharacterActionBase()
+        repr_str = repr(action)
+        self.assertEqual(repr_str, "CharacterActionBase()")
 
 
 if __name__ == '__main__':

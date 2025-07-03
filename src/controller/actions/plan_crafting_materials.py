@@ -36,9 +36,8 @@ class PlanCraftingMaterialsAction(ActionBase):
         "craft_plan_available": True,
         "need_resources": True,  # If materials are missing
         "materials_sufficient": True  # If we have everything
-        # Removed: "material_requirements_known": True - not used as condition by any action
     }
-    weights = {"craft_plan_available": 10}  # Changed from material_requirements_known
+    weights = {"craft_plan_available": 10}
     
     def __init__(self):
         """

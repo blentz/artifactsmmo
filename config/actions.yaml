@@ -150,11 +150,11 @@ actions:
   evaluate_recipes:
     conditions:
       equipment_status:
-        target_slot: '!null'
-        selected_item: null
+        has_target_slot: true
+        has_selected_item: false
     reactions:
       equipment_status:
-        selected_item: 'wooden_staff'
+        has_selected_item: true
         recipe_evaluated: true
     weight: 2
     
@@ -192,7 +192,7 @@ actions:
   check_skill_requirement:
     conditions:
       equipment_status:
-        selected_item: '!null'
+        has_selected_item: true
       skill_status:
         checked: false
     reactions:
@@ -292,7 +292,7 @@ actions:
   mark_combat_not_viable:
     conditions:
       combat_context:
-        recent_win_rate: '<0.2'
+        low_win_rate: true
       character_status:
         alive: true
     reactions:
@@ -327,8 +327,8 @@ actions:
   mark_equipment_crafting:
     conditions:
       equipment_status:
-        upgrade_status: 'analyzing'
-        selected_item: '!null'
+        upgrade_status: 'ready'
+        has_selected_item: true
     reactions:
       equipment_status:
         upgrade_status: 'crafting'
@@ -344,15 +344,41 @@ actions:
         upgrade_status: 'ready'
     weight: 1.5
     
-  complete_equipment_upgrade:
+  analyze_equipment_gaps:
     conditions:
       equipment_status:
-        upgrade_status: 'ready'
-        equipped: true
+        upgrade_status: 'analyzing'
+      character_status:
+        alive: true
     reactions:
       equipment_status:
-        upgrade_status: 'completed'
+        upgrade_status: 'analyzing'
+        gaps_analyzed: true
+    weight: 1.0
+    
+  select_optimal_slot:
+    conditions:
+      equipment_status:
+        gaps_analyzed: true
+        has_target_slot: false
+      character_status:
+        alive: true
+    reactions:
+      equipment_status:
+        has_target_slot: true
+    weight: 1.5
+    
+  select_recipe:
+    conditions:
+      equipment_status:
+        upgrade_status: 'analyzing'
+        has_target_slot: true
+    reactions:
+      equipment_status:
+        upgrade_status: 'ready'
+        has_selected_item: true
     weight: 2
+  
     
   reset_equipment_upgrade:
     conditions:

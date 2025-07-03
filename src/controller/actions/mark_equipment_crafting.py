@@ -16,15 +16,15 @@ class MarkEquipmentCraftingAction(ActionBase):
     """
     Bridge action to mark equipment as being crafted.
     
-    This action transitions the equipment_status.upgrade_status from 'analyzing' to 'crafting'
+    This action transitions the equipment_status.upgrade_status from 'ready' to 'crafting'
     after a recipe has been selected and crafting is about to begin.
     """
 
     # GOAP parameters
     conditions = {
         'equipment_status': {
-            'upgrade_status': 'analyzing',
-            'selected_item': '!null',
+            'upgrade_status': 'ready',
+            'has_selected_item': True,
         },
     }
     reactions = {

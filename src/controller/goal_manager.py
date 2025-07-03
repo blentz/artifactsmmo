@@ -150,6 +150,14 @@ class GOAPGoalManager:
         # Apply state mappings to add derived states (like has_gained_xp)
         enhanced_state = self._apply_state_mappings_to_selection_state(state)
         
+        # Calculate additional boolean flags for equipment
+        enhanced_state['equipment_status']['has_target_slot'] = enhanced_state['equipment_status'].get('target_slot') is not None
+        enhanced_state['equipment_status']['has_selected_item'] = enhanced_state['equipment_status'].get('selected_item') is not None
+        
+        # Calculate combat context flags
+        win_rate = enhanced_state['combat_context'].get('recent_win_rate', 1.0)
+        enhanced_state['combat_context']['low_win_rate'] = win_rate < 0.2
+        
         # Return consolidated state with derived states
         self.logger.debug(f"🔄 Using consolidated state format with {len(enhanced_state)} state groups")
         

@@ -21,6 +21,8 @@ Examples:
   %(prog)s -p Char1,Char2,Char3             # Run multiple characters in parallel
   %(prog)s -g "reach_level_10"              # Show plan for achieving a goal
   %(prog)s -e "move->fight->rest"           # Evaluate a user-defined plan
+  %(prog)s -g "hunt_monsters" --live        # Execute goal plan with live API
+  %(prog)s -e "rest" --offline              # Evaluate plan in offline mode
   %(prog)s --clean                           # Clear all generated data files
   %(prog)s --daemon                          # Run as a background daemon
         """
@@ -89,6 +91,33 @@ Examples:
         help='Evaluate a user-defined plan (e.g., "move->fight->rest")'
     )
     
+    # Diagnostic mode options
+    diag_group = parser.add_argument_group('diagnostic options')
+    diag_group.add_argument(
+        '--offline',
+        action='store_true',
+        help='Run diagnostic tools in offline mode without API access (default)'
+    )
+    
+    diag_group.add_argument(
+        '--live',
+        action='store_true',
+        help='Execute diagnostic plans with live API calls (requires authentication)'
+    )
+    
+    diag_group.add_argument(
+        '--clean-state',
+        action='store_true',
+        help='Start diagnostics with a clean default state instead of loading existing data'
+    )
+    
+    diag_group.add_argument(
+        '--state',
+        type=str,
+        metavar='STATE_JSON',
+        help='Initialize diagnostics with custom state (JSON format)'
+    )
+    
     # Additional options
     parser.add_argument(
         '--version',
@@ -124,6 +153,21 @@ def validate_args(args: argparse.Namespace) -> bool:
     # Check for conflicting options
     if args.daemon and (args.goal_planner or args.evaluate_plan):
         logging.error("Cannot use --daemon with goal planning options")
+        return False
+    
+    # Check diagnostic mode conflicts
+    if args.offline and args.live:
+        logging.error("Cannot use both --offline and --live modes")
+        return False
+    
+    # Live mode requires goal or plan
+    if args.live and not (args.goal_planner or args.evaluate_plan):
+        logging.error("--live mode requires either --goal-planner or --evaluate-plan")
+        return False
+    
+    # Custom state requires diagnostic mode
+    if args.state and not (args.goal_planner or args.evaluate_plan):
+        logging.error("--state requires either --goal-planner or --evaluate-plan")
         return False
     
     if args.clean and (args.create_character or args.delete_character):

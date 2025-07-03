@@ -9,7 +9,7 @@ from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAc
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
 from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
 from src.controller.actions.find_xp_sources import FindXpSourcesAction
-from src.controller.actions.transform_raw_materials import TransformRawMaterialsAction
+from src.controller.actions.transform_materials_coordinator import TransformMaterialsCoordinatorAction
 
 from test.fixtures import MockActionContext
 
@@ -30,20 +30,20 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_transform_raw_materials_basic(self):
-        """Test TransformRawMaterialsAction basic functionality."""
-        action = TransformRawMaterialsAction()
+        """Test TransformMaterialsCoordinatorAction basic functionality."""
+        action = TransformMaterialsCoordinatorAction()
         # Action no longer stores these as instance attributes
         self.assertFalse(hasattr(action, 'character_name'))
         self.assertFalse(hasattr(action, 'target_item'))
         
         # Test repr
-        expected = "TransformRawMaterialsAction()"
+        expected = "TransformMaterialsCoordinatorAction()"
         self.assertEqual(repr(action), expected)
         
         # Test GOAP attributes
-        self.assertTrue(hasattr(TransformRawMaterialsAction, 'conditions'))
-        self.assertTrue(hasattr(TransformRawMaterialsAction, 'reactions'))
-        self.assertTrue(hasattr(TransformRawMaterialsAction, 'weights'))
+        self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'conditions'))
+        self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'reactions'))
+        self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'weights'))
         
         # Test no client
         context = MockActionContext(character_name="player", target_item="sword")
@@ -251,8 +251,8 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
             self.assertIsInstance(action.transformation_chains, list)
 
     def test_transform_raw_materials_helper_methods(self):
-        """Test TransformRawMaterialsAction helper methods if they exist."""
-        action = TransformRawMaterialsAction()
+        """Test TransformMaterialsCoordinatorAction helper methods if they exist."""
+        action = TransformMaterialsCoordinatorAction()
         
         # Test potential helper methods (will pass if they don't exist)
         if hasattr(action, '_is_raw_material'):
@@ -271,7 +271,7 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
     def test_error_handling_patterns(self):
         """Test common error handling patterns across actions."""
         actions = [
-            TransformRawMaterialsAction(),
+            TransformMaterialsCoordinatorAction(),
             AnalyzeCraftingChainAction(),
             AnalyzeResourcesAction(),
             EvaluateWeaponRecipesAction(),
@@ -293,7 +293,7 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
     def test_goap_attribute_consistency(self):
         """Test GOAP attribute consistency across actions."""
         action_classes = [
-            TransformRawMaterialsAction,
+            TransformMaterialsCoordinatorAction,
             AnalyzeCraftingChainAction,
             AnalyzeResourcesAction,
             EvaluateWeaponRecipesAction,
@@ -316,7 +316,7 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
     def test_action_initialization_patterns(self):
         """Test action initialization patterns."""
         # Test with no parameters
-        action1 = TransformRawMaterialsAction()
+        action1 = TransformMaterialsCoordinatorAction()
         self.assertFalse(hasattr(action1, 'character_name'))
         self.assertFalse(hasattr(action1, 'target_item'))
         
@@ -339,8 +339,8 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
     def test_action_string_representations(self):
         """Test action string representations."""
         # Test consistent repr format
-        action1 = TransformRawMaterialsAction()
-        self.assertEqual("TransformRawMaterialsAction()", repr(action1))
+        action1 = TransformMaterialsCoordinatorAction()
+        self.assertEqual("TransformMaterialsCoordinatorAction()", repr(action1))
         
         action2 = AnalyzeCraftingChainAction()
         self.assertEqual("AnalyzeCraftingChainAction()", repr(action2))

@@ -12,6 +12,7 @@ from pathlib import Path
 from artifactsmmo_api_client.client import AuthenticatedClient, Client
 
 from src.cli import get_character_list, parse_args, setup_logging, validate_args
+from src.diagnostic_tools import DiagnosticTools
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.bulk_data_loader import BulkDataLoader
 from src.controller.goal_manager import GOAPGoalManager
@@ -155,231 +156,38 @@ def clean_data_files():
     logging.info("All generated data files cleared")
 
 
-def show_goal_plan(goal_string, client):
+def show_goal_plan(goal_string, client, args):
     """Show the GOAP plan for achieving a specified goal."""
-    logging.info(f"\n=== GOAP Plan Analysis for Goal: {goal_string} ===")
+    # Use new diagnostic tools
+    offline = not args.live if hasattr(args, 'live') else True
+    clean_state = args.clean_state if hasattr(args, 'clean_state') else False
+    custom_state = args.state if hasattr(args, 'state') else None
     
-    # Initialize managers
-    goap_executor = GOAPExecutionManager()
-    actions_data = ActionsData("config/actions.yaml")
-    goap_data = GoapData("data/world.yaml")
+    tools = DiagnosticTools(
+        client=client,
+        offline=offline,
+        clean_state=clean_state,
+        custom_state=custom_state
+    )
     
-    # Initialize goal manager to access goal templates
-    goal_manager = GOAPGoalManager()
-    
-    # Load actions configuration
-    actions_config = actions_data.get_actions()
-    logging.info(f"Loaded {len(actions_config)} available actions")
-    
-    # Parse goal string into goal state using goal templates when available
-    goal_state = {}
-    if goal_string in goal_manager.goal_templates:
-        # Use the target_state from the goal template
-        goal_template = goal_manager.goal_templates[goal_string]
-        goal_state = goal_template.get('target_state', {}).copy()
-        logging.info(f"Using goal template '{goal_string}' with target state: {goal_state}")
-    elif "level" in goal_string:
-        # Extract level number from goal string
-        level_match = re.search(r'level[\s_]*(\d+)', goal_string, re.IGNORECASE)
-        if level_match:
-            target_level = int(level_match.group(1))
-            goal_state['character_level_ge'] = target_level
-            logging.info(f"Goal: Reach level {target_level}")
-    elif "xp" in goal_string:
-        # XP-related goal
-        goal_state['has_xp'] = True
-        logging.info("Goal: Gain XP")
-    elif "skill" in goal_string:
-        # Skill-related goal
-        for skill in ['combat', 'woodcutting', 'mining', 'fishing', 'weaponcrafting', 
-                     'gearcrafting', 'jewelrycrafting', 'cooking', 'alchemy']:
-            if skill in goal_string.lower():
-                goal_state[f'{skill}_skill_ge'] = 10  # Default target
-                logging.info(f"Goal: Advance {skill} skill")
-                break
-    else:
-        # Try to parse as a direct state variable
-        if '=' in goal_string:
-            key, value = goal_string.split('=', 1)
-            goal_state[key.strip()] = value.strip() == 'true' if value.strip() in ['true', 'false'] else value.strip()
-        else:
-            goal_state[goal_string] = True
-        logging.info(f"Goal state: {goal_state}")
-    
-    # Load current world state (without hardcoded overrides)
-    # Let the GOAP execution manager handle start state configuration
-    current_state = goap_data.data.copy()
-    
-    logging.info(f"\nCurrent world state has {len(current_state)} variables")
-    
-    # Create plan
-    logging.info("\nGenerating GOAP plan...")
-    plan = goap_executor.create_plan(current_state, goal_state, actions_config)
-    
-    if plan:
-        logging.info(f"\n✅ Plan found with {len(plan)} actions:\n")
-        total_weight = 0
-        for i, action in enumerate(plan, 1):
-            action_name = action.get('name', 'unknown')
-            action_cfg = actions_config.get(action_name, {})
-            weight = action_cfg.get('weight', 1.0)
-            total_weight += weight
-            
-            logging.info(f"{i}. {action_name} (weight: {weight})")
-            
-            # Show conditions
-            conditions = action_cfg.get('conditions', {})
-            if conditions:
-                logging.info("   Requires:")
-                for key, value in conditions.items():
-                    logging.info(f"     - {key}: {value}")
-            
-            # Show effects
-            reactions = action_cfg.get('reactions', {})
-            if reactions:
-                logging.info("   Effects:")
-                for key, value in reactions.items():
-                    logging.info(f"     - {key}: {value}")
-            
-            logging.info("")
-        
-        logging.info(f"Total plan cost: {total_weight:.2f}")
-    else:
-        logging.info("\n❌ No plan found!")
-        logging.info("\nPossible reasons:")
-        logging.info("- Goal is already satisfied in current state")
-        logging.info("- No action sequence can achieve the goal")
-        logging.info("- Missing prerequisite states")
-        
-        # Show current state values relevant to goal
-        logging.info("\nRelevant current state:")
-        for key in goal_state:
-            if key in current_state:
-                logging.info(f"  {key}: {current_state[key]}")
-            else:
-                logging.info(f"  {key}: <not set>")
+    tools.show_goal_plan(goal_string)
 
 
-def evaluate_user_plan(plan_string, client):
+def evaluate_user_plan(plan_string, client, args):
     """Evaluate a user-defined plan."""
-    logging.info(f"\n=== Evaluating User Plan: {plan_string} ===")
+    # Use new diagnostic tools
+    offline = not args.live if hasattr(args, 'live') else True
+    clean_state = args.clean_state if hasattr(args, 'clean_state') else False
+    custom_state = args.state if hasattr(args, 'state') else None
     
-    # Parse plan string (e.g., "move->fight->rest" or "move,fight,rest")
-    separators = ['->', ',', '|', ';']
-    plan_actions = None
-    for sep in separators:
-        if sep in plan_string:
-            plan_actions = [a.strip() for a in plan_string.split(sep)]
-            break
-    if not plan_actions:
-        plan_actions = [plan_string.strip()]
+    tools = DiagnosticTools(
+        client=client,
+        offline=offline,
+        clean_state=clean_state,
+        custom_state=custom_state
+    )
     
-    logging.info(f"\nPlan contains {len(plan_actions)} actions: {plan_actions}")
-    
-    # Load actions configuration
-    actions_data = ActionsData("config/actions.yaml")
-    actions_config = actions_data.get_actions()
-    goap_data = GoapData("data/world.yaml")
-    
-    # Start with current world state
-    current_state = goap_data.data.copy()
-    # Add defaults
-    if 'character_alive' not in current_state:
-        current_state['character_alive'] = True
-    
-    logging.info(f"\nStarting state has {len(current_state)} variables")
-    
-    # Evaluate each action in sequence
-    plan_valid = True
-    total_cost = 0
-    
-    for i, action_name in enumerate(plan_actions, 1):
-        logging.info(f"\n{i}. Evaluating action: {action_name}")
-        
-        if action_name not in actions_config:
-            logging.error(f"   ❌ ERROR: Unknown action '{action_name}'")
-            logging.info("   Available actions: " + ", ".join(sorted(actions_config.keys())))
-            plan_valid = False
-            break
-        
-        action_cfg = actions_config[action_name]
-        conditions = action_cfg.get('conditions', {})
-        reactions = action_cfg.get('reactions', {})
-        weight = action_cfg.get('weight', 1.0)
-        total_cost += weight
-        
-        # Check if conditions are met
-        conditions_met = True
-        logging.info("   Checking conditions:")
-        for key, required_value in conditions.items():
-            current_value = current_state.get(key, False)
-            
-            # Handle comparison operators in key names
-            if key.endswith('_ge'):
-                # Greater than or equal comparison
-                base_key = key[:-3]
-                current_val = current_state.get(base_key, 0)
-                met = current_val >= required_value
-                logging.info(f"     - {base_key} >= {required_value}: {current_val} {'✓' if met else '✗'}")
-                if not met:
-                    conditions_met = False
-            elif key.endswith('_lt'):
-                # Less than comparison
-                base_key = key[:-3]
-                current_val = current_state.get(base_key, float('inf'))
-                met = current_val < required_value
-                logging.info(f"     - {base_key} < {required_value}: {current_val} {'✓' if met else '✗'}")
-                if not met:
-                    conditions_met = False
-            else:
-                # Direct equality check
-                met = current_value == required_value
-                logging.info(f"     - {key} = {required_value}: {current_value} {'✓' if met else '✗'}")
-                if not met:
-                    conditions_met = False
-        
-        if not conditions_met:
-            logging.error(f"   ❌ Cannot execute {action_name}: conditions not met")
-            plan_valid = False
-            break
-        
-        # Apply reactions to state
-        logging.info("   Applying effects:")
-        for key, value in reactions.items():
-            old_value = current_state.get(key, None)
-            current_state[key] = value
-            logging.info(f"     - {key}: {old_value} → {value}")
-        
-        logging.info(f"   ✓ Action executable (cost: {weight})")
-    
-    # Summary
-    logging.info("\n=== Plan Evaluation Summary ===")
-    if plan_valid:
-        logging.info("✅ Plan is VALID and executable")
-        logging.info(f"Total cost: {total_cost}")
-        logging.info("\nFinal state changes:")
-        
-        # Compare initial vs final state
-        initial_state = goap_data.data.copy()
-        for key in set(initial_state.keys()) | set(current_state.keys()):
-            initial_val = initial_state.get(key, None)
-            final_val = current_state.get(key, None)
-            if initial_val != final_val:
-                logging.info(f"  {key}: {initial_val} → {final_val}")
-    else:
-        logging.info("❌ Plan is INVALID and cannot be executed")
-        logging.info("Fix the issues above before the plan can work")
-    
-    # Suggest improvements
-    if plan_valid:
-        logging.info("\nPlan optimization suggestions:")
-        # Check for redundant actions
-        if len(plan_actions) != len(set(plan_actions)):
-            logging.info("- Plan contains duplicate actions")
-        # Check for high-cost actions
-        for action in plan_actions:
-            if actions_config.get(action, {}).get('weight', 1.0) > 5:
-                logging.info(f"- Action '{action}' has high cost, consider alternatives")
+    tools.evaluate_user_plan(plan_string)
 
 
 def create_character(character_name, client):
@@ -454,11 +262,11 @@ async def main():
             return
         
         if args.goal_planner:
-            show_goal_plan(args.goal_planner, client)
+            show_goal_plan(args.goal_planner, client, args)
             return
         
         if args.evaluate_plan:
-            evaluate_user_plan(args.evaluate_plan, client)
+            evaluate_user_plan(args.evaluate_plan, client, args)
             return
     
     # Normal execution - run character(s)

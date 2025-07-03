@@ -34,21 +34,6 @@ goal_templates:
       level_range: 2
       prioritize_known_monsters: true
       
-  bootstrap_character:
-    description: "Get low-level character to viable state through equipment progression"
-    objective_type: "equipment_progression"
-    parameters:
-      target_level: 3
-    target_state:
-      character_status:
-        safe: true
-      equipment_status:
-        upgrade_status: "completed"
-    strategy:
-      max_iterations: 30
-      equipment_priority: ["weapon", "shield"]
-      focus_combat_effectiveness: true
-      
   upgrade_weapon:
     description: "Craft and equip a better weapon for improved combat effectiveness"
     objective_type: "equipment_progression"
@@ -109,15 +94,6 @@ goal_selection_rules:
       goal: "get_to_safety"
       priority: 99
       
-    - condition:
-        combat_context:
-          status: "not_viable"
-        character_status:
-          is_low_level: true
-          safe: true
-      goal: "bootstrap_character"
-      priority: 96
-      
   # Maintenance priorities
   maintenance:
     - condition:
@@ -128,6 +104,14 @@ goal_selection_rules:
       
   # Progression priorities
   progression:
+    - condition:
+        equipment_status:
+          upgrade_status: "needs_analysis"
+        character_status:
+          safe: true
+      goal: "upgrade_weapon"
+      priority: 70
+      
     - condition:
         character_status:
           safe: true

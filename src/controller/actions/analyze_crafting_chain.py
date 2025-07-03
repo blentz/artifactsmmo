@@ -25,7 +25,6 @@ class AnalyzeCraftingChainAction(ActionBase):
         }
     reactions = {
         "craft_plan_available": True, 
-        # Removed: "material_requirements_known": True - not used as condition by any action
         "crafting_opportunities_known": True
     }
     weights = {"craft_plan_available": 20}

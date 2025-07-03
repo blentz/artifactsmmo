@@ -52,8 +52,14 @@ action_classes:
   move_to_workshop: "src.controller.actions.move_to_workshop.MoveToWorkshopAction"
   move_to_resource: "src.controller.actions.move_to_resource.MoveToResourceAction"
   lookup_material_requirements: "src.controller.actions.lookup_item_info.LookupItemInfoAction"
-  transform_material: "src.controller.actions.transform_raw_materials.TransformRawMaterialsAction"
-  transform_raw_materials: "src.controller.actions.transform_raw_materials.TransformRawMaterialsAction"
+  transform_material: "src.controller.actions.transform_materials_coordinator.TransformMaterialsCoordinatorAction"
+  transform_raw_materials: "src.controller.actions.transform_materials_coordinator.TransformMaterialsCoordinatorAction"
+  # Bridge actions for material transformation
+  analyze_materials_for_transformation: "src.controller.actions.analyze_materials_for_transformation.AnalyzeMaterialsForTransformationAction"
+  determine_workshop_requirements: "src.controller.actions.determine_workshop_requirements.DetermineWorkshopRequirementsAction"
+  navigate_to_workshop: "src.controller.actions.navigate_to_workshop.NavigateToWorkshopAction"
+  execute_material_transformation: "src.controller.actions.execute_material_transformation.ExecuteMaterialTransformationAction"
+  verify_transformation_results: "src.controller.actions.verify_transformation_results.VerifyTransformationResultsAction"
   find_correct_workshop: "src.controller.actions.find_correct_workshop.FindCorrectWorkshopAction"
   evaluate_weapon_recipes: "src.controller.actions.evaluate_weapon_recipes.EvaluateWeaponRecipesAction"
   analyze_equipment_gaps: "src.controller.actions.analyze_equipment_gaps.AnalyzeEquipmentGapsAction"
@@ -202,6 +208,52 @@ action_configurations:
   transform_raw_materials:
     type: "builtin" 
     description: "Transform raw materials into refined materials (smelting)"
+    
+  # Bridge actions for material transformation workflow
+  analyze_materials_for_transformation:
+    type: "builtin"
+    description: "Analyze inventory to determine which materials to transform"
+    
+  determine_workshop_requirements:
+    type: "builtin"
+    description: "Determine which workshop is needed for each transformation"
+    
+  navigate_to_workshop:
+    type: "builtin"
+    description: "Navigate character to a specific workshop type"
+    
+  execute_material_transformation:
+    type: "builtin"
+    description: "Execute a single material transformation at current workshop"
+    
+  verify_transformation_results:
+    type: "builtin"
+    description: "Verify transformation results in inventory"
+    
+  # Equipment upgrade actions
+  initiate_equipment_analysis:
+    type: "builtin"
+    description: "Initiate equipment analysis to prepare for upgrades"
+    
+  analyze_equipment_gaps:
+    type: "builtin"
+    description: "Analyze gaps in character equipment to identify upgrade needs"
+    
+  select_optimal_slot:
+    type: "builtin"
+    description: "Select the optimal equipment slot for crafting based on gaps and skill"
+    
+  select_recipe:
+    type: "builtin"
+    description: "Select the best recipe for crafting equipment in chosen slot"
+    
+  mark_equipment_crafting:
+    type: "builtin"
+    description: "Mark equipment status as crafting to track upgrade progress"
+    
+  complete_equipment_upgrade:
+    type: "builtin"
+    description: "Complete the equipment upgrade process after crafting"
 
   # Equipment progression action configurations
   find_workshops:

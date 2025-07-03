@@ -58,7 +58,7 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
         if use_target_coordinates:
             # Convert context to dict for get_standardized_coordinates
             context_dict = dict(context) if hasattr(context, '__iter__') else {}
-            return self.get_standardized_coordinates(**context_dict)
+            return self.get_standardized_coordinates(context_dict)
         
         return None, None
 

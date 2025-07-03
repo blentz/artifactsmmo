@@ -27,7 +27,7 @@ class SelectOptimalSlotAction(ActionBase):
     conditions = {
             'equipment_status': {
                 'gaps_analyzed': True,
-                'target_slot': None
+                'has_target_slot': False
             },
             'character_status': {
                 'alive': True,
@@ -36,7 +36,7 @@ class SelectOptimalSlotAction(ActionBase):
     
     reactions = {
         'equipment_status': {
-            'target_slot': 'weapon'
+            'has_target_slot': True
         }
     }
     

@@ -16,6 +16,8 @@ state_defaults:
     item_crafted: false
     equipped: false
     recipe_evaluated: false
+    has_target_slot: false
+    has_selected_item: false
     
   location_context:
     current:
@@ -40,6 +42,7 @@ state_defaults:
     target: null
     location: null
     recent_win_rate: 1.0
+    low_win_rate: false
     
   skills:
     # Skills are dynamically populated from character data

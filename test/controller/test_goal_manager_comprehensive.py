@@ -33,8 +33,8 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
                     'target_state': {'equipment_status': {'upgrade_status': 'completed'}},
                     'parameters': {'target_level': 5}
                 },
-                'bootstrap_character': {
-                    'description': 'Bootstrap character',
+                'get_to_safety': {
+                    'description': 'Get to safety',
                     'target_state': {'character_status': {'safe': True}},
                     'strategy': {'safety_priority': True}
                 }
@@ -43,14 +43,14 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
                 'emergency': [
                     {
                         'condition': {'character_status': {'hp_percentage': '<30'}},
-                        'goal': 'bootstrap_character',
+                        'goal': 'get_to_safety',
                         'priority': 100
                     }
                 ],
                 'maintenance': [
                     {
                         'condition': {'character_status': {'alive': True}},
-                        'goal': 'bootstrap_character',
+                        'goal': 'get_to_safety',
                         'priority': 80
                     }
                 ],
@@ -310,18 +310,18 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
         
         result = self.goal_manager.select_goal(current_state)
         self.assertIsNotNone(result)
-        self.assertEqual(result[0], 'bootstrap_character')
+        self.assertEqual(result[0], 'get_to_safety')
     
     def test_select_safety_goal_with_weights(self):
         """Test _select_safety_goal with goal weights."""
         current_state = self.mock_state_defaults.copy()
         current_state['character_status']['hp_percentage'] = 25
         
-        goal_weights = {'bootstrap_character': 10.0}
-        result = self.goal_manager._select_safety_goal(current_state, ['bootstrap_character'], goal_weights)
+        goal_weights = {'get_to_safety': 10.0}
+        result = self.goal_manager._select_safety_goal(current_state, ['get_to_safety'], goal_weights)
         
         self.assertIsNotNone(result)
-        self.assertEqual(result[0], 'bootstrap_character')
+        self.assertEqual(result[0], 'get_to_safety')
     
     def test_select_xp_goal_hierarchical_not_safe(self):
         """Test _select_xp_goal_hierarchical when character is not safe."""
