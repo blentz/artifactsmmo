@@ -134,11 +134,26 @@ class ActionContext:
         return default
     
     def set_parameter(self, key: str, value: Any) -> None:
-        """Set parameter in action_data."""
+        """
+        Set parameter in action_data.
+        
+        Args:
+            key: Parameter name
+            value: Parameter value to store
+        """
         self.action_data[key] = value
     
     def set_result(self, key: str, value: Any) -> None:
-        """Set result data for use by subsequent actions."""
+        """
+        Set result data for use by subsequent actions.
+        
+        This method enables data flow between actions in a plan by storing
+        results from one action that can be accessed by later actions.
+        
+        Args:
+            key: Result key name
+            value: Result value to store
+        """
         self.action_results[key] = value
     
     def get_character_inventory(self, use_cache: bool = True) -> Dict[str, int]:
@@ -193,10 +208,25 @@ class ActionContext:
         return inventory
     
     def clear_inventory_cache(self) -> None:
-        """Clear cached inventory data to force refresh on next access."""
+        """
+        Clear cached inventory data to force refresh on next access.
+        
+        Call this method when the character's inventory has changed (e.g.,
+        after crafting, combat drops, or item consumption) to ensure the
+        next call to get_character_inventory() returns fresh data.
+        """
         self._cached_inventory = None
     
     def get_equipped_item_in_slot(self, slot: str) -> Optional[str]:
+        """
+        Get the item code equipped in a specific equipment slot.
+        
+        Args:
+            slot: Equipment slot name (e.g., 'weapon', 'helmet', 'shield')
+            
+        Returns:
+            Item code equipped in the slot, or None if slot is empty
+        """
         """
         Get item code equipped in specified slot.
         

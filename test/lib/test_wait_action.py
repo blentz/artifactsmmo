@@ -1,7 +1,6 @@
 """ Tests for WaitAction class """
 
 import unittest
-from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 from src.controller.actions.wait import WaitAction
@@ -48,8 +47,8 @@ class TestWaitAction(BaseTest):
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
-        self.assertIn('Waited 0.1 seconds', result.get('message', ''))
-        mock_sleep.assert_called_once_with(0.1)  # Default character has no cooldown, so min wait
+        self.assertIn('Waited 1.0 seconds', result.get('message', ''))
+        mock_sleep.assert_called_once_with(1.0)  # Uses provided wait_duration
 
     @patch('time.sleep')
     def test_execute_with_character_state_no_cooldown(self, mock_sleep):
@@ -60,31 +59,25 @@ class TestWaitAction(BaseTest):
             'cooldown_expiration': None
         }
         
+        # With default wait_duration
         context = MockActionContext(character_state=mock_character_state)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
-        mock_sleep.assert_called_once_with(0.1)  # Minimum wait
+        mock_sleep.assert_called_once_with(1.0)  # Uses default wait_duration
 
     @patch('time.sleep')
-    @patch('src.controller.actions.wait.datetime')
-    def test_execute_with_active_cooldown(self, mock_datetime, mock_sleep):
-        """ Test execute with active cooldown """
-        # Set up current time and cooldown expiration
-        current_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        cooldown_end = current_time + timedelta(seconds=5.5)
-        
-        mock_datetime.now.return_value = current_time
-        mock_datetime.fromisoformat.return_value = cooldown_end
-        
+    def test_execute_with_active_cooldown(self, mock_sleep):
+        """ Test execute with GOAP-provided wait duration """
         mock_character_state = Mock()
         mock_character_state.data = {
             'cooldown': 6,
-            'cooldown_expiration': cooldown_end.isoformat()
+            'cooldown_expiration': '2023-01-01T12:00:06+00:00'
         }
         
-        context = MockActionContext(character_state=mock_character_state)
+        # GOAP provides the calculated wait duration
+        context = MockActionContext(character_state=mock_character_state, wait_duration=5.5)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
@@ -93,39 +86,33 @@ class TestWaitAction(BaseTest):
         mock_sleep.assert_called_once_with(5.5)
 
     @patch('time.sleep')
-    @patch('src.controller.actions.wait.datetime')
-    def test_execute_with_expired_cooldown(self, mock_datetime, mock_sleep):
-        """ Test execute with expired cooldown """
-        # Set up current time after cooldown expiration
-        current_time = datetime(2023, 1, 1, 12, 0, 10, tzinfo=timezone.utc)
-        cooldown_end = current_time - timedelta(seconds=5)  # Expired 5 seconds ago
-        
-        mock_datetime.now.return_value = current_time
-        mock_datetime.fromisoformat.return_value = cooldown_end
-        
+    def test_execute_with_expired_cooldown(self, mock_sleep):
+        """ Test execute with zero wait duration (cooldown already expired) """
         mock_character_state = Mock()
         mock_character_state.data = {
-            'cooldown': 6,
-            'cooldown_expiration': cooldown_end.isoformat()
+            'cooldown': 0,
+            'cooldown_expiration': None
         }
         
-        context = MockActionContext(character_state=mock_character_state)
+        # GOAP would provide 0.1 for expired/no cooldown (minimum wait)
+        context = MockActionContext(character_state=mock_character_state, wait_duration=0.1)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.get('success', False))
-        mock_sleep.assert_not_called()  # No sleep for expired cooldown
+        mock_sleep.assert_called_once_with(0.1)  # Minimum wait
 
     @patch('time.sleep')
     def test_execute_with_cooldown_seconds_only(self, mock_sleep):
-        """ Test execute with cooldown seconds but no expiration time """
+        """ Test execute with GOAP-provided wait duration """
         mock_character_state = Mock()
         mock_character_state.data = {
             'cooldown': 3,
             'cooldown_expiration': None
         }
         
-        context = MockActionContext(character_state=mock_character_state)
+        # GOAP provides wait duration
+        context = MockActionContext(character_state=mock_character_state, wait_duration=3.0)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
@@ -141,7 +128,8 @@ class TestWaitAction(BaseTest):
             'cooldown_expiration': None
         }
         
-        context = MockActionContext(character_state=mock_character_state)
+        # GOAP would already clamp this, but wait action also clamps for safety
+        context = MockActionContext(character_state=mock_character_state, wait_duration=120.0)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
@@ -149,22 +137,16 @@ class TestWaitAction(BaseTest):
         mock_sleep.assert_called_once_with(60.0)  # Clamped to 60 seconds max
 
     @patch('time.sleep')
-    @patch('src.controller.actions.wait.datetime')
-    def test_execute_with_string_cooldown_expiration(self, mock_datetime, mock_sleep):
-        """ Test execute with string cooldown expiration """
-        current_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        cooldown_end = current_time + timedelta(seconds=2.5)
-        
-        mock_datetime.now.return_value = current_time
-        mock_datetime.fromisoformat.return_value = cooldown_end
-        
+    def test_execute_with_string_cooldown_expiration(self, mock_sleep):
+        """ Test execute with GOAP-calculated wait duration from string expiration """
         mock_character_state = Mock()
         mock_character_state.data = {
             'cooldown': 3,
             'cooldown_expiration': '2023-01-01T12:00:02.500000+00:00'
         }
         
-        context = MockActionContext(character_state=mock_character_state)
+        # GOAP calculates and provides the wait duration
+        context = MockActionContext(character_state=mock_character_state, wait_duration=2.5)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
@@ -173,14 +155,15 @@ class TestWaitAction(BaseTest):
 
     @patch('time.sleep')
     def test_execute_with_parse_error_fallback(self, mock_sleep):
-        """ Test execute falls back to cooldown seconds when parsing fails """
+        """ Test execute with GOAP fallback duration when parsing fails """
         mock_character_state = Mock()
         mock_character_state.data = {
             'cooldown': 4,
             'cooldown_expiration': 'invalid-date-format'
         }
         
-        context = MockActionContext(character_state=mock_character_state)
+        # GOAP would handle parse errors and provide a fallback duration
+        context = MockActionContext(character_state=mock_character_state, wait_duration=4.0)
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)

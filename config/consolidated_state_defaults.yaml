@@ -79,3 +79,8 @@ state_defaults:
     
   inventory:
     updated: false
+    
+  healing_context:
+    healing_needed: false
+    healing_status: "idle"  # idle, in_progress, complete
+    healing_method: null    # rest, potion, spell, etc.

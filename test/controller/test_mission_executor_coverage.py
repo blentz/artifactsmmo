@@ -91,9 +91,8 @@ class TestMissionExecutorCoverage(unittest.TestCase):
         # Get available goals
         available = self.mission_executor._get_available_goals()
         
-        # Currently the code has failed goal exclusion disabled (line 89)
-        # So all goals should be available
-        self.assertEqual(set(available), {'goal1', 'goal2', 'goal3'})
+        # Failed goals should be excluded
+        self.assertEqual(set(available), {'goal1', 'goal3'})
         
     def test_should_reselect_goal_no_current_goal(self):
         """Test _should_reselect_goal when no current goal."""

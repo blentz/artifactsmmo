@@ -75,8 +75,30 @@ class RestAction(CharacterActionBase):
             error_msg = str(e)
             
             # Check for specific error conditions
-            if "Character is in cooldown" in error_msg:
-                return self.get_error_response("Rest failed: Character is in cooldown", is_cooldown=True)
+            if "Character is in cooldown" in error_msg or "499" in error_msg:
+                # Extract cooldown information if available
+                cooldown_data = {}
+                
+                # Try to extract cooldown duration from error response
+                if hasattr(e, 'response'):
+                    try:
+                        # The API might return cooldown info in the error response
+                        if hasattr(e.response, 'json') and callable(e.response.json):
+                            error_data = e.response.json()
+                            if 'detail' in error_data:
+                                # Extract cooldown seconds from detail message if present
+                                import re
+                                match = re.search(r'(\d+(?:\.\d+)?)\s*seconds?', str(error_data['detail']))
+                                if match:
+                                    cooldown_data['cooldown_seconds'] = float(match.group(1))
+                    except:
+                        pass
+                
+                return self.get_error_response(
+                    "Rest failed: Character is in cooldown", 
+                    is_cooldown=True,
+                    **cooldown_data
+                )
             elif "Character not found" in error_msg:
                 return self.get_error_response("Rest failed: Character not found")
             else:

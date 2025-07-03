@@ -26,10 +26,8 @@ goal_templates:
     description: "Hunt monsters for experience and loot"
     objective_type: "combat"
     target_state:
-      combat_context:
-        status: "completed"
-      character_status:
-        safe: true
+      goal_progress:
+        has_gained_xp: true
     strategy:
       search_radius: 4
       max_search_attempts: 5
@@ -67,8 +65,9 @@ goal_templates:
     description: "Rest to restore HP when in danger"
     objective_type: "maintenance"
     target_state:
+      healing_context:
+        healing_status: "complete"
       character_status:
-        hp_at_max: true
         safe: true
     strategy:
       max_iterations: 5
@@ -88,7 +87,8 @@ goal_templates:
     target_state:
       character_status:
         alive: true
-        hp_at_max: true
+      healing_context:
+        healing_status: "complete"
     strategy:
       max_attempts: 3
       
@@ -148,9 +148,6 @@ state_mappings:
     hp_sufficient_for_combat:
       source: "character_status.hp_percentage" 
       condition: ">= 80"
-    hp_at_max:
-      source: "character_status.hp_percentage"
-      condition: "== 100"
     is_low_level:
       source: "character_status.level"
       condition: "<= 5"

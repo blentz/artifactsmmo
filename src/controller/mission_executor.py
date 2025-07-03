@@ -85,8 +85,8 @@ class MissionExecutor:
     def _get_available_goals(self) -> List[str]:
         """Get list of goals available for selection, excluding failed goals."""
         all_goals = list(self.goal_templates.keys())
-        # TEMPORARY: Disable failed goal exclusion for testing fixes
-        available_goals = all_goals  # [goal for goal in all_goals if goal not in self.failed_goals]
+        # Exclude goals that have exceeded max failures
+        available_goals = [goal for goal in all_goals if goal not in self.failed_goals]
         
         if len(available_goals) < len(all_goals):
             excluded_count = len(all_goals) - len(available_goals)
@@ -101,6 +101,15 @@ class MissionExecutor:
         if goal_name in self.failed_goals:
             self.failed_goals.remove(goal_name)
             self.logger.info(f"✅ Goal '{goal_name}' succeeded - removing from failed goals list")
+    
+    def reset_failed_goal(self, goal_name: str) -> None:
+        """Reset failure tracking for a specific goal."""
+        if goal_name in self.goal_failure_counts:
+            del self.goal_failure_counts[goal_name]
+            self.logger.info(f"🔄 Reset failure count for goal '{goal_name}'")
+        if goal_name in self.failed_goals:
+            self.failed_goals.remove(goal_name)
+            self.logger.info(f"🔄 Restored goal '{goal_name}' to available goals list")
     
     def _evaluate_goal_progress(self, goal_name: str, current_state: Dict[str, Any], 
                               goal_config: Dict[str, Any]) -> float:
@@ -121,15 +130,20 @@ class MissionExecutor:
             if not goal_state:
                 return 0.0
             
-            # Calculate how many goal conditions are already met
-            total_conditions = len(goal_state)
+            # Flatten nested goal state for comparison
+            flattened_goal_conditions = self._flatten_dict(goal_state)
+            flattened_current_state = self._flatten_dict(current_state)
+            
+            total_conditions = len(flattened_goal_conditions)
             met_conditions = 0
             
-            for condition, target_value in goal_state.items():
-                current_value = current_state.get(condition, False)
+            for condition_path, target_value in flattened_goal_conditions.items():
+                current_value = flattened_current_state.get(condition_path)
                 
                 # Check if condition is met (handle different value types)
                 if isinstance(target_value, bool) and current_value == target_value:
+                    met_conditions += 1
+                elif isinstance(target_value, str) and current_value == target_value:
                     met_conditions += 1
                 elif isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
                     # For numeric values, consider partial progress
@@ -145,6 +159,27 @@ class MissionExecutor:
         except Exception as e:
             self.logger.debug(f"Error evaluating progress for goal {goal_name}: {e}")
             return 0.0
+    
+    def _flatten_dict(self, d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
+        """
+        Flatten a nested dictionary into dot-notation keys.
+        
+        Args:
+            d: Dictionary to flatten
+            parent_key: Parent key for recursion
+            sep: Separator for keys
+            
+        Returns:
+            Flattened dictionary
+        """
+        items = []
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
     
     def _record_goal_progress(self, goal_name: str, progress: float) -> None:
         """Record progress for a goal in the history."""

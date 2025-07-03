@@ -61,10 +61,60 @@ actions:
   rest:
     conditions:
       character_status:
-        hp_percentage: '<100'
+        alive: true
+        cooldown_active: false
+      healing_context:
+        healing_status: "in_progress"
     reactions:
       character_status:
         hp_percentage: 100
+        safe: true
+    weight: 1
+    
+  # Healing Flow Bridge Actions
+  assess_healing_needs:
+    conditions:
+      character_status:
+        alive: true
+        safe: false
+    reactions:
+      healing_context:
+        healing_needed: true
+    weight: 1
+    
+  initiate_healing:
+    conditions:
+      healing_context:
+        healing_needed: true
+      character_status:
+        alive: true
+        cooldown_active: false
+    reactions:
+      healing_context:
+        healing_status: "in_progress"
+        healing_method: "rest"
+    weight: 1
+    
+  complete_healing:
+    conditions:
+      healing_context:
+        healing_status: "in_progress"
+      character_status:
+        safe: true
+    reactions:
+      healing_context:
+        healing_status: "complete"
+        healing_needed: false
+    weight: 1
+    
+  reset_healing_state:
+    conditions:
+      healing_context:
+        healing_status: "complete"
+    reactions:
+      healing_context:
+        healing_status: "idle"
+        healing_method: null
     weight: 1
     
   wait:

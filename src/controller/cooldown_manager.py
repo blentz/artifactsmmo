@@ -40,26 +40,21 @@ class CooldownManager:
         try:
             thresholds = self.config_data.data.get('thresholds', {})
             
-            # Load cooldown thresholds with defaults
-            self.cooldown_detection_threshold = thresholds.get('cooldown_detection_threshold', 0.5)
+            # Load cooldown configuration
             self.max_cooldown_wait = thresholds.get('max_cooldown_wait', 65)
-            self.min_cooldown_wait = thresholds.get('min_cooldown_wait', 0.5)
             self.character_refresh_cache_duration = thresholds.get('character_refresh_cache_duration', 5.0)
             
-            self.logger.debug(f"Loaded cooldown configuration: detection_threshold={self.cooldown_detection_threshold}, "
-                            f"max_wait={self.max_cooldown_wait}, min_wait={self.min_cooldown_wait}")
+            self.logger.debug(f"Loaded cooldown configuration: max_wait={self.max_cooldown_wait}")
             
         except Exception as e:
             self.logger.error(f"Failed to load cooldown configuration: {e}")
-            # Use hardcoded defaults as fallback
-            self.cooldown_detection_threshold = 0.5
+            # Use defaults
             self.max_cooldown_wait = 65
-            self.min_cooldown_wait = 0.5
             self.character_refresh_cache_duration = 5.0
     
     def is_character_on_cooldown(self, character_state) -> bool:
         """
-        Check if character is currently on cooldown using configuration-driven thresholds.
+        Check if character is currently on cooldown based on API data.
         
         Args:
             character_state: Character state object
@@ -74,26 +69,15 @@ class CooldownManager:
             char_data = character_state.data
             cooldown_expiration = char_data.get('cooldown_expiration')
             
-            if cooldown_expiration:
-                if isinstance(cooldown_expiration, str):
-                    cooldown_end = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
-                    current_time = datetime.now(timezone.utc)
-                    
-                    if current_time < cooldown_end:
-                        remaining = (cooldown_end - current_time).total_seconds()
-                        # Use configured threshold instead of hardcoded value
-                        if remaining > self.cooldown_detection_threshold:
-                            return True
-                    else:
-                        # Cooldown has expired - ignore legacy cooldown field
-                        return False
+            if not cooldown_expiration:
+                return False
+                
+            if isinstance(cooldown_expiration, str):
+                cooldown_end = datetime.fromisoformat(cooldown_expiration)
+                current_time = datetime.now(timezone.utc)
+                
+                return current_time < cooldown_end
             
-            # Only check legacy cooldown field if no expiration time is available
-            if cooldown_expiration is None:
-                cooldown = char_data.get('cooldown', 0)
-                return cooldown > self.cooldown_detection_threshold
-            
-            # If we have expiration time but it's expired, cooldown is not active
             return False
             
         except Exception as e:
@@ -102,7 +86,7 @@ class CooldownManager:
     
     def calculate_wait_duration(self, character_state) -> float:
         """
-        Calculate optimal wait duration based on cooldown and configuration.
+        Calculate wait duration based on cooldown expiration from API.
         
         Args:
             character_state: Character state object
@@ -111,34 +95,59 @@ class CooldownManager:
             Wait duration in seconds (0.0 if no wait needed)
         """
         if not character_state:
+            self.logger.debug("calculate_wait_duration: No character_state provided")
             return 0.0
             
         try:
             char_data = character_state.data
             cooldown_expiration = char_data.get('cooldown_expiration')
-            wait_duration = self.min_cooldown_wait  # Default wait time
             
-            if cooldown_expiration:
-                try:
-                    if isinstance(cooldown_expiration, str):
-                        cooldown_end = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
-                        current_time = datetime.now(timezone.utc)
-                        if current_time < cooldown_end:
-                            remaining_seconds = (cooldown_end - current_time).total_seconds()
-                            # Wait for the remaining time, using configured bounds
-                            wait_duration = max(self.min_cooldown_wait, min(remaining_seconds, self.max_cooldown_wait))
-                        else:
-                            # Cooldown has expired, no need to wait
-                            wait_duration = 0.0
-                except Exception as e:
-                    self.logger.warning(f"Error calculating wait duration: {e}")
-                    wait_duration = min(char_data.get('cooldown', 1), self.max_cooldown_wait)
+            self.logger.debug(f"calculate_wait_duration: cooldown_expiration = {cooldown_expiration} (type: {type(cooldown_expiration)})")
             
-            return wait_duration
+            if not cooldown_expiration:
+                self.logger.debug("calculate_wait_duration: No cooldown_expiration found, returning 0.0")
+                return 0.0
+                
+            if isinstance(cooldown_expiration, str):
+                cooldown_end = datetime.fromisoformat(cooldown_expiration)
+                current_time = datetime.now(timezone.utc)
+                
+                self.logger.debug(f"calculate_wait_duration: cooldown_end = {cooldown_end}")
+                self.logger.debug(f"calculate_wait_duration: current_time = {current_time}")
+                
+                if current_time < cooldown_end:
+                    remaining_seconds = (cooldown_end - current_time).total_seconds()
+                    wait_duration = min(remaining_seconds, self.max_cooldown_wait)
+                    self.logger.debug(f"calculate_wait_duration: remaining_seconds = {remaining_seconds:.1f}, wait_duration = {wait_duration:.1f}")
+                    return wait_duration
+                else:
+                    # Cooldown has expired
+                    self.logger.debug(f"calculate_wait_duration: Cooldown expired, returning 0.0")
+                    return 0.0
+            elif isinstance(cooldown_expiration, datetime):
+                # Handle datetime objects directly
+                cooldown_end = cooldown_expiration
+                current_time = datetime.now(timezone.utc)
+                
+                self.logger.debug(f"calculate_wait_duration: cooldown_end (datetime) = {cooldown_end}")
+                self.logger.debug(f"calculate_wait_duration: current_time = {current_time}")
+                
+                if current_time < cooldown_end:
+                    remaining_seconds = (cooldown_end - current_time).total_seconds()
+                    wait_duration = min(remaining_seconds, self.max_cooldown_wait)
+                    self.logger.debug(f"calculate_wait_duration: remaining_seconds = {remaining_seconds:.1f}, wait_duration = {wait_duration:.1f}")
+                    return wait_duration
+                else:
+                    # Cooldown has expired
+                    self.logger.debug(f"calculate_wait_duration: Cooldown expired, returning 0.0")
+                    return 0.0
+            
+            self.logger.debug(f"calculate_wait_duration: cooldown_expiration is neither string nor datetime, returning 0.0")
+            return 0.0
             
         except Exception as e:
             self.logger.error(f"Error calculating cooldown wait duration: {e}")
-            return self.min_cooldown_wait
+            return 0.0
     
     def should_refresh_character_state(self) -> bool:
         """

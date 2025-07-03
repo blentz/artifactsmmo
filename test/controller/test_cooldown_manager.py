@@ -22,9 +22,7 @@ class TestCooldownManager(unittest.TestCase):
         # Create test configuration
         test_config = """
 thresholds:
-  cooldown_detection_threshold: 1.0
   max_cooldown_wait: 30
-  min_cooldown_wait: 0.5
   character_refresh_cache_duration: 10.0
 """
         self.config_file.write_text(test_config)
@@ -46,9 +44,7 @@ thresholds:
         manager = CooldownManager(str(self.config_file))
         
         # Verify configuration was loaded
-        self.assertEqual(manager.cooldown_detection_threshold, 1.0)
         self.assertEqual(manager.max_cooldown_wait, 30)
-        self.assertEqual(manager.min_cooldown_wait, 0.5)
         self.assertEqual(manager.character_refresh_cache_duration, 10.0)
     
     @patch('src.controller.cooldown_manager.YamlData')
@@ -65,9 +61,7 @@ thresholds:
     def test_load_configuration_success(self):
         """Test successful configuration loading."""
         # Configuration should be loaded in setUp
-        self.assertEqual(self.manager.cooldown_detection_threshold, 1.0)
         self.assertEqual(self.manager.max_cooldown_wait, 30)
-        self.assertEqual(self.manager.min_cooldown_wait, 0.5)
         self.assertEqual(self.manager.character_refresh_cache_duration, 10.0)
     
     def test_load_configuration_missing_thresholds(self):
@@ -79,9 +73,7 @@ thresholds:
         manager = CooldownManager(str(config_file))
         
         # Should use defaults
-        self.assertEqual(manager.cooldown_detection_threshold, 0.5)
         self.assertEqual(manager.max_cooldown_wait, 65)
-        self.assertEqual(manager.min_cooldown_wait, 0.5)
         self.assertEqual(manager.character_refresh_cache_duration, 5.0)
     
     def test_load_configuration_exception(self):
@@ -95,10 +87,8 @@ thresholds:
                 # Call _load_configuration directly to test exception handling
                 self.manager._load_configuration()
                 
-                # Should use hardcoded defaults after exception
-                self.assertEqual(self.manager.cooldown_detection_threshold, 0.5)
+                # Should use defaults after exception
                 self.assertEqual(self.manager.max_cooldown_wait, 65)
-                self.assertEqual(self.manager.min_cooldown_wait, 0.5)
                 self.assertEqual(self.manager.character_refresh_cache_duration, 5.0)
     
     def test_is_character_on_cooldown_no_character_state(self):
@@ -113,25 +103,11 @@ thresholds:
         result = self.manager.is_character_on_cooldown(self.mock_character_state)
         self.assertFalse(result)
     
-    def test_is_character_on_cooldown_legacy_cooldown_above_threshold(self):
-        """Test cooldown check with legacy cooldown above threshold."""
-        self.mock_character_state.data = {'cooldown': 2.0}  # Above 1.0 threshold
-        
-        result = self.manager.is_character_on_cooldown(self.mock_character_state)
-        self.assertTrue(result)
-    
-    def test_is_character_on_cooldown_legacy_cooldown_below_threshold(self):
-        """Test cooldown check with legacy cooldown below threshold."""
-        self.mock_character_state.data = {'cooldown': 0.5}  # Below 1.0 threshold
-        
-        result = self.manager.is_character_on_cooldown(self.mock_character_state)
-        self.assertFalse(result)
-    
     def test_is_character_on_cooldown_expiration_future(self):
         """Test cooldown check with future expiration time."""
         # Set expiration 10 seconds in the future
         future_time = datetime.now(timezone.utc) + timedelta(seconds=10)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
@@ -142,23 +118,23 @@ thresholds:
         """Test cooldown check with past expiration time."""
         # Set expiration 10 seconds in the past
         past_time = datetime.now(timezone.utc) - timedelta(seconds=10)
-        expiration_str = past_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = past_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         result = self.manager.is_character_on_cooldown(self.mock_character_state)
         self.assertFalse(result)
     
-    def test_is_character_on_cooldown_expiration_near_threshold(self):
-        """Test cooldown check with expiration near threshold."""
-        # Set expiration just below threshold (0.5 seconds in future with 1.0 threshold)
+    def test_is_character_on_cooldown_expiration_near_zero(self):
+        """Test cooldown check with expiration very near."""
+        # Set expiration 0.5 seconds in future
         future_time = datetime.now(timezone.utc) + timedelta(seconds=0.5)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         result = self.manager.is_character_on_cooldown(self.mock_character_state)
-        self.assertFalse(result)  # Should be False because 0.5 < 1.0 threshold
+        self.assertTrue(result)  # Should be True because expiration is in the future
     
     def test_is_character_on_cooldown_exception_handling(self):
         """Test cooldown check with exception during processing."""
@@ -179,13 +155,13 @@ thresholds:
         self.mock_character_state.data = {}
         
         result = self.manager.calculate_wait_duration(self.mock_character_state)
-        self.assertEqual(result, 0.5)  # min_cooldown_wait
+        self.assertEqual(result, 0.0)  # No cooldown data means no wait
     
     def test_calculate_wait_duration_future_expiration(self):
         """Test wait duration calculation with future expiration."""
         # Set expiration 5 seconds in the future
         future_time = datetime.now(timezone.utc) + timedelta(seconds=5)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
@@ -198,7 +174,7 @@ thresholds:
         """Test wait duration calculation with past expiration."""
         # Set expiration 5 seconds in the past
         past_time = datetime.now(timezone.utc) - timedelta(seconds=5)
-        expiration_str = past_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = past_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
@@ -209,7 +185,7 @@ thresholds:
         """Test wait duration calculation when it exceeds maximum."""
         # Set expiration 60 seconds in the future (exceeds max of 30)
         future_time = datetime.now(timezone.utc) + timedelta(seconds=60)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
@@ -217,19 +193,20 @@ thresholds:
         self.assertEqual(result, 30.0)  # Should be capped at max_cooldown_wait
     
     def test_calculate_wait_duration_below_min(self):
-        """Test wait duration calculation when it's below minimum."""
-        # Set expiration 0.1 seconds in the future (below min of 0.5)
+        """Test wait duration calculation when it's very short."""
+        # Set expiration 0.1 seconds in the future
         future_time = datetime.now(timezone.utc) + timedelta(seconds=0.1)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         result = self.manager.calculate_wait_duration(self.mock_character_state)
-        self.assertEqual(result, 0.5)  # Should be raised to min_cooldown_wait
+        # Should return actual remaining time, not enforce minimum
+        self.assertAlmostEqual(result, 0.1, places=1)
     
     def test_calculate_wait_duration_exception_handling(self):
         """Test wait duration calculation with exception."""
-        # Set invalid expiration format but include legacy cooldown
+        # Set invalid expiration format
         self.mock_character_state.data = {
             'cooldown_expiration': 'invalid-format',
             'cooldown': 10
@@ -237,8 +214,8 @@ thresholds:
         
         with patch('src.controller.cooldown_manager.logging') as mock_logging:
             result = self.manager.calculate_wait_duration(self.mock_character_state)
-            # Should fall back to legacy cooldown, capped at max_wait
-            self.assertEqual(result, 10.0)
+            # Should return 0.0 on error
+            self.assertEqual(result, 0.0)
     
     def test_calculate_wait_duration_outer_exception(self):
         """Test wait duration calculation with outer exception."""
@@ -248,7 +225,7 @@ thresholds:
         
         with patch('src.controller.cooldown_manager.logging') as mock_logging:
             result = self.manager.calculate_wait_duration(mock_state)
-            self.assertEqual(result, 0.5)  # Should return min_cooldown_wait
+            self.assertEqual(result, 0.0)  # Should return 0.0 on error
     
     def test_should_refresh_character_state_initial(self):
         """Test should refresh character state on first call."""
@@ -296,7 +273,7 @@ thresholds:
         """Test successful cooldown handling with wait."""
         # Set up character state with cooldown
         future_time = datetime.now(timezone.utc) + timedelta(seconds=2)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         # Mock action executor
@@ -325,7 +302,7 @@ thresholds:
         """Test cooldown handling when no wait is needed."""
         # Set up character state with expired cooldown
         past_time = datetime.now(timezone.utc) - timedelta(seconds=5)
-        expiration_str = past_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = past_time.isoformat()
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         mock_action_executor = Mock()
@@ -342,7 +319,7 @@ thresholds:
         """Test cooldown handling when wait action fails."""
         # Set up character state with cooldown
         future_time = datetime.now(timezone.utc) + timedelta(seconds=2)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         # Mock action executor with failing result
@@ -362,7 +339,7 @@ thresholds:
         """Test cooldown handling without controller reference."""
         # Set up character state with cooldown
         future_time = datetime.now(timezone.utc) + timedelta(seconds=1)
-        expiration_str = future_time.isoformat().replace('+00:00', 'Z')
+        expiration_str = future_time.isoformat()
         self.mock_character_state.data = {'cooldown_expiration': expiration_str}
         
         # Mock action executor
@@ -383,7 +360,12 @@ thresholds:
         self.assertNotIn('controller', context)
     
     def test_handle_cooldown_with_wait_exception(self):
-        """Test cooldown handling with exception."""
+        """Test cooldown handling with exception during wait action."""
+        # Set up character state with actual cooldown
+        future_time = datetime.now(timezone.utc) + timedelta(seconds=5)
+        expiration_str = future_time.isoformat()
+        self.mock_character_state.data = {'cooldown_expiration': expiration_str}
+        
         # Mock action executor that raises exception
         mock_action_executor = Mock()
         mock_action_executor.execute_action.side_effect = Exception("Action execution failed")

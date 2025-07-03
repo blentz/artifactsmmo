@@ -30,6 +30,12 @@ action_classes:
   complete_equipment_upgrade: "src.controller.actions.complete_equipment_upgrade.CompleteEquipmentUpgradeAction"
   reset_equipment_upgrade: "src.controller.actions.reset_equipment_upgrade.ResetEquipmentUpgradeAction"
   
+  # Bridge actions - Healing Flow
+  assess_healing_needs: "src.controller.actions.assess_healing_needs.AssessHealingNeedsAction"
+  initiate_healing: "src.controller.actions.initiate_healing.InitiateHealingAction"
+  complete_healing: "src.controller.actions.complete_healing.CompleteHealingAction"
+  reset_healing_state: "src.controller.actions.reset_healing_state.ResetHealingStateAction"
+  
   # Legacy actions (for backward compatibility during transition)
   attack: "src.controller.actions.attack.AttackAction"
   map_lookup: "src.controller.actions.map_lookup.MapLookupAction"

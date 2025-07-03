@@ -1,7 +1,6 @@
 """ WaitAction module """
 
 import time
-from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from src.lib.action_context import ActionContext
@@ -33,46 +32,17 @@ class WaitAction(ActionBase):
 
     def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
         """ Execute the wait action - wait for cooldown to expire """
-        # Get wait duration from context or use default
+        # Get wait duration from context - this is calculated by GOAP planning
+        # GOAP's _handle_cooldown_with_plan_insertion already calculates the exact remaining time
         wait_duration = context.get('wait_duration', 1.0)
         
         self.log_execution_start(wait_duration=wait_duration)
         
-        # Check if we have character state with cooldown information
-        remaining_cooldown = wait_duration
-        character_state = context.character_state
+        # Trust the wait_duration provided by GOAP planning
+        remaining_cooldown = float(wait_duration)
         
-        if character_state is not None:
-            char_data = character_state.data
-            cooldown_seconds = char_data.get('cooldown', 0)
-            cooldown_expiration = char_data.get('cooldown_expiration', None)
-            
-            if cooldown_seconds > 0:
-                if cooldown_expiration:
-                    try:
-                        if isinstance(cooldown_expiration, str):
-                            cooldown_end = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
-                        else:
-                            cooldown_end = cooldown_expiration
-                        
-                        current_time = datetime.now(timezone.utc)
-                        if current_time < cooldown_end:
-                            remaining_cooldown = (cooldown_end - current_time).total_seconds()
-                            # Clamp to reasonable bounds
-                            remaining_cooldown = max(0.1, min(remaining_cooldown, 60.0))
-                        else:
-                            # Cooldown has already expired, no need to wait
-                            remaining_cooldown = 0.0
-                            
-                    except Exception as e:
-                        self.logger.warning(f"Error parsing cooldown for wait: {e}")
-                        remaining_cooldown = min(cooldown_seconds, 60.0)
-                else:
-                    # Use cooldown seconds directly if no expiration time
-                    remaining_cooldown = min(cooldown_seconds, 60.0)
-            else:
-                # No cooldown, use minimum wait
-                remaining_cooldown = 0.1
+        # Clamp to reasonable bounds for safety
+        remaining_cooldown = max(0.1, min(remaining_cooldown, 60.0))
         
         try:
             if remaining_cooldown > 0.0:

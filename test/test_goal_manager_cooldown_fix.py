@@ -211,14 +211,14 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
         self.assertTrue(controller._is_character_on_cooldown(),
                        "AI controller: Active cooldown should return True")
         
-        # Test case 3: No expiration time, use legacy
+        # Test case 3: No expiration time, legacy ignored
         mock_character_state.data = {
             'cooldown': 5,
             'cooldown_expiration': None
         }
         
-        self.assertTrue(controller._is_character_on_cooldown(),
-                       "AI controller: Legacy cooldown should be used when no expiration available")
+        self.assertFalse(controller._is_character_on_cooldown(),
+                        "AI controller: Legacy cooldown should be ignored when no expiration available")
         
         # Test case 4: No cooldown
         mock_character_state.data = {

@@ -147,10 +147,13 @@ class GOAPGoalManager:
         self.logger.debug(f"💰 Materials: {len(state['materials']['inventory'])} types")
         self.logger.debug(f"🎓 Skills: {list(state['skills'].keys())}")
         
-        # Return consolidated state only - no backward compatibility
-        self.logger.debug(f"🔄 Using consolidated state format with {len(state)} state groups")
+        # Apply state mappings to add derived states (like has_gained_xp)
+        enhanced_state = self._apply_state_mappings_to_selection_state(state)
         
-        return state
+        # Return consolidated state with derived states
+        self.logger.debug(f"🔄 Using consolidated state format with {len(enhanced_state)} state groups")
+        
+        return enhanced_state
     
     def _determine_location_type(self, char_data: Dict, map_state: Any) -> str:
         """Determine the type of current location from map data."""
@@ -180,7 +183,7 @@ class GOAPGoalManager:
         if cooldown_expiration:
             try:
                 if isinstance(cooldown_expiration, str):
-                    cooldown_end = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
+                    cooldown_end = datetime.fromisoformat(cooldown_expiration)
                 else:
                     cooldown_end = cooldown_expiration
                     
@@ -458,6 +461,10 @@ class GOAPGoalManager:
         
         # Basic viability check
         if character_level < 2:  # Need level 2+ for most crafting
+            return False
+        
+        # Check if on cooldown - crafting actions require no cooldown
+        if char_status.get('cooldown_active', False):
             return False
         
         # Specific goal checks

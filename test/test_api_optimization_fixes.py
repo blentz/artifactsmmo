@@ -192,9 +192,11 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
         with patch('time.sleep') as mock_sleep:
             from test.fixtures import MockActionContext
             context = MockActionContext(character_state=self.mock_character_state)
+            # GOAP provides the wait_duration
+            context['wait_duration'] = 10.0
             result = wait_action.execute(self.mock_client, context)
             
-            # Should have called sleep with reasonable duration
+            # Should have called sleep with the provided duration
             mock_sleep.assert_called_once()
             sleep_duration = mock_sleep.call_args[0][0]
             self.assertGreater(sleep_duration, 8.0)  # At least 8 seconds

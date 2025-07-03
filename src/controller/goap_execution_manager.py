@@ -6,6 +6,7 @@ eliminating redundant GOAP methods from the AI controller.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from src.lib.goap import World, Planner, Action_List
@@ -426,8 +427,9 @@ class GOAPExecutionManager:
         This phase should use the analyze_crafting_chain action and existing
         knowledge to build a comprehensive plan before execution begins.
         """
-        # Get current state without forcing refresh to avoid infinite loops
-        current_state = controller.get_current_world_state(force_refresh=False)
+        # Get current state with fresh data to ensure accurate planning
+        # This is critical for cooldown detection and other time-sensitive state
+        current_state = controller.get_current_world_state(force_refresh=True)
         
         # Check if goal is already achieved
         if self._is_goal_achieved(goal_state, current_state):
@@ -481,7 +483,8 @@ class GOAPExecutionManager:
             iterations += 1
             
             # Check for cooldown and handle by inserting wait action and replanning
-            current_state = controller.get_current_world_state(force_refresh=False)
+            # Force refresh to ensure we have accurate cooldown status
+            current_state = controller.get_current_world_state(force_refresh=True)
             if current_state.get('is_on_cooldown', False):
                 # Only insert wait action if current action isn't already a wait action
                 if action_index < len(current_plan):
@@ -520,6 +523,14 @@ class GOAPExecutionManager:
                 if self._is_authentication_failure(action_name, controller):
                     self.logger.error("🚨 Authentication failure detected - aborting execution")
                     return False
+                elif self._is_cooldown_failure(action_name, controller):
+                    self.logger.warning("⏱️ Cooldown failure detected - inserting wait action")
+                    # Insert wait action at current position to handle cooldown
+                    current_plan = self._handle_cooldown_with_plan_insertion(
+                        current_plan, action_index, controller
+                    )
+                    # Don't increment action_index - retry the same action after wait
+                    continue
                 elif self._is_coordinate_failure(action_name, controller):
                     self.logger.warning("📍 Coordinate failure detected - forcing find_monsters replan")
                     # Force a complete replan starting with find_monsters
@@ -564,7 +575,7 @@ class GOAPExecutionManager:
             
             # Check for cooldown after action execution
             # Move and attack actions can put character on cooldown
-            if action_name in ['move', 'attack', 'gather_resources', 'craft_item']:
+            if action_name in ['move', 'attack', 'gather_resources', 'craft_item', 'rest']:
                 current_state = controller.get_current_world_state(force_refresh=True)
                 if current_state.get('is_on_cooldown', False):
                     # Insert wait action at next position if not already present
@@ -660,6 +671,13 @@ class GOAPExecutionManager:
         character_state = controller.get_current_world_state(force_refresh=True)
         cooldown_seconds = self._get_cooldown_duration(controller)
         
+        # Check if we have a more accurate cooldown from the error response
+        if hasattr(controller, 'last_action_result') and isinstance(controller.last_action_result, dict):
+            error_cooldown = controller.last_action_result.get('cooldown_seconds')
+            if error_cooldown and error_cooldown > 0:
+                self.logger.info(f"Using cooldown duration from error response: {error_cooldown}s")
+                cooldown_seconds = error_cooldown
+        
         if cooldown_seconds > 0:
             # Create wait action
             wait_action = {
@@ -681,8 +699,36 @@ class GOAPExecutionManager:
         """Get remaining cooldown duration in seconds."""
         try:
             if hasattr(controller, 'character_state') and controller.character_state:
-                cooldown = controller.character_state.data.get('cooldown', 0)
-                return max(0, cooldown)
+                char_data = controller.character_state.data
+                cooldown_seconds = char_data.get('cooldown', 0)
+                cooldown_expiration = char_data.get('cooldown_expiration', None)
+                
+                if cooldown_seconds > 0 and cooldown_expiration:
+                    try:
+                        # Parse expiration timestamp
+                        if isinstance(cooldown_expiration, str):
+                            cooldown_end = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
+                        else:
+                            cooldown_end = cooldown_expiration
+                        
+                        # Calculate remaining time
+                        current_time = datetime.now(timezone.utc)
+                        if current_time < cooldown_end:
+                            remaining = (cooldown_end - current_time).total_seconds()
+                            # Clamp to reasonable bounds and add small buffer
+                            return max(0.1, min(remaining + 0.5, 60.0))
+                        else:
+                            # Cooldown has already expired
+                            return 0.0
+                            
+                    except Exception as e:
+                        self.logger.warning(f"Error parsing cooldown expiration: {e}")
+                        # Fall back to raw cooldown value
+                        return min(cooldown_seconds, 60.0)
+                else:
+                    # Use raw cooldown seconds if no expiration time
+                    return min(cooldown_seconds, 60.0) if cooldown_seconds > 0 else 0.0
+                    
         except Exception as e:
             self.logger.warning(f"Could not get cooldown duration: {e}")
         return 0
@@ -1059,6 +1105,48 @@ class GOAPExecutionManager:
             self.logger.warning(f"Error checking coordinate failure: {e}")
             return False
     
+    def _is_cooldown_failure(self, action_name: str, controller) -> bool:
+        """
+        Detect if action failed due to character being on cooldown.
+        
+        This typically happens with HTTP 499 status code errors.
+        
+        Args:
+            action_name: Name of the failed action
+            controller: AI controller for error context
+            
+        Returns:
+            True if cooldown failure detected, False otherwise
+        """
+        try:
+            # Check if the last action result indicates cooldown
+            if hasattr(controller, 'last_action_result'):
+                result = controller.last_action_result
+                if isinstance(result, dict):
+                    # Check for error messages indicating cooldown
+                    error_msg = result.get('error', '').lower()
+                    if 'cooldown' in error_msg or '499' in error_msg:
+                        self.logger.info(f"⏱️ Action {action_name} failed due to cooldown")
+                        return True
+                    
+                    # Check response data for cooldown indicators
+                    response = result.get('response')
+                    if response and hasattr(response, 'status_code') and response.status_code == 499:
+                        self.logger.info(f"⏱️ Action {action_name} failed with HTTP 499 (cooldown)")
+                        return True
+                        
+            # Also check current world state with fresh data
+            world_state = controller.get_current_world_state(force_refresh=True)
+            character_status = world_state.get('character_status', {})
+            if character_status.get('cooldown_active', False):
+                self.logger.info(f"⏱️ Character is on cooldown after {action_name}")
+                return True
+                
+            return False
+        except Exception as e:
+            self.logger.warning(f"Error checking cooldown failure: {e}")
+            return False
+    
     def _create_recovery_plan_with_find_monsters(self, controller, goal_state: Dict[str, Any],
                                                config_file: str = None) -> Optional[List[Dict]]:
         """
@@ -1073,8 +1161,8 @@ class GOAPExecutionManager:
             List of action dictionaries for recovery plan
         """
         try:
-            # Force a clean state that requires find_monsters
-            recovery_state = controller.get_current_world_state(force_refresh=False)
+            # Get fresh state and then force it to require find_monsters
+            recovery_state = controller.get_current_world_state(force_refresh=True)
             recovery_state.update({
                 'monsters_available': False,
                 'monster_present': False,

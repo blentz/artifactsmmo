@@ -287,7 +287,7 @@ class AIPlayerController(StateManagerMixin):
                     return False, {}
             
             # Prepare execution context
-            context = self._build_execution_context(action_data)
+            context = self._build_execution_context(action_data, action_name)
             
             # Execute action through the metaprogramming executor
             result: ActionResult = self.action_executor.execute_action(
@@ -470,12 +470,13 @@ class AIPlayerController(StateManagerMixin):
         except Exception as e:
             self.logger.warning(f"Failed to refresh character state: {e}")
     
-    def _build_execution_context(self, action_data: Dict) -> 'ActionContext':
+    def _build_execution_context(self, action_data: Dict, action_name: str = None) -> 'ActionContext':
         """
         Build unified execution context for action execution.
         
         Args:
             action_data: Action data from the plan
+            action_name: Name of the action being executed (optional)
             
         Returns:
             ActionContext instance with all execution dependencies
@@ -502,7 +503,23 @@ class AIPlayerController(StateManagerMixin):
                 context.set_parameter(param_name, param_value)
                 self.logger.debug(f"Added goal parameter to action context: {param_name} = {param_value}")
         
+        # For wait actions, calculate and add wait_duration if not already present
+        # Check both action_data.name and action_name parameter
+        detected_action_name = action_name or action_data.get('name')
+        if detected_action_name == 'wait' and 'wait_duration' not in action_data:
+            # Refresh character state to get current cooldown info
+            self._refresh_character_state()
+            wait_duration = self.cooldown_manager.calculate_wait_duration(self.character_state)
+            context.set_parameter('wait_duration', wait_duration)
+            self.logger.info(f"Added calculated wait_duration={wait_duration} to wait action context")
+        
         return context
+    
+    def reset_failed_goal(self, goal_name: str) -> None:
+        """Reset a failed goal to make it available for selection again."""
+        if hasattr(self, 'mission_executor') and self.mission_executor:
+            self.mission_executor.reset_failed_goal(goal_name)
+            self.logger.info(f"🔄 Reset failed goal: {goal_name}")
     
     def get_available_actions(self) -> List[str]:
         """Get list of available actions from the metaprogramming executor."""
@@ -562,7 +579,7 @@ class AIPlayerController(StateManagerMixin):
         """
         try:
             # Build execution context
-            context = self._build_execution_context(action_data)
+            context = self._build_execution_context(action_data, action_name)
             
             # Execute the action using the action executor
             result = self.action_executor.execute_action(action_name, action_data, self.client, context)
@@ -579,6 +596,8 @@ class AIPlayerController(StateManagerMixin):
                 return True
             else:
                 self.logger.warning(f"Action {action_name} failed: {result}")
+                # Store the failure result for cooldown detection
+                self.last_action_result = result if isinstance(result, dict) else {'error': str(result)}
                 return False
                 
         except Exception as e:
@@ -842,7 +861,7 @@ class AIPlayerController(StateManagerMixin):
                 'level_range': level_range
             }
             
-            context = self._build_execution_context(action_data)
+            context = self._build_execution_context(action_data, 'find_and_move_to_monster')
             result = self.action_executor.execute_action('find_and_move_to_monster', action_data, self.client, context)
             
             return result.success
@@ -1026,7 +1045,7 @@ class AIPlayerController(StateManagerMixin):
             
         try:
             action_data = {'search_radius': search_radius}
-            context = self._build_execution_context(action_data)
+            context = self._build_execution_context(action_data, 'intelligent_monster_search')
             result = self.action_executor.execute_action('intelligent_monster_search', action_data, self.client, context)
             
             return result.success

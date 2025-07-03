@@ -1,4 +1,10 @@
-""" yaml_data module """
+"""
+YAML Data Management Module
+
+Provides a unified interface for YAML-based data persistence with support for
+complex API objects and enum serialization. Used throughout the system for
+configuration, state management, and learned data storage.
+"""
 
 import logging
 import os.path
@@ -8,7 +14,19 @@ from yaml import SafeDumper, safe_dump, safe_load
 
 
 def enum_representer(dumper, data):
-    """Custom YAML representer for Enum objects."""
+    """
+    Custom YAML representer for Enum objects.
+    
+    Converts enum objects to their string values for YAML serialization,
+    preventing serialization errors when API enums are stored in YAML files.
+    
+    Args:
+        dumper: YAML dumper instance
+        data: Enum object to represent
+        
+    Returns:
+        YAML string representation of the enum value
+    """
     return dumper.represent_str(str(data.value))
 
 
@@ -36,13 +54,32 @@ except ImportError:
 
 
 class YamlData:
-    """Data stored in YAML."""
+    """
+    Base class for YAML-based data persistence and management.
+    
+    Provides a standardized interface for loading, saving, and manipulating
+    YAML data files throughout the system. Handles complex API objects,
+    enums, and nested data structures with automatic serialization.
+    
+    Features:
+    - Automatic file creation if missing
+    - Safe YAML loading/saving with error handling
+    - Support for API enums and complex objects
+    - Data validation and cleanup utilities
+    - Logging integration for debugging
+    """
 
     data = None
     filename = None
     _log = None
 
     def __init__(self, filename="data.yaml"):
+        """
+        Initialize YAML data manager.
+        
+        Args:
+            filename: Path to YAML file for data storage
+        """
         self._log = logging.getLogger()
         self.filename = filename
         self.data = {} if self.data is None else self.data
@@ -62,9 +99,30 @@ class YamlData:
         yield "data", self.data
 
     def __getitem__(self, key):
+        """
+        Dictionary-style access to data.
+        
+        Args:
+            key: Data key to retrieve
+            
+        Returns:
+            Value associated with key
+        """
         return self.data[key]
 
     def _load_yaml(self, filename):
+        """
+        Load YAML data from file with error handling.
+        
+        Creates the file if it doesn't exist, handles corrupted files,
+        and provides fallback to empty dictionary on load errors.
+        
+        Args:
+            filename: Path to YAML file to load
+            
+        Returns:
+            dict: Loaded data or empty dict if file missing/corrupted
+        """
         doc = {}
         if not os.path.exists(filename):
             self._log.debug(f"YamlData({filename}): file not found. creating...")

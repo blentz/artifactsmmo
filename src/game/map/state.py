@@ -7,12 +7,27 @@ from src.lib.yaml_data import YamlData
 
 
 class MapState(YamlData):
-    """Map model."""
+    """
+    Map state management with intelligent caching and learning integration.
+    
+    Manages discovered map locations with timestamp-based caching to minimize
+    API calls while keeping data fresh. Integrates with learning callbacks
+    to enable knowledge retention across sessions.
+    """
 
     _client = None
     data = None
 
     def __init__(self, client, name="map", initial_scan=True, cache_duration=180):
+        """
+        Initialize map state with caching and learning capabilities.
+        
+        Args:
+            client: API client for making map requests
+            name: Name for the map data file (default: "map")
+            initial_scan: Whether to perform initial scan at origin (default: True)
+            cache_duration: Cache validity duration in seconds (default: 180)
+        """
         YamlData.__init__(self, filename=f"{DATA_PREFIX}/{name}.yaml")
 
         self._client = client
@@ -32,11 +47,31 @@ class MapState(YamlData):
                 pass
 
     def set_learning_callback(self, callback):
-        """Set a learning callback to be called when content is discovered."""
+        """
+        Set a learning callback to be called when content is discovered.
+        
+        The callback enables the AI to learn from map exploration, recording
+        discovered resources, monsters, and other points of interest.
+        
+        Args:
+            callback: Function to call with (x, y, map_response) when content is found
+        """
         self._learning_callback = callback
 
     def is_cache_fresh(self, x, y):
-        """Check if cached data for coordinates is fresh enough."""
+        """
+        Check if cached data for coordinates is fresh enough to avoid API calls.
+        
+        Uses timestamp comparison to determine if cached map data is still
+        valid or needs refreshing from the API.
+        
+        Args:
+            x: X coordinate to check
+            y: Y coordinate to check
+            
+        Returns:
+            bool: True if cache is fresh, False if needs refresh
+        """
         coord_key = f"{x},{y}"
         if coord_key not in self.data:
             return False
@@ -55,7 +90,22 @@ class MapState(YamlData):
         return time_since_scan < self.cache_duration
 
     def scan(self, x, y, cache=True, save_immediately=True):
-        """collect data on the given coordinates."""
+        """
+        Scan map coordinates with intelligent caching and learning integration.
+        
+        Retrieves map data for the specified coordinates, using cached data
+        when available and fresh, or fetching from API when needed. Triggers
+        learning callbacks for content discovery.
+        
+        Args:
+            x: X coordinate to scan
+            y: Y coordinate to scan
+            cache: Whether to use cached data if available (default: True)
+            save_immediately: Whether to save data immediately after scan (default: True)
+            
+        Returns:
+            dict: Complete map data including scanned location
+        """
         coord_key = f"{x},{y}"
         
         # Check if we have fresh cached data
