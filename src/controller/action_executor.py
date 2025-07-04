@@ -7,25 +7,16 @@ replacing hardcoded if-elif blocks with YAML-configurable action handling.
 
 import logging
 import time
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ..game.globals import CONFIG_PREFIX
 from ..lib.yaml_data import YamlData
 from .action_factory import ActionFactory
 from .action_validator import ActionValidator, ValidationResult
+from .actions.base import ActionResult
 
 
-@dataclass
-class ActionResult:
-    """Result of action execution with metadata."""
-    success: bool
-    response: Any
-    action_name: str
-    execution_time: Optional[float] = None
-    error_message: Optional[str] = None
-    metadata: Dict[str, Any] = None
-
+from dataclasses import dataclass
 
 @dataclass
 class CompositeActionStep:
@@ -118,49 +109,34 @@ class ActionExecutor:
             if self.validation_enabled:
                 validation_result = self._validate_action(action_name, resolved_action_data, context, client)
                 if not validation_result.is_valid:
-                    execution_time = time.time() - start_time if start_time else None
                     return ActionResult(
                         success=False,
-                        response={'validation_errors': [e.__dict__ for e in validation_result.errors]},
-                        action_name=action_name,
-                        execution_time=execution_time,
-                        error_message=f"Validation failed: {validation_result.summary}",
-                        metadata={'validation_failed': True}
+                        error=f"Validation failed: {validation_result.summary}",
+                        data={'validation_errors': [e.__dict__ for e in validation_result.errors]},
+                        action_name=action_name
                     )
             
             # Phase 3 - Execution: Standard action execution through factory
-            success, response = self.factory.execute_action(action_name, resolved_action_data, client, context)
+            final_result = self.factory.execute_action(action_name, resolved_action_data, client, context)
             
-            # Convert response to dict if needed
-            if not isinstance(response, dict):
-                response = {'data': response, 'success': success}
+            # All actions must return ActionResult now
+            if not isinstance(final_result, ActionResult):
+                raise TypeError(f"Action {action_name} must return ActionResult, got {type(final_result)}")
             
             # Phase 4 - Post-execution processing - UNIFIED handler
-            # Always get controller from context (ActionContext has controller attribute)
             controller = context.controller if hasattr(context, 'controller') else context.get('controller') if isinstance(context, dict) else None
             if controller:
-                self.apply_post_execution_updates(action_name, response, controller, context)
+                self.apply_post_execution_updates(action_name, final_result, controller, context)
             
-            execution_time = time.time() - start_time if start_time else None
-            
-            return ActionResult(
-                success=success,
-                response=response,
-                action_name=action_name,
-                execution_time=execution_time,
-                metadata={'factory_execution': True}
-            )
+            return final_result
             
         except Exception as e:
             self.logger.error(f"Failed to execute action {action_name}: {e}")
-            execution_time = time.time() - start_time if start_time else None
             
             return ActionResult(
                 success=False,
-                response=None,
-                action_name=action_name,
-                execution_time=execution_time,
-                error_message=str(e)
+                error=str(e),
+                action_name=action_name
             )
     
     def _is_composite_action(self, action_name: str) -> bool:
@@ -181,9 +157,8 @@ class ActionExecutor:
         if not steps:
             return ActionResult(
                 success=False,
-                response=None,
-                action_name=action_name,
-                error_message=f"No steps defined for composite action {action_name}"
+                error=f"No steps defined for composite action {action_name}",
+                action_name=action_name
             )
         
         step_results = []
@@ -221,9 +196,8 @@ class ActionExecutor:
         
         return ActionResult(
             success=overall_success,
-            response={'steps': step_results, 'composite': True},
-            action_name=action_name,
-            metadata={'composite_execution': True, 'steps_count': len(step_results)}
+            data={'steps': step_results, 'composite': True, 'steps_count': len(step_results)},
+            action_name=action_name
         )
     
     def _check_step_conditions(self, conditions: Dict[str, Any], context: Dict[str, Any]) -> bool:
@@ -303,16 +277,16 @@ class ActionExecutor:
                         attack_result = self.execute_action('attack', {'character_name': char_name}, client, context)
                         return ActionResult(
                             success=attack_result.success,
-                            response=attack_result.response,
+                            data=attack_result.data,
                             action_name='hunt',
-                            metadata={'hunt_method': 'intelligent_search'}
+                            message='Hunt completed successfully'
                         )
                 
                 return ActionResult(
                     success=False,
-                    response=None,
+                    data={},
                     action_name='hunt',
-                    error_message="No monsters found during hunt"
+                    error="No monsters found during hunt"
                 )
             else:
                 # Fallback to composite action
@@ -321,9 +295,9 @@ class ActionExecutor:
         except Exception as e:
             return ActionResult(
                 success=False,
-                response=None,
+                data={},
                 action_name='hunt',
-                error_message=f"Hunt action failed: {str(e)}"
+                error=f"Hunt action failed: {str(e)}"
             )
     
     def _handle_learning_callbacks(self, action_name: str, response: Any, context: Dict[str, Any]) -> None:
@@ -556,49 +530,53 @@ class ActionExecutor:
             self.logger.warning(f"Learning callback failed for {action_name}: {e}")
     
     
-    def apply_post_execution_updates(self, action_name: str, action_result: Dict, 
+    def apply_post_execution_updates(self, action_name: str, action_result: ActionResult, 
                                     controller, context) -> None:
         """
         Unified handler for ALL state updates after action execution.
         This is the ONLY place where state should be modified.
         """
         
-        if not action_result.get('success', False):
+        if not action_result.success:
             self.logger.debug(f"Skipping state updates for failed action {action_name}")
             return
             
-        # 1. Apply unified state changes (GOAP reactions + action context)
-        self._apply_unified_state_changes(action_name, action_result, controller, context)
-        
-        # 2. Update action context for inter-action data flow
-        self._update_action_context(action_name, action_result, controller)
-        
-        # 4. Handle learning callbacks (existing functionality)
-        self._handle_learning_callbacks(action_name, action_result, {'controller': controller})
+        try:
+            # 1. Apply unified state changes (GOAP reactions + action context + explicit)
+            self._apply_unified_state_changes(action_name, action_result, controller, context)
+            
+            # 2. Update action context for inter-action data flow
+            self._update_action_context(action_name, action_result, controller)
+            
+            # 3. Handle learning callbacks (existing functionality)
+            self._handle_learning_callbacks(action_name, action_result, {'controller': controller})
+            
+        except Exception as e:
+            self.logger.error(f"Error in post-execution updates for {action_name}: {e}")
+            # Don't re-raise - we want execution to continue even if state updates fail
         
         # 5. Persist state changes (if needed)
         self._persist_state_changes(controller)
         
         self.logger.debug(f"✓ Post-execution updates completed for {action_name}")
     
-    def _apply_unified_state_changes(self, action_name: str, action_result: Dict, 
+    def _apply_unified_state_changes(self, action_name: str, action_result: ActionResult, 
                                     controller, context) -> None:
         """Apply unified state changes from GOAP reactions and action context."""
-        
-        # Get current world state for reference
-        world_state = controller.get_current_world_state()
         
         # Track only the changes to pass to update_world_state
         state_changes = {}
         
-        # 1. Apply GOAP reactions from action class
+        # 1. Handle explicit state changes from ActionResult
+        if action_result.state_changes:
+            self.logger.debug(f"Adding explicit state changes from ActionResult: {action_result.state_changes}")
+            state_changes.update(action_result.state_changes)
+        
+        # 2. Apply GOAP reactions from action class
         self._collect_goap_reactions(action_name, action_result, controller, context, state_changes)
         
-        # 2. Apply action context results (equipment workflow)
+        # 3. Apply action context results (equipment workflow)
         self._collect_action_context_results(action_name, action_result, state_changes)
-        
-        # 3. Apply explicit state changes from action result
-        self._collect_explicit_state_changes(action_result, state_changes)
         
         # Apply all collected state changes in one operation
         if state_changes:
@@ -612,29 +590,38 @@ class ActionExecutor:
             self._recalculate_boolean_flags(updated_world_state)
             
             self.logger.debug(f"Updated world state via unified changes: {state_changes}")
+        else:
+            self.logger.debug(f"No state changes collected for {action_name}")
     
-    def _collect_goap_reactions(self, action_name: str, action_result: Dict, 
+    def _collect_goap_reactions(self, action_name: str, action_result: ActionResult, 
                                controller, context, state_changes: Dict) -> None:
         """Collect GOAP reactions into state changes."""
+        
+        self.logger.info(f"🔧 GOAP REACTIONS: Looking for reactions on {action_name}")
         
         # Get action class to access reactions
         action_class = self._get_action_class(action_name)
         if not action_class:
+            self.logger.warning(f"🔧 No action class found for {action_name}")
             return
             
+        self.logger.info(f"🔧 Found action class: {action_class}")
+        
         # Check if context has an action instance with modified reactions
         reactions = None
         if hasattr(context, 'action_instance') and context.action_instance:
             # Use instance reactions if available (for dynamic reactions)
             reactions = getattr(context.action_instance, 'reactions', None)
             if reactions:
-                self.logger.debug(f"Using instance reactions for {action_name}: {reactions}")
+                self.logger.info(f"🔧 Using instance reactions for {action_name}: {reactions}")
         
         # Fall back to class reactions if no instance reactions
         if not reactions:
             reactions = getattr(action_class, 'reactions', {})
+            self.logger.info(f"🔧 Class reactions for {action_name}: {reactions}")
             
         if not reactions:
+            self.logger.warning(f"🔧 No reactions found for {action_name}")
             return
             
         # Get current world state for reference
@@ -667,50 +654,25 @@ class ActionExecutor:
                 resolved_value = self._resolve_template(group_reactions, context, action_result)
                 state_changes[state_group] = resolved_value
     
-    def _collect_action_context_results(self, action_name: str, action_result: Dict, 
+    def _collect_action_context_results(self, action_name: str, action_result: ActionResult, 
                                        state_changes: Dict) -> None:
         """Collect action context results into state changes."""
         
         # Apply equipment-related results to world state
-        if 'selected_slot' in action_result:
+        if 'selected_slot' in action_result.data:
             if 'equipment_status' not in state_changes:
                 state_changes['equipment_status'] = {}
-            state_changes['equipment_status']['target_slot'] = action_result['selected_slot']
-            self.logger.debug(f"Collected target_slot: {action_result['selected_slot']}")
+            state_changes['equipment_status']['target_slot'] = action_result.data['selected_slot']
+            self.logger.debug(f"Collected target_slot: {action_result.data['selected_slot']}")
         
-        if 'selected_item' in action_result:
+        if 'selected_item' in action_result.data:
             if 'equipment_status' not in state_changes:
                 state_changes['equipment_status'] = {}
-            state_changes['equipment_status']['selected_item'] = action_result['selected_item']
-            self.logger.debug(f"Collected selected_item: {action_result['selected_item']}")
+            state_changes['equipment_status']['selected_item'] = action_result.data['selected_item']
+            self.logger.debug(f"Collected selected_item: {action_result.data['selected_item']}")
     
-    def _collect_explicit_state_changes(self, action_result: Dict, state_changes: Dict) -> None:
-        """Collect explicit state changes from action result."""
-        
-        # 1. Check 'state_changes' key (preferred)
-        if 'state_changes' in action_result:
-            for key, value in action_result['state_changes'].items():
-                if key not in state_changes:
-                    state_changes[key] = {}
-                if isinstance(value, dict) and isinstance(state_changes[key], dict):
-                    state_changes[key].update(value)
-                else:
-                    state_changes[key] = value
-            
-        # 2. Check specific state keys (backward compatibility)
-        state_keys = ['equipment_status', 'character_status', 'location_context', 
-                      'combat_context', 'materials', 'skills', 'goal_progress']
-        
-        for key in state_keys:
-            if key in action_result and isinstance(action_result[key], dict):
-                if key not in state_changes:
-                    state_changes[key] = {}
-                if isinstance(state_changes[key], dict):
-                    state_changes[key].update(action_result[key])
-                else:
-                    state_changes[key] = action_result[key]
     
-    def _resolve_template(self, template: Any, context, action_result: Dict) -> Any:
+    def _resolve_template(self, template: Any, context, action_result: ActionResult) -> Any:
         """Resolve template variables in reaction values."""
         
         if not isinstance(template, str):
@@ -723,9 +685,9 @@ class ActionExecutor:
         var_name = template[2:-1]  # Remove ${ and }
         
         # Resolution priority order:
-        # 1. Check action result
-        if var_name in action_result:
-            return action_result[var_name]
+        # 1. Check action result data
+        if var_name in action_result.data:
+            return action_result.data[var_name]
             
         # 2. Check action context
         if hasattr(context, var_name):
@@ -748,7 +710,7 @@ class ActionExecutor:
         self.logger.warning(f"Could not resolve template variable: {template}")
         return None
     
-    def _update_action_context(self, action_name: str, action_result: Dict, controller) -> None:
+    def _update_action_context(self, action_name: str, action_result: ActionResult, controller) -> None:
         """Update action context for inter-action data flow."""
         
         # Store action result in controller's action context
@@ -761,13 +723,13 @@ class ActionExecutor:
         }
         
         # Also store specific values that might be used as template variables
-        if 'selected_item' in action_result:
-            controller.action_context['selected_item'] = action_result['selected_item']
-        if 'target_slot' in action_result:
-            controller.action_context['target_slot'] = action_result['target_slot']
+        if 'selected_item' in action_result.data:
+            controller.action_context['selected_item'] = action_result.data['selected_item']
+        if 'target_slot' in action_result.data:
+            controller.action_context['target_slot'] = action_result.data['target_slot']
         # Handle SelectOptimalSlotAction naming convention
-        if 'selected_slot' in action_result:
-            controller.action_context['target_slot'] = action_result['selected_slot']
+        if 'selected_slot' in action_result.data:
+            controller.action_context['target_slot'] = action_result.data['selected_slot']
             
         self.logger.debug(f"Updated action context with results from {action_name}")
     

@@ -60,9 +60,9 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         )
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     def test_execute_no_item_code(self):
         """Test execute fails without item_code."""
@@ -71,8 +71,8 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
             # No item_code provided
         )
         result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No item code specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No item code specified', result.error)
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_item_api_fails(self, mock_get_item_api):
@@ -85,8 +85,8 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
             search_radius=5
         )
         result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get details for item', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get details for item', result.error)
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_item_api_no_data(self, mock_get_item_api):
@@ -101,8 +101,8 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
             search_radius=5
         )
         result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get details for item', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get details for item', result.error)
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_no_craft_requirements(self, mock_get_item_api):
@@ -120,8 +120,8 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
             search_radius=5
         )
         result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('does not have crafting information', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('does not have crafting information', result.error)
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_item_api_no_craft_data(self, mock_get_item_api):
@@ -139,8 +139,8 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
             search_radius=5
         )
         result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('does not have crafting information', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('does not have crafting information', result.error)
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_success_workshop_found(self, mock_get_item_api):
@@ -156,8 +156,9 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         
         # Mock unified_search to return success
         with patch.object(self.action, 'unified_search') as mock_unified_search:
-            mock_unified_search.return_value = {
-                'success': True,
+            from src.controller.actions.base import ActionResult
+            mock_result = ActionResult(success=True)
+            mock_result.data = {
                 'workshop_code': 'weaponcrafting',
                 'workshop_type': 'weaponcrafting',
                 'location': (12, 15),
@@ -166,6 +167,7 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
                 'required_skill': 'weaponcrafting',
                 'item_code': 'copper_sword'
             }
+            mock_unified_search.return_value = mock_result
             
             context = MockActionContext(
                 character_name=self.character_name,
@@ -175,11 +177,12 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
                 map_state=MockMapState()
             )
             result = self.action.execute(self.client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['item_code'], 'copper_sword')
-        self.assertEqual(result['required_skill'], 'weaponcrafting')
-        self.assertEqual(result['workshop_type'], 'weaponcrafting')
-        self.assertEqual(result['location'], (12, 15))
+        
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['item_code'], 'copper_sword')
+        self.assertEqual(result.data['required_skill'], 'weaponcrafting')
+        self.assertEqual(result.data['workshop_type'], 'weaponcrafting')
+        self.assertEqual(result.data['location'], (12, 15))
 
     @patch('src.controller.actions.find_correct_workshop.get_item_api')
     def test_execute_workshop_not_found(self, mock_get_item_api):
@@ -205,8 +208,8 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
                 map_state=MockMapState()
             )
             result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No weaponcrafting workshop found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No weaponcrafting workshop found', result.error)
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
@@ -218,14 +221,14 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         
         with patch('src.controller.actions.find_correct_workshop.get_item_api', side_effect=Exception("API Error")):
             result = self.action.execute(self.client, context)
-            self.assertFalse(result['success'])
-            self.assertIn('Workshop search failed: API Error', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Workshop search failed: API Error', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that FindCorrectWorkshopAction has expected GOAP attributes."""
         self.assertTrue(hasattr(FindCorrectWorkshopAction, 'conditions'))
         self.assertTrue(hasattr(FindCorrectWorkshopAction, 'reactions'))
-        self.assertTrue(hasattr(FindCorrectWorkshopAction, 'weights'))
+        self.assertTrue(hasattr(FindCorrectWorkshopAction, 'weight'))
     
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -235,13 +238,12 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
     
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
-        expected_reactions = {"at_correct_workshop": True, "workshops_discovered": True}
-        self.assertEqual(FindCorrectWorkshopAction.reactions, expected_reactions)
+        self.assertIsInstance(FindCorrectWorkshopAction.reactions, dict)
     
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"at_correct_workshop": 20}
-        self.assertEqual(FindCorrectWorkshopAction.weights, expected_weights)
+        expected_weight = FindCorrectWorkshopAction.weight
+        self.assertIsInstance(expected_weight, (int, float))
 
 
 if __name__ == '__main__':

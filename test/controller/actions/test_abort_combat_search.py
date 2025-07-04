@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock
 
 from src.controller.actions.abort_combat_search import AbortCombatSearchAction
+from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -24,8 +25,11 @@ class TestAbortCombatSearchAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Combat search aborted, returning to idle state")
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Combat search aborted, returning to idle state")
+        self.assertIn('combat_context', result.state_changes)
+        self.assertEqual(result.state_changes['combat_context']['status'], 'idle')
         
     def test_execute_with_search_context(self):
         """Test execution with search context."""
@@ -39,9 +43,11 @@ class TestAbortCombatSearchAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Combat search aborted, returning to idle state")
-        self.assertEqual(result['reason'], "No monsters available")
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Combat search aborted, returning to idle state")
+        self.assertEqual(result.data['reason'], "No monsters available")
+        self.assertIn('combat_context', result.state_changes)
         
     def test_repr(self):
         """Test string representation."""

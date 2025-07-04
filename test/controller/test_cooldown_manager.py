@@ -326,7 +326,7 @@ thresholds:
         mock_action_executor = Mock()
         mock_result = Mock()
         mock_result.success = False
-        mock_result.error_message = "Wait action failed"
+        mock_result.error = "Wait action failed"
         mock_action_executor.execute_action.return_value = mock_result
         
         result = self.manager.handle_cooldown_with_wait(

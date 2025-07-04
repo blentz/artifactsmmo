@@ -53,10 +53,10 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
         # AnalyzeCombatViabilityAction can work without client if character_state is in context
-        self.assertTrue(result["success"])
-        self.assertTrue(result.get("combat_viability_known"))
-        self.assertIn("combat_viable", result)
-        self.assertIn("ready_for_combat", result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data.get("combat_viability_known"))
+        self.assertIn("combat_viable", result.data)
+        self.assertIn("ready_for_combat", result.data)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -66,8 +66,8 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character", character_state="no_state")
         
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_execute_successful_basic_analysis(self, mock_get_character):
@@ -87,10 +87,10 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['combat_viability_known'])
-        self.assertIn('character_x', result)
-        self.assertIn('character_y', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['combat_viability_known'])
+        self.assertIn('character_x', result.data)
+        self.assertIn('character_y', result.data)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_execute_with_knowledge_base(self, mock_get_character):
@@ -127,9 +127,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['combat_viability_known'])
-        self.assertIn('analysis_radius', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['combat_viability_known'])
+        self.assertIn('analysis_radius', result.data)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_execute_low_hp_character(self, mock_get_character):
@@ -147,8 +147,8 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertFalse(result['ready_for_combat'])  # Should not be combat ready with low HP
+        self.assertTrue(result.success)
+        self.assertFalse(result.data['ready_for_combat'])  # Should not be combat ready with low HP
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_execute_exception_handling(self, mock_get_character):
@@ -158,14 +158,14 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character", character_state="no_state")
         
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Combat viability analysis failed: API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Combat viability analysis failed: API Error', result.error)
 
     def test_goap_attributes(self):
         """Test that AnalyzeCombatViabilityAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeCombatViabilityAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -183,8 +183,7 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        self.assertIsInstance(AnalyzeCombatViabilityAction.weights, dict)
-        self.assertIn('combat_viability_known', AnalyzeCombatViabilityAction.weights)
+        self.assertIsInstance(AnalyzeCombatViabilityAction.weight, (int, float))
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_character_readiness_healthy_character(self, mock_get_character):
@@ -202,9 +201,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['ready_for_combat'])
-        self.assertEqual(result['hp_percentage'], 1.0)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['ready_for_combat'])
+        self.assertEqual(result.data['hp_percentage'], 1.0)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api')
     def test_combat_recommendation_generation(self, mock_get_character):
@@ -235,9 +234,9 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('primary_recommendation', result)
-        self.assertIn('specific_actions', result)
+        self.assertTrue(result.success)
+        self.assertIn('primary_recommendation', result.data)
+        self.assertIn('specific_actions', result.data)
 
     @patch('src.controller.actions.analyze_combat_viability.get_character_api') 
     def test_win_rate_analysis(self, mock_get_character):
@@ -264,7 +263,7 @@ class TestAnalyzeCombatViabilityAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         # Should calculate win rate as 75% (3 wins out of 4 fights)
 
 

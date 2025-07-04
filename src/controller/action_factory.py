@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Optional, Type, Union
 from ..lib.action_context import ActionContext
 from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
 from .actions.attack import AttackAction
-from .actions.base import ActionBase
+from .actions.base import ActionBase, ActionResult
 from .actions.check_inventory import CheckInventoryAction
 from .actions.check_location import CheckLocationAction
 from .actions.craft_item import CraftItemAction
@@ -449,7 +449,7 @@ class ActionFactory:
             return None
     
     def execute_action(self, action_name: str, action_data: Dict[str, Any], 
-                      client, context: Union[Dict[str, Any], 'ActionContext'] = None) -> tuple[bool, Any]:
+                      client, context: Union[Dict[str, Any], 'ActionContext'] = None) -> ActionResult:
         """
         Create and execute an action in one step.
         
@@ -460,11 +460,15 @@ class ActionFactory:
             context: Additional context (character state, etc.) or ActionContext instance
             
         Returns:
-            Tuple of (success: bool, response: Any)
+            ActionResult object with execution results
         """
         action = self.create_action(action_name, action_data, context)
         if not action:
-            return False, None
+            return ActionResult(
+                success=False,
+                error=f"Failed to create action: {action_name}",
+                action_name=action_name
+            )
         
         try:
             # Convert dict context to ActionContext if needed
@@ -481,28 +485,27 @@ class ActionFactory:
             action_context.action_instance = action
             
             # Execute the action with ActionContext
-            response = action.execute(client, action_context)
+            result = action.execute(client, action_context)
+            
+            # All actions MUST return ActionResult - no exceptions
+            if not isinstance(result, ActionResult):
+                raise TypeError(f"Action {action_name} must return ActionResult, got {type(result)}")
             
             # Apply postprocessors if available
             config = self._action_registry[action_name]
             if config.postprocessors:
                 for processor in config.postprocessors.values():
-                    response = processor(response)
+                    result.data = processor(result.data)
             
-            # Check if response indicates success or failure
-            if response is None:
-                success = False
-            elif isinstance(response, dict) and 'success' in response:
-                success = response['success']
-            else:
-                # For API responses that don't have a 'success' field, consider them successful
-                success = True
-            
-            return success, response
+            return result
             
         except Exception as e:
             self.logger.error(f"Failed to execute action {action_name}: {e}")
-            return False, None
+            return ActionResult(
+                success=False,
+                error=f"Action execution failed: {str(e)}",
+                action_name=action_name
+            )
     
     def get_available_actions(self) -> list[str]:
         """Get list of available action names."""

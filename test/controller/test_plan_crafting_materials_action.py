@@ -43,9 +43,9 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name)
         result = action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertFalse(result.get('success', True))
+        self.assertIsNotNone(result.error)
         
     def test_execute_no_knowledge_base(self):
         """Test execute fails without knowledge base"""
@@ -56,8 +56,8 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         )
         context.knowledge_base = None
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No knowledge base available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No knowledge base available', result.error)
         
     def test_execute_no_target_item(self):
         """Test execute fails without target item"""
@@ -66,8 +66,8 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         context.knowledge_base = Mock()
         # Don't set target_item in context
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No target item specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No target item specified', result.error)
         
     def test_determine_target_item_from_context(self):
         """Test determining target item from action context"""
@@ -139,11 +139,11 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
             
             result = action.execute(self.client, context)
             
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_item'], 'wooden_staff')
-        self.assertTrue(result['materials_sufficient'])
-        self.assertFalse(result.get('need_resources', False))
-        self.assertEqual(len(result['missing_materials']), 0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_item'], 'wooden_staff')
+        self.assertTrue(result.data['materials_sufficient'])
+        self.assertFalse(result.data.get('need_resources', False))
+        self.assertEqual(len(result.data['missing_materials']), 0)
         
     def test_execute_success_missing_materials(self):
         """Test successful execution when materials are missing"""
@@ -191,19 +191,19 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
             
             result = action.execute(self.client, context)
             
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_item'], 'wooden_staff')
-        self.assertFalse(result['materials_sufficient'])
-        self.assertTrue(result['need_resources'])
-        self.assertEqual(len(result['missing_materials']), 1)
-        self.assertEqual(result['missing_materials'][0]['code'], 'ash_wood')
-        self.assertEqual(result['missing_materials'][0]['missing'], 4)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_item'], 'wooden_staff')
+        self.assertFalse(result.data['materials_sufficient'])
+        self.assertTrue(result.data['need_resources'])
+        self.assertEqual(len(result.data['missing_materials']), 1)
+        self.assertEqual(result.data['missing_materials'][0]['code'], 'ash_wood')
+        self.assertEqual(result.data['missing_materials'][0]['missing'], 4)
         
     def test_has_goap_attributes(self):
         """Test that PlanCraftingMaterialsAction has expected GOAP attributes"""
         self.assertTrue(hasattr(PlanCraftingMaterialsAction, 'conditions'))
         self.assertTrue(hasattr(PlanCraftingMaterialsAction, 'reactions'))
-        self.assertTrue(hasattr(PlanCraftingMaterialsAction, 'weights'))
+        self.assertTrue(hasattr(PlanCraftingMaterialsAction, 'weight'))
         
         # Check specific conditions
         self.assertIn('character_status', PlanCraftingMaterialsAction.conditions)
@@ -236,9 +236,9 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         
         result = action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting planning failed', result['error'])
-        self.assertIn('API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting planning failed', result.error)
+        self.assertIn('API Error', result.error)
 
 
 if __name__ == '__main__':

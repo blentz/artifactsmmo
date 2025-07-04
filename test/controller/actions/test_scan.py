@@ -57,10 +57,10 @@ class TestScanAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertIn('discoveries', result)
-        self.assertIn('scan_center', result)
-        self.assertEqual(result['scan_center'], (0, 0))
+        self.assertTrue(result.success)
+        self.assertIn('discoveries', result.data)
+        self.assertIn('scan_center', result.data)
+        self.assertEqual(result.data['scan_center'], (0, 0))
     
     @patch('src.controller.actions.scan.get_character_api')
     def test_execute_no_character_data(self, mock_get_char):
@@ -75,8 +75,8 @@ class TestScanAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify error result
-        self.assertFalse(result['success'])
-        self.assertIn("Could not get character data", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("Could not get character data", result.error)
     
     @patch('src.controller.actions.scan.get_character_api')
     @patch('src.controller.actions.scan.get_map_api')
@@ -101,8 +101,8 @@ class TestScanAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Should still succeed but with empty discoveries
-        self.assertTrue(result['success'])
-        self.assertEqual(len(result['discoveries']), 0)
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.data['discoveries']), 0)
     
     def test_categorize_content_workshop(self):
         """Test categorizing workshop content."""

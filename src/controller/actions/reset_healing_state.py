@@ -8,7 +8,7 @@ allowing the healing flow to be used again in future cycles.
 from typing import Dict, Any
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class ResetHealingStateAction(ActionBase):
@@ -23,7 +23,7 @@ class ResetHealingStateAction(ActionBase):
         """Initialize reset healing state action."""
         super().__init__()
         
-    def execute(self, client, context: 'ActionContext') -> Dict[str, Any]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
         Reset healing state to idle.
         
@@ -34,16 +34,19 @@ class ResetHealingStateAction(ActionBase):
         Returns:
             Dict with state reset results
         """
+        self._context = context
+        
         try:
             self.logger.debug("🔄 Resetting healing state to idle")
             
             # This is a state update action - no API call needed
-            return self.get_success_response(
+            return self.create_success_result(
+                "Healing state reset to idle",
                 healing_state_reset=True
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to reset healing state: {e}")
+            return self.create_error_result(f"Failed to reset healing state: {e}")
     
     def __repr__(self):
         return "ResetHealingStateAction()"

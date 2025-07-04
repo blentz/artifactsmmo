@@ -12,7 +12,7 @@ from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_cr
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class ExecuteMaterialTransformationAction(ActionBase):
@@ -27,7 +27,7 @@ class ExecuteMaterialTransformationAction(ActionBase):
         """Initialize execute material transformation action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict[str, Any]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute material transformation.
         
@@ -43,6 +43,8 @@ class ExecuteMaterialTransformationAction(ActionBase):
         Returns:
             Dict with transformation results
         """
+        self._context = context
+        
         try:
             character_name = context.character_name
             raw_material = context.get('raw_material')
@@ -50,7 +52,7 @@ class ExecuteMaterialTransformationAction(ActionBase):
             quantity = context.get('quantity', 1)
             
             if not all([raw_material, refined_material]):
-                return self.get_error_response("Missing transformation parameters")
+                return self.create_error_result("Missing transformation parameters")
             
             self.logger.info(f"🔥 Transforming {quantity}x {raw_material} → {refined_material}")
             
@@ -62,7 +64,7 @@ class ExecuteMaterialTransformationAction(ActionBase):
             craft_response = crafting_api(name=character_name, client=client, body=crafting_schema)
             
             if not craft_response or not hasattr(craft_response, 'data') or not craft_response.data:
-                return self.get_error_response(f"Crafting failed for {refined_material}")
+                return self.create_error_result(f"Crafting failed for {refined_material}")
             
             craft_data = craft_response.data
             
@@ -92,14 +94,15 @@ class ExecuteMaterialTransformationAction(ActionBase):
             
             context.set_result('last_transformation', transformation_result)
             
-            return self.get_success_response(
+            return self.create_success_result(
+                message=f"Successfully transformed materials",
                 transformation=transformation_result,
                 items_produced=items_produced,
                 xp_gained=xp_gained
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to execute transformation: {e}")
+            return self.create_error_result(f"Failed to execute transformation: {e}")
     
     def _wait_for_cooldown(self, client, character_name: str, context: ActionContext):
         """Wait for cooldown if active."""

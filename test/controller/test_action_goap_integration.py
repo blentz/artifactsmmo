@@ -70,7 +70,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         action_class = config.action_class
         self.assertTrue(hasattr(action_class, 'conditions'))
         self.assertTrue(hasattr(action_class, 'reactions'))
-        self.assertTrue(hasattr(action_class, 'weights'))
+        self.assertTrue(hasattr(action_class, 'weight'))
         
         # Check specific move action defaults - consolidated format
         self.assertIn('character_status', action_class.conditions)
@@ -78,11 +78,11 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.assertEqual(action_class.conditions['character_status']['alive'], True)
         self.assertIn('location_context', action_class.reactions)
         self.assertEqual(action_class.reactions['location_context']['at_target'], True)
-        # Weights might be a dict with action name as key
-        if isinstance(action_class.weights, dict):
-            self.assertEqual(action_class.weights['move'], 1.0)
+        # Weight might be a dict with action name as key
+        if isinstance(action_class.weight, dict):
+            self.assertEqual(action_class.weight['move'], 1.0)
         else:
-            self.assertEqual(action_class.weights, 1.0)
+            self.assertEqual(action_class.weight, 1.0)
 
     def test_get_action_class_defaults_attack(self) -> None:
         """Test that attack action is properly registered with GOAP attributes."""
@@ -96,7 +96,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         # Verify GOAP attributes exist
         self.assertTrue(hasattr(action_class, 'conditions'))
         self.assertTrue(hasattr(action_class, 'reactions'))
-        self.assertTrue(hasattr(action_class, 'weights'))
+        self.assertTrue(hasattr(action_class, 'weight'))
 
     def test_get_action_class_defaults_rest(self) -> None:
         """Test that rest action is properly registered with GOAP attributes."""
@@ -109,7 +109,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         # Verify GOAP attributes exist
         self.assertTrue(hasattr(action_class, 'conditions'))
         self.assertTrue(hasattr(action_class, 'reactions'))
-        self.assertTrue(hasattr(action_class, 'weights'))
+        self.assertTrue(hasattr(action_class, 'weight'))
 
     def test_get_action_class_defaults_find_monsters(self) -> None:
         """Test that find_monsters action is properly registered with GOAP attributes."""
@@ -122,7 +122,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         # Verify GOAP attributes exist
         self.assertTrue(hasattr(action_class, 'conditions'))
         self.assertTrue(hasattr(action_class, 'reactions'))
-        self.assertTrue(hasattr(action_class, 'weights'))
+        self.assertTrue(hasattr(action_class, 'weight'))
 
     def test_get_action_class_defaults_unknown_action(self) -> None:
         """Test that unknown actions are not registered."""
@@ -225,12 +225,12 @@ class TestActionGoapIntegration(unittest.TestCase):
             move_class = move_config.action_class
             
             # Verify both have weights defined
-            self.assertTrue(hasattr(attack_class, 'weights'))
-            self.assertTrue(hasattr(move_class, 'weights'))
+            self.assertTrue(hasattr(attack_class, 'weight'))
+            self.assertTrue(hasattr(move_class, 'weight'))
             
             # Get the actual weight values - handle both dict and direct value formats
-            attack_weight = attack_class.weights.get('attack', attack_class.weights) if isinstance(attack_class.weights, dict) else attack_class.weights
-            move_weight = move_class.weights.get('move', move_class.weights) if isinstance(move_class.weights, dict) else move_class.weights
+            attack_weight = attack_class.weight.get('attack', attack_class.weight) if isinstance(attack_class.weight, dict) else attack_class.weight
+            move_weight = move_class.weight.get('move', move_class.weight) if isinstance(move_class.weight, dict) else move_class.weight
             
             # Attack should have higher weight than move for goal prioritization
             self.assertGreater(attack_weight, move_weight)

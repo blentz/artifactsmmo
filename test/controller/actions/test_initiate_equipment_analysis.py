@@ -28,8 +28,8 @@ class TestInitiateEquipmentAnalysisAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Equipment upgrade analysis initiated")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Equipment upgrade analysis initiated")
         
     def test_execute_with_equipment_context(self):
         """Test execution with existing equipment context."""
@@ -44,9 +44,9 @@ class TestInitiateEquipmentAnalysisAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Equipment upgrade analysis initiated")
-        self.assertEqual(result['character_level'], 2)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Equipment upgrade analysis initiated")
+        self.assertEqual(result.data['character_level'], 2)
         
     def test_repr(self):
         """Test string representation."""

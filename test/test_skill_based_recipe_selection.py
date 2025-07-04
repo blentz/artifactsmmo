@@ -142,9 +142,9 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should select iron_sword (level 2) which matches weaponcrafting level 2
-        assert result['success'] is True
-        assert result['selected_item'] == 'iron_sword'
-        assert result['selected_recipe']['required_skill_level'] == 2
+        assert result.success is True
+        assert result.data['selected_item'] == 'iron_sword'
+        assert result.data['selected_recipe']['required_skill_level'] == 2
 
     @patch('src.controller.actions.select_recipe.get_character_api')
     def test_respects_skill_level_constraint(self, mock_get_char):
@@ -165,7 +165,7 @@ class TestSkillBasedRecipeSelection:
         
         # Verify - should not select steel_sword (requires level 3) or adamantite_sword (requires level 4)
         # since character only has weaponcrafting level 2
-        selected_item = result['selected_item']
+        selected_item = result.data['selected_item']
         assert selected_item in ['wooden_sword', 'iron_sword']  # Only level 1-2 weapons
         assert selected_item != 'steel_sword'
         assert selected_item != 'adamantite_sword'
@@ -192,7 +192,7 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should only select items requiring level <= 2 (character level)
-        selected_recipe = result['selected_recipe']
+        selected_recipe = result.data['selected_recipe']
         assert selected_recipe['required_skill_level'] <= 2
 
     @patch('src.controller.actions.select_recipe.get_character_api')
@@ -213,9 +213,9 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should select leather_armor (level 1) to match gearcrafting level 1
-        assert result['success'] is True
-        assert result['selected_item'] == 'leather_armor'
-        assert result['selected_recipe']['required_skill_level'] == 1
+        assert result.success is True
+        assert result.data['selected_item'] == 'leather_armor'
+        assert result.data['selected_recipe']['required_skill_level'] == 1
 
     @patch('src.controller.actions.select_recipe.get_character_api')
     def test_skill_progression_with_jewelrycrafting(self, mock_get_char):
@@ -235,9 +235,9 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should select silver_ring (level 3) to match jewelrycrafting level 3
-        assert result['success'] is True
-        assert result['selected_item'] == 'silver_ring'
-        assert result['selected_recipe']['required_skill_level'] == 3
+        assert result.success is True
+        assert result.data['selected_item'] == 'silver_ring'
+        assert result.data['selected_recipe']['required_skill_level'] == 3
 
     @patch('src.controller.actions.select_recipe.get_character_api')
     def test_fallback_to_lower_skill_level(self, mock_get_char):
@@ -273,8 +273,8 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should select wooden_sword (level 1) as fallback
-        assert result['success'] is True
-        assert result['selected_item'] == 'wooden_sword'
+        assert result.success is True
+        assert result.data['selected_item'] == 'wooden_sword'
 
     @patch('src.controller.actions.select_recipe.get_character_api')
     def test_filters_out_impossible_recipes(self, mock_get_char):
@@ -294,7 +294,7 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should not select impossible_weapon (requires level 10, character is level 5)
-        assert result['selected_item'] != 'impossible_weapon'
+        assert result.data['selected_item'] != 'impossible_weapon'
 
     @patch('src.controller.actions.select_recipe.get_character_api')
     def test_no_suitable_recipe_found(self, mock_get_char):
@@ -326,8 +326,8 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should return error
-        assert result['success'] is False
-        assert 'No suitable recipe found' in result['error']
+        assert result.success is False
+        assert 'No suitable recipe found' in result.error
 
     def test_skill_progression_sorting(self):
         """Test the skill progression sorting algorithm."""
@@ -387,9 +387,9 @@ class TestSkillBasedRecipeSelection:
         result = self.action.execute(self.mock_client, self.context)
         
         # Verify - should automatically determine weaponcrafting for weapon slot
-        assert result['success'] is True
+        assert result.success is True
         # Should select appropriate weapon based on weaponcrafting skill level 2
-        assert result['selected_item'] in ['wooden_sword', 'iron_sword']
+        assert result.data['selected_item'] in ['wooden_sword', 'iron_sword']
 
 
 class TestSkillConstraints:
@@ -489,5 +489,5 @@ class TestRecipeSelectionIntegration:
             result = self.action.execute(Mock(), context)
             
             # Verify progression
-            assert result['success'] is True, f"Failed at skill level {skill_level}"
-            assert result['selected_item'] == expected_item, f"Expected {expected_item} at skill level {skill_level}, got {result['selected_item']}"
+            assert result.success is True, f"Failed at skill level {skill_level}"
+            assert result.data['selected_item'] == expected_item, f"Expected {expected_item} at skill level {skill_level}, got {result.data['selected_item']}"

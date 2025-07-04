@@ -11,7 +11,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
 
 
@@ -82,7 +82,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                         # Default result processing
                         x, y = location
                         distance = self._calculate_distance(character_x, character_y, x, y)
-                        return self.get_success_response(
+                        return self.create_success_result(
                             location=location,
                             distance=distance,
                             content_code=content_code,
@@ -90,7 +90,7 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                         )
         
         # If no locations found, return error
-        return self.get_error_response(f"No matching content found within radius {search_radius}")
+        return self.create_error_result(f"No matching content found within radius {search_radius}")
 
     def _search_radius_for_content(self, client, character_x: int, character_y: int, radius: int, 
                                   content_filter: Callable[[Dict, int, int], bool],

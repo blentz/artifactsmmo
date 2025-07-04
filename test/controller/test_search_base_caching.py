@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.search_base import SearchActionBase
+from src.controller.actions.find_resources import FindResourcesAction
 from src.game.map.state import MapState
 
 from test.fixtures import create_mock_client
@@ -17,7 +18,7 @@ class TestSearchBaseCaching(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.mock_client = create_mock_client()
-        self.search_action = SearchActionBase()
+        self.search_action = FindResourcesAction()
         self.character_x = 5
         self.character_y = 3
         self.search_radius = 2
@@ -76,9 +77,9 @@ class TestSearchBaseCaching(unittest.TestCase):
         self.map_state.scan.assert_not_called()
         
         # Verify successful result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['location'], (6, 3))
-        self.assertEqual(result['content_code'], 'copper_rocks')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['location'], (6, 3))
+        self.assertEqual(result.data['content_code'], 'copper_rocks')
 
     def test_unified_search_with_mapstate_cache_miss(self):
         """Test unified search refreshes cache when data is stale."""
@@ -121,8 +122,8 @@ class TestSearchBaseCaching(unittest.TestCase):
         self.map_state.scan.assert_called()
         
         # Verify successful result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['content_code'], 'iron_rocks')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['content_code'], 'iron_rocks')
 
     def test_unified_search_without_mapstate_fallback(self):
         """Test unified search falls back to direct API when MapState unavailable."""
@@ -156,8 +157,8 @@ class TestSearchBaseCaching(unittest.TestCase):
             )
         
         # Verify successful result using direct API
-        self.assertTrue(result['success'])
-        self.assertEqual(result['content_code'], 'coal_rocks')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['content_code'], 'coal_rocks')
 
     def test_unified_search_with_mapstate_scan_exception(self):
         """Test unified search handles MapState scan exceptions."""
@@ -182,8 +183,8 @@ class TestSearchBaseCaching(unittest.TestCase):
         )
         
         # Verify exception was handled (no content found due to boundary)
-        self.assertFalse(result['success'])
-        self.assertIn("No matching content found", result.get('error', ''))
+        self.assertFalse(result.success)
+        self.assertIn("No matching content found", result.error or '')
 
     def test_content_filter_factory_methods_work_with_cache(self):
         """Test that built-in content filters work with cached data."""
@@ -231,8 +232,8 @@ class TestSearchBaseCaching(unittest.TestCase):
             resource_filter,
             map_state=self.map_state
         )
-        self.assertTrue(result['success'])
-        self.assertEqual(result['content_code'], 'copper_rocks')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['content_code'], 'copper_rocks')
         
         # Test monster filter  
         monster_filter = SearchActionBase.create_monster_filter(['green_slime'])
@@ -244,8 +245,8 @@ class TestSearchBaseCaching(unittest.TestCase):
             monster_filter,
             map_state=self.map_state
         )
-        self.assertTrue(result['success'])
-        self.assertEqual(result['content_code'], 'green_slime')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['content_code'], 'green_slime')
         
         # Test workshop filter
         workshop_filter = SearchActionBase.create_workshop_filter('weaponcrafting')
@@ -257,8 +258,8 @@ class TestSearchBaseCaching(unittest.TestCase):
             workshop_filter,
             map_state=self.map_state
         )
-        self.assertTrue(result['success'])
-        self.assertEqual(result['content_code'], 'weaponcrafting')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['content_code'], 'weaponcrafting')
 
     def test_boundary_detection_integrates_with_cache(self):
         """Test that boundary detection works properly with MapState caching."""

@@ -61,9 +61,9 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         context = MockActionContext(character_name="test_char")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_monster_api_fails(self, mock_get_monsters_api):
@@ -74,8 +74,8 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_char")
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No suitable monsters found matching criteria', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No suitable monsters found matching criteria', result.error)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_monster_api_no_data(self, mock_get_monsters_api):
@@ -88,8 +88,8 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_char")
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No suitable monsters found matching criteria', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No suitable monsters found matching criteria', result.error)
 
     @patch('src.controller.actions.search_base.get_map_api')
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
@@ -168,12 +168,12 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
             map_state=mock_map_state
         )
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertIn('target_x', result)
-        self.assertIn('target_y', result)
-        self.assertIn('distance', result)
-        self.assertIn('monster_code', result)
-        self.assertIn('target_codes', result)
+        self.assertTrue(result.success)
+        self.assertIn('target_x', result.data)
+        self.assertIn('target_y', result.data)
+        self.assertIn('distance', result.data)
+        self.assertIn('monster_code', result.data)
+        self.assertIn('target_codes', result.data)
 
     def test_filter_monsters_by_level_within_range(self):
         """Test _filter_monsters_by_level with monsters in level range."""
@@ -265,16 +265,15 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
             from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_char")
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
             # The error message should be about no suitable monsters found
-        self.assertIn('No suitable monsters found matching criteria', result['error'])
+        self.assertIn('No suitable monsters found matching criteria', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that FindMonstersAction has expected GOAP attributes."""
         self.assertTrue(hasattr(FindMonstersAction, 'conditions'))
         self.assertTrue(hasattr(FindMonstersAction, 'reactions'))
-        self.assertTrue(hasattr(FindMonstersAction, 'weights'))
-        self.assertTrue(hasattr(FindMonstersAction, 'g'))
+        self.assertTrue(hasattr(FindMonstersAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -296,8 +295,8 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {'find_monsters': 2.0}
-        self.assertEqual(FindMonstersAction.weights, expected_weights)
+        expected_weight = 2.0
+        self.assertEqual(FindMonstersAction.weight, expected_weight)
 
     def test_different_monster_type_combinations(self):
         """Test action with different monster type combinations."""
@@ -371,7 +370,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         context = MockActionContext(character_name="test_char")
         result = self.action.execute(client, context)
         # Should handle gracefully
-        self.assertIn('success', result)
+        self.assertTrue(hasattr(result, 'success'))
 
     def test_inheritance_from_search_base(self):
         """Test that FindMonstersAction properly inherits from SearchActionBase."""
@@ -416,7 +415,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         context = MockActionContext(character_name="test_char", character_level=5, level_range=2)
         result = action.execute(client, context)
         # Should find appropriate_monster (level 5) but not weak(1) or strong(20)
-        self.assertIn('success', result)
+        self.assertTrue(hasattr(result, 'success'))
 
 
 if __name__ == '__main__':

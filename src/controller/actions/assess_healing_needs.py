@@ -8,7 +8,7 @@ if healing is needed. It sets appropriate state flags for the healing flow.
 from typing import Dict, Any
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AssessHealingNeedsAction(ActionBase):
@@ -25,7 +25,7 @@ class AssessHealingNeedsAction(ActionBase):
         super().__init__()
         self.healing_threshold = 100  # Default: need healing if HP < 100%
         
-    def execute(self, client, context: 'ActionContext') -> Dict[str, Any]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
         Assess if character needs healing based on current HP.
         
@@ -36,6 +36,8 @@ class AssessHealingNeedsAction(ActionBase):
         Returns:
             Dict with healing assessment results
         """
+        self._context = context
+        
         try:
             # Get current HP from world state
             world_state_obj = context.get('world_state')
@@ -59,14 +61,15 @@ class AssessHealingNeedsAction(ActionBase):
                 self.logger.debug(f"💚 No healing needed: HP at {hp_percentage:.1f}%")
             
             # This is a state update action - no API call needed
-            return self.get_success_response(
+            return self.create_success_result(
+                f"Healing assessment: {'needed' if healing_needed else 'not needed'} (HP: {hp_percentage:.1f}%)",
                 healing_needed=healing_needed,
                 current_hp_percentage=hp_percentage,
                 healing_threshold=self.healing_threshold
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to assess healing needs: {e}")
+            return self.create_error_result(f"Failed to assess healing needs: {e}")
     
     def __repr__(self):
         return f"AssessHealingNeedsAction(threshold={self.healing_threshold})"

@@ -42,9 +42,9 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.analyze_resources.AnalyzeResourcesAction._find_nearby_resources')
     def test_execute_map_state_fails(self, mock_find_resources):
@@ -62,8 +62,8 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
             knowledge_base=MockKnowledgeBase()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No resources found in analysis radius', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No resources found in analysis radius', result.error)
 
 
 
@@ -85,15 +85,14 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
         
         with patch('src.controller.actions.analyze_resources.AnalyzeResourcesAction._find_nearby_resources', side_effect=Exception("Unexpected Error")):
             result = self.action.execute(client, context)
-            self.assertFalse(result['success'])
-            self.assertIn('Resource analysis failed: Unexpected Error', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Resource analysis failed: Unexpected Error', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that AnalyzeResourcesAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeResourcesAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeResourcesAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeResourcesAction, 'weights'))
-        self.assertTrue(hasattr(AnalyzeResourcesAction, 'g'))
+        self.assertTrue(hasattr(AnalyzeResourcesAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -107,8 +106,8 @@ class TestAnalyzeResourcesAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        self.assertTrue(hasattr(AnalyzeResourcesAction, 'weights'))
-        self.assertIsInstance(AnalyzeResourcesAction.weights, dict)
+        self.assertTrue(hasattr(AnalyzeResourcesAction, 'weight'))
+        self.assertIsInstance(AnalyzeResourcesAction.weight, (int, float))
 
 
 if __name__ == '__main__':

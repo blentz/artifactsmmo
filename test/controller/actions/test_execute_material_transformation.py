@@ -33,14 +33,14 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
         """Test execution with missing parameters."""
         # Missing all parameters
         result = self.action.execute(self.client, self.context)
-        self.assertFalse(result['success'])
-        self.assertIn("Missing transformation parameters", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("Missing transformation parameters", result.error)
         
         # Missing refined_material
         self.context['raw_material'] = 'copper_ore'
         result = self.action.execute(self.client, self.context)
-        self.assertFalse(result['success'])
-        self.assertIn("Missing transformation parameters", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("Missing transformation parameters", result.error)
         
     def test_execute_successful_transformation(self):
         """Test successful material transformation."""
@@ -62,11 +62,11 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertTrue(result['success'])
-                self.assertEqual(result['xp_gained'], 10)
-                self.assertEqual(len(result['items_produced']), 1)
-                self.assertEqual(result['items_produced'][0]['code'], 'copper')
-                self.assertEqual(result['items_produced'][0]['quantity'], 5)
+                self.assertTrue(result.success)
+                self.assertEqual(result.data['xp_gained'], 10)
+                self.assertEqual(len(result.data['items_produced']), 1)
+                self.assertEqual(result.data['items_produced'][0]['code'], 'copper')
+                self.assertEqual(result.data['items_produced'][0]['quantity'], 5)
                 
                 # Check context was updated
                 last_transformation = self.context.get('last_transformation')
@@ -92,7 +92,7 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertTrue(result['success'])
+                self.assertTrue(result.success)
                 
                 # Verify CraftingSchema was called with quantity=1
                 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
@@ -114,8 +114,8 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertFalse(result['success'])
-                self.assertIn("Crafting failed for copper", result['error'])
+                self.assertFalse(result.success)
+                self.assertIn("Crafting failed for copper", result.error)
                 
     def test_execute_exception_handling(self):
         """Test exception handling."""
@@ -129,8 +129,8 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertFalse(result['success'])
-                self.assertIn("Failed to execute transformation", result['error'])
+                self.assertFalse(result.success)
+                self.assertIn("Failed to execute transformation", result.error)
                 
     def test_wait_for_cooldown_active(self):
         """Test waiting for active cooldown."""
@@ -213,9 +213,9 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertTrue(result['success'])
+                self.assertTrue(result.success)
                 
-                transformation = result['transformation']
+                transformation = result.data['transformation']
                 self.assertEqual(transformation['raw_material'], 'copper_ore')
                 self.assertEqual(transformation['refined_material'], 'copper')
                 self.assertEqual(transformation['quantity_requested'], 5)
@@ -242,8 +242,8 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertTrue(result['success'])
-                self.assertEqual(result['items_produced'], [])
+                self.assertTrue(result.success)
+                self.assertEqual(result.data['items_produced'], [])
 
 
 if __name__ == '__main__':

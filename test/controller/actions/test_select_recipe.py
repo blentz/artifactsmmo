@@ -34,8 +34,8 @@ class TestSelectRecipeAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Could not get character data", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Could not get character data", result.error)
     
     def test_execute_character_api_no_data(self):
         """Test execute fails when character response has no data."""
@@ -46,8 +46,8 @@ class TestSelectRecipeAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Could not get character data", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Could not get character data", result.error)
     
     def test_execute_no_suitable_recipe(self):
         """Test execute fails when no suitable recipe is found."""
@@ -64,8 +64,8 @@ class TestSelectRecipeAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertFalse(result['success'])
-                self.assertIn("No suitable recipe found for weapon", result['error'])
+                self.assertFalse(result.success)
+                self.assertIn("No suitable recipe found for weapon", result.error)
     
     def test_execute_success_weapon(self):
         """Test recipe selection for weapon without knowledge base."""
@@ -80,8 +80,8 @@ class TestSelectRecipeAction(unittest.TestCase):
             result = self.action.execute(self.client, self.context)
             
             # Without knowledge base, should fail
-            self.assertFalse(result['success'])
-            self.assertIn('No suitable recipe found', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('No suitable recipe found', result.error)
     
     def test_execute_success_armor(self):
         """Test recipe selection for armor without knowledge base."""
@@ -98,8 +98,8 @@ class TestSelectRecipeAction(unittest.TestCase):
             result = self.action.execute(self.client, self.context)
             
             # Without knowledge base, should fail
-            self.assertFalse(result['success'])
-            self.assertIn('No suitable recipe found', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('No suitable recipe found', result.error)
     
     def test_execute_with_exception(self):
         """Test execute handles exceptions."""
@@ -108,9 +108,9 @@ class TestSelectRecipeAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Recipe selection failed", result['error'])
-            self.assertIn("Test error", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Recipe selection failed", result.error)
+            self.assertIn("Test error", result.error)
     
     def test_select_weapon_recipe_level_1_no_weapon(self):
         """Test weapon recipe selection for level 1 with no weapon."""
@@ -379,8 +379,8 @@ class TestSelectRecipeAction(unittest.TestCase):
             result = self.action.execute(self.client, self.context)
             
             # Without knowledge base, recipe selection should fail
-            self.assertFalse(result['success'])
-            self.assertIn('No suitable recipe found', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('No suitable recipe found', result.error)
     
     def test_weapon_recipe_none_weapon_slot(self):
         """Test weapon recipe selection when weapon_slot is None."""

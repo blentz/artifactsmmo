@@ -12,7 +12,7 @@ from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .mixins import CharacterDataMixin
 
 
@@ -26,7 +26,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
             },
         }
     reactions = {"at_location": True}
-    weights = {"at_location": 10}
+    weight = 10
     
     def __init__(self):
         """
@@ -51,7 +51,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         return target_x, target_y
     
     def execute_movement(self, client, target_x: int, target_y: int, 
-                        movement_context: Dict = None) -> Dict:
+                        movement_context: Dict = None) -> ActionResult:
         """
         Execute the movement to target coordinates.
         
@@ -83,7 +83,8 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 response_data = response.data
                 cooldown = getattr(response_data, 'cooldown', None)
                 
-                result = self.get_success_response(
+                result = self.create_success_result(
+                    message=f"Moved to ({target_x}, {target_y})",
                     moved=True,
                     target_x=target_x,
                     target_y=target_y,
@@ -97,7 +98,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 self.logger.info(f"🚶 Moved to ({target_x}, {target_y})")
                 return result
             else:
-                return self.get_error_response(
+                return self.create_error_result(
                     "Movement failed: No response data",
                     target_x=target_x,
                     target_y=target_y
@@ -108,7 +109,8 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
             error_str = str(e).lower()
             if "490" in str(e) and ("already at" in error_str or "destination" in error_str):
                 self.logger.info(f"✓ Already at destination ({target_x}, {target_y})")
-                return self.get_success_response(
+                return self.create_success_result(
+                    message=f"Already at destination ({target_x}, {target_y})",
                     moved=False,
                     already_at_destination=True,
                     target_x=target_x,
@@ -120,13 +122,13 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 )
             
             # Handle other movement errors
-            return self.get_error_response(
+            return self.create_error_result(
                 f"Movement failed: {str(e)}",
                 target_x=target_x,
                 target_y=target_y
             )
     
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
         Execute the movement action.
         
@@ -144,20 +146,13 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         target_x, target_y = self.get_target_coordinates(context)
         
         if target_x is None or target_y is None:
-            error_response = self.get_error_response(
+            return self.create_error_result(
                 "No valid coordinates provided",
                 provided_x=target_x,
                 provided_y=target_y
             )
-            self.log_execution_result(error_response)
-            return error_response
         
-        # Log execution start
-        self.log_execution_start(
-            character_name=character_name,
-            target_x=target_x,
-            target_y=target_y
-        )
+        self._context = context
         
         # Build movement context
         movement_context = self.build_movement_context(context)
@@ -166,8 +161,6 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         # Execute movement
         result = self.execute_movement(client, target_x, target_y, movement_context)
         
-        # Log result
-        self.log_execution_result(result)
         return result
     
     def build_movement_context(self, context: 'ActionContext') -> Dict:

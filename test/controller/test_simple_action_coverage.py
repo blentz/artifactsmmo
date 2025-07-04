@@ -46,7 +46,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(skill="weaponcrafting")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_check_skill_requirement_basic(self):
         """Test CheckSkillRequirementAction basic functionality."""
@@ -61,7 +61,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player", target_item="sword")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_evaluate_weapon_recipes_basic(self):
         """Test EvaluateWeaponRecipesAction basic functionality."""
@@ -75,7 +75,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_find_correct_workshop_basic(self):
         """Test FindCorrectWorkshopAction basic functionality."""
@@ -89,7 +89,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(item_code="sword")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_analyze_crafting_chain_basic(self):
         """Test AnalyzeCraftingChainAction basic functionality."""
@@ -104,7 +104,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player", target_item="sword")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_transform_raw_materials_basic(self):
         """Test TransformMaterialsCoordinatorAction basic functionality."""
@@ -118,7 +118,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_analyze_resources_basic(self):
         """Test AnalyzeResourcesAction basic functionality."""
@@ -133,7 +133,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_x=5, character_y=10)
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_check_inventory_basic(self):
         """Test CheckInventoryAction basic functionality."""
@@ -147,8 +147,8 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client - CheckInventoryAction returns success with empty inventory
         context = MockActionContext(character_name="player")
         result = action.execute(None, context)
-        self.assertTrue(result['success'])  # Returns success with empty inventory
-        self.assertEqual(result['inventory'], {})  # But inventory is empty
+        self.assertTrue(result.success)  # Returns success with empty inventory
+        self.assertEqual(result.data['inventory'], {})  # But inventory is empty
 
     def test_check_location_basic(self):
         """Test CheckLocationAction basic functionality."""
@@ -162,7 +162,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_move_to_resource_basic(self):
         """Test MoveToResourceAction basic functionality."""
@@ -178,7 +178,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player", target_x=5, target_y=10)
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_move_to_workshop_basic(self):
         """Test MoveToWorkshopAction basic functionality."""
@@ -194,7 +194,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
         # Test no client
         context = MockActionContext(character_name="player", target_x=5, target_y=10)
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_goap_attributes(self):
         """Test that actions have GOAP attributes."""
@@ -217,8 +217,7 @@ class TestSimpleActionCoverage(unittest.TestCase):
                 # Test that they have GOAP attributes
                 self.assertTrue(hasattr(action.__class__, 'conditions'))
                 self.assertTrue(hasattr(action.__class__, 'reactions'))
-                self.assertTrue(hasattr(action.__class__, 'weights'))
-                self.assertTrue(hasattr(action.__class__, 'g'))
+                self.assertTrue(hasattr(action.__class__, 'weight'))
 
 
 if __name__ == '__main__':

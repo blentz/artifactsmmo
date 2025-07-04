@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class PlanCraftingMaterialsAction(ActionBase):
@@ -37,7 +37,7 @@ class PlanCraftingMaterialsAction(ActionBase):
         "need_resources": True,  # If materials are missing
         "materials_sufficient": True  # If we have everything
     }
-    weights = {"craft_plan_available": 10}
+    weight = 10
     
     def __init__(self):
         """
@@ -45,7 +45,7 @@ class PlanCraftingMaterialsAction(ActionBase):
         """
         super().__init__()
         
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Plan material gathering for crafting"""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -54,22 +54,19 @@ class PlanCraftingMaterialsAction(ActionBase):
         character_name = context.character_name
         target_item = context.get('target_item')
         
-        self.log_execution_start(
-            character_name=character_name,
-            target_item=target_item
-        )
+        self._context = context
         
         try:
             # Get knowledge base from context
             knowledge_base = context.knowledge_base
             if not knowledge_base:
-                return self.get_error_response("No knowledge base available")
+                return self.create_error_result("No knowledge base available")
             
             # Determine target item from context
             if not target_item:
                 target_item = self._determine_target_item(context)
             if not target_item:
-                return self.get_error_response("No target item specified for crafting")
+                return self.create_error_result("No target item specified for crafting")
             
             # Get character inventory
             inventory_lookup = self._get_character_inventory(client, character_name)
@@ -77,16 +74,16 @@ class PlanCraftingMaterialsAction(ActionBase):
             # Get item crafting requirements from knowledge base
             item_data = knowledge_base.get_item_data(target_item, client=client)
             if not item_data:
-                return self.get_error_response(f"Could not find item data for {target_item}")
+                return self.create_error_result(f"Could not find item data for {target_item}")
             
             # Analyze material requirements
             craft_data = item_data.get('craft_data', {})
             if not craft_data:
-                return self.get_error_response(f"Item {target_item} is not craftable")
+                return self.create_error_result(f"Item {target_item} is not craftable")
             
             required_materials = craft_data.get('items', [])
             if not required_materials:
-                return self.get_error_response(f"No materials required for {target_item}")
+                return self.create_error_result(f"No materials required for {target_item}")
             
             # Check what materials we have vs what we need
             material_analysis = self._analyze_material_availability(
@@ -102,7 +99,7 @@ class PlanCraftingMaterialsAction(ActionBase):
             state_updates = self._determine_state_updates(material_analysis)
             
             # Store target item in result for execute_crafting_plan to use
-            result = self.get_success_response(
+            result = self.create_success_result(
                 target_item=target_item,
                 item_code=target_item,  # For compatibility
                 material_analysis=material_analysis,
@@ -113,12 +110,10 @@ class PlanCraftingMaterialsAction(ActionBase):
                 **state_updates
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Crafting planning failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Crafting planning failed: {str(e)}")
             return error_response
     
     def _determine_target_item(self, context: 'ActionContext') -> Optional[str]:

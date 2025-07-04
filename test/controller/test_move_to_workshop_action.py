@@ -34,7 +34,7 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         """Test GOAP class attributes."""
         self.assertIsInstance(MoveToWorkshopAction.conditions, dict)
         self.assertIsInstance(MoveToWorkshopAction.reactions, dict)
-        self.assertIsInstance(MoveToWorkshopAction.weights, dict)
+        self.assertIsInstance(MoveToWorkshopAction.weight, (int, float))
         
         # Check specific conditions
         self.assertIn('character_status', MoveToWorkshopAction.conditions)
@@ -47,8 +47,8 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertIn("location_context", MoveToWorkshopAction.reactions)
         self.assertTrue(MoveToWorkshopAction.reactions["location_context"]["at_target"])
         
-        # Check weights
-        self.assertEqual(MoveToWorkshopAction.weights["at_workshop"], 10)
+        # Check weight
+        self.assertEqual(MoveToWorkshopAction.weight, 10)
     
     def test_get_target_coordinates_from_context(self):
         """Test coordinate extraction from context parameters."""
@@ -174,12 +174,12 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertEqual(destination.y, 35)
         
         # Verify response
-        self.assertTrue(result['success'])
-        self.assertTrue(result['moved'])
-        self.assertEqual(result['target_x'], 25)
-        self.assertEqual(result['target_y'], 35)
-        self.assertTrue(result['at_workshop'])
-        self.assertEqual(result['workshop_type'], 'jewelrycrafting')
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['moved'])
+        self.assertEqual(result.data['target_x'], 25)
+        self.assertEqual(result.data['target_y'], 35)
+        self.assertTrue(result.data['at_workshop'])
+        self.assertEqual(result.data['workshop_type'], 'jewelrycrafting')
     
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_success_with_context_coordinates(self, mock_move_api):
@@ -202,12 +202,12 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify response
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_x'], 40)
-        self.assertEqual(result['target_y'], 50)
-        self.assertTrue(result['at_workshop'])
-        self.assertEqual(result['workshop_type'], 'gearcrafting')
-        self.assertEqual(result['workshop_code'], 'gearcrafting_workshop')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 40)
+        self.assertEqual(result.data['target_y'], 50)
+        self.assertTrue(result.data['at_workshop'])
+        self.assertEqual(result.data['workshop_type'], 'gearcrafting')
+        self.assertEqual(result.data['workshop_code'], 'gearcrafting_workshop')
     
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_already_at_destination(self, mock_move_api):
@@ -222,13 +222,13 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify it's treated as success
-        self.assertTrue(result['success'])
-        self.assertFalse(result['moved'])
-        self.assertTrue(result['already_at_destination'])
-        self.assertEqual(result['target_x'], 15)
-        self.assertEqual(result['target_y'], 25)
-        self.assertTrue(result['at_workshop'])
-        self.assertEqual(result['workshop_type'], 'alchemy')
+        self.assertTrue(result.success)
+        self.assertFalse(result.data['moved'])
+        self.assertTrue(result.data['already_at_destination'])
+        self.assertEqual(result.data['target_x'], 15)
+        self.assertEqual(result.data['target_y'], 25)
+        self.assertTrue(result.data['at_workshop'])
+        self.assertEqual(result.data['workshop_type'], 'alchemy')
     
     def test_execute_no_client(self):
         """Test execution without client."""
@@ -237,9 +237,9 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         context = MockActionContext(character_name=self.char_name, target_x=8, target_y=18)
         result = action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
     
     def test_execute_no_coordinates(self):
         """Test execution without coordinates."""
@@ -248,8 +248,8 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         context = MockActionContext(character_name=self.char_name)
         result = action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
     
     def test_execute_partial_coordinates(self):
         """Test execution with partial coordinates."""
@@ -259,14 +259,14 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         # Only target_x
         context = MockActionContext(character_name=self.char_name, target_x=20)
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
         
         # Only workshop_y
         context = MockActionContext(character_name=self.char_name, workshop_y=30)
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
     
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_api_error(self, mock_move_api):
@@ -281,10 +281,10 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error
-        self.assertFalse(result['success'])
-        self.assertIn('Connection timeout', result['error'])
-        self.assertEqual(result['target_x'], 6)
-        self.assertEqual(result['target_y'], 16)
+        self.assertFalse(result.success)
+        self.assertIn('Connection timeout', result.error)
+        self.assertEqual(result.data['target_x'], 6)
+        self.assertEqual(result.data['target_y'], 16)
     
     def test_inheritance_from_movement_base(self):
         """Test that MoveToWorkshopAction properly inherits from MovementActionBase."""
@@ -295,8 +295,8 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertTrue(hasattr(action, 'calculate_distance'))
         
         # Should have ActionBase methods
-        self.assertTrue(hasattr(action, 'get_success_response'))
-        self.assertTrue(hasattr(action, 'get_error_response'))
+        self.assertTrue(hasattr(action, 'create_success_result'))
+        self.assertTrue(hasattr(action, 'create_error_result'))
         
         # Should have CharacterDataMixin methods
         self.assertTrue(hasattr(action, 'get_character_data'))

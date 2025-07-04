@@ -5,13 +5,13 @@ This action analyzes the knowledge base completeness, information gaps,
 and learning progress to guide exploration and information gathering.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeKnowledgeStateAction(ActionBase):
@@ -36,7 +36,7 @@ class AnalyzeKnowledgeStateAction(ActionBase):
         "recipe_known": True,
         "exploration_data_available": True
     }
-    weights = {"knowledge_state_analyzed": 8}
+    weight = 8
 
     def __init__(self):
         """
@@ -44,7 +44,7 @@ class AnalyzeKnowledgeStateAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Analyze knowledge base state and completeness."""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -53,16 +53,13 @@ class AnalyzeKnowledgeStateAction(ActionBase):
         character_name = context.character_name
         analysis_scope = context.get('analysis_scope', 'comprehensive')
         
-        self.log_execution_start(
-            character_name=character_name,
-            analysis_scope=analysis_scope
-        )
+        self._context = context
         
         try:
             # Get current character data for context
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             
@@ -71,7 +68,7 @@ class AnalyzeKnowledgeStateAction(ActionBase):
             map_state = context.map_state
             
             if not knowledge_base:
-                return self.get_error_response("No knowledge base available for analysis")
+                return self.create_error_result("No knowledge base available for analysis")
             
             # Perform comprehensive knowledge analysis
             general_analysis = self._analyze_general_knowledge_state(knowledge_base, character_data)
@@ -109,7 +106,7 @@ class AnalyzeKnowledgeStateAction(ActionBase):
             )
             
             # Create result
-            result = self.get_success_response(
+            result = self.create_success_result(
                 knowledge_state_analyzed=True,
                 analysis_scope=analysis_scope,
                 **general_analysis,
@@ -121,12 +118,10 @@ class AnalyzeKnowledgeStateAction(ActionBase):
                 **goap_updates
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Knowledge state analysis failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Knowledge state analysis failed: {str(e)}")
             return error_response
 
     def _analyze_general_knowledge_state(self, knowledge_base, character_data) -> Dict:

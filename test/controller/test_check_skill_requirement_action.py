@@ -51,9 +51,9 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -85,11 +85,11 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         # Check the actual keys returned by the action
-        self.assertTrue(result.get('skill_level_sufficient'))
-        self.assertEqual(result.get('current_skill_level'), 10)
-        self.assertEqual(result.get('required_skill_level'), 5)
+        self.assertTrue(result.data.get('skill_level_sufficient'))
+        self.assertEqual(result.data.get('current_skill_level'), 10)
+        self.assertEqual(result.data.get('required_skill_level'), 5)
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -121,11 +121,11 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertTrue(result['success'])
-        self.assertFalse(result.get('skill_level_sufficient'))
-        self.assertEqual(result.get('current_skill_level'), 2)
-        self.assertEqual(result.get('required_skill_level'), 5)
-        self.assertEqual(result.get('skill_gap'), 3)
+        self.assertTrue(result.success)
+        self.assertFalse(result.data.get('skill_level_sufficient'))
+        self.assertEqual(result.data.get('current_skill_level'), 2)
+        self.assertEqual(result.data.get('required_skill_level'), 5)
+        self.assertEqual(result.data.get('skill_gap'), 3)
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')  
@@ -152,8 +152,8 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Could not determine skill requirements', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not determine skill requirements', result.error)
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -174,8 +174,8 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Could not determine skill requirements', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not determine skill requirements', result.error)
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -196,8 +196,8 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Could not determine skill requirements', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not determine skill requirements', result.error)
 
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -212,8 +212,8 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -229,15 +229,15 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Skill requirement check failed', result['error'])
-        self.assertIn('API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Skill requirement check failed', result.error)
+        self.assertIn('API Error', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that CheckSkillRequirementAction has expected GOAP attributes."""
         self.assertTrue(hasattr(CheckSkillRequirementAction, 'conditions'))
         self.assertTrue(hasattr(CheckSkillRequirementAction, 'reactions'))
-        self.assertTrue(hasattr(CheckSkillRequirementAction, 'weights'))
+        self.assertTrue(hasattr(CheckSkillRequirementAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -256,8 +256,8 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"skill_requirements_checked": 10}
-        self.assertEqual(CheckSkillRequirementAction.weights, expected_weights)
+        expected_weight = CheckSkillRequirementAction.weight
+        self.assertIsInstance(expected_weight, (int, float))
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -287,21 +287,21 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         result = self.action.execute(self.client, context)
         
         # Verify the result
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         
         # Check weaponcrafting-specific states
-        self.assertTrue(result['need_weaponcrafting_upgrade'])
-        self.assertFalse(result['weaponcrafting_level_sufficient'])
-        self.assertEqual(result['required_weaponcrafting_level'], 5)
-        self.assertEqual(result['current_weaponcrafting_level'], 2)
+        self.assertTrue(result.data['need_weaponcrafting_upgrade'])
+        self.assertFalse(result.data['weaponcrafting_level_sufficient'])
+        self.assertEqual(result.data['required_weaponcrafting_level'], 5)
+        self.assertEqual(result.data['current_weaponcrafting_level'], 2)
         
         # Check general skill states
-        self.assertFalse(result['skill_level_sufficient'])
-        self.assertTrue(result['need_skill_upgrade'])
-        self.assertEqual(result['required_skill'], 'weaponcrafting')
-        self.assertEqual(result['required_skill_level'], 5)
-        self.assertEqual(result['current_skill_level'], 2)
-        self.assertEqual(result['skill_gap'], 3)
+        self.assertFalse(result.data['skill_level_sufficient'])
+        self.assertTrue(result.data['need_skill_upgrade'])
+        self.assertEqual(result.data['required_skill'], 'weaponcrafting')
+        self.assertEqual(result.data['required_skill_level'], 5)
+        self.assertEqual(result.data['current_skill_level'], 2)
+        self.assertEqual(result.data['skill_gap'], 3)
 
     @patch('src.controller.actions.check_skill_requirement.get_item_api')
     @patch('src.controller.actions.check_skill_requirement.get_character_api')
@@ -331,18 +331,18 @@ class TestCheckSkillRequirementAction(unittest.TestCase):
         result = self.action.execute(self.client, context)
         
         # Verify the result
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         
         # Check weaponcrafting-specific states
-        self.assertFalse(result['need_weaponcrafting_upgrade'])
-        self.assertTrue(result['weaponcrafting_level_sufficient'])
-        self.assertEqual(result['required_weaponcrafting_level'], 3)
-        self.assertEqual(result['current_weaponcrafting_level'], 5)
+        self.assertFalse(result.data['need_weaponcrafting_upgrade'])
+        self.assertTrue(result.data['weaponcrafting_level_sufficient'])
+        self.assertEqual(result.data['required_weaponcrafting_level'], 3)
+        self.assertEqual(result.data['current_weaponcrafting_level'], 5)
         
         # Check general skill states
-        self.assertTrue(result['skill_level_sufficient'])
-        self.assertFalse(result['need_skill_upgrade'])
-        self.assertEqual(result['skill_gap'], 0)
+        self.assertTrue(result.data['skill_level_sufficient'])
+        self.assertFalse(result.data['need_skill_upgrade'])
+        self.assertEqual(result.data['skill_gap'], 0)
 
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from src.controller.action_executor import ActionResult
+from src.controller.actions.base import ActionResult
 from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
 
@@ -62,8 +62,9 @@ class TestLearningMetaprogramming(unittest.TestCase):
                 
                 mock_result = ActionResult(
                     success=True,
-                    response=mock_response,
-                    action_name='move'
+                    message="Moved successfully",
+                    action_name='move',
+                    data={'response': mock_response}
                 )
                 
                 # Configure executor to call the learning callback
@@ -110,8 +111,9 @@ class TestLearningMetaprogramming(unittest.TestCase):
                 
                 mock_result = ActionResult(
                     success=True,
-                    response=mock_response,
-                    action_name='attack'
+                    message="Attack successful",
+                    action_name='attack',
+                    data={'response': mock_response}
                 )
                 
                 # Configure executor to call the learning callback
@@ -157,11 +159,12 @@ class TestLearningMetaprogramming(unittest.TestCase):
                 # Mock composite action response
                 mock_result = ActionResult(
                     success=True,
-                    response={'composite': True, 'steps': [
+                    message="Hunt successful",
+                    action_name='hunt',
+                    data={'composite': True, 'steps': [
                         {'action': 'move', 'success': True},
                         {'action': 'attack', 'success': True}
-                    ]},
-                    action_name='hunt'
+                    ]}
                 )
                 
                 # Configure executor to simulate composite action learning

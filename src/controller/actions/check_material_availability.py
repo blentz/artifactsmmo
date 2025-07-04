@@ -9,7 +9,7 @@ from typing import Dict, List
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -48,7 +48,7 @@ class CheckMaterialAvailabilityAction(ActionBase):
         """Initialize the material availability check action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute material availability check.
         
@@ -59,13 +59,13 @@ class CheckMaterialAvailabilityAction(ActionBase):
         Returns:
             Action result with availability status
         """
-        super().execute(client, context)
+        self._context = context
         
         character_name = context.character_name
         required_materials = context.get('required_materials', [])
         
         if not required_materials:
-            return self.get_error_response("No required materials specified")
+            return self.create_error_result("No required materials specified")
             
         self.logger.info(f"🔍 Checking availability of {len(required_materials)} materials")
         
@@ -73,7 +73,7 @@ class CheckMaterialAvailabilityAction(ActionBase):
             # Get current character inventory
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
                 
             character_data = character_response.data
             inventory = getattr(character_data, 'inventory', [])
@@ -110,7 +110,8 @@ class CheckMaterialAvailabilityAction(ActionBase):
             context.set_result('missing_materials', [item['material'] for item in missing_materials])
             context.set_result('sufficient_materials', [item['material'] for item in availability_results if item['sufficient']])
             
-            return self.get_success_response(
+            return self.create_success_result(
+                f"Material availability check completed: {'All materials available' if all_sufficient else f'{len(missing_materials)} materials missing'}",
                 total_materials=len(required_materials),
                 sufficient_materials=len(availability_results) - len(missing_materials),
                 missing_materials=len(missing_materials),
@@ -119,7 +120,7 @@ class CheckMaterialAvailabilityAction(ActionBase):
             )
             
         except Exception as e:
-            return self.get_error_response(f"Material availability check failed: {str(e)}")
+            return self.create_error_result(f"Material availability check failed: {str(e)}")
             
     def _check_material_availability(self, required_materials: List[str], inventory: List) -> List[Dict]:
         """Check availability of each required material in inventory."""

@@ -45,9 +45,9 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -62,8 +62,8 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
             map_state=MockMapState()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_execute_successful_basic_analysis(self, mock_get_character):
@@ -86,10 +86,10 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['workshop_requirements_known'])
-        self.assertIn('required_workshops', result)
-        self.assertIn('discovery_needed', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['workshop_requirements_known'])
+        self.assertIn('required_workshops', result.data)
+        self.assertIn('discovery_needed', result.data)
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_execute_with_knowledge_base(self, mock_get_character):
@@ -129,10 +129,10 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['workshop_requirements_known'])
-        self.assertIn('known_workshops', result)
-        self.assertEqual(result['total_workshops_known'], 2)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['workshop_requirements_known'])
+        self.assertIn('known_workshops', result.data)
+        self.assertEqual(result.data['total_workshops_known'], 2)
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_execute_weaponcrafting_goal(self, mock_get_character):
@@ -150,9 +150,9 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('weaponcrafting', result['required_workshop_types'])
-        self.assertIn('goal_specific_needs', result)
+        self.assertTrue(result.success)
+        self.assertIn('weaponcrafting', result.data['required_workshop_types'])
+        self.assertIn('goal_specific_needs', result.data)
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_execute_exception_handling(self, mock_get_character):
@@ -167,14 +167,14 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
             map_state=MockMapState()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Workshop requirements analysis failed: API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Workshop requirements analysis failed: API Error', result.error)
 
     def test_goap_attributes(self):
         """Test that AnalyzeWorkshopRequirementsAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeWorkshopRequirementsAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeWorkshopRequirementsAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeWorkshopRequirementsAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeWorkshopRequirementsAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -194,8 +194,7 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        self.assertIsInstance(AnalyzeWorkshopRequirementsAction.weights, dict)
-        self.assertIn('workshop_requirements_known', AnalyzeWorkshopRequirementsAction.weights)
+        self.assertIsInstance(AnalyzeWorkshopRequirementsAction.weight, (int, float))
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_discovery_needs_high_level_character(self, mock_get_character):
@@ -213,9 +212,9 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['discovery_needed'])
-        self.assertIn('discovery_priority', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['discovery_needed'])
+        self.assertIn('discovery_priority', result.data)
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_workshop_location_analysis(self, mock_get_character):
@@ -248,9 +247,9 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['at_workshop'])
-        self.assertEqual(result['current_workshop_code'], 'weaponcrafting_workshop')
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['at_workshop'])
+        self.assertEqual(result.data['current_workshop_code'], 'weaponcrafting_workshop')
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_missing_workshop_identification(self, mock_get_character):
@@ -276,10 +275,10 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         # Should identify weaponcrafting and gearcrafting as missing for level 5 character
-        self.assertIn('missing_workshop_types', result)
-        self.assertIn('weaponcrafting', result['missing_workshop_types'])
+        self.assertIn('missing_workshop_types', result.data)
+        self.assertIn('weaponcrafting', result.data['missing_workshop_types'])
 
     @patch('src.controller.actions.analyze_workshop_requirements.get_character_api')
     def test_workshop_recommendations(self, mock_get_character):
@@ -296,10 +295,10 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('primary_recommendation', result)
-        self.assertIn('specific_actions', result)
-        self.assertIn('immediate_steps', result)
+        self.assertTrue(result.success)
+        self.assertIn('primary_recommendation', result.data)
+        self.assertIn('specific_actions', result.data)
+        self.assertIn('immediate_steps', result.data)
 
 
 if __name__ == '__main__':

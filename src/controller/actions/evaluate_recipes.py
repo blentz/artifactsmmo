@@ -9,7 +9,7 @@ character requirements.
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 from src.game.character.state import CharacterState
 from src.lib.action_context import ActionContext
 
@@ -145,9 +145,9 @@ class EvaluateRecipesAction(ActionBase):
     
     def __init__(self):
         """Initialize the evaluate recipes action."""
-        self.logger = logging.getLogger(__name__)
+        super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute the recipe evaluation for the specified equipment slot.
         
@@ -158,13 +158,12 @@ class EvaluateRecipesAction(ActionBase):
         Returns:
             Action result dictionary
         """
-        super().execute(client, context)
+        self._context = context
         
-            
         # Get target slot from action context (set by SelectOptimalSlotAction)
         target_slot = context.get_parameter('target_equipment_slot')
         if not target_slot:
-            return self.get_error_response("No target equipment slot specified - run SelectOptimalSlotAction first")
+            return self.create_error_result("No target equipment slot specified - run SelectOptimalSlotAction first")
             
         # Get target craft skill from context (may be set by goal or previous action)
         target_craft_skill = context.get_parameter('target_craft_skill')
@@ -174,19 +173,19 @@ class EvaluateRecipesAction(ActionBase):
         # Get character state from context
         character_state = context.character_state
         if not character_state:
-            return self.get_error_response("No character state available")
+            return self.create_error_result("No character state available")
             
         # Determine crafting skill - prioritize explicit target_craft_skill over slot mapping
         if target_craft_skill:
             craft_skill = target_craft_skill
             # Validate that the target slot is compatible with the target skill
             if not self._validate_slot_skill_compatibility(target_slot, craft_skill):
-                return self.get_error_response(f"Slot '{target_slot}' not compatible with skill '{craft_skill}'")
+                return self.create_error_result(f"Slot '{target_slot}' not compatible with skill '{craft_skill}'")
         else:
             # Fall back to slot-to-skill mapping
             craft_skill = self.SLOT_TO_SKILL.get(target_slot)
             if not craft_skill:
-                return self.get_error_response(f"Unknown equipment slot: {target_slot}")
+                return self.create_error_result(f"Unknown equipment slot: {target_slot}")
             
         # Get current equipment in this slot
         current_item = self._get_current_equipment(character_state, target_slot)
@@ -194,7 +193,7 @@ class EvaluateRecipesAction(ActionBase):
         # Fetch available recipes for this crafting skill
         recipes = self._fetch_recipes(craft_skill, character_state, client)
         if not recipes:
-            return self.get_error_response(f"No {craft_skill} recipes available")
+            return self.create_error_result(f"No {craft_skill} recipes available")
             
         # Evaluate and score each recipe
         scored_recipes = []
@@ -206,7 +205,7 @@ class EvaluateRecipesAction(ActionBase):
                 scored_recipes.append((recipe, score, reasoning))
                 
         if not scored_recipes:
-            return self.get_error_response(f"No craftable recipes found for {target_slot}")
+            return self.create_error_result(f"No craftable recipes found for {target_slot}")
             
         # Sort by score and select the best option
         scored_recipes.sort(key=lambda x: x[1], reverse=True)
@@ -233,7 +232,8 @@ class EvaluateRecipesAction(ActionBase):
         self.logger.info(f"   Reasoning: {best_reasoning}")
         self.logger.info(f"   Required workshop: {workshop_type}")
         
-        return self.get_success_response(
+        return self.create_success_result(
+            message=f"Selected {selected_item} for {target_slot} slot",
             selected_item=selected_item,
             target_slot=target_slot,
             craft_skill=craft_skill,

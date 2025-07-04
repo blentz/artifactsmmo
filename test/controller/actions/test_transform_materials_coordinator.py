@@ -50,7 +50,7 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
             }
         })
         
-        self.assertEqual(self.action.weights, {"inventory_status.has_refined_materials": 15})
+        self.assertEqual(self.action.weight, 15)
         
     def test_execute_character_api_fails(self):
         """Test when character API fails."""
@@ -59,8 +59,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn('Could not get character data', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Could not get character data', result.error)
             
     def test_execute_no_raw_materials(self):
         """Test when no raw materials found."""
@@ -87,8 +87,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertFalse(result['success'])
-                self.assertIn('No raw materials found that need transformation', result['error'])
+                self.assertFalse(result.success)
+                self.assertIn('No raw materials found that need transformation', result.error)
                 
     def test_execute_analyze_fails(self):
         """Test when analysis step fails."""
@@ -106,8 +106,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertFalse(result['success'])
-                self.assertIn('Failed to analyze materials', result['error'])
+                self.assertFalse(result.success)
+                self.assertIn('Failed to analyze materials', result.error)
                 
     def test_execute_workshop_determination_fails(self):
         """Test when workshop determination fails."""
@@ -137,8 +137,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                     
                     result = self.action.execute(self.client, self.context)
                     
-                    self.assertFalse(result['success'])
-                    self.assertIn('Failed to determine workshop requirements', result['error'])
+                    self.assertFalse(result.success)
+                    self.assertIn('Failed to determine workshop requirements', result.error)
                     
     def test_execute_successful_single_transformation(self):
         """Test successful execution with single transformation."""
@@ -205,9 +205,9 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                                 
                                 result = self.action.execute(self.client, self.context)
                                 
-                                self.assertTrue(result['success'])
-                                self.assertEqual(result['total_transformations'], 1)
-                                self.assertEqual(len(result['materials_transformed']), 1)
+                                self.assertTrue(result.success)
+                                self.assertEqual(result.data['total_transformations'], 1)
+                                self.assertEqual(len(result.data['materials_transformed']), 1)
                                 
     def test_execute_multiple_transformations_same_workshop(self):
         """Test multiple transformations at same workshop."""
@@ -296,8 +296,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                                 
                                 result = self.action.execute(self.client, self.context)
                                 
-                                self.assertTrue(result['success'])
-                                self.assertEqual(result['total_transformations'], 2)
+                                self.assertTrue(result.success)
+                                self.assertEqual(result.data['total_transformations'], 2)
                                 
                                 # Should only navigate once since same workshop
                                 mock_nav.execute.assert_called_once()
@@ -350,8 +350,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                             result = self.action.execute(self.client, self.context)
                             
                             # Should fail since all transformations failed
-                            self.assertFalse(result['success'])
-                            self.assertIn('All material transformations failed', result['error'])
+                            self.assertFalse(result.success)
+                            self.assertIn('All material transformations failed', result.error)
                             
     def test_execute_exception_handling(self):
         """Test exception handling in coordinator."""
@@ -360,8 +360,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Material transformation workflow failed", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Material transformation workflow failed", result.error)
             
     def test_execute_with_target_item(self):
         """Test execution with target item specified."""
@@ -427,8 +427,8 @@ class TestTransformMaterialsCoordinatorAction(unittest.TestCase):
                                 
                                 result = self.action.execute(self.client, self.context)
                                 
-                                self.assertTrue(result['success'])
-                                self.assertEqual(result['target_item'], 'iron_sword')
+                                self.assertTrue(result.success)
+                                self.assertEqual(result.data['target_item'], 'iron_sword')
                                 
                                 # Verify target_item was passed to analyze action
                                 analyze_context = mock_analyze.execute.call_args[0][1]

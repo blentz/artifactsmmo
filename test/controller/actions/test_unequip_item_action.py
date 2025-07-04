@@ -53,8 +53,8 @@ class TestUnequipItemAction(BaseTest):
     def test_execute_no_client(self):
         """ Test execute with no API client """
         result = self.action.execute(None, self.context)
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
 
     def test_execute_invalid_slot(self):
         """ Test execute with invalid slot name """
@@ -68,9 +68,9 @@ class TestUnequipItemAction(BaseTest):
         
         result = action.execute(client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Invalid equipment slot', result['error'])
-        self.assertIn('invalid_slot', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Invalid equipment slot', result.error)
+        self.assertIn('invalid_slot', result.error)
 
     def test_execute_success(self):
         """ Test successful execution """
@@ -106,18 +106,20 @@ class TestUnequipItemAction(BaseTest):
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
             result = self.action.execute(client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['slot'], "weapon")
-        self.assertEqual(result['quantity'], 1)
-        self.assertEqual(result['cooldown'], 20)
-        self.assertEqual(result['character_level'], 5)
-        self.assertEqual(result['character_hp'], 85)
-        self.assertEqual(result['character_max_hp'], 100)
-        self.assertEqual(result['unequipped_item_code'], "iron_sword")
-        self.assertEqual(result['unequipped_item_name'], "Iron Sword")
-        self.assertEqual(result['unequipped_item_type'], "weapon")
-        self.assertEqual(result['unequipped_item_level'], 3)
-        self.assertEqual(result['unequipped_slot'], "weapon")
+        if not result.success:
+            print(f"UnequipItem failed: {result.error}")
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['slot'], "weapon")
+        self.assertEqual(result.data['quantity'], 1)
+        self.assertEqual(result.data['cooldown'], 20)
+        self.assertEqual(result.data['character_level'], 5)
+        self.assertEqual(result.data['character_hp'], 85)
+        self.assertEqual(result.data['character_max_hp'], 100)
+        self.assertEqual(result.data['unequipped_item_code'], "iron_sword")
+        self.assertEqual(result.data['unequipped_item_name'], "Iron Sword")
+        self.assertEqual(result.data['unequipped_item_type'], "weapon")
+        self.assertEqual(result.data['unequipped_item_level'], 3)
+        self.assertEqual(result.data['unequipped_slot'], "weapon")
 
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """
@@ -128,8 +130,8 @@ class TestUnequipItemAction(BaseTest):
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
             result = self.action.execute(client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('no response data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('no response data', result.error)
 
     def test_execute_api_exception(self):
         """ Test execute when API throws exception """
@@ -138,8 +140,8 @@ class TestUnequipItemAction(BaseTest):
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', side_effect=Exception("API Error")):
             result = self.action.execute(client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('API Error', result.error)
 
     def test_get_item_slot_enum_weapon(self):
         """ Test slot enum conversion for weapon """
@@ -243,9 +245,9 @@ class TestUnequipItemAction(BaseTest):
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
             result = self.action.execute(client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['slot'], "weapon")
-        self.assertEqual(result['cooldown'], 0)  # Default when no cooldown data
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['slot'], "weapon")
+        self.assertEqual(result.data['cooldown'], 0)  # Default when no cooldown data
 
     def test_execute_utility_slot_with_quantity(self):
         """ Test execute for utility slot with custom quantity """
@@ -273,10 +275,10 @@ class TestUnequipItemAction(BaseTest):
         with unittest.mock.patch('src.controller.actions.unequip_item.unequip_api', return_value=mock_response):
             result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['quantity'], 3)
-        self.assertEqual(result['unequipped_item_code'], "health_potion")
-        self.assertEqual(result['unequipped_item_type'], "utility")
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['quantity'], 3)
+        self.assertEqual(result.data['unequipped_item_code'], "health_potion")
+        self.assertEqual(result.data['unequipped_item_type'], "utility")
 
     def test_all_equipment_slots_mapping(self):
         """ Test that all equipment slots can be mapped correctly """

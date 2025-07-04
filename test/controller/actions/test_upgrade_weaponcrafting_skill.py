@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 from src.controller.actions.upgrade_weaponcrafting_skill import UpgradeWeaponcraftingSkillAction
+from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -47,8 +48,7 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         self.assertTrue(self.action.reactions['skill_status']['xp_gained'])
         self.assertTrue(self.action.reactions['character_status']['stats_improved'])
         
-        self.assertIn('skill_status.weaponcrafting_level_sufficient', self.action.weights)
-        self.assertEqual(self.action.weights['skill_status.weaponcrafting_level_sufficient'], 30)
+        self.assertEqual(self.action.weight, 30)
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -57,8 +57,8 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_already_at_target_level(self, mock_get_character):
@@ -77,10 +77,10 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['skill_level_achieved'])
-        self.assertEqual(result['current_weaponcrafting_level'], 5)
-        self.assertEqual(result['target_level'], 3)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['skill_level_achieved'])
+        self.assertEqual(result.data['current_weaponcrafting_level'], 5)
+        self.assertEqual(result.data['target_level'], 3)
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.craft_api')
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
@@ -98,8 +98,8 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No suitable items to craft', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No suitable items to craft', result.error)
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.craft_api')
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
@@ -125,8 +125,8 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Failed to craft', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Failed to craft', result.error)
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.craft_api')
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
@@ -163,13 +163,13 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['item_crafted'], 'wooden_stick')
-        self.assertTrue(result['skill_xp_gained'])
-        self.assertEqual(result['previous_skill_level'], 0)
-        self.assertEqual(result['current_weaponcrafting_level'], 1)
-        self.assertEqual(result['target_level'], 1)
-        self.assertTrue(result['target_achieved'])
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['item_crafted'], 'wooden_stick')
+        self.assertTrue(result.data['skill_xp_gained'])
+        self.assertEqual(result.data['previous_skill_level'], 0)
+        self.assertEqual(result.data['current_weaponcrafting_level'], 1)
+        self.assertEqual(result.data['target_level'], 1)
+        self.assertTrue(result.data['target_achieved'])
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.craft_api')
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
@@ -200,11 +200,11 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['item_crafted'], 'wooden_stick')
-        self.assertTrue(result['skill_xp_gained'])
-        self.assertEqual(result['current_weaponcrafting_level'], 0)  # No update available
-        self.assertEqual(result['target_level'], 1)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['item_crafted'], 'wooden_stick')
+        self.assertTrue(result.data['skill_xp_gained'])
+        self.assertEqual(result.data['current_weaponcrafting_level'], 0)  # No update available
+        self.assertEqual(result.data['target_level'], 1)
         
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_exception_handling(self, mock_get_character):
@@ -213,9 +213,9 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Weaponcrafting skill upgrade failed', result['error'])
-        self.assertIn('API error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Weaponcrafting skill upgrade failed', result.error)
+        self.assertIn('API error', result.error)
         
     def test_select_craft_item_no_skill_no_materials(self):
         """Test item selection with no skill and no materials."""
@@ -354,24 +354,24 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.mock_context)
             
             # Should fail due to no character data, but parameters should have been extracted
-            self.assertFalse(result['success'])
+            self.assertFalse(result.success)
             
             # Verify context was accessed for target_level and current_level
             self.mock_context.get.assert_any_call('target_level', 1)
             self.mock_context.get.assert_any_call('current_level', 0)
             
-    def test_logging_calls(self):
-        """Test that logging methods are called appropriately."""
-        with patch.object(self.action, 'log_execution_start') as mock_log_start, \
-             patch.object(self.action, 'log_execution_result') as mock_log_result, \
-             patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync') as mock_get_char:
-            
-            mock_get_char.return_value = None
+    def test_error_result_format(self):
+        """Test that error results are returned in proper format."""
+        # Test the execute method returns proper ActionResult on error
+        with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync') as mock_get_char:
+            # Simulate an exception
+            mock_get_char.side_effect = Exception("API error")
             result = self.action.execute(self.mock_client, self.mock_context)
             
-            # Verify logging was called
-            mock_log_start.assert_called_once()
-            mock_log_result.assert_called_once_with(result)
+            # Verify error result is returned properly
+            self.assertIsInstance(result, ActionResult)
+            self.assertFalse(result.success)
+            self.assertIn("Weaponcrafting skill upgrade failed", result.error)
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class UnequipItemAction(ActionBase):
@@ -22,7 +22,7 @@ class UnequipItemAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Unequip an item from the specified equipment slot to inventory """
         # Get parameters from context
         character_name = context.character_name
@@ -30,23 +30,18 @@ class UnequipItemAction(ActionBase):
         quantity = context.get('quantity', 1)
         
         if not slot:
-            return self.get_error_response("No slot provided")
+            return self.create_error_result("No slot provided")
             
-        self.log_execution_start(
-            character_name=character_name, 
-            slot=slot,
-            quantity=quantity
-        )
+        self._context = context
         
         try:
             # Validate slot name and convert to ItemSlot enum
             slot_enum = self._get_item_slot_enum(slot)
             if not slot_enum:
-                error_response = self.get_error_response(
+                error_response = self.create_error_result(
                     f"Invalid equipment slot: {slot}",
                     valid_slots=list(ItemSlot)
                 )
-                self.log_execution_result(error_response)
                 return error_response
             
             # Create the unequip schema
@@ -61,7 +56,8 @@ class UnequipItemAction(ActionBase):
             if unequip_response and unequip_response.data:
                 # Extract useful information from the response
                 data = unequip_response.data
-                result = self.get_success_response(
+                result = self.create_success_result(
+                    f"Successfully unequipped item from {slot} slot",
                     slot=slot,
                     quantity=quantity,
                     cooldown=getattr(data.cooldown, 'total_seconds', 0) if hasattr(data, 'cooldown') else 0
@@ -70,32 +66,29 @@ class UnequipItemAction(ActionBase):
                 # Add character data if available
                 if hasattr(data, 'character'):
                     char_data = data.character
-                    result['character_level'] = getattr(char_data, 'level', 0)
-                    result['character_hp'] = getattr(char_data, 'hp', 0)
-                    result['character_max_hp'] = getattr(char_data, 'max_hp', 0)
+                    result.data['character_level'] = getattr(char_data, 'level', 0)
+                    result.data['character_hp'] = getattr(char_data, 'hp', 0)
+                    result.data['character_max_hp'] = getattr(char_data, 'max_hp', 0)
                 
                 # Add item data if available (the item that was unequipped)
                 if hasattr(data, 'item'):
                     item_data = data.item
-                    result['unequipped_item_code'] = getattr(item_data, 'code', '')
-                    result['unequipped_item_name'] = getattr(item_data, 'name', '')
-                    result['unequipped_item_type'] = getattr(item_data, 'type', '')
-                    result['unequipped_item_level'] = getattr(item_data, 'level', 0)
+                    result.data['unequipped_item_code'] = getattr(item_data, 'code', '')
+                    result.data['unequipped_item_name'] = getattr(item_data, 'name', '')
+                    result.data['unequipped_item_type'] = getattr(item_data, 'type', '')
+                    result.data['unequipped_item_level'] = getattr(item_data, 'level', 0)
                 
                 # Add equipment slot information
                 if hasattr(data, 'slot'):
-                    result['unequipped_slot'] = str(data.slot)
+                    result.data['unequipped_slot'] = str(data.slot)
                 
-                self.log_execution_result(result)
                 return result
             else:
-                error_response = self.get_error_response('Unequip action failed - no response data')
-                self.log_execution_result(error_response)
+                error_response = self.create_error_result('Unequip action failed - no response data')
                 return error_response
                 
         except Exception as e:
-            error_response = self.get_error_response(f'Unequip action failed: {str(e)}')
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f'Unequip action failed: {str(e)}')
             return error_response
 
     def _get_item_slot_enum(self, slot_name: str) -> Optional[ItemSlot]:

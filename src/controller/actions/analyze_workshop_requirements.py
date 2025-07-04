@@ -5,13 +5,13 @@ This action analyzes workshop discovery needs and crafting facility requirements
 for the character's current goals and strategic planning.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeWorkshopRequirementsAction(ActionBase):
@@ -34,7 +34,7 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
         "workshops_discovered": True,
         "at_correct_workshop": True
     }
-    weights = {"workshop_requirements_known": 10}
+    weight = 10
 
     def __init__(self):
         """
@@ -42,7 +42,7 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Analyze workshop requirements and discovery needs."""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -51,16 +51,13 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
         character_name = context.character_name
         goal_type = context.get('goal_type', 'general')
         
-        self.log_execution_start(
-            character_name=character_name,
-            goal_type=goal_type
-        )
+        self._context = context
         
         try:
             # Get current character data
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             
@@ -97,7 +94,7 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
             )
             
             # Create result
-            result = self.get_success_response(
+            result = self.create_success_result(
                 workshop_requirements_known=True,
                 goal_type=goal_type,
                 **workshop_analysis,
@@ -108,12 +105,10 @@ class AnalyzeWorkshopRequirementsAction(ActionBase):
                 **goap_updates
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Workshop requirements analysis failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Workshop requirements analysis failed: {str(e)}")
             return error_response
 
     def _analyze_workshop_knowledge(self, knowledge_base, map_state) -> Dict:

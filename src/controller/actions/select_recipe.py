@@ -5,14 +5,13 @@ This action selects the optimal recipe for crafting based on current equipment a
 and character status, setting the selected_item for subsequent crafting actions.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from src.lib.action_context import ActionContext
 
 class SelectRecipeAction(ActionBase):
     """
@@ -42,7 +41,7 @@ class SelectRecipeAction(ActionBase):
         """Initialize the recipe selection action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Select optimal recipe for current equipment needs."""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -51,16 +50,13 @@ class SelectRecipeAction(ActionBase):
         character_name = context.character_name
         target_slot = context.get('target_slot', 'weapon')
         
-        self.log_execution_start(
-            character_name=character_name,
-            target_slot=target_slot
-        )
+        self._context = context
         
         try:
             # Get current character data
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             character_level = getattr(character_data, 'level', 1)
@@ -69,10 +65,10 @@ class SelectRecipeAction(ActionBase):
             selected_recipe = self._select_optimal_recipe(target_slot, character_level, character_data, client, context)
             
             if not selected_recipe:
-                return self.get_error_response(f"No suitable recipe found for {target_slot}")
+                return self.create_error_result(f"No suitable recipe found for {target_slot}")
             
             # Create result with consolidated state updates
-            result = self.get_success_response(
+            result = self.create_success_result(
                 equipment_status={
                     "upgrade_status": "ready",
                     "selected_item": selected_recipe['item_code'],
@@ -86,12 +82,10 @@ class SelectRecipeAction(ActionBase):
                 target_slot=target_slot
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Recipe selection failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Recipe selection failed: {str(e)}")
             return error_response
 
     def _select_optimal_recipe(self, target_slot: str, character_level: int, 

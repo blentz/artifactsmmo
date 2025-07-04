@@ -51,9 +51,9 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -68,8 +68,8 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
             map_state=MockMapState()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_no_knowledge_base(self, mock_get_character):
@@ -86,8 +86,8 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)  # No knowledge_base kwarg
         
-        self.assertFalse(result['success'])
-        self.assertIn('No knowledge base available for analysis', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No knowledge base available for analysis', result.error)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_successful_basic_analysis(self, mock_get_character):
@@ -121,10 +121,10 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['knowledge_state_analyzed'])
-        self.assertIn('knowledge_completeness_score', result)
-        self.assertIn('populated_categories', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['knowledge_state_analyzed'])
+        self.assertIn('knowledge_completeness_score', result.data)
+        self.assertIn('populated_categories', result.data)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_combat_scope_analysis(self, mock_get_character):
@@ -156,9 +156,9 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('combat_knowledge_score', result)
-        self.assertIn('monsters_with_combat_data', result)
+        self.assertTrue(result.success)
+        self.assertIn('combat_knowledge_score', result.data)
+        self.assertIn('monsters_with_combat_data', result.data)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_crafting_scope_analysis(self, mock_get_character):
@@ -193,10 +193,10 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('crafting_knowledge_score', result)
-        self.assertIn('items_with_recipes', result)
-        self.assertIn('workshops_known', result)
+        self.assertTrue(result.success)
+        self.assertIn('crafting_knowledge_score', result.data)
+        self.assertIn('items_with_recipes', result.data)
+        self.assertIn('workshops_known', result.data)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_exploration_scope_analysis(self, mock_get_character):
@@ -223,10 +223,10 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('exploration_knowledge_score', result)
-        self.assertIn('locations_explored', result)
-        self.assertIn('content_discovery_rate', result)
+        self.assertTrue(result.success)
+        self.assertIn('exploration_knowledge_score', result.data)
+        self.assertIn('locations_explored', result.data)
+        self.assertIn('content_discovery_rate', result.data)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_execute_exception_handling(self, mock_get_character):
@@ -241,14 +241,14 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
             map_state=MockMapState()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Knowledge state analysis failed: API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Knowledge state analysis failed: API Error', result.error)
 
     def test_goap_attributes(self):
         """Test that AnalyzeKnowledgeStateAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeKnowledgeStateAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeKnowledgeStateAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeKnowledgeStateAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeKnowledgeStateAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -268,8 +268,7 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        self.assertIsInstance(AnalyzeKnowledgeStateAction.weights, dict)
-        self.assertIn('knowledge_state_analyzed', AnalyzeKnowledgeStateAction.weights)
+        self.assertIsInstance(AnalyzeKnowledgeStateAction.weight, (int, float))
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_knowledge_completeness_calculation(self, mock_get_character):
@@ -317,9 +316,9 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertGreater(result['knowledge_completeness_score'], 0.0)
-        self.assertLessEqual(result['knowledge_completeness_score'], 1.0)
+        self.assertTrue(result.success)
+        self.assertGreater(result.data['knowledge_completeness_score'], 0.0)
+        self.assertLessEqual(result.data['knowledge_completeness_score'], 1.0)
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_information_gaps_identification(self, mock_get_character):
@@ -346,11 +345,11 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('priority_gaps', result)
-        self.assertIn('learning_opportunities', result)
-        self.assertIn('recommended_activities', result)
-        self.assertGreater(result['information_gaps_score'], 0.5)  # Should have significant gaps
+        self.assertTrue(result.success)
+        self.assertIn('priority_gaps', result.data)
+        self.assertIn('learning_opportunities', result.data)
+        self.assertIn('recommended_activities', result.data)
+        self.assertGreater(result.data['information_gaps_score'], 0.5)  # Should have significant gaps
 
     @patch('src.controller.actions.analyze_knowledge_state.get_character_api')
     def test_learning_recommendations_generation(self, mock_get_character):
@@ -369,11 +368,11 @@ class TestAnalyzeKnowledgeStateAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('primary_learning_focus', result)
-        self.assertIn('specific_learning_goals', result)
-        self.assertIn('learning_strategy', result)
-        self.assertIn('estimated_learning_time', result)
+        self.assertTrue(result.success)
+        self.assertIn('primary_learning_focus', result.data)
+        self.assertIn('specific_learning_goals', result.data)
+        self.assertIn('learning_strategy', result.data)
+        self.assertIn('estimated_learning_time', result.data)
 
 
 if __name__ == '__main__':

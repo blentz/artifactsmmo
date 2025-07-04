@@ -5,14 +5,14 @@ This action analyzes crafting requirements, material needs, and recipe availabil
 for strategic crafting planning and material gathering guidance.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeCraftingRequirementsAction(ActionBase):
@@ -36,7 +36,7 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
         "has_crafting_materials": True,
         "materials_sufficient": True
     }
-    weights = {"crafting_requirements_known": 12}
+    weight = 12
 
     def __init__(self):
         """
@@ -44,7 +44,7 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Analyze crafting requirements and material needs."""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -54,17 +54,13 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
         target_items = context.get('target_items', [])
         crafting_goal = context.get('crafting_goal', 'equipment')
         
-        self.log_execution_start(
-            character_name=character_name,
-            target_items=target_items,
-            crafting_goal=crafting_goal
-        )
+        self._context = context
         
         try:
             # Get current character data
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             
@@ -106,7 +102,7 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
             )
             
             # Create result
-            result = self.get_success_response(
+            result = self.create_success_result(
                 crafting_requirements_known=True,
                 target_items=target_items,
                 crafting_goal=crafting_goal,
@@ -118,12 +114,10 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
                 **goap_updates
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Crafting requirements analysis failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Crafting requirements analysis failed: {str(e)}")
             return error_response
 
     def _determine_target_items(self, character_data, knowledge_base, crafting_goal: str) -> List[str]:

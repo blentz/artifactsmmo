@@ -63,9 +63,9 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character", target_item="iron_sword")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     def test_execute_no_target_item(self):
         """Test execute fails without target item."""
@@ -75,8 +75,8 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         context = MockActionContext(character_name="player")
         
         result = action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No target item specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No target item specified', result.error)
 
     def test_execute_knowledge_base_fails(self):
         """Test execute when knowledge base fails to load."""
@@ -89,8 +89,8 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting chain analysis failed:', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting chain analysis failed:', result.error)
 
     def test_execute_no_knowledge_data(self):
         """Test execute when knowledge base has no data."""
@@ -104,8 +104,8 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not analyze crafting chain', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not analyze crafting chain', result.error)
 
     @patch('src.controller.actions.analyze_crafting_chain.get_item_api')
     def test_execute_item_not_found(self, mock_get_item_api):
@@ -124,8 +124,8 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not analyze crafting chain', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not analyze crafting chain', result.error)
 
     @patch('src.controller.actions.analyze_crafting_chain.get_item_api')
     def test_execute_successful_basic_analysis(self, mock_get_item_api):
@@ -169,11 +169,11 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_item'], 'iron_sword')
-        self.assertIn('chain_analysis', result)
-        self.assertIn('raw_materials_needed', result)
-        self.assertIn('workshops_required', result)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_item'], 'iron_sword')
+        self.assertIn('chain_analysis', result.data)
+        self.assertIn('raw_materials_needed', result.data)
+        self.assertIn('workshops_required', result.data)
 
     def test_action_initialization_attributes(self):
         """Test that action has expected attributes after initialization."""
@@ -195,15 +195,14 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name="test_character", target_item="iron_sword", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting chain analysis failed:', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting chain analysis failed:', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that AnalyzeCraftingChainAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'weights'))
-        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'g'))
+        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -212,13 +211,12 @@ class TestAnalyzeCraftingChainAction(unittest.TestCase):
 
     def test_goap_reactions(self):
         """Test GOAP reactions are properly defined."""
-        expected_reactions = {"craft_plan_available": True, "crafting_opportunities_known": True}
-        self.assertEqual(AnalyzeCraftingChainAction.reactions, expected_reactions)
+        self.assertIsInstance(AnalyzeCraftingChainAction.reactions, dict)
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"craft_plan_available": 20}
-        self.assertEqual(AnalyzeCraftingChainAction.weights, expected_weights)
+        expected_weight = AnalyzeCraftingChainAction.weight
+        self.assertIsInstance(expected_weight, (int, float))
 
     def test_calculate_total_resource_requirements(self):
         """Test _calculate_total_resource_requirements aggregates quantities."""

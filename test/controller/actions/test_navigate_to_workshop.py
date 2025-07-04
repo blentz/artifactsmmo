@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.navigate_to_workshop import NavigateToWorkshopAction
+from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -36,8 +37,8 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
         """Test execution without workshop type."""
         result = self.action.execute(self.client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("No workshop type specified", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("No workshop type specified", result.error)
         
     def test_execute_already_at_workshop(self):
         """Test when already at the workshop."""
@@ -57,10 +58,10 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertTrue(result['success'])
-                self.assertTrue(result['already_at_workshop'])
-                self.assertEqual(result['workshop_type'], 'mining')
-                self.assertEqual(result['location'], {'x': 10, 'y': 20})
+                self.assertTrue(result.success)
+                self.assertTrue(result.data['already_at_workshop'])
+                self.assertEqual(result.data['workshop_type'], 'mining')
+                self.assertEqual(result.data['location'], {'x': 10, 'y': 20})
                 
     def test_execute_successful_movement(self):
         """Test successful movement to workshop."""
@@ -80,15 +81,15 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
                 
                 with patch('src.controller.actions.navigate_to_workshop.MoveAction') as mock_move_class:
                     mock_move = Mock()
-                    mock_move.execute.return_value = {'success': True}
+                    mock_move.execute.return_value = ActionResult(success=True)
                     mock_move_class.return_value = mock_move
                     
                     result = self.action.execute(self.client, self.context)
                     
-                    self.assertTrue(result['success'])
-                    self.assertTrue(result['moved_to_workshop'])
-                    self.assertEqual(result['workshop_type'], 'mining')
-                    self.assertEqual(result['location'], {'x': 10, 'y': 20})
+                    self.assertTrue(result.success)
+                    self.assertTrue(result.data['moved_to_workshop'])
+                    self.assertEqual(result.data['workshop_type'], 'mining')
+                    self.assertEqual(result.data['location'], {'x': 10, 'y': 20})
                     
     def test_execute_workshop_not_found(self):
         """Test when workshop location not found."""
@@ -107,8 +108,8 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
                 
                 result = self.action.execute(self.client, self.context)
                 
-                self.assertFalse(result['success'])
-                self.assertIn("Could not find unknown workshop", result['error'])
+                self.assertFalse(result.success)
+                self.assertIn("Could not find unknown workshop", result.error)
                 
     def test_execute_movement_fails(self):
         """Test when movement to workshop fails."""
@@ -127,13 +128,13 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
                 
                 with patch('src.controller.actions.navigate_to_workshop.MoveAction') as mock_move_class:
                     mock_move = Mock()
-                    mock_move.execute.return_value = {'success': False}
+                    mock_move.execute.return_value = ActionResult(success=False)
                     mock_move_class.return_value = mock_move
                     
                     result = self.action.execute(self.client, self.context)
                     
-                    self.assertFalse(result['success'])
-                    self.assertIn("Failed to move to mining workshop", result['error'])
+                    self.assertFalse(result.success)
+                    self.assertIn("Failed to move to mining workshop", result.error)
                     
     def test_execute_character_api_fails(self):
         """Test when character API fails."""
@@ -144,8 +145,8 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Could not get character location", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Could not get character location", result.error)
             
     def test_execute_exception_handling(self):
         """Test exception handling."""
@@ -156,8 +157,8 @@ class TestNavigateToWorkshopAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Failed to navigate to workshop", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Failed to navigate to workshop", result.error)
             
     def test_find_workshop_location_in_workshops(self):
         """Test finding workshop in workshops data."""

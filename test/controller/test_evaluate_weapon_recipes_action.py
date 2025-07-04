@@ -59,9 +59,9 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -74,8 +74,8 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         context["action_config"] = self.mock_action_config
         
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_character_api_no_data(self, mock_get_character_api):
@@ -90,8 +90,8 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         context["action_config"] = self.mock_action_config
         
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_knowledge_base_fails(self, mock_get_character_api):
@@ -119,8 +119,8 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         client = create_mock_client()
         
         result = action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Knowledge base error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Knowledge base error', result.error)
 
     @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_no_weapons_data(self, mock_get_character_api):
@@ -147,8 +147,8 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         client = create_mock_client()
         
         result = action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No weapon recipes found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No weapon recipes found', result.error)
 
     @patch('src.controller.actions.evaluate_weapon_recipes.get_character_api')
     def test_execute_success_basic(self, mock_get_character_api):
@@ -247,16 +247,16 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         
         # Since action can't fetch weapons from API and knowledge base has limited weapons,
         # it might find no craftable weapons for the character's skill level
-        if result['success']:
-            self.assertIn('selected_weapon', result)
-            self.assertIn('craftability_score', result)
+        if result.success:
+            self.assertIn('selected_weapon', result.data)
+            self.assertIn('craftability_score', result.data)
         else:
             # If no craftable weapons found, it should suggest skill upgrade
-            if 'skill_upgrade_needed' in result:
-                self.assertTrue(result['skill_upgrade_needed'])
-                self.assertIn('required_skill', result)
+            if 'skill_upgrade_needed' in result.data:
+                self.assertTrue(result.data['skill_upgrade_needed'])
+                self.assertIn('required_skill', result.data)
             else:
-                self.assertIn('No weapon recipes found', result['error'])
+                self.assertIn('No weapon recipes found', result.error)
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
@@ -268,15 +268,14 @@ class TestEvaluateWeaponRecipesAction(unittest.TestCase):
         
         with patch('src.controller.actions.evaluate_weapon_recipes.get_character_api', side_effect=Exception("API Error")):
             result = self.action.execute(client, context)
-            self.assertFalse(result['success'])
-            self.assertIn('Weapon recipe evaluation failed: API Error', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Weapon recipe evaluation failed: API Error', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that EvaluateWeaponRecipesAction has expected GOAP attributes."""
         self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'conditions'))
         self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'reactions'))
-        self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'weights'))
-        self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'g'))
+        self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'weight'))
 
 
 if __name__ == '__main__':

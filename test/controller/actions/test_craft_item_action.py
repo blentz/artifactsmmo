@@ -54,9 +54,9 @@ class TestCraftItemAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.craft_item.get_character_api')
     def test_execute_no_character_cache(self, mock_get_character_api):
@@ -67,8 +67,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=None, character_y=None)
         result = self.action.execute(mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No character data available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No character data available', result.error)
 
     @patch('src.controller.actions.craft_item.get_map_api')
     def test_execute_map_api_fails(self, mock_get_map_api):
@@ -77,10 +77,10 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get map information', result['error'])
-        self.assertEqual(result['target_x'], 5)
-        self.assertEqual(result['target_y'], 3)
+        self.assertFalse(result.success)
+        self.assertIn('Could not get map information', result.error)
+        self.assertEqual(result.data['target_x'], 5)
+        self.assertEqual(result.data['target_y'], 3)
 
     @patch('src.controller.actions.craft_item.get_map_api')
     def test_execute_map_api_no_data(self, mock_get_map_api):
@@ -91,8 +91,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get map information', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get map information', result.error)
 
     @patch('src.controller.actions.craft_item.get_map_api')
     def test_execute_no_workshop_at_location(self, mock_get_map_api):
@@ -107,8 +107,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting action failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting action failed', result.error)
 
     @patch('src.controller.actions.craft_item.get_character_api')
     @patch('src.controller.actions.craft_item.get_map_api')
@@ -136,8 +136,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting action failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting action failed', result.error)
 
     @patch('src.controller.actions.craft_item.get_item_api')
     @patch('src.controller.actions.craft_item.get_map_api')
@@ -160,8 +160,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn(f'Could not get details for item {self.item_code}', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn(f'Could not get details for item {self.item_code}', result.error)
 
     @patch('src.controller.actions.craft_item.get_item_api')
     @patch('src.controller.actions.craft_item.get_map_api')
@@ -186,8 +186,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn(f'Could not get details for item {self.item_code}', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn(f'Could not get details for item {self.item_code}', result.error)
 
     @patch('src.controller.actions.craft_item.crafting_api')
     @patch('src.controller.actions.craft_item.get_item_api')
@@ -201,8 +201,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting action failed - no response data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting action failed - no response data', result.error)
 
     @patch('src.controller.actions.craft_item.crafting_api')
     @patch('src.controller.actions.craft_item.get_item_api')
@@ -218,8 +218,8 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting action failed - no response data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting action failed - no response data', result.error)
 
     @patch('src.controller.actions.craft_item.crafting_api')
     @patch('src.controller.actions.craft_item.get_item_api')
@@ -240,12 +240,12 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['item_code'], self.item_code)
-        self.assertEqual(result['quantity_crafted'], self.quantity)
-        self.assertEqual(result['workshop_code'], 'weaponcrafting')
-        self.assertEqual(result['target_x'], 5)
-        self.assertEqual(result['target_y'], 3)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['item_code'], self.item_code)
+        self.assertEqual(result.data['quantity_crafted'], self.quantity)
+        self.assertEqual(result.data['workshop_code'], 'weaponcrafting')
+        self.assertEqual(result.data['target_x'], 5)
+        self.assertEqual(result.data['target_y'], 3)
 
     @patch('src.controller.actions.craft_item.crafting_api')
     @patch('src.controller.actions.craft_item.get_item_api')
@@ -288,17 +288,17 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['cooldown'], 30)
-        self.assertEqual(result['xp_gained'], 25)
-        self.assertEqual(result['skill'], 'weaponcrafting')
-        self.assertEqual(result['character_level'], 15)
-        self.assertEqual(result['character_hp'], 80)
-        self.assertEqual(result['character_max_hp'], 100)
-        self.assertEqual(len(result['items_produced']), 1)
-        self.assertEqual(result['items_produced'][0]['code'], 'copper_sword')
-        self.assertEqual(len(result['materials_consumed']), 1)
-        self.assertEqual(result['materials_consumed'][0]['code'], 'copper')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['cooldown'], 30)
+        self.assertEqual(result.data['xp_gained'], 25)
+        self.assertEqual(result.data['skill'], 'weaponcrafting')
+        self.assertEqual(result.data['character_level'], 15)
+        self.assertEqual(result.data['character_hp'], 80)
+        self.assertEqual(result.data['character_max_hp'], 100)
+        self.assertEqual(len(result.data['items_produced']), 1)
+        self.assertEqual(result.data['items_produced'][0]['code'], 'copper_sword')
+        self.assertEqual(len(result.data['materials_consumed']), 1)
+        self.assertEqual(result.data['materials_consumed'][0]['code'], 'copper')
 
     @patch('src.controller.actions.craft_item.get_map_api')
     def test_execute_exception_handling(self, mock_get_map_api):
@@ -307,15 +307,14 @@ class TestCraftItemAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, quantity=self.quantity)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting action failed: Network error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting action failed: Network error', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that CraftItemAction has expected GOAP attributes."""
         self.assertTrue(hasattr(CraftItemAction, 'conditions'))
         self.assertTrue(hasattr(CraftItemAction, 'reactions'))
-        self.assertTrue(hasattr(CraftItemAction, 'weights'))
-        self.assertTrue(hasattr(CraftItemAction, 'g'))
+        self.assertTrue(hasattr(CraftItemAction, 'weight'))
 
     def _setup_successful_mocks(self, mock_get_map_api, mock_get_item_api):
         """Helper method to setup successful mock responses."""

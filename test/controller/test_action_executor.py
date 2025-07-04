@@ -6,7 +6,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 import yaml
-from src.controller.action_executor import ActionExecutor, ActionResult
+from src.controller.action_executor import ActionExecutor
+from src.controller.actions.base import ActionResult
 
 from test.fixtures import create_mock_client
 
@@ -72,21 +73,21 @@ class TestActionExecutor(unittest.TestCase):
         
         # Mock the factory execution
         with patch.object(self.executor.factory, 'execute_action') as mock_execute:
-            mock_execute.return_value = (True, {'success': True})
+            mock_execute.return_value = ActionResult(success=True, data={'success': True}, action_name='move')
             
             result = self.executor.execute_action('move', action_data, self.mock_client, context)
             
             self.assertIsInstance(result, ActionResult)
             self.assertTrue(result.success)
             self.assertEqual(result.action_name, 'move')
-            self.assertIsNotNone(result.response)
+            self.assertIsNotNone(result.data)
     
     def test_execute_action_failure(self) -> None:
         """Test handling of action execution failure."""
         action_data = {}
         
         with patch.object(self.executor.factory, 'execute_action') as mock_execute:
-            mock_execute.return_value = (False, None)
+            mock_execute.return_value = ActionResult(success=False, error='Action failed', action_name='unknown')
             
             result = self.executor.execute_action('unknown', action_data, self.mock_client)
             
@@ -109,8 +110,8 @@ class TestActionExecutor(unittest.TestCase):
         with patch.object(self.executor, 'execute_action') as mock_execute:
             # First call is the composite action itself (recursive), then the steps
             mock_execute.side_effect = [
-                ActionResult(success=True, response={'step': 'move'}, action_name='move'),
-                ActionResult(success=True, response={'step': 'attack'}, action_name='attack')
+                ActionResult(success=True, data={'step': 'move'}, action_name='move'),
+                ActionResult(success=True, data={'step': 'attack'}, action_name='attack')
             ]
             
             result = self.executor._execute_composite_action('test_composite', action_data, self.mock_client, context)
@@ -118,7 +119,7 @@ class TestActionExecutor(unittest.TestCase):
             self.assertIsInstance(result, ActionResult)
             self.assertTrue(result.success)
             self.assertEqual(result.action_name, 'test_composite')
-            self.assertIn('composite', result.response)
+            self.assertIn('composite', result.data)
     
     def test_resolve_parameter_templates(self) -> None:
         """Test parameter template resolution."""
@@ -182,7 +183,7 @@ class TestActionExecutor(unittest.TestCase):
         
         # Mock attack execution
         with patch.object(self.executor, 'execute_action') as mock_execute:
-            mock_execute.return_value = ActionResult(success=True, response={'attack': 'success'}, action_name='attack')
+            mock_execute.return_value = ActionResult(success=True, data={'attack': 'success'}, action_name='attack')
             
             result = self.executor._execute_hunt_action(action_data, self.mock_client, context)
             
@@ -203,7 +204,7 @@ class TestActionExecutor(unittest.TestCase):
         
         self.assertFalse(result.success)
         self.assertEqual(result.action_name, 'hunt')
-        self.assertIn('No monsters found', result.error_message)
+        self.assertIn('No monsters found', result.error)
     
     def test_handle_learning_callbacks(self) -> None:
         """Test learning callback handling."""
@@ -258,7 +259,7 @@ class TestActionExecutor(unittest.TestCase):
         mock_controller.update_world_state = Mock()
         mock_controller.action_context = {}  # Initialize as empty dict
         
-        action_result = {'success': True}
+        action_result = ActionResult(success=True, data={'move': 'completed'}, action_name='move')
         context = {}
         
         # Test the new unified post-execution handler

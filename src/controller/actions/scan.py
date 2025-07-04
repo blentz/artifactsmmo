@@ -12,7 +12,7 @@ from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_ma
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class ScanAction(ActionBase):
@@ -41,25 +41,19 @@ class ScanAction(ActionBase):
         """Initialize the scan action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """Scan surrounding area for points of interest."""
-        # Call superclass to set self._context
-        super().execute(client, context)
+        self._context = context
         
         # Get parameters from context
         character_name = context.character_name
         search_radius = context.get('search_radius', 3)
         
-        self.log_execution_start(
-            character_name=character_name,
-            search_radius=search_radius
-        )
-        
         try:
             # Get current character position
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             char_x = getattr(character_data, 'x', 0)
@@ -72,20 +66,16 @@ class ScanAction(ActionBase):
             location_updates = self._process_discoveries(discoveries, char_x, char_y)
             
             # Create result with consolidated state updates
-            result = self.get_success_response(
+            return self.create_success_result(
+                message=f"Scanned {len(discoveries)} locations",
                 location_context=location_updates.get('location_context', {}),
                 discoveries=discoveries,
                 scan_center=(char_x, char_y),
                 search_radius=search_radius
             )
             
-            self.log_execution_result(result)
-            return result
-            
         except Exception as e:
-            error_response = self.get_error_response(f"Scan failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Scan failed: {str(e)}")
 
     def _scan_surrounding_area(self, center_x: int, center_y: int, radius: int,
                               client, context: 'ActionContext') -> List[Dict]:

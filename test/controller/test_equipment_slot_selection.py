@@ -72,7 +72,7 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             mock_yaml.return_value.data = self._get_test_config()
             
             result1 = self.analyze_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result1['success'])
+            self.assertTrue(result1.success)
             
             # Verify gap analysis is available
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
@@ -82,7 +82,7 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             
             # Step 2: Select optimal slot
             result2 = self.select_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result2['success'])
+            self.assertTrue(result2.success)
             
             # Should select a weaponcrafting slot (weapon or shield)
             selected_slot = self.action_context.get_parameter('target_equipment_slot')
@@ -105,9 +105,9 @@ class TestEquipmentSlotSelection(unittest.TestCase):
                 mock_get_items.return_value = mock_response
                 
                 result3 = self.evaluate_action.execute(self.mock_client, self.action_context)
-                if not result3['success']:
-                    print(f"Recipe evaluation failed: {result3.get('error', 'Unknown error')}")
-                self.assertTrue(result3['success'])
+                if not result3.success:
+                    print(f"Recipe evaluation failed: {result3.error or 'Unknown error'}")
+                self.assertTrue(result3.success)
                 
                 # Verify recipe selection - should select appropriate item for the chosen slot
                 selected_item = self.action_context.get_parameter('selected_item_code')
@@ -130,11 +130,11 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             mock_yaml.return_value.data = self._get_test_config()
             
             result1 = self.analyze_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result1['success'])
+            self.assertTrue(result1.success)
             
             # Step 2: Select optimal slot
             result2 = self.select_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result2['success'])
+            self.assertTrue(result2.success)
             
             # Should select helmet (missing equipment = 100 urgency)
             selected_slot = self.action_context.get_parameter('target_equipment_slot')
@@ -159,7 +159,7 @@ class TestEquipmentSlotSelection(unittest.TestCase):
                 mock_get_items.return_value = mock_response
                 
                 result3 = self.evaluate_action.execute(self.mock_client, self.action_context)
-                self.assertTrue(result3['success'])
+                self.assertTrue(result3.success)
                 
                 # Verify recipe selection matches the selected slot
                 selected_item = self.action_context.get_parameter('selected_item_code')
@@ -178,7 +178,7 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             
             # Analyze equipment
             result1 = self.analyze_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result1['success'])
+            self.assertTrue(result1.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             
@@ -201,7 +201,7 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             self.analyze_action.execute(self.mock_client, self.action_context)
             result = self.select_action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # Should only select from jewelry slots
             selected_slot = self.action_context.get_parameter('target_equipment_slot')
@@ -214,7 +214,7 @@ class TestEquipmentSlotSelection(unittest.TestCase):
             mock_yaml.return_value.data = self._get_test_config()
             
             result = self.analyze_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             
@@ -232,8 +232,8 @@ class TestEquipmentSlotSelection(unittest.TestCase):
         """Test error handling when action dependencies are missing"""
         # Try to select slot without gap analysis (now checked first)
         result = self.select_action.execute(self.mock_client, self.action_context)
-        self.assertFalse(result['success'])
-        self.assertIn('Equipment gap analysis not available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Equipment gap analysis not available', result.error)
         
         # Try to select slot with gap analysis but no target skill (should work with fallback)
         self.action_context.set_parameter('equipment_gap_analysis', {'weapon': {'urgency_score': 50, 'missing': False}})
@@ -244,22 +244,22 @@ class TestEquipmentSlotSelection(unittest.TestCase):
                 'skill_slot_mappings': {'weaponcrafting': ['weapon']}
             }
             result = self.select_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result['success'])  # Should succeed with fallback skill
+            self.assertTrue(result.success)  # Should succeed with fallback skill
         
         # Try to evaluate recipes without target slot (clear the slot set by previous action)
         self.action_context.set_parameter('target_equipment_slot', None)
         if 'target_equipment_slot' in self.action_context.action_results:
             del self.action_context.action_results['target_equipment_slot']
         result = self.evaluate_action.execute(self.mock_client, self.action_context)
-        self.assertFalse(result['success'])
-        self.assertIn('No target equipment slot specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No target equipment slot specified', result.error)
         
     def test_config_fallback_handling(self):
         """Test that actions handle config loading failures gracefully"""
         with patch('src.lib.yaml_data.YamlData', side_effect=Exception("Config load failed")):
             # Should use fallback configuration
             result = self.analyze_action.execute(self.mock_client, self.action_context)
-            self.assertTrue(result['success'])  # Should still work with fallbacks
+            self.assertTrue(result.success)  # Should still work with fallbacks
             
     def _get_test_config(self):
         """Get test configuration data"""

@@ -54,9 +54,9 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -66,8 +66,8 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_item_api')
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
@@ -108,10 +108,10 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['crafting_requirements_known'])
-        self.assertIn('craftable_items', result)
-        self.assertIn('total_materials_needed', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['crafting_requirements_known'])
+        self.assertIn('craftable_items', result.data)
+        self.assertIn('total_materials_needed', result.data)
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_execute_with_knowledge_base(self, mock_get_character):
@@ -144,9 +144,9 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['crafting_requirements_known'])
-        self.assertIn('copper_dagger', result['craftable_items'])
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['crafting_requirements_known'])
+        self.assertIn('copper_dagger', result.data['craftable_items'])
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_execute_auto_target_determination(self, mock_get_character):
@@ -175,8 +175,8 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertGreater(len(result['target_items']), 0)  # Should determine some items
+        self.assertTrue(result.success)
+        self.assertGreater(len(result.data['target_items']), 0)  # Should determine some items
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_execute_exception_handling(self, mock_get_character):
@@ -191,14 +191,14 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
             knowledge_base=MockKnowledgeBase()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Crafting requirements analysis failed: API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Crafting requirements analysis failed: API Error', result.error)
 
     def test_goap_attributes(self):
         """Test that AnalyzeCraftingRequirementsAction has expected GOAP attributes."""
         self.assertTrue(hasattr(AnalyzeCraftingRequirementsAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeCraftingRequirementsAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeCraftingRequirementsAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeCraftingRequirementsAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -218,8 +218,7 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        self.assertIsInstance(AnalyzeCraftingRequirementsAction.weights, dict)
-        self.assertIn('crafting_requirements_known', AnalyzeCraftingRequirementsAction.weights)
+        self.assertIsInstance(AnalyzeCraftingRequirementsAction.weight, (int, float))
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_material_sufficiency_analysis(self, mock_get_character):
@@ -256,9 +255,9 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('copper_dagger', result['ready_to_craft'])
-        self.assertGreaterEqual(result['total_sufficiency_score'], 0.5)
+        self.assertTrue(result.success)
+        self.assertIn('copper_dagger', result.data['ready_to_craft'])
+        self.assertGreaterEqual(result.data['total_sufficiency_score'], 0.5)
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_skill_requirements_analysis(self, mock_get_character):
@@ -292,9 +291,9 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertFalse(result['skills_sufficient'])
-        self.assertIn('weaponcrafting', result['skill_gaps'])
+        self.assertTrue(result.success)
+        self.assertFalse(result.data['skills_sufficient'])
+        self.assertIn('weaponcrafting', result.data['skill_gaps'])
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_gathering_strategy_generation(self, mock_get_character):
@@ -328,10 +327,10 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('gathering_priorities', result)
-        self.assertIn('resource_sources', result)
-        self.assertIn(result['primary_strategy'], ['material_gathering_focus', 'skill_development_first'])
+        self.assertTrue(result.success)
+        self.assertIn('gathering_priorities', result.data)
+        self.assertIn('resource_sources', result.data)
+        self.assertIn(result.data['primary_strategy'], ['material_gathering_focus', 'skill_development_first'])
 
     @patch('src.controller.actions.analyze_crafting_requirements.get_character_api')
     def test_consumables_crafting_goal(self, mock_get_character):
@@ -349,8 +348,8 @@ class TestAnalyzeCraftingRequirementsAction(unittest.TestCase):
         )
         result = action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['crafting_goal'], 'consumables')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['crafting_goal'], 'consumables')
 
 
 if __name__ == '__main__':

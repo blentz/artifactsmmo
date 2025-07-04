@@ -23,7 +23,7 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
                 'at_target': True,
             },
         }
-    weights = {'move': 1.0}
+    weight = 1.0
 
     def __init__(self):
         """

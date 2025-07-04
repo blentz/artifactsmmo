@@ -90,16 +90,15 @@ class TestLookupItemInfoAction(BaseTest):
         context = MockActionContext(character_name="test_char", item_code=self.item_code)
         result = self.action_with_code.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that LookupItemInfoAction has expected GOAP attributes."""
         self.assertTrue(hasattr(LookupItemInfoAction, 'conditions'))
         self.assertTrue(hasattr(LookupItemInfoAction, 'reactions'))
-        self.assertTrue(hasattr(LookupItemInfoAction, 'weights'))
-        self.assertTrue(hasattr(LookupItemInfoAction, 'g'))
+        self.assertTrue(hasattr(LookupItemInfoAction, 'weight'))
 
     @patch('src.controller.actions.lookup_item_info.LookupItemInfoAction._lookup_specific_item')
     def test_execute_with_item_code(self, mock_lookup_specific):
@@ -142,8 +141,8 @@ class TestLookupItemInfoAction(BaseTest):
         
         try:
             result = self.action_with_code.execute(self.mock_client, context)
-            self.assertFalse(result['success'])
-            self.assertIn('Item lookup failed: Network error', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Item lookup failed: Network error', result.error)
         finally:
             # Re-enable logging
             logging.disable(original_level)

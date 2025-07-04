@@ -49,9 +49,9 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         )
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -64,8 +64,8 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
             current_level=0
         )
         result = self.action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_already_at_target_level(self, mock_get_character_api):
@@ -84,9 +84,9 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result.get('skill_level_achieved'))
-        self.assertEqual(result.get('current_weaponcrafting_level'), 5)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data.get('skill_level_achieved'))
+        self.assertEqual(result.data.get('current_weaponcrafting_level'), 5)
 
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.craft_api')
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
@@ -126,9 +126,9 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result.get('item_crafted'), 'wooden_stick')
-        self.assertTrue(result.get('skill_xp_gained'))
+        self.assertTrue(result.success)
+        self.assertEqual(result.data.get('item_crafted'), 'wooden_stick')
+        self.assertTrue(result.data.get('skill_xp_gained'))
 
     @patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api')
     def test_execute_no_suitable_items(self, mock_get_character_api):
@@ -149,8 +149,8 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         )
         result = self.action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No suitable items to craft', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No suitable items to craft', result.error)
 
     def test_execute_exception_handling(self):
         """Test exception handling during execution."""
@@ -162,14 +162,14 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
         
         with patch('src.controller.actions.upgrade_weaponcrafting_skill.get_character_api', side_effect=Exception("API Error")):
             result = self.action.execute(self.client, context)
-            self.assertFalse(result['success'])
-            self.assertIn('Weaponcrafting skill upgrade failed: API Error', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Weaponcrafting skill upgrade failed: API Error', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that UpgradeWeaponcraftingSkillAction has expected GOAP attributes."""
         self.assertTrue(hasattr(UpgradeWeaponcraftingSkillAction, 'conditions'))
         self.assertTrue(hasattr(UpgradeWeaponcraftingSkillAction, 'reactions'))
-        self.assertTrue(hasattr(UpgradeWeaponcraftingSkillAction, 'weights'))
+        self.assertTrue(hasattr(UpgradeWeaponcraftingSkillAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -202,8 +202,8 @@ class TestUpgradeWeaponcraftingSkillAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"skill_status.weaponcrafting_level_sufficient": 30}
-        self.assertEqual(UpgradeWeaponcraftingSkillAction.weights, expected_weights)
+        expected_weight = 30
+        self.assertEqual(UpgradeWeaponcraftingSkillAction.weight, expected_weight)
 
 
 if __name__ == '__main__':

@@ -4,7 +4,8 @@ import os
 import tempfile
 import unittest
 
-from src.controller.action_executor import ActionExecutor, ActionResult, CompositeActionStep
+from src.controller.action_executor import ActionExecutor, CompositeActionStep
+from src.controller.actions.base import ActionResult
 from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
 from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
@@ -43,13 +44,13 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         # Test GOAP attributes
         self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'conditions'))
         self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'reactions'))
-        self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'weights'))
+        self.assertTrue(hasattr(TransformMaterialsCoordinatorAction, 'weight'))
         
         # Test no client
         context = MockActionContext(character_name="player", target_item="sword")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
+        self.assertFalse(result.success)
 
     def test_analyze_crafting_chain_basic(self):
         """Test AnalyzeCraftingChainAction basic functionality."""
@@ -77,13 +78,13 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         # Test GOAP attributes
         self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'weight'))
         
         # Test no client
         context = MockActionContext(character_name="player", target_item="sword")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
+        self.assertFalse(result.success)
 
     def test_analyze_resources_basic(self):
         """Test AnalyzeResourcesAction basic functionality."""
@@ -100,13 +101,13 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         # Test GOAP attributes
         self.assertTrue(hasattr(AnalyzeResourcesAction, 'conditions'))
         self.assertTrue(hasattr(AnalyzeResourcesAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeResourcesAction, 'weights'))
+        self.assertTrue(hasattr(AnalyzeResourcesAction, 'weight'))
         
         # Test no client
         context = MockActionContext(character_x=10, character_y=15, character_level=5)
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
+        self.assertFalse(result.success)
 
     def test_evaluate_weapon_recipes_basic(self):
         """Test EvaluateWeaponRecipesAction basic functionality."""
@@ -118,13 +119,13 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         # Test GOAP attributes
         self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'conditions'))
         self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'reactions'))
-        self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'weights'))
+        self.assertTrue(hasattr(EvaluateWeaponRecipesAction, 'weight'))
         
         # Test no client
         context = MockActionContext(character_name="player", current_weapon="iron_sword")
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
+        self.assertFalse(result.success)
 
     def test_find_xp_sources_basic(self):
         """Test FindXpSourcesAction basic functionality."""
@@ -140,32 +141,28 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         # Test GOAP attributes
         self.assertTrue(hasattr(FindXpSourcesAction, 'conditions'))
         self.assertTrue(hasattr(FindXpSourcesAction, 'reactions'))
-        self.assertTrue(hasattr(FindXpSourcesAction, 'weights'))
+        self.assertTrue(hasattr(FindXpSourcesAction, 'weight'))
         
         # Test no client
         context = MockActionContext(skill="weaponcrafting", character_level=5)
         result = action.execute(None, context)
-        self.assertFalse(result['success'])
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
+        self.assertFalse(result.success)
 
     def test_action_executor_dataclasses(self):
         """Test ActionExecutor dataclasses."""
         # Test ActionResult
         result = ActionResult(
             success=True,
-            response={'status': 'ok'},
-            action_name='test_action',
-            execution_time=1.5,
-            error_message=None,
-            metadata={'key': 'value'}
+            message='Test action completed',
+            data={'status': 'ok'},
+            action_name='test_action'
         )
         
         self.assertTrue(result.success)
-        self.assertEqual(result.response['status'], 'ok')
+        self.assertEqual(result.data['status'], 'ok')
         self.assertEqual(result.action_name, 'test_action')
-        self.assertEqual(result.execution_time, 1.5)
-        self.assertIsNone(result.error_message)
-        self.assertEqual(result.metadata['key'], 'value')
+        self.assertIsNone(result.error)
         
         # Test CompositeActionStep
         step = CompositeActionStep(
@@ -283,12 +280,12 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
                 # Test no client error
                 context = MockActionContext(character_name="player", skill="skill")
                 result = action.execute(None, context)
-                self.assertFalse(result['success'])
-                self.assertFalse(result.get('success', True))
+                self.assertFalse(result.success)
+                self.assertFalse(result.success)
                 
                 # Test result structure
-                self.assertIn('success', result)
-                self.assertIn('error', result)
+                self.assertTrue(hasattr(result, 'success'))
+                self.assertTrue(hasattr(result, 'error'))
 
     def test_goap_attribute_consistency(self):
         """Test GOAP attribute consistency across actions."""
@@ -305,13 +302,12 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
                 # Test required GOAP attributes exist
                 self.assertTrue(hasattr(action_class, 'conditions'))
                 self.assertTrue(hasattr(action_class, 'reactions'))
-                self.assertTrue(hasattr(action_class, 'weights'))
-                self.assertTrue(hasattr(action_class, 'g'))
+                self.assertTrue(hasattr(action_class, 'weight'))
                 
                 # Test attributes are proper types
                 self.assertIsInstance(action_class.conditions, dict)
                 self.assertIsInstance(action_class.reactions, dict)
-                self.assertIsInstance(action_class.weights, dict)
+                self.assertIsInstance(action_class.weight, (int, float))
 
     def test_action_initialization_patterns(self):
         """Test action initialization patterns."""

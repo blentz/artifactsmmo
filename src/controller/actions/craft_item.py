@@ -11,7 +11,7 @@ from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .coordinate_mixin import CoordinateStandardizationMixin
 
 
@@ -50,7 +50,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Craft the specified item """
             
         # Get parameters from context
@@ -58,7 +58,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
         item_code = context.get('item_code')
         quantity = context.get('quantity', 1)
         
-        self.log_execution_start(character_name=character_name, item_code=item_code, quantity=quantity)
+        self._context = context
         
         try:
             # Get current character position from context
@@ -70,9 +70,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                 character_response = get_character_api(name=character_name, client=client)
                 
                 if not character_response or not character_response.data:
-                    error_response = self.get_error_response('No character data available')
-                    self.log_execution_result(error_response)
-                    return error_response
+                    return self.create_error_result('No character data available')
                     
                 character_x = character_response.data.x
                 character_y = character_response.data.y
@@ -81,12 +79,11 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             # Note: Workshop presence and compatibility are now validated by ActionValidator
             map_response = get_map_api(x=character_x, y=character_y, client=client)
             if not map_response or not map_response.data:
-                error_data = self.create_coordinate_response(
-                    character_x, character_y,
-                    success=False,
-                    error='Could not get map information'
+                error_data = self.standardize_coordinate_output(character_x, character_y)
+                return self.create_error_result(
+                    'Could not get map information',
+                    **error_data
                 )
-                return error_data
                 
             map_data = map_response.data
             workshop_code = getattr(map_data.content, 'code', 'unknown') if hasattr(map_data, 'content') else 'unknown'
@@ -94,12 +91,11 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             # Get item details for response enrichment
             item_details = get_item_api(code=item_code, client=client)
             if not item_details or not item_details.data:
-                error_data = self.create_coordinate_response(
-                    character_x, character_y,
-                    success=False,
-                    error=f'Could not get details for item {item_code}'
+                error_data = self.standardize_coordinate_output(character_x, character_y)
+                return self.create_error_result(
+                    f'Could not get details for item {item_code}',
+                    **error_data
                 )
-                return error_data
             
             item_data = item_details.data
             
@@ -130,25 +126,27 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                     # If this is the last attempt or not a timeout error, don't retry
                     if attempt == max_retries - 1 or not is_timeout:
                         if "598" in error_msg:
-                            error_data = self.create_coordinate_response(
-                                character_x, character_y,
-                                success=False,
-                                error=f'Workshop not found on map - API returned HTTP 598. Found {workshop_code} workshop',
-                                workshop_code=workshop_code,
-                                api_error=error_msg,
-                                item_code=item_code,
-                                attempts=attempt + 1
+                            error_data = self.standardize_coordinate_output(character_x, character_y)
+                            error_data.update({
+                                'workshop_code': workshop_code,
+                                'api_error': error_msg,
+                                'item_code': item_code,
+                                'attempts': attempt + 1
+                            })
+                            return self.create_error_result(
+                                f'Workshop not found on map - API returned HTTP 598. Found {workshop_code} workshop',
+                                **error_data
                             )
-                            return error_data
                         else:
-                            error_data = self.create_coordinate_response(
-                                character_x, character_y,
-                                success=False,
-                                error=f'Crafting API call failed after {attempt + 1} attempts: {error_msg}',
-                                api_error=error_msg,
-                                attempts=attempt + 1
+                            error_data = self.standardize_coordinate_output(character_x, character_y)
+                            error_data.update({
+                                'api_error': error_msg,
+                                'attempts': attempt + 1
+                            })
+                            return self.create_error_result(
+                                f'Crafting API call failed after {attempt + 1} attempts: {error_msg}',
+                                **error_data
                             )
-                            return error_data
                     
                     # Calculate exponential backoff delay
                     delay = base_delay * (2 ** attempt)
@@ -158,60 +156,60 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             if crafting_response and crafting_response.data:
                 # Extract useful information from the response
                 skill_data = crafting_response.data
-                result = self.create_coordinate_response(
-                    character_x, character_y,
-                    success=True,
-                    item_code=item_code,
-                    item_name=item_details.data.name,
-                    quantity_crafted=quantity,
-                    workshop_code=workshop_code,
-                    cooldown=getattr(skill_data.cooldown, 'total_seconds', 0) if hasattr(skill_data, 'cooldown') else 0,
-                    xp_gained=getattr(skill_data, 'xp', 0),
-                    skill=getattr(skill_data, 'skill', 'unknown')
-                )
+                success_data = self.standardize_coordinate_output(character_x, character_y)
+                success_data.update({
+                    'item_code': item_code,
+                    'item_name': item_details.data.name,
+                    'quantity_crafted': quantity,
+                    'workshop_code': workshop_code,
+                    'cooldown': getattr(skill_data.cooldown, 'total_seconds', 0) if hasattr(skill_data, 'cooldown') else 0,
+                    'xp_gained': getattr(skill_data, 'xp', 0),
+                    'skill': getattr(skill_data, 'skill', 'unknown')
+                })
                 
                 # Add character data if available
                 if hasattr(skill_data, 'character'):
                     char_data = skill_data.character
-                    result['character_level'] = getattr(char_data, 'level', 0)
-                    result['character_hp'] = getattr(char_data, 'hp', 0)
-                    result['character_max_hp'] = getattr(char_data, 'max_hp', 0)
+                    success_data['character_level'] = getattr(char_data, 'level', 0)
+                    success_data['character_hp'] = getattr(char_data, 'hp', 0)
+                    success_data['character_max_hp'] = getattr(char_data, 'max_hp', 0)
                 
                 # Add items produced if available
                 if hasattr(skill_data, 'details') and hasattr(skill_data.details, 'items'):
-                    result['items_produced'] = []
+                    success_data['items_produced'] = []
                     for item in skill_data.details.items:
-                        result['items_produced'].append({
+                        success_data['items_produced'].append({
                             'code': getattr(item, 'code', ''),
                             'quantity': getattr(item, 'quantity', 0)
                         })
                 
                 # Add materials consumed if available
                 if hasattr(skill_data, 'details') and hasattr(skill_data.details, 'consumed'):
-                    result['materials_consumed'] = []
+                    success_data['materials_consumed'] = []
                     for item in skill_data.details.consumed:
-                        result['materials_consumed'].append({
+                        success_data['materials_consumed'].append({
                             'code': getattr(item, 'code', ''),
                             'quantity': getattr(item, 'quantity', 0)
                         })
                 
-                return result
-            else:
-                error_data = self.create_coordinate_response(
-                    character_x, character_y,
-                    success=False,
-                    error='Crafting action failed - no response data'
+                return self.create_success_result(
+                    f'Successfully crafted {quantity} {item_details.data.name}',
+                    **success_data
                 )
-                return error_data
+            else:
+                error_data = self.standardize_coordinate_output(character_x, character_y)
+                return self.create_error_result(
+                    'Crafting action failed - no response data',
+                    **error_data
+                )
                 
         except Exception as e:
             # Use default coordinates if we don't have character position
-            error_data = self.create_coordinate_response(
-                0, 0,  # Default coordinates for exception case
-                success=False,
-                error=f'Crafting action failed: {str(e)}'
+            error_data = self.standardize_coordinate_output(0, 0)
+            return self.create_error_result(
+                f'Crafting action failed: {str(e)}',
+                **error_data
             )
-            return error_data
 
     def __repr__(self):
         return "CraftItemAction()"

@@ -59,9 +59,9 @@ class TestGatherResourcesAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     def test_execute_no_character_cache(self):
         """Test gathering fails without character data."""
@@ -71,8 +71,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         # Test without position in context
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=None, character_y=None)
         result = self.action.execute(mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No character data or position available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No character data or position available', result.error)
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_map_api_fails(self, mock_get_map_api):
@@ -81,9 +81,9 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get map information', result['error'])
-        self.assertEqual(result['location'], (5, 3))
+        self.assertFalse(result.success)
+        self.assertIn('Could not get map information', result.error)
+        self.assertEqual(result.data['location'], (5, 3))
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_map_api_no_data(self, mock_get_map_api):
@@ -94,8 +94,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get map information', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get map information', result.error)
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_no_resource_at_location(self, mock_get_map_api):
@@ -110,8 +110,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Gathering action failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Gathering action failed', result.error)
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_wrong_content_type(self, mock_get_map_api):
@@ -129,8 +129,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Gathering action failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Gathering action failed', result.error)
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_wrong_target_resource(self, mock_get_map_api):
@@ -149,8 +149,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Gathering action failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Gathering action failed', result.error)
         # The available_resource field is no longer present in error responses
 
     @patch('src.controller.actions.gather_resources.get_resource_api')
@@ -174,8 +174,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get details for resource copper', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get details for resource copper', result.error)
 
     @patch('src.controller.actions.gather_resources.get_resource_api')
     @patch('src.controller.actions.gather_resources.get_map_api')
@@ -200,8 +200,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get details for resource copper', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get details for resource copper', result.error)
 
     @patch('src.controller.actions.gather_resources.gathering_api')
     @patch('src.controller.actions.gather_resources.get_resource_api')
@@ -215,8 +215,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Gathering action failed - no response data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Gathering action failed - no response data', result.error)
 
     @patch('src.controller.actions.gather_resources.gathering_api')
     @patch('src.controller.actions.gather_resources.get_resource_api')
@@ -232,8 +232,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Gathering action failed - no response data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Gathering action failed - no response data', result.error)
 
     @patch('src.controller.actions.gather_resources.gathering_api')
     @patch('src.controller.actions.gather_resources.get_resource_api')
@@ -253,9 +253,9 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['resource_code'], 'copper')
-        self.assertEqual(result['location'], (5, 3))
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['resource_code'], 'copper')
+        self.assertEqual(result.data['location'], (5, 3))
 
     @patch('src.controller.actions.gather_resources.gathering_api')
     @patch('src.controller.actions.gather_resources.get_resource_api')
@@ -293,16 +293,16 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['cooldown'], 15)
-        self.assertEqual(result['xp_gained'], 15)
-        self.assertEqual(result['skill'], 'mining')
-        self.assertEqual(result['character_level'], 12)
-        self.assertEqual(result['character_hp'], 90)
-        self.assertEqual(result['character_max_hp'], 100)
-        self.assertEqual(len(result['items_obtained']), 1)
-        self.assertEqual(result['items_obtained'][0]['code'], 'copper')
-        self.assertEqual(result['items_obtained'][0]['quantity'], 1)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['cooldown'], 15)
+        self.assertEqual(result.data['xp_gained'], 15)
+        self.assertEqual(result.data['skill'], 'mining')
+        self.assertEqual(result.data['character_level'], 12)
+        self.assertEqual(result.data['character_hp'], 90)
+        self.assertEqual(result.data['character_max_hp'], 100)
+        self.assertEqual(len(result.data['items_obtained']), 1)
+        self.assertEqual(result.data['items_obtained'][0]['code'], 'copper')
+        self.assertEqual(result.data['items_obtained'][0]['quantity'], 1)
 
     @patch('src.controller.actions.gather_resources.get_map_api')
     def test_execute_exception_handling(self, mock_get_map_api):
@@ -311,8 +311,8 @@ class TestGatherResourcesAction(unittest.TestCase):
         
         context = MockActionContext(character_name=self.character_name, target_resource=self.target_resource, character_x=5, character_y=3)
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Gathering action failed: Network error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Gathering action failed: Network error', result.error)
 
     @patch('src.controller.actions.gather_resources.get_resource_api')
     @patch('src.controller.actions.gather_resources.get_map_api')
@@ -354,15 +354,14 @@ class TestGatherResourcesAction(unittest.TestCase):
             
             context = MockActionContext(character_name=self.character_name, character_x=5, character_y=3)
             result = action.execute(self.mock_client, context)
-            self.assertTrue(result['success'])
-            self.assertEqual(result['resource_code'], 'iron_ore')
+            self.assertTrue(result.success)
+            self.assertEqual(result.data['resource_code'], 'iron_ore')
 
     def test_execute_has_goap_attributes(self):
         """Test that GatherResourcesAction has expected GOAP attributes."""
         self.assertTrue(hasattr(GatherResourcesAction, 'conditions'))
         self.assertTrue(hasattr(GatherResourcesAction, 'reactions'))
-        self.assertTrue(hasattr(GatherResourcesAction, 'weights'))
-        self.assertTrue(hasattr(GatherResourcesAction, 'g'))
+        self.assertTrue(hasattr(GatherResourcesAction, 'weight'))
 
     def _setup_successful_mocks(self, mock_get_map_api, mock_get_resource_api):
         """Helper method to setup successful mock responses."""

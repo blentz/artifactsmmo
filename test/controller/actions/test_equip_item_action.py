@@ -38,9 +38,9 @@ class TestEquipItemAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     def test_execute_invalid_slot(self):
         """ Test execute with invalid slot name """
@@ -50,9 +50,9 @@ class TestEquipItemAction(unittest.TestCase):
         context = MockActionContext(character_name="char", item_code="item", slot="invalid_slot")
         result = action.execute(client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Invalid equipment slot', result['error'])
-        self.assertIn('invalid_slot', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Invalid equipment slot', result.error)
+        self.assertIn('invalid_slot', result.error)
 
     def test_execute_success(self):
         """ Test successful execution """
@@ -88,14 +88,14 @@ class TestEquipItemAction(unittest.TestCase):
             context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
             result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['item_code'], "iron_sword")
-        self.assertEqual(result['slot'], "weapon")
-        self.assertEqual(result['character_name'], "test_character")
-        self.assertTrue(result['equipped'])
-        self.assertEqual(result['character_level'], 5)
-        self.assertEqual(result['character_hp'], 80)
-        self.assertEqual(result['character_max_hp'], 100)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['item_code'], "iron_sword")
+        self.assertEqual(result.data['slot'], "weapon")
+        self.assertEqual(result.data['character_name'], "test_character")
+        self.assertTrue(result.data['equipped'])
+        self.assertEqual(result.data['character_level'], 5)
+        self.assertEqual(result.data['character_hp'], 80)
+        self.assertEqual(result.data['character_max_hp'], 100)
 
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """
@@ -107,8 +107,8 @@ class TestEquipItemAction(unittest.TestCase):
             context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
             result = self.action.execute(client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('no response data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('no response data', result.error)
 
     def test_execute_api_exception(self):
         """ Test execute when API throws exception """
@@ -118,8 +118,8 @@ class TestEquipItemAction(unittest.TestCase):
             context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
             result = self.action.execute(client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('API Error', result.error)
 
     def test_get_item_slot_enum_weapon(self):
         """ Test slot enum conversion for weapon """
@@ -238,10 +238,10 @@ class TestEquipItemAction(unittest.TestCase):
             context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
             result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['item_code'], "iron_sword")
-        self.assertEqual(result['slot'], "weapon")
-        self.assertEqual(result['cooldown'], 0)  # Default when no cooldown data
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['item_code'], "iron_sword")
+        self.assertEqual(result.data['slot'], "weapon")
+        self.assertEqual(result.data['cooldown'], 0)  # Default when no cooldown data
 
 
 if __name__ == '__main__':

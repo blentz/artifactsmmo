@@ -30,11 +30,11 @@ class TestResetCombatContextAction(unittest.TestCase):
         """Test successful execution of reset combat context."""
         result = self.action.execute(self.mock_client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['combat_context_reset'])
-        self.assertEqual(result['previous_status'], 'completed')
-        self.assertEqual(result['new_status'], 'idle')
-        self.assertIn("Combat context reset to idle state", result['message'])
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['combat_context_reset'])
+        self.assertEqual(result.data['previous_status'], 'completed')
+        self.assertEqual(result.data['new_status'], 'idle')
+        self.assertIn("Combat context reset to idle state", result.message)
         
     def test_execute_no_character_name(self):
         """Test execution when no character name is provided."""
@@ -42,20 +42,20 @@ class TestResetCombatContextAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("No character name provided", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("No character name provided", result.error)
         
     def test_execute_with_exception(self):
         """Test execution when an exception occurs."""
-        # Mock get_success_response to raise an exception after log_execution_start
-        with patch.object(self.action, 'get_success_response') as mock_response:
+        # Mock create_success_result to raise an exception
+        with patch.object(self.action, 'create_success_result') as mock_response:
             mock_response.side_effect = Exception("Test exception")
             
             result = self.action.execute(self.mock_client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Failed to reset combat context", result['error'])
-            self.assertIn("Test exception", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Failed to reset combat context", result.error)
+            self.assertIn("Test exception", result.error)
     
     def test_goap_parameters(self):
         """Test GOAP parameters are properly defined."""
@@ -73,7 +73,7 @@ class TestResetCombatContextAction(unittest.TestCase):
             },
         })
         
-        self.assertEqual(self.action.weights, {'combat_context.status': 1.0})
+        self.assertEqual(self.action.weight, 1.0)
     
     def test_repr(self):
         """Test string representation of the action."""

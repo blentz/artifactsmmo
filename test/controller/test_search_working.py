@@ -72,10 +72,10 @@ class TestSearchWorking(unittest.TestCase):
         result = action.execute(self.mock_client, context)
         
         # Verify successful result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['resource_code'], 'copper_rocks')
-        self.assertEqual(result['target_x'], 6)
-        self.assertEqual(result['target_y'], 3)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['resource_code'], 'copper_rocks')
+        self.assertEqual(result.data['target_x'], 6)
+        self.assertEqual(result.data['target_y'], 3)
         
         # Verify cache was used, not API calls
         map_state.scan.assert_not_called()
@@ -138,7 +138,7 @@ class TestSearchWorking(unittest.TestCase):
         self.assertEqual(total_boundaries, 0)
         
         # Record boundary hits in all directions
-        search_action = SearchActionBase()
+        search_action = FindResourcesAction()
         character_x, character_y = 5, 5
         search_action._record_boundary_hit(character_x, character_y, 3, 5)  # West boundary (x < character_x, y == character_y)
         search_action._record_boundary_hit(character_x, character_y, 7, 5)  # East boundary (x > character_x, y == character_y)

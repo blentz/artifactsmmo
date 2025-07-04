@@ -28,8 +28,8 @@ class TestResetEquipmentUpgradeAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Equipment upgrade status reset, ready for new upgrade")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Equipment upgrade status reset, ready for new upgrade")
         
     def test_execute_with_previous_upgrade_context(self):
         """Test execution with previous upgrade context."""
@@ -45,9 +45,9 @@ class TestResetEquipmentUpgradeAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Equipment upgrade status reset, ready for new upgrade")
-        self.assertEqual(result['previous_item'], 'copper_sword')
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Equipment upgrade status reset, ready for new upgrade")
+        self.assertEqual(result.data['previous_item'], 'copper_sword')
         
     def test_repr(self):
         """Test string representation."""

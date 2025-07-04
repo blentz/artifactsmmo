@@ -54,11 +54,10 @@ class TestRestAction(unittest.TestCase):
         mock_rest_api.assert_called_once_with(name=self.char_name, client=mock_client)
         
         # Verify response format
-        self.assertTrue(result['success'])
-        self.assertEqual(result['action'], 'RestAction')
-        self.assertEqual(result['current_hp'], 80)
-        self.assertEqual(result['max_hp'], 100)
-        self.assertEqual(result['hp_percentage'], 80.0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['current_hp'], 80)
+        self.assertEqual(result.data['max_hp'], 100)
+        self.assertEqual(result.data['hp_percentage'], 80.0)
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_with_hp_recovery(self, mock_rest_api):
@@ -81,7 +80,7 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Verify HP recovery was calculated
-        self.assertEqual(result['hp_recovered'], 20)  # 80 - 60
+        self.assertEqual(result.data['hp_recovered'], 20)  # 80 - 60
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_low_hp(self, mock_rest_api):
@@ -104,7 +103,7 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Verify response shows low HP
-        self.assertEqual(result['hp_percentage'], 25.0)
+        self.assertEqual(result.data['hp_percentage'], 25.0)
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_no_response_data(self, mock_rest_api):
@@ -123,10 +122,10 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Should still return success with default values
-        self.assertTrue(result['success'])
-        self.assertEqual(result['current_hp'], 0)
-        self.assertEqual(result['max_hp'], 0)
-        self.assertEqual(result['hp_percentage'], 0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['current_hp'], 0)
+        self.assertEqual(result.data['max_hp'], 0)
+        self.assertEqual(result.data['hp_percentage'], 0)
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_no_character_data(self, mock_rest_api):
@@ -146,9 +145,9 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Should still return success with default values
-        self.assertTrue(result['success'])
-        self.assertEqual(result['current_hp'], 0)
-        self.assertEqual(result['max_hp'], 0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['current_hp'], 0)
+        self.assertEqual(result.data['max_hp'], 0)
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_zero_max_hp(self, mock_rest_api):
@@ -171,7 +170,7 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Should handle division by zero gracefully
-        self.assertEqual(result['hp_percentage'], 0)
+        self.assertEqual(result.data['hp_percentage'], 0)
 
     def test_rest_action_execute_no_client(self):
         """Test executing rest action without client."""
@@ -180,8 +179,8 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(None, context)
         
         # Should return error
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_api_error_cooldown(self, mock_rest_api):
@@ -198,9 +197,9 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Should return error with cooldown flag
-        self.assertFalse(result['success'])
-        self.assertIn('Character is in cooldown', result['error'])
-        self.assertTrue(result.get('is_cooldown', False))
+        self.assertFalse(result.success)
+        self.assertIn('Character is in cooldown', result.error)
+        self.assertTrue(result.data.get('is_cooldown', False))
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_api_error_not_found(self, mock_rest_api):
@@ -217,8 +216,8 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Should return appropriate error
-        self.assertFalse(result['success'])
-        self.assertIn('Character not found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Character not found', result.error)
 
     @patch('src.controller.actions.rest.rest_character_api')
     def test_rest_action_execute_api_error_generic(self, mock_rest_api):
@@ -235,8 +234,8 @@ class TestRestAction(unittest.TestCase):
         result = self.rest_action.execute(mock_client, context)
         
         # Should return error with original message
-        self.assertFalse(result['success'])
-        self.assertIn('Network error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Network error', result.error)
 
     def test_rest_action_validate_no_character_name(self):
         """Test validation fails when character name is empty."""
@@ -245,7 +244,7 @@ class TestRestAction(unittest.TestCase):
         context = MockActionContext(character_name="")
         mock_client = create_mock_client()
         result = action.execute(mock_client, context)
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
 
     def test_rest_action_class_attributes(self):
         """Test RestAction class has expected GOAP attributes."""

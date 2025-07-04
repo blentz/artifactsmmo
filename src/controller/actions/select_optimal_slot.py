@@ -9,7 +9,7 @@ This action selects the optimal equipment slot for crafting based on:
 
 from typing import Dict, List
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 from src.game.globals import CONFIG_PREFIX
 from src.lib.action_context import ActionContext
 from src.lib.yaml_data import YamlData
@@ -71,7 +71,7 @@ class SelectOptimalSlotAction(ActionBase):
         self.logger.error("Using empty fallback config - equipment_analysis.yaml should be configured")
         return config
         
-    def execute(self, client, context: ActionContext) -> Dict:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute slot selection based on equipment gaps and target skill.
         
@@ -82,7 +82,7 @@ class SelectOptimalSlotAction(ActionBase):
         Returns:
             Action result with selected slot information
         """
-        super().execute(client, context)
+        self._context = context
         
         # Get required data from context
         gap_analysis = context.get_parameter('equipment_gap_analysis')
@@ -102,7 +102,7 @@ class SelectOptimalSlotAction(ActionBase):
                 self.logger.info(f"🎯 Exception occurred, defaulting to {target_skill}")
             
         if not gap_analysis:
-            return self.get_error_response("Equipment gap analysis not available - run AnalyzeEquipmentGapsAction first")
+            return self.create_error_result("Equipment gap analysis not available - run AnalyzeEquipmentGapsAction first")
             
         config = self._load_equipment_config()
         
@@ -110,7 +110,7 @@ class SelectOptimalSlotAction(ActionBase):
         applicable_slots = config.data.get('skill_slot_mappings', {}).get(target_skill, [])
         
         if not applicable_slots:
-            return self.get_error_response(f"No equipment slots mapped for skill '{target_skill}'")
+            return self.create_error_result(f"No equipment slots mapped for skill '{target_skill}'")
             
         self.logger.info(f"🎯 Selecting optimal slot for {target_skill} from {len(applicable_slots)} options")
         
@@ -133,7 +133,7 @@ class SelectOptimalSlotAction(ActionBase):
             if not available_slots:
                 self.logger.warning(f"No applicable slots for {target_skill} found in gap analysis. "
                                    f"Applicable: {applicable_slots}, Available: {list(gap_analysis.keys())}")
-                return self.get_error_response(f"No valid slots found for skill {target_skill}")
+                return self.create_error_result(f"No valid slots found for skill {target_skill}")
         
         self.logger.debug(f"Filtered to {len(available_slots)} available slots: {available_slots}")
         
@@ -148,7 +148,7 @@ class SelectOptimalSlotAction(ActionBase):
         
         # Select the highest scoring slot
         if not slot_scores:
-            return self.get_error_response(f"No valid slots found for skill {target_skill}")
+            return self.create_error_result(f"No valid slots found for skill {target_skill}")
             
         # Sort by combined score (highest first)
         slot_scores.sort(key=lambda x: x['combined_score'], reverse=True)
@@ -179,7 +179,8 @@ class SelectOptimalSlotAction(ActionBase):
         self.logger.info(f"✅ Selected '{best_slot_data['slot_name']}' for {target_skill} crafting "
                         f"(score: {best_slot_data['combined_score']:.2f}, reason: {best_slot_data['urgency_reason']})")
         
-        return self.get_success_response(
+        return self.create_success_result(
+            f"Selected slot '{best_slot_data['slot_name']}' for {target_skill} crafting",
             selected_slot=best_slot_data['slot_name'],
             target_skill=target_skill,
             combined_score=best_slot_data['combined_score'],

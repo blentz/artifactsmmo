@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.analyze_materials_for_transformation import AnalyzeMaterialsForTransformationAction
+from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -54,9 +55,10 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(result['transformation_count'], 1)  # Only iron_ore needed
-            transformations = result['transformations']
+            self.assertIsInstance(result, ActionResult)
+            self.assertTrue(result.success)
+            self.assertEqual(result.data['transformation_count'], 1)  # Only iron_ore needed
+            transformations = result.data['transformations']
             self.assertEqual(len(transformations), 1)
             self.assertEqual(transformations[0], ('iron_ore', 'iron', 3))  # Only need 3 iron
             
@@ -81,9 +83,10 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['transformation_count'], 1)
-        transformations = result['transformations']
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['transformation_count'], 1)
+        transformations = result.data['transformations']
         self.assertEqual(transformations[0], ('copper_ore', 'copper', 5))
         
     def test_execute_no_transformations_available(self):
@@ -98,9 +101,10 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['transformation_count'], 0)
-        self.assertEqual(result['transformations'], [])
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['transformation_count'], 0)
+        self.assertEqual(result.data['transformations'], [])
         
     def test_execute_empty_inventory(self):
         """Test with empty inventory."""
@@ -108,8 +112,9 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['transformation_count'], 0)
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['transformation_count'], 0)
         
     def test_execute_exception_handling(self):
         """Test exception handling."""
@@ -120,8 +125,9 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("Failed to analyze materials", result['error'])
+        self.assertIsInstance(result, ActionResult)
+        self.assertFalse(result.success)
+        self.assertIn("Failed to analyze materials", result.error)
         
     def test_build_inventory_dict_mixed_formats(self):
         """Test building inventory dict with mixed formats."""

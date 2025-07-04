@@ -6,13 +6,13 @@ for planning decisions. Used as a GOAP reaction to determine location state
 and update action context with current coordinates.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class CheckLocationAction(ActionBase):
@@ -31,7 +31,7 @@ class CheckLocationAction(ActionBase):
             },
             'spatial_context_updated': True,
         }
-    weights = {"location_known": 1.0}
+    weight = 1.0
 
     def __init__(self):
         """
@@ -39,19 +39,19 @@ class CheckLocationAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Check current location and update spatial context """
         # Get parameters from context
         character_name = context.character_name
             
-        self.log_execution_start(character_name=character_name)
+        self._context = context
         
         try:
             # Get current character location
             character_response = get_character_api(name=character_name, client=client)
             
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             current_x = getattr(character_data, 'x', 0)
@@ -93,7 +93,6 @@ class CheckLocationAction(ActionBase):
             )
             
             result = {
-                'success': True,
                 'character_name': character_name,
                 'current_x': current_x,
                 'current_y': current_y,
@@ -106,12 +105,13 @@ class CheckLocationAction(ActionBase):
                 'spatial_context_updated': True
             }
             
-            self.log_execution_result(result)
-            return result
+            return self.create_success_result(
+                "Location check completed",
+                **result
+            )
             
         except Exception as e:
-            error_response = self.get_error_response(f"Location check failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Location check failed: {str(e)}")
             return error_response
 
     def _analyze_location_capabilities(self, location_info: Dict, knowledge_base=None, **kwargs) -> Dict[str, bool]:

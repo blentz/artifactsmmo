@@ -5,11 +5,11 @@ This bridge action resets the combat context from 'completed' back to 'idle',
 allowing the character to start a new combat cycle.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class ResetCombatContextAction(ActionBase):
@@ -33,13 +33,13 @@ class ResetCombatContextAction(ActionBase):
             'location': None,
         },
     }
-    weights = {'combat_context.status': 1.0}
+    weight = 1.0
 
     def __init__(self):
         """Initialize reset combat context action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute the combat context reset.
         
@@ -48,25 +48,23 @@ class ResetCombatContextAction(ActionBase):
         """
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
+            return self.create_error_result("No character name provided")
             
-        self.log_execution_start(character_name=character_name)
+        self._context = context
         
         try:
             # This is a bridge action - it only updates state, no API calls needed
-            result = self.get_success_response(
+            result = self.create_success_result(
                 combat_context_reset=True,
                 previous_status='completed',
                 new_status='idle',
                 message="Combat context reset to idle state"
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Failed to reset combat context: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Failed to reset combat context: {str(e)}")
             return error_response
 
     def __repr__(self):

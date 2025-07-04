@@ -42,8 +42,8 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
-            self.assertGreater(result['slots_analyzed'], 0)
+            self.assertTrue(result.success)
+            self.assertGreater(result.data['slots_analyzed'], 0)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             self.assertIsNotNone(gap_analysis)
@@ -77,7 +77,7 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             
@@ -104,7 +104,7 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             weapon_data = gap_analysis['weapon']
@@ -131,7 +131,7 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             
@@ -149,8 +149,8 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.action_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No character state available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No character state available', result.error)
         
     def test_config_loading_fallback(self):
         """Test fallback behavior when config loading fails"""
@@ -165,7 +165,7 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.action_context)
             
             # Should still work with fallback config
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             self.assertIsNotNone(gap_analysis)
@@ -187,7 +187,7 @@ class TestAnalyzeEquipmentGapsAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             gap_analysis = self.action_context.get_parameter('equipment_gap_analysis')
             

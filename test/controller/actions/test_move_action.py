@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 from artifactsmmo_api_client.client import AuthenticatedClient
 from src.controller.actions.move import MoveAction
+from src.controller.actions.base import ActionResult
 
 from test.base_test import BaseTest
 
@@ -51,12 +52,12 @@ class TestMoveAction(BaseTest):
         self.assertEqual(call_args.kwargs['body'].y, self.y)
         
         # Verify response is properly formatted
-        self.assertIsInstance(response, dict)
-        self.assertTrue(response.get('success'))
-        self.assertTrue(response.get('moved'))
-        self.assertEqual(response.get('target_x'), self.x)
-        self.assertEqual(response.get('target_y'), self.y)
-        self.assertEqual(response.get('cooldown'), 5)
+        self.assertIsInstance(response, ActionResult)
+        self.assertTrue(response.success)
+        self.assertTrue(response.data.get('moved'))
+        self.assertEqual(response.data.get('target_x'), self.x)
+        self.assertEqual(response.data.get('target_y'), self.y)
+        self.assertEqual(response.data.get('cooldown'), 5)
 
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_move_action_already_at_destination(self, mock_move_api):
@@ -72,12 +73,12 @@ class TestMoveAction(BaseTest):
         mock_move_api.assert_called_once()
         
         # Verify success response for "already at destination"
-        self.assertIsInstance(response, dict)
-        self.assertTrue(response.get('success', False))
-        self.assertFalse(response.get('moved'))
-        self.assertTrue(response.get('already_at_destination'))
-        self.assertEqual(response.get('target_x'), self.x)
-        self.assertEqual(response.get('target_y'), self.y)
+        self.assertIsInstance(response, ActionResult)
+        self.assertTrue(response.success)
+        self.assertFalse(response.data.get('moved'))
+        self.assertTrue(response.data.get('already_at_destination'))
+        self.assertEqual(response.data.get('target_x'), self.x)
+        self.assertEqual(response.data.get('target_y'), self.y)
 
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_move_action_other_error(self, mock_move_api):
@@ -93,9 +94,9 @@ class TestMoveAction(BaseTest):
         mock_move_api.assert_called_once()
         
         # Verify error response for other exceptions
-        self.assertIsInstance(response, dict)
-        self.assertFalse(response.get('success', True))
-        self.assertIn('Network error', response.get('error', ''))
+        self.assertIsInstance(response, ActionResult)
+        self.assertFalse(response.success)
+        self.assertIn('Network error', response.error)
 
     def test_move_action_with_context_coordinates(self):
         # Test using coordinates from context
@@ -105,7 +106,7 @@ class TestMoveAction(BaseTest):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name, use_target_coordinates=True, target_x=30, target_y=40)
         response = action.execute(self.client, context)
-        self.assertFalse(response.get('success'))  # Will fail due to no client mock
+        self.assertFalse(response.success)  # Will fail due to no client mock
         
         # Verify coordinates were extracted correctly
         context = MockActionContext(character_name=self.char_name, use_target_coordinates=True, target_x=30, target_y=40)
@@ -124,8 +125,8 @@ class TestMoveAction(BaseTest):
         response = action.execute(self.client, context)
         
         # Should fail with no coordinates
-        self.assertFalse(response.get('success'))
-        self.assertIn('No valid coordinates provided', response.get('error', ''))
+        self.assertFalse(response.success)
+        self.assertIn('No valid coordinates provided', response.error)
 
 if __name__ == '__main__':
     unittest.main()

@@ -5,11 +5,11 @@ This bridge action marks the transition from equipment analysis to crafting
 after a recipe has been selected.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class MarkEquipmentCraftingAction(ActionBase):
@@ -32,13 +32,13 @@ class MarkEquipmentCraftingAction(ActionBase):
             'upgrade_status': 'crafting',
         },
     }
-    weights = {'equipment_status.upgrade_status': 1.5}
+    weight = 1.5
 
     def __init__(self):
         """Initialize mark equipment crafting action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute marking equipment as crafting.
         
@@ -47,9 +47,9 @@ class MarkEquipmentCraftingAction(ActionBase):
         """
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
+            return self.create_error_result("No character name provided")
             
-        self.log_execution_start(character_name=character_name)
+        self._context = context
         
         try:
             # Get selected item information
@@ -63,7 +63,7 @@ class MarkEquipmentCraftingAction(ActionBase):
             )
             
             # This is a bridge action - it only updates state, no API calls needed
-            result = self.get_success_response(
+            result = self.create_success_result(
                 equipment_crafting_marked=True,
                 previous_status='analyzing',
                 new_status='crafting',
@@ -72,12 +72,10 @@ class MarkEquipmentCraftingAction(ActionBase):
                 message=f"Equipment crafting initiated for {selected_item}"
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Failed to mark equipment crafting: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Failed to mark equipment crafting: {str(e)}")
             return error_response
 
     def __repr__(self):

@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as ge
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeCraftingChainAction(ActionBase):
@@ -27,7 +27,7 @@ class AnalyzeCraftingChainAction(ActionBase):
         "craft_plan_available": True, 
         "crafting_opportunities_known": True
     }
-    weights = {"craft_plan_available": 20}
+    weight = 20
 
     def __init__(self):
         """
@@ -42,18 +42,18 @@ class AnalyzeCraftingChainAction(ActionBase):
         self.crafting_dependencies: Dict[str, List[Dict]] = {}
         self.transformation_chains: List[Dict] = []
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Analyze the complete crafting chain for the target item """
         # Get character name and target item from context
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
+            return self.create_error_result("No character name provided")
             
         target_item = context.get('target_item')
         if not target_item:
-            return self.get_error_response("No target item specified for analysis")
+            return self.create_error_result("No target item specified for analysis")
             
-        self.log_execution_start(character_name=character_name, target_item=target_item)
+        self._context = context
         
         try:
             # Get knowledge base and map state from context
@@ -70,7 +70,7 @@ class AnalyzeCraftingChainAction(ActionBase):
             chain_analysis = self._analyze_complete_chain(client, target_item, knowledge_base)
             
             if not chain_analysis:
-                return self.get_error_response(f"Could not analyze crafting chain for {target_item}")
+                return self.create_error_result(f"Could not analyze crafting chain for {target_item}")
             
             # Build complete action sequence
             action_sequence = self._build_action_sequence(chain_analysis, knowledge_base, map_state, client)
@@ -86,12 +86,13 @@ class AnalyzeCraftingChainAction(ActionBase):
                 'raw_materials_needed': self._extract_raw_materials(chain_analysis)
             }
             
-            self.log_execution_result(result)
-            return result
+            return self.create_success_result(
+                "Crafting chain analysis complete",
+                **result
+            )
             
         except Exception as e:
-            error_response = self.get_error_response(f"Crafting chain analysis failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Crafting chain analysis failed: {str(e)}")
             return error_response
 
     def _analyze_complete_chain(self, client, item_code: str, knowledge_base, depth: int = 0) -> Optional[Dict]:

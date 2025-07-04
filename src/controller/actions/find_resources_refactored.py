@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from src.lib.action_context import ActionContext
 
 from .search_base import SearchActionBase
+from .base import ActionResult
 
 
 class FindResourcesAction(SearchActionBase):
@@ -16,18 +17,18 @@ class FindResourcesAction(SearchActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the nearest resource location using unified search algorithm """
+        self._context = context
+        
         try:
             return self.perform_action(client, context)
         except Exception as e:
-            error_response = self.get_error_response(
+            return self.create_error_result(
                 f"{self.__class__.__name__} failed: {str(e)}"
             )
-            self.log_execution_result(error_response)
-            return error_response
     
-    def perform_action(self, client, context: ActionContext) -> Dict:
+    def perform_action(self, client, context: ActionContext) -> ActionResult:
         """
         Perform the resource search with knowledge base fallback.
         
@@ -45,12 +46,6 @@ class FindResourcesAction(SearchActionBase):
         skill_type = context.get('skill_type')
         level_range = context.get('level_range', 5)
         
-        self.log_execution_start(
-            character_x=character_x,
-            character_y=character_y, 
-            search_radius=search_radius,
-            resource_types=resource_types
-        )
         
         # Extract context
         knowledge_base = context.knowledge_base
@@ -59,7 +54,7 @@ class FindResourcesAction(SearchActionBase):
         # Determine target resource codes
         target_codes = self._determine_target_resource_codes(resource_types)
         if not target_codes:
-            return self.get_error_response("No target resource types specified")
+            return self.create_error_result("No target resource types specified")
         
         # Priority 1: Search knowledge base for known resource locations
         if knowledge_base:
@@ -107,7 +102,6 @@ class FindResourcesAction(SearchActionBase):
         # Use unified search algorithm
         result = self.unified_search(client, character_x, character_y, search_radius, resource_filter, resource_result_processor, map_state)
         
-        self.log_execution_result(result)
         return result
 
     def _determine_target_resource_codes(self, resource_types: List[str]) -> List[str]:
@@ -158,7 +152,8 @@ class FindResourcesAction(SearchActionBase):
         x, y = location
         distance = self._calculate_distance(x, y, character_x, character_y)
         
-        return self.get_success_response(
+        return self.create_success_result(
+            message=f"Found {code} at {location}",
             location=location,
             distance=distance,
             resource_code=code,

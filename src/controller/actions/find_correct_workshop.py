@@ -6,6 +6,7 @@ from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as ge
 
 from src.lib.action_context import ActionContext
 
+from .base import ActionResult
 from .find_workshops import FindWorkshopsAction
 from .move import MoveAction
 
@@ -21,7 +22,7 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
             },
         }
     reactions = {"at_correct_workshop": True, "workshops_discovered": True}
-    weights = {"at_correct_workshop": 20}
+    weight = 20
 
     def __init__(self):
         """
@@ -30,7 +31,7 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
         # Don't set workshop_type yet - we'll determine it from the item
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the correct workshop for the specified item and move there """        
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
@@ -42,20 +43,15 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
         # Parameters will be passed directly to helper methods via context
             
         if not item_code:
-            return self.get_error_response("No item code specified")
+            return self.create_error_result("No item code specified")
             
-        self.log_execution_start(
-            character_x=character_x,
-            character_y=character_y, 
-            search_radius=search_radius,
-            item_code=item_code
-        )
+        self._context = context
         
         try:
             # 1. Look up item details to determine required workshop type
             item_response = get_item_api(code=item_code, client=client)
             if not item_response or not item_response.data:
-                return self.get_error_response(f'Could not get details for item {item_code}')
+                return self.create_error_result(f'Could not get details for item {item_code}')
             
             item_data = item_response.data
             required_skill = None
@@ -64,7 +60,7 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
                 required_skill = getattr(item_data.craft, 'skill', None)
             
             if not required_skill:
-                return self.get_error_response(f'Item {item_code} does not have crafting information')
+                return self.create_error_result(f'Item {item_code} does not have crafting information')
             
             # 2. Skills and workshops have identical names, so direct assignment
             required_workshop = required_skill
@@ -79,17 +75,16 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
             def workshop_result_processor(location, content_code, content_data):
                 x, y = location
                 distance = self._calculate_distance(character_x, character_y, x, y)
-                return {
-                    'success': True,
-                    'location': location,
-                    'distance': distance,
-                    'workshop_code': content_code,
-                    'workshop_type': required_workshop,
-                    'required_skill': required_skill,
-                    'item_code': item_code,
-                    'target_x': x,
-                    'target_y': y
-                }
+                return self.create_success_result(
+                    location=location,
+                    distance=distance,
+                    workshop_code=content_code,
+                    workshop_type=required_workshop,
+                    required_skill=required_skill,
+                    item_code=item_code,
+                    target_x=x,
+                    target_y=y
+                )
             
             # 4. Get map_state and knowledge_base from context for cached access
             map_state = context.map_state
@@ -108,11 +103,11 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
                 # 6. Use unified search algorithm to discover new workshops
                 result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
             
-            if result and result.get('success'):
+            if result and result.success:
                 # 7. If we found a workshop, move to it if we have character_name
-                if character_name and result.get('target_x') is not None:
-                    target_x = result['target_x']
-                    target_y = result['target_y']
+                if character_name and result.data.get('target_x') is not None:
+                    target_x = result.data['target_x']
+                    target_y = result.data['target_y']
                     
                     # Only move if we're not already there
                     if character_x != target_x or character_y != target_y:
@@ -129,39 +124,36 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
                         if move_result:
                             if hasattr(move_result, 'data') and move_result.data:
                                 # API response object format
-                                result['moved_to_workshop'] = True
-                                result['move_result'] = f"Moved successfully: {move_result.data}"
+                                result.data['moved_to_workshop'] = True
+                                result.data['move_result'] = f"Moved successfully: {move_result.data}"
                             elif isinstance(move_result, dict) and move_result.get('success'):
                                 # Dict format
-                                result['moved_to_workshop'] = True
-                                result['move_result'] = move_result
+                                result.data['moved_to_workshop'] = True
+                                result.data['move_result'] = move_result
                             else:
-                                result['moved_to_workshop'] = False
+                                result.data['moved_to_workshop'] = False
                                 move_error = move_result.get('error', 'Unknown move error') if isinstance(move_result, dict) else str(move_result)
-                                result['move_error'] = move_error
+                                result.data['move_error'] = move_error
                         else:
-                            result['moved_to_workshop'] = False
-                            result['move_error'] = 'Move failed - no result'
+                            result.data['moved_to_workshop'] = False
+                            result.data['move_error'] = 'Move failed - no result'
                     else:
-                        result['moved_to_workshop'] = True
-                        result['already_at_workshop'] = True
+                        result.data['moved_to_workshop'] = True
+                        result.data['already_at_workshop'] = True
                 
-                self.log_execution_result(result)
                 return result
             else:
                 error_msg = f'No {required_workshop} workshop found within radius {search_radius}'
-                error_response = self.get_error_response(error_msg)
-                error_response.update({
-                    'required_skill': required_skill,
-                    'required_workshop': required_workshop,
-                    'item_code': item_code
-                })
-                self.log_execution_result(error_response)
+                error_response = self.create_error_result(
+                    error_msg,
+                    required_skill=required_skill,
+                    required_workshop=required_workshop,
+                    item_code=item_code
+                )
                 return error_response
                 
         except Exception as e:
-            error_response = self.get_error_response(f"Workshop search failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Workshop search failed: {str(e)}")
             return error_response
 
     def _search_knowledge_base_for_workshop(self, knowledge_base, workshop_type: str, character_x: int, character_y: int) -> Optional[Dict]:

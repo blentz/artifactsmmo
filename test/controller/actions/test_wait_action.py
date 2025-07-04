@@ -46,8 +46,8 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
-        self.assertIn('Waited 1.0 seconds', result.get('message', ''))
+        self.assertTrue(result.success)
+        self.assertIn('Waited 1.0 seconds', result.message)
         mock_sleep.assert_called_once_with(1.0)  # Uses provided wait_duration
 
     @patch('time.sleep')
@@ -64,7 +64,7 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
+        self.assertTrue(result.success)
         mock_sleep.assert_called_once_with(1.0)  # Uses default wait_duration
 
     @patch('time.sleep')
@@ -81,8 +81,8 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
-        self.assertIn('Waited 5.5 seconds', result.get('message', ''))
+        self.assertTrue(result.success)
+        self.assertIn('Waited 5.5 seconds', result.message)
         mock_sleep.assert_called_once_with(5.5)
 
     @patch('time.sleep')
@@ -99,7 +99,7 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
+        self.assertTrue(result.success)
         mock_sleep.assert_called_once_with(0.1)  # Minimum wait
 
     @patch('time.sleep')
@@ -116,7 +116,7 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
+        self.assertTrue(result.success)
         mock_sleep.assert_called_once_with(3.0)
 
     @patch('time.sleep')
@@ -133,7 +133,7 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
+        self.assertTrue(result.success)
         mock_sleep.assert_called_once_with(60.0)  # Clamped to 60 seconds max
 
     @patch('time.sleep')
@@ -150,7 +150,7 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
+        self.assertTrue(result.success)
         mock_sleep.assert_called_once_with(2.5)
 
     @patch('time.sleep')
@@ -167,7 +167,7 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.get('success', False))
+        self.assertTrue(result.success)
         mock_sleep.assert_called_once_with(4.0)
 
     @patch('time.sleep')
@@ -179,8 +179,8 @@ class TestWaitAction(BaseTest):
         result = self.wait_action.execute(self.mock_client, context)
         
         self.assertIsNotNone(result)
-        self.assertFalse(result.get('success', True))
-        self.assertIn('Wait failed', result.get('error', ''))
+        self.assertFalse(result.success)
+        self.assertIn('Wait failed', result.error)
 
     def test_repr(self):
         """ Test string representation """

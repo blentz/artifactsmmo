@@ -40,7 +40,7 @@ class TestEquipmentUpgradeChain(unittest.TestCase):
             result = attack_action.execute(self.mock_client, context)
         
         # Assert
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         # Check that reactions were updated for combat loss
         self.assertEqual(attack_action.reactions['equipment_status']['upgrade_status'], 'needs_analysis')
         self.assertEqual(attack_action.reactions['combat_context']['status'], 'completed')
@@ -84,8 +84,8 @@ class TestEquipmentUpgradeChain(unittest.TestCase):
         result = action.execute(self.mock_client, context)
         
         # Assert
-        self.assertTrue(result['success'])
-        self.assertTrue(result.get('is_combat_ready', False))
+        self.assertTrue(result.success)
+        self.assertTrue(result.data.get('is_combat_ready', False))
         # Check that reactions were updated for combat ready
         self.assertEqual(action.reactions['equipment_status']['upgrade_status'], 'combat_ready')
 

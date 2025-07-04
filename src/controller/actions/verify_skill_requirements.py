@@ -9,7 +9,7 @@ from typing import Dict
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -47,7 +47,7 @@ class VerifySkillRequirementsAction(ActionBase):
         """Initialize the skill verification action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute skill requirements verification.
         
@@ -58,14 +58,14 @@ class VerifySkillRequirementsAction(ActionBase):
         Returns:
             Action result with skill verification status
         """
-        super().execute(client, context)
+        self._context = context
         
         character_name = context.character_name
         selected_item = context.get('selected_item')
         selected_recipe = context.get('selected_recipe', {})
         
         if not selected_item:
-            return self.get_error_response("No selected item available")
+            return self.create_error_result("No selected item available")
             
         self.logger.info(f"🔍 Verifying skill requirements for {selected_item}")
         
@@ -73,7 +73,7 @@ class VerifySkillRequirementsAction(ActionBase):
             # Get current character data
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
                 
             character_data = character_response.data
             
@@ -81,7 +81,7 @@ class VerifySkillRequirementsAction(ActionBase):
             skill_info = self._get_skill_requirements(selected_recipe, selected_item, context)
             
             if not skill_info:
-                return self.get_error_response(f"Could not determine skill requirements for {selected_item}")
+                return self.create_error_result(f"Could not determine skill requirements for {selected_item}")
             
             required_skill = skill_info['skill']
             required_level = skill_info['level']
@@ -119,7 +119,8 @@ class VerifySkillRequirementsAction(ActionBase):
                 'shortfall': max(0, required_level - current_level)
             })
             
-            return self.get_success_response(
+            return self.create_success_result(
+                f"Skill verification completed: {required_skill} {current_level}/{required_level}",
                 required_skill=required_skill,
                 required_level=required_level,
                 current_level=current_level,
@@ -128,7 +129,7 @@ class VerifySkillRequirementsAction(ActionBase):
             )
             
         except Exception as e:
-            return self.get_error_response(f"Skill verification failed: {str(e)}")
+            return self.create_error_result(f"Skill verification failed: {str(e)}")
             
     def _get_skill_requirements(self, recipe: Dict, item_code: str, context: ActionContext) -> Dict:
         """Get skill requirements for the recipe."""

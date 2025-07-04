@@ -138,8 +138,8 @@ class TestCooldownDetectionFixes(TestAPIOptimizationFixes):
         self.mock_character_state.data['cooldown_expiration'] = future_time.isoformat()
         
         # Mock ActionExecutor's execute_action method
-        from src.controller.action_executor import ActionResult
-        mock_result = ActionResult(success=True, response={}, action_name='wait', error_message=None)
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True, data={}, action_name='wait', error=None)
         
         with patch.object(self.controller.action_executor, 'execute_action', return_value=mock_result) as mock_execute:
             success = self.controller._execute_cooldown_wait()
@@ -203,7 +203,7 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
             self.assertLessEqual(sleep_duration, 12.0)  # At most 12 seconds (with bounds)
             
             # Should return success
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
     
     def test_wait_action_handles_expired_cooldown(self):
         """Test that WaitAction handles expired cooldowns correctly."""
@@ -228,7 +228,7 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
             self.assertLessEqual(sleep_duration, 1.0)  # Should be minimal wait
             
             # Should return success
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
 
 
 class TestGOAPIterationOptimization(TestAPIOptimizationFixes):

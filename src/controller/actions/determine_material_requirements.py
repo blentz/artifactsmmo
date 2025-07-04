@@ -7,7 +7,7 @@ checking the recipe requirements and current inventory status.
 
 from typing import Dict, List, Optional
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -43,7 +43,7 @@ class DetermineMaterialRequirementsAction(ActionBase):
         """Initialize the material requirements action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute material requirements determination.
         
@@ -52,7 +52,7 @@ class DetermineMaterialRequirementsAction(ActionBase):
             context: ActionContext containing selected recipe
             
         Returns:
-            Action result with material requirements
+            ActionResult with material requirements
         """
         super().execute(client, context)
         
@@ -61,7 +61,7 @@ class DetermineMaterialRequirementsAction(ActionBase):
         selected_recipe = context.get('selected_recipe', {})
         
         if not selected_item:
-            return self.get_error_response("No selected item available")
+            return self.create_error_result("No selected item available")
             
         self.logger.info(f"🔍 Determining material requirements for {selected_item}")
         
@@ -70,7 +70,7 @@ class DetermineMaterialRequirementsAction(ActionBase):
             materials = self._get_recipe_materials(selected_recipe, selected_item, context)
             
             if not materials:
-                return self.get_error_response(f"Could not determine materials for {selected_item}")
+                return self.create_error_result(f"Could not determine materials for {selected_item}")
             
             # Store results in context
             context.set_result('required_materials', materials)
@@ -82,14 +82,25 @@ class DetermineMaterialRequirementsAction(ActionBase):
             
             self.logger.info(f"📋 Found {len(materials)} material requirements: {', '.join(materials)}")
             
-            return self.get_success_response(
+            # Create state changes to mark requirements as determined
+            state_changes = {
+                'materials': {
+                    'requirements_determined': True,
+                    'status': 'checking'
+                }
+            }
+            
+            return self.create_result_with_state_changes(
+                success=True,
+                state_changes=state_changes,
+                message=f"Found {len(materials)} material requirements: {', '.join(materials)}",
                 item_code=selected_item,
                 required_materials=materials,
                 total_materials=len(materials)
             )
             
         except Exception as e:
-            return self.get_error_response(f"Material requirements determination failed: {str(e)}")
+            return self.create_error_result(f"Material requirements determination failed: {str(e)}")
             
     def _get_recipe_materials(self, recipe: Dict, item_code: str, context: ActionContext) -> List[str]:
         """Get materials needed for the recipe."""

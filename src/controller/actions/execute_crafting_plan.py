@@ -13,7 +13,7 @@ from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_ma
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .craft_item import CraftItemAction
 from .find_correct_workshop import FindCorrectWorkshopAction
 from .move import MoveAction
@@ -44,7 +44,7 @@ class ExecuteCraftingPlanAction(ActionBase):
         "inventory_updated": True,
         "craft_plan_available": False  # Consumed the plan
     }
-    weights = {"has_equipment": 10}
+    weight = 10
     
     def __init__(self):
         """
@@ -52,44 +52,41 @@ class ExecuteCraftingPlanAction(ActionBase):
         """
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Execute the crafting plan"""
+        self._context = context
+        
         # Get parameters from context
         character_name = context.character_name
         target_item = context.get('target_item')
-            
-        self.log_execution_start(
-            character_name=character_name,
-            target_item=target_item
-        )
         
         try:
             # Get knowledge base from context
             knowledge_base = context.knowledge_base
             
             if not knowledge_base:
-                return self.get_error_response("No knowledge base available")
+                return self.create_error_result("No knowledge base available")
             
             # Determine target item
             if not target_item:
                 target_item = self._determine_target_item(context)
             if not target_item:
-                return self.get_error_response("No target item specified for crafting")
+                return self.create_error_result("No target item specified for crafting")
             
             # Get item data to find workshop type
             item_data = knowledge_base.get_item_data(target_item, client=client)
             if not item_data:
-                return self.get_error_response(f"Could not find item data for {target_item}")
+                return self.create_error_result(f"Could not find item data for {target_item}")
             
             craft_data = item_data.get('craft_data', {})
             if not craft_data:
-                return self.get_error_response(f"Item {target_item} is not craftable")
+                return self.create_error_result(f"Item {target_item} is not craftable")
             
             workshop_type = craft_data.get('skill', 'unknown')
             
             # Check if we need to move to workshop
             move_result = self._ensure_at_workshop(client, workshop_type, target_item, character_name, context)
-            if not move_result.get('success'):
+            if not move_result.success:
                 return move_result
             
             # Check for equipped materials that need to be unequipped
@@ -109,22 +106,18 @@ class ExecuteCraftingPlanAction(ActionBase):
             
             if not craft_result or not craft_result.get('success'):
                 error_msg = craft_result.get('error', 'Unknown error') if craft_result else 'No response'
-                return self.get_error_response(f"Failed to craft {target_item}: {error_msg}")
+                return self.create_error_result(f"Failed to craft {target_item}: {error_msg}")
             
-            result = self.get_success_response(
+            return self.create_success_result(
+                message=f"Successfully crafted {target_item}",
                 target_item=target_item,
                 craft_result=craft_result,
                 unequipped_items=unequip_results,
                 workshop_type=workshop_type
             )
             
-            self.log_execution_result(result)
-            return result
-            
         except Exception as e:
-            error_response = self.get_error_response(f"Crafting execution failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Crafting execution failed: {str(e)}")
     
     def _determine_target_item(self, action_context: Dict) -> Optional[str]:
         """Determine target item from context or parameters"""
@@ -136,13 +129,13 @@ class ExecuteCraftingPlanAction(ActionBase):
             return action_context['target_item']
         return None
     
-    def _ensure_at_workshop(self, client, workshop_type: str, item_code: str, character_name: str, context: ActionContext) -> Dict:
+    def _ensure_at_workshop(self, client, workshop_type: str, item_code: str, character_name: str, context: ActionContext) -> ActionResult:
         """Ensure we're at the correct workshop"""
         # Get current location
         try:
             char_response = get_character_api(name=character_name, client=client)
             if not char_response or not char_response.data:
-                return self.get_error_response("Could not get character location")
+                return self.create_error_result("Could not get character location")
             
             char_data = char_response.data
             current_x = char_data.x
@@ -157,7 +150,7 @@ class ExecuteCraftingPlanAction(ActionBase):
                         current_workshop = getattr(map_data.content, 'code', '')
                         if current_workshop == workshop_type:
                             # Already at correct workshop
-                            return self.get_success_response(at_workshop=True)
+                            return self.create_success_result("Already at workshop", at_workshop=True)
             
             # Need to find and move to workshop
             find_action = FindCorrectWorkshopAction()
@@ -171,12 +164,12 @@ class ExecuteCraftingPlanAction(ActionBase):
             find_context['item_code'] = item_code
             
             find_result = find_action.execute(client, find_context)
-            if not find_result or not find_result.get('success'):
-                return self.get_error_response(f"Could not find {workshop_type} workshop")
+            if not find_result.success:
+                return self.create_error_result(f"Could not find {workshop_type} workshop")
             
             # Move to workshop
-            target_x = find_result.get('workshop_x')
-            target_y = find_result.get('workshop_y')
+            target_x = find_result.data.get('workshop_x')
+            target_y = find_result.data.get('workshop_y')
             
             if target_x is not None and target_y is not None:
                 move_action = MoveAction()
@@ -190,12 +183,12 @@ class ExecuteCraftingPlanAction(ActionBase):
                 
                 move_result = move_action.execute(client, move_context)
                 if not move_result or not move_result.get('success'):
-                    return self.get_error_response(f"Could not move to workshop at ({target_x}, {target_y})")
+                    return self.create_error_result(f"Could not move to workshop at ({target_x}, {target_y})")
             
-            return self.get_success_response(at_workshop=True, moved_to_workshop=True)
+            return self.create_success_result("Moved to workshop", at_workshop=True, moved_to_workshop=True)
             
         except Exception as e:
-            return self.get_error_response(f"Workshop check failed: {str(e)}")
+            return self.create_error_result(f"Workshop check failed: {str(e)}")
     
     def _unequip_required_materials(self, client, target_item: str, craft_data: Dict,
                                    knowledge_base, character_name: str, context: ActionContext) -> List[Dict]:

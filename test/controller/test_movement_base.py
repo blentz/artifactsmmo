@@ -46,12 +46,12 @@ class TestMovementActionBase(unittest.TestCase):
         mock_move_api.assert_called_once()
         
         # Verify response format
-        self.assertTrue(result['success'])
-        self.assertTrue(result['moved'])
-        self.assertEqual(result['target_x'], 5)
-        self.assertEqual(result['target_y'], 10)
-        self.assertEqual(result['cooldown'], 10)
-        self.assertTrue(result['movement_completed'])
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['moved'])
+        self.assertEqual(result.data['target_x'], 5)
+        self.assertEqual(result.data['target_y'], 10)
+        self.assertEqual(result.data['cooldown'], 10)
+        self.assertTrue(result.data['movement_completed'])
 
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_movement_already_at_destination(self, mock_move_api):
@@ -65,12 +65,12 @@ class TestMovementActionBase(unittest.TestCase):
         result = action.execute_movement(self.client, 5, 10, movement_context)
         
         # Verify response format for already at destination
-        self.assertTrue(result['success'])
-        self.assertFalse(result['moved'])
-        self.assertTrue(result['already_at_destination'])
-        self.assertEqual(result['target_x'], 5)
-        self.assertEqual(result['target_y'], 10)
-        self.assertTrue(result['movement_completed'])
+        self.assertTrue(result.success)
+        self.assertFalse(result.data['moved'])
+        self.assertTrue(result.data['already_at_destination'])
+        self.assertEqual(result.data['target_x'], 5)
+        self.assertEqual(result.data['target_y'], 10)
+        self.assertTrue(result.data['movement_completed'])
 
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_movement_other_error(self, mock_move_api):
@@ -84,8 +84,8 @@ class TestMovementActionBase(unittest.TestCase):
         result = action.execute_movement(self.client, 5, 10, movement_context)
         
         # Verify error response
-        self.assertFalse(result['success'])
-        self.assertIn('Network error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Network error', result.error)
 
     def test_execute_no_coordinates(self):
         action = TestMovementAction()
@@ -93,8 +93,8 @@ class TestMovementActionBase(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should fail with no coordinates
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
 
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_with_context(self, mock_move_api):
@@ -109,9 +109,9 @@ class TestMovementActionBase(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify success
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_x'], 15)
-        self.assertEqual(result['target_y'], 20)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 15)
+        self.assertEqual(result.data['target_y'], 20)
 
     def test_calculate_distance(self):
         action = TestMovementAction()
@@ -146,8 +146,8 @@ class TestMovementActionBase(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify context was included in response
-        self.assertEqual(result.get('custom_field'), 'test_value')
-        self.assertEqual(result.get('resource_code'), 'iron_ore')
+        self.assertEqual(result.data.get('custom_field'), 'test_value')
+        self.assertEqual(result.data.get('resource_code'), 'iron_ore')
 
     def test_no_api_client(self):
         action = TestMovementAction()
@@ -155,8 +155,8 @@ class TestMovementActionBase(unittest.TestCase):
         result = action.execute(None, context)
         
         # Should fail with no client
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
 
 
 if __name__ == '__main__':

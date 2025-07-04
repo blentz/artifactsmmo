@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.find_workshops import FindWorkshopsAction
+from src.controller.actions.base import ActionResult
 from test.fixtures import MockActionContext, create_mock_client
 
 
@@ -35,7 +36,7 @@ class TestFindWorkshopsAction(unittest.TestCase):
                 'workshop_known': True
             }
         })
-        self.assertEqual(self.action.weights, {"workshops_discovered": 15})
+        self.assertEqual(self.action.weight, 15)
     
     def test_repr_default_values(self):
         """Test string representation with default values."""
@@ -65,25 +66,24 @@ class TestFindWorkshopsAction(unittest.TestCase):
     
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search')
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_workshop_filter')
-    @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_coordinate_response')
+    @patch('src.controller.actions.find_workshops.FindWorkshopsAction.standardize_coordinate_output')
     def test_execute_success(self, mock_create_coord, mock_create_filter, mock_unified_search):
         """Test successful workshop finding execution."""
         # Set up mocks
         mock_create_filter.return_value = Mock()  # Workshop filter function
         mock_create_coord.return_value = {
-            'x': 10,
-            'y': 15,
-            'distance': 7,
-            'workshop_code': 'weaponcrafting_workshop',
-            'workshop_name': 'weaponcrafting_workshop',
-            'workshop_type': 'weaponcrafting'
+            'target_x': 10,
+            'target_y': 15
         }
-        mock_unified_search.return_value = {
-            'success': True,
-            'x': 10,
-            'y': 15,
-            'workshop_code': 'weaponcrafting_workshop'
-        }
+        mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={
+                'target_x': 10,
+                'target_y': 15,
+                'workshop_code': 'weaponcrafting_workshop'
+            },
+            message="Found workshop"
+        )
         
         # Create context
         context = MockActionContext(
@@ -99,9 +99,9 @@ class TestFindWorkshopsAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['x'], 10)
-        self.assertEqual(result['y'], 15)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 10)
+        self.assertEqual(result.data['target_y'], 15)
         
         # Verify method calls
         mock_create_filter.assert_called_once_with(workshop_type='weaponcrafting')
@@ -119,7 +119,11 @@ class TestFindWorkshopsAction(unittest.TestCase):
     def test_execute_no_workshop_type(self, mock_create_filter, mock_unified_search):
         """Test execution without specifying workshop type."""
         mock_create_filter.return_value = Mock()
-        mock_unified_search.return_value = {'success': True, 'workshop_type': 'general'}
+        mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={'workshop_type': 'general'},
+            message="Found workshop"
+        )
         
         context = MockActionContext(
             character_name=self.character_name,
@@ -131,7 +135,7 @@ class TestFindWorkshopsAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, context)
         
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         mock_create_filter.assert_called_once_with(workshop_type=None)
     
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search')
@@ -139,7 +143,11 @@ class TestFindWorkshopsAction(unittest.TestCase):
     def test_execute_context_defaults(self, mock_create_filter, mock_unified_search):
         """Test execution using context defaults for missing parameters."""
         mock_create_filter.return_value = Mock()
-        mock_unified_search.return_value = {'success': True}
+        mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={},
+            message="Found workshop"
+        )
         
         # Create context with defaults
         context = MockActionContext(
@@ -173,25 +181,25 @@ class TestFindWorkshopsAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify error response
-        self.assertFalse(result['success'])
-        self.assertIn('Workshop search failed', result['error'])
-        self.assertIn('Filter creation failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Workshop search failed', result.error)
+        self.assertIn('Filter creation failed', result.error)
     
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search')
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_workshop_filter')
-    @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_coordinate_response')
+    @patch('src.controller.actions.find_workshops.FindWorkshopsAction.standardize_coordinate_output')
     def test_workshop_result_processor_function(self, mock_create_coord, mock_create_filter, mock_unified_search):
         """Test that the workshop result processor function works correctly."""
         mock_create_filter.return_value = Mock()
         mock_create_coord.return_value = {
-            'x': 12,
-            'y': 18,
-            'distance': 15,
-            'workshop_code': 'gearcrafting_workshop',
-            'workshop_name': 'gearcrafting_workshop',
-            'workshop_type': 'gearcrafting'
+            'target_x': 12,
+            'target_y': 18
         }
-        mock_unified_search.return_value = {'success': True}
+        mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={},
+            message="Found workshop"
+        )
         
         context = MockActionContext(
             character_name=self.character_name,
@@ -214,26 +222,24 @@ class TestFindWorkshopsAction(unittest.TestCase):
             content_data={'name': 'Gear Crafting Workshop'}
         )
         
-        # Verify the processor called create_coordinate_response with correct distance
-        mock_create_coord.assert_called_with(
-            12, 18,
-            distance=15,  # Manhattan distance from (5,10) to (12,18) = |12-5| + |18-10| = 7+8 = 15
-            workshop_code='gearcrafting_workshop',
-            workshop_name='gearcrafting_workshop',
-            workshop_type='gearcrafting'
-        )
+        # Verify the processor called standardize_coordinate_output with correct coordinates
+        mock_create_coord.assert_called_with(12, 18)
         
         # Verify result is a success response
-        self.assertTrue(test_result['success'])
+        self.assertTrue(test_result.success)
     
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search')
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_workshop_filter')
-    @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_coordinate_response')
+    @patch('src.controller.actions.find_workshops.FindWorkshopsAction.standardize_coordinate_output')
     def test_workshop_result_processor_no_workshop_type(self, mock_create_coord, mock_create_filter, mock_unified_search):
         """Test workshop result processor with no workshop type specified."""
         mock_create_filter.return_value = Mock()
-        mock_create_coord.return_value = {'x': 0, 'y': 0, 'workshop_type': 'general'}
-        mock_unified_search.return_value = {'success': True}
+        mock_create_coord.return_value = {'target_x': 0, 'target_y': 0}
+        mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={},
+            message="Found workshop"
+        )
         
         context = MockActionContext(
             character_name=self.character_name,
@@ -256,21 +262,19 @@ class TestFindWorkshopsAction(unittest.TestCase):
             content_data={}
         )
         
-        # Verify create_coordinate_response was called with 'general' as default workshop_type
-        mock_create_coord.assert_called_with(
-            0, 0,
-            distance=0,
-            workshop_code='unknown_workshop',
-            workshop_name='unknown_workshop',
-            workshop_type='general'  # Default when no workshop_type specified
-        )
+        # Verify standardize_coordinate_output was called with coordinates
+        mock_create_coord.assert_called_with(0, 0)
     
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search')
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_workshop_filter')
     def test_execute_no_map_state(self, mock_create_filter, mock_unified_search):
         """Test execution with no map state in context."""
         mock_create_filter.return_value = Mock()
-        mock_unified_search.return_value = {'success': True}
+        mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={},
+            message="Found workshop"
+        )
         
         context = MockActionContext(
             character_name=self.character_name,
@@ -284,17 +288,18 @@ class TestFindWorkshopsAction(unittest.TestCase):
         # Should still work, passing None to unified_search
         unified_args = mock_unified_search.call_args[0]
         self.assertIsNone(unified_args[6])  # map_state argument should be None
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
     
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search')
     @patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_workshop_filter')
     def test_execute_failed_search(self, mock_create_filter, mock_unified_search):
         """Test execution when unified search fails."""
         mock_create_filter.return_value = Mock()
-        mock_unified_search.return_value = {
-            'success': False,
-            'error': 'No workshops found in search radius'
-        }
+        mock_unified_search.return_value = ActionResult(
+            success=False,
+            error='No workshops found in search radius',
+            message="Search failed"
+        )
         
         context = MockActionContext(
             character_name=self.character_name,
@@ -306,17 +311,21 @@ class TestFindWorkshopsAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Should return the failed result from unified_search
-        self.assertFalse(result['success'])
-        self.assertEqual(result['error'], 'No workshops found in search radius')
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, 'No workshops found in search radius')
     
     def test_manhattan_distance_calculation(self):
         """Test Manhattan distance calculation in result processor."""
         # This tests the distance calculation logic within the result processor
         with patch('src.controller.actions.find_workshops.FindWorkshopsAction.unified_search') as mock_unified_search:
             with patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_workshop_filter'):
-                with patch('src.controller.actions.find_workshops.FindWorkshopsAction.create_coordinate_response') as mock_create_coord:
-                    mock_unified_search.return_value = {'success': True}
-                    mock_create_coord.return_value = {'success': True}
+                with patch('src.controller.actions.find_workshops.FindWorkshopsAction.standardize_coordinate_output') as mock_create_coord:
+                    mock_unified_search.return_value = ActionResult(
+            success=True,
+            data={},
+            message="Found workshop"
+        )
+                    mock_create_coord.return_value = {'target_x': 0, 'target_y': 0}
                     
                     context = MockActionContext(
                         character_name=self.character_name,
@@ -338,9 +347,10 @@ class TestFindWorkshopsAction(unittest.TestCase):
                         content_data={}
                     )
                     
-                    # Verify correct distance was calculated
-                    call_args = mock_create_coord.call_args[1]  # kwargs
-                    self.assertEqual(call_args['distance'], 7)
+                    # Verify correct coordinates were passed
+                    call_args = mock_create_coord.call_args[0]  # args
+                    self.assertEqual(call_args[0], 8)  # x
+                    self.assertEqual(call_args[1], 7)  # y
 
 
 if __name__ == '__main__':

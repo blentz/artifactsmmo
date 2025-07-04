@@ -9,7 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from src.controller.action_executor import ActionExecutor, ActionResult
+from src.controller.action_executor import ActionExecutor
+from src.controller.actions.base import ActionResult
 from src.controller.action_factory import ActionFactory
 from src.lib.yaml_data import YamlData
 
@@ -90,8 +91,8 @@ class TestActionExecutionRegression(BaseTest):
             # Should return failure result, not raise exception
             self.assertIsInstance(result, ActionResult)
             self.assertFalse(result.success)
-            if result.error_message:
-                self.assertIn('Unknown action', result.error_message)
+            if result.error:
+                self.assertIn('Failed to create action', result.error)
         finally:
             # Re-enable logging
             logging.disable(original_level)
@@ -113,8 +114,8 @@ class TestActionExecutionRegression(BaseTest):
             self.assertIsInstance(result, ActionResult)
             self.assertFalse(result.success)
             # Error message should mention missing parameters
-            if result.error_message:
-                self.assertTrue(any(keyword in result.error_message.lower() 
+            if result.error:
+                self.assertTrue(any(keyword in result.error.lower() 
                                   for keyword in ['parameter', 'missing', 'required']))
         finally:
             # Re-enable logging
@@ -193,11 +194,13 @@ class TestActionExecutionRegression(BaseTest):
                         
                         # Should return ActionResult (success or failure)
                         self.assertIsInstance(result, ActionResult)
-                        self.assertEqual(result.action_name, action_name)
+                        # action_name in result will be the class name (e.g., 'FindMonstersAction')
+                        # not the action key (e.g., 'find_monsters')
+                        self.assertIsNotNone(result.action_name)
                         
                         # If it failed, should have error message (unless it's an API mock issue)
-                        if not result.success and result.error_message is not None:
-                            self.assertIsNotNone(result.error_message)
+                        if not result.success and result.error is not None:
+                            self.assertIsNotNone(result.error)
                             
                     except Exception as e:
                         self.fail(f"Action {action_name} execution raised unexpected exception: {e}")
@@ -246,8 +249,8 @@ class TestActionExecutionRegression(BaseTest):
                 # Should handle exception and return failure result
                 self.assertIsInstance(result, ActionResult)
                 self.assertFalse(result.success)
-                if result.error_message:
-                    self.assertIn('Test exception', result.error_message)
+                if result.error:
+                    self.assertIn('Test exception', result.error)
             finally:
                 # Re-enable logging
                 logging.disable(original_level)

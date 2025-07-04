@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.action_factory import ActionExecutorConfig, ActionFactory
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 
 from test.fixtures import create_mock_client
 
@@ -14,7 +14,7 @@ class MockAction(ActionBase):
     
     conditions = {'test_condition': True}
     reactions = {'test_reaction': True}
-    weights = {'mock': 1.5}
+    weight = 1.5
     
     def __init__(self, param1: str, param2: int = 10):
         super().__init__()
@@ -23,7 +23,10 @@ class MockAction(ActionBase):
     
     def execute(self, client, context=None):
         # Accept context for ActionContext compatibility
-        return {'success': True, 'param1': self.param1, 'param2': self.param2}
+        return ActionResult(
+            success=True,
+            data={'param1': self.param1, 'param2': self.param2}
+        )
 
 
 class TestActionFactory(unittest.TestCase):
@@ -130,20 +133,20 @@ class TestActionFactory(unittest.TestCase):
         self.factory.register_action('test_action', config)
         
         action_data = {'test_param': 'executed', 'optional_param': 100}
-        success, response = self.factory.execute_action('test_action', action_data, self.mock_client)
+        result = self.factory.execute_action('test_action', action_data, self.mock_client)
         
-        self.assertTrue(success)
-        self.assertIsNotNone(response)
-        self.assertEqual(response['param1'], 'executed')
-        self.assertEqual(response['param2'], 100)
+        self.assertTrue(result.success)
+        self.assertIsNotNone(result.data)
+        self.assertEqual(result.data['param1'], 'executed')
+        self.assertEqual(result.data['param2'], 100)
     
     def test_execute_action_failure(self) -> None:
         """Test action execution failure handling."""
         # Don't register the action
-        success, response = self.factory.execute_action('unknown_action', {}, self.mock_client)
+        result = self.factory.execute_action('unknown_action', {}, self.mock_client)
         
-        self.assertFalse(success)
-        self.assertIsNone(response)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
     
     @patch('src.controller.action_factory.importlib.import_module')
     def test_register_action_from_yaml(self, mock_import) -> None:

@@ -7,7 +7,7 @@ from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_ma
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class ExploreMapAction(ActionBase):
@@ -19,7 +19,7 @@ class ExploreMapAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Explore the map to find interesting locations """
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
@@ -28,12 +28,7 @@ class ExploreMapAction(ActionBase):
         exploration_strategy = context.get('exploration_strategy', 'spiral')
         target_content_types = context.get('target_content_types', ['monster', 'resource'])
             
-        self.log_execution_start(
-            character_x=character_x,
-            character_y=character_y, 
-            radius=exploration_radius,
-            strategy=exploration_strategy
-        )
+        self._context = context
         
         try:
             # Generate exploration coordinates based on strategy
@@ -79,7 +74,7 @@ class ExploreMapAction(ActionBase):
             # Analyze discoveries and suggest next action
             next_action_suggestion = self._suggest_next_action(discovered_locations, character_x, character_y, exploration_radius)
             
-            result = self.get_success_response(
+            return self.create_success_result(
                 explored_locations=explored_count,
                 discovered_monsters=len(discovered_locations["monsters"]),
                 discovered_resources=len(discovered_locations["resources"]),
@@ -89,13 +84,8 @@ class ExploreMapAction(ActionBase):
                 exploration_strategy_used=exploration_strategy
             )
             
-            self.log_execution_result(result)
-            return result
-            
         except Exception as e:
-            error_response = self.get_error_response(f'Map exploration failed: {str(e)}')
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f'Map exploration failed: {str(e)}')
 
     def _generate_exploration_coordinates(self, character_x: int, character_y: int, 
                                         exploration_radius: int, exploration_strategy: str) -> List[Tuple[int, int]]:

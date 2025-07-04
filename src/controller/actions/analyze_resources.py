@@ -8,7 +8,7 @@ from artifactsmmo_api_client.api.resources.get_resource_resources_code_get impor
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeResourcesAction(ActionBase):
@@ -16,17 +16,17 @@ class AnalyzeResourcesAction(ActionBase):
 
     # GOAP parameters
     conditions = {
-            'character_status': {
-                'alive': True,
-            },
-        }
+        'character_status': {
+            'alive': True,
+        },
+    }
     reactions = {
         "resource_analysis_complete": True,
         "nearby_resources_known": True,
         "crafting_opportunities_identified": True,
         "resource_locations_known": True
     }
-    weights = {"resource_analysis_complete": 6}
+    weight = 6.0
 
     def __init__(self):
         """
@@ -34,10 +34,9 @@ class AnalyzeResourcesAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Analyze nearby resources for crafting opportunities """
-        # Call superclass to set self._context
-        super().execute(client, context)
+        self._context = context
         
         # Get parameters from context
         character_x = context.get('character_x', 0)
@@ -46,19 +45,14 @@ class AnalyzeResourcesAction(ActionBase):
         analysis_radius = context.get('analysis_radius', 10)
         equipment_types = context.get('equipment_types', ["weapon", "armor", "utility"])
         
-        self.log_execution_start(
-            character_x=character_x,
-            character_y=character_y,
-            character_level=character_level,
-            analysis_radius=analysis_radius
-        )
+        self.logger.debug(f"Starting {self.__class__.__name__} (character_x={character_x}, character_y={character_y}, character_level={character_level}, analysis_radius={analysis_radius})")
         
         try:
             # Step 1: Find nearby resources
             nearby_resources = self._find_nearby_resources(client, character_x, character_y, analysis_radius)
             
             if not nearby_resources:
-                return self.get_error_response("No resources found in analysis radius")
+                return self.create_error_result("No resources found in analysis radius")
             
             # Step 2: Analyze each resource for crafting potential
             resource_analysis = {}
@@ -81,7 +75,18 @@ class AnalyzeResourcesAction(ActionBase):
             # Step 4: Prioritize opportunities based on character needs using YAML configuration
             prioritized_opportunities = self._prioritize_crafting_opportunities(equipment_opportunities, config_data)
             
-            result = self.get_success_response(
+            # Create state changes to mark analysis complete
+            state_changes = {
+                "resource_analysis_complete": True,
+                "nearby_resources_known": True,
+                "crafting_opportunities_identified": True,
+                "resource_locations_known": True
+            }
+            
+            return self.create_result_with_state_changes(
+                success=True,
+                state_changes=state_changes,
+                message=f"Analyzed {len(nearby_resources)} resources, found {len(prioritized_opportunities)} opportunities",
                 nearby_resources_count=len(nearby_resources),
                 analyzed_resources=list(resource_analysis.keys()),
                 equipment_opportunities=equipment_opportunities,
@@ -89,13 +94,8 @@ class AnalyzeResourcesAction(ActionBase):
                 recommended_action=self._recommend_next_action(prioritized_opportunities)
             )
             
-            self.log_execution_result(result)
-            return result
-            
         except Exception as e:
-            error_response = self.get_error_response(f'Resource analysis failed: {str(e)}')
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f'Resource analysis failed: {str(e)}')
 
     def _find_nearby_resources(self, client, character_x: int, character_y: int, analysis_radius: int) -> List[Dict]:
         """

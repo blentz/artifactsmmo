@@ -60,11 +60,11 @@ class TestFindMonstersCurrentPosition(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
         
         # Assert
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_x'], 0)
-        self.assertEqual(result['target_y'], 1)
-        self.assertEqual(result['monster_code'], 'chicken')
-        self.assertEqual(result['distance'], 0.0)  # Character is at the same position
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 0)
+        self.assertEqual(result.data['target_y'], 1)
+        self.assertEqual(result.data['monster_code'], 'chicken')
+        self.assertEqual(result.data['distance'], 0.0)  # Character is at the same position
         
     def test_search_includes_radius_zero(self):
         """Test that the search loop starts from radius 0."""
@@ -171,11 +171,11 @@ class TestFindMonstersCurrentPosition(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
         
         # Assert - should choose chicken at current position
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_x'], 0)
-        self.assertEqual(result['target_y'], 0)
-        self.assertEqual(result['monster_code'], 'chicken')
-        self.assertEqual(result['distance'], 0.0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 0)
+        self.assertEqual(result.data['target_y'], 0)
+        self.assertEqual(result.data['monster_code'], 'chicken')
+        self.assertEqual(result.data['distance'], 0.0)
 
 
 if __name__ == '__main__':

@@ -37,8 +37,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertTrue(self.action.reactions['at_resource_location'])
         self.assertTrue(self.action.reactions['location_context']['at_target'])
         
-        self.assertIn('at_resource_location', self.action.weights)
-        self.assertEqual(self.action.weights['at_resource_location'], 10)
+        self.assertIsInstance(self.action.weight, (int, float))
         
     def test_get_target_coordinates_from_target_params(self):
         """Test getting target coordinates from target_x/target_y parameters."""

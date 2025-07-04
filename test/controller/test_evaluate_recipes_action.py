@@ -70,7 +70,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'wooden_staff')
             self.assertEqual(self.action_context.get_parameter('target_equipment_slot'), 'weapon')
             self.assertEqual(self.action_context.get_parameter('required_craft_skill'), 'weaponcrafting')
@@ -94,9 +94,9 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            if not result['success']:
-                print(f"Armor test failed with error: {result.get('error', 'Unknown error')}")
-            self.assertTrue(result['success'])
+            if not result.success:
+                print(f"Armor test failed with error: {result.error}")
+            self.assertTrue(result.success)
             self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'copper_armor')
             self.assertEqual(self.action_context.get_parameter('required_craft_skill'), 'gearcrafting')
             self.assertEqual(self.action_context.get_parameter('required_workshop_type'), 'gearcrafting_workshop')
@@ -122,7 +122,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'copper_ring')
             self.assertEqual(self.action_context.get_parameter('required_craft_skill'), 'jewelrycrafting')
             self.assertEqual(self.action_context.get_parameter('required_workshop_type'), 'jewelrycrafting_workshop')
@@ -131,7 +131,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         """Test that missing target slot causes failure"""
         result = self.action.execute(self.mock_client, self.action_context)
         
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
         
     def test_unknown_slot_fails(self):
         """Test that unknown equipment slot causes failure"""
@@ -139,7 +139,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.action_context)
         
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
         
     def test_no_craftable_recipes_fails(self):
         """Test that no craftable recipes causes failure"""
@@ -154,7 +154,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertFalse(result['success'])
+            self.assertFalse(result.success)
             
     def test_insufficient_skill_level_filters_out(self):
         """Test that recipes requiring too high skill level are filtered out"""
@@ -173,7 +173,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertFalse(result['success'])  # No craftable recipes after filtering
+            self.assertFalse(result.success)  # No craftable recipes after filtering
             
     def test_material_availability_scoring(self):
         """Test that recipes with available materials score higher"""
@@ -197,7 +197,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             # Should select the one with available materials
             self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'wooden_staff')
             
@@ -223,7 +223,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             # Should select the one with better stats
             self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'ash_staff')
             
@@ -249,7 +249,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertFalse(result['success'])  # All recipes filtered out
+            self.assertFalse(result.success)  # All recipes filtered out
             
     def test_no_current_equipment_handles_gracefully(self):
         """Test that missing current equipment is handled gracefully"""
@@ -271,7 +271,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'copper_helmet')
             
     def test_api_error_handling(self):
@@ -283,7 +283,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertFalse(result['success'])
+            self.assertFalse(result.success)
             
     def test_no_api_client_fails(self):
         """Test that missing API client causes failure"""
@@ -291,7 +291,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(None, self.action_context)
         
-        self.assertFalse(result['success'])
+        self.assertFalse(result.success)
         
     def _create_mock_item(self, item_code: str, item_level: int, craft_skill: str, 
                          required_items: list, effects: dict, item_slot: str = None):

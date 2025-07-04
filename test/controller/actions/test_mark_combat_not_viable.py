@@ -28,8 +28,8 @@ class TestMarkCombatNotViableAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Combat marked as not viable (win rate: 0.0%)")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Combat marked as not viable (win rate: 0.0%)")
         
     def test_execute_with_win_rate_context(self):
         """Test execution with win rate context."""
@@ -46,10 +46,10 @@ class TestMarkCombatNotViableAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Combat marked as not viable (win rate: 15.0%)")
-        self.assertEqual(result['recent_win_rate'], 0.15)
-        self.assertEqual(result['recommendation'], "Upgrade equipment before continuing combat")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Combat marked as not viable (win rate: 15.0%)")
+        self.assertEqual(result.data['recent_win_rate'], 0.15)
+        self.assertEqual(result.data['recommendation'], "Upgrade equipment before continuing combat")
         
     def test_repr(self):
         """Test string representation."""

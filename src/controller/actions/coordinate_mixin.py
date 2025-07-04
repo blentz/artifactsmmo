@@ -93,18 +93,4 @@ class CoordinateStandardizationMixin:
             location=context.get('location')
         )
     
-    def create_coordinate_response(self, x: int, y: int, **additional_data) -> Dict[str, Any]:
-        """
-        Create a standardized coordinate response.
-        
-        Args:
-            x: X coordinate
-            y: Y coordinate
-            **additional_data: Additional response data
-            
-        Returns:
-            Dictionary with standardized coordinate response
-        """
-        response = self.standardize_coordinate_output(x, y)
-        response.update(additional_data)
-        return response
+    # Legacy create_coordinate_response method removed - use create_success_result/create_error_result instead

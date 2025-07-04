@@ -35,7 +35,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # Should select helmet (priority 80) over boots (priority 70)
             selected_slot = self.action_context.get_parameter('target_equipment_slot')
@@ -61,7 +61,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # Should select weapon due to higher urgency despite helmet being available
             selected_slot = self.action_context.get_parameter('target_equipment_slot')
@@ -83,7 +83,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # Should only consider jewelry slots, select amulet
             selected_slot = self.action_context.get_parameter('target_equipment_slot')
@@ -104,7 +104,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # weapon: 60 * (100/100) = 60
             # shield: 80 * (90/100) = 72
@@ -118,8 +118,8 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.action_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Equipment gap analysis not available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Equipment gap analysis not available', result.error)
         
     def test_error_handling_missing_gap_analysis_data(self):
         """Test error when gap analysis is empty"""
@@ -127,8 +127,8 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.action_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Equipment gap analysis not available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Equipment gap analysis not available', result.error)
         
     def test_error_handling_unknown_skill(self):
         """Test error when target skill has no mapped slots"""
@@ -142,8 +142,8 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("No equipment slots mapped for skill 'unknown_skill'", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("No equipment slots mapped for skill 'unknown_skill'", result.error)
             
     def test_no_valid_slots_in_gap_analysis(self):
         """Test error when no valid slots are found in gap analysis"""
@@ -157,8 +157,8 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertFalse(result['success'])
-            self.assertIn('No valid slots found for skill weaponcrafting', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('No valid slots found for skill weaponcrafting', result.error)
             
     def test_alternatives_tracking(self):
         """Test that alternative slot options are tracked in reasoning"""
@@ -177,7 +177,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             reasoning = self.action_context.get_parameter('slot_selection_reasoning')
             alternatives = reasoning.get('alternatives', [])
@@ -203,7 +203,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.action_context)
             
             # Should still work with fallback configuration
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
     def test_determine_default_craft_skill_from_knowledge_base(self):
         """Test automatic craft skill determination from knowledge base"""
@@ -243,7 +243,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # Should determine gearcrafting as the default skill for helmet
             reasoning = self.action_context.get_parameter('slot_selection_reasoning')
@@ -372,7 +372,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.action_context)
             
-            self.assertTrue(result['success'])
+            self.assertTrue(result.success)
             
             # Should intelligently select a skill that works with available equipment slots
             reasoning = self.action_context.get_parameter('slot_selection_reasoning')
@@ -408,7 +408,7 @@ class TestSelectOptimalSlotAction(unittest.TestCase):
             skills_found = set()
             for _ in range(10):
                 result = self.action.execute(self.mock_client, self.action_context)
-                self.assertTrue(result['success'])
+                self.assertTrue(result.success)
                 
                 reasoning = self.action_context.get_parameter('slot_selection_reasoning')
                 self.assertIsNotNone(reasoning)

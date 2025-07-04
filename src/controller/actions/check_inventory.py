@@ -12,7 +12,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class CheckInventoryAction(ActionBase):
@@ -31,7 +31,7 @@ class CheckInventoryAction(ActionBase):
         "has_refined_materials": True,
         "inventory_updated": True
     }
-    weights = {"inventory_updated": 1.0}
+    weight = 1.0
 
     def __init__(self):
         """
@@ -39,7 +39,7 @@ class CheckInventoryAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Check inventory for required items and update world state """
         # Get parameters from context
         character_name = context.character_name
@@ -51,7 +51,7 @@ class CheckInventoryAction(ActionBase):
         elif isinstance(required_items, list) and len(required_items) > 0 and isinstance(required_items[0], str):
             required_items = [{'item_code': item, 'quantity': 1} for item in required_items]
             
-        self.log_execution_start(character_name=character_name, required_items=required_items)
+        self._context = context
         
         try:
             # Get current character inventory
@@ -82,25 +82,19 @@ class CheckInventoryAction(ActionBase):
             # Update world state based on findings
             world_state_updates = self._determine_world_state_updates(item_checks, inventory_analysis)
             
-            result = {
-                'success': True,
-                'inventory': inventory_dict,
-                'item_checks': item_checks,
-                'inventory_analysis': inventory_analysis,
-                'world_state_updates': world_state_updates,
-                'total_items': len([k for k, v in inventory_dict.items() if v > 0]),
-                'inventory_summary': self._create_inventory_summary(inventory_dict),
+            return self.create_success_result(
+                inventory=inventory_dict,
+                item_checks=item_checks,
+                inventory_analysis=inventory_analysis,
+                world_state_updates=world_state_updates,
+                total_items=len([k for k, v in inventory_dict.items() if v > 0]),
+                inventory_summary=self._create_inventory_summary(inventory_dict),
                 # Add inventory_status for compatibility with transform_raw_materials
-                'inventory_status': {item: {'available': qty} for item, qty in inventory_dict.items()}
-            }
-            
-            self.log_execution_result(result)
-            return result
+                inventory_status={item: {'available': qty} for item, qty in inventory_dict.items()}
+            )
             
         except Exception as e:
-            error_response = self.get_error_response(f"Inventory check failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Inventory check failed: {str(e)}")
 
     def _get_character_inventory(self, client, character_name: str) -> Dict[str, int]:
         """

@@ -24,7 +24,7 @@ class MoveToResourceAction(MovementActionBase):
                 'at_target': True,
             },
         }
-    weights = {"at_resource_location": 10}
+    weight = 10
 
     def __init__(self):
         """

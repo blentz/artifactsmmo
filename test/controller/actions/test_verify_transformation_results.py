@@ -36,9 +36,9 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['verified'])
-        self.assertIn("No transformations to verify", result['message'])
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['verified'])
+        self.assertIn("No transformations to verify", result.message)
         
     def test_execute_all_verified(self):
         """Test when all transformations are verified."""
@@ -69,12 +69,12 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertTrue(result['all_verified'])
-            self.assertEqual(len(result['verification_results']), 2)
+            self.assertTrue(result.success)
+            self.assertTrue(result.data['all_verified'])
+            self.assertEqual(len(result.data['verification_results']), 2)
             
             # Check individual verifications
-            for verification in result['verification_results']:
+            for verification in result.data['verification_results']:
                 self.assertTrue(verification['verified'])
                 
     def test_execute_partial_verification(self):
@@ -106,11 +106,11 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])  # Action succeeds even if verification fails
-            self.assertFalse(result['all_verified'])
+            self.assertTrue(result.success)  # Action succeeds even if verification fails
+            self.assertFalse(result.data['all_verified'])
             
             # Check individual results
-            verifications = result['verification_results']
+            verifications = result.data['verification_results']
             copper_result = next(v for v in verifications if v['material'] == 'copper')
             iron_result = next(v for v in verifications if v['material'] == 'iron')
             
@@ -143,10 +143,10 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertFalse(result['all_verified'])
+            self.assertTrue(result.success)
+            self.assertFalse(result.data['all_verified'])
             
-            verification = result['verification_results'][0]
+            verification = result.data['verification_results'][0]
             self.assertFalse(verification['verified'])
             self.assertEqual(verification['expected'], 5)
             self.assertEqual(verification['available'], 3)
@@ -164,8 +164,8 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Could not verify inventory", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Could not verify inventory", result.error)
             
     def test_execute_exception_handling(self):
         """Test exception handling."""
@@ -178,8 +178,8 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Failed to verify transformation results", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Failed to verify transformation results", result.error)
             
     def test_duplicate_materials_handling(self):
         """Test handling of duplicate materials in transformations."""
@@ -214,8 +214,8 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             self.assertEqual(check_context['required_items'], ['copper'])
             
             # Both transformations should be verified
-            self.assertTrue(result['all_verified'])
-            self.assertEqual(len(result['verification_results']), 2)
+            self.assertTrue(result.data['all_verified'])
+            self.assertEqual(len(result.data['verification_results']), 2)
             
     def test_transformation_without_quantity(self):
         """Test transformation without quantity field."""
@@ -238,10 +238,10 @@ class TestVerifyTransformationResultsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertTrue(result['all_verified'])
+            self.assertTrue(result.success)
+            self.assertTrue(result.data['all_verified'])
             
-            verification = result['verification_results'][0]
+            verification = result.data['verification_results'][0]
             self.assertEqual(verification['expected'], 0)  # Default when not specified
             self.assertTrue(verification['verified'])  # 1 >= 0
             

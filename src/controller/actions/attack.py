@@ -4,7 +4,7 @@ from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AttackAction(ActionBase):
@@ -25,21 +25,21 @@ class AttackAction(ActionBase):
                 'status': 'completed',
             },
         }
-    weights = {'attack': 3.0}  # Higher weight since it's a goal action
+    weight = 3.0  # Higher weight since it's a goal action
 
     def __init__(self):
         """Initialize attack action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext'):
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """ Execute the attack action """
             
         # Get character name from context
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
+            return self.create_error_result("No character name provided")
             
-        self.log_execution_start(character_name=character_name)
+        self._context = context
         
         try:
             response = fight_character_api(
@@ -90,7 +90,7 @@ class AttackAction(ActionBase):
                     }
                     
             # Return enhanced response with XP tracking
-            return self.get_success_response(
+            return self.create_success_result(
                 fight_response=response,
                 xp_gained=xp_gained,
                 gold_gained=gold_gained,
@@ -104,21 +104,21 @@ class AttackAction(ActionBase):
             
             # Check for specific error conditions
             if "Character is in cooldown" in error_msg:
-                return self.get_error_response("Attack failed: Character is in cooldown", is_cooldown=True)
+                return self.create_error_result("Attack failed: Character is in cooldown", is_cooldown=True)
             elif "Character not found" in error_msg:
-                return self.get_error_response("Attack failed: Character not found")
+                return self.create_error_result("Attack failed: Character not found")
             elif "Monster not found at this location" in error_msg:
-                return self.get_error_response("Attack failed: No monster at location", no_monster=True)
+                return self.create_error_result("Attack failed: No monster at location", no_monster=True)
             elif "497" in error_msg:
                 # Character already at this location
                 if "already at this location" in error_msg.lower():
-                    return self.get_error_response("Attack failed: Character must be at monster location", wrong_location=True)
+                    return self.create_error_result("Attack failed: Character must be at monster location", wrong_location=True)
             elif "486" in error_msg:
                 # Action not allowed  
                 if "action is not allowed" in error_msg.lower():
-                    return self.get_error_response("Attack failed: Action not allowed", action_not_allowed=True)
+                    return self.create_error_result("Attack failed: Action not allowed", action_not_allowed=True)
             else:
-                return self.get_error_response(f"Attack failed: {error_msg}")
+                return self.create_error_result(f"Attack failed: {error_msg}")
 
     def estimate_fight_duration(self, context: 'ActionContext', monster_data=None):
         """

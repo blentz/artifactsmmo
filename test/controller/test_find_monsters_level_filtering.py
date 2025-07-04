@@ -89,8 +89,8 @@ class TestFindMonstersLevelFiltering(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
             
             # Should not find viable monsters because level 4 > level 1 + 1
-            self.assertFalse(result.get('success'))
-            self.assertIn('No suitable monsters found matching criteria', result.get('error', ''))
+            self.assertFalse(result.success)
+            self.assertIn('No suitable monsters found matching criteria', result.error)
     
     def test_unknown_monster_appropriate_level(self):
         """Test that unknown monsters with appropriate levels are accepted."""
@@ -146,10 +146,10 @@ class TestFindMonstersLevelFiltering(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
             
             # Should find viable monster because level 1 <= level 1 + 1
-            self.assertTrue(result.get('success'))
-            self.assertEqual(result.get('target_x'), 0)
-            self.assertEqual(result.get('target_y'), 1)
-            self.assertEqual(result.get('monster_code'), 'chicken')
+            self.assertTrue(result.success)
+            self.assertEqual(result.data.get('target_x'), 0)
+            self.assertEqual(result.data.get('target_y'), 1)
+            self.assertEqual(result.data.get('monster_code'), 'chicken')
     
     def test_api_failure_skips_monster(self):
         """Test that API failures cause monsters to be skipped."""
@@ -195,8 +195,8 @@ class TestFindMonstersLevelFiltering(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
             
             # Should not find viable monsters due to API failure
-            self.assertFalse(result.get('success'))
-            self.assertIn('No suitable monsters found matching criteria', result.get('error', ''))
+            self.assertFalse(result.success)
+            self.assertIn('No suitable monsters found matching criteria', result.error)
     
     def test_known_monster_uses_knowledge_base(self):
         """Test that known monsters use knowledge base data instead of API."""
@@ -271,12 +271,12 @@ class TestFindMonstersLevelFiltering(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
             
             # Should find viable monster from knowledge base
-            if not result.get('success'):
+            if not result.success:
                 print(f"DEBUG: Result = {result}")
-            self.assertTrue(result.get('success'))
-            self.assertEqual(result.get('target_x'), 1)
-            self.assertEqual(result.get('target_y'), 0)
-            self.assertEqual(result.get('monster_code'), 'wolf')
+            self.assertTrue(result.success)
+            self.assertEqual(result.data.get('target_x'), 1)
+            self.assertEqual(result.data.get('target_y'), 0)
+            self.assertEqual(result.data.get('monster_code'), 'wolf')
             
             # API is called once to get target monster codes (expected behavior)
             self.assertEqual(mock_get_all_monsters.call_count, 1)
@@ -338,10 +338,10 @@ class TestFindMonstersLevelFiltering(unittest.TestCase):
             result = self.action.execute(self.mock_client, context)
             
             # Should find chicken (level 1) over wolf (level 2), and skip slime (level 4)
-            self.assertTrue(result.get('success'))
-            self.assertEqual(result.get('target_x'), 0)
-            self.assertEqual(result.get('target_y'), 1)
-            self.assertEqual(result.get('monster_code'), 'chicken')
+            self.assertTrue(result.success)
+            self.assertEqual(result.data.get('target_x'), 0)
+            self.assertEqual(result.data.get('target_y'), 1)
+            self.assertEqual(result.data.get('monster_code'), 'chicken')
 
 
 if __name__ == '__main__':

@@ -59,9 +59,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
         context = MockActionContext(skill="weaponcrafting", character_level=5)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
 
     def test_execute_no_knowledge_base(self):
         """Test execute fails when knowledge base is not provided."""
@@ -72,8 +72,8 @@ class TestFindXpSourcesAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(skill="weaponcrafting", learning_manager=mock_learning_manager, knowledge_base=None)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Knowledge base not available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Knowledge base not available', result.error)
 
     def test_execute_no_learning_manager(self):
         """Test execute when learning manager is not provided."""
@@ -84,8 +84,8 @@ class TestFindXpSourcesAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Learning manager not available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Learning manager not available', result.error)
 
     def test_execute_no_skill_xp_effects(self):
         """Test execute when skill has no XP effects."""
@@ -99,8 +99,8 @@ class TestFindXpSourcesAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn("No XP sources found for skill 'weaponcrafting'", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("No XP sources found for skill 'weaponcrafting'", result.error)
 
     def test_execute_success_basic(self):
         """Test successful execution with basic XP effects."""
@@ -123,11 +123,11 @@ class TestFindXpSourcesAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['skill'], 'weaponcrafting')
-        self.assertIn('xp_sources', result)
-        self.assertIn('actionable_sources', result)
-        self.assertGreater(result['total_sources_found'], 0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['skill'], 'weaponcrafting')
+        self.assertIn('xp_sources', result.data)
+        self.assertIn('actionable_sources', result.data)
+        self.assertGreater(result.data['total_sources_found'], 0)
 
     def test_execute_success_with_detailed_analysis(self):
         """Test successful execution with detailed effect analysis."""
@@ -149,9 +149,9 @@ class TestFindXpSourcesAction(unittest.TestCase):
             context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
             result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['total_sources_found'], 1)
-        self.assertIsNotNone(result.get('actionable_sources'))
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['total_sources_found'], 1)
+        self.assertIsNotNone(result.data.get('actionable_sources'))
 
     def test_execute_missing_effect_details(self):
         """Test execution when effect details are missing but sources exist."""
@@ -167,8 +167,8 @@ class TestFindXpSourcesAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(skill="weaponcrafting", knowledge_base=mock_knowledge_base, learning_manager=mock_learning_manager)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['total_sources_found'], 1)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['total_sources_found'], 1)
 
     def test_execute_with_effects_learning(self):
         """Test execution triggers effects learning when data not available."""
@@ -191,14 +191,13 @@ class TestFindXpSourcesAction(unittest.TestCase):
         
         # Verify effects learning was called
         mock_learning_manager.learn_all_effects_bulk.assert_called_once_with(client)
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
 
     def test_execute_has_goap_attributes(self):
         """Test that FindXpSourcesAction has expected GOAP attributes."""
         self.assertTrue(hasattr(FindXpSourcesAction, 'conditions'))
         self.assertTrue(hasattr(FindXpSourcesAction, 'reactions'))
-        self.assertTrue(hasattr(FindXpSourcesAction, 'weights'))
-        self.assertTrue(hasattr(FindXpSourcesAction, 'g'))
+        self.assertTrue(hasattr(FindXpSourcesAction, 'weight'))
 
     def test_check_effects_data_available(self):
         """Test _check_effects_data_available method."""

@@ -99,7 +99,7 @@ class TestFindResourcesAction(unittest.TestCase):
         
         self.assertIsNotNone(result)
         self.assertEqual(result['code'], 'iron_ore')  # Closer to (12,17) than gold_ore
-        self.assertEqual(result['location'], (10, 15))
+        self.assertEqual(result['data']['last_seen_location'], [10, 15])
     
     def test_find_closest_kb_resource_no_location(self):
         """Test finding closest resource when no location data available."""
@@ -159,16 +159,16 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_info, 'knowledge_base', 12, 17
         )
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['location'], (10, 15))
-        self.assertEqual(result['distance'], 4)  # Manhattan distance
-        self.assertEqual(result['resource_code'], 'iron_ore')
-        self.assertEqual(result['resource_name'], 'Iron Ore')
-        self.assertEqual(result['resource_skill'], 'mining')
-        self.assertEqual(result['resource_level'], 5)
-        self.assertEqual(result['source'], 'knowledge_base')
-        self.assertEqual(result['target_x'], 10)
-        self.assertEqual(result['target_y'], 15)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['location'], (10, 15))
+        self.assertEqual(result.data['distance'], 4)  # Manhattan distance
+        self.assertEqual(result.data['resource_code'], 'iron_ore')
+        self.assertEqual(result.data['resource_name'], 'Iron Ore')
+        self.assertEqual(result.data['resource_skill'], 'mining')
+        self.assertEqual(result.data['resource_level'], 5)
+        self.assertEqual(result.data['source'], 'knowledge_base')
+        self.assertEqual(result.data['target_x'], 10)
+        self.assertEqual(result.data['target_y'], 15)
     
     def test_format_resource_response_map_state(self):
         """Test formatting resource response from map state source."""
@@ -188,10 +188,10 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_info, 'map_state', 0, 0
         )
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['resource_skill'], 'woodcutting')  # From content
-        self.assertEqual(result['resource_level'], 3)  # From content
-        self.assertEqual(result['source'], 'map_state')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['resource_skill'], 'woodcutting')  # From content
+        self.assertEqual(result.data['resource_level'], 3)  # From content
+        self.assertEqual(result.data['source'], 'map_state')
     
     def test_create_resource_filter_basic(self):
         """Test creating basic resource filter."""
@@ -264,8 +264,8 @@ class TestFindResourcesAction(unittest.TestCase):
         
         result = self.action.perform_action(self.mock_client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No target resource types specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No target resource types specified', result.error)
     
     def test_perform_action_knowledge_base_hit(self):
         """Test perform_action finding resource in knowledge base."""
@@ -294,10 +294,10 @@ class TestFindResourcesAction(unittest.TestCase):
             
             result = self.action.perform_action(self.mock_client, context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(result['source'], 'knowledge_base')
-            self.assertEqual(result['resource_code'], 'iron_ore')
-            self.assertEqual(result['distance'], 4)
+            self.assertTrue(result.success)
+            self.assertEqual(result.data['source'], 'knowledge_base')
+            self.assertEqual(result.data['resource_code'], 'iron_ore')
+            self.assertEqual(result.data['distance'], 4)
     
     def test_perform_action_map_state_hit(self):
         """Test perform_action finding resource in map state."""
@@ -326,9 +326,9 @@ class TestFindResourcesAction(unittest.TestCase):
                 
                 result = self.action.perform_action(self.mock_client, context)
                 
-                self.assertTrue(result['success'])
-                self.assertEqual(result['source'], 'map_state')
-                self.assertEqual(result['resource_code'], 'ash_wood')
+                self.assertTrue(result.success)
+                self.assertEqual(result.data['source'], 'map_state')
+                self.assertEqual(result.data['resource_code'], 'ash_wood')
     
     def test_perform_action_api_fallback(self):
         """Test perform_action falling back to API search."""
@@ -336,11 +336,14 @@ class TestFindResourcesAction(unittest.TestCase):
         with patch.object(self.action, 'search_knowledge_base_resources', return_value=[]):
             with patch.object(self.action, 'search_map_state_for_content', return_value=[]):
                 with patch.object(self.action, 'unified_search') as mock_unified:
-                    mock_unified.return_value = {
-                        'success': True,
-                        'source': 'api_search',
-                        'resource_code': 'iron_ore'
-                    }
+                    from src.controller.actions.base import ActionResult
+                    mock_unified.return_value = ActionResult(
+                        success=True,
+                        data={
+                            'source': 'api_search',
+                            'resource_code': 'iron_ore'
+                        }
+                    )
                     
                     context = MockActionContext(
                         character_name=self.character_name,
@@ -356,8 +359,8 @@ class TestFindResourcesAction(unittest.TestCase):
                     
                     result = self.action.perform_action(self.mock_client, context)
                     
-                    self.assertTrue(result['success'])
-                    self.assertEqual(result['source'], 'api_search')
+                    self.assertTrue(result.success)
+                    self.assertEqual(result.data['source'], 'api_search')
                     
                     # Verify unified_search was called with correct parameters
                     mock_unified.assert_called_once()
@@ -382,7 +385,11 @@ class TestFindResourcesAction(unittest.TestCase):
         )
         
         with patch.object(self.action, 'unified_search') as mock_unified:
-            mock_unified.return_value = {'success': False, 'error': 'Not found'}
+            from src.controller.actions.base import ActionResult
+            mock_unified.return_value = ActionResult(
+                success=False,
+                error='Not found'
+            )
             
             result = self.action.perform_action(self.mock_client, context)
             
@@ -403,8 +410,9 @@ class TestFindResourcesAction(unittest.TestCase):
         )
         
         with patch.object(self.action, 'unified_search') as mock_unified:
+            from src.controller.actions.base import ActionResult
             # Capture the result processor function
-            mock_unified.return_value = {'success': True}
+            mock_unified.return_value = ActionResult(success=True)
             
             self.action.perform_action(self.mock_client, context)
             
@@ -419,10 +427,10 @@ class TestFindResourcesAction(unittest.TestCase):
                 content_data={'name': 'Iron Ore', 'skill': 'mining', 'level': 5}
             )
             
-            self.assertTrue(test_result['success'])
-            self.assertEqual(test_result['source'], 'api_search')
-            self.assertEqual(test_result['target_x'], 15)
-            self.assertEqual(test_result['target_y'], 20)
+            self.assertTrue(test_result.success)
+            self.assertEqual(test_result.data['source'], 'api_search')
+            self.assertEqual(test_result.data['target_x'], 15)
+            self.assertEqual(test_result.data['target_y'], 20)
     
     def test_perform_action_multiple_resource_types_map_state(self):
         """Test perform_action with multiple resource types checking map state."""
@@ -442,8 +450,8 @@ class TestFindResourcesAction(unittest.TestCase):
                 
                 result = self.action.perform_action(self.mock_client, context)
                 
-                self.assertTrue(result['success'])
-                self.assertEqual(result['source'], 'map_state')
+                self.assertTrue(result.success)
+                self.assertEqual(result.data['source'], 'map_state')
                 
                 # Should have called search twice - once for each resource type
                 self.assertEqual(mock_map_search.call_count, 2)

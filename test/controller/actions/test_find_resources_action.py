@@ -84,25 +84,24 @@ class TestFindResourcesAction(unittest.TestCase):
         )
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that FindResourcesAction has expected GOAP attributes."""
         self.assertTrue(hasattr(FindResourcesAction, 'conditions'))
         self.assertTrue(hasattr(FindResourcesAction, 'reactions'))
-        self.assertTrue(hasattr(FindResourcesAction, 'weights'))
-        self.assertTrue(hasattr(FindResourcesAction, 'g'))
+        self.assertTrue(hasattr(FindResourcesAction, 'weight'))
 
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_no_resource_types(self, mock_unified_search):
         """Test finding resources fails without resource types."""
         # When no resource types are provided, the method will expand search and may use default types
-        mock_unified_search.return_value = {
-            'success': False,
-            'error': 'No matching content found within radius 3'
-        }
+        # Create a mock ActionResult object
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=False, error='No matching content found within radius 3')
+        mock_unified_search.return_value = mock_result
         
         from test.fixtures import MockActionContext
         context = MockActionContext(
@@ -111,16 +110,16 @@ class TestFindResourcesAction(unittest.TestCase):
             search_radius=self.search_radius
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_no_resources_found(self, mock_unified_search):
         """Test finding resources when none are found."""
-        mock_unified_search.return_value = {
-            'success': False,
-            'error': f'No matching content found within radius {self.search_radius}'
-        }
+        # Create a mock ActionResult object
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=False, error=f'No matching content found within radius {self.search_radius}')
+        mock_unified_search.return_value = mock_result
         
         from test.fixtures import MockActionContext
         context = MockActionContext(
@@ -130,18 +129,21 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_types=['copper']
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_resources_found_specific_types(self, mock_unified_search):
         """Test finding resources with specific resource types."""
-        mock_unified_search.return_value = {
-            'success': True,
+        # Create a mock ActionResult object
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True)
+        mock_result.data = {
             'location': (7, 5),
             'resource_code': 'copper',
             'distance': 2.828
         }
+        mock_unified_search.return_value = mock_result
         
         from test.fixtures import MockActionContext
         context = MockActionContext(
@@ -151,22 +153,25 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_types=['copper']
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['location'], (7, 5))
-        self.assertEqual(result['resource_code'], 'copper')
-        self.assertAlmostEqual(result['distance'], 2.828, places=2)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['location'], (7, 5))
+        self.assertEqual(result.data['resource_code'], 'copper')
+        self.assertAlmostEqual(result.data['distance'], 2.828, places=2)
 
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_resources_found_default_types(self, mock_unified_search):
         """Test finding resources with default resource types."""
         action = FindResourcesAction()
         
-        mock_unified_search.return_value = {
-            'success': True,
+        # Create a mock ActionResult object
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True)
+        mock_result.data = {
             'location': (6, 3),
             'resource_code': 'ash_wood',
             'distance': 1.0
         }
+        mock_unified_search.return_value = mock_result
         
         from test.fixtures import MockActionContext
         context = MockActionContext(
@@ -176,20 +181,23 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_types=['ash_wood']
         )
         result = action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['location'], (6, 3))
-        self.assertEqual(result['resource_code'], 'ash_wood')
-        self.assertEqual(result['distance'], 1.0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['location'], (6, 3))
+        self.assertEqual(result.data['resource_code'], 'ash_wood')
+        self.assertEqual(result.data['distance'], 1.0)
 
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_multiple_resources_closest_selected(self, mock_unified_search):
         """Test finding resources selects closest when multiple found."""
-        mock_unified_search.return_value = {
-            'success': True,
+        # Create a mock ActionResult object
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True)
+        mock_result.data = {
             'location': (4, 4),
             'resource_code': 'iron_ore',
             'distance': 1.414
         }
+        mock_unified_search.return_value = mock_result
         
         from test.fixtures import MockActionContext
         context = MockActionContext(
@@ -199,10 +207,11 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_types=['copper', 'iron_ore']
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['location'], (4, 4))
-        self.assertEqual(result['resource_code'], 'iron_ore')
-        self.assertAlmostEqual(result['distance'], 1.414, places=2)
+        
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['location'], (4, 4))
+        self.assertEqual(result.data['resource_code'], 'iron_ore')
+        self.assertAlmostEqual(result.data['distance'], 1.414, places=2)
 
     @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
     def test_execute_exception_handling(self, mock_unified_search):
@@ -217,8 +226,8 @@ class TestFindResourcesAction(unittest.TestCase):
             resource_types=['copper']
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Resource search failed', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Resource search failed', result.error)
 
     def test_determine_target_resource_codes_context_types(self):
         """Test _determine_target_resource_codes with context resource types."""

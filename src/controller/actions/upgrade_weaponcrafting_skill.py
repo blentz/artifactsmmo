@@ -13,7 +13,7 @@ from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_cr
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class UpgradeWeaponcraftingSkillAction(ActionBase):
@@ -46,7 +46,7 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
             'stats_improved': True
         }
     }
-    weights = {"skill_status.weaponcrafting_level_sufficient": 30}
+    weight = 30
 
     def __init__(self):
         """
@@ -55,50 +55,45 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
         super().__init__()
         self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Execute weaponcrafting skill upgrade through item crafting."""
         # Get parameters from context
         character_name = context.character_name
         target_level = context.get('target_level', 1)
         current_level = context.get('current_level', 0)
             
-        self.log_execution_start(
-            character_name=character_name,
-            target_level=target_level,
-            current_level=current_level
-        )
+        self._context = context
         
         try:
             # Get current character data to check skill level and materials
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             current_skill_level = getattr(character_data, 'weaponcrafting_level', 0)
             
             # Check if we've already reached the target level
             if current_skill_level >= target_level:
-                result = self.get_success_response(
+                result = self.create_success_result(
                     skill_level_achieved=True,
                     current_weaponcrafting_level=current_skill_level,
                     target_level=target_level,
                     message=f"Already at weaponcrafting level {current_skill_level}"
                 )
-                self.log_execution_result(result)
                 return result
             
             # Determine what to craft based on current skill level and available materials
             craft_item = self._select_craft_item(character_data)
             if not craft_item:
-                return self.get_error_response("No suitable items to craft for skill upgrade")
+                return self.create_error_result("No suitable items to craft for skill upgrade")
             
             # Attempt to craft the item
             self.logger.info(f"🔨 Crafting {craft_item} to gain weaponcrafting experience")
             craft_response = craft_api(name=character_name, code=craft_item, client=client)
             
             if not craft_response:
-                return self.get_error_response(f"Failed to craft {craft_item}")
+                return self.create_error_result(f"Failed to craft {craft_item}")
             
             # Check if crafting was successful
             craft_data = craft_response.data if hasattr(craft_response, 'data') else {}
@@ -109,7 +104,7 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
                 new_skill_level = getattr(updated_character_response.data, 'weaponcrafting_level', current_skill_level)
                 skill_gained = new_skill_level - current_skill_level
                 
-                result = self.get_success_response(
+                result = self.create_success_result(
                     item_crafted=craft_item,
                     skill_xp_gained=skill_gained > 0,
                     previous_skill_level=current_skill_level,
@@ -120,7 +115,7 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
                 )
             else:
                 # Fallback result if we can't get updated character data
-                result = self.get_success_response(
+                result = self.create_success_result(
                     item_crafted=craft_item,
                     skill_xp_gained=True,  # Assume success
                     current_weaponcrafting_level=current_skill_level,
@@ -128,12 +123,10 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
                     craft_response=craft_data
                 )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Weaponcrafting skill upgrade failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Weaponcrafting skill upgrade failed: {str(e)}")
             return error_response
 
     def _select_craft_item(self, character_data) -> Optional[str]:

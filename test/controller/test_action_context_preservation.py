@@ -81,11 +81,11 @@ class TestActionContextPreservation(unittest.TestCase):
             result = action.execute(self.client, context)
         
         # Verify the action was successful
-        self.assertTrue(result['success'])
+        self.assertTrue(result.data.get('success', False) if isinstance(result, dict) else result.success)
         
         # Verify target_item is in the result
-        self.assertIn('target_item', result)
-        self.assertEqual(result['target_item'], 'wooden_staff')
+        self.assertIn('target_item', result.data)
+        self.assertEqual(result.data['target_item'], 'wooden_staff')
         
         # Verify target_item was set in the context results
         self.assertEqual(context.action_results.get('target_item'), 'wooden_staff')
@@ -132,10 +132,10 @@ class TestActionContextPreservation(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify the action was successful
-        self.assertTrue(result['success'])
+        self.assertTrue(result.data.get('success', False) if isinstance(result, dict) else result.success)
         
         # Verify it used the correct target_item
-        self.assertEqual(result['target_item'], 'wooden_staff')
+        self.assertEqual(result.data['target_item'], 'wooden_staff')
     
     def test_action_context_get_method_checks_action_results(self):
         """Test that ActionContext.get() checks action_results for data from previous actions."""

@@ -49,14 +49,17 @@ class TestUnifiedStateManagement(unittest.TestCase):
         executor = ActionExecutor()
         
         # Mock the action factory to return a mock action with reactions
+        from src.controller.actions.base import ActionResult
         mock_action = Mock()
-        mock_action.execute.return_value = {
-            'success': True,
-            'equipment_status': {
-                'upgrade_status': 'analyzing',
-                'target_slot': 'weapon'
+        mock_action.execute.return_value = ActionResult(
+            success=True,
+            data={
+                'equipment_status': {
+                    'upgrade_status': 'analyzing',
+                    'target_slot': 'weapon'
+                }
             }
-        }
+        )
         
         # Set up reactions on the mock action class
         mock_action.__class__.reactions = {
@@ -96,12 +99,15 @@ class TestUnifiedStateManagement(unittest.TestCase):
         executor = ActionExecutor()
         
         # Mock action that returns a value used in template
+        from src.controller.actions.base import ActionResult
         mock_action = Mock()
-        mock_action.execute.return_value = {
-            'success': True,
-            'selected_item': 'wooden_staff',
-            'target_slot': 'weapon'
-        }
+        mock_action.execute.return_value = ActionResult(
+            success=True,
+            data={
+                'selected_item': 'wooden_staff',
+                'target_slot': 'weapon'
+            }
+        )
         
         # Set up reactions with template variables
         mock_action.__class__.reactions = {
@@ -136,12 +142,15 @@ class TestUnifiedStateManagement(unittest.TestCase):
         executor = ActionExecutor()
         
         # First action sets some data
+        from src.controller.actions.base import ActionResult
         mock_action1 = Mock()
-        mock_action1.execute.return_value = {
-            'success': True,
-            'selected_item': 'copper_sword',
-            'target_slot': 'weapon'
-        }
+        mock_action1.execute.return_value = ActionResult(
+            success=True,
+            data={
+                'selected_item': 'copper_sword',
+                'target_slot': 'weapon'
+            }
+        )
         mock_action1.__class__.reactions = {}
         
         # Add required methods to controller
@@ -170,11 +179,12 @@ class TestUnifiedStateManagement(unittest.TestCase):
         executor = ActionExecutor()
         
         # Mock a failing action
+        from src.controller.actions.base import ActionResult
         mock_action = Mock()
-        mock_action.execute.return_value = {
-            'success': False,
-            'error': 'Action failed'
-        }
+        mock_action.execute.return_value = ActionResult(
+            success=False,
+            error='Action failed'
+        )
         mock_action.__class__.reactions = {
             'equipment_status': {
                 'upgrade_status': 'failed'

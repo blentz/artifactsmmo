@@ -5,6 +5,7 @@ from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_p
 from src.lib.action_context import ActionContext
 
 from .character_base import CharacterActionBase
+from .base import ActionResult
 
 # Import to support testing with character state
 try:
@@ -24,13 +25,13 @@ class RestAction(CharacterActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext'):
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """ Execute the rest action """
             
         # Get character name from context
         character_name = context.character_name
             
-        self.log_execution_start(character_name=character_name)
+        self._context = context
         
         try:
             response = rest_character_api(
@@ -62,7 +63,8 @@ class RestAction(CharacterActionBase):
                         self.logger.info(f"💚 Recovered {hp_recovered} HP (now {current_hp}/{max_hp})")
             
             # Return enhanced response with HP tracking
-            return self.get_success_response(
+            return self.create_success_result(
+                message=f"Rest completed, recovered {hp_recovered} HP",
                 rest_response=response,
                 hp_recovered=hp_recovered,
                 current_hp=current_hp,
@@ -94,15 +96,15 @@ class RestAction(CharacterActionBase):
                     except:
                         pass
                 
-                return self.get_error_response(
-                    "Rest failed: Character is in cooldown", 
+                return self.create_error_result(
+                    "Rest failed: Character is in cooldown",
                     is_cooldown=True,
                     **cooldown_data
                 )
             elif "Character not found" in error_msg:
-                return self.get_error_response("Rest failed: Character not found")
+                return self.create_error_result("Rest failed: Character not found")
             else:
-                return self.get_error_response(f"Rest failed: {error_msg}")
+                return self.create_error_result(f"Rest failed: {error_msg}")
 
     def __repr__(self):
         return "RestAction()"

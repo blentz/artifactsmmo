@@ -2,9 +2,23 @@
 
 import unittest
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
+from src.lib.action_context import ActionContext
 
 from test.fixtures import MockActionContext, create_mock_client
+
+
+class TestableActionBase(ActionBase):
+    """Concrete implementation of ActionBase for testing."""
+    
+    conditions = {}
+    reactions = {}
+    weight = 1.0
+    
+    def execute(self, client, context: ActionContext) -> ActionResult:
+        """Test implementation of execute."""
+        self._context = context
+        return self.create_success_result("Test execution")
 
 
 class TestActionBase(unittest.TestCase):
@@ -12,118 +26,81 @@ class TestActionBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.action = ActionBase()
+        self.action = TestableActionBase()
         self.mock_client = create_mock_client()
         self.mock_context = MockActionContext(character_name="test_character")
 
     
-    def test_get_error_response_basic(self):
-        """Test get_error_response with basic error message."""
-        error_msg = "Test error"
-        result = self.action.get_error_response(error_msg)
+    def test_create_success_result_basic(self):
+        """Test create_success_result with basic message."""
+        result = self.action.create_success_result("Test success")
         
-        expected = {
-            'success': False,
-            'error': error_msg,
-            'action': 'ActionBase'
-        }
-        self.assertEqual(result, expected)
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Test success")
+        self.assertIsNone(result.error)
+        self.assertEqual(result.action_name, "TestableActionBase")
 
-    def test_get_error_response_with_additional_data(self):
-        """Test get_error_response with additional data."""
-        error_msg = "Test error"
-        additional_data = {'location': (5, 3), 'code': 'E001'}
-        result = self.action.get_error_response(error_msg, **additional_data)
+    def test_create_success_result_with_data(self):
+        """Test create_success_result with additional data."""
+        result = self.action.create_success_result("Test success", items=[1, 2, 3], location=(5, 3))
         
-        expected = {
-            'success': False,
-            'error': error_msg,
-            'action': 'ActionBase',
-            'location': (5, 3),
-            'code': 'E001'
-        }
-        self.assertEqual(result, expected)
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Test success")
+        self.assertEqual(result.data['items'], [1, 2, 3])
+        self.assertEqual(result.data['location'], (5, 3))
 
-    def test_get_success_response_basic(self):
-        """Test get_success_response with no data."""
-        result = self.action.get_success_response()
+    def test_create_error_result_basic(self):
+        """Test create_error_result with basic error message."""
+        result = self.action.create_error_result("Test error")
         
-        expected = {
-            'success': True,
-            'action': 'ActionBase'
-        }
-        self.assertEqual(result, expected)
+        self.assertIsInstance(result, ActionResult)
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "Test error")
+        self.assertEqual(result.action_name, "TestableActionBase")
 
-    def test_get_success_response_with_data(self):
-        """Test get_success_response with data."""
-        data = {'result': 'completed', 'items': [1, 2, 3]}
-        result = self.action.get_success_response(**data)
+    def test_create_error_result_with_data(self):
+        """Test create_error_result with additional data."""
+        result = self.action.create_error_result("Test error", code='E001', location=(5, 3))
         
-        expected = {
-            'success': True,
-            'action': 'ActionBase',
-            'result': 'completed',
-            'items': [1, 2, 3]
-        }
-        self.assertEqual(result, expected)
+        self.assertIsInstance(result, ActionResult)
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "Test error")
+        self.assertEqual(result.data['code'], 'E001')
+        self.assertEqual(result.data['location'], (5, 3))
 
-    def test_log_execution_start(self):
-        """Test log_execution_start method."""
-        with self.assertLogs(self.action.logger, level='INFO') as log:
-            self.action.log_execution_start(test_param="value", another_param=123)
+    def test_create_result_with_state_changes(self):
+        """Test create_result_with_state_changes method."""
+        state_changes = {'hp': 100, 'location': {'x': 5, 'y': 3}}
+        result = self.action.create_result_with_state_changes(
+            success=True,
+            state_changes=state_changes,
+            message="State updated",
+            items_collected=5
+        )
         
-        self.assertEqual(len(log.output), 1)
-        self.assertIn("Executing ActionBase with context:", log.output[0])
-        self.assertIn("'test_param': 'value'", log.output[0])
-        self.assertIn("'another_param': 123", log.output[0])
-
-    def test_log_execution_result_success(self):
-        """Test log_execution_result method with success."""
-        result = {'success': True, 'message': 'Test result'}
-        
-        with self.assertLogs(self.action.logger, level='INFO') as log:
-            self.action.log_execution_result(result)
-        
-        self.assertEqual(len(log.output), 1)
-        self.assertIn("ActionBase completed successfully", log.output[0])
-
-    def test_log_execution_result_failure(self):
-        """Test log_execution_result method with failure."""
-        result = {'success': False, 'error': 'Test error'}
-        
-        with self.assertLogs(self.action.logger, level='WARNING') as log:
-            self.action.log_execution_result(result)
-        
-        self.assertEqual(len(log.output), 1)
-        self.assertIn("ActionBase failed: Test error", log.output[0])
-
-    def test_log_execution_result_non_dict(self):
-        """Test log_execution_result method with non-dict result."""
-        result = "some string result"
-        
-        with self.assertLogs(self.action.logger, level='INFO') as log:
-            self.action.log_execution_result(result)
-        
-        self.assertEqual(len(log.output), 1)
-        self.assertIn("ActionBase completed with result: str", log.output[0])
+        self.assertIsInstance(result, ActionResult)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "State updated")
+        self.assertEqual(result.state_changes, state_changes)
+        self.assertEqual(result.data['items_collected'], 5)
 
     def test_action_base_has_goap_attributes(self):
         """Test that ActionBase has expected GOAP class attributes."""
         self.assertTrue(hasattr(ActionBase, 'conditions'))
         self.assertTrue(hasattr(ActionBase, 'reactions'))
-        self.assertTrue(hasattr(ActionBase, 'weights'))
-        self.assertTrue(hasattr(ActionBase, 'g'))
+        self.assertTrue(hasattr(ActionBase, 'weight'))
         
         # Check that they are correct types
         self.assertIsInstance(ActionBase.conditions, dict)
         self.assertIsInstance(ActionBase.reactions, dict)
-        self.assertIsInstance(ActionBase.weights, dict)
-        self.assertIsNone(ActionBase.g)  # g is None by default
+        self.assertIsInstance(ActionBase.weight, (int, float))
 
     def test_action_base_repr(self):
         """Test ActionBase string representation."""
         result = repr(self.action)
-        self.assertEqual(result, "ActionBase()")
+        self.assertEqual(result, "TestableActionBase(weight=1.0)")
 
 
 if __name__ == '__main__':

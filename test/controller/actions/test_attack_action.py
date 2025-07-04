@@ -50,12 +50,11 @@ class TestAttackAction(unittest.TestCase):
         )
         
         # Verify response format
-        self.assertTrue(result['success'])
-        self.assertEqual(result['action'], 'AttackAction')
-        self.assertEqual(result['xp_gained'], 100)
-        self.assertEqual(result['gold_gained'], 50)
-        self.assertEqual(result['drops'], mock_fight_data['drops'])
-        self.assertTrue(result['monster_defeated'])
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['xp_gained'], 100)
+        self.assertEqual(result.data['gold_gained'], 50)
+        self.assertEqual(result.data['drops'], mock_fight_data['drops'])
+        self.assertTrue(result.data['monster_defeated'])
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_loss(self, mock_fight_api):
@@ -78,10 +77,10 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify response shows loss
-        self.assertTrue(result['success'])
-        self.assertEqual(result['xp_gained'], 0)
-        self.assertEqual(result['gold_gained'], 0)
-        self.assertFalse(result['monster_defeated'])
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['xp_gained'], 0)
+        self.assertEqual(result.data['gold_gained'], 0)
+        self.assertFalse(result.data['monster_defeated'])
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_no_fight_data(self, mock_fight_api):
@@ -96,11 +95,11 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should still return success with default values
-        self.assertTrue(result['success'])
-        self.assertEqual(result['xp_gained'], 0)
-        self.assertEqual(result['gold_gained'], 0)
-        self.assertEqual(result['drops'], [])
-        self.assertFalse(result['monster_defeated'])
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['xp_gained'], 0)
+        self.assertEqual(result.data['gold_gained'], 0)
+        self.assertEqual(result.data['drops'], [])
+        self.assertFalse(result.data['monster_defeated'])
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_no_fight_object(self, mock_fight_api):
@@ -116,8 +115,8 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should still return success with default values
-        self.assertTrue(result['success'])
-        self.assertEqual(result['xp_gained'], 0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['xp_gained'], 0)
 
     def test_attack_action_execute_no_client(self):
         action = AttackAction()
@@ -126,8 +125,8 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(None, context)
         
         # Should return error
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_cooldown_error(self, mock_fight_api):
@@ -140,9 +139,9 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error with cooldown flag
-        self.assertFalse(result['success'])
-        self.assertIn('Character is in cooldown', result['error'])
-        self.assertTrue(result.get('is_cooldown', False))
+        self.assertFalse(result.success)
+        self.assertIn('Character is in cooldown', result.error)
+        self.assertTrue(result.data.get('is_cooldown', False))
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_no_monster_error(self, mock_fight_api):
@@ -155,9 +154,9 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error with no_monster flag
-        self.assertFalse(result['success'])
-        self.assertIn('No monster at location', result['error'])
-        self.assertTrue(result.get('no_monster', False))
+        self.assertFalse(result.success)
+        self.assertIn('No monster at location', result.error)
+        self.assertTrue(result.data.get('no_monster', False))
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_wrong_location_error(self, mock_fight_api):
@@ -170,9 +169,9 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error with wrong_location flag
-        self.assertFalse(result['success'])
-        self.assertIn('must be at monster location', result['error'])
-        self.assertTrue(result.get('wrong_location', False))
+        self.assertFalse(result.success)
+        self.assertIn('must be at monster location', result.error)
+        self.assertTrue(result.data.get('wrong_location', False))
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_action_not_allowed_error(self, mock_fight_api):
@@ -185,9 +184,9 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error with action_not_allowed flag
-        self.assertFalse(result['success'])
-        self.assertIn('Action not allowed', result['error'])
-        self.assertTrue(result.get('action_not_allowed', False))
+        self.assertFalse(result.success)
+        self.assertIn('Action not allowed', result.error)
+        self.assertTrue(result.data.get('action_not_allowed', False))
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_character_not_found_error(self, mock_fight_api):
@@ -200,8 +199,8 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return appropriate error
-        self.assertFalse(result['success'])
-        self.assertIn('Character not found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Character not found', result.error)
 
     @patch('src.controller.actions.attack.fight_character_api')
     def test_attack_action_execute_generic_error(self, mock_fight_api):
@@ -214,8 +213,8 @@ class TestAttackAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error with original message
-        self.assertFalse(result['success'])
-        self.assertIn('Network error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Network error', result.error)
 
     def test_attack_action_validate_no_character_name(self):
         """Test validation with empty character name returns error."""
@@ -223,8 +222,8 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         context = MockActionContext(character_name="")
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('character name', result['error'].lower())
+        self.assertFalse(result.success)
+        self.assertIn('character name', result.error.lower())
 
     def test_estimate_fight_duration_with_monster_data(self):
         """Test fight duration estimation with monster data."""
@@ -278,7 +277,7 @@ class TestAttackAction(unittest.TestCase):
         # Check that GOAP attributes exist
         self.assertIsInstance(AttackAction.conditions, dict)
         self.assertIsInstance(AttackAction.reactions, dict)
-        self.assertIsInstance(AttackAction.weights, dict)
+        self.assertIsInstance(AttackAction.weight, (int, float))
         
         # Check specific GOAP conditions (consolidated state format)
         self.assertIn('combat_context', AttackAction.conditions)
@@ -291,9 +290,8 @@ class TestAttackAction(unittest.TestCase):
         self.assertIn('combat_context', AttackAction.reactions)
         self.assertEqual(AttackAction.reactions['combat_context']['status'], 'completed')
         
-        # Check weight
-        self.assertIn('attack', AttackAction.weights)
-        self.assertEqual(AttackAction.weights['attack'], 3.0)
+        # Check weight is a float value
+        self.assertEqual(AttackAction.weight, 3.0)
 
 
 if __name__ == '__main__':

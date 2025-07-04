@@ -10,7 +10,7 @@ from artifactsmmo_api_client.api.resources.get_resource_resources_code_get impor
 from src.lib.action_context import ActionContext
 
 # Note: get_all_resources API endpoint not available in current client
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class LookupItemInfoAction(ActionBase):
@@ -22,7 +22,7 @@ class LookupItemInfoAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Lookup item information and crafting requirements """
         # Get parameters from context
         item_code = context.get('item_code')
@@ -31,7 +31,7 @@ class LookupItemInfoAction(ActionBase):
         max_level = context.get('max_level')
         character_level = context.get('character_level')
             
-        self.log_execution_start(item_code=item_code, search_term=search_term)
+        self._context = context
         
         try:
             if item_code:
@@ -41,12 +41,10 @@ class LookupItemInfoAction(ActionBase):
                 # For equipment goals, determine appropriate items to craft
                 result = self._determine_equipment_to_craft(client, context)
             
-            self.log_execution_result(result)
             return result
                 
         except Exception as e:
-            error_response = self.get_error_response(f'Item lookup failed: {str(e)}')
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f'Item lookup failed: {str(e)}')
             return error_response
 
     def _lookup_specific_item(self, client, item_code: str) -> Dict:

@@ -60,7 +60,10 @@ class TestMissionExecutorCombatReset(unittest.TestCase):
                 # Mock reset action execution
                 with patch('src.controller.actions.reset_combat_context.ResetCombatContextAction') as mock_reset_class:
                     mock_reset_action = MagicMock()
-                    mock_reset_action.execute.return_value = {'success': True}
+                    # Create a mock ActionResult object
+                    mock_result = MagicMock()
+                    mock_result.success = True
+                    mock_reset_action.execute.return_value = mock_result
                     mock_reset_class.return_value = mock_reset_action
                     
                     # Act - execute one iteration of the mission
@@ -83,7 +86,7 @@ class TestMissionExecutorCombatReset(unittest.TestCase):
                             context.character_name = self.controller.character_state.data.get('name')
                             reset_result = reset_action.execute(self.controller.client, context)
                             
-                            if reset_result and reset_result.get('success'):
+                            if reset_result and reset_result.success:
                                 # Update world state
                                 self.controller.update_world_state(
                                     {'combat_context': {'status': 'idle', 'target': None, 'location': None}}

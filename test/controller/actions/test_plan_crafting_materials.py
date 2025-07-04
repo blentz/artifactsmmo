@@ -66,11 +66,11 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify success
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_item'], 'wooden_staff')
-        self.assertTrue(result['materials_sufficient'])
-        self.assertEqual(len(result['missing_materials']), 0)
-        self.assertEqual(result['materials_available'], 2)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_item'], 'wooden_staff')
+        self.assertTrue(result.data['materials_sufficient'])
+        self.assertEqual(len(result.data['missing_materials']), 0)
+        self.assertEqual(result.data['materials_available'], 2)
     
     @patch('src.controller.actions.plan_crafting_materials.get_character_api')
     def test_execute_missing_materials(self, mock_get_character):
@@ -111,11 +111,11 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify success with missing materials
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_item'], 'wooden_staff')
-        self.assertFalse(result['materials_sufficient'])
-        self.assertTrue(result['need_resources'])
-        self.assertEqual(len(result['missing_materials']), 2)  # Missing both materials
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_item'], 'wooden_staff')
+        self.assertFalse(result.data['materials_sufficient'])
+        self.assertTrue(result.data['need_resources'])
+        self.assertEqual(len(result.data['missing_materials']), 2)  # Missing both materials
     
     def test_execute_no_target_item(self):
         """Test execution when no target item is specified"""
@@ -127,8 +127,8 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No target item specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No target item specified', result.error)
     
     def test_execute_item_not_craftable(self):
         """Test execution when item is not craftable"""
@@ -147,8 +147,8 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('not craftable', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('not craftable', result.error)
     
     @patch('src.controller.actions.plan_crafting_materials.get_character_api')
     def test_equipped_items_counted(self, mock_get_character):
@@ -187,9 +187,9 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Should have all materials (equipped wooden_stick + inventory ash_wood)
-        self.assertTrue(result['success'])
-        self.assertTrue(result['materials_sufficient'])
-        self.assertEqual(len(result['missing_materials']), 0)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['materials_sufficient'])
+        self.assertEqual(len(result.data['missing_materials']), 0)
     
     def test_repr(self):
         """Test string representation"""

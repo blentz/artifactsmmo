@@ -4,11 +4,11 @@ Mark Equipment Ready Action
 This bridge action marks equipment as ready for equipping after successful crafting.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class MarkEquipmentReadyAction(ActionBase):
@@ -31,13 +31,13 @@ class MarkEquipmentReadyAction(ActionBase):
             'upgrade_status': 'ready',
         },
     }
-    weights = {'equipment_status.upgrade_status': 1.5}
+    weight = 1.5
 
     def __init__(self):
         """Initialize mark equipment ready action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute marking equipment as ready.
         
@@ -46,9 +46,9 @@ class MarkEquipmentReadyAction(ActionBase):
         """
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
+            return self.create_error_result("No character name provided")
             
-        self.log_execution_start(character_name=character_name)
+        self._context = context
         
         try:
             # Get crafted item information
@@ -62,7 +62,7 @@ class MarkEquipmentReadyAction(ActionBase):
             )
             
             # This is a bridge action - it only updates state, no API calls needed
-            result = self.get_success_response(
+            result = self.create_success_result(
                 equipment_ready_marked=True,
                 previous_status='crafting',
                 new_status='ready',
@@ -71,12 +71,10 @@ class MarkEquipmentReadyAction(ActionBase):
                 message=f"{selected_item} is ready to be equipped"
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Failed to mark equipment ready: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Failed to mark equipment ready: {str(e)}")
             return error_response
 
     def __repr__(self):

@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock, call
 import logging
 
 from src.controller.ai_player_controller import AIPlayerController
-from src.controller.action_executor import ActionResult
+from src.controller.actions.base import ActionResult
 from src.controller.skill_goal_manager import SkillType
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
@@ -322,7 +322,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                     mock_cooldown.return_value = False
                     mock_context.return_value = Mock()
                     self.controller.action_executor.execute_action.return_value = ActionResult(
-                        success=True, response={}, action_name='move'
+                        success=True, data={}, action_name='move'
                     )
                     
                     self.controller._execute_action('move', {})
@@ -339,7 +339,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                     
                     with patch.object(self.controller, '_build_execution_context'):
                         self.controller.action_executor.execute_action.return_value = ActionResult(
-                            success=True, response={}, action_name='move'
+                            success=True, data={}, action_name='move'
                         )
                         
                         success, result = self.controller._execute_action('move', {})
@@ -358,7 +358,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                     
                     response = {'location': [15, 20]}
                     self.controller.action_executor.execute_action.return_value = ActionResult(
-                        success=True, response=response, action_name='find_monsters'
+                        success=True, data=response, action_name='find_monsters'
                     )
                     
                     success, result_data = self.controller._execute_action('find_monsters', {})
@@ -391,7 +391,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                         ]
                     }
                     self.controller.action_executor.execute_action.return_value = ActionResult(
-                        success=True, response=response, action_name='lookup_item_info'
+                        success=True, data=response, action_name='lookup_item_info'
                     )
                     
                     success, result_data = self.controller._execute_action('lookup_item_info', {})
@@ -418,7 +418,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                             
                             response = {'success': True, 'monster_defeated': True}
                             self.controller.action_executor.execute_action.return_value = ActionResult(
-                                success=True, response=response, action_name='attack'
+                                success=True, data=response, action_name='attack'
                             )
                             
                             success, result_data = self.controller._execute_action('attack', {})
@@ -435,11 +435,12 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                     mock_context.return_value = Mock()
                     
                     self.controller.action_executor.execute_action.return_value = ActionResult(
-                        success=False, 
-                        response={}, 
-                        action_name='move',
-                        error_message='Character is on cooldown'
-                    )
+                    success=False,
+                    data={},
+                    action_name='move',
+                    error='Character is on cooldown'
+                    
+                )
                     
                     success, result = self.controller._execute_action('move', {})
                     
@@ -671,7 +672,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             
             mock_result = ActionResult(
                 success=True,
-                response={'moved': True},
+                data={'moved': True},
                 action_name='move'
             )
             self.controller.action_executor.execute_action.return_value = mock_result

@@ -73,7 +73,7 @@ class TestFindMonstersAction(unittest.TestCase):
         """Test that FindMonstersAction has expected GOAP class attributes."""
         self.assertTrue(hasattr(FindMonstersAction, 'conditions'))
         self.assertTrue(hasattr(FindMonstersAction, 'reactions'))
-        self.assertTrue(hasattr(FindMonstersAction, 'weights'))
+        self.assertTrue(hasattr(FindMonstersAction, 'weight'))
 
     def test_monster_types_none_becomes_empty_list(self):
         """Test that None monster_types becomes empty list."""
@@ -93,9 +93,9 @@ class TestFindMonstersAction(unittest.TestCase):
         )
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_empty_monsters_data(self, mock_get_monsters):
@@ -111,8 +111,8 @@ class TestFindMonstersAction(unittest.TestCase):
             use_exponential_search=False
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No suitable monsters found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No suitable monsters found', result.error)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_find_monster_success(self, mock_get_monsters):
@@ -172,16 +172,16 @@ class TestFindMonstersAction(unittest.TestCase):
             )
             result = self.action.execute(self.mock_client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_x'], 6)
-        self.assertEqual(result['target_y'], 7)
-        self.assertEqual(result['monster_code'], 'green_slime')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 6)
+        self.assertEqual(result.data['target_y'], 7)
+        self.assertEqual(result.data['monster_code'], 'green_slime')
         # Distance calculation may vary based on search implementation
-        if 'distance' in result:
-            self.assertGreater(result['distance'], 0)
+        if 'distance' in result.data:
+            self.assertGreater(result.data['distance'], 0)
         # Win rate check
-        if 'win_rate' in result:
-            self.assertAlmostEqual(result['win_rate'], 0.667, places=2)
+        if 'win_rate' in result.data:
+            self.assertAlmostEqual(result.data['win_rate'], 0.667, places=2)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_execute_no_monsters_found(self, mock_get_monsters):
@@ -195,10 +195,7 @@ class TestFindMonstersAction(unittest.TestCase):
         
         # Mock the _find_best_monster_target method to return no results
         with patch.object(self.action, '_find_best_monster_target') as mock_find_best:
-            mock_find_best.return_value = {
-                'success': False,
-                'error': 'No viable monsters found within radius 3'
-            }
+            mock_find_best.return_value = None
             
             context = MockActionContext(
                 character_x=self.character_x,
@@ -211,8 +208,8 @@ class TestFindMonstersAction(unittest.TestCase):
             )
             result = self.action.execute(self.mock_client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No viable monsters found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No viable monsters found', result.error)
 
     @patch('src.controller.actions.find_monsters.get_all_monsters_api')
     def test_no_monsters_response(self, mock_get_monsters):
@@ -228,8 +225,8 @@ class TestFindMonstersAction(unittest.TestCase):
             use_exponential_search=False
         )
         result = self.action.execute(self.mock_client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No suitable monsters found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No suitable monsters found', result.error)
 
     def test_get_target_monster_codes_type_filtering(self):
         """Test filtering monsters by type."""

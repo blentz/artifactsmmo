@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 from src.lib.action_context import ActionContext
 
+from .base import ActionResult
 from .coordinate_mixin import CoordinateStandardizationMixin
 from .search_base import SearchActionBase
 
@@ -17,7 +18,7 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the nearest resource location using unified search algorithm """
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
@@ -30,12 +31,7 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
         
         # Parameters will be passed directly to helper methods via context
         
-        self.log_execution_start(
-            character_x=character_x,
-            character_y=character_y, 
-            search_radius=search_radius,
-            resource_types=resource_types
-        )
+        self._context = context
         
         try:
             # Extract recipe-focused resource types from context if available
@@ -52,7 +48,7 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
             target_codes = self._determine_target_resource_codes(context_resource_types, materials_needed, resource_types, skill_type, **kwargs)
             
             if not target_codes:
-                return self.get_error_response("No target resource types specified for focused search")
+                return self.create_error_result("No target resource types specified for focused search")
             
             # Create resource filter using the unified search base
             resource_filter = self.create_resource_filter(
@@ -67,17 +63,17 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 distance = self._calculate_distance(character_x, character_y, x, y)
                 
                 # Create standardized coordinate response
-                coordinate_data = self.create_coordinate_response(
-                    x, y,
-                    distance=distance,
-                    resource_code=content_code,
-                    resource_name=content_code,
-                    resource_skill=content_data.get('skill', 'unknown'),
-                    resource_level=content_data.get('level', 1),
-                    target_codes=target_codes
-                )
+                coordinate_data = self.standardize_coordinate_output(x, y)
+                coordinate_data.update({
+                    'distance': distance,
+                    'resource_code': content_code,
+                    'resource_name': content_code,
+                    'resource_skill': content_data.get('skill', 'unknown'),
+                    'resource_level': content_data.get('level', 1),
+                    'target_codes': target_codes
+                })
                 
-                return self.get_success_response(**coordinate_data)
+                return self.create_success_result(**coordinate_data)
             
             # Get map_state from context if available for cached access
             map_state = context.map_state
@@ -91,18 +87,18 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                     self.logger.info(f"🗺️ Found {resource_code} in learned map data at ({x}, {y})")
                     
                     # Create standardized coordinate response
-                    coordinate_data = self.create_coordinate_response(
-                        x, y,
-                        distance=distance,
-                        resource_code=resource_code,
-                        resource_name=resource_code,  # Use code as name fallback
-                        resource_skill='unknown',
-                        resource_level=1,
-                        target_codes=target_codes,
-                        source='learned_map_data'
-                    )
+                    coordinate_data = self.standardize_coordinate_output(x, y)
+                    coordinate_data.update({
+                        'distance': distance,
+                        'resource_code': resource_code,
+                        'resource_name': resource_code,  # Use code as name fallback
+                        'resource_skill': 'unknown',
+                        'resource_level': 1,
+                        'target_codes': target_codes,
+                        'source': 'learned_map_data'
+                    })
                     
-                    return self.get_success_response(**coordinate_data)
+                    return self.create_success_result(**coordinate_data)
             
             # PRIORITY 2: Try knowledge-based search with known locations (no predictions)
             controller = context.controller
@@ -112,8 +108,8 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 knowledge_result = self._search_known_resource_locations_only_real(knowledge_base, target_codes)
             
             # If we found resources in knowledge base, use that location
-            if knowledge_result and knowledge_result.get('success'):
-                self.logger.info(f"🎯 Found {knowledge_result['resource_code']} at known location {knowledge_result['location']} from knowledge base")
+            if knowledge_result and knowledge_result.success:
+                self.logger.info(f"🎯 Found {knowledge_result.data['resource_code']} at known location {knowledge_result.data['location']} from knowledge base")
                 return knowledge_result
             
             # If no known locations and we have a controller, try learning game data first
@@ -125,18 +121,18 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 if current_resource_count < min_resource_knowledge:
                     self.logger.info(f"🧠 Limited resource knowledge ({current_resource_count} resources), performing bulk learning...")
                     learning_result = controller.learn_all_game_data_efficiently()
-                    if learning_result.get('success'):
+                    if learning_result and hasattr(learning_result, 'success') and learning_result.success:
                         # Try knowledge search again after learning
                         knowledge_result = self._search_known_resource_locations(knowledge_base, target_codes)
-                        if knowledge_result and knowledge_result.get('success'):
-                            self.logger.info(f"🎯 Found {knowledge_result['resource_code']} after bulk learning at {knowledge_result['location']}")
+                        if knowledge_result and knowledge_result.success:
+                            self.logger.info(f"🎯 Found {knowledge_result.data['resource_code']} after bulk learning at {knowledge_result.data['location']}")
                             return knowledge_result
             
             # PRIORITY 3: Try knowledge-based predictions as fallback
             if knowledge_base:
                 prediction_result = self._search_known_resource_locations(knowledge_base, target_codes)
-                if prediction_result and prediction_result.get('success'):
-                    self.logger.info(f"🔮 Using prediction for {prediction_result['resource_code']} at {prediction_result['location']} from knowledge base")
+                if prediction_result and prediction_result.success:
+                    self.logger.info(f"🔮 Using prediction for {prediction_result.data['resource_code']} at {prediction_result.data['location']} from knowledge base")
                     return prediction_result
             
             # Fallback to map scanning if no known locations found
@@ -150,7 +146,7 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
             max_search_radius = action_config.get('max_resource_search_radius', 8)
             radius_expansion = action_config.get('resource_search_radius_expansion', 3)
             
-            if result and not result.get('success') and search_radius < max_search_radius:
+            if result and not result.success and search_radius < max_search_radius:
                 expanded_radius = min(max_search_radius, search_radius + radius_expansion)
                 self.logger.info(f"🔍 No resources found within radius {search_radius}, expanding search to radius {expanded_radius}")
                 # Create a new action with modestly expanded radius
@@ -164,17 +160,14 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 expanded_action.skill_type = skill_type
                 # Try the expanded search
                 expanded_result = expanded_action.unified_search(client, character_x, character_y, expanded_radius, resource_filter, resource_result_processor, map_state)
-                if expanded_result and expanded_result.get('success'):
+                if expanded_result and expanded_result.success:
                     self.logger.info(f"✅ Found resources with expanded search radius {expanded_radius}")
                     result = expanded_result
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Resource search failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Resource search failed: {str(e)}")
     
     def _determine_target_resource_codes(self, context_resource_types: List[str], materials_needed: List[Dict], resource_types: List[str], skill_type: str, **kwargs) -> List[str]:
         """Determine target resource codes with focus on recipe requirements."""
@@ -281,18 +274,18 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                             distance = self._calculate_distance(character_x, character_y, x, y)
                             
                             # Create standardized coordinate response
-                            coordinate_data = self.create_coordinate_response(
-                                x, y,
-                                distance=distance,
-                                resource_code=resource_code,
-                                resource_name=resource_info.get('name', resource_code),
-                                resource_skill=self._get_resource_skill(resource_info),
-                                resource_level=self._get_resource_level(resource_info),
-                                target_codes=target_codes,
-                                source='knowledge_base'
-                            )
+                            coordinate_data = self.standardize_coordinate_output(x, y)
+                            coordinate_data.update({
+                                'distance': distance,
+                                'resource_code': resource_code,
+                                'resource_name': resource_info.get('name', resource_code),
+                                'resource_skill': self._get_resource_skill(resource_info),
+                                'resource_level': self._get_resource_level(resource_info),
+                                'target_codes': target_codes,
+                                'source': 'knowledge_base'
+                            })
                             
-                            return self.get_success_response(**coordinate_data)
+                            return self.create_success_result(**coordinate_data)
             
             # No real known locations found for any target resources
             self.logger.debug(f"No real known locations found for resources: {target_codes}")
@@ -340,18 +333,18 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                             self.logger.info(f"📍 Using known location for {resource_code}: ({x}, {y})")
                             
                             # Create standardized coordinate response
-                            coordinate_data = self.create_coordinate_response(
-                                x, y,
-                                distance=distance,
-                                resource_code=resource_code,
-                                resource_name=resource_info.get('name', resource_code),
-                                resource_skill=self._get_resource_skill(resource_info),
-                                resource_level=self._get_resource_level(resource_info),
-                                target_codes=target_codes,
-                                source='knowledge_base'
-                            )
+                            coordinate_data = self.standardize_coordinate_output(x, y)
+                            coordinate_data.update({
+                                'distance': distance,
+                                'resource_code': resource_code,
+                                'resource_name': resource_info.get('name', resource_code),
+                                'resource_skill': self._get_resource_skill(resource_info),
+                                'resource_level': self._get_resource_level(resource_info),
+                                'target_codes': target_codes,
+                                'source': 'knowledge_base'
+                            })
                             
-                            return self.get_success_response(**coordinate_data)
+                            return self.create_success_result(**coordinate_data)
                     
                     # Method 2: Use learned API data to predict locations based on skill and level (fallback)
                     api_data = resource_info.get('api_data', {})
@@ -366,16 +359,20 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                             distance = self._calculate_distance(character_x, character_y, x, y)
                             self.logger.info(f"🔮 Using predicted location for {resource_code}: ({x}, {y}) based on API data")
                             
-                            return self.get_success_response(
-                                location=(x, y),
-                                distance=distance,
-                                resource_code=resource_code,
-                                resource_name=api_data.get('name', resource_code),
-                                resource_skill=skill or 'unknown',
-                                resource_level=level,
-                                target_codes=target_codes,
-                                source='knowledge_base_predicted'
-                            )
+                            # Create standardized coordinate response
+                            coordinate_data = self.standardize_coordinate_output(x, y)
+                            coordinate_data.update({
+                                'location': (x, y),
+                                'distance': distance,
+                                'resource_code': resource_code,
+                                'resource_name': api_data.get('name', resource_code),
+                                'resource_skill': skill or 'unknown',
+                                'resource_level': level,
+                                'target_codes': target_codes,
+                                'source': 'knowledge_base_predicted'
+                            })
+                            
+                            return self.create_success_result(**coordinate_data)
             
             # No known locations found for any target resources
             self.logger.debug(f"No known locations found for resources: {target_codes}")

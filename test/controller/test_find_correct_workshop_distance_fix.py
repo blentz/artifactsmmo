@@ -52,12 +52,12 @@ class TestFindCorrectWorkshopDistanceFix(unittest.TestCase):
             result = self.action.execute(self.client, context)
         
         # Verify success
-        self.assertTrue(result['success'])
-        self.assertEqual(result['workshop_type'], 'weaponcrafting')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['workshop_type'], 'weaponcrafting')
         
         # Verify distance calculation was correct (from 5,5 to 10,10)
         expected_distance = ((10-5)**2 + (10-5)**2) ** 0.5  # ~7.07
-        self.assertAlmostEqual(result['distance'], expected_distance, places=1)
+        self.assertAlmostEqual(result.data['distance'], expected_distance, places=1)
     
     def test_result_processor_uses_character_position(self):
         """Test that the result processor correctly uses character position for distance."""
@@ -112,10 +112,10 @@ class TestFindCorrectWorkshopDistanceFix(unittest.TestCase):
         
         # Verify the result processor was captured and result is correct
         self.assertIsNotNone(result_processor)
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         
         # Verify distance calculation (from 0,0 to 3,4 = distance 5)
-        self.assertEqual(result['distance'], 5.0)
+        self.assertEqual(result.data['distance'], 5.0)
 
 
 if __name__ == '__main__':

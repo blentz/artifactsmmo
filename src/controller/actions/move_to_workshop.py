@@ -24,7 +24,7 @@ class MoveToWorkshopAction(MovementActionBase):
                 'at_target': True,
             },
         }
-    weights = {"at_workshop": 10}
+    weight = 10
 
     def __init__(self):
         """

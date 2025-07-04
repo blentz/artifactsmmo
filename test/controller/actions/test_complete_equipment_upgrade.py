@@ -29,8 +29,8 @@ class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Equipment upgrade completed with iron_sword")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Equipment upgrade completed with iron_sword")
         
     def test_execute_with_character_state(self):
         """Test execution with character state context."""
@@ -47,10 +47,10 @@ class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Equipment upgrade completed with wooden_shield")
-        self.assertEqual(result['equipped_item'], 'wooden_shield')
-        self.assertEqual(result['target_slot'], 'shield')
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Equipment upgrade completed with wooden_shield")
+        self.assertEqual(result.data['equipped_item'], 'wooden_shield')
+        self.assertEqual(result.data['target_slot'], 'shield')
         
     def test_repr(self):
         """Test string representation."""

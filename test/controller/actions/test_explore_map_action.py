@@ -254,12 +254,12 @@ class TestExploreMapAction(unittest.TestCase):
         with patch('src.controller.actions.explore_map.get_map_api', return_value=mock_map_response):
             result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertIn('explored_locations', result)
-        self.assertIn('discovered_monsters', result)
-        self.assertIn('discoveries', result)
-        self.assertIn('next_action_suggestion', result)
-        self.assertIn('exploration_strategy_used', result)
+        self.assertTrue(result.success)
+        self.assertIn('explored_locations', result.data)
+        self.assertIn('discovered_monsters', result.data)
+        self.assertIn('discoveries', result.data)
+        self.assertIn('next_action_suggestion', result.data)
+        self.assertIn('exploration_strategy_used', result.data)
 
     def test_execute_no_client(self):
         """ Test execution with no API client """
@@ -272,8 +272,8 @@ class TestExploreMapAction(unittest.TestCase):
         )
         # ExploreMapAction returns success with 0 explored locations when client is None
         result = self.action.execute(None, context)
-        self.assertTrue(result['success'])  # Returns success
-        self.assertEqual(result['explored_locations'], 0)  # But explores 0 locations
+        self.assertTrue(result.success)  # Returns success
+        self.assertEqual(result.data['explored_locations'], 0)  # But explores 0 locations
 
     def test_execute_api_failure(self):
         """ Test execution when API calls fail """
@@ -291,8 +291,8 @@ class TestExploreMapAction(unittest.TestCase):
             result = self.action.execute(client, context)
         
         # Should still succeed even if some API calls fail
-        self.assertTrue(result['success'])
-        self.assertEqual(result['discovered_monsters'], 0)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['discovered_monsters'], 0)
 
     def test_repr(self):
         """ Test string representation """

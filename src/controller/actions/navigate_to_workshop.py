@@ -7,7 +7,7 @@ This bridge action moves the character to a required workshop.
 from typing import Dict, Any, Optional, Tuple
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .move import MoveAction
 
 
@@ -19,11 +19,23 @@ class NavigateToWorkshopAction(ActionBase):
     if they're not already at the workshop.
     """
     
+    # GOAP parameters
+    conditions = {
+        'character_status': {
+            'alive': True,
+            'cooldown_active': False
+        }
+    }
+    reactions = {
+        'at_workshop': True
+    }
+    weight = 1.0
+    
     def __init__(self):
         """Initialize navigate to workshop action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict[str, Any]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Navigate to the specified workshop.
         
@@ -38,12 +50,14 @@ class NavigateToWorkshopAction(ActionBase):
         Returns:
             Dict with navigation results
         """
+        self._context = context
+        
         try:
             character_name = context.character_name
             workshop_type = context.get('workshop_type')
             
             if not workshop_type:
-                return self.get_error_response("No workshop type specified")
+                return self.create_error_result("No workshop type specified")
             
             self.logger.debug(f"🗺️ Navigating to {workshop_type} workshop")
             
@@ -52,7 +66,7 @@ class NavigateToWorkshopAction(ActionBase):
             
             char_response = get_character_api(name=character_name, client=client)
             if not char_response or not char_response.data:
-                return self.get_error_response("Could not get character location")
+                return self.create_error_result("Could not get character location")
             
             current_x = char_response.data.x
             current_y = char_response.data.y
@@ -61,14 +75,15 @@ class NavigateToWorkshopAction(ActionBase):
             workshop_location = self._find_workshop_location(workshop_type, context.knowledge_base)
             
             if not workshop_location:
-                return self.get_error_response(f"Could not find {workshop_type} workshop")
+                return self.create_error_result(f"Could not find {workshop_type} workshop")
             
             target_x, target_y = workshop_location
             
             # Check if already at workshop
             if current_x == target_x and current_y == target_y:
                 self.logger.info(f"✅ Already at {workshop_type} workshop")
-                return self.get_success_response(
+                return self.create_success_result(
+                    message=f"Already at {workshop_type} workshop",
                     already_at_workshop=True,
                     workshop_type=workshop_type,
                     location={'x': target_x, 'y': target_y}
@@ -85,18 +100,19 @@ class NavigateToWorkshopAction(ActionBase):
             
             move_result = move_action.execute(client, move_context)
             
-            if move_result and move_result.get('success'):
+            if move_result and move_result.success:
                 self.logger.info(f"✅ Moved to {workshop_type} workshop at ({target_x}, {target_y})")
-                return self.get_success_response(
+                return self.create_success_result(
+                    message=f"Moved to {workshop_type} workshop",
                     moved_to_workshop=True,
                     workshop_type=workshop_type,
                     location={'x': target_x, 'y': target_y}
                 )
             else:
-                return self.get_error_response(f"Failed to move to {workshop_type} workshop")
+                return self.create_error_result(f"Failed to move to {workshop_type} workshop")
                 
         except Exception as e:
-            return self.get_error_response(f"Failed to navigate to workshop: {e}")
+            return self.create_error_result(f"Failed to navigate to workshop: {e}")
     
     def _find_workshop_location(self, workshop_type: str, knowledge_base) -> Optional[Tuple[int, int]]:
         """Find workshop location from knowledge base."""

@@ -5,7 +5,7 @@ from typing import Dict, Optional
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class WaitAction(ActionBase):
@@ -30,13 +30,13 @@ class WaitAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """ Execute the wait action - wait for cooldown to expire """
         # Get wait duration from context - this is calculated by GOAP planning
         # GOAP's _handle_cooldown_with_plan_insertion already calculates the exact remaining time
         wait_duration = context.get('wait_duration', 1.0)
         
-        self.log_execution_start(wait_duration=wait_duration)
+        self._context = context
         
         # Trust the wait_duration provided by GOAP planning
         remaining_cooldown = float(wait_duration)
@@ -49,18 +49,14 @@ class WaitAction(ActionBase):
                 self.logger.info(f"Waiting {remaining_cooldown:.1f} seconds for cooldown to expire")
                 time.sleep(remaining_cooldown)
             
-            success_response = self.get_success_response(
+            return self.create_success_result(
                 message=f"Waited {remaining_cooldown:.1f} seconds for cooldown",
                 wait_duration=remaining_cooldown,
                 cooldown_handled=True
             )
-            self.log_execution_result(success_response)
-            return success_response
             
         except Exception as e:
-            error_response = self.get_error_response(f"Wait failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Wait failed: {str(e)}")
 
     def __repr__(self):
         return "WaitAction()"

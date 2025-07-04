@@ -45,9 +45,9 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(len(result['workshop_requirements']), 2)
-            self.assertEqual(result['unique_workshops'], ['mining'])
+            self.assertTrue(result.success)
+            self.assertEqual(len(result.data['workshop_requirements']), 2)
+            self.assertEqual(result.data['unique_workshops'], ['mining'])
             
             # Check stored context
             workshop_reqs = self.context.get('workshop_requirements')
@@ -66,8 +66,8 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertTrue(result['success'])
-            self.assertEqual(set(result['unique_workshops']), {'mining', 'woodcutting'})
+            self.assertTrue(result.success)
+            self.assertEqual(set(result.data['unique_workshops']), {'mining', 'woodcutting'})
             
     def test_execute_no_transformations(self):
         """Test with no transformations needed."""
@@ -75,9 +75,9 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['workshop_requirements'], [])
-        self.assertEqual(result['unique_workshops'], [])
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['workshop_requirements'], [])
+        self.assertEqual(result.data['unique_workshops'], [])
         
     def test_execute_exception_handling(self):
         """Test exception handling."""
@@ -88,8 +88,8 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Failed to determine workshop requirements", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Failed to determine workshop requirements", result.error)
             
     def test_determine_workshop_for_transformation_success(self):
         """Test determining workshop from API."""

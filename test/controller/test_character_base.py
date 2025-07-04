@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 from artifactsmmo_api_client.client import AuthenticatedClient
 from src.controller.actions.character_base import CharacterActionBase
+from src.controller.actions.base import ActionResult
 
 from test.fixtures import MockActionContext
 
@@ -18,9 +19,11 @@ class TestCharacterImplementation(CharacterActionBase):
         super().__init__()
         self.return_data = return_data or {}
     
-    def perform_action(self, client, context) -> Optional[Dict]:
+    def execute(self, client, context) -> ActionResult:
         """Simple implementation for testing."""
-        return self.get_success_response(
+        self._context = context
+        return self.create_success_result(
+            "Test action executed",
             test_action_executed=True,
             character_name=context.character_name,
             **self.return_data
@@ -41,8 +44,8 @@ class TestCharacterActionBase(unittest.TestCase):
     
     def test_multiple_character_actions(self):
         """Test creating multiple character actions with different names."""
-        action1 = CharacterActionBase()
-        action2 = CharacterActionBase()
+        action1 = TestCharacterImplementation()
+        action2 = TestCharacterImplementation()
         
         # Actions no longer store character names
         # They would get character names from context during execution
@@ -51,9 +54,9 @@ class TestCharacterActionBase(unittest.TestCase):
     
     def test_repr(self):
         """Test string representation of CharacterActionBase."""
-        action = CharacterActionBase()
+        action = TestCharacterImplementation()
         repr_str = repr(action)
-        self.assertEqual(repr_str, "CharacterActionBase()")
+        self.assertEqual(repr_str, "TestCharacterImplementation()")
 
 
 if __name__ == '__main__':

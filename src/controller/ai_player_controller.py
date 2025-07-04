@@ -296,10 +296,10 @@ class AIPlayerController(StateManagerMixin):
             
             # Extract useful data from action result
             result_data = {}
-            if result.response:
+            if result.data:
                 # Extract location data for move actions
-                if action_name == 'find_monsters' and hasattr(result.response, 'get'):
-                    location = result.response.get('location')
+                if action_name == 'find_monsters' and hasattr(result.data, 'get'):
+                    location = result.data.get('location')
                     if location:
                         result_data.update({
                             'x': location[0],
@@ -308,8 +308,8 @@ class AIPlayerController(StateManagerMixin):
                             'target_y': location[1]
                         })
                         self.logger.info(f"Found monster location: {location}")
-                elif action_name == 'find_workshops' and hasattr(result.response, 'get'):
-                    location = result.response.get('location')
+                elif action_name == 'find_workshops' and hasattr(result.data, 'get'):
+                    location = result.data.get('location')
                     if location:
                         result_data.update({
                             'target_x': location[0],
@@ -318,10 +318,10 @@ class AIPlayerController(StateManagerMixin):
                             'workshop_y': location[1]
                         })
                         self.logger.info(f"Found workshop location: {location}")
-                elif action_name == 'lookup_item_info' and hasattr(result.response, 'get'):
+                elif action_name == 'lookup_item_info' and hasattr(result.data, 'get'):
                     # Extract recipe information for use by find_resources
-                    if result.response.get('success') and result.response.get('recipe_found'):
-                        materials_needed = result.response.get('materials_needed', [])
+                    if result.data.get('success') and result.data.get('recipe_found'):
+                        materials_needed = result.data.get('materials_needed', [])
                         resource_types = []
                         for material in materials_needed:
                             if material.get('is_resource'):
@@ -330,7 +330,7 @@ class AIPlayerController(StateManagerMixin):
                                 resource_types.append(resource_code)
                         
                         # Check for crafting chain
-                        crafting_chain = result.response.get('crafting_chain', [])
+                        crafting_chain = result.data.get('crafting_chain', [])
                         smelting_required = False
                         if crafting_chain:
                             # Find intermediate crafting steps (like copper smelting)
@@ -346,29 +346,29 @@ class AIPlayerController(StateManagerMixin):
                                 smelting_required = True
                                 
                         result_data.update({
-                            'recipe_item_code': result.response.get('item_code'),
-                            'recipe_item_name': result.response.get('item_name'),
+                            'recipe_item_code': result.data.get('item_code'),
+                            'recipe_item_name': result.data.get('item_name'),
                             'resource_types': resource_types,
-                            'craft_skill': result.response.get('craft_skill'),
+                            'craft_skill': result.data.get('craft_skill'),
                             'materials_needed': materials_needed,
                             'crafting_chain': crafting_chain,
                             'smelting_required': smelting_required
                         })
-                        self.logger.info(f"📋 Recipe selected: {result.response.get('item_name')} - needs {resource_types}")
+                        self.logger.info(f"📋 Recipe selected: {result.data.get('item_name')} - needs {resource_types}")
                         if smelting_required:
                             self.logger.info(f"🔥 Smelting required: {result_data.get('smelt_item_code')}")
-                elif action_name == 'evaluate_weapon_recipes' and hasattr(result.response, 'get'):
+                elif action_name == 'evaluate_weapon_recipes' and hasattr(result.data, 'get'):
                     # Extract selected weapon information for use by find_correct_workshop
-                    if result.response.get('success') and result.response.get('item_code'):
+                    if result.data.get('success') and result.data.get('item_code'):
                         result_data.update({
-                            'item_code': result.response.get('item_code'),
-                            'selected_weapon': result.response.get('selected_weapon'),
-                            'weapon_name': result.response.get('weapon_name'),
-                            'workshop_type': result.response.get('workshop_type')
+                            'item_code': result.data.get('item_code'),
+                            'selected_weapon': result.data.get('selected_weapon'),
+                            'weapon_name': result.data.get('weapon_name'),
+                            'workshop_type': result.data.get('workshop_type')
                         })
-                        self.logger.info(f"🗡️ Weapon selected: {result.response.get('weapon_name')} (code: {result.response.get('item_code')})")
-                elif action_name == 'find_resources' and hasattr(result.response, 'get'):
-                    location = result.response.get('location')
+                        self.logger.info(f"🗡️ Weapon selected: {result.data.get('weapon_name')} (code: {result.data.get('item_code')})")
+                elif action_name == 'find_resources' and hasattr(result.data, 'get'):
+                    location = result.data.get('location')
                     if location:
                         result_data.update({
                             'target_x': location[0],
@@ -377,9 +377,9 @@ class AIPlayerController(StateManagerMixin):
                             'resource_y': location[1]
                         })
                         self.logger.info(f"Found resource location: {location}")
-                elif action_name == 'attack' and hasattr(result.response, 'get'):
+                elif action_name == 'attack' and hasattr(result.data, 'get'):
                     # Track monster kills internally for goal progress
-                    if result.response.get('success') and result.response.get('monster_defeated'):
+                    if result.data.get('success') and result.data.get('monster_defeated'):
                         # Update internal goal progress tracking
                         current_state = self.get_current_world_state()
                         goal_progress = current_state.get('goal_progress', {})
@@ -393,13 +393,11 @@ class AIPlayerController(StateManagerMixin):
             # Log execution result
             if result.success:
                 self.logger.info(f"Action {action_name} executed successfully")
-                if result.execution_time:
-                    self.logger.debug(f"Execution time: {result.execution_time:.3f}s")
             else:
-                self.logger.error(f"Action {action_name} failed: {result.error_message}")
+                self.logger.error(f"Action {action_name} failed: {result.error}")
                 
                 # If action failed, check if it's a cooldown error and refresh character state
-                if result.error_message and "cooldown" in result.error_message.lower():
+                if result.error and "cooldown" in result.error.lower():
                     self.logger.info("Cooldown detected - refreshing character state")
                     self._refresh_character_state()
             
@@ -586,8 +584,8 @@ class AIPlayerController(StateManagerMixin):
             
             if result and hasattr(result, 'success') and result.success:
                 # Update action context with results for future actions
-                if hasattr(result, 'response') and result.response:
-                    self._update_action_context_from_response(action_name, result.response)
+                if result.data:
+                    self._update_action_context_from_response(action_name, result.data)
                 
                 # Also capture data stored in the action context results
                 if hasattr(context, 'action_results') and context.action_results:

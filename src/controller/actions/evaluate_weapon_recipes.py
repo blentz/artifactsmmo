@@ -9,7 +9,7 @@ from artifactsmmo_api_client.models.item_type import ItemType
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class EvaluateWeaponRecipesAction(ActionBase):
@@ -29,7 +29,7 @@ class EvaluateWeaponRecipesAction(ActionBase):
         super().__init__()
         self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Evaluate all weapon recipes and select the best craftable option """
         # Call superclass to set self._context
         super().execute(client, context)
@@ -55,17 +55,13 @@ class EvaluateWeaponRecipesAction(ActionBase):
                 
             current_weapon = default_weapon
             
-        self.log_execution_start(
-            character_name=character_name,
-            current_weapon=current_weapon,
-            character_level=character_level
-        )
+        self._context = context
         
         try:
             # Get current character data to extract skills and inventory
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             # Store character data for skill discovery
@@ -85,7 +81,7 @@ class EvaluateWeaponRecipesAction(ActionBase):
             # Step 1: Fetch all weapon recipes
             weapon_recipes = self._fetch_weapon_recipes(client, context)
             if not weapon_recipes:
-                return self.get_error_response("No weapon recipes found")
+                return self.create_error_result("No weapon recipes found")
             
             self.logger.info(f"Found {len(weapon_recipes)} weapon recipes to evaluate")
             
@@ -108,7 +104,7 @@ class EvaluateWeaponRecipesAction(ActionBase):
                     # Found weapons that are blocked by skill requirements
                     lowest_skill_weapon = min(skill_blocked_weapons, key=lambda w: w['required_skill_level'])
                     
-                    result = self.get_success_response(
+                    result = self.create_success_result(
                         skill_upgrade_needed=True,
                         required_skill=lowest_skill_weapon['required_skill'],
                         required_skill_level=lowest_skill_weapon['required_skill_level'],
@@ -116,15 +112,14 @@ class EvaluateWeaponRecipesAction(ActionBase):
                         blocked_weapon=lowest_skill_weapon['weapon_code'],
                         message=f"Need {lowest_skill_weapon['required_skill']} level {lowest_skill_weapon['required_skill_level']} to craft {lowest_skill_weapon['weapon_code']}"
                     )
-                    self.log_execution_result(result)
                     return result
                 
-                return self.get_error_response("No craftable weapon recipes found")
+                return self.create_error_result("No craftable weapon recipes found")
             
             # Step 4: Select the best recipe
             best_recipe = self._select_best_recipe(recipe_evaluations)
             
-            result = self.get_success_response(
+            result = self.create_success_result(
                 selected_weapon=best_recipe['weapon_code'],
                 item_code=best_recipe['weapon_code'],  # For find_correct_workshop compatibility
                 target_item=best_recipe['weapon_code'],  # For analyze_crafting_chain compatibility
@@ -142,12 +137,10 @@ class EvaluateWeaponRecipesAction(ActionBase):
                 self._context.set_result('target_item', best_recipe['weapon_code'])
                 self._context.set_result('item_code', best_recipe['weapon_code'])
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Weapon recipe evaluation failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Weapon recipe evaluation failed: {str(e)}")
             return error_response
 
     def _fetch_weapon_recipes(self, client, context: ActionContext) -> Dict[str, Dict]:
@@ -520,7 +513,7 @@ class EvaluateWeaponRecipesAction(ActionBase):
         """Get the importance weight for a stat from configuration"""
         # Get weights from action configuration, with fallback
         action_config = self._context.get('action_config', {})
-        weights = action_config.get('weapon_stat_weights', {})
+        weight = action_config.get('weapon_stat_weights', {})
         
         # Return configured weight or get from knowledge base
         configured_weight = weights.get(stat)

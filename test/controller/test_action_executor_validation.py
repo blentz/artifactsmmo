@@ -31,8 +31,10 @@ class TestActionExecutorValidation(unittest.TestCase):
         mock_validation_result = ValidationResult(is_valid=True)
         self.mock_validator.validate_action = Mock(return_value=mock_validation_result)
         
-        # Mock factory execution
-        self.executor.factory.execute_action = Mock(return_value=(True, {'success': True}))
+        # Mock factory execution to return ActionResult
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True, message="Action completed", data={'success': True})
+        self.executor.factory.execute_action = Mock(return_value=mock_result)
         
         # Create context
         context = MockActionContext(character_name="test_char")
@@ -78,17 +80,21 @@ class TestActionExecutorValidation(unittest.TestCase):
         
         # Verify result indicates validation failure
         self.assertFalse(result.success)
-        self.assertIn("Validation failed", result.error_message)
-        self.assertIn("validation_errors", result.response)
-        self.assertTrue(result.metadata.get('validation_failed'))
+        self.assertIn("Validation failed", result.error)
+        self.assertIn("validation_errors", result.data)
+        # Validation errors are stored in the data
+        self.assertIsInstance(result.data['validation_errors'], list)
+        self.assertGreater(len(result.data['validation_errors']), 0)
     
     def test_validation_disabled_flag(self):
         """Test that validation can be disabled via flag."""
         # Disable validation
         self.executor.validation_enabled = False
         
-        # Mock factory execution
-        self.executor.factory.execute_action = Mock(return_value=(True, {'success': True}))
+        # Mock factory execution to return ActionResult
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True, message="Action completed", data={'success': True})
+        self.executor.factory.execute_action = Mock(return_value=mock_result)
         
         # Create context
         context = MockActionContext(character_name="test_char")
@@ -111,8 +117,10 @@ class TestActionExecutorValidation(unittest.TestCase):
         mock_validation_result = ValidationResult(is_valid=True)
         self.mock_validator.validate_action = Mock(return_value=mock_validation_result)
         
-        # Mock factory execution
-        self.executor.factory.execute_action = Mock(return_value=(True, {'success': True}))
+        # Mock factory execution to return ActionResult
+        from src.controller.actions.base import ActionResult
+        mock_result = ActionResult(success=True, message="Action completed", data={'success': True})
+        self.executor.factory.execute_action = Mock(return_value=mock_result)
         
         # Create context
         context = MockActionContext(character_name="test_char")
@@ -156,8 +164,8 @@ class TestActionExecutorValidation(unittest.TestCase):
         
         # Verify error details in response
         self.assertFalse(result.success)
-        self.assertIn('validation_errors', result.response)
-        errors = result.response['validation_errors']
+        self.assertIn('validation_errors', result.data)
+        errors = result.data['validation_errors']
         self.assertEqual(len(errors), 2)
         
         # Check first error

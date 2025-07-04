@@ -10,7 +10,7 @@ from typing import Dict, Any
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .analyze_materials_for_transformation import AnalyzeMaterialsForTransformationAction
 from .determine_workshop_requirements import DetermineWorkshopRequirementsAction
 from .navigate_to_workshop import NavigateToWorkshopAction
@@ -45,13 +45,13 @@ class TransformMaterialsCoordinatorAction(ActionBase):
             'materials_sufficient': True
         }
     }
-    weights = {"inventory_status.has_refined_materials": 15}
+    weight = 15
     
     def __init__(self):
         """Initialize transform materials coordinator action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict[str, Any]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Coordinate material transformation workflow.
         
@@ -66,6 +66,8 @@ class TransformMaterialsCoordinatorAction(ActionBase):
         Returns:
             Dict with transformation results
         """
+        self._context = context
+        
         try:
             character_name = context.character_name
             target_item = context.get('target_item')
@@ -75,7 +77,7 @@ class TransformMaterialsCoordinatorAction(ActionBase):
             # Get current inventory
             char_response = get_character_api(name=character_name, client=client)
             if not char_response or not char_response.data:
-                return self.get_error_response('Could not get character data')
+                return self.create_error_result('Could not get character data')
             
             character_data = char_response.data
             inventory = character_data.inventory or []
@@ -89,12 +91,12 @@ class TransformMaterialsCoordinatorAction(ActionBase):
             analyze_result = analyze_action.execute(client, analyze_context)
             
             if not analyze_result.get('success'):
-                return self.get_error_response('Failed to analyze materials for transformation')
+                return self.create_error_result('Failed to analyze materials for transformation')
             
             transformations_needed = analyze_context.get('transformations_needed', [])
             
             if not transformations_needed:
-                return self.get_error_response('No raw materials found that need transformation')
+                return self.create_error_result('No raw materials found that need transformation')
             
             self.logger.info(f"📊 Found {len(transformations_needed)} materials to transform")
             
@@ -107,7 +109,7 @@ class TransformMaterialsCoordinatorAction(ActionBase):
             workshop_result = workshop_action.execute(client, workshop_context)
             
             if not workshop_result.get('success'):
-                return self.get_error_response('Failed to determine workshop requirements')
+                return self.create_error_result('Failed to determine workshop requirements')
             
             workshop_requirements = workshop_context.get('workshop_requirements', [])
             
@@ -165,17 +167,18 @@ class TransformMaterialsCoordinatorAction(ActionBase):
             
             # Return results
             if transformations_completed:
-                return self.get_success_response(
+                return self.create_success_result(
+                    f"Material transformation workflow completed: {len(transformations_completed)} transformations",
                     materials_transformed=transformations_completed,
                     total_transformations=len(transformations_completed),
                     verification=verify_result.get('verification_results', []),
                     target_item=target_item
                 )
             else:
-                return self.get_error_response('All material transformations failed')
+                return self.create_error_result('All material transformations failed')
                 
         except Exception as e:
-            return self.get_error_response(f"Material transformation workflow failed: {str(e)}")
+            return self.create_error_result(f"Material transformation workflow failed: {str(e)}")
     
     def __repr__(self):
         return "TransformMaterialsCoordinatorAction()"

@@ -64,7 +64,7 @@ class TestAttackAction(unittest.TestCase):
         # Check that GOAP attributes exist
         self.assertIsInstance(AttackAction.conditions, dict)
         self.assertIsInstance(AttackAction.reactions, dict)
-        self.assertIsInstance(AttackAction.weights, dict)
+        self.assertIsInstance(AttackAction.weight, (int, float))
         
         # Check specific GOAP conditions
         self.assertIn('combat_context', AttackAction.conditions)
@@ -80,8 +80,7 @@ class TestAttackAction(unittest.TestCase):
         self.assertNotIn('goal_progress', AttackAction.reactions)
         
         # Check weight
-        self.assertIn('attack', AttackAction.weights)
-        self.assertEqual(AttackAction.weights['attack'], 3.0)
+        self.assertEqual(AttackAction.weight, 3.0)
 
 
 if __name__ == '__main__':

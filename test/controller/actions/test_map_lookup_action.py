@@ -6,6 +6,7 @@ from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_response_schema import MapResponseSchema
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from src.controller.actions.map_lookup import MapLookupAction
+from src.controller.actions.base import ActionResult
 
 from test.base_test import BaseTest
 from test.fixtures import MockActionContext, create_mock_client
@@ -58,7 +59,7 @@ class TestMapLookupAction(BaseTest):
         
         # Verify response is returned
         self.assertIsNotNone(response)
-        self.assertTrue(response['success'])
+        self.assertTrue(response.success)
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_action_execute_with_real_map_data(self, mock_get_map_api):
@@ -82,13 +83,13 @@ class TestMapLookupAction(BaseTest):
         response = action.execute(client=self.client, context=context)
         
         # Verify the response contains expected data
-        self.assertIsInstance(response, dict)
-        self.assertTrue(response['success'])
-        self.assertEqual(response['x'], self.x)
-        self.assertEqual(response['y'], self.y)
-        if 'content' in response:
-            self.assertEqual(response['content']['type'], 'monster')
-            self.assertEqual(response['content']['code'], 'chicken')
+        self.assertIsInstance(response, ActionResult)
+        self.assertTrue(response.success)
+        self.assertEqual(response.data['x'], self.x)
+        self.assertEqual(response.data['y'], self.y)
+        if 'content' in response.data:
+            self.assertEqual(response.data['content']['type'], 'monster')
+            self.assertEqual(response.data['content']['code'], 'chicken')
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_action_execute_with_empty_map(self, mock_get_map_api):
@@ -108,12 +109,12 @@ class TestMapLookupAction(BaseTest):
         response = action.execute(client=self.client, context=context)
         
         # Verify the response handles empty content correctly
-        self.assertIsInstance(response, dict)
-        self.assertTrue(response['success'])
-        self.assertEqual(response['x'], self.x)
-        self.assertEqual(response['y'], self.y)
-        if 'content' in response:
-            self.assertIsNone(response['content'])
+        self.assertIsInstance(response, ActionResult)
+        self.assertTrue(response.success)
+        self.assertEqual(response.data['x'], self.x)
+        self.assertEqual(response.data['y'], self.y)
+        if 'content' in response.data:
+            self.assertIsNone(response.data['content'])
 
     @patch('src.controller.actions.map_lookup.get_map_api')
     def test_map_lookup_different_content_types(self, mock_get_map_api):
@@ -147,10 +148,10 @@ class TestMapLookupAction(BaseTest):
                 context = MockActionContext(x=self.x, y=self.y)
                 response = action.execute(client=self.client, context=context)
                 
-                self.assertTrue(response['success'])
-                if 'content' in response and response['content']:
-                    self.assertEqual(response['content']['type'], content_type.value)
-                    self.assertEqual(response['content']['code'], code)
+                self.assertTrue(response.success)
+                if 'content' in response.data and response.data['content']:
+                    self.assertEqual(response.data['content']['type'], content_type.value)
+                    self.assertEqual(response.data['content']['code'], code)
 
     def test_map_lookup_action_class_attributes(self):
         # Test that the action has the expected GOAP-related attributes
@@ -159,8 +160,7 @@ class TestMapLookupAction(BaseTest):
         # Check that class attributes exist (following the pattern from MoveAction)
         self.assertIsInstance(action.conditions, dict)
         self.assertIsInstance(action.reactions, dict)
-        self.assertIsInstance(action.weights, dict)
-        self.assertTrue(hasattr(action, 'g'))  # goal attribute
+        self.assertIsInstance(action.weight, (int, float))
 
     def test_map_lookup_action_no_client(self):
         # Test that execute fails gracefully without a client
@@ -168,8 +168,8 @@ class TestMapLookupAction(BaseTest):
         context = MockActionContext(x=self.x, y=self.y)
         response = action.execute(client=None, context=context)
         
-        self.assertFalse(response['success'])
-        self.assertIn('failed', response['error'])
+        self.assertFalse(response.success)
+        self.assertIn('failed', response.error)
 
     def test_map_lookup_action_missing_coordinates(self):
         # Test that execute fails when coordinates are missing
@@ -177,8 +177,8 @@ class TestMapLookupAction(BaseTest):
         context = MockActionContext()  # No x, y coordinates
         response = action.execute(client=self.client, context=context)
         
-        self.assertFalse(response['success'])
-        self.assertIn('coordinates', response['error'].lower())
+        self.assertFalse(response.success)
+        self.assertIn('coordinates', response.error.lower())
 
 if __name__ == '__main__':
     unittest.main()

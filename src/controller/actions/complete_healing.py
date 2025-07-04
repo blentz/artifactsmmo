@@ -8,7 +8,7 @@ It resets the healing state machine for future healing cycles.
 from typing import Dict, Any
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class CompleteHealingAction(ActionBase):
@@ -23,7 +23,7 @@ class CompleteHealingAction(ActionBase):
         """Initialize complete healing action."""
         super().__init__()
         
-    def execute(self, client, context: 'ActionContext') -> Dict[str, Any]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
         Mark healing process as complete.
         
@@ -34,6 +34,8 @@ class CompleteHealingAction(ActionBase):
         Returns:
             Dict with healing completion results
         """
+        self._context = context
+        
         try:
             # Get current HP to verify healing success
             world_state_obj = context.get('world_state')
@@ -60,7 +62,8 @@ class CompleteHealingAction(ActionBase):
             hp_gained = hp_percentage - starting_hp if starting_hp else hp_percentage
             
             # This is a state update action - no API call needed
-            return self.get_success_response(
+            return self.create_success_result(
+                f"Healing complete: {hp_percentage:.1f}% HP (+{hp_gained:.1f}%)",
                 healing_complete=True,
                 final_hp=hp_percentage,
                 hp_gained=hp_gained,
@@ -68,7 +71,7 @@ class CompleteHealingAction(ActionBase):
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to complete healing: {e}")
+            return self.create_error_result(f"Failed to complete healing: {e}")
     
     def __repr__(self):
         return "CompleteHealingAction()"

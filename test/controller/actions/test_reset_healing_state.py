@@ -24,8 +24,8 @@ class TestResetHealingStateAction(unittest.TestCase):
         """Test successful execution of reset healing state."""
         result = self.action.execute(self.mock_client, self.context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['healing_state_reset'])
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['healing_state_reset'])
         
     def test_execute_with_exception(self):
         """Test execution when an exception occurs."""
@@ -35,9 +35,9 @@ class TestResetHealingStateAction(unittest.TestCase):
             
             result = self.action.execute(self.mock_client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("Failed to reset healing state", result['error'])
-            self.assertIn("Test exception", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Failed to reset healing state", result.error)
+            self.assertIn("Test exception", result.error)
     
     def test_repr(self):
         """Test string representation of the action."""

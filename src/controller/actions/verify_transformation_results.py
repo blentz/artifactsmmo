@@ -8,7 +8,7 @@ were successful by checking inventory.
 from typing import Dict, Any, List
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 from .check_inventory import CheckInventoryAction
 
 
@@ -24,7 +24,7 @@ class VerifyTransformationResultsAction(ActionBase):
         """Initialize verify transformation results action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict[str, Any]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Verify transformation results.
         
@@ -38,13 +38,15 @@ class VerifyTransformationResultsAction(ActionBase):
         Returns:
             Dict with verification results
         """
+        self._context = context
+        
         try:
             transformations = context.get('transformations_completed', [])
             
             if not transformations:
-                return self.get_success_response(
-                    verified=True,
-                    message="No transformations to verify"
+                return self.create_success_result(
+                    "No transformations to verify",
+                    verified=True
                 )
             
             self.logger.debug(f"🔍 Verifying {len(transformations)} transformation results")
@@ -72,7 +74,7 @@ class VerifyTransformationResultsAction(ActionBase):
             inventory_result = check_action.execute(client, check_context)
             
             if not inventory_result or not inventory_result.get('success'):
-                return self.get_error_response("Could not verify inventory")
+                return self.create_error_result("Could not verify inventory")
             
             # Analyze results
             inventory_status = inventory_result.get('inventory_status', {})
@@ -111,14 +113,15 @@ class VerifyTransformationResultsAction(ActionBase):
                     })
                     self.logger.warning(f"❌ {refined_material} not found in inventory")
             
-            return self.get_success_response(
+            return self.create_success_result(
+                f"Transformation verification {'successful' if all_verified else 'partially successful'}",
                 all_verified=all_verified,
                 verification_results=verification_results,
                 inventory_status=inventory_status
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to verify transformation results: {e}")
+            return self.create_error_result(f"Failed to verify transformation results: {e}")
     
     def __repr__(self):
         return "VerifyTransformationResultsAction()"

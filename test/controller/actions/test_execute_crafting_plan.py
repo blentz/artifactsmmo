@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 
 from src.controller.actions.execute_crafting_plan import ExecuteCraftingPlanAction
+from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -37,8 +38,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("No knowledge base available", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("No knowledge base available", result.error)
         
     def test_execute_no_target_item(self):
         """Test execute fails without target item."""
@@ -49,8 +50,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn("No target item specified", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("No target item specified", result.error)
     
     def test_execute_item_not_found(self):
         """Test execute fails when item data not found."""
@@ -58,8 +59,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("Could not find item data", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("Could not find item data", result.error)
     
     def test_execute_item_not_craftable(self):
         """Test execute fails when item is not craftable."""
@@ -70,8 +71,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("is not craftable", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("is not craftable", result.error)
     
     def test_execute_workshop_move_fails(self):
         """Test execute fails when can't move to workshop."""
@@ -86,12 +87,12 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         # Mock workshop move failure
         with patch.object(self.action, '_ensure_at_workshop') as mock_ensure:
-            mock_ensure.return_value = {'success': False, 'error': 'Workshop not found'}
+            mock_ensure.return_value = Mock(success=False, error='Workshop not found')
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertEqual(result, {'success': False, 'error': 'Workshop not found'})
+            self.assertFalse(result.success)
+            self.assertEqual(result.error, 'Workshop not found')
     
     def test_execute_craft_fails(self):
         """Test execute fails when crafting fails."""
@@ -106,7 +107,7 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         # Mock successful workshop check
         with patch.object(self.action, '_ensure_at_workshop') as mock_ensure:
-            mock_ensure.return_value = {'success': True}
+            mock_ensure.return_value = Mock(success=True)
             
             # Mock unequip materials
             with patch.object(self.action, '_unequip_required_materials') as mock_unequip:
@@ -115,14 +116,20 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock craft failure
                 with patch('src.controller.actions.execute_crafting_plan.CraftItemAction') as mock_craft_class:
                     mock_craft_action = Mock()
-                    mock_craft_action.execute.return_value = {'success': False, 'error': 'Not enough materials'}
+                    # Mock needs to support both dict-style and ActionResult style
+                    mock_craft_result = Mock(success=False, error='Not enough materials')
+                    mock_craft_result.get.side_effect = lambda key, default=None: {
+                        'success': False,
+                        'error': 'Not enough materials'
+                    }.get(key, default)
+                    mock_craft_action.execute.return_value = mock_craft_result
                     mock_craft_class.return_value = mock_craft_action
                     
                     result = self.action.execute(self.client, self.context)
                     
-                    self.assertFalse(result['success'])
-                    self.assertIn("Failed to craft", result['error'])
-                    self.assertIn("Not enough materials", result['error'])
+                    self.assertFalse(result.success)
+                    self.assertIn("Failed to craft", result.error)
+                    self.assertIn("Not enough materials", result.error)
     
     def test_execute_success(self):
         """Test successful crafting execution."""
@@ -137,7 +144,7 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         # Mock successful workshop check
         with patch.object(self.action, '_ensure_at_workshop') as mock_ensure:
-            mock_ensure.return_value = {'success': True}
+            mock_ensure.return_value = Mock(success=True)
             
             # Mock unequip materials
             with patch.object(self.action, '_unequip_required_materials') as mock_unequip:
@@ -146,19 +153,21 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock successful craft
                 with patch('src.controller.actions.execute_crafting_plan.CraftItemAction') as mock_craft_class:
                     mock_craft_action = Mock()
-                    mock_craft_action.execute.return_value = {
-                        'success': True,
-                        'item_crafted': 'iron_sword',
-                        'quantity': 1
-                    }
+                    mock_craft_action.execute.return_value = Mock(
+                        success=True,
+                        data={
+                            'item_crafted': 'iron_sword',
+                            'quantity': 1
+                        }
+                    )
                     mock_craft_class.return_value = mock_craft_action
                     
                     result = self.action.execute(self.client, self.context)
                     
-                    self.assertTrue(result['success'])
-                    self.assertEqual(result['target_item'], 'iron_sword')
-                    self.assertEqual(result['workshop_type'], 'weaponsmithing')
-                    self.assertEqual(len(result['unequipped_items']), 1)
+                    self.assertTrue(result.success)
+                    self.assertEqual(result.data['target_item'], 'iron_sword')
+                    self.assertEqual(result.data['workshop_type'], 'weaponsmithing')
+                    self.assertEqual(len(result.data['unequipped_items']), 1)
     
     def test_execute_with_exception(self):
         """Test execute handles exceptions."""
@@ -167,9 +176,9 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         
         result = self.action.execute(self.client, self.context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("Crafting execution failed", result['error'])
-        self.assertIn("Test error", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("Crafting execution failed", result.error)
+        self.assertIn("Test error", result.error)
     
     def test_determine_target_item_from_selected_weapon(self):
         """Test _determine_target_item gets item from selected_weapon."""
@@ -228,8 +237,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                     self.client, 'weaponsmithing', 'iron_sword', 'test_char', self.context
                 )
                 
-                self.assertTrue(result['success'])
-                self.assertTrue(result['at_workshop'])
+                self.assertTrue(result.success)
+                self.assertTrue(result.data['at_workshop'])
     
     def test_ensure_at_workshop_need_to_move(self):
         """Test _ensure_at_workshop when need to move to workshop."""
@@ -253,26 +262,28 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock find workshop
                 with patch('src.controller.actions.execute_crafting_plan.FindCorrectWorkshopAction') as mock_find_class:
                     mock_find_action = Mock()
-                    mock_find_action.execute.return_value = {
-                        'success': True,
-                        'workshop_x': 10,
-                        'workshop_y': 20
-                    }
+                    mock_find_action.execute.return_value = Mock(
+                        success=True,
+                        data={
+                            'workshop_x': 10,
+                            'workshop_y': 20
+                        }
+                    )
                     mock_find_class.return_value = mock_find_action
                     
                     # Mock move action
                     with patch('src.controller.actions.execute_crafting_plan.MoveAction') as mock_move_class:
                         mock_move_action = Mock()
-                        mock_move_action.execute.return_value = {'success': True}
+                        mock_move_action.execute.return_value = Mock(success=True)
                         mock_move_class.return_value = mock_move_action
                         
                         result = self.action._ensure_at_workshop(
                             self.client, 'weaponsmithing', 'iron_sword', 'test_char', self.context
                         )
                         
-                        self.assertTrue(result['success'])
-                        self.assertTrue(result['at_workshop'])
-                        self.assertTrue(result['moved_to_workshop'])
+                        self.assertTrue(result.success)
+                        self.assertTrue(result.data['at_workshop'])
+                        self.assertTrue(result.data['moved_to_workshop'])
                         
                         # Verify the move action was called with correct context
                         mock_move_action.execute.assert_called_once()
@@ -289,8 +300,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 self.client, 'weaponsmithing', 'iron_sword', 'test_char', self.context
             )
             
-            self.assertFalse(result['success'])
-            self.assertIn("Could not get character location", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Could not get character location", result.error)
     
     def test_ensure_at_workshop_exception(self):
         """Test _ensure_at_workshop handles exceptions."""
@@ -301,8 +312,8 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 self.client, 'weaponsmithing', 'iron_sword', 'test_char', self.context
             )
             
-            self.assertFalse(result['success'])
-            self.assertIn("Workshop check failed", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Workshop check failed", result.error)
     
     def test_unequip_required_materials_no_materials(self):
         """Test _unequip_required_materials when no materials needed."""
@@ -340,7 +351,7 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock unequip action
                 with patch('src.controller.actions.execute_crafting_plan.UnequipItemAction') as mock_unequip_class:
                     mock_unequip_action = Mock()
-                    mock_unequip_action.execute.return_value = {'success': True}
+                    mock_unequip_action.execute.return_value = Mock(success=True)
                     mock_unequip_class.return_value = mock_unequip_action
                     
                     result = self.action._unequip_required_materials(
@@ -395,7 +406,7 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
         self.assertIn('inventory_updated', self.action.reactions)
         self.assertIn('craft_plan_available', self.action.reactions)
         
-        self.assertIn('has_equipment', self.action.weights)
+        self.assertEqual(self.action.weight, 10)
     
     def test_ensure_at_workshop_find_workshop_fails(self):
         """Test _ensure_at_workshop when find workshop fails."""
@@ -419,15 +430,15 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock find workshop failure
                 with patch('src.controller.actions.execute_crafting_plan.FindCorrectWorkshopAction') as mock_find_class:
                     mock_find_action = Mock()
-                    mock_find_action.execute.return_value = {'success': False}
+                    mock_find_action.execute.return_value = Mock(success=False)
                     mock_find_class.return_value = mock_find_action
                     
                     result = self.action._ensure_at_workshop(
                         self.client, 'weaponsmithing', 'iron_sword', 'test_char', self.context
                     )
                     
-                    self.assertFalse(result['success'])
-                    self.assertIn("Could not find weaponsmithing workshop", result['error'])
+                    self.assertFalse(result.success)
+                    self.assertIn("Could not find weaponsmithing workshop", result.error)
     
     def test_ensure_at_workshop_move_fails(self):
         """Test _ensure_at_workshop when move to workshop fails."""
@@ -451,25 +462,30 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock find workshop success
                 with patch('src.controller.actions.execute_crafting_plan.FindCorrectWorkshopAction') as mock_find_class:
                     mock_find_action = Mock()
-                    mock_find_action.execute.return_value = {
-                        'success': True,
-                        'workshop_x': 10,
-                        'workshop_y': 20
-                    }
+                    mock_find_action.execute.return_value = Mock(
+                        success=True,
+                        data={
+                            'workshop_x': 10,
+                            'workshop_y': 20
+                        }
+                    )
                     mock_find_class.return_value = mock_find_action
                     
                     # Mock move failure
                     with patch('src.controller.actions.execute_crafting_plan.MoveAction') as mock_move_class:
                         mock_move_action = Mock()
-                        mock_move_action.execute.return_value = {'success': False}
+                        # Mock needs to support both dict-style and ActionResult style
+                        mock_move_result = Mock(success=False)
+                        mock_move_result.get.return_value = False
+                        mock_move_action.execute.return_value = mock_move_result
                         mock_move_class.return_value = mock_move_action
                         
                         result = self.action._ensure_at_workshop(
                             self.client, 'weaponsmithing', 'iron_sword', 'test_char', self.context
                         )
                         
-                        self.assertFalse(result['success'])
-                        self.assertIn("Could not move to workshop", result['error'])
+                        self.assertFalse(result.success)
+                        self.assertIn("Could not move to workshop", result.error)
     
     def test_unequip_required_materials_unequip_fails(self):
         """Test _unequip_required_materials when unequip fails."""
@@ -492,7 +508,12 @@ class TestExecuteCraftingPlanAction(unittest.TestCase):
                 # Mock unequip action failure
                 with patch('src.controller.actions.execute_crafting_plan.UnequipItemAction') as mock_unequip_class:
                     mock_unequip_action = Mock()
-                    mock_unequip_action.execute.return_value = {'success': False}
+                    # Mock needs to support both dict-style and ActionResult style  
+                    mock_unequip_result = Mock(success=False)
+                    mock_unequip_result.get.side_effect = lambda key, default=None: {
+                        'success': False
+                    }.get(key, default)
+                    mock_unequip_action.execute.return_value = mock_unequip_result
                     mock_unequip_class.return_value = mock_unequip_action
                     
                     result = self.action._unequip_required_materials(

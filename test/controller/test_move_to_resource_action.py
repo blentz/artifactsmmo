@@ -34,7 +34,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         """Test GOAP class attributes."""
         self.assertIsInstance(MoveToResourceAction.conditions, dict)
         self.assertIsInstance(MoveToResourceAction.reactions, dict)
-        self.assertIsInstance(MoveToResourceAction.weights, dict)
+        self.assertIsInstance(MoveToResourceAction.weight, (int, float))
         
         # Check specific conditions
         self.assertIn("character_status", MoveToResourceAction.conditions)
@@ -48,7 +48,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertTrue(MoveToResourceAction.reactions["location_context"]["at_target"])
         
         # Check weights
-        self.assertEqual(MoveToResourceAction.weights["at_resource_location"], 10)
+        self.assertEqual(MoveToResourceAction.weight, 10)
     
     def test_get_target_coordinates_from_context(self):
         """Test coordinate extraction from context parameters."""
@@ -174,12 +174,12 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertEqual(destination.y, 25)
         
         # Verify response
-        self.assertTrue(result['success'])
-        self.assertTrue(result['moved'])
-        self.assertEqual(result['target_x'], 15)
-        self.assertEqual(result['target_y'], 25)
-        self.assertTrue(result['at_resource_location'])
-        self.assertEqual(result['resource_code'], 'ash_wood')
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['moved'])
+        self.assertEqual(result.data['target_x'], 15)
+        self.assertEqual(result.data['target_y'], 25)
+        self.assertTrue(result.data['at_resource_location'])
+        self.assertEqual(result.data['resource_code'], 'ash_wood')
     
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_success_with_detailed_context(self, mock_move_api):
@@ -202,12 +202,12 @@ class TestMoveToResourceAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify response
-        self.assertTrue(result['success'])
-        self.assertEqual(result['target_x'], 30)
-        self.assertEqual(result['target_y'], 40)
-        self.assertTrue(result['at_resource_location'])
-        self.assertEqual(result['resource_code'], 'copper_ore')
-        self.assertEqual(result['resource_name'], 'Copper Ore')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 30)
+        self.assertEqual(result.data['target_y'], 40)
+        self.assertTrue(result.data['at_resource_location'])
+        self.assertEqual(result.data['resource_code'], 'copper_ore')
+        self.assertEqual(result.data['resource_name'], 'Copper Ore')
     
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_already_at_destination(self, mock_move_api):
@@ -222,13 +222,13 @@ class TestMoveToResourceAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Verify it's treated as success
-        self.assertTrue(result['success'])
-        self.assertFalse(result['moved'])
-        self.assertTrue(result['already_at_destination'])
-        self.assertEqual(result['target_x'], 10)
-        self.assertEqual(result['target_y'], 20)
-        self.assertTrue(result['at_resource_location'])
-        self.assertEqual(result['resource_code'], 'iron_ore')
+        self.assertTrue(result.success)
+        self.assertFalse(result.data['moved'])
+        self.assertTrue(result.data['already_at_destination'])
+        self.assertEqual(result.data['target_x'], 10)
+        self.assertEqual(result.data['target_y'], 20)
+        self.assertTrue(result.data['at_resource_location'])
+        self.assertEqual(result.data['resource_code'], 'iron_ore')
     
     def test_execute_no_client(self):
         """Test execution without client."""
@@ -237,9 +237,9 @@ class TestMoveToResourceAction(unittest.TestCase):
         context = MockActionContext(character_name=self.char_name, target_x=5, target_y=10)
         result = action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
     
     def test_execute_no_coordinates(self):
         """Test execution without coordinates."""
@@ -248,8 +248,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         context = MockActionContext(character_name=self.char_name)
         result = action.execute(self.client, context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
     
     def test_execute_partial_coordinates(self):
         """Test execution with partial coordinates."""
@@ -259,14 +259,14 @@ class TestMoveToResourceAction(unittest.TestCase):
         # Only target_x
         context = MockActionContext(character_name=self.char_name, target_x=10)
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
         
         # Only resource_y
         context = MockActionContext(character_name=self.char_name, resource_y=20)
         result = action.execute(self.client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('No valid coordinates provided', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No valid coordinates provided', result.error)
     
     @patch('src.controller.actions.movement_base.move_character_api')
     def test_execute_api_error(self, mock_move_api):
@@ -281,10 +281,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         result = action.execute(self.client, context)
         
         # Should return error
-        self.assertFalse(result['success'])
-        self.assertIn('Network error', result['error'])
-        self.assertEqual(result['target_x'], 5)
-        self.assertEqual(result['target_y'], 10)
+        self.assertFalse(result.success)
+        self.assertIn('Network error', result.error)
+        self.assertEqual(result.data['target_x'], 5)
+        self.assertEqual(result.data['target_y'], 10)
     
     def test_inheritance_from_movement_base(self):
         """Test that MoveToResourceAction properly inherits from MovementActionBase."""
@@ -295,8 +295,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertTrue(hasattr(action, 'calculate_distance'))
         
         # Should have ActionBase methods
-        self.assertTrue(hasattr(action, 'get_success_response'))
-        self.assertTrue(hasattr(action, 'get_error_response'))
+        self.assertTrue(hasattr(action, 'create_success_result'))
+        self.assertTrue(hasattr(action, 'create_error_result'))
         
         # Should have CharacterDataMixin methods
         self.assertTrue(hasattr(action, 'get_character_data'))

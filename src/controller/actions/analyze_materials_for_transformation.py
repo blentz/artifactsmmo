@@ -8,7 +8,7 @@ which raw materials should be transformed into refined materials.
 from typing import Dict, Any, List, Tuple, Optional
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeMaterialsForTransformationAction(ActionBase):
@@ -20,11 +20,16 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
     or general transformation opportunities.
     """
     
+    # GOAP metadata
+    conditions = {}
+    reactions = {}
+    weight = 1.0
+    
     def __init__(self):
         """Initialize analyze materials action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict[str, Any]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Analyze inventory for transformation opportunities.
         
@@ -37,8 +42,10 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
                 - knowledge_base: Knowledge base instance
                 
         Returns:
-            Dict with transformation analysis results
+            ActionResult with transformation analysis results
         """
+        self._context = context
+        
         try:
             inventory = context.get('inventory', [])
             target_item = context.get('target_item')
@@ -67,14 +74,15 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
             
             self.logger.info(f"📊 Found {len(transformations)} transformation opportunities")
             
-            return self.get_success_response(
+            return self.create_success_result(
+                message=f"Found {len(transformations)} transformation opportunities",
                 transformations=transformations,
                 transformation_count=len(transformations),
                 target_item=target_item
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to analyze materials: {e}")
+            return self.create_error_result(f"Failed to analyze materials: {e}")
     
     def _build_inventory_dict(self, inventory: list) -> Dict[str, int]:
         """Convert inventory list to dict for easier lookup."""

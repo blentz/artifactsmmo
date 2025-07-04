@@ -1,11 +1,11 @@
 """ FindXpSourcesAction module """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class FindXpSourcesAction(ActionBase):
@@ -23,14 +23,14 @@ class FindXpSourcesAction(ActionBase):
         super().__init__()
         self.logger = logging.getLogger(__name__)
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find all XP sources for the target skill """
         # Get parameters from context
         skill = context.get('skill')
         if not skill:
-            return self.get_error_response("No skill type provided")
+            return self.create_error_result("No skill type provided")
             
-        self.log_execution_start(skill=skill)
+        self._context = context
         
         try:
             # Get learning manager and knowledge base from context
@@ -38,10 +38,10 @@ class FindXpSourcesAction(ActionBase):
             knowledge_base = context.knowledge_base
             
             if not learning_manager:
-                return self.get_error_response("Learning manager not available")
+                return self.create_error_result("Learning manager not available")
             
             if not knowledge_base:
-                return self.get_error_response("Knowledge base not available")
+                return self.create_error_result("Knowledge base not available")
             
             # Check if effects data is available, if not learn it
             effects_available = self._check_effects_data_available(knowledge_base)
@@ -49,7 +49,7 @@ class FindXpSourcesAction(ActionBase):
                 self.logger.info("🔍 Effects data not available, learning all effects...")
                 effects_result = learning_manager.learn_all_effects_bulk(client)
                 if not effects_result.get('success'):
-                    return self.get_error_response(f"Failed to learn effects: {effects_result.get('error')}")
+                    return self.create_error_result(f"Failed to learn effects: {effects_result.get('error')}")
             
             # Find XP sources for the target skill
             xp_sources = learning_manager.find_xp_sources_for_skill(skill)
@@ -65,12 +65,12 @@ class FindXpSourcesAction(ActionBase):
                         break
             
             if not xp_sources:
-                return self.get_error_response(f"No XP sources found for skill '{skill}'")
+                return self.create_error_result(f"No XP sources found for skill '{skill}'")
             
             # Analyze XP sources to find actionable items
             actionable_sources = self._analyze_actionable_sources(xp_sources, knowledge_base, skill)
             
-            result = self.get_success_response(
+            result = self.create_success_result(
                 skill=skill,
                 xp_sources=xp_sources,
                 actionable_sources=actionable_sources,
@@ -79,12 +79,10 @@ class FindXpSourcesAction(ActionBase):
                 message=f"Found {len(xp_sources)} XP sources for {skill} skill"
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"XP sources search failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"XP sources search failed: {str(e)}")
             return error_response
 
     def _check_effects_data_available(self, knowledge_base) -> bool:

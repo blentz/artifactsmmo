@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import yaml
-from src.controller.action_executor import ActionResult
+from src.controller.actions.base import ActionResult
 from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
 
@@ -122,7 +122,7 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
                 # Mock successful action execution
                 mock_result = ActionResult(
                     success=True,
-                    response={'success': True, 'x': 15, 'y': 20},
+                    data={'success': True, 'x': 15, 'y': 20},
                     action_name='move'
                 )
                 mock_executor_instance.execute_action.return_value = mock_result
@@ -165,11 +165,12 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
             
             # Mock failed action execution
             mock_result = ActionResult(
-                success=False,
-                response=None,
-                action_name='move',
-                error_message='Action failed'
-            )
+                    success=False,
+                    data=None,
+                    action_name='move',
+                    error='Action failed'
+            
+                )
             mock_executor_instance.execute_action.return_value = mock_result
             
             # Execute action

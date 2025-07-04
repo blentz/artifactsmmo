@@ -29,8 +29,8 @@ class TestMarkEquipmentReadyAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "steel_armor is ready to be equipped")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "steel_armor is ready to be equipped")
         
     def test_execute_with_item_context(self):
         """Test execution with item context."""
@@ -45,10 +45,10 @@ class TestMarkEquipmentReadyAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "copper_sword is ready to be equipped")
-        self.assertEqual(result['selected_item'], 'copper_sword')
-        self.assertEqual(result['target_slot'], 'weapon')
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "copper_sword is ready to be equipped")
+        self.assertEqual(result.data['selected_item'], 'copper_sword')
+        self.assertEqual(result.data['target_slot'], 'weapon')
         
     def test_repr(self):
         """Test string representation."""

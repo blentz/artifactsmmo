@@ -102,28 +102,19 @@ class TestCoordinateStandardizationMixin(unittest.TestCase):
         result = self.mixin.get_standardized_coordinates(context)
         self.assertEqual(result, (50, 60))
     
-    def test_create_coordinate_response(self):
-        """Test creating coordinate response with additional data."""
-        result = self.mixin.create_coordinate_response(
-            10, 20,
-            distance=5,
-            resource_code='iron_ore',
-            success=True
-        )
-        
+    def test_standardize_coordinate_output(self):
+        """Test standardizing coordinate output."""
+        result = self.mixin.standardize_coordinate_output(10, 20)
         expected = {
             'target_x': 10,
-            'target_y': 20,
-            'distance': 5,
-            'resource_code': 'iron_ore',
-            'success': True
+            'target_y': 20
         }
         self.assertEqual(result, expected)
     
-    def test_create_coordinate_response_no_additional_data(self):
-        """Test creating coordinate response without additional data."""
-        result = self.mixin.create_coordinate_response(5, 15)
-        expected = {'target_x': 5, 'target_y': 15}
+    def test_standardize_coordinate_output_with_floats(self):
+        """Test standardizing coordinate output with float values."""
+        result = self.mixin.standardize_coordinate_output(5.7, 15.3)
+        expected = {'target_x': 5.7, 'target_y': 15.3}
         self.assertEqual(result, expected)
 
 

@@ -28,8 +28,8 @@ class TestRecoverCombatViabilityAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Combat viability recovered, ready to resume hunting")
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Combat viability recovered, ready to resume hunting")
         
     def test_execute_with_upgraded_equipment_context(self):
         """Test execution with upgraded equipment context."""
@@ -46,10 +46,10 @@ class TestRecoverCombatViabilityAction(unittest.TestCase):
         result = self.action.execute(self.mock_client, context)
         
         # Verify result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message'], "Combat viability recovered, ready to resume hunting")
-        self.assertEqual(result['equipment_upgraded'], 'copper_sword')
-        self.assertEqual(result['win_rate_reset'], True)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "Combat viability recovered, ready to resume hunting")
+        self.assertEqual(result.data['equipment_upgraded'], 'copper_sword')
+        self.assertEqual(result.data['win_rate_reset'], True)
         
     def test_repr(self):
         """Test string representation."""

@@ -8,7 +8,7 @@ from typing import Dict, Optional
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class CompleteEquipmentUpgradeAction(ActionBase):
@@ -43,18 +43,17 @@ class CompleteEquipmentUpgradeAction(ActionBase):
         """Initialize complete equipment upgrade action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
         Execute equipment upgrade completion.
         
         This is a state-only action that updates the equipment status
         without making any API calls.
         """
+        self._context = context
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
-            
-        self.log_execution_start(character_name=character_name)
+            return self.create_error_result("No character name provided")
         
         try:
             # Get equipped item information
@@ -68,22 +67,17 @@ class CompleteEquipmentUpgradeAction(ActionBase):
             )
             
             # This is a bridge action - it only updates state, no API calls needed
-            result = self.get_success_response(
+            return self.create_success_result(
+                message=f"Equipment upgrade completed with {selected_item}",
                 equipment_upgrade_completed=True,
                 previous_status='ready',
                 new_status='completed',
                 equipped_item=selected_item,
-                target_slot=target_slot,
-                message=f"Equipment upgrade completed with {selected_item}"
+                target_slot=target_slot
             )
             
-            self.log_execution_result(result)
-            return result
-            
         except Exception as e:
-            error_response = self.get_error_response(f"Failed to complete equipment upgrade: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Failed to complete equipment upgrade: {str(e)}")
 
     def __repr__(self):
         return "CompleteEquipmentUpgradeAction()"

@@ -6,7 +6,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 import yaml
-from src.controller.action_executor import ActionExecutor, ActionResult, CompositeActionStep
+from src.controller.action_executor import ActionExecutor, CompositeActionStep
+from src.controller.actions.base import ActionResult
 from src.controller.action_factory import ActionFactory
 
 from test.fixtures import create_mock_client
@@ -84,19 +85,17 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         """Test ActionResult dataclass."""
         result = ActionResult(
             success=True,
-            response={'status': 'ok'},
+            data={'status': 'ok'},
             action_name='test_action',
-            execution_time=1.5,
-            error_message=None,
-            metadata={'test': 'data'}
+            error=None,
+            message='Test successful'
         )
         
         self.assertTrue(result.success)
-        self.assertEqual(result.response['status'], 'ok')
+        self.assertEqual(result.data['status'], 'ok')
         self.assertEqual(result.action_name, 'test_action')
-        self.assertEqual(result.execution_time, 1.5)
-        self.assertIsNone(result.error_message)
-        self.assertEqual(result.metadata['test'], 'data')
+        self.assertIsNone(result.error)
+        self.assertEqual(result.message, 'Test successful')
 
     def test_composite_action_step_dataclass(self):
         """Test CompositeActionStep dataclass."""
@@ -149,7 +148,7 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         """Test successful execution of simple action."""
         # Mock factory to return success tuple
         mock_factory = Mock()
-        mock_factory.execute_action.return_value = (True, {'success': True, 'message': 'Action completed'})
+        mock_factory.execute_action.return_value = ActionResult(success=True, data={'message': 'Action completed'}, action_name='move')
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
@@ -167,7 +166,7 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         """Test failed execution of simple action."""
         # Mock factory to return failure tuple
         mock_factory = Mock()
-        mock_factory.execute_action.return_value = (False, None)
+        mock_factory.execute_action.return_value = ActionResult(success=False, error='Action failed', action_name='unknown_action')
         mock_factory_class.return_value = mock_factory
         
         executor = ActionExecutor(self.config_file)
@@ -195,7 +194,7 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         
         self.assertIsInstance(result, ActionResult)
         self.assertFalse(result.success)
-        self.assertIn('Test exception', result.error_message)
+        self.assertIn('Test exception', result.error)
 
     def test_action_executor_config_data(self):
         """Test ActionExecutor config_data is loaded."""
@@ -212,8 +211,8 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         mock_factory = Mock()
         # Return success for both move and attack steps
         mock_factory.execute_action.side_effect = [
-            (True, {'success': True, 'message': 'Moved'}),
-            (True, {'success': True, 'message': 'Attacked'})
+            ActionResult(success=True, data={'message': 'Moved'}, action_name='move'),
+            ActionResult(success=True, data={'message': 'Attacked'}, action_name='attack')
         ]
         mock_factory_class.return_value = mock_factory
         
@@ -225,9 +224,9 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         self.assertIsInstance(result, ActionResult)
         self.assertTrue(result.success)
         self.assertEqual(result.action_name, 'test_composite')
-        # Composite actions return 'steps' and 'composite' in response
-        self.assertIn('steps', result.response)
-        self.assertTrue(result.response.get('composite', False))
+        # Composite actions return 'steps' and 'composite' in data
+        self.assertIn('steps', result.data)
+        self.assertTrue(result.data.get('composite', False))
 
     def test_validate_step_conditions_true(self):
         """Test step condition validation when conditions are met."""
@@ -284,9 +283,9 @@ class TestActionExecutorEnhanced(unittest.TestCase):
         
         result = ActionResult(
             success=True,
-            response={'message': 'success'},
+            data={'message': 'success'},
             action_name='test_action',
-            execution_time=1.2
+            message='Test successful'
         )
         
         # Should not raise exceptions when logging

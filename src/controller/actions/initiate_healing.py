@@ -8,7 +8,7 @@ It transitions the healing state machine and prepares for actual healing actions
 from typing import Dict, Any
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class InitiateHealingAction(ActionBase):
@@ -23,7 +23,7 @@ class InitiateHealingAction(ActionBase):
         """Initialize initiate healing action."""
         super().__init__()
         
-    def execute(self, client, context: 'ActionContext') -> Dict[str, Any]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
         Initiate the healing process.
         
@@ -34,6 +34,8 @@ class InitiateHealingAction(ActionBase):
         Returns:
             Dict with healing initiation results
         """
+        self._context = context
+        
         try:
             # Get current state
             world_state_obj = context.get('world_state')
@@ -56,14 +58,15 @@ class InitiateHealingAction(ActionBase):
             self.logger.info(f"💊 Current HP: {hp_percentage:.1f}%")
             
             # This is a state update action - no API call needed
-            return self.get_success_response(
+            return self.create_success_result(
+                f"Healing initiated using method: {healing_method}",
                 healing_initiated=True,
                 healing_method=healing_method,
                 starting_hp=hp_percentage
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to initiate healing: {e}")
+            return self.create_error_result(f"Failed to initiate healing: {e}")
     
     def _select_healing_method(self, world_state: Dict[str, Any], 
                               context: 'ActionContext') -> str:

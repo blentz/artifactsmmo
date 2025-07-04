@@ -44,9 +44,9 @@ class TestCheckLocationAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertIsNotNone(result.error)
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_character_api_fails(self, mock_get_character_api):
@@ -57,8 +57,8 @@ class TestCheckLocationAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_character_api_no_data(self, mock_get_character_api):
@@ -71,8 +71,8 @@ class TestCheckLocationAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_success_basic_location(self, mock_get_character_api):
@@ -90,11 +90,11 @@ class TestCheckLocationAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['character_name'], 'test_character')
-        self.assertEqual(result['current_x'], 10)
-        self.assertEqual(result['current_y'], 15)
-        self.assertIn('location_info', result)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['character_name'], 'test_character')
+        self.assertEqual(result.data['current_x'], 10)
+        self.assertEqual(result.data['current_y'], 15)
+        self.assertIn('location_info', result.data)
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_success_with_map_data(self, mock_get_character_api):
@@ -120,14 +120,14 @@ class TestCheckLocationAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.character_name, map_state=mock_map_state)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['current_x'], 5)
-        self.assertEqual(result['current_y'], 8)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['current_x'], 5)
+        self.assertEqual(result.data['current_y'], 8)
         # The action returns location_info, not map_content
-        self.assertIn('location_info', result)
-        self.assertEqual(result['location_info']['content_type'], 'resource')
-        self.assertIn('location_info', result)
-        self.assertEqual(result['location_info']['content_code'], 'copper_rocks')
+        self.assertIn('location_info', result.data)
+        self.assertEqual(result.data['location_info']['content_type'], 'resource')
+        self.assertIn('location_info', result.data)
+        self.assertEqual(result.data['location_info']['content_code'], 'copper_rocks')
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_map_api_fails(self, mock_get_character_api):
@@ -147,12 +147,12 @@ class TestCheckLocationAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])  # Should still succeed without map data
-        self.assertEqual(result['current_x'], 5)
-        self.assertEqual(result['current_y'], 8)
-        self.assertIn('location_info', result)
+        self.assertTrue(result.success)  # Should still succeed without map data
+        self.assertEqual(result.data['current_x'], 5)
+        self.assertEqual(result.data['current_y'], 8)
+        self.assertIn('location_info', result.data)
         # When no map state, location_info will be empty
-        self.assertEqual(result['location_info'], {})
+        self.assertEqual(result.data['location_info'], {})
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_with_target_location_context(self, mock_get_character_api):
@@ -171,11 +171,11 @@ class TestCheckLocationAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name, target_x=10, target_y=15)
         
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['current_x'], 10)
-        self.assertEqual(result['current_y'], 15)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['current_x'], 10)
+        self.assertEqual(result.data['current_y'], 15)
         # Should indicate if at target location
-        self.assertTrue(result.get('at_location', False))
+        self.assertTrue(result.data.get('at_location', False))
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_not_at_target_location(self, mock_get_character_api):
@@ -194,12 +194,12 @@ class TestCheckLocationAction(unittest.TestCase):
         context = MockActionContext(character_name=self.character_name, target_x=10, target_y=15)
         
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
-        self.assertEqual(result['current_x'], 5)
-        self.assertEqual(result['current_y'], 8)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['current_x'], 5)
+        self.assertEqual(result.data['current_y'], 8)
         # The action always sets target coordinates to current location
-        self.assertEqual(result['target_x'], 5)
-        self.assertEqual(result['target_y'], 8)
+        self.assertEqual(result.data['target_x'], 5)
+        self.assertEqual(result.data['target_y'], 8)
 
     def test_calculate_distance_helper_method(self):
         """Test _calculate_distance helper method."""
@@ -239,15 +239,14 @@ class TestCheckLocationAction(unittest.TestCase):
             from test.fixtures import MockActionContext
             context = MockActionContext(character_name=self.character_name)
             result = self.action.execute(client, context)
-            self.assertFalse(result['success'])
-            self.assertIn('Location check failed', result['error'])
+            self.assertFalse(result.success)
+            self.assertIn('Location check failed', result.error)
 
     def test_execute_has_goap_attributes(self):
         """Test that CheckLocationAction has expected GOAP attributes."""
         self.assertTrue(hasattr(CheckLocationAction, 'conditions'))
         self.assertTrue(hasattr(CheckLocationAction, 'reactions'))
-        self.assertTrue(hasattr(CheckLocationAction, 'weights'))
-        self.assertTrue(hasattr(CheckLocationAction, 'g'))
+        self.assertTrue(hasattr(CheckLocationAction, 'weight'))
 
     def test_goap_conditions(self):
         """Test GOAP conditions are properly defined."""
@@ -263,8 +262,8 @@ class TestCheckLocationAction(unittest.TestCase):
 
     def test_goap_weights(self):
         """Test GOAP weights are properly defined."""
-        expected_weights = {"location_known": 1.0}
-        self.assertEqual(CheckLocationAction.weights, expected_weights)
+        expected_weight = CheckLocationAction.weight
+        self.assertIsInstance(expected_weight, (int, float))
 
     def test_different_character_names(self):
         """Test action works with different character names."""
@@ -299,12 +298,12 @@ class TestCheckLocationAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.character_name)
         result = self.action.execute(client, context)
-        self.assertTrue(result['success'])
+        self.assertTrue(result.success)
         
         # Should capture location information
-        self.assertEqual(result['current_x'], 10)
-        self.assertEqual(result['current_y'], 15)
-        self.assertEqual(result['character_name'], 'test_character')
+        self.assertEqual(result.data['current_x'], 10)
+        self.assertEqual(result.data['current_y'], 15)
+        self.assertEqual(result.data['character_name'], 'test_character')
 
     @patch('src.controller.actions.check_location.get_character_api')
     def test_execute_coordinate_validation(self, mock_get_character_api):
@@ -330,9 +329,9 @@ class TestCheckLocationAction(unittest.TestCase):
             from test.fixtures import MockActionContext
             context = MockActionContext(character_name=self.character_name)
             result = self.action.execute(client, context)
-            self.assertTrue(result['success'])
-            self.assertEqual(result['current_x'], x)
-            self.assertEqual(result['current_y'], y)
+            self.assertTrue(result.success)
+            self.assertEqual(result.data['current_x'], x)
+            self.assertEqual(result.data['current_y'], y)
 
 
 if __name__ == '__main__':

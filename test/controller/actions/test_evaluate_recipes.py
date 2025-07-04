@@ -434,8 +434,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No target equipment slot specified', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No target equipment slot specified', result.error)
         
     def test_execute_integration_no_character_state(self):
         """Test execute integration with no character state."""
@@ -444,8 +444,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No character state available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No character state available', result.error)
         
     def test_execute_integration_unknown_slot(self):
         """Test execute integration with unknown equipment slot."""
@@ -453,8 +453,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('Unknown equipment slot: unknown_slot', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Unknown equipment slot: unknown_slot', result.error)
         
     def test_execute_integration_incompatible_slot_skill(self):
         """Test execute integration with incompatible slot and skill."""
@@ -465,8 +465,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn("not compatible with skill 'cooking'", result['error'])
+        self.assertFalse(result.success)
+        self.assertIn("not compatible with skill 'cooking'", result.error)
         
     @patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync')
     def test_execute_integration_no_recipes(self, mock_get_items):
@@ -476,8 +476,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertFalse(result['success'])
-        self.assertIn('No weaponcrafting recipes available', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No weaponcrafting recipes available', result.error)
         
     @patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync')
     def test_execute_integration_successful_selection(self, mock_get_items):
@@ -504,10 +504,10 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['selected_item'], 'copper_dagger')
-        self.assertEqual(result['target_slot'], 'weapon')
-        self.assertEqual(result['craft_skill'], 'weaponcrafting')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['selected_item'], 'copper_dagger')
+        self.assertEqual(result.data['target_slot'], 'weapon')
+        self.assertEqual(result.data['craft_skill'], 'weaponcrafting')
         
         # Verify context updates
         self.mock_context.set_result.assert_any_call('selected_item_code', 'copper_dagger')

@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
+from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
 
 
@@ -403,10 +404,11 @@ class TestAnalyzeResourcesComprehensive(unittest.TestCase):
                             
                             result = self.action.execute(self.client, self.context)
                             
-                            self.assertTrue(result['success'])
-                            self.assertEqual(result['nearby_resources_count'], 1)
-                            self.assertIn('iron_ore', result['analyzed_resources'])
-                            self.assertEqual(len(result['equipment_opportunities']), 1)
+                            self.assertIsInstance(result, ActionResult)
+                            self.assertTrue(result.success)
+                            self.assertEqual(result.data['nearby_resources_count'], 1)
+                            self.assertIn('iron_ore', result.data['analyzed_resources'])
+                            self.assertEqual(len(result.data['equipment_opportunities']), 1)
     
     def test_execute_no_resources_found(self):
         """Test execute when no resources are found."""
@@ -415,8 +417,9 @@ class TestAnalyzeResourcesComprehensive(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn('No resources found', result['error'])
+            self.assertIsInstance(result, ActionResult)
+            self.assertFalse(result.success)
+            self.assertIn('No resources found', result.error)
     
     def test_execute_with_exception(self):
         """Test execute handles exceptions properly."""
@@ -425,9 +428,10 @@ class TestAnalyzeResourcesComprehensive(unittest.TestCase):
             
             result = self.action.execute(self.client, self.context)
             
-            self.assertFalse(result['success'])
-            self.assertIn('Resource analysis failed', result['error'])
-            self.assertIn('Test error', result['error'])
+            self.assertIsInstance(result, ActionResult)
+            self.assertFalse(result.success)
+            self.assertIn('Resource analysis failed', result.error)
+            self.assertIn('Test error', result.error)
 
 
     def test_find_crafting_uses_for_item_with_knowledge_base(self):

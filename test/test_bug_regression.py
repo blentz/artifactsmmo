@@ -394,7 +394,7 @@ class TestDataPersistenceBug(unittest.TestCase):
             'coordinates_scanned': ['1,2', '3,4']
         }
         
-        # Save the data
+        # Save the data with metadata
         yaml_data.save(metadata='test_run')
         
         # Verify file was created

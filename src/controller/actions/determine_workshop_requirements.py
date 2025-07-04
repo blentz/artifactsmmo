@@ -8,7 +8,7 @@ each material transformation.
 from typing import Dict, Any, List, Tuple, Optional
 
 from src.lib.action_context import ActionContext
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class DetermineWorkshopRequirementsAction(ActionBase):
@@ -23,7 +23,7 @@ class DetermineWorkshopRequirementsAction(ActionBase):
         """Initialize determine workshop requirements action."""
         super().__init__()
         
-    def execute(self, client, context: ActionContext) -> Dict[str, Any]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Determine workshop requirements for transformations.
         
@@ -36,6 +36,7 @@ class DetermineWorkshopRequirementsAction(ActionBase):
         Returns:
             Dict with workshop requirements
         """
+        self._context = context
         try:
             transformations = context.get('transformations_needed', [])
             knowledge_base = context.knowledge_base
@@ -62,13 +63,14 @@ class DetermineWorkshopRequirementsAction(ActionBase):
             # Store results in context
             context.set_result('workshop_requirements', workshop_requirements)
             
-            return self.get_success_response(
+            return self.create_success_result(
+                message="Workshop requirements determined successfully",
                 workshop_requirements=workshop_requirements,
                 unique_workshops=list(set(req['workshop_type'] for req in workshop_requirements if req['workshop_type']))
             )
             
         except Exception as e:
-            return self.get_error_response(f"Failed to determine workshop requirements: {e}")
+            return self.create_error_result(f"Failed to determine workshop requirements: {e}")
     
     def _determine_workshop_for_transformation(
         self, raw_material: str, refined_material: str, client, knowledge_base

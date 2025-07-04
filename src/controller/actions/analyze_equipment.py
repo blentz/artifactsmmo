@@ -5,14 +5,14 @@ This action performs comprehensive equipment analysis for the character,
 determining upgrade needs and equipment priorities for GOAP planning.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeEquipmentAction(ActionBase):
@@ -44,7 +44,7 @@ class AnalyzeEquipmentAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Perform comprehensive equipment analysis."""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -53,16 +53,13 @@ class AnalyzeEquipmentAction(ActionBase):
         character_name = context.character_name
         analysis_type = context.get('analysis_type', 'comprehensive')
         
-        self.log_execution_start(
-            character_name=character_name,
-            analysis_type=analysis_type
-        )
+        self._context = context
         
         try:
             # Get current character data
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             
@@ -73,7 +70,7 @@ class AnalyzeEquipmentAction(ActionBase):
             equipment_needs = self._determine_equipment_needs(analysis_results, character_data)
             
             # Create result with consolidated state updates
-            result = self.get_success_response(
+            result = self.create_success_result(
                 equipment_status={
                     "upgrade_status": "analyzing",
                     "target_slot": equipment_needs.get('equipment_upgrade_priority', 'weapon'),
@@ -91,12 +88,10 @@ class AnalyzeEquipmentAction(ActionBase):
                 equipment_info_known=True
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Equipment analysis failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Equipment analysis failed: {str(e)}")
             return error_response
 
     def _analyze_equipment(self, character_data, client, context: 'ActionContext') -> Dict:

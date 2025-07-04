@@ -59,11 +59,11 @@ class TestFightAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.test_context)
             
             # Verify result
-            self.assertTrue(result['success'])
-            self.assertEqual(result['combat_context']['status'], 'completed')
-            self.assertEqual(result['combat_context']['last_fight_result'], 'win')
-            self.assertEqual(result['combat_context']['experience_gained'], 100)
-            self.assertEqual(result['goal_progress']['steps_completed'], 1)
+            self.assertTrue(result.success)
+            self.assertEqual(result.data['combat_context']['status'], 'completed')
+            self.assertEqual(result.data['combat_context']['last_fight_result'], 'win')
+            self.assertEqual(result.data['combat_context']['experience_gained'], 100)
+            self.assertEqual(result.data['goal_progress']['steps_completed'], 1)
     
     def test_execute_failed_fight(self):
         """Test failed fight execution (lost combat)."""
@@ -79,10 +79,10 @@ class TestFightAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.test_context)
             
             # Verify result - fight was lost, so success should be False
-            self.assertFalse(result['success'])
-            self.assertEqual(result['combat_context']['status'], 'failed')
-            self.assertEqual(result['combat_context']['last_fight_result'], 'loss')
-            self.assertEqual(result['goal_progress']['steps_completed'], 0)
+            self.assertFalse(result.success)
+            self.assertEqual(result.data['combat_context']['status'], 'failed')
+            self.assertEqual(result.data['combat_context']['last_fight_result'], 'loss')
+            self.assertEqual(result.data['goal_progress']['steps_completed'], 0)
     
     def test_execute_no_response_data(self):
         """Test execution with no response data."""
@@ -96,8 +96,8 @@ class TestFightAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.test_context)
             
             # Verify error result
-            self.assertFalse(result['success'])
-            self.assertIn("no response data", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("no response data", result.error)
     
     def test_execute_api_exception(self):
         """Test execution with API exception."""
@@ -107,8 +107,8 @@ class TestFightAction(unittest.TestCase):
             result = self.action.execute(self.mock_client, self.test_context)
             
             # Verify error result
-            self.assertFalse(result['success'])
-            self.assertIn("Fight execution failed", result['error'])
+            self.assertFalse(result.success)
+            self.assertIn("Fight execution failed", result.error)
     
     def test_analyze_fight_result_victory(self):
         """Test analyzing victory fight result."""

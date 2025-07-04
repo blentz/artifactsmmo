@@ -7,7 +7,7 @@ calculating upgrade urgency scores and identifying equipment priorities.
 
 from typing import Any, Dict, Optional
 
-from src.controller.actions.base import ActionBase
+from src.controller.actions.base import ActionBase, ActionResult
 from src.game.character.state import CharacterState
 from src.game.globals import CONFIG_PREFIX
 from src.lib.action_context import ActionContext
@@ -77,7 +77,7 @@ class AnalyzeEquipmentGapsAction(ActionBase):
         config.data = fallback_data
         return config
         
-    def execute(self, client, context: ActionContext) -> Dict:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
         Execute equipment gap analysis for all slots.
         
@@ -88,11 +88,11 @@ class AnalyzeEquipmentGapsAction(ActionBase):
         Returns:
             Action result with equipment gap analysis
         """
-        super().execute(client, context)
+        self._context = context
         
         character_state = context.character_state
         if not character_state:
-            return self.get_error_response("No character state available")
+            return self.create_error_result("No character state available")
             
         config = self._load_equipment_config()
         
@@ -160,7 +160,8 @@ class AnalyzeEquipmentGapsAction(ActionBase):
             # Keep default reactions (upgrade_status: 'analyzing')
             pass
         
-        return self.get_success_response(
+        return self.create_success_result(
+            "Equipment gap analysis completed",
             slots_analyzed=len(gap_analysis),
             missing_slots=missing_slots,
             average_urgency=avg_urgency,

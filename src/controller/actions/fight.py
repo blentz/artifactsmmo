@@ -5,14 +5,13 @@ This action handles combat with monsters using the consolidated state format
 for GOAP planning and execution.
 """
 
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import Dict, Optional
 
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import sync as fight_character_api
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
-if TYPE_CHECKING:
-    from src.lib.action_context import ActionContext
+from src.lib.action_context import ActionContext
 
 class FightAction(ActionBase):
     """
@@ -46,15 +45,12 @@ class FightAction(ActionBase):
         """Initialize the fight action."""
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """Execute combat with a monster."""
-        # Call superclass to set self._context
-        super().execute(client, context)
+        self._context = context
         
         # Get parameters from context
         character_name = context.character_name
-        
-        self.log_execution_start(character_name=character_name)
         
         try:
             # Execute the fight command
@@ -64,7 +60,7 @@ class FightAction(ActionBase):
             )
             
             if not response or not response.data:
-                return self.get_error_response("Fight command failed - no response data")
+                return self.create_error_result("Fight command failed - no response data")
                 
             fight_data = response.data
             
@@ -75,27 +71,38 @@ class FightAction(ActionBase):
             combat_status = "completed" if fight_result['success'] else "failed"
             
             # Create result with consolidated state updates
-            result = self.get_success_response(
-                combat_context={
-                    "status": combat_status,
-                    "last_fight_result": fight_result['result'],
-                    "experience_gained": fight_result.get('xp_gained', 0),
-                    "damage_taken": fight_result.get('damage_taken', 0)
-                },
-                goal_progress={
-                    "steps_completed": 1 if fight_result['success'] else 0
-                },
-                fight_data=fight_data,
-                success=fight_result['success']
-            )
-            
-            self.log_execution_result(result)
-            return result
+            if fight_result['success']:
+                return self.create_success_result(
+                    message=f"Fight {combat_status}",
+                    combat_context={
+                        "status": combat_status,
+                        "last_fight_result": fight_result['result'],
+                        "experience_gained": fight_result.get('xp_gained', 0),
+                        "damage_taken": fight_result.get('damage_taken', 0)
+                    },
+                    goal_progress={
+                        "steps_completed": 1
+                    },
+                    fight_data=fight_data
+                )
+            else:
+                # Fight was lost - return error result
+                return self.create_error_result(
+                    f"Fight {combat_status}",
+                    combat_context={
+                        "status": combat_status,
+                        "last_fight_result": fight_result['result'],
+                        "experience_gained": fight_result.get('xp_gained', 0),
+                        "damage_taken": fight_result.get('damage_taken', 0)
+                    },
+                    goal_progress={
+                        "steps_completed": 0
+                    },
+                    fight_data=fight_data
+                )
             
         except Exception as e:
-            error_response = self.get_error_response(f"Fight execution failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Fight execution failed: {str(e)}")
 
     def _analyze_fight_result(self, fight_data) -> Dict:
         """Analyze the fight result data."""

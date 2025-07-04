@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import Mock, patch, MagicMock, call
 
 from src.controller.ai_player_controller import AIPlayerController
-from src.controller.action_executor import ActionResult
+from src.controller.actions.base import ActionResult
 from src.controller.skill_goal_manager import SkillType
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
@@ -215,7 +215,7 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
         self.controller.action_executor = Mock()
         mock_result = ActionResult(
             success=True,
-            response={'moved': True, 'x': 10, 'y': 15},
+            data={'moved': True, 'x': 10, 'y': 15},
             action_name='move'
         )
         self.controller.action_executor.execute_action.return_value = mock_result

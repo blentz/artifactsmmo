@@ -12,7 +12,7 @@ from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as ge
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class CheckSkillRequirementAction(ActionBase):
@@ -35,7 +35,7 @@ class CheckSkillRequirementAction(ActionBase):
             'sufficient': True
         }
     }
-    weights = {"skill_requirements_checked": 10}
+    weight = 10
 
     def __init__(self):
         """
@@ -43,7 +43,7 @@ class CheckSkillRequirementAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """Check skill requirements and update state accordingly."""
         # Call superclass to set self._context
         super().execute(client, context)
@@ -53,17 +53,13 @@ class CheckSkillRequirementAction(ActionBase):
         task_type = context.get('task_type', 'crafting')
         target_item = context.get('target_item')
         
-        self.log_execution_start(
-            character_name=character_name,
-            task_type=task_type,
-            target_item=target_item
-        )
+        self._context = context
         
         try:
             # Get current character data to check skill levels
             character_response = get_character_api(name=character_name, client=client)
             if not character_response or not character_response.data:
-                return self.get_error_response("Could not get character data")
+                return self.create_error_result("Could not get character data")
             
             character_data = character_response.data
             # Store character data for skill discovery
@@ -73,25 +69,23 @@ class CheckSkillRequirementAction(ActionBase):
             # Get task requirements based on task type and target
             requirements = self._get_task_requirements(client, character_skills, task_type, target_item)
             if not requirements:
-                return self.get_error_response(f"Could not determine skill requirements for {task_type}")
+                return self.create_error_result(f"Could not determine skill requirements for {task_type}")
             
             # Check if requirements are met
             skill_check_results = self._check_skill_requirements(character_skills, requirements, target_item)
             
             # Prepare result with detailed skill information
-            result = self.get_success_response(
+            result = self.create_success_result(
                 skill_requirements_checked=True,
                 task_type=task_type,
                 target_item=target_item,
                 **skill_check_results
             )
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Skill requirement check failed: {str(e)}")
-            self.log_execution_result(error_response)
+            error_response = self.create_error_result(f"Skill requirement check failed: {str(e)}")
             return error_response
 
     def _extract_character_skills(self, character_data, context: ActionContext) -> Dict[str, int]:

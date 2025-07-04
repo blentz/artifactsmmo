@@ -55,9 +55,9 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         context = MockActionContext(character_name="test_character")
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
-        self.assertFalse(result["success"])
+        self.assertFalse(result.success)
         # Direct action execution bypasses centralized validation
-        self.assertIn('error', result)
+        self.assertTrue(hasattr(result, 'error'))
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_execute_no_character_data(self, mock_get_character):
@@ -71,8 +71,8 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
             knowledge_base=MockKnowledgeBase()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Could not get character data', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data', result.error)
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_execute_successful_basic_analysis(self, mock_get_character):
@@ -102,10 +102,10 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['equipment_analysis_available'])
-        self.assertIn('current_equipment', result)
-        self.assertIn('current_equipment', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['equipment_analysis_available'])
+        self.assertIn('current_equipment', result.data)
+        self.assertIn('current_equipment', result.data)
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_execute_with_knowledge_base(self, mock_get_character):
@@ -136,8 +136,8 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['equipment_analysis_available'])
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['equipment_analysis_available'])
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_execute_exception_handling(self, mock_get_character):
@@ -151,8 +151,8 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
             knowledge_base=MockKnowledgeBase()
         )
         result = self.action.execute(client, context)
-        self.assertFalse(result['success'])
-        self.assertIn('Equipment analysis failed: API Error', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('Equipment analysis failed: API Error', result.error)
 
     def test_goap_attributes(self):
         """Test that AnalyzeEquipmentAction has expected GOAP attributes."""
@@ -196,9 +196,9 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['need_equipment'])
-        self.assertEqual(result['equipment_coverage']['total_equipped'], 0)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['need_equipment'])
+        self.assertEqual(result.data['equipment_coverage']['total_equipped'], 0)
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_equipment_coverage_calculation(self, mock_get_character):
@@ -223,9 +223,9 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertEqual(result['equipment_coverage']['total_equipped'], 2)
-        self.assertAlmostEqual(result['equipment_coverage_percentage'], 16.0, places=0)  # 2/12 slots
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['equipment_coverage']['total_equipped'], 2)
+        self.assertAlmostEqual(result.data['equipment_coverage_percentage'], 16.0, places=0)  # 2/12 slots
 
     @patch('src.controller.actions.analyze_equipment.get_character_api')
     def test_upgrade_recommendations(self, mock_get_character):
@@ -243,9 +243,9 @@ class TestAnalyzeEquipmentAction(unittest.TestCase):
         )
         result = self.action.execute(client, context)
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['need_equipment'])
-        self.assertIn('upgrade_priorities', result)
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['need_equipment'])
+        self.assertIn('upgrade_priorities', result.data)
 
 
 if __name__ == '__main__':

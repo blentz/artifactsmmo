@@ -11,7 +11,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class AnalyzeCombatViabilityAction(ActionBase):
@@ -39,7 +39,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 'monsters_hunted': 1,
             },
         }
-    weights = {"combat_viability_known": 12}
+    weight = 12
 
     def __init__(self):
         """
@@ -47,20 +47,17 @@ class AnalyzeCombatViabilityAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: 'ActionContext') -> Optional[Dict]:
+    def execute(self, client, context: 'ActionContext') -> ActionResult:
         """Analyze combat viability in current area."""
         # Get character name from context
         character_name = context.character_name
         if not character_name:
-            return self.get_error_response("No character name provided")
+            return self.create_error_result("No character name provided")
             
         # Get analysis radius from context or use default
         analysis_radius = context.get('analysis_radius', 3)
             
-        self.log_execution_start(
-            character_name=character_name,
-            analysis_radius=analysis_radius
-        )
+        self._context = context
         
         try:
             # Get current character data from context or API
@@ -72,7 +69,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 # Fallback to API call
                 character_response = get_character_api(name=character_name, client=client)
                 if not character_response or not character_response.data:
-                    return self.get_error_response("Could not get character data")
+                    return self.create_error_result("Could not get character data")
                 
                 character_data = character_response.data
                 character_x = getattr(character_data, 'x', 0)
@@ -101,7 +98,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
             )
             
             # Create result
-            result = self.get_success_response(
+            return self.create_success_result(
                 combat_viability_known=True,
                 character_x=character_x,
                 character_y=character_y,
@@ -112,13 +109,8 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 **goap_updates
             )
             
-            self.log_execution_result(result)
-            return result
-            
         except Exception as e:
-            error_response = self.get_error_response(f"Combat viability analysis failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Combat viability analysis failed: {str(e)}")
 
     def _analyze_combat_viability(self, character_data, character_x: int, character_y: int,
                                 knowledge_base, map_state, analysis_radius: int = 3) -> Dict:

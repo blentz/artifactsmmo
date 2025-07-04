@@ -8,7 +8,7 @@ from artifactsmmo_api_client.models.item_slot import ItemSlot
 
 from src.lib.action_context import ActionContext
 
-from .base import ActionBase
+from .base import ActionBase, ActionResult
 
 
 class EquipItemAction(ActionBase):
@@ -39,7 +39,7 @@ class EquipItemAction(ActionBase):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Equip the specified item """
         # Get parameters from context
         character_name = context.character_name
@@ -48,23 +48,17 @@ class EquipItemAction(ActionBase):
         quantity = context.get('quantity', 1)
         
         if not item_code:
-            return self.get_error_response("No item code provided")
+            return self.create_error_result("No item code provided")
         if not slot:
-            return self.get_error_response("No slot provided")
+            return self.create_error_result("No slot provided")
             
-        self.log_execution_start(
-            character_name=character_name,
-            item_code=item_code,
-            slot=slot
-        )
+        self._context = context
         
         try:
             # Convert slot name to ItemSlot enum
             item_slot = self._get_item_slot_enum(slot)
             if item_slot is None:
-                error_response = self.get_error_response(f'Invalid equipment slot: {slot}')
-                self.log_execution_result(error_response)
-                return error_response
+                return self.create_error_result(f'Invalid equipment slot: {slot}')
             
             # Prepare equip schema
             equip_schema = EquipSchema(
@@ -82,8 +76,8 @@ class EquipItemAction(ActionBase):
             if equip_response and equip_response.data:
                 # Extract useful information from the response
                 character_data = equip_response.data
-                result = {
-                    'success': True,
+                # Extract useful information from the response
+                result_data = {
                     'item_code': item_code,
                     'slot': slot,
                     'character_name': character_name,
@@ -93,35 +87,30 @@ class EquipItemAction(ActionBase):
                 # Add character data if available
                 if hasattr(character_data, 'character'):
                     char_data = character_data.character
-                    result['character_level'] = getattr(char_data, 'level', 0)
-                    result['character_hp'] = getattr(char_data, 'hp', 0)
-                    result['character_max_hp'] = getattr(char_data, 'max_hp', 0)
+                    result_data['character_level'] = getattr(char_data, 'level', 0)
+                    result_data['character_hp'] = getattr(char_data, 'hp', 0)
+                    result_data['character_max_hp'] = getattr(char_data, 'max_hp', 0)
                     
                     # Add equipment status
-                    result['weapon_slot'] = getattr(char_data, 'weapon_slot', '')
-                    result['shield_slot'] = getattr(char_data, 'shield_slot', '')
-                    result['helmet_slot'] = getattr(char_data, 'helmet_slot', '')
-                    result['body_armor_slot'] = getattr(char_data, 'body_armor_slot', '')
-                    result['leg_armor_slot'] = getattr(char_data, 'leg_armor_slot', '')
-                    result['boots_slot'] = getattr(char_data, 'boots_slot', '')
+                    result_data['weapon_slot'] = getattr(char_data, 'weapon_slot', '')
+                    result_data['shield_slot'] = getattr(char_data, 'shield_slot', '')
+                    result_data['helmet_slot'] = getattr(char_data, 'helmet_slot', '')
+                    result_data['body_armor_slot'] = getattr(char_data, 'body_armor_slot', '')
+                    result_data['leg_armor_slot'] = getattr(char_data, 'leg_armor_slot', '')
+                    result_data['boots_slot'] = getattr(char_data, 'boots_slot', '')
                 
                 # Add cooldown information
                 if hasattr(character_data, 'cooldown') and character_data.cooldown:
-                    result['cooldown'] = getattr(character_data.cooldown, 'total_seconds', 0)
+                    result_data['cooldown'] = getattr(character_data.cooldown, 'total_seconds', 0)
                 else:
-                    result['cooldown'] = 0
+                    result_data['cooldown'] = 0
                 
-                self.log_execution_result(result)
-                return result
+                return self.create_success_result(**result_data)
             else:
-                error_response = self.get_error_response('Equip action failed - no response data')
-                self.log_execution_result(error_response)
-                return error_response
+                return self.create_error_result('Equip action failed - no response data')
                 
         except Exception as e:
-            error_response = self.get_error_response(f'Equip action failed: {str(e)}')
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f'Equip action failed: {str(e)}')
 
     def _get_item_slot_enum(self, slot_name: str) -> Optional[ItemSlot]:
         """

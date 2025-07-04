@@ -6,6 +6,7 @@ from src.lib.action_context import ActionContext
 
 from .coordinate_mixin import CoordinateStandardizationMixin
 from .search_base import SearchActionBase
+from .base import ActionResult
 
 
 class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
@@ -26,7 +27,7 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
             'workshop_known': True
         }
     }
-    weights = {"workshops_discovered": 15}
+    weight = 15
 
     def __init__(self):
         """
@@ -34,7 +35,7 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the nearest workshop location using unified search algorithm """
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
@@ -44,12 +45,7 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
         
         # Parameters will be passed directly to helper methods via context
         
-        self.log_execution_start(
-            character_x=character_x,
-            character_y=character_y, 
-            search_radius=search_radius,
-            workshop_type=workshop_type
-        )
+        self._context = context
         
         try:
             # Create workshop filter using the unified search base
@@ -61,15 +57,15 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
                 distance = abs(x - character_x) + abs(y - character_y)  # Manhattan distance
                 
                 # Create standardized coordinate response
-                coordinate_data = self.create_coordinate_response(
-                    x, y,
-                    distance=distance,
-                    workshop_code=content_code,
-                    workshop_name=content_code,
-                    workshop_type=workshop_type or 'general'
-                )
+                coordinate_data = self.standardize_coordinate_output(x, y)
+                coordinate_data.update({
+                    'distance': distance,
+                    'workshop_code': content_code,
+                    'workshop_name': content_code,
+                    'workshop_type': workshop_type or 'general'
+                })
                 
-                return self.get_success_response(**coordinate_data)
+                return self.create_success_result(**coordinate_data)
             
             # Get map_state from context for cached access
             map_state = context.map_state
@@ -77,13 +73,10 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
             # Use unified search algorithm
             result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Workshop search failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Workshop search failed: {str(e)}")
 
 
     

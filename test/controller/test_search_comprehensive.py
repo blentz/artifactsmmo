@@ -130,7 +130,7 @@ class TestSearchComprehensive(unittest.TestCase):
         self.assertEqual(total_boundaries, 0)
         
         # Record boundaries in all directions
-        search_action = SearchActionBase()
+        search_action = FindResourcesAction()
         search_action._record_boundary_hit(3, 5, 5, 5)  # West
         search_action._record_boundary_hit(7, 5, 5, 5)  # East  
         search_action._record_boundary_hit(5, 3, 5, 5)  # South
@@ -144,7 +144,7 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_unified_search_with_mock_content(self):
         """Test unified search algorithm with properly mocked content."""
-        search_action = SearchActionBase()
+        search_action = FindResourcesAction()
         
         # Create MapState with mock content
         map_state = MapState(self.mock_client, initial_scan=False)
@@ -174,9 +174,9 @@ class TestSearchComprehensive(unittest.TestCase):
         result = search_action.unified_search(self.mock_client, 5, 3, 2, content_filter, map_state=map_state)
         
         # Verify successful result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['content_code'], 'copper_rocks')
-        self.assertEqual(result['location'], (6, 3))
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['content_code'], 'copper_rocks')
+        self.assertEqual(result.data['location'], (6, 3))
         
         # Verify cache was used (no API calls)
         map_state.scan.assert_not_called()
@@ -219,10 +219,13 @@ class TestSearchComprehensive(unittest.TestCase):
         result = action.execute(self.mock_client, context)
         
         # Verify successful result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['resource_code'], 'iron_rocks')
-        self.assertEqual(result['target_x'], 6)
-        self.assertEqual(result['target_y'], 3)
+        if not result.success:
+            print(f"Error: {result.error}")
+            print(f"Message: {result.message}")
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['resource_code'], 'iron_rocks')
+        self.assertEqual(result.data['target_x'], 6)
+        self.assertEqual(result.data['target_y'], 3)
 
     def test_cache_optimization_prevents_api_calls(self):
         """Test that caching optimization prevents excessive API calls."""
@@ -250,7 +253,7 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_search_coordinate_generation(self):
         """Test search coordinate generation for different radii."""
-        action = SearchActionBase()
+        action = FindResourcesAction()
         
         # Test radius 0 (character position)
         coords_r0 = action._generate_radius_coordinates(5, 5, 0)
@@ -268,12 +271,12 @@ class TestSearchComprehensive(unittest.TestCase):
 
     def test_error_handling_in_search(self):
         """Test error handling in search operations."""
-        search_action = SearchActionBase()
+        search_action = FindResourcesAction()
         
         # Test with no client
         result = search_action.unified_search(None, lambda c, x, y: True, 0, 0, 1)
-        self.assertFalse(result['success'])
-        self.assertFalse(result.get('success', True))
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error)
         
         # Test with filter that finds nothing
         map_state = MapState(self.mock_client, initial_scan=False)
@@ -285,8 +288,8 @@ class TestSearchComprehensive(unittest.TestCase):
             return False
         
         result = search_action.unified_search(self.mock_client, never_match_filter, 0, 0, 1, map_state=map_state)
-        self.assertFalse(result['success'])
-        self.assertIn('No matching content found', result['error'])
+        self.assertFalse(result.success)
+        self.assertIn('No matching content found', result.error)
 
     def test_malformed_cache_data_handling(self):
         """Test handling of malformed cache data."""

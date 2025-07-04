@@ -6,6 +6,7 @@ from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import s
 
 from src.lib.action_context import ActionContext
 
+from .base import ActionResult
 from .coordinate_mixin import CoordinateStandardizationMixin
 from .search_base import SearchActionBase
 
@@ -36,7 +37,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
                 'at_target': True,
             },
         }
-    weights = {'find_monsters': 2.0}  # Medium-high priority for exploration
+    weight = 2.0  # Medium-high priority for exploration
 
     def __init__(self):
         """
@@ -44,7 +45,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         """
         super().__init__()
 
-    def execute(self, client, context: ActionContext) -> Optional[Dict]:
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the nearest monster location using unified search algorithm """
         # Get parameters from context
         character_x = context.get('character_x', context.character_x)
@@ -58,26 +59,17 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         
         # Parameters will be passed directly to helper methods via context
         
-        self.log_execution_start(
-            character_x=character_x, 
-            character_y=character_y, 
-            search_radius=search_radius,
-            monster_types=monster_types
-        )
+        self._context = context
         
         # Validation is now handled by centralized ActionValidator
         if client is None:
-            error_response = self.get_error_response("No API client provided")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result("No API client provided")
         
         try:
             # Get target monster codes from API
             target_codes = self._get_target_monster_codes(client, monster_types, character_level, level_range)
             if not target_codes:
-                error_response = self.get_error_response("No suitable monsters found matching criteria")
-                self.log_execution_result(error_response)
-                return error_response
+                return self.create_error_result("No suitable monsters found matching criteria")
 
             # Create monster filter using the unified search base
             monster_filter = self.create_monster_filter(
@@ -97,22 +89,17 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             result = self._find_best_monster_target(client, monster_filter, target_codes, context)
             
             # If no viable monsters found, provide helpful error
-            if not result or not result.get('success'):
-                error_response = self.get_error_response(
+            if not result:
+                return self.create_error_result(
                     f"No viable monsters found within radius {search_radius}",
                     max_radius_searched=search_radius,
                     suggestion="Consider map exploration or resource gathering for equipment upgrades"
                 )
-                self.log_execution_result(error_response)
-                return error_response
             
-            self.log_execution_result(result)
             return result
             
         except Exception as e:
-            error_response = self.get_error_response(f"Monster search failed: {str(e)}")
-            self.log_execution_result(error_response)
-            return error_response
+            return self.create_error_result(f"Monster search failed: {str(e)}")
     
     def _find_best_monster_target(self, client, monster_filter, target_codes, context: ActionContext):
         """
@@ -199,17 +186,17 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             self.logger.info(f"🎯 Selected {content_code} (level {monster_level}) at ({x}, {y}) - distance: {distance:.1f}, win rate: {win_rate_str}")
             
             # Create standardized coordinate response
-            coordinate_data = self.create_coordinate_response(
-                x, y,
-                distance=distance,
-                monster_code=content_code,
-                target_codes=target_codes,
-                search_radius_used=search_radius,
-                exponential_search_used=use_exponential_search,
-                win_rate=win_rate
-            )
+            coordinate_data = self.standardize_coordinate_output(x, y)
+            coordinate_data.update({
+                'distance': distance,
+                'monster_code': content_code,
+                'target_codes': target_codes,
+                'search_radius_used': search_radius,
+                'exponential_search_used': use_exponential_search,
+                'win_rate': win_rate
+            })
             
-            return self.get_success_response(**coordinate_data)
+            return self.create_success_result(**coordinate_data)
         
         return None
     
