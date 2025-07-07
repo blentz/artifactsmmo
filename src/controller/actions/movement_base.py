@@ -45,9 +45,9 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         Returns:
             Tuple of (x, y) coordinates or (None, None)
         """
-        # Default implementation - direct coordinates
-        target_x = context.get('target_x')
-        target_y = context.get('target_y')
+        # Default implementation - use unified context properties
+        target_x = getattr(context, 'target_x', None)
+        target_y = getattr(context, 'target_y', None)
         return target_x, target_y
     
     def execute_movement(self, client, target_x: int, target_y: int, 
@@ -71,9 +71,15 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
             # Create destination schema
             destination = DestinationSchema(x=target_x, y=target_y)
             
+            # Get character name for movement API
+            api_character_name = movement_context.get('character_name', 'unknown')
+            
+            # Debug logging for character name
+            self.logger.info(f"🚶 Moving character '{api_character_name}' to ({target_x}, {target_y})")
+            
             # Execute movement
             response = move_character_api(
-                name=movement_context.get('character_name', 'unknown'),
+                name=api_character_name,
                 client=client,
                 body=destination
             )
@@ -83,20 +89,41 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 response_data = response.data
                 cooldown = getattr(response_data, 'cooldown', None)
                 
-                result = self.create_success_result(
-                    message=f"Moved to ({target_x}, {target_y})",
-                    moved=True,
-                    target_x=target_x,
-                    target_y=target_y,
-                    current_x=target_x,
-                    current_y=target_y,
-                    cooldown=cooldown,
-                    movement_completed=True,
-                    **movement_context
-                )
+                # Validate actual character position from API response
+                actual_x, actual_y = None, None
+                if hasattr(response_data, 'character'):
+                    character_data = response_data.character
+                    if hasattr(character_data, 'x') and hasattr(character_data, 'y'):
+                        actual_x = character_data.x
+                        actual_y = character_data.y
                 
-                self.logger.info(f"🚶 Moved to ({target_x}, {target_y})")
-                return result
+                # Check if character actually moved to target position
+                if actual_x == target_x and actual_y == target_y:
+                    result = self.create_success_result(
+                        message=f"Moved to ({target_x}, {target_y})",
+                        moved=True,
+                        target_x=target_x,
+                        target_y=target_y,
+                        current_x=actual_x,
+                        current_y=actual_y,
+                        cooldown=cooldown,
+                        movement_completed=True,
+                        **movement_context
+                    )
+                    
+                    self.logger.info(f"🚶 Moved to ({target_x}, {target_y})")
+                    return result
+                else:
+                    # Character is not at expected location - movement failed
+                    self.logger.warning(f"❌ Move failed: Character at ({actual_x}, {actual_y}) instead of target ({target_x}, {target_y})")
+                    return self.create_error_result(
+                        f"Movement validation failed: Character at ({actual_x}, {actual_y}) instead of target ({target_x}, {target_y})",
+                        target_x=target_x,
+                        target_y=target_y,
+                        actual_x=actual_x,
+                        actual_y=actual_y,
+                        movement_failed=True
+                    )
             else:
                 return self.create_error_result(
                     "Movement failed: No response data",
@@ -141,6 +168,11 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         """
         # Get character name from context
         character_name = context.character_name
+        
+        # Debug logging for character name issue
+        if not character_name:
+            self.logger.error(f"❌ No character name found in context. Available attributes: {list(dir(context))}")
+            return self.create_error_result("No character name provided in context")
         
         # Get target coordinates
         target_x, target_y = self.get_target_coordinates(context)
