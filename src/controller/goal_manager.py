@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.game.globals import CONFIG_PREFIX
 from src.lib.yaml_data import YamlData
+from src.lib.character_utils import calculate_hp_percentage, calculate_xp_percentage, is_character_safe
 
 
 class GOAPGoalManager:
@@ -89,26 +90,26 @@ class GOAPGoalManager:
             
         char_data = character_state.data
         
-        # Update character status
+        # Update character status (no stored hp_percentage - calculated dynamically)
         current_hp = char_data.get('hp', 100)
         max_hp = char_data.get('max_hp', 100)
-        hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
         
         current_level = char_data.get('level', 1)
         current_xp = char_data.get('xp', 0)
         max_xp = char_data.get('max_xp', 150)
-        xp_percentage = (current_xp / max_xp * 100) if max_xp > 0 else 0
+        xp_percentage = calculate_xp_percentage(current_xp, max_xp)
         
         state['character_status'] = {
             'level': current_level,
-            'hp_percentage': hp_percentage,
             'xp_percentage': xp_percentage,
+            'hp_percentage': (current_hp / max_hp * 100.0) if max_hp > 0 else 100.0,
             'alive': current_hp > 0,
-            'safe': hp_percentage >= 30,
+            'safe': is_character_safe(current_hp, max_hp),
             'cooldown_active': self._check_cooldown_status(char_data)
         }
         
         # Update equipment status
+        state.setdefault('equipment_status', {})
         state['equipment_status']['weapon'] = char_data.get('weapon_slot') or None
         state['equipment_status']['armor'] = char_data.get('body_armor_slot') or None
         state['equipment_status']['shield'] = char_data.get('shield_slot') or None
@@ -116,6 +117,7 @@ class GOAPGoalManager:
         state['equipment_status']['boots'] = char_data.get('boots_slot') or None
         
         # Update location context
+        state.setdefault('location_context', {})
         state['location_context']['current'] = {
             'x': char_data.get('x', 0),
             'y': char_data.get('y', 0),
@@ -127,10 +129,12 @@ class GOAPGoalManager:
         for item in char_data.get('inventory', []):
             if item.get('code'):
                 inventory[item['code']] = item.get('quantity', 0)
+        state.setdefault('materials', {})
         state['materials']['inventory'] = inventory
         
         # Update skills dynamically from character data
         # Look for any keys ending with '_level' to identify skills
+        state.setdefault('skills', {})
         for key in char_data:
             if key.endswith('_level') and key != 'level':
                 skill_name = key[:-6]  # Remove '_level' suffix
@@ -180,11 +184,17 @@ class GOAPGoalManager:
     
     def _check_cooldown_status(self, char_data: Dict[str, Any]) -> bool:
         """Check if character is currently on cooldown."""
-        cooldown_seconds = char_data.get('cooldown', 0)
+        cooldown_data = char_data.get('cooldown', 0)
         cooldown_expiration = char_data.get('cooldown_expiration', None)
         
+        # Handle cooldown field - can be a number or a dict with remaining_seconds
+        if isinstance(cooldown_data, dict):
+            cooldown_seconds = cooldown_data.get('remaining_seconds', 0)
+        else:
+            cooldown_seconds = cooldown_data or 0
+        
         # Debug log to see what data we're actually getting
-        self.logger.debug(f"Cooldown check - cooldown: {cooldown_seconds}, cooldown_expiration: {cooldown_expiration}")
+        self.logger.debug(f"Cooldown check - cooldown_data: {cooldown_data}, cooldown_seconds: {cooldown_seconds}, cooldown_expiration: {cooldown_expiration}")
         self.logger.debug(f"Available char_data keys: {list(char_data.keys())}")
         
         # First check if we have a cooldown expiration time
@@ -246,9 +256,11 @@ class GOAPGoalManager:
         """
         Hierarchical goal selection system.
         
-        Implements user-requested hierarchy:
-        1. Safety vs Leveling up (first level decision)
-        2. XP-gaining goals (second level - combat vs crafting, combat weighted higher)
+        Implements hierarchical goal selection with priorities:
+        1. Safety goals (emergency, maintenance) - highest priority
+        2. Material gathering goals - high priority, prerequisites for progression
+        3. XP-gaining goals (combat vs crafting, combat weighted higher)
+        4. Support goals (equipment, skill progression, exploration) - fallback
         
         Args:
             current_state: Current world state
@@ -263,7 +275,12 @@ class GOAPGoalManager:
         if safety_goal:
             return safety_goal
         
-        # Second level: XP-gaining goals (combat vs crafting)
+        # Second level: Material gathering (high priority - needed for progression)
+        material_goal = self._select_material_goal(current_state, available_goals, goal_weights)
+        if material_goal:
+            return material_goal
+        
+        # Third level: XP-gaining goals (combat vs crafting)
         xp_goal = self._select_xp_goal_hierarchical(current_state, available_goals, goal_weights)
         if xp_goal:
             return xp_goal
@@ -314,6 +331,52 @@ class GOAPGoalManager:
                                 best_goal = (goal_name, goal_config)
                                 best_priority = weighted_priority
                                 self.logger.debug(f"🛡️ Selected safety goal '{goal_name}' (priority {weighted_priority:.2f}) "
+                                               f"from category '{category_name}'")
+        return best_goal
+    
+    def _select_material_goal(self, current_state: Dict[str, Any], 
+                             available_goals: List[str],
+                             goal_weights: Dict[str, float] = None) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """
+        Select material gathering goals.
+        
+        Args:
+            current_state: Current world state
+            available_goals: List of goals to consider
+            goal_weights: Optional persistence weight bonuses
+            
+        Returns:
+            Material gathering goal if needed, None otherwise
+        """
+        material_categories = ['material_gathering']
+        best_goal = None
+        best_priority = -1
+        
+        for category_name in material_categories:
+            if category_name not in self.goal_selection_rules:
+                continue
+                
+            for rule in self.goal_selection_rules[category_name]:
+                if self._check_goal_condition(rule.get('condition', {}), current_state):
+                    goal_name = rule.get('goal')
+                    if goal_name in available_goals:
+                        goal_config = self.goal_templates.get(goal_name)
+                        if goal_config:
+                            priority = rule.get('priority', 0)
+                            
+                            # Apply persistence weight bonus if available
+                            if goal_weights and goal_name in goal_weights:
+                                persistence_bonus = goal_weights[goal_name]
+                                weighted_priority = priority + persistence_bonus
+                                self.logger.debug(f"🎯 Applied persistence bonus to material goal '{goal_name}': "
+                                               f"{priority} + {persistence_bonus:.2f} = {weighted_priority:.2f}")
+                            else:
+                                weighted_priority = priority
+                            
+                            if weighted_priority > best_priority:
+                                best_goal = (goal_name, goal_config)
+                                best_priority = weighted_priority
+                                self.logger.debug(f"🧱 Selected material goal '{goal_name}' (priority {weighted_priority:.2f}) "
                                                f"from category '{category_name}'")
         return best_goal
     
@@ -575,6 +638,10 @@ class GOAPGoalManager:
                         # Direct string equality
                         if str(actual_value) != expected_value:
                             return False
+                elif isinstance(expected_value, list):
+                    # List condition - check if actual value is in the list
+                    if actual_value not in expected_value:
+                        return False
                 else:
                     # Simple equality check - preferred new approach
                     if actual_value != expected_value:
