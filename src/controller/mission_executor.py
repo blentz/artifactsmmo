@@ -300,7 +300,7 @@ class MissionExecutor:
             context.character_name = self.controller.character_state.data.get('name')
             reset_result = reset_action.execute(self.controller.client, context)
             
-            if reset_result and reset_result.get('success'):
+            if reset_result and reset_result.success:
                 # Update the world state to reflect the change
                 self.controller.update_world_state(
                     {'combat_context': {'status': 'idle', 'target': None, 'location': None}}

@@ -17,6 +17,7 @@ class ActionResult:
     error: Optional[str] = None
     action_name: str = ""
     state_changes: Dict[str, Any] = None
+    subgoal_request: Optional[Dict[str, Any]] = None
     
     def __post_init__(self):
         """Initialize empty dicts if None."""
@@ -24,6 +25,52 @@ class ActionResult:
             self.data = {}
         if self.state_changes is None:
             self.state_changes = {}
+    
+    def request_subgoal(self, goal_name: str, parameters: Dict[str, Any] = None, 
+                       preserve_context: list = None) -> None:
+        """
+        Request a subgoal to be executed before continuing current goal.
+        
+        This method enables recursive workflow execution where actions can delegate
+        subtasks to the GOAP system and continue execution after completion.
+        
+        EXECUTION FLOW:
+        1. Action calls request_subgoal() to delegate work
+        2. GOAP system executes subgoal recursively  
+        3. After subgoal completion, original action is re-executed
+        4. Action should check stored context to determine continuation logic
+        
+        CONTINUATION PATTERN:
+        Actions should implement continuation logic by checking stored context:
+        
+        ```python
+        def execute(self, client, context):
+            # Check for continuation from previous execution
+            if context.get('target_x') is not None:
+                # Continuation logic - subgoal completed
+                return self._continue_after_subgoal(client, context)
+            
+            # Initial execution - request subgoal
+            result = self.create_success_result("Starting workflow")
+            result.request_subgoal(
+                goal_name="move_to_location",
+                parameters={"target_x": 10, "target_y": 5},
+                preserve_context=["target_resource", "workflow_step"]
+            )
+            return result
+        ```
+        
+        Args:
+            goal_name: Name of the subgoal to execute (must match goal template)
+            parameters: Parameters to pass to the subgoal planning
+            preserve_context: List of context keys to preserve across subgoal execution
+                            Always include keys needed for continuation logic
+        """
+        self.subgoal_request = {
+            "goal_name": goal_name,
+            "parameters": parameters or {},
+            "preserve_context": preserve_context or []
+        }
 
 
 class ActionBase(ABC):

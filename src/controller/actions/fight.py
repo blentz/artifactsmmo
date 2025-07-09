@@ -10,8 +10,10 @@ from typing import Dict, Optional
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import sync as fight_character_api
 
 from .base import ActionBase, ActionResult
+from src.game.globals import CommonStatus
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 class FightAction(ActionBase):
     """
@@ -50,7 +52,7 @@ class FightAction(ActionBase):
         self._context = context
         
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         
         try:
             # Execute the fight command
@@ -68,7 +70,7 @@ class FightAction(ActionBase):
             fight_result = self._analyze_fight_result(fight_data)
             
             # Update combat context based on results
-            combat_status = "completed" if fight_result['success'] else "failed"
+            combat_status = CommonStatus.COMPLETED if fight_result['success'] else CommonStatus.FAILED
             
             # Create result with consolidated state updates
             if fight_result['success']:

@@ -56,14 +56,19 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
                 x, y = location
                 distance = abs(x - character_x) + abs(y - character_y)  # Manhattan distance
                 
-                # Create standardized coordinate response
-                coordinate_data = self.standardize_coordinate_output(x, y)
-                coordinate_data.update({
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = x
+                    self._context.target_y = y
+                    self._context.workshop_code = content_code
+                    self._context.workshop_name = content_code
+                
+                coordinate_data = {
                     'distance': distance,
                     'workshop_code': content_code,
                     'workshop_name': content_code,
                     'workshop_type': workshop_type or 'general'
-                })
+                }
                 
                 return self.create_success_result(**coordinate_data)
             

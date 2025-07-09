@@ -8,6 +8,7 @@ each material transformation.
 from typing import Dict, Any, List, Tuple, Optional
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
 
 
@@ -38,7 +39,7 @@ class DetermineWorkshopRequirementsAction(ActionBase):
         """
         self._context = context
         try:
-            transformations = context.get('transformations_needed', [])
+            transformations = context.get(StateParameters.TRANSFORMATIONS_NEEDED, [])
             knowledge_base = context.knowledge_base
             
             self.logger.debug(f"🏭 Determining workshop requirements for {len(transformations)} transformations")
@@ -61,7 +62,7 @@ class DetermineWorkshopRequirementsAction(ActionBase):
                 self.logger.info(f"🔧 {raw_material} → {refined_material} requires {workshop_type} workshop")
             
             # Store results in context
-            context.set_result('workshop_requirements', workshop_requirements)
+            context.set_result(StateParameters.WORKSHOP_REQUIREMENTS, workshop_requirements)
             
             return self.create_success_result(
                 message="Workshop requirements determined successfully",

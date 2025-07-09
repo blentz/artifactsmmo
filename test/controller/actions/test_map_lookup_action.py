@@ -179,6 +179,23 @@ class TestMapLookupAction(BaseTest):
         
         self.assertFalse(response.success)
         self.assertIn('coordinates', response.error.lower())
+    
+    @patch('src.controller.actions.map_lookup.get_map_api')
+    def test_map_lookup_action_no_data_in_response(self, mock_get_map_api):
+        # Test when API returns response but data is None
+        mock_response = Mock()
+        mock_response.data = None
+        mock_get_map_api.return_value = mock_response
+        
+        action = MapLookupAction()
+        context = MockActionContext(x=self.x, y=self.y)
+        response = action.execute(client=self.client, context=context)
+        
+        # Should return error when no map data
+        self.assertFalse(response.success)
+        self.assertEqual(response.error, "No map data returned")
+        self.assertEqual(response.data['x'], self.x)
+        self.assertEqual(response.data['y'], self.y)
 
 if __name__ == '__main__':
     unittest.main()

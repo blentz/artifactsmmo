@@ -9,18 +9,20 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.select_recipe import SelectRecipeAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from test.test_base import UnifiedContextTestBase
 
 
-class TestSelectRecipeAction(unittest.TestCase):
+class TestSelectRecipeAction(UnifiedContextTestBase):
     """Test the SelectRecipeAction class."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         self.action = SelectRecipeAction()
         self.client = Mock()
-        self.context = ActionContext()
-        self.context.character_name = "test_character"
-        self.context['target_slot'] = "weapon"
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, "weapon")
         
     def test_init(self):
         """Test action initialization."""
@@ -85,7 +87,7 @@ class TestSelectRecipeAction(unittest.TestCase):
     
     def test_execute_success_armor(self):
         """Test recipe selection for armor without knowledge base."""
-        self.context['target_slot'] = "helmet"
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, "helmet")
         
         # Mock character response
         char_response = Mock()
@@ -364,8 +366,8 @@ class TestSelectRecipeAction(unittest.TestCase):
     
     def test_execute_default_target_slot(self):
         """Test execute with no target_slot uses default."""
-        # Remove target_slot from context
-        del self.context['target_slot']
+        # Clear target_slot from context
+        self.context.target_slot = None
         
         # Mock character response
         char_response = Mock()

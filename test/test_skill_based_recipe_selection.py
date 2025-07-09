@@ -6,17 +6,19 @@ from unittest.mock import Mock, patch, MagicMock
 
 from src.controller.actions.select_recipe import SelectRecipeAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from test.test_base import UnifiedContextTestBase
 
 
-class TestSkillBasedRecipeSelection:
+class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
     """Test skill-based recipe selection logic."""
 
-    def setup_method(self):
+    def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         self.action = SelectRecipeAction()
         self.mock_client = Mock()
-        self.context = ActionContext()
-        self.context.character_name = "TestChar"
+        self.context.set(StateParameters.CHARACTER_NAME, "TestChar")
         
         # Mock knowledge base with sample recipes
         self.mock_knowledge_base = Mock()
@@ -135,8 +137,8 @@ class TestSkillBasedRecipeSelection:
         items_data = self.create_sample_items_data()
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'weaponcrafting')
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -157,8 +159,8 @@ class TestSkillBasedRecipeSelection:
         items_data = self.create_sample_items_data()
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'weaponcrafting')
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute  
         result = self.action.execute(self.mock_client, self.context)
@@ -185,8 +187,8 @@ class TestSkillBasedRecipeSelection:
         items_data = self.create_sample_items_data()
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'weaponcrafting')
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -206,8 +208,8 @@ class TestSkillBasedRecipeSelection:
         items_data = self.create_sample_items_data()
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'gearcrafting')
-        self.context.target_slot = 'armor'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'gearcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'armor')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -228,8 +230,8 @@ class TestSkillBasedRecipeSelection:
         items_data = self.create_sample_items_data()
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'jewelrycrafting')
-        self.context.target_slot = 'ring'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'jewelrycrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'ring')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -266,8 +268,8 @@ class TestSkillBasedRecipeSelection:
         }
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'weaponcrafting')
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -287,8 +289,8 @@ class TestSkillBasedRecipeSelection:
         items_data = self.create_sample_items_data()
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'weaponcrafting')
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -319,8 +321,8 @@ class TestSkillBasedRecipeSelection:
         }
         self.mock_knowledge_base.data = {'items': items_data}
         
-        self.context.set_parameter('target_craft_skill', 'weaponcrafting')
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -381,7 +383,7 @@ class TestSkillBasedRecipeSelection:
         self.mock_knowledge_base.data = {'items': items_data}
         
         # Don't set target_craft_skill - let it be determined automatically
-        self.context.target_slot = 'weapon'
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -426,11 +428,12 @@ class TestSkillConstraints:
             assert skill_level <= char_level
 
 
-class TestRecipeSelectionIntegration:
+class TestRecipeSelectionIntegration(UnifiedContextTestBase):
     """Integration tests for recipe selection."""
 
-    def setup_method(self):
+    def setUp(self):
         """Set up integration test fixtures."""
+        super().setUp()
         self.action = SelectRecipeAction()
 
     @patch('src.controller.actions.select_recipe.get_character_api')
@@ -478,15 +481,14 @@ class TestRecipeSelectionIntegration:
             mock_get_char.return_value = mock_response
             
             # Setup context
-            context = ActionContext()
-            context.character_name = "TestChar"
-            context.knowledge_base = Mock()
-            context.knowledge_base.data = {'items': items_data}
-            context.set_parameter('target_craft_skill', 'weaponcrafting')
-            context.target_slot = 'weapon'
+            self.context.character_name = "TestChar"
+            self.context.knowledge_base = Mock()
+            self.context.knowledge_base.data = {'items': items_data}
+            self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
+            self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
             
             # Execute
-            result = self.action.execute(Mock(), context)
+            result = self.action.execute(Mock(), self.context)
             
             # Verify progression
             assert result.success is True, f"Failed at skill level {skill_level}"

@@ -7,6 +7,7 @@ from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_ma
 from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -39,11 +40,11 @@ class AnalyzeResourcesAction(ActionBase):
         self._context = context
         
         # Get parameters from context
-        character_x = context.get('character_x', 0)
-        character_y = context.get('character_y', 0)
-        character_level = context.get('character_level', 1)
-        analysis_radius = context.get('analysis_radius', 10)
-        equipment_types = context.get('equipment_types', ["weapon", "armor", "utility"])
+        character_x = context.get(StateParameters.CHARACTER_X, 0)
+        character_y = context.get(StateParameters.CHARACTER_Y, 0)
+        character_level = context.get(StateParameters.CHARACTER_LEVEL, 1)
+        analysis_radius = context.get(StateParameters.ANALYSIS_RADIUS, 10)
+        equipment_types = context.get(StateParameters.EQUIPMENT_TYPES, ["weapon", "armor", "utility"])
         
         self.logger.debug(f"Starting {self.__class__.__name__} (character_x={character_x}, character_y={character_y}, character_level={character_level}, analysis_radius={analysis_radius})")
         
@@ -58,7 +59,7 @@ class AnalyzeResourcesAction(ActionBase):
             resource_analysis = {}
             # Get knowledge base and config data from context
             knowledge_base = context.knowledge_base
-            config_data = context.get('config_data')
+            config_data = context.get(StateParameters.CONFIG_DATA)
             
             for resource_location in nearby_resources:
                 analysis = self._analyze_resource_crafting_potential(

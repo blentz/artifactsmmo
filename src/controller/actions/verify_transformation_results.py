@@ -8,6 +8,7 @@ were successful by checking inventory.
 from typing import Dict, Any, List
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
 from .check_inventory import CheckInventoryAction
 
@@ -41,7 +42,7 @@ class VerifyTransformationResultsAction(ActionBase):
         self._context = context
         
         try:
-            transformations = context.get('transformations_completed', [])
+            transformations = context.get(StateParameters.TRANSFORMATIONS_COMPLETED, [])
             
             if not transformations:
                 return self.create_success_result(
@@ -60,18 +61,10 @@ class VerifyTransformationResultsAction(ActionBase):
             
             # Use CheckInventoryAction to verify
             check_action = CheckInventoryAction()
-            check_context = ActionContext(
-                character_name=context.character_name,
-                knowledge_base=context.knowledge_base,
-                map_state=context.map_state
-            )
-            # Copy other context data
-            for key, value in context.items():
-                if key not in ['character_name', 'knowledge_base', 'map_state']:
-                    check_context[key] = value
-            check_context['required_items'] = materials_to_verify
+            # Use existing context and set required_items
+            context.set(StateParameters.REQUIRED_ITEMS, materials_to_verify)
             
-            inventory_result = check_action.execute(client, check_context)
+            inventory_result = check_action.execute(client, context)
             
             if not inventory_result or not inventory_result.get('success'):
                 return self.create_error_result("Could not verify inventory")

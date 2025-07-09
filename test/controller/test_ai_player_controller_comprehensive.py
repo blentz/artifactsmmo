@@ -150,7 +150,7 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
                 result = self.controller.check_and_handle_cooldown()
                 
                 self.assertTrue(result)
-                mock_execute.assert_called_once_with('wait', {'wait_duration': 5})
+                mock_execute.assert_called_once_with('wait')
                 mock_refresh.assert_called_once()
     
     def test_check_and_handle_cooldown_inactive(self):
@@ -188,7 +188,7 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
             
             self.assertTrue(result)
             self.assertEqual(self.controller.current_action_index, 1)
-            mock_execute.assert_called_once_with('move', {'name': 'move', 'x': 10, 'y': 15})
+            mock_execute.assert_called_once_with('move')
     
     def test_execute_next_action_failure(self):
         """Test failed execution of next action."""
@@ -228,12 +228,14 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
                     mock_build_context.return_value = mock_context
                     mock_cooldown.return_value = False
                     
-                    # Mock action context update
-                    with patch.object(self.controller, '_update_action_context_from_response'):
-                        success, result = self.controller._execute_action('move', {'x': 10, 'y': 15})
-                        
-                        self.assertTrue(success)
-                        self.assertEqual(result, {})
+                    # Execute action (context update now handled by ActionContext singleton)
+                    # Set parameters on the unified context
+                    self.controller.plan_action_context.x = 10
+                    self.controller.plan_action_context.y = 15
+                    success, result = self.controller._execute_action('move')
+                    
+                    self.assertTrue(success)
+                    self.assertEqual(result, {})
     
     def test_execute_cooldown_wait(self):
         """Test _execute_cooldown_wait method."""
@@ -311,23 +313,31 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
     
     def test_build_execution_context(self):
         """Test _build_execution_context method."""
-        action_data = {
-            'target': 'monster',
-            'distance': 5
+        from src.lib.state_parameters import StateParameters
+        
+        # With unified context, set parameters using StateParameters
+        self.controller.plan_action_context.set(StateParameters.COMBAT_TARGET, 'monster')
+        
+        # Mock goal_manager.calculate_world_state to return a proper dict
+        self.mock_goal_manager.calculate_world_state.return_value = {
+            'character_status': {
+                'alive': True,
+                'hp': 100
+            },
+            'location_context': {
+                'target_x': 10,
+                'target_y': 20
+            }
         }
         
-        context = self.controller._build_execution_context(action_data, 'attack')
+        context = self.controller._build_execution_context('attack')
         
         # Verify context attributes
         self.assertIsInstance(context, ActionContext)
         self.assertEqual(context.controller, self.controller)
         self.assertEqual(context.character_state, self.mock_character_state)
         self.assertEqual(context.world_state, self.mock_world_state)
-        self.assertEqual(context.get('target'), 'monster')
-        self.assertEqual(context.get('distance'), 5)
-        self.assertEqual(context.character_name, 'test_character')
-        self.assertEqual(context.character_x, 5)
-        self.assertEqual(context.character_y, 10)
+        self.assertEqual(context.get(StateParameters.COMBAT_TARGET), 'monster')
     
     def test_reset_failed_goal(self):
         """Test reset_failed_goal method."""
@@ -411,55 +421,14 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
             mock_context.action_results = {'test': 'result'}
             mock_build_context.return_value = mock_context
             
-            with patch.object(self.controller, '_update_action_context_from_response'):
-                with patch.object(self.controller, '_update_action_context_from_results'):
-                    result = self.controller._execute_single_action('move', action_data)
-                    
-                    self.assertTrue(result)
-                    self.controller.action_executor.execute_action.assert_called_once_with(
-                        'move', action_data, self.mock_client, mock_context
-                    )
+            # Execute single action (context update now handled by ActionContext singleton)
+            result = self.controller._execute_single_action('move', action_data)
+            
+            self.assertTrue(result)
+            self.controller.action_executor.execute_action.assert_called_once_with(
+                'move', self.mock_client, mock_context
+            )
     
-    def test_update_action_context_from_response(self):
-        """Test _update_action_context_from_response method."""
-        # Initialize action_context
-        self.controller.action_context = {}
-        
-        # Test with dict response
-        mock_response = {
-            'x': 10,
-            'y': 15,
-            'cooldown': 5,
-            'moved': True
-        }
-        
-        self.controller._update_action_context_from_response('move', mock_response)
-        
-        # Verify context was updated with the response data
-        self.assertEqual(self.controller.action_context['x'], 10)
-        self.assertEqual(self.controller.action_context['y'], 15)
-        self.assertEqual(self.controller.action_context['cooldown'], 5)
-        self.assertEqual(self.controller.action_context['moved'], True)
-    
-    def test_update_action_context_from_results(self):
-        """Test _update_action_context_from_results method."""
-        # Initialize action_context
-        self.controller.action_context = {}
-        
-        action_results = {
-            'moved': True,
-            'new_x': 20,
-            'new_y': 25,
-            'monster_found': 'goblin'
-        }
-        
-        self.controller._update_action_context_from_results('find_monsters', action_results)
-        
-        # Verify context was updated with action results
-        self.assertEqual(self.controller.action_context['moved'], True)
-        self.assertEqual(self.controller.action_context['new_x'], 20)
-        self.assertEqual(self.controller.action_context['new_y'], 25)
-        self.assertEqual(self.controller.action_context['monster_found'], 'goblin')
     
     def test_is_plan_complete(self):
         """Test is_plan_complete method."""
@@ -642,11 +611,13 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
             
             self.assertTrue(result)
             self.controller.action_executor.execute_action.assert_called_once_with(
-                'find_and_move_to_monster', 
-                {'search_radius': 5, 'level_range': 2}, 
+                'find_and_move_to_monster',
                 self.mock_client, 
                 mock_context
             )
+            # Verify parameters were set on context using StateParameters
+            mock_context.set.assert_any_call('search.radius', 5)
+            mock_context.set.assert_any_call('level.range', 2)
     
     def test_learn_from_map_exploration(self):
         """Test learn_from_map_exploration method."""
@@ -765,10 +736,11 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
             self.assertTrue(result)
             self.controller.action_executor.execute_action.assert_called_once_with(
                 'intelligent_monster_search',
-                {'search_radius': 5},
                 self.mock_client,
                 mock_context
             )
+            # Verify parameter was set on context using StateParameters
+            mock_context.set.assert_called_with('search.radius', 5)
     
     def test_get_learning_insights(self):
         """Test get_learning_insights method."""

@@ -6,6 +6,7 @@ from unittest.mock import Mock
 from src.controller.actions.abort_combat_search import AbortCombatSearchAction
 from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestAbortCombatSearchAction(unittest.TestCase):
@@ -19,7 +20,8 @@ class TestAbortCombatSearchAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful execution of abort combat search."""
         # Create context
-        context = ActionContext(character_name="test_char")
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -33,11 +35,11 @@ class TestAbortCombatSearchAction(unittest.TestCase):
         
     def test_execute_with_search_context(self):
         """Test execution with search context."""
-        # Create context with search data
-        context = ActionContext(character_name="test_char")
-        context['search_radius_used'] = 5
-        context['locations_searched'] = 10
-        context['search_pattern'] = 'spiral'
+        # Create context with search data using StateParameters
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        # Note: search_radius_used, locations_searched, search_pattern are not core StateParameters
+        # These would be handled by the action's internal logic, not stored in context
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

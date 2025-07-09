@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.explore_map import ExploreMapAction
 
-from test.fixtures import create_mock_client
+from test.fixtures import create_mock_client, MockActionContext
 
 
 class TestExploreMapAction(unittest.TestCase):
@@ -327,6 +327,154 @@ class TestExploreMapAction(unittest.TestCase):
         # Monsters should have priority
         suggestion = self.action._suggest_next_action(discoveries, 10, 10, 5)
         self.assertEqual(suggestion['action'], 'move_to_monster')
+    
+    def test_execute_explores_multiple_locations_with_different_content_types(self):
+        """Test execute method finds different content types including resource, workshop, and other."""
+        context = MockActionContext(
+            character_name="TestCharacter",
+            character_x=10,
+            character_y=10,
+            exploration_radius=1,
+            exploration_strategy='cardinal',
+            target_content_types=['monster', 'resource', 'workshop', 'other', 'town']  # Include all types we'll test
+        )
+        
+        # Create a sequence of map responses for different locations
+        # Cardinal with radius 1 explores: center(10,10), north(10,11), south(10,9), east(11,10), west(9,10)
+        map_responses = []
+        
+        # Center location (10,10) - no content
+        center_response = Mock()
+        center_response.data = Mock()
+        center_response.data.content = None
+        map_responses.append(center_response)
+        
+        # North location (10,11) - resource
+        north_response = Mock()
+        north_response.data = Mock()
+        north_response.data.content = Mock()
+        north_response.data.content.type_ = 'resource'
+        north_response.data.content.code = 'copper_ore'
+        map_responses.append(north_response)
+        
+        # South location (10,9) - workshop
+        south_response = Mock()
+        south_response.data = Mock()
+        south_response.data.content = Mock()
+        south_response.data.content.type_ = 'workshop'
+        south_response.data.content.code = 'weaponcrafting'
+        map_responses.append(south_response)
+        
+        # East location (11,10) - other content
+        east_response = Mock()
+        east_response.data = Mock()
+        east_response.data.content = Mock()
+        east_response.data.content.type_ = 'town'  # Not monster/resource/workshop
+        east_response.data.content.code = 'spawn_town'
+        map_responses.append(east_response)
+        
+        # West location (9,10) - no map response
+        map_responses.append(None)
+        
+        with patch('src.controller.actions.explore_map.get_map_api', side_effect=map_responses):
+            result = self.action.execute(create_mock_client(), context)
+        
+        self.assertTrue(result.success)
+        discoveries = result.data['discoveries']
+        
+        # Check that resource was discovered
+        self.assertEqual(len(discoveries['resources']), 1)
+        self.assertEqual(discoveries['resources'][0]['resource_code'], 'copper_ore')
+        
+        # Check that workshop was discovered
+        self.assertEqual(len(discoveries['workshops']), 1)
+        self.assertEqual(discoveries['workshops'][0]['workshop_code'], 'weaponcrafting')
+        
+        # Check that other content was discovered (town type)
+        self.assertEqual(len(discoveries['other']), 1)
+        self.assertEqual(discoveries['other'][0]['content_type'], 'town')
+    
+    def test_execute_exception_handling(self):
+        """Test execute method handles exceptions gracefully."""
+        context = MockActionContext(
+            character_name="TestCharacter", 
+            character_x=10,
+            character_y=10,
+            exploration_radius=2
+        )
+        
+        # First mock call will work, subsequent calls will raise exception to trigger the overall exception handler
+        def side_effect_func(*args, **kwargs):
+            # Raise exception on the first call to trigger the overall exception handler
+            raise Exception("API error")
+            
+        # Mock generate_exploration_coordinates to raise exception
+        with patch.object(self.action, '_generate_exploration_coordinates', side_effect=Exception("API error")):
+            result = self.action.execute(create_mock_client(), context)
+        
+        self.assertFalse(result.success)
+        self.assertIn("Map exploration failed: API error", result.error)
+    
+    def test_analyze_location_workshop_with_code(self):
+        """Test analyze_location correctly extracts workshop code."""
+        # Create map data with workshop content
+        map_data = Mock()
+        map_data.content = Mock()
+        map_data.content.type_ = 'workshop'
+        map_data.content.code = 'smithing_workshop'
+        
+        location_info = self.action._analyze_location(map_data, 10, 15, 5, 5, ['workshop'])
+        
+        self.assertEqual(location_info['content_type'], 'workshop')
+        self.assertEqual(location_info['workshop_code'], 'smithing_workshop')
+        self.assertEqual(location_info['x'], 10)
+        self.assertEqual(location_info['y'], 15)
+    
+    def test_execute_simple_workshop_and_other_discovery(self):
+        """Simple test to ensure workshop and other categorization branches are covered."""
+        context = MockActionContext(
+            character_name="TestCharacter",
+            character_x=0,
+            character_y=0,
+            exploration_radius=1,
+            exploration_strategy='cardinal',
+            target_content_types=['workshop', 'other']
+        )
+        
+        # Mock only two locations - one workshop, one other
+        workshop_response = Mock()
+        workshop_response.data = Mock()
+        workshop_response.data.content = Mock()
+        workshop_response.data.content.type_ = 'workshop'
+        workshop_response.data.content.code = 'test_workshop'
+        
+        other_response = Mock()
+        other_response.data = Mock()
+        other_response.data.content = Mock()
+        other_response.data.content.type_ = 'other'
+        other_response.data.content.code = 'test_other'
+        
+        responses = [
+            Mock(data=Mock(content=None)),  # Center - no content
+            workshop_response,  # First cardinal direction
+            other_response,     # Second cardinal direction
+            None,              # Third location fails
+            None               # Fourth location fails  
+        ]
+        
+        with patch('src.controller.actions.explore_map.get_map_api', side_effect=responses):
+            result = self.action.execute(create_mock_client(), context)
+        
+        self.assertTrue(result.success)
+        discoveries = result.data['discoveries']
+        
+        # Verify workshop was categorized correctly (line 65-66)
+        self.assertEqual(len(discoveries['workshops']), 1)
+        self.assertEqual(discoveries['workshops'][0]['workshop_code'], 'test_workshop')
+        
+        # Verify other was categorized correctly (line 67-68)
+        self.assertEqual(len(discoveries['other']), 1)
+        self.assertEqual(discoveries['other'][0]['content_type'], 'other')
 
 
 if __name__ == '__main__':

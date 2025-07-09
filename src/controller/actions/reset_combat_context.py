@@ -8,6 +8,7 @@ allowing the character to start a new combat cycle.
 from typing import Dict
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -46,7 +47,7 @@ class ResetCombatContextAction(ActionBase):
         This is a state-only action that updates the combat context
         without making any API calls.
         """
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             

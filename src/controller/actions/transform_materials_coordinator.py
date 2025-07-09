@@ -10,15 +10,12 @@ from typing import Dict, Any
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
-from .analyze_materials_for_transformation import AnalyzeMaterialsForTransformationAction
-from .determine_workshop_requirements import DetermineWorkshopRequirementsAction
-from .navigate_to_workshop import NavigateToWorkshopAction
-from .execute_material_transformation import ExecuteMaterialTransformationAction
-from .verify_transformation_results import VerifyTransformationResultsAction
+from .subgoal_mixins import WorkflowSubgoalMixin
 
 
-class TransformMaterialsCoordinatorAction(ActionBase):
+class TransformMaterialsCoordinatorAction(ActionBase, WorkflowSubgoalMixin):
     """
     Coordinator action for material transformation workflow.
     
@@ -53,132 +50,150 @@ class TransformMaterialsCoordinatorAction(ActionBase):
         
     def execute(self, client, context: ActionContext) -> ActionResult:
         """
-        Coordinate material transformation workflow.
+        Coordinate material transformation workflow using proper subgoal patterns.
+        
+        Workflow steps:
+        1. analyze_materials: Analyze materials to determine transformations needed
+        2. determine_workshops: Determine workshop requirements
+        3. execute_transformations: Execute each transformation via subgoals
+        4. verify_results: Verify transformation results
         
         Args:
             client: API client
-            context: Action context containing:
-                - character_name: Name of character
-                - target_item: Optional target item to craft
-                - knowledge_base: Knowledge base instance
-                - map_state: Map state instance
+            context: Action context containing character and target item data
                 
         Returns:
-            Dict with transformation results
+            ActionResult with transformation results
         """
         self._context = context
         
         try:
-            character_name = context.character_name
-            target_item = context.get('target_item')
+            character_name = context.get(StateParameters.CHARACTER_NAME)
+            target_item = context.get(StateParameters.TARGET_ITEM)
+            workflow_step = self.get_workflow_step(context, 'analyze_materials')
             
-            self.logger.info(f"🎯 Starting material transformation workflow, target: {target_item}")
+            self.logger.info(f"🎯 Material transformation workflow step: {workflow_step}")
             
-            # Get current inventory
-            char_response = get_character_api(name=character_name, client=client)
-            if not char_response or not char_response.data:
-                return self.create_error_result('Could not get character data')
-            
-            character_data = char_response.data
-            inventory = character_data.inventory or []
-            
-            # Step 1: Analyze materials
-            analyze_context = ActionContext()
-            analyze_context.update(context)
-            analyze_context['inventory'] = inventory
-            
-            analyze_action = AnalyzeMaterialsForTransformationAction()
-            analyze_result = analyze_action.execute(client, analyze_context)
-            
-            if not analyze_result.get('success'):
-                return self.create_error_result('Failed to analyze materials for transformation')
-            
-            transformations_needed = analyze_context.get('transformations_needed', [])
-            
-            if not transformations_needed:
-                return self.create_error_result('No raw materials found that need transformation')
-            
-            self.logger.info(f"📊 Found {len(transformations_needed)} materials to transform")
-            
-            # Step 2: Determine workshop requirements
-            workshop_context = ActionContext()
-            workshop_context.update(context)
-            workshop_context['transformations_needed'] = transformations_needed
-            
-            workshop_action = DetermineWorkshopRequirementsAction()
-            workshop_result = workshop_action.execute(client, workshop_context)
-            
-            if not workshop_result.get('success'):
-                return self.create_error_result('Failed to determine workshop requirements')
-            
-            workshop_requirements = workshop_context.get('workshop_requirements', [])
-            
-            # Step 3: Execute transformations
-            transformations_completed = []
-            current_workshop = None
-            
-            for requirement in workshop_requirements:
-                workshop_type = requirement['workshop_type']
-                
-                # Navigate to workshop if needed
-                if workshop_type and workshop_type != current_workshop:
-                    nav_context = ActionContext()
-                    nav_context.update(context)
-                    nav_context['workshop_type'] = workshop_type
-                    
-                    nav_action = NavigateToWorkshopAction()
-                    nav_result = nav_action.execute(client, nav_context)
-                    
-                    if not nav_result.get('success'):
-                        self.logger.error(f"Failed to navigate to {workshop_type} workshop")
-                        continue
-                    
-                    current_workshop = workshop_type
-                
-                # Execute transformation
-                transform_context = ActionContext()
-                transform_context.update(context)
-                transform_context['raw_material'] = requirement['raw_material']
-                transform_context['refined_material'] = requirement['refined_material']
-                transform_context['quantity'] = requirement['quantity']
-                
-                transform_action = ExecuteMaterialTransformationAction()
-                transform_result = transform_action.execute(client, transform_context)
-                
-                if transform_result.get('success'):
-                    transformation = transform_context.get('last_transformation')
-                    if transformation:
-                        transformations_completed.append(transformation)
-                        self.logger.info(
-                            f"✅ Transformed {requirement['raw_material']} → {requirement['refined_material']}"
-                        )
-                else:
-                    self.logger.error(
-                        f"❌ Failed to transform {requirement['raw_material']} → {requirement['refined_material']}"
-                    )
-            
-            # Step 4: Verify results
-            verify_context = ActionContext()
-            verify_context.update(context)
-            verify_context['transformations_completed'] = transformations_completed
-            
-            verify_action = VerifyTransformationResultsAction()
-            verify_result = verify_action.execute(client, verify_context)
-            
-            # Return results
-            if transformations_completed:
-                return self.create_success_result(
-                    f"Material transformation workflow completed: {len(transformations_completed)} transformations",
-                    materials_transformed=transformations_completed,
-                    total_transformations=len(transformations_completed),
-                    verification=verify_result.get('verification_results', []),
-                    target_item=target_item
-                )
+            if workflow_step == 'analyze_materials':
+                return self._handle_analyze_materials_step(client, context, target_item)
+            elif workflow_step == 'determine_workshops':
+                return self._handle_determine_workshops_step(client, context, target_item)
+            elif workflow_step == 'execute_transformations':
+                return self._handle_execute_transformations_step(client, context, target_item)
+            elif workflow_step == 'verify_results':
+                return self._handle_verify_results_step(client, context, target_item)
             else:
-                return self.create_error_result('All material transformations failed')
+                return self.create_error_result(f"Unknown workflow step: {workflow_step}")
                 
         except Exception as e:
             return self.create_error_result(f"Material transformation workflow failed: {str(e)}")
+    
+    def _handle_analyze_materials_step(self, client, context: ActionContext, target_item: str) -> ActionResult:
+        """Handle materials analysis step."""
+        # Get current inventory
+        char_response = get_character_api(name=context.get(StateParameters.CHARACTER_NAME), client=client)
+        if not char_response or not char_response.data:
+            return self.create_error_result('Could not get character data')
+        
+        character_data = char_response.data
+        inventory = character_data.inventory or []
+        
+        # Request materials analysis subgoal (inventory will be re-fetched by subgoal)
+        return self.request_workflow_subgoal(
+            context,
+            goal_name="analyze_materials",
+            parameters={
+                "target_item": target_item
+            },
+            next_step="determine_workshops",
+            preserve_keys=[StateParameters.TARGET_ITEM]
+        )
+    
+    def _handle_determine_workshops_step(self, client, context: ActionContext, target_item: str) -> ActionResult:
+        """Handle workshop requirements determination step."""
+        transformations_needed = context.get(StateParameters.TRANSFORMATIONS_NEEDED, [])
+        
+        if not transformations_needed:
+            return self.create_error_result('No raw materials found that need transformation')
+        
+        self.logger.info(f"📊 Found {len(transformations_needed)} materials to transform")
+        
+        # Request workshop requirements analysis subgoal
+        return self.request_workflow_subgoal(
+            context,
+            goal_name="determine_workshop_requirements",
+            parameters={
+                "transformations_needed": transformations_needed
+            },
+            next_step="execute_transformations",
+            preserve_keys=[StateParameters.TARGET_ITEM, StateParameters.TRANSFORMATIONS_NEEDED]
+        )
+    
+    def _handle_execute_transformations_step(self, client, context: ActionContext, target_item: str) -> ActionResult:
+        """Handle transformation execution step."""
+        workshop_requirements = context.get(StateParameters.WORKSHOP_REQUIREMENTS, [])
+        
+        if not workshop_requirements:
+            return self.create_error_result('No workshop requirements found')
+        
+        # Get current transformation index
+        transformation_index = context.get(StateParameters.CURRENT_TRANSFORMATION_INDEX, 0)
+        
+        if transformation_index >= len(workshop_requirements):
+            # All transformations completed, move to verification
+            self.set_workflow_step(context, 'verify_results')
+            return self._handle_verify_results_step(client, context, target_item)
+        
+        # Get current transformation requirement
+        current_requirement = workshop_requirements[transformation_index]
+        
+        # Request transformation subgoal
+        return self.request_workflow_subgoal(
+            context,
+            goal_name="execute_material_transformation",
+            parameters={
+                "workshop_type": current_requirement['workshop_type'],
+                "raw_material": current_requirement['raw_material'],
+                "refined_material": current_requirement['refined_material'],
+                "quantity": current_requirement['quantity']
+            },
+            next_step="execute_transformations",  # Continue with next transformation
+            preserve_keys=[StateParameters.TARGET_ITEM, StateParameters.WORKSHOP_REQUIREMENTS, StateParameters.TRANSFORMATIONS_COMPLETED]
+        )
+    
+    def _handle_verify_results_step(self, client, context: ActionContext, target_item: str) -> ActionResult:
+        """Handle results verification step."""
+        transformations_completed = context.get(StateParameters.TRANSFORMATIONS_COMPLETED, [])
+        
+        if not transformations_completed:
+            return self.create_error_result('No transformations were completed')
+        
+        # Request verification subgoal
+        return self.request_workflow_subgoal(
+            context,
+            goal_name="verify_transformation_results",
+            parameters={
+                "transformations_completed": transformations_completed
+            },
+            next_step="completed",
+            preserve_keys=[StateParameters.TARGET_ITEM, StateParameters.TRANSFORMATIONS_COMPLETED]
+        )
+    
+    def _complete_workflow(self, context: ActionContext, target_item: str) -> ActionResult:
+        """Complete the workflow and return final results."""
+        transformations_completed = context.get(StateParameters.TRANSFORMATIONS_COMPLETED, [])
+        verification_results = context.get(StateParameters.VERIFICATION_RESULTS, [])
+        
+        if transformations_completed:
+            return self.create_success_result(
+                f"Material transformation workflow completed: {len(transformations_completed)} transformations",
+                materials_transformed=transformations_completed,
+                total_transformations=len(transformations_completed),
+                verification=verification_results,
+                target_item=target_item
+            )
+        else:
+            return self.create_error_result('All material transformations failed')
     
     def __repr__(self):
         return "TransformMaterialsCoordinatorAction()"

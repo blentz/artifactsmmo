@@ -18,13 +18,15 @@ from src.controller.ai_player_controller import AIPlayerController
 
 from test.base_test import BaseTest
 from test.fixtures import create_mock_client
+from test.test_base import UnifiedContextTestBase
 
 
-class TestAPIOptimizationFixes(BaseTest):
+class TestAPIOptimizationFixes(UnifiedContextTestBase):
     """Test API optimization fixes to prevent rate limiting and infinite loops."""
     
     def setUp(self):
         """Set up test environment with mocked components."""
+        super().setUp()
         self.temp_dir = tempfile.mkdtemp()
         self.mock_client = create_mock_client()
         
@@ -151,12 +153,13 @@ class TestCooldownDetectionFixes(TestAPIOptimizationFixes):
             # Check that wait action was called with proper parameters
             args, kwargs = mock_execute.call_args
             action_name = args[0]
-            action_data = args[1]
+            client = args[1]
+            context = args[2]
             self.assertEqual(action_name, 'wait')
-            self.assertIn('wait_duration', action_data)
             
-            # Check that wait duration was reasonable (around 5 seconds, but may be slightly less due to processing time)
-            wait_duration = action_data['wait_duration']
+            # Check that wait duration was set on context
+            self.assertTrue(hasattr(context, 'wait_duration'))
+            wait_duration = getattr(context, 'wait_duration', 0)
             self.assertGreater(wait_duration, 3.0)  # At least 3 seconds
             self.assertLessEqual(wait_duration, 6.0)  # At most 6 seconds
     
@@ -190,11 +193,10 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
         
         # Mock time.sleep to avoid actually waiting
         with patch('time.sleep') as mock_sleep:
-            from test.fixtures import MockActionContext
-            context = MockActionContext(character_state=self.mock_character_state)
-            # GOAP provides the wait_duration
-            context['wait_duration'] = 10.0
-            result = wait_action.execute(self.mock_client, context)
+            # Set up context with character state and wait duration
+            self.context.character_state = self.mock_character_state
+            self.context.wait_duration = 10.0
+            result = wait_action.execute(self.mock_client, self.context)
             
             # Should have called sleep with the provided duration
             mock_sleep.assert_called_once()
@@ -218,9 +220,10 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
         
         # Mock time.sleep to verify it's called with minimal duration
         with patch('time.sleep') as mock_sleep:
-            from test.fixtures import MockActionContext
-            context = MockActionContext(character_state=self.mock_character_state)
-            result = wait_action.execute(self.mock_client, context)
+            # Set up context with character state
+            self.context.character_state = self.mock_character_state
+            # Don't set wait_duration - it should default to 1.0
+            result = wait_action.execute(self.mock_client, self.context)
             
             # Should have called sleep with minimal duration for expired cooldown
             mock_sleep.assert_called_once()
@@ -320,9 +323,11 @@ class TestAPIErrorHandling(TestAPIOptimizationFixes):
             mock_execute.assert_called_once()
             call_args = mock_execute.call_args
             self.assertEqual(call_args[0][0], 'wait')  # action name
-            context = call_args[0][3]  # context argument
-            self.assertIn('character_state', context)
-            self.assertEqual(context['character_state'], self.mock_character_state)
+            # With new signature, context is 3rd argument (0-indexed: action_name, client, context)
+            context = call_args[0][2]  # context argument
+            # Context should have wait_duration set
+            self.assertTrue(hasattr(context, 'wait_duration'))
+            self.assertLessEqual(context.wait_duration, 0.2)  # Should be short wait for 0.1s cooldown
 
 
 if __name__ == '__main__':

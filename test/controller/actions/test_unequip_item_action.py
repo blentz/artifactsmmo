@@ -121,6 +121,20 @@ class TestUnequipItemAction(BaseTest):
         self.assertEqual(result.data['unequipped_item_level'], 3)
         self.assertEqual(result.data['unequipped_slot'], "weapon")
 
+    def test_execute_no_slot_provided(self):
+        """ Test execute when no slot is provided """
+        client = create_mock_client()
+        # Create context without slot
+        context = MockActionContext(
+            character_name="TestCharacter"
+            # No slot provided
+        )
+        
+        result = self.action.execute(client, context)
+        
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "No slot provided")
+
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """
         client = create_mock_client()

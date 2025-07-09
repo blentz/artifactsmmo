@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from src.controller.actions.mark_combat_not_viable import MarkCombatNotViableAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestMarkCombatNotViableAction(unittest.TestCase):
@@ -18,11 +19,10 @@ class TestMarkCombatNotViableAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful execution of mark combat not viable."""
         # Create context
-        context = ActionContext(character_name="test_char")
-        # Set combat_context in context
-        context['combat_context'] = {
-            'recent_win_rate': 0.0
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        # Set combat context in context
+        context.set(StateParameters.COMBAT_RECENT_WIN_RATE, 0.0)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -34,13 +34,12 @@ class TestMarkCombatNotViableAction(unittest.TestCase):
     def test_execute_with_win_rate_context(self):
         """Test execution with win rate context."""
         # Create context with combat data
-        context = ActionContext(character_name="test_char")
-        context['combat_context'] = {
-            'recent_win_rate': 0.15,
-            'status': 'active'
-        }
-        context['recent_losses'] = 8
-        context['recent_wins'] = 2
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.COMBAT_RECENT_WIN_RATE, 0.15)
+        context.set(StateParameters.COMBAT_STATUS, 'active')
+        context.set(StateParameters.RECENT_LOSSES, 8)
+        context.set(StateParameters.RECENT_WINS, 2)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

@@ -12,6 +12,7 @@ from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_cr
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
 
 
@@ -46,10 +47,10 @@ class ExecuteMaterialTransformationAction(ActionBase):
         self._context = context
         
         try:
-            character_name = context.character_name
-            raw_material = context.get('raw_material')
-            refined_material = context.get('refined_material')
-            quantity = context.get('quantity', 1)
+            character_name = context.get(StateParameters.CHARACTER_NAME)
+            raw_material = context.get(StateParameters.RAW_MATERIAL)
+            refined_material = context.get(StateParameters.REFINED_MATERIAL)
+            quantity = context.get(StateParameters.QUANTITY, 1)
             
             if not all([raw_material, refined_material]):
                 return self.create_error_result("Missing transformation parameters")
@@ -92,7 +93,7 @@ class ExecuteMaterialTransformationAction(ActionBase):
                 'success': True
             }
             
-            context.set_result('last_transformation', transformation_result)
+            context.set_result(StateParameters.LAST_TRANSFORMATION, transformation_result)
             
             return self.create_success_result(
                 message=f"Successfully transformed materials",
@@ -113,9 +114,8 @@ class ExecuteMaterialTransformationAction(ActionBase):
             if char_response and char_response.data and char_response.data.cooldown > 0:
                 cooldown_seconds = char_response.data.cooldown
                 
-                # Get cooldown buffer from config
-                action_config = context.get('action_config', {})
-                cooldown_buffer = action_config.get('cooldown_buffer_seconds', 1)
+                # Use default cooldown buffer (no nested config)
+                cooldown_buffer = 1  # Default buffer seconds
                 
                 total_wait = cooldown_seconds + cooldown_buffer
                 

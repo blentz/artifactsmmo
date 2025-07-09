@@ -12,6 +12,7 @@ from unittest.mock import Mock
 
 # Import extend_http_status but don't call it here - tests should call it in setUpClass
 from src.lib.httpstatus import extend_http_status
+from src.lib.state_parameters import StateParameters
 
 
 class MockAPIResponse:
@@ -188,6 +189,8 @@ class MockKnowledgeBase:
             'items': {},
             'workshops': {}
         }
+        # Add mock methods that tests expect
+        self.find_monsters_in_map = Mock(return_value=[])
         
     def get_monster_win_rate(self, monster_code: str) -> Optional[float]:
         """Get win rate for a monster."""
@@ -218,7 +221,7 @@ class MockMapState:
         """Set learning callback."""
         self._learning_callback = callback
         
-    def scan(self, x: int, y: int, client) -> Optional[Dict]:
+    def scan(self, x: int, y: int, cache=True, save_immediately=True) -> Optional[Dict]:
         """Mock map scan."""
         key = f"{x},{y}"
         return self.data.get(key)
@@ -265,8 +268,44 @@ class MockActionContext:
         for key, value in kwargs.items():
             setattr(self, key, value)
     
+    def _get_state_parameter(self, param: str, default=None):
+        """Map StateParameters to MockActionContext attributes."""
+        # Map StateParameters to legacy attributes
+        mapping = {
+            StateParameters.CHARACTER_NAME: 'character_name',
+            StateParameters.CHARACTER_LEVEL: 'character_level', 
+            StateParameters.CHARACTER_HP: 'character_hp',
+            StateParameters.CHARACTER_MAX_HP: 'character_max_hp',
+            StateParameters.CHARACTER_X: 'character_x',
+            StateParameters.CHARACTER_Y: 'character_y',
+            StateParameters.MATERIALS_TARGET_ITEM: 'target_item',
+            StateParameters.EQUIPMENT_SELECTED_ITEM: 'selected_item',
+            StateParameters.EQUIPMENT_TARGET_SLOT: 'target_slot',
+            StateParameters.TARGET_X: 'target_x',
+            StateParameters.TARGET_Y: 'target_y',
+            StateParameters.ITEM_CODE: 'item_code',
+            StateParameters.SELECTED_ITEM: 'selected_item',
+            StateParameters.SEARCH_RADIUS: 'search_radius',
+        }
+        
+        if param in mapping:
+            attr_name = mapping[param]
+            if hasattr(self, attr_name):
+                return getattr(self, attr_name)
+        
+        # Check action_data for the parameter
+        if param in self.action_data:
+            return self.action_data[param]
+            
+        return default
+    
     def get(self, key, default=None):
-        """Dictionary-like get method."""
+        """Dictionary-like get method with StateParameters support."""
+        # Handle StateParameters by mapping to attributes
+        if key in StateParameters.get_all_parameters():
+            return self._get_state_parameter(key, default)
+        
+        # Legacy support for direct attribute access
         if hasattr(self, key):
             return getattr(self, key)
         if key in self.action_data:
@@ -280,6 +319,33 @@ class MockActionContext:
     def __setitem__(self, key, value):
         """Dictionary-like setting."""
         self.action_data[key] = value
+    
+    def set(self, param: str, value):
+        """Set parameter using StateParameters pattern."""
+        # Map StateParameters to legacy attributes
+        mapping = {
+            StateParameters.CHARACTER_NAME: 'character_name',
+            StateParameters.CHARACTER_LEVEL: 'character_level', 
+            StateParameters.CHARACTER_HP: 'character_hp',
+            StateParameters.CHARACTER_MAX_HP: 'character_max_hp',
+            StateParameters.CHARACTER_X: 'character_x',
+            StateParameters.CHARACTER_Y: 'character_y',
+            StateParameters.MATERIALS_TARGET_ITEM: 'target_item',
+            StateParameters.EQUIPMENT_SELECTED_ITEM: 'selected_item',
+            StateParameters.EQUIPMENT_TARGET_SLOT: 'target_slot',
+            StateParameters.TARGET_X: 'target_x',
+            StateParameters.TARGET_Y: 'target_y',
+            StateParameters.ITEM_CODE: 'item_code',
+            StateParameters.SELECTED_ITEM: 'selected_item',
+            StateParameters.SEARCH_RADIUS: 'search_radius',
+        }
+        
+        if param in mapping:
+            attr_name = mapping[param]
+            setattr(self, attr_name, value)
+        else:
+            # Store in action_data for other parameters
+            self.action_data[param] = value
     
     def __contains__(self, key):
         """Dictionary-like contains check."""
@@ -340,6 +406,26 @@ def create_mock_client():
     client.get_httpx_client.return_value = mock_httpx_client
     
     return client
+
+
+class ActionTestCase:
+    """Mixin class to ensure proper ActionContext singleton isolation in tests."""
+    
+    def setUp(self):
+        """Reset singleton state for proper test isolation."""
+        # Import here to avoid circular imports
+        from src.lib.action_context import ActionContext
+        context = ActionContext()
+        context._state.reset()
+        super().setUp() if hasattr(super(), 'setUp') else None
+    
+    def tearDown(self):
+        """Clean up singleton state after test.""" 
+        # Import here to avoid circular imports
+        from src.lib.action_context import ActionContext
+        context = ActionContext()
+        context._state.reset()
+        super().tearDown() if hasattr(super(), 'tearDown') else None
 
 
 def create_mock_action_config():

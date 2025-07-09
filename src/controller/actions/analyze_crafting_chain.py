@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -45,11 +46,11 @@ class AnalyzeCraftingChainAction(ActionBase):
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Analyze the complete crafting chain for the target item """
         # Get character name and target item from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
-        target_item = context.get('target_item')
+        target_item = context.get(StateParameters.MATERIALS_TARGET_ITEM)
         if not target_item:
             return self.create_error_result("No target item specified for analysis")
             
@@ -57,8 +58,13 @@ class AnalyzeCraftingChainAction(ActionBase):
         
         try:
             # Get knowledge base and map state from context
-            knowledge_base = context.knowledge_base
-            map_state = context.map_state
+            knowledge_base = getattr(context, 'knowledge_base', None)
+            map_state = getattr(context, 'map_state', None)
+            
+            if not knowledge_base:
+                return self.create_error_result("No knowledge base provided in context")
+            if not map_state:
+                return self.create_error_result("No map state provided in context")
             
             # Get character inventory from context
             self.character_inventory = context.get_character_inventory() if hasattr(context, 'get_character_inventory') else {}
@@ -338,7 +344,7 @@ class AnalyzeCraftingChainAction(ActionBase):
         self.logger.warning(f"⚠️ Workshop type not found in knowledge base for skill: {skill_lower}")
         return skill_lower
 
-    def _get_equipment_slot(self, item_code: str, workshop_type: str, knowledge_base=None, client=None) -> Optional[str]:
+    def _get_equipment_slot(self, item_code: str, workshop_type: str, knowledge_base=None) -> Optional[str]:
         """
         Determine the equipment slot for an item using API data.
         
@@ -350,7 +356,7 @@ class AnalyzeCraftingChainAction(ActionBase):
         
         # Use knowledge base to get item data with API fallback
         if knowledge_base and hasattr(knowledge_base, 'get_item_data'):
-            item_data = knowledge_base.get_item_data(item_code, client=client)
+            item_data = knowledge_base.get_item_data(item_code)
             if item_data:
                 # First check for explicit slot information
                 slot_info = item_data.get('slot', '')
@@ -587,7 +593,7 @@ class AnalyzeCraftingChainAction(ActionBase):
         })
         
         # Add equip action for weapons and armor
-        equipment_slot = self._get_equipment_slot(item_code, workshop_type, knowledge_base, client)
+        equipment_slot = self._get_equipment_slot(item_code, workshop_type, knowledge_base)
         if equipment_slot:
             actions.append({
                 'name': 'equip_item',
@@ -746,7 +752,7 @@ class AnalyzeCraftingChainAction(ActionBase):
                 'description': f"Craft {item_code}"
             })
             # Add equip action for weapons and armor
-            equipment_slot = self._get_equipment_slot(item_code, workshop_type, knowledge_base, client)
+            equipment_slot = self._get_equipment_slot(item_code, workshop_type, knowledge_base)
             if equipment_slot:
                 actions.append({
                     'name': 'equip_item',

@@ -8,6 +8,8 @@ is too low, triggering the need for equipment upgrades.
 from typing import Dict
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import CombatStatus
 
 from .base import ActionBase, ActionResult
 
@@ -32,7 +34,7 @@ class MarkCombatNotViableAction(ActionBase):
     }
     reactions = {
         'combat_context': {
-            'status': 'not_viable',
+            'status': CombatStatus.NOT_VIABLE,
         },
     }
     weight = 2.0
@@ -48,7 +50,7 @@ class MarkCombatNotViableAction(ActionBase):
         This is a state-only action that updates the combat context
         without making any API calls.
         """
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
@@ -56,8 +58,7 @@ class MarkCombatNotViableAction(ActionBase):
         
         try:
             # Get current win rate from context
-            combat_context = context.get('combat_context', {})
-            recent_win_rate = combat_context.get('recent_win_rate', 0.0)
+            recent_win_rate = context.get(StateParameters.COMBAT_RECENT_WIN_RATE, 0.0)
             
             # Log the decision
             self.logger.warning(
@@ -69,7 +70,7 @@ class MarkCombatNotViableAction(ActionBase):
             # This is a bridge action - it only updates state, no API calls needed
             result = self.create_success_result(
                 combat_viability_marked=True,
-                previous_status=combat_context.get('status', 'unknown'),
+                previous_status=context.get(StateParameters.COMBAT_STATUS, 'unknown'),
                 new_status='not_viable',
                 recent_win_rate=recent_win_rate,
                 recommendation="Upgrade equipment before continuing combat",

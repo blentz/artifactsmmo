@@ -110,15 +110,15 @@ consolidated_states:
     description: "Character health and basic status"
     schema:
       level: "int"
-      hp_percentage: "float"
       xp_percentage: "float"
+      hp_percentage: "float"
       alive: "bool"
-      safe: "bool"  # hp >= 30%
+      safe: "bool"  # calculated from fresh HP data
       cooldown_active: "bool"
     default:
       level: 1
-      hp_percentage: 100.0
       xp_percentage: 0.0
+      hp_percentage: 100.0
       alive: true
       safe: true
       cooldown_active: false

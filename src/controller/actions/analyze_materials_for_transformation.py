@@ -8,6 +8,7 @@ which raw materials should be transformed into refined materials.
 from typing import Dict, Any, List, Tuple, Optional
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
 
 
@@ -47,8 +48,8 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
         self._context = context
         
         try:
-            inventory = context.get('inventory', [])
-            target_item = context.get('target_item')
+            inventory = context.get(StateParameters.MATERIALS_INVENTORY, [])
+            target_item = context.get(StateParameters.MATERIALS_TARGET_ITEM)
             knowledge_base = context.knowledge_base
             
             self.logger.debug(f"🔍 Analyzing materials for transformation, target: {target_item}")
@@ -70,7 +71,7 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
                 )
             
             # Store results in context for next action
-            context.set_result('transformations_needed', transformations)
+            context.set_result(StateParameters.TRANSFORMATIONS_NEEDED, transformations)
             
             self.logger.info(f"📊 Found {len(transformations)} transformation opportunities")
             
@@ -176,9 +177,8 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
         """Analyze general transformation opportunities."""
         transformations = []
         
-        # Get default transform quantity from config
-        action_config = context.get('action_config', {})
-        default_quantity = action_config.get('default_transform_quantity', 1)
+        # Use default transform quantity (no nested config per user instruction)
+        default_quantity = 1
         
         for raw_material, refined_material in transformations_map.items():
             if raw_material in inventory_dict:

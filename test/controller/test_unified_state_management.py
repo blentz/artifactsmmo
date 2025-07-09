@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from src.controller.action_executor import ActionExecutor
 from src.controller.ai_player_controller import AIPlayerController
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestUnifiedStateManagement(unittest.TestCase):
@@ -43,8 +44,13 @@ class TestUnifiedStateManagement(unittest.TestCase):
             'x': 0, 'y': 0, 'level': 1, 'hp': 100, 'max_hp': 100
         }
         
+        # Mock additional required attributes
+        self.controller.cooldown_manager = Mock()
+        self.controller.update_world_state = Mock()
+        self.controller.get_current_world_state = Mock(return_value={})
+        
     def test_action_with_reactions_updates_state(self):
-        """Test that action reactions update world state through unified handler."""
+        """Test that action reactions update state using StateParameters."""
         # Create action executor
         executor = ActionExecutor()
         
@@ -53,126 +59,89 @@ class TestUnifiedStateManagement(unittest.TestCase):
         mock_action = Mock()
         mock_action.execute.return_value = ActionResult(
             success=True,
-            data={
-                'equipment_status': {
-                    'upgrade_status': 'analyzing',
-                    'target_slot': 'weapon'
-                }
-            }
+            data={}
         )
         
-        # Set up reactions on the mock action class
+        # Set up reactions using flat StateParameters (no nested dictionaries)
         mock_action.__class__.reactions = {
-            'equipment_status': {
-                'upgrade_status': 'analyzing',
-                'target_slot': 'weapon'
-            }
+            StateParameters.EQUIPMENT_UPGRADE_STATUS: 'analyzing',
+            StateParameters.EQUIPMENT_TARGET_SLOT: 'weapon'
         }
         
-        # Add required methods to controller
-        self.controller.update_world_state = Mock()
-        self.controller.get_current_world_state = Mock(return_value={'equipment_status': {}})
-        
         with patch.object(executor.factory, 'create_action', return_value=mock_action), \
+             patch.object(executor.factory, '_load_action_parameters', return_value=None), \
              patch.object(executor, '_get_action_class', return_value=mock_action.__class__):
             # Build context
             context = ActionContext.from_controller(self.controller, {})
+            context.controller = self.controller
             
             # Execute action
-            result = executor.execute_action('analyze_equipment', {}, self.mock_client, context)
+            result = executor.execute_action('analyze_equipment', self.mock_client, context)
             
             # Verify action was executed
             self.assertTrue(result.success)
             
-            # Verify world state was updated through unified API
-            # The update_world_state method should be called with the full world state including reactions
-            self.controller.update_world_state.assert_called()
+            # Verify state was updated in context using StateParameters
+            self.assertEqual(context.get(StateParameters.EQUIPMENT_UPGRADE_STATUS), 'analyzing')
+            self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
             
-            # Check that the call included the equipment_status updates
-            call_args = self.controller.update_world_state.call_args[0][0]
-            self.assertIn('equipment_status', call_args)
-            self.assertEqual(call_args['equipment_status']['upgrade_status'], 'analyzing')
-            self.assertEqual(call_args['equipment_status']['target_slot'], 'weapon')
+            # Verify boolean flags were recalculated
+            self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_TARGET_SLOT))
     
-    def test_template_resolution_in_reactions(self):
-        """Test that template variables in reactions are resolved correctly."""
+    def test_direct_value_assignment_in_reactions(self):
+        """Test that actions use direct value assignment in reactions (no templates)."""
         executor = ActionExecutor()
         
-        # Mock action that returns a value used in template
+        # Mock action that sets explicit values
         from src.controller.actions.base import ActionResult
         mock_action = Mock()
         mock_action.execute.return_value = ActionResult(
             success=True,
-            data={
-                'selected_item': 'wooden_staff',
-                'target_slot': 'weapon'
-            }
+            data={}
         )
         
-        # Set up reactions with template variables
+        # Set up reactions with direct values (no template variables)
         mock_action.__class__.reactions = {
-            'equipment_status': {
-                'selected_item': '${selected_item}',
-                'target_slot': '${target_slot}'
-            }
+            StateParameters.EQUIPMENT_SELECTED_ITEM: 'wooden_staff',
+            StateParameters.EQUIPMENT_TARGET_SLOT: 'weapon'
         }
         
-        # Add required methods to controller
-        self.controller.update_world_state = Mock()
-        self.controller.get_current_world_state = Mock(return_value={'equipment_status': {}})
-        
         with patch.object(executor.factory, 'create_action', return_value=mock_action), \
+             patch.object(executor.factory, '_load_action_parameters', return_value=None), \
              patch.object(executor, '_get_action_class', return_value=mock_action.__class__):
             context = ActionContext.from_controller(self.controller, {})
-            result = executor.execute_action('select_recipe', {}, self.mock_client, context)
+            context.controller = self.controller
+            result = executor.execute_action('select_recipe', self.mock_client, context)
             
             self.assertTrue(result.success)
             
-            # Verify update_world_state was called
-            self.controller.update_world_state.assert_called()
+            # Verify direct value assignment worked
+            self.assertEqual(context.get(StateParameters.EQUIPMENT_SELECTED_ITEM), 'wooden_staff')
+            self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
             
-            # Check that templates were resolved in the call
-            call_args = self.controller.update_world_state.call_args[0][0]
-            self.assertIn('equipment_status', call_args)
-            self.assertEqual(call_args['equipment_status']['selected_item'], 'wooden_staff')
-            self.assertEqual(call_args['equipment_status']['target_slot'], 'weapon')
+            # Verify boolean flags were recalculated
+            self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_TARGET_SLOT))
+            self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
     
     def test_action_context_preserved_between_actions(self):
-        """Test that action context is preserved for inter-action data flow."""
-        executor = ActionExecutor()
+        """Test that StateParameters persist correctly across action executions."""
+        context = ActionContext()
         
-        # First action sets some data
-        from src.controller.actions.base import ActionResult
-        mock_action1 = Mock()
-        mock_action1.execute.return_value = ActionResult(
-            success=True,
-            data={
-                'selected_item': 'copper_sword',
-                'target_slot': 'weapon'
-            }
-        )
-        mock_action1.__class__.reactions = {}
+        # First action sets data using StateParameters
+        context.set_result(StateParameters.SELECTED_ITEM, 'copper_sword')
+        context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
-        # Add required methods to controller
-        self.controller.update_world_state = Mock()
-        self.controller.get_current_world_state = Mock(return_value={})
+        # Verify data persists (simulating between-action state)
+        self.assertEqual(context.get(StateParameters.SELECTED_ITEM), 'copper_sword')
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
         
-        # Execute first action
-        with patch.object(executor.factory, 'create_action', return_value=mock_action1):
-            context = ActionContext.from_controller(self.controller, {})
-            executor.execute_action('select_recipe', {}, self.mock_client, context)
+        # Second action can access the data and add more
+        context.set_result(StateParameters.WORKFLOW_STEP, 'crafting_ready')
         
-        # Verify action context was updated
-        self.assertIn('select_recipe', self.controller.action_context)
-        self.assertIn('selected_item', self.controller.action_context)
-        self.assertEqual(self.controller.action_context['selected_item'], 'copper_sword')
-        self.assertEqual(self.controller.action_context['target_slot'], 'weapon')
-        
-        # Second action should have access to this data
-        context2 = ActionContext.from_controller(self.controller, {})
-        # ActionContext stores previous results in controller.action_context
-        self.assertEqual(self.controller.action_context['selected_item'], 'copper_sword')
-        self.assertEqual(self.controller.action_context['target_slot'], 'weapon')
+        # All data should still be accessible through unified context
+        self.assertEqual(context.get(StateParameters.SELECTED_ITEM), 'copper_sword')
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+        self.assertEqual(context.get(StateParameters.WORKFLOW_STEP), 'crafting_ready')
     
     def test_no_state_updates_on_failed_action(self):
         """Test that state is not updated when action fails."""
@@ -186,25 +155,25 @@ class TestUnifiedStateManagement(unittest.TestCase):
             error='Action failed'
         )
         mock_action.__class__.reactions = {
-            'equipment_status': {
-                'upgrade_status': 'failed'
-            }
+            StateParameters.EQUIPMENT_UPGRADE_STATUS: 'failed'
         }
         
-        # Add required methods to controller
-        self.controller.update_world_state = Mock()
-        self.controller.get_current_world_state = Mock(return_value={'equipment_status': {}})
-        
         with patch.object(executor.factory, 'create_action', return_value=mock_action), \
+             patch.object(executor.factory, '_load_action_parameters', return_value=None), \
              patch.object(executor, '_get_action_class', return_value=mock_action.__class__):
             context = ActionContext.from_controller(self.controller, {})
-            result = executor.execute_action('test_action', {}, self.mock_client, context)
+            context.controller = self.controller
+            
+            # Store initial state
+            initial_upgrade_status = context.get(StateParameters.EQUIPMENT_UPGRADE_STATUS)
+            
+            result = executor.execute_action('analyze_equipment', self.mock_client, context)
             
             # Verify action failed
             self.assertFalse(result.success)
             
-            # Verify world state was NOT updated (due to failed action)
-            self.controller.update_world_state.assert_not_called()
+            # Verify state was NOT updated (should remain the same)
+            self.assertEqual(context.get(StateParameters.EQUIPMENT_UPGRADE_STATUS), initial_upgrade_status)
 
 
 if __name__ == '__main__':

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from src.game.globals import CONFIG_PREFIX
 from src.lib.yaml_data import YamlData
+from src.lib.action_context import ActionContext
 
 
 class CooldownManager:
@@ -189,19 +190,20 @@ class CooldownManager:
             self.logger.info(f"🕐 Executing wait action for {wait_duration:.1f} seconds")
             
             # Execute wait action with calculated duration
-            wait_action_data = {'wait_duration': wait_duration}
+            # Use the singleton context from the controller
+            if controller and hasattr(controller, 'plan_action_context'):
+                context = controller.plan_action_context
+                # Update wait duration on the existing context
+                context.wait_duration = wait_duration
+            else:
+                # Fallback: create minimal context if no controller available
+                context = ActionContext()
+                context.character_state = character_state
+                context.wait_duration = wait_duration
+                if controller:
+                    context.controller = controller
             
-            # Build proper context with character state
-            context = {
-                'character_state': character_state,
-                'wait_duration': wait_duration
-            }
-            
-            # Include controller if provided
-            if controller:
-                context['controller'] = controller
-            
-            result = action_executor.execute_action('wait', wait_action_data, None, context)
+            result = action_executor.execute_action('wait', None, context)
             
             if result.success:
                 self.logger.info(f"✅ Successfully waited {wait_duration:.1f} seconds for cooldown")

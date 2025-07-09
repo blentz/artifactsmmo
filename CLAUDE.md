@@ -194,6 +194,8 @@ controller.action_context  # Should persist between actions
 - Bug prevention patterns: `docs/BUG_PREVENTION_PATTERNS.md`
 - YAML configuration guide: `docs/YAML_CONFIGURATION.md`
 - CLI usage: `docs/CLI_USAGE.md`
+- Architecture overview: `docs/ARCHITECTURE.md`
+- Subgoal patterns and best practices: `docs/SUBGOAL_PATTERNS.md`
 
 ## Important Notes
 

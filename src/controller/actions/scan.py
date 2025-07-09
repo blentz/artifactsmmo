@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -46,8 +47,8 @@ class ScanAction(ActionBase):
         self._context = context
         
         # Get parameters from context
-        character_name = context.character_name
-        search_radius = context.get('search_radius', 3)
+        character_name = context.get(StateParameters.CHARACTER_NAME)
+        search_radius = context.get(StateParameters.SEARCH_RADIUS, 3)
         
         try:
             # Get current character position

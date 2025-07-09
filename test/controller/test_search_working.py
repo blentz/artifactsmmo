@@ -39,7 +39,13 @@ class TestSearchWorking(unittest.TestCase):
             character_x=self.character_x,
             character_y=self.character_y,
             search_radius=2,
-            resource_types=['copper_rocks']
+            resource_types=['copper_rocks'],
+            character_level=10,
+            skill_type=None,
+            level_range=5,
+            current_gathering_goal=None,
+            missing_materials={},
+            raw_material_needs={}
         )
         
         # Create MapState for caching
@@ -161,7 +167,8 @@ class TestSearchWorking(unittest.TestCase):
             search_radius=7,
             resource_types=['iron_rocks', 'coal_rocks'],
             character_level=5,
-            skill_type='mining'
+            skill_type='mining',
+            level_range=5
         )
         
         # Verify all parameters are preserved in context

@@ -8,13 +8,15 @@ from unittest.mock import Mock, patch
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.world.state import WorldState
+from test.test_base import UnifiedContextTestBase
 
 
-class TestWorldStateMerging(unittest.TestCase):
+class TestWorldStateMerging(UnifiedContextTestBase):
     """Test that world state merging includes all persisted states"""
     
     def setUp(self):
         """Set up test fixtures"""
+        super().setUp()
         # Create temporary directory for test data
         self.temp_dir = tempfile.mkdtemp()
         
@@ -65,7 +67,7 @@ class TestWorldStateMerging(unittest.TestCase):
             'resource_availability': {'monsters': False},
             'location_context': {'at_target': False},
             'monster_present': False,
-            'goal_progress': {'monsters_hunted': '>0'},
+            'goal_progress': {'monsters_hunted': 5},
         }
         
     def tearDown(self):
@@ -109,8 +111,8 @@ class TestWorldStateMerging(unittest.TestCase):
             self.assertTrue(world_state['character_status'].get('safe'))
             self.assertFalse(world_state['character_status'].get('cooldown_active'))
             
-    def test_calculated_states_override_persisted_states(self):
-        """Test that calculated states take precedence over persisted states"""
+    def test_persisted_states_override_calculated_states(self):
+        """Test that persisted states take precedence over calculated states for nested dicts"""
         # Add conflicting state to persisted data
         self.controller.world_state.data['character_status'] = {
             'alive': False,
@@ -122,18 +124,18 @@ class TestWorldStateMerging(unittest.TestCase):
         with patch.object(self.controller.goal_manager, 'calculate_world_state') as mock_calc:
             mock_calc.return_value = {
                 'character_status': {
-                    'alive': True,  # Override persisted False
-                    'safe': True,
-                    'cooldown_active': False  # Override persisted False
+                    'alive': True,  # Will be overridden by persisted False
+                    'safe': True,   # Will be overridden by persisted False
+                    'cooldown_active': False  # Will be overridden by persisted True
                 }
             }
             
             # Get current world state
             world_state = self.controller.get_current_world_state()
             
-            # Verify calculated states override persisted ones
-            self.assertTrue(world_state.get('character_status', {}).get('alive'))
-            self.assertFalse(world_state.get('character_status', {}).get('cooldown_active'))
+            # Verify persisted states override calculated ones for nested dicts
+            self.assertFalse(world_state.get('character_status', {}).get('alive'))
+            self.assertTrue(world_state.get('character_status', {}).get('cooldown_active'))
             
             # Verify persisted states are still included for non-conflicting keys
             self.assertTrue(world_state.get('inventory_updated'))

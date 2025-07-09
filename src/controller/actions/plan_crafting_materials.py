@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -51,7 +52,7 @@ class PlanCraftingMaterialsAction(ActionBase):
         super().execute(client, context)
         
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         target_item = context.get('target_item')
         
         self._context = context

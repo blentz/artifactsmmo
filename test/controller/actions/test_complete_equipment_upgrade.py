@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from src.controller.actions.complete_equipment_upgrade import CompleteEquipmentUpgradeAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
@@ -18,12 +19,11 @@ class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful execution of complete equipment upgrade."""
         # Create context
-        context = ActionContext(character_name="test_char")
-        # Set equipment_status in context
-        context['equipment_status'] = {
-            'selected_item': 'iron_sword',
-            'target_slot': 'weapon'
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        # Set equipment_status parameters in context
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'iron_sword')
+        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -35,13 +35,13 @@ class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
     def test_execute_with_character_state(self):
         """Test execution with character state context."""
         # Create context with character data
-        context = ActionContext(character_name="test_char")
-        context.character_x = 5
-        context.character_y = 10
-        context['equipment_status'] = {
-            'selected_item': 'wooden_shield',
-            'target_slot': 'shield'
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.CHARACTER_X, 5)
+        context.set(StateParameters.CHARACTER_Y, 10)
+        # Set equipment_status parameters in context
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'wooden_shield')
+        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'shield')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

@@ -20,32 +20,42 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
 
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the nearest resource location using unified search algorithm """
-        # Get parameters from context
-        character_x = context.get('character_x', context.character_x)
-        character_y = context.get('character_y', context.character_y)
-        search_radius = context.get('search_radius', 5)
-        resource_types = context.get('resource_types', [])
-        character_level = context.get('character_level', context.character_level)
-        skill_type = context.get('skill_type')
-        level_range = context.get('level_range', 5)
+        # Get parameters from context - no need for defensive coding with singleton
+        character_x = context.character_x
+        character_y = context.character_y
+        search_radius = context.search_radius
+        resource_types = context.resource_types
+        character_level = context.character_level
+        skill_type = context.skill_type
+        level_range = context.level_range
         
         # Parameters will be passed directly to helper methods via context
         
         self._context = context
         
         try:
-            # Extract recipe-focused resource types from context if available
-            context_resource_types = context.get('resource_types', [])
-            materials_needed = context.get('materials_needed', [])
+            # Priority: Check for current_gathering_goal from subgoal context
+            if context.current_gathering_goal:
+                material = context.current_gathering_goal.get('material')
+                if material:
+                    # Map material to resource code
+                    resource_code = context.knowledge_base.get_resource_for_material(material)
+                    if resource_code:
+                        self.logger.info(f"🎯 Using current_gathering_goal: Looking for {resource_code} to gather {material}")
+                        context.resource_types = [resource_code]
+                    else:
+                        # Try direct material name as fallback
+                        self.logger.info(f"🎯 Using current_gathering_goal: Looking for {material} directly")
+                        context.resource_types = [material]
             
-            # Convert context to kwargs dict for helper methods
-            kwargs = dict(context) if hasattr(context, '__iter__') else {}
-            # Remove keys that are passed as positional arguments to avoid conflicts
-            kwargs.pop('resource_types', None)
-            kwargs.pop('skill_type', None)
+            # Check for missing_materials (from calculate_material_quantities action)
+            if not context.resource_types and (context.missing_materials or context.raw_material_needs):
+                material_dict = context.raw_material_needs if context.raw_material_needs else context.missing_materials
+                context.resource_types = list(material_dict.keys())
+                self.logger.info(f"🎯 Using materials from context: {context.resource_types}")
             
             # Determine target resource codes with focus on recipe requirements
-            target_codes = self._determine_target_resource_codes(context_resource_types, materials_needed, resource_types, skill_type, **kwargs)
+            target_codes = self._determine_target_resource_codes(context)
             
             if not target_codes:
                 return self.create_error_result("No target resource types specified for focused search")
@@ -62,20 +72,45 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 x, y = location
                 distance = self._calculate_distance(character_x, character_y, x, y)
                 
-                # Create standardized coordinate response
-                coordinate_data = self.standardize_coordinate_output(x, y)
-                coordinate_data.update({
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = x
+                    self._context.target_y = y
+                    self._context.resource_code = content_code
+                    self._context.resource_name = content_code
+                
+                coordinate_data = {
+                    'target_x': x,
+                    'target_y': y,
                     'distance': distance,
                     'resource_code': content_code,
                     'resource_name': content_code,
                     'resource_skill': content_data.get('skill', 'unknown'),
                     'resource_level': content_data.get('level', 1),
                     'target_codes': target_codes
-                })
+                }
                 
-                return self.create_success_result(**coordinate_data)
+                
+                # Nested state changes for GOAP compatibility
+                state_changes = {
+                    'location_context': {
+                        'target': {'x': x, 'y': y},
+                        'resource_known': True,
+                        'target_x': x,
+                        'target_y': y
+                    },
+                    'resource_availability': {
+                        'resources': True
+                    }
+                }
+                
+                return self.create_result_with_state_changes(
+                    success=True,
+                    state_changes=state_changes,
+                    **coordinate_data
+                )
             
-            # Get map_state from context if available for cached access
+            # Get map_state from context for cached access
             map_state = context.map_state
             
             # PRIORITY 1: Search learned map data first (most accurate)
@@ -86,9 +121,16 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                     distance = self._calculate_distance(character_x, character_y, x, y)
                     self.logger.info(f"🗺️ Found {resource_code} in learned map data at ({x}, {y})")
                     
-                    # Create standardized coordinate response
-                    coordinate_data = self.standardize_coordinate_output(x, y)
-                    coordinate_data.update({
+                    # Set coordinates directly on ActionContext for unified access
+                    if hasattr(self, '_context') and self._context:
+                        self._context.target_x = x
+                        self._context.target_y = y
+                        self._context.resource_code = resource_code
+                        self._context.resource_name = resource_code
+                    
+                    coordinate_data = {
+                        'target_x': x,
+                        'target_y': y,
                         'distance': distance,
                         'resource_code': resource_code,
                         'resource_name': resource_code,  # Use code as name fallback
@@ -96,9 +138,29 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                         'resource_level': 1,
                         'target_codes': target_codes,
                         'source': 'learned_map_data'
-                    })
+                    }
                     
-                    return self.create_success_result(**coordinate_data)
+                    # Set coordinates using ActionContext methods for subsequent actions
+                    if hasattr(self, '_context') and self._context:
+                        self._context.set_result('target_x', x)
+                        self._context.set_result('target_y', y)
+                        self._context.set_result('resource_code', resource_code)
+                        self._context.set_result('resource_name', resource_code)
+                    
+                    # Nested state changes for GOAP compatibility
+                    state_changes = {
+                        'location_context': {
+                            'target': {'x': x, 'y': y},
+                            'resource_known': True,
+                            'target_x': x,
+                            'target_y': y
+                        },
+                        'resource_availability': {
+                            'resources': True
+                        }
+                    }
+                    
+                    return self._create_resource_result_with_movement_check(x, y, coordinate_data, state_changes)
             
             # PRIORITY 2: Try knowledge-based search with known locations (no predictions)
             controller = context.controller
@@ -114,7 +176,7 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
             
             # If no known locations and we have a controller, try learning game data first
             if controller and hasattr(controller, 'learn_all_game_data_efficiently'):
-                action_config = kwargs.get('action_config', {})
+                action_config = context.get('action_config', {})
                 min_resource_knowledge = action_config.get('min_resource_knowledge_threshold', 20)
                 
                 current_resource_count = len(knowledge_base.get_all_known_resource_codes())
@@ -142,7 +204,7 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
             result = self.unified_search(client, character_x, character_y, search_radius, resource_filter, resource_result_processor, map_state)
             
             # If no resources found within current radius, try expansion based on configuration
-            action_config = kwargs.get('action_config', {})
+            action_config = context.get('action_config', {})
             max_search_radius = action_config.get('max_resource_search_radius', 8)
             radius_expansion = action_config.get('resource_search_radius_expansion', 3)
             
@@ -151,13 +213,8 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 self.logger.info(f"🔍 No resources found within radius {search_radius}, expanding search to radius {expanded_radius}")
                 # Create a new action with modestly expanded radius
                 expanded_action = FindResourcesAction()
-                # Set instance variables for the expanded search
-                expanded_action.character_x = self.character_x
-                expanded_action.character_y = self.character_y
-                expanded_action.search_radius = expanded_radius
-                expanded_action.resource_types = target_codes
-                expanded_action.character_level = character_level
-                expanded_action.skill_type = skill_type
+                # Pass context to the expanded action
+                expanded_action._context = context
                 # Try the expanded search
                 expanded_result = expanded_action.unified_search(client, character_x, character_y, expanded_radius, resource_filter, resource_result_processor, map_state)
                 if expanded_result and expanded_result.success:
@@ -169,65 +226,27 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
         except Exception as e:
             return self.create_error_result(f"Resource search failed: {str(e)}")
     
-    def _determine_target_resource_codes(self, context_resource_types: List[str], materials_needed: List[Dict], resource_types: List[str], skill_type: str, **kwargs) -> List[str]:
+    def _determine_target_resource_codes(self, context: ActionContext) -> List[str]:
         """Determine target resource codes with focus on recipe requirements."""
         # Priority 1: Use provided context resource types
-        if context_resource_types:
-            self.logger.info(f"🎯 Context resource search: {context_resource_types}")
-            return context_resource_types
+        if context.resource_types:
+            self.logger.info(f"🎯 Context resource search: {context.resource_types}")
+            return context.resource_types
         
-        # Priority 2: Extract from materials_needed (recipe information)
-        if materials_needed:
-            target_codes = []
-            for material in materials_needed:
-                if isinstance(material, dict) and material.get('is_resource'):
-                    # First try to use the resource_source if available (set by lookup_item_info)
-                    if material.get('resource_source'):
-                        resource_code = material.get('resource_source')
-                        target_codes.append(resource_code)
-                        self.logger.info(f"🎯 Using resource source mapping: {material.get('code')} -> {resource_code}")
-                    else:
-                        # Try to find resource mapping from knowledge base
-                        material_code = material.get('code')
-                        if material_code:
-                            resource_code = self._get_resource_for_material(material_code, **kwargs)
-                            if resource_code:
-                                target_codes.append(resource_code)
-                                self.logger.info(f"🎯 Using knowledge base mapping: {material_code} -> {resource_code}")
-                            else:
-                                # If no mapping found, use the material code directly
-                                target_codes.append(material_code)
-                                self.logger.warning(f"⚠️ No resource mapping found for {material_code}, using directly")
-                        
-            if target_codes:
-                self.logger.info(f"🎯 Recipe-focused resource search for materials: {target_codes}")
-                return target_codes
-            else:
-                # Fall back to material codes directly if mapping failed
-                target_codes = [m.get('code') for m in materials_needed if isinstance(m, dict) and m.get('code')]
-                if target_codes:
-                    self.logger.info(f"🎯 Direct material search: {target_codes}")
-                    return target_codes
-        
-        # Priority 3: Use configured resource types
-        if resource_types:
-            return resource_types
-        
-        # Priority 4: Get all known resource types from knowledge base
-        knowledge_base = kwargs.get('knowledge_base')
-        if knowledge_base and hasattr(knowledge_base, 'data'):
-            known_resources = list(knowledge_base.data.get('resources', {}).keys())
+        # Priority 2: Get all known resource types from knowledge base
+        if context.knowledge_base and context.knowledge_base.data:
+            known_resources = list(context.knowledge_base.data.get('resources', {}).keys())
             if known_resources:
                 # Filter by skill type if specified
-                if skill_type:
+                if context.skill_type:
                     filtered_resources = []
                     for resource_code in known_resources:
-                        resource_info = knowledge_base.data['resources'][resource_code]
+                        resource_info = context.knowledge_base.data['resources'][resource_code]
                         resource_skill = self._get_resource_skill(resource_info)
-                        if resource_skill == skill_type:
+                        if resource_skill == context.skill_type:
                             filtered_resources.append(resource_code)
                     if filtered_resources:
-                        self.logger.info(f"🔍 Generic {skill_type} resource search: {filtered_resources[:10]}")  # Limit log output
+                        self.logger.info(f"🔍 Generic {context.skill_type} resource search: {filtered_resources[:10]}")  # Limit log output
                         return filtered_resources
                 else:
                     self.logger.info(f"🔍 Generic resource search from {len(known_resources)} known resources")
@@ -271,11 +290,21 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                             continue
                             
                         if x is not None and y is not None:
-                            distance = self._calculate_distance(character_x, character_y, x, y)
+                            # Get character position from context
+                            char_x = self._context.character_x if hasattr(self, '_context') else 0
+                            char_y = self._context.character_y if hasattr(self, '_context') else 0
+                            distance = self._calculate_distance(char_x, char_y, x, y)
                             
-                            # Create standardized coordinate response
-                            coordinate_data = self.standardize_coordinate_output(x, y)
-                            coordinate_data.update({
+                            # Set coordinates directly on ActionContext for unified access
+                            if hasattr(self, '_context') and self._context:
+                                self._context.target_x = x
+                                self._context.target_y = y
+                                self._context.resource_code = resource_code
+                                self._context.resource_name = resource_info.get('name', resource_code)
+                            
+                            coordinate_data = {
+                                'target_x': x,
+                                'target_y': y,
                                 'distance': distance,
                                 'resource_code': resource_code,
                                 'resource_name': resource_info.get('name', resource_code),
@@ -283,9 +312,9 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                                 'resource_level': self._get_resource_level(resource_info),
                                 'target_codes': target_codes,
                                 'source': 'knowledge_base'
-                            })
+                            }
                             
-                            return self.create_success_result(**coordinate_data)
+                            return self._create_resource_result_with_movement_check(x, y, coordinate_data)
             
             # No real known locations found for any target resources
             self.logger.debug(f"No real known locations found for resources: {target_codes}")
@@ -329,12 +358,22 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                             continue
                         
                         if x is not None and y is not None:
-                            distance = self._calculate_distance(character_x, character_y, x, y)
+                            # Get character position from context
+                            char_x = self._context.character_x if hasattr(self, '_context') else 0
+                            char_y = self._context.character_y if hasattr(self, '_context') else 0
+                            distance = self._calculate_distance(char_x, char_y, x, y)
                             self.logger.info(f"📍 Using known location for {resource_code}: ({x}, {y})")
                             
-                            # Create standardized coordinate response
-                            coordinate_data = self.standardize_coordinate_output(x, y)
-                            coordinate_data.update({
+                            # Set coordinates directly on ActionContext for unified access
+                            if hasattr(self, '_context') and self._context:
+                                self._context.target_x = x
+                                self._context.target_y = y
+                                self._context.resource_code = resource_code
+                                self._context.resource_name = resource_info.get('name', resource_code)
+                            
+                            coordinate_data = {
+                                'target_x': x,
+                                'target_y': y,
                                 'distance': distance,
                                 'resource_code': resource_code,
                                 'resource_name': resource_info.get('name', resource_code),
@@ -342,9 +381,9 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                                 'resource_level': self._get_resource_level(resource_info),
                                 'target_codes': target_codes,
                                 'source': 'knowledge_base'
-                            })
+                            }
                             
-                            return self.create_success_result(**coordinate_data)
+                            return self._create_resource_result_with_movement_check(x, y, coordinate_data)
                     
                     # Method 2: Use learned API data to predict locations based on skill and level (fallback)
                     api_data = resource_info.get('api_data', {})
@@ -356,13 +395,22 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                         predicted_location = self._predict_resource_location_from_api_data(resource_code, skill, level)
                         if predicted_location:
                             x, y = predicted_location
-                            distance = self._calculate_distance(character_x, character_y, x, y)
+                            # Get character position from context
+                            char_x = self._context.character_x if hasattr(self, '_context') else 0
+                            char_y = self._context.character_y if hasattr(self, '_context') else 0
+                            distance = self._calculate_distance(char_x, char_y, x, y)
                             self.logger.info(f"🔮 Using predicted location for {resource_code}: ({x}, {y}) based on API data")
                             
-                            # Create standardized coordinate response
-                            coordinate_data = self.standardize_coordinate_output(x, y)
-                            coordinate_data.update({
-                                'location': (x, y),
+                            # Set coordinates directly on ActionContext for unified access
+                            if hasattr(self, '_context') and self._context:
+                                self._context.target_x = x
+                                self._context.target_y = y
+                                self._context.resource_code = resource_code
+                                self._context.resource_name = api_data.get('name', resource_code)
+                            
+                            coordinate_data = {
+                                'target_x': x,
+                                'target_y': y,
                                 'distance': distance,
                                 'resource_code': resource_code,
                                 'resource_name': api_data.get('name', resource_code),
@@ -370,9 +418,9 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                                 'resource_level': level,
                                 'target_codes': target_codes,
                                 'source': 'knowledge_base_predicted'
-                            })
+                            }
                             
-                            return self.create_success_result(**coordinate_data)
+                            return self._create_resource_result_with_movement_check(x, y, coordinate_data)
             
             # No known locations found for any target resources
             self.logger.debug(f"No known locations found for resources: {target_codes}")
@@ -490,43 +538,48 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
             return None
 
 
-    def _get_resource_for_material(self, material_code: str, **kwargs) -> Optional[str]:
+
+    def _create_resource_result_with_movement_check(self, x: int, y: int, coordinate_data: dict, state_changes: dict = None) -> ActionResult:
         """
-        Get the resource code that produces a given material.
+        Create a resource result and request move_to_location subgoal if needed.
         
         Args:
-            material_code: Code of the material item
-            **kwargs: Additional context including knowledge_base
+            x: Target X coordinate
+            y: Target Y coordinate  
+            coordinate_data: Data to include in result
+            state_changes: Optional state changes for GOAP
             
         Returns:
-            Resource code that produces this material, or None if not found
+            ActionResult with optional subgoal request
         """
-        knowledge_base = kwargs.get('knowledge_base')
-        if not knowledge_base or not hasattr(knowledge_base, 'data'):
-            return None
+        if state_changes:
+            result = self.create_result_with_state_changes(
+                success=True,
+                state_changes=state_changes,
+                **coordinate_data
+            )
+        else:
+            result = self.create_success_result(**coordinate_data)
             
-        # Check items in knowledge base for resource_source mapping
-        items = knowledge_base.data.get('items', {})
-        item_info = items.get(material_code, {})
+        # Check if character needs to move to resource location
+        char_x = getattr(self._context, 'character_x', 0) if hasattr(self, '_context') else 0
+        char_y = getattr(self._context, 'character_y', 0) if hasattr(self, '_context') else 0
         
-        # First check if we have a direct resource_source mapping
-        if item_info.get('resource_source'):
-            return item_info['resource_source']
-        
-        # Search through resources to find which one drops this material
-        resources = knowledge_base.data.get('resources', {})
-        for resource_code, resource_info in resources.items():
-            # Check drops from API data
-            api_data = resource_info.get('api_data', {})
-            drops = api_data.get('drops', [])
+        # Request move_to_location subgoal if character is not at resource location
+        if char_x != x or char_y != y:
+            self.logger.info(f"🚶 Character at ({char_x}, {char_y}) needs to move to resource at ({x}, {y})")
+            result.request_subgoal(
+                goal_name="move_to_location",
+                parameters={
+                    "target_x": x,
+                    "target_y": y
+                },
+                preserve_context=["resource_code", "resource_name", "target_x", "target_y"]
+            )
+        else:
+            self.logger.info(f"✅ Character already at resource location ({x}, {y})")
             
-            for drop in drops:
-                if isinstance(drop, dict) and drop.get('code') == material_code:
-                    self.logger.debug(f"Found resource {resource_code} drops {material_code}")
-                    return resource_code
-        
-        # No mapping found
-        return None
+        return result
 
     def __repr__(self):
         return "FindResourcesAction()"

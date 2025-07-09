@@ -253,9 +253,9 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         mock_controller.get_current_world_state.return_value = {'level': 3}
         
         # Mock internal methods
-        with patch.object(self.goap_manager, '_develop_complete_plan') as mock_develop:
+        with patch.object(self.goap_manager, 'create_plan') as mock_create_plan:
             with patch.object(self.goap_manager, '_execute_plan_with_selective_replanning') as mock_execute:
-                mock_develop.return_value = [{'name': 'hunt'}]
+                mock_create_plan.return_value = [{'name': 'hunt'}]
                 mock_execute.return_value = True
                 
                 result = self.goap_manager.achieve_goal_with_goap(
@@ -263,7 +263,7 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
                 )
                 
                 self.assertTrue(result)
-                mock_develop.assert_called_once()
+                mock_create_plan.assert_called_once()
                 mock_execute.assert_called_once()
     
     def test_achieve_goal_with_goap_no_controller(self):
@@ -272,23 +272,24 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         mock_controller = Mock()
         mock_controller.get_current_world_state.return_value = {}  # Empty state instead of None
         
-        # Mock _develop_complete_plan to return no plan
-        with patch.object(self.goap_manager, '_develop_complete_plan') as mock_develop:
-            mock_develop.return_value = []
+        # Mock create_plan to return no plan
+        with patch.object(self.goap_manager, 'create_plan') as mock_create_plan:
+            mock_create_plan.return_value = []
             
             result = self.goap_manager.achieve_goal_with_goap(goal_state, mock_controller)
             
             self.assertFalse(result)
     
     def test_achieve_goal_with_goap_no_plan(self):
-        """Test achieve_goal_with_goap when no plan is developed."""
+        """Test achieve_goal_with_goap when no plan can be created."""
         goal_state = {'level': '>5'}
         mock_controller = Mock()
         mock_controller.get_current_world_state.return_value = {'level': 3}
+        mock_controller.client = Mock()  # Ensure client exists
         
-        # Mock _develop_complete_plan to return empty plan
-        with patch.object(self.goap_manager, '_develop_complete_plan') as mock_develop:
-            mock_develop.return_value = []
+        # Mock create_plan to return empty plan
+        with patch.object(self.goap_manager, 'create_plan') as mock_create_plan:
+            mock_create_plan.return_value = []
             
             result = self.goap_manager.achieve_goal_with_goap(
                 goal_state, controller=mock_controller
@@ -296,63 +297,12 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
             
             self.assertFalse(result)
     
-    def test_develop_complete_plan_with_knowledge(self):
-        """Test _develop_complete_plan with knowledge-based planning."""
-        mock_controller = Mock()
-        mock_controller.get_current_world_state.return_value = {'level': 3}
-        goal_state = {'level': '>5'}
-        
-        # Mock internal methods
-        with patch.object(self.goap_manager, '_create_knowledge_based_plan') as mock_knowledge:
-            with patch.object(self.goap_manager, '_is_goal_achieved') as mock_achieved:
-                mock_knowledge.return_value = [{'name': 'hunt'}]
-                mock_achieved.return_value = False
-                
-                plan = self.goap_manager._develop_complete_plan(
-                    mock_controller, goal_state
-                )
-                
-                self.assertEqual(plan, [{'name': 'hunt'}])
-    
-    def test_develop_complete_plan_discovery_needed(self):
-        """Test _develop_complete_plan when discovery is needed."""
-        mock_controller = Mock()
-        mock_controller.get_current_world_state.return_value = {'level': 3}
-        goal_state = {'level': '>5'}
-        
-        # Mock internal methods
-        with patch.object(self.goap_manager, '_create_knowledge_based_plan') as mock_knowledge:
-            with patch.object(self.goap_manager, '_create_discovery_plan') as mock_discovery:
-                with patch.object(self.goap_manager, '_is_goal_achieved') as mock_achieved:
-                    mock_knowledge.return_value = []  # No knowledge-based plan
-                    mock_discovery.return_value = [{'name': 'explore'}]
-                    mock_achieved.return_value = False
-                    
-                    plan = self.goap_manager._develop_complete_plan(
-                        mock_controller, goal_state
-                    )
-                    
-                    self.assertEqual(plan, [{'name': 'explore'}])
-    
-    def test_develop_complete_plan_goal_already_achieved(self):
-        """Test _develop_complete_plan when goal is already achieved."""
-        mock_controller = Mock()
-        mock_controller.get_current_world_state.return_value = {'level': 10}
-        goal_state = {'level': '>5'}
-        
-        with patch.object(self.goap_manager, '_is_goal_achieved') as mock_achieved:
-            mock_achieved.return_value = True
-            
-            plan = self.goap_manager._develop_complete_plan(
-                mock_controller, goal_state
-            )
-            
-            self.assertEqual(plan, [])
     
     def test_execute_plan_with_selective_replanning_success(self):
         """Test _execute_plan_with_selective_replanning successful execution."""
         plan = [{'name': 'move'}, {'name': 'hunt'}]
         mock_controller = Mock()
+        mock_controller.plan_action_context = Mock()  # Required attribute
         mock_controller.get_current_world_state.side_effect = [
             {'level': 3, 'is_on_cooldown': False},  # Initial check - goal not achieved
             {'level': 4, 'is_on_cooldown': False},  # After move - still not achieved
@@ -363,6 +313,8 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         mock_controller._execute_single_action.side_effect = [True, True]  # Both actions succeed
         mock_controller._refresh_character_state = Mock()
         mock_controller.action_context = {}
+        mock_controller.last_action_result = Mock()
+        mock_controller.last_action_result.subgoal_request = None  # No subgoal request
         goal_state = {'level': '>5'}
         
         result = self.goap_manager._execute_plan_with_selective_replanning(
@@ -376,12 +328,15 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         """Test _execute_plan_with_selective_replanning with replanning."""
         plan = [{'name': 'explore_map'}, {'name': 'hunt'}]  # Use actual discovery action
         mock_controller = Mock()
+        mock_controller.plan_action_context = Mock()  # Required attribute
         mock_controller.get_current_world_state.return_value = {'level': 10}  # Goal achieved
         mock_controller.character_state = Mock()
         mock_controller.character_state.data = {'cooldown': 0}
         mock_controller._execute_single_action.return_value = True
         mock_controller._refresh_character_state = Mock()
         mock_controller.action_context = {}
+        mock_controller.last_action_result = Mock()
+        mock_controller.last_action_result.subgoal_request = None  # No subgoal request
         goal_state = {'level': '>5'}
         
         # Mock methods
@@ -404,25 +359,30 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         plan = [{'name': 'move'}]
         mock_controller = Mock()
         mock_controller.action_context = {}
+        mock_controller.plan_action_context = Mock()  # Required attribute
         mock_controller.get_current_world_state.return_value = {'level': 3}  # Goal not achieved
         mock_controller.character_state = Mock()
         mock_controller.character_state.data = {'cooldown': 0}
         mock_controller._execute_single_action.return_value = False  # Action fails
+        mock_controller.last_action_result = Mock()
+        mock_controller.last_action_result.subgoal_request = None  # No subgoal request
         goal_state = {'level': '>5'}
         
         # Mock failure handling methods
         with patch.object(self.goap_manager, '_is_authentication_failure') as mock_auth:
             with patch.object(self.goap_manager, '_is_cooldown_failure') as mock_cooldown:
                 with patch.object(self.goap_manager, '_is_coordinate_failure') as mock_coord:
-                    mock_auth.return_value = False
-                    mock_cooldown.return_value = False
-                    mock_coord.return_value = False
-                    
-                    result = self.goap_manager._execute_plan_with_selective_replanning(
-                        plan, mock_controller, goal_state
-                    )
-                    
-                    self.assertFalse(result)
+                    with patch.object(self.goap_manager, '_is_hp_validation_failure') as mock_hp:
+                        mock_auth.return_value = False
+                        mock_cooldown.return_value = False
+                        mock_coord.return_value = False
+                        mock_hp.return_value = False
+                        
+                        result = self.goap_manager._execute_plan_with_selective_replanning(
+                            plan, mock_controller, goal_state
+                        )
+                        
+                        self.assertFalse(result)
     
     
     def test_handle_cooldown_with_plan_insertion(self):
@@ -545,40 +505,6 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         
         self.assertFalse(result)
     
-    def test_execute_single_action_with_learning_success(self):
-        """Test _execute_single_action_with_learning successful execution."""
-        plan = [{'name': 'move'}]
-        mock_controller = Mock()
-        mock_controller._execute_single_action.return_value = True  # Action execution success
-        mock_controller.get_current_world_state.return_value = {'level': 10}
-        mock_controller._refresh_character_state = Mock()
-        
-        current_state = {'level': 5}
-        goal_state = {'level': '>5'}
-        
-        # Mock _learn_from_action_response
-        with patch.object(self.goap_manager, '_learn_from_action_response'):
-            result = self.goap_manager._execute_single_action_with_learning(
-                plan, mock_controller, current_state, goal_state
-            )
-            
-            self.assertEqual(result, "goal_achieved")  # Goal was achieved
-            mock_controller._execute_single_action.assert_called_once_with('move', {'name': 'move'})
-    
-    def test_execute_single_action_with_learning_failure(self):
-        """Test _execute_single_action_with_learning with failure."""
-        plan = [{'name': 'move'}]
-        mock_controller = Mock()
-        mock_controller._execute_single_action.return_value = False  # Action execution fails
-        
-        current_state = {'level': 5}
-        goal_state = {'level': '>5'}
-        
-        result = self.goap_manager._execute_single_action_with_learning(
-            plan, mock_controller, current_state, goal_state
-        )
-        
-        self.assertEqual(result, "failed")
     
     def test_learn_from_action_response_weapon_evaluation(self):
         """Test _learn_from_action_response for weapon evaluation."""

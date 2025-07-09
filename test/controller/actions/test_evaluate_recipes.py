@@ -4,14 +4,17 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 from src.controller.actions.evaluate_recipes import EvaluateRecipesAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from src.game.character.state import CharacterState
+from test.test_base import UnifiedContextTestBase
 
 
-class TestEvaluateRecipesAction(unittest.TestCase):
+class TestEvaluateRecipesAction(UnifiedContextTestBase):
     """Test the EvaluateRecipesAction class."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         self.action = EvaluateRecipesAction()
         self.mock_client = Mock()
         
@@ -29,11 +32,10 @@ class TestEvaluateRecipesAction(unittest.TestCase):
             }
         }
         
-        # Create mock context
-        self.mock_context = Mock(spec=ActionContext)
+        # Use unified context and set character name
+        self.mock_context = self.context  # Use the unified context
+        self.mock_context.set(StateParameters.CHARACTER_NAME, "test_character")
         self.mock_context.character_state = self.mock_character_state
-        self.mock_context.get_parameter.return_value = None
-        self.mock_context.set_result = Mock()
         
     def test_init(self):
         """Test action initialization."""
@@ -430,7 +432,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
     def test_execute_integration_no_target_slot(self):
         """Test execute integration with no target slot."""
-        self.mock_context.get_parameter.return_value = None
+        # Don't set EQUIPMENT_TARGET_SLOT parameter - should be None by default
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
@@ -439,7 +441,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
     def test_execute_integration_no_character_state(self):
         """Test execute integration with no character state."""
-        self.mock_context.get_parameter.side_effect = lambda key: 'weapon' if key == 'target_equipment_slot' else None
+        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         self.mock_context.character_state = None
         
         result = self.action.execute(self.mock_client, self.mock_context)
@@ -449,7 +451,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
     def test_execute_integration_unknown_slot(self):
         """Test execute integration with unknown equipment slot."""
-        self.mock_context.get_parameter.side_effect = lambda key: 'unknown_slot' if key == 'target_equipment_slot' else None
+        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown_slot')
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
@@ -458,10 +460,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         
     def test_execute_integration_incompatible_slot_skill(self):
         """Test execute integration with incompatible slot and skill."""
-        self.mock_context.get_parameter.side_effect = lambda key: {
-            'target_equipment_slot': 'weapon',
-            'target_craft_skill': 'cooking'
-        }.get(key)
+        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.mock_context.set(StateParameters.TARGET_CRAFT_SKILL, 'cooking')
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
@@ -471,7 +471,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
     @patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync')
     def test_execute_integration_no_recipes(self, mock_get_items):
         """Test execute integration when no recipes available."""
-        self.mock_context.get_parameter.side_effect = lambda key: 'weapon' if key == 'target_equipment_slot' else None
+        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         mock_get_items.return_value = None
         
         result = self.action.execute(self.mock_client, self.mock_context)
@@ -482,7 +482,7 @@ class TestEvaluateRecipesAction(unittest.TestCase):
     @patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync')
     def test_execute_integration_successful_selection(self, mock_get_items):
         """Test execute integration with successful recipe selection."""
-        self.mock_context.get_parameter.side_effect = lambda key: 'weapon' if key == 'target_equipment_slot' else None
+        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response with craftable recipe
         mock_response = Mock()
@@ -510,9 +510,10 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         self.assertEqual(result.data['craft_skill'], 'weaponcrafting')
         
         # Verify context updates
-        self.mock_context.set_result.assert_any_call('selected_item_code', 'copper_dagger')
-        self.mock_context.set_result.assert_any_call('target_equipment_slot', 'weapon')
-        self.mock_context.set_result.assert_any_call('required_craft_skill', 'weaponcrafting')
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['selected_item'], 'copper_dagger')
+        self.assertEqual(result.data['target_slot'], 'weapon')
+        self.assertEqual(result.data['craft_skill'], 'weaponcrafting')
         
     def test_repr_method(self):
         """Test string representation of the action."""

@@ -8,19 +8,22 @@ from unittest.mock import Mock, patch
 from src.controller.actions.analyze_materials_for_transformation import AnalyzeMaterialsForTransformationAction
 from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from test.fixtures import ActionTestCase
 
 
-class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
+class TestAnalyzeMaterialsForTransformationAction(ActionTestCase, unittest.TestCase):
     """Test cases for AnalyzeMaterialsForTransformationAction."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()  # This calls ActionTestCase.setUp() which resets the singleton
         self.action = AnalyzeMaterialsForTransformationAction()
         self.client = Mock()
         
         # Create context with knowledge base
         self.context = ActionContext()
-        self.context.character_name = "test_character"
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
         self.context.knowledge_base = Mock()
         self.context.knowledge_base.data = {}
         
@@ -31,15 +34,98 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
     def test_repr(self):
         """Test string representation."""
         self.assertEqual(repr(self.action), "AnalyzeMaterialsForTransformationAction()")
+    
+    def test_get_item_requirements_no_api_response(self):
+        """Test _get_item_requirements when API returns None."""
+        with patch('artifactsmmo_api_client.api.items.get_item_items_code_get.sync') as mock_get_item:
+            mock_get_item.return_value = None
+            
+            result = self.action._get_item_requirements(self.client, 'missing_item')
+            
+            self.assertEqual(result, {})
+    
+    def test_get_item_requirements_no_craft_data(self):
+        """Test _get_item_requirements when item has no craft data."""
+        with patch('artifactsmmo_api_client.api.items.get_item_items_code_get.sync') as mock_get_item:
+            # Create response with no craft attribute
+            mock_response = Mock()
+            mock_response.data = Mock(spec=[])
+            mock_get_item.return_value = mock_response
+            
+            result = self.action._get_item_requirements(self.client, 'non_craftable_item')
+            
+            self.assertEqual(result, {})
+    
+    def test_transformations_with_raw_material_not_in_inventory(self):
+        """Test transformation analysis when raw material not in inventory."""
+        # Setup inventory without copper_ore
+        self.context.set(StateParameters.MATERIALS_INVENTORY, [
+            Mock(code='iron_ore', quantity=5)
+        ])
+        self.context.set(StateParameters.MATERIALS_REQUIRED_MATERIALS, {'copper': 10})
+        
+        # Setup knowledge base with transformation that requires material not in inventory
+        self.context.knowledge_base.data = {
+            'material_transformations': {
+                'copper_ore': 'copper',  # This raw material is not in inventory
+                'iron_ore': 'iron'
+            }
+        }
+        
+        # Execute action
+        result = self.action.execute(self.client, self.context)
+        
+        # Should succeed but not include copper transformation
+        self.assertTrue(result.success)
+        transformations = self.context.get(StateParameters.TRANSFORMATIONS_NEEDED)
+        # Should not have any copper transformations since copper_ore not in inventory
+        self.assertFalse(any(t[0] == 'copper_ore' for t in transformations))
+    
+    def test_analyze_for_target_item_raw_material_not_in_inventory(self):
+        """Test _analyze_for_target_item skips transformations when raw material not in inventory."""
+        # Setup inventory without copper_ore
+        inventory_dict = {
+            'iron_ore': 5,
+            'iron': 2  # Some iron already available
+        }
+        
+        # Setup transformations map with material not in inventory
+        transformations_map = {
+            'copper_ore': 'copper',  # This raw material is not in inventory
+            'iron_ore': 'iron'
+        }
+        
+        # Mock _get_item_requirements to return requirements for both materials
+        with patch.object(self.action, '_get_item_requirements') as mock_get_reqs:
+            mock_get_reqs.return_value = {
+                'copper': 10,  # Need copper but don't have copper_ore
+                'iron': 5      # Need more iron and have iron_ore
+            }
+            
+            # Call the method with correct parameter order: inventory_dict, transformations_map, target_item, client
+            result = self.action._analyze_for_target_item(
+                inventory_dict,
+                transformations_map,
+                'test_item',
+                self.client
+            )
+            
+            # Verify the mock was called
+            mock_get_reqs.assert_called_once_with('test_item', self.client)
+            
+            # Should only include iron transformation, not copper
+            # We need 5 iron total, have 2, can transform 3 from iron_ore
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0], ('iron_ore', 'iron', 3))  # Need 3 more iron
         
     def test_execute_with_target_item(self):
         """Test analyzing materials with a target item."""
         # Setup inventory
-        self.context['inventory'] = [
+        self.context.set(StateParameters.MATERIALS_INVENTORY, [
             Mock(code='copper_ore', quantity=10),
             Mock(code='iron_ore', quantity=5)
-        ]
-        self.context['target_item'] = 'iron_sword'
+        ])
+        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, 'iron_sword')
         
         # Setup knowledge base
         self.context.knowledge_base.data = {
@@ -64,36 +150,45 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
             
     def test_execute_without_target_item(self):
         """Test analyzing materials without a target item."""
+        # Create fresh context to avoid test pollution
+        context = ActionContext()
+        context._state.reset()  # Reset the singleton state immediately
+        context.set(StateParameters.CHARACTER_NAME, "test_character")
+        context.knowledge_base = Mock()
+        
         # Setup inventory
-        self.context['inventory'] = [
+        context.set(StateParameters.MATERIALS_INVENTORY, [
             Mock(code='copper_ore', quantity=10)
-        ]
+        ])
         
         # Setup knowledge base
-        self.context.knowledge_base.data = {
+        context.knowledge_base.data = {
             'material_transformations': {
                 'copper_ore': 'copper'
             }
         }
         
-        # Setup action config
-        self.context['action_config'] = {
-            'default_transform_quantity': 5
-        }
+        # Action now uses default quantity of 1 (no config needed)
         
-        result = self.action.execute(self.client, self.context)
+        # Explicitly clear target_item 
+        context.set(StateParameters.MATERIALS_TARGET_ITEM, None)
+        
+        # Verify no target_item is set right before execution
+        self.assertIsNone(context.get(StateParameters.MATERIALS_TARGET_ITEM))
+        
+        result = self.action.execute(self.client, context)
         
         self.assertIsInstance(result, ActionResult)
         self.assertTrue(result.success)
         self.assertEqual(result.data['transformation_count'], 1)
         transformations = result.data['transformations']
-        self.assertEqual(transformations[0], ('copper_ore', 'copper', 5))
+        self.assertEqual(transformations[0], ('copper_ore', 'copper', 1))
         
     def test_execute_no_transformations_available(self):
         """Test when no transformations are available."""
-        self.context['inventory'] = [
+        self.context.set(StateParameters.MATERIALS_INVENTORY, [
             Mock(code='unknown_item', quantity=10)
-        ]
+        ])
         
         self.context.knowledge_base.data = {
             'material_transformations': {}
@@ -108,7 +203,7 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         
     def test_execute_empty_inventory(self):
         """Test with empty inventory."""
-        self.context['inventory'] = []
+        self.context.set(StateParameters.MATERIALS_INVENTORY, [])
         
         result = self.action.execute(self.client, self.context)
         
@@ -118,7 +213,7 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         
     def test_execute_exception_handling(self):
         """Test exception handling."""
-        self.context['inventory'] = [Mock(code='test', quantity=1)]
+        self.context.set(StateParameters.MATERIALS_INVENTORY, [Mock(code='test', quantity=1)])
         
         # Make knowledge base raise exception
         self.context.knowledge_base.data = Mock(side_effect=Exception("Test error"))
@@ -232,17 +327,14 @@ class TestAnalyzeMaterialsForTransformationAction(unittest.TestCase):
         inventory_dict = {'copper_ore': 100}
         transformations_map = {'copper_ore': 'copper'}
         
-        # Set low default quantity
-        self.context['action_config'] = {
-            'default_transform_quantity': 2
-        }
+        # Action now uses default quantity of 1 (no config needed)
         
         result = self.action._analyze_general_transformations(
             inventory_dict, transformations_map, self.context
         )
         
-        # Should only transform 2 despite having 100
-        self.assertEqual(result, [('copper_ore', 'copper', 2)])
+        # Should only transform 1 (default quantity)
+        self.assertEqual(result, [('copper_ore', 'copper', 1)])
 
 
 if __name__ == '__main__':

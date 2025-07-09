@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 from src.controller.actions.base import ActionBase, ActionResult
 from src.game.character.state import CharacterState
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class EvaluateRecipesAction(ActionBase):
@@ -161,12 +162,12 @@ class EvaluateRecipesAction(ActionBase):
         self._context = context
         
         # Get target slot from action context (set by SelectOptimalSlotAction)
-        target_slot = context.get_parameter('target_equipment_slot')
+        target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
         if not target_slot:
             return self.create_error_result("No target equipment slot specified - run SelectOptimalSlotAction first")
             
         # Get target craft skill from context (may be set by goal or previous action)
-        target_craft_skill = context.get_parameter('target_craft_skill')
+        target_craft_skill = context.get(StateParameters.TARGET_CRAFT_SKILL)
         
         self.logger.info(f"🔍 Evaluating recipes for slot: {target_slot}")
         
@@ -218,15 +219,15 @@ class EvaluateRecipesAction(ActionBase):
             
         # Update action context with selected item
         selected_item = best_recipe['item']['code']
-        context.set_result('selected_item_code', selected_item)
-        context.set_result('selected_recipe', best_recipe)
-        context.set_result('target_equipment_slot', target_slot)
-        context.set_result('required_craft_skill', craft_skill)
-        context.set_result('required_craft_level', best_recipe.get('level', 1))
+        context.set_result(StateParameters.SELECTED_ITEM, selected_item)
+        context.set_result(StateParameters.EQUIPMENT_TARGET_RECIPE, best_recipe)
+        context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, target_slot)
+        context.set_result(StateParameters.REQUIRED_CRAFT_SKILL, craft_skill)
+        context.set_result(StateParameters.REQUIRED_CRAFT_LEVEL, best_recipe.get('level', 1))
         
         # Store workshop type needed
         workshop_type = f"{craft_skill}_workshop"
-        context.set_result('required_workshop_type', workshop_type)
+        context.set_result(StateParameters.REQUIRED_WORKSHOP_TYPE, workshop_type)
         
         self.logger.info(f"✅ Selected {selected_item} for {target_slot} crafting (score: {best_score:.2f})")
         self.logger.info(f"   Reasoning: {best_reasoning}")

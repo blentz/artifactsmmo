@@ -36,11 +36,15 @@ class TestMoveAction(BaseTest):
         mock_response = Mock()
         mock_response.data = Mock()
         mock_response.data.cooldown = 5
+        # Mock character position in response
+        mock_response.data.character = Mock()
+        mock_response.data.character.x = self.x  # 10
+        mock_response.data.character.y = self.y  # 20
         mock_move_api.return_value = mock_response
         
         action = MoveAction()
         from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name, x=self.x, y=self.y)
+        context = MockActionContext(character_name=self.char_name, target_x=self.x, target_y=self.y)
         response = action.execute(self.client, context)
         
         # Verify the API was called with correct parameters
@@ -66,7 +70,7 @@ class TestMoveAction(BaseTest):
         
         action = MoveAction()
         from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name, x=self.x, y=self.y)
+        context = MockActionContext(character_name=self.char_name, target_x=self.x, target_y=self.y)
         response = action.execute(self.client, context)
         
         # Verify the API was called
@@ -87,7 +91,7 @@ class TestMoveAction(BaseTest):
         
         action = MoveAction()
         from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name, x=self.x, y=self.y)
+        context = MockActionContext(character_name=self.char_name, target_x=self.x, target_y=self.y)
         response = action.execute(self.client, context)
         
         # Verify the API was called
@@ -113,8 +117,8 @@ class TestMoveAction(BaseTest):
         coords = action.get_target_coordinates(context)
         self.assertEqual(coords, (30, 40))
         
-        # Test with x/y in context
-        context = MockActionContext(character_name=self.char_name, x=50, y=60)
+        # Test with target_x/target_y in context (unified approach)
+        context = MockActionContext(character_name=self.char_name, target_x=50, target_y=60)
         coords = action.get_target_coordinates(context)
         self.assertEqual(coords, (50, 60))
 

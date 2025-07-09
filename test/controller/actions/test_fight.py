@@ -17,7 +17,8 @@ class TestFightAction(unittest.TestCase):
         
         # Create test fixtures for consistent test data
         self.test_character_name = "test_character"
-        self.test_context = ActionContext(character_name=self.test_character_name)
+        self.test_context = ActionContext()
+        self.test_context.character_name = self.test_character_name
         
         # Standard test fight results
         self.win_fight_result = {'result': 'win', 'xp': 100}

@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from src.controller.actions.mark_equipment_ready import MarkEquipmentReadyAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestMarkEquipmentReadyAction(unittest.TestCase):
@@ -18,12 +19,11 @@ class TestMarkEquipmentReadyAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful execution of mark equipment ready."""
         # Create context
-        context = ActionContext(character_name="test_char")
-        # Set equipment_status in context
-        context['equipment_status'] = {
-            'selected_item': 'steel_armor',
-            'target_slot': 'body_armor'
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        # Set equipment status in context
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'steel_armor')
+        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'body_armor')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -35,11 +35,10 @@ class TestMarkEquipmentReadyAction(unittest.TestCase):
     def test_execute_with_item_context(self):
         """Test execution with item context."""
         # Create context with item data
-        context = ActionContext(character_name="test_char")
-        context['equipment_status'] = {
-            'selected_item': 'copper_sword',
-            'target_slot': 'weapon'
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'copper_sword')
+        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

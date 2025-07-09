@@ -41,10 +41,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_get_target_coordinates_from_target_params(self):
         """Test getting target coordinates from target_x/target_y parameters."""
-        self.mock_context.get.side_effect = lambda key: {
-            'target_x': 10,
-            'target_y': 20
-        }.get(key)
+        self.mock_context.target_x = 10
+        self.mock_context.target_y = 20
+        self.mock_context.resource_x = None
+        self.mock_context.resource_y = None
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         
@@ -53,10 +53,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_get_target_coordinates_from_resource_params(self):
         """Test getting target coordinates from resource_x/resource_y parameters."""
-        self.mock_context.get.side_effect = lambda key: {
-            'resource_x': 15,
-            'resource_y': 25
-        }.get(key)
+        self.mock_context.target_x = None
+        self.mock_context.target_y = None
+        self.mock_context.resource_x = 15
+        self.mock_context.resource_y = 25
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         
@@ -65,12 +65,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_get_target_coordinates_target_priority(self):
         """Test that target_x/target_y takes priority over resource_x/resource_y."""
-        self.mock_context.get.side_effect = lambda key: {
-            'target_x': 10,
-            'target_y': 20,
-            'resource_x': 15,
-            'resource_y': 25
-        }.get(key)
+        self.mock_context.target_x = 10
+        self.mock_context.target_y = 20
+        self.mock_context.resource_x = 15
+        self.mock_context.resource_y = 25
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         
@@ -79,10 +77,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_get_target_coordinates_partial_target(self):
         """Test getting target coordinates when only one target coordinate is available."""
-        self.mock_context.get.side_effect = lambda key: {
-            'target_x': 10,
-            'resource_y': 25
-        }.get(key)
+        self.mock_context.target_x = 10
+        self.mock_context.target_y = None
+        self.mock_context.resource_x = None
+        self.mock_context.resource_y = 25
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         
@@ -91,7 +89,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_get_target_coordinates_no_coordinates(self):
         """Test getting target coordinates when no coordinates are available."""
-        self.mock_context.get.return_value = None
+        self.mock_context.target_x = None
+        self.mock_context.target_y = None
+        self.mock_context.resource_x = None
+        self.mock_context.resource_y = None
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         
@@ -100,7 +101,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_build_movement_context_minimal(self):
         """Test building movement context with minimal information."""
-        self.mock_context.get.return_value = None
+        self.mock_context.resource_code = None
+        self.mock_context.resource_name = None
         
         context = self.action.build_movement_context(self.mock_context)
         
@@ -108,9 +110,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_build_movement_context_with_resource_code(self):
         """Test building movement context with resource code."""
-        self.mock_context.get.side_effect = lambda key: {
-            'resource_code': 'copper_ore'
-        }.get(key)
+        self.mock_context.resource_code = 'copper_ore'
+        self.mock_context.resource_name = None
         
         context = self.action.build_movement_context(self.mock_context)
         
@@ -122,9 +123,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_build_movement_context_with_resource_name(self):
         """Test building movement context with resource name."""
-        self.mock_context.get.side_effect = lambda key: {
-            'resource_name': 'Copper Ore'
-        }.get(key)
+        self.mock_context.resource_code = None
+        self.mock_context.resource_name = 'Copper Ore'
         
         context = self.action.build_movement_context(self.mock_context)
         
@@ -136,10 +136,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_build_movement_context_complete(self):
         """Test building movement context with all resource information."""
-        self.mock_context.get.side_effect = lambda key: {
-            'resource_code': 'copper_ore',
-            'resource_name': 'Copper Ore'
-        }.get(key)
+        self.mock_context.resource_code = 'copper_ore'
+        self.mock_context.resource_name = 'Copper Ore'
         
         context = self.action.build_movement_context(self.mock_context)
         
@@ -152,10 +150,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_build_movement_context_empty_resource_values(self):
         """Test building movement context with empty resource values."""
-        self.mock_context.get.side_effect = lambda key: {
-            'resource_code': '',
-            'resource_name': ''
-        }.get(key)
+        self.mock_context.resource_code = ''
+        self.mock_context.resource_name = ''
         
         context = self.action.build_movement_context(self.mock_context)
         
@@ -164,10 +160,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_build_movement_context_none_resource_values(self):
         """Test building movement context with None resource values."""
-        self.mock_context.get.side_effect = lambda key: {
-            'resource_code': None,
-            'resource_name': None
-        }.get(key)
+        self.mock_context.resource_code = None
+        self.mock_context.resource_name = None
         
         context = self.action.build_movement_context(self.mock_context)
         
@@ -210,16 +204,17 @@ class TestMoveToResourceAction(unittest.TestCase):
         # Test with mixed parameters
         test_cases = [
             # (context_data, expected_x, expected_y)
-            ({'target_x': 5, 'target_y': 10}, 5, 10),
-            ({'resource_x': 15, 'resource_y': 20}, 15, 20),
-            ({'target_x': 5, 'resource_y': 20}, 5, 20),
-            ({'target_y': 10, 'resource_x': 15}, 15, 10),
-            ({}, None, None),
+            ({'target_x': 5, 'target_y': 10, 'resource_x': None, 'resource_y': None}, 5, 10),
+            ({'target_x': None, 'target_y': None, 'resource_x': 15, 'resource_y': 20}, 15, 20),
+            ({'target_x': 5, 'target_y': None, 'resource_x': None, 'resource_y': 20}, 5, 20),
+            ({'target_x': None, 'target_y': 10, 'resource_x': 15, 'resource_y': None}, 15, 10),
+            ({'target_x': None, 'target_y': None, 'resource_x': None, 'resource_y': None}, None, None),
         ]
         
         for context_data, expected_x, expected_y in test_cases:
             with self.subTest(context_data=context_data):
-                self.mock_context.get.side_effect = lambda key: context_data.get(key)
+                for attr, value in context_data.items():
+                    setattr(self.mock_context, attr, value)
                 x, y = self.action.get_target_coordinates(self.mock_context)
                 self.assertEqual(x, expected_x)
                 self.assertEqual(y, expected_y)
@@ -228,13 +223,13 @@ class TestMoveToResourceAction(unittest.TestCase):
         """Test build_movement_context with various context scenarios."""
         test_cases = [
             # (context_data, expected_context)
-            ({}, {'at_resource_location': True}),
+            ({'resource_code': None, 'resource_name': None}, {'at_resource_location': True}),
             (
-                {'resource_code': 'iron_ore'},
+                {'resource_code': 'iron_ore', 'resource_name': None},
                 {'at_resource_location': True, 'resource_code': 'iron_ore'}
             ),
             (
-                {'resource_name': 'Iron Ore'},
+                {'resource_code': None, 'resource_name': 'Iron Ore'},
                 {'at_resource_location': True, 'resource_name': 'Iron Ore'}
             ),
             (
@@ -245,53 +240,55 @@ class TestMoveToResourceAction(unittest.TestCase):
         
         for context_data, expected_context in test_cases:
             with self.subTest(context_data=context_data):
-                self.mock_context.get.side_effect = lambda key: context_data.get(key)
+                for attr, value in context_data.items():
+                    setattr(self.mock_context, attr, value)
                 context = self.action.build_movement_context(self.mock_context)
                 self.assertEqual(context, expected_context)
                 
     def test_coordinate_priority_logic(self):
         """Test the priority logic for coordinate selection."""
         # target_x should take priority over resource_x
-        self.mock_context.get.side_effect = lambda key: {
-            'target_x': 100,
-            'resource_x': 200
-        }.get(key)
+        self.mock_context.target_x = 100
+        self.mock_context.target_y = None
+        self.mock_context.resource_x = 200
+        self.mock_context.resource_y = None
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         self.assertEqual(x, 100)  # target_x wins
         
         # target_y should take priority over resource_y
-        self.mock_context.get.side_effect = lambda key: {
-            'target_y': 300,
-            'resource_y': 400
-        }.get(key)
+        self.mock_context.target_x = None
+        self.mock_context.target_y = 300
+        self.mock_context.resource_x = None
+        self.mock_context.resource_y = 400
         
         x, y = self.action.get_target_coordinates(self.mock_context)
         self.assertEqual(y, 300)  # target_y wins
         
     def test_context_method_calls(self):
-        """Test that the correct context methods are called."""
-        # Test get_target_coordinates calls
+        """Test that the correct context attributes are accessed."""
+        # Set up mock context with all expected attributes
+        self.mock_context.target_x = None
+        self.mock_context.target_y = None
+        self.mock_context.resource_x = None
+        self.mock_context.resource_y = None
+        self.mock_context.resource_code = None
+        self.mock_context.resource_name = None
+        
+        # Test get_target_coordinates - should access coordinate attributes
         self.action.get_target_coordinates(self.mock_context)
         
-        # Verify all the expected keys were requested
-        expected_calls = ['target_x', 'resource_x', 'target_y', 'resource_y']
-        actual_calls = [call[0][0] for call in self.mock_context.get.call_args_list]
-        
-        for expected_key in expected_calls:
-            self.assertIn(expected_key, actual_calls)
-            
-        # Reset mock for next test
-        self.mock_context.reset_mock()
-        
-        # Test build_movement_context calls
+        # Test build_movement_context - should access resource attributes
         self.action.build_movement_context(self.mock_context)
         
-        expected_calls = ['resource_code', 'resource_name']
-        actual_calls = [call[0][0] for call in self.mock_context.get.call_args_list]
+        # Since we changed from method calls to attribute access,
+        # we just verify the methods don't crash and return expected results
+        x, y = self.action.get_target_coordinates(self.mock_context)
+        self.assertIsNone(x)
+        self.assertIsNone(y)
         
-        for expected_key in expected_calls:
-            self.assertIn(expected_key, actual_calls)
+        context = self.action.build_movement_context(self.mock_context)
+        self.assertEqual(context, {'at_resource_location': True})
 
 
 if __name__ == '__main__':

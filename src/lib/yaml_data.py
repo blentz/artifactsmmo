@@ -33,6 +33,25 @@ def enum_representer(dumper, data):
 # Register the enum representer for all Enum subclasses with SafeDumper
 SafeDumper.add_representer(Enum, enum_representer)
 
+# Register custom game enums for YAML serialization
+try:
+    from src.game.globals import (
+        StringCompatibleEnum, CommonStatus, EquipmentStatus, MaterialStatus,
+        CombatStatus, GoalStatus, AnalysisStatus, SearchStatus, WorkshopStatus,
+        HealingStatus, QualityLevel, CombatRecommendation, RiskLevel
+    )
+    
+    # Register all custom enum classes
+    for enum_class in [
+        StringCompatibleEnum, CommonStatus, EquipmentStatus, MaterialStatus,
+        CombatStatus, GoalStatus, AnalysisStatus, SearchStatus, WorkshopStatus,
+        HealingStatus, QualityLevel, CombatRecommendation, RiskLevel
+    ]:
+        SafeDumper.add_representer(enum_class, enum_representer)
+        
+except ImportError:
+    pass
+
 # Also try to handle specific API enum types that might get imported
 try:
     from artifactsmmo_api_client.models.map_content_type import MapContentType

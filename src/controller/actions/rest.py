@@ -3,6 +3,7 @@
 from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import sync as rest_character_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .character_base import CharacterActionBase
 from .base import ActionResult
@@ -29,7 +30,7 @@ class RestAction(CharacterActionBase):
         """ Execute the rest action """
             
         # Get character name from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
             
         self._context = context
         
@@ -56,7 +57,7 @@ class RestAction(CharacterActionBase):
                     hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
                     
                 # Calculate HP recovered if we have previous HP info
-                previous_hp = context.get('previous_hp', 0)
+                previous_hp = context.get(StateParameters.CHARACTER_PREVIOUS_HP, 0)
                 if previous_hp:
                     hp_recovered = current_hp - previous_hp
                     if hp_recovered > 0:

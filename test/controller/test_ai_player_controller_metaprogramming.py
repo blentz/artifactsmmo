@@ -11,13 +11,15 @@ from src.controller.ai_player_controller import AIPlayerController
 from src.game.character.state import CharacterState
 
 from test.fixtures import create_mock_client
+from test.test_base import UnifiedContextTestBase
 
 
-class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
+class TestAIPlayerControllerMetaprogramming(UnifiedContextTestBase):
     """Test cases for AIPlayerController with metaprogramming approach."""
     
     def setUp(self) -> None:
         """Set up test fixtures with proper metaprogramming configuration."""
+        super().setUp()
         self.temp_dir = tempfile.mkdtemp()
         
         # Create test action configuration
@@ -127,9 +129,10 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
                 )
                 mock_executor_instance.execute_action.return_value = mock_result
                 
-                # Execute action
-                action_data = {'x': 15, 'y': 20}
-                result = controller._execute_action('move', action_data)
+                # Execute action - with unified context, set parameters on context
+                controller.plan_action_context.x = 15
+                controller.plan_action_context.y = 20
+                result = controller._execute_action('move')
                 
                 # Verify execution through metaprogramming
                 self.assertTrue(result)
@@ -137,15 +140,17 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
                 
                 # Verify context was built correctly
                 call_args = mock_executor_instance.execute_action.call_args
-                # The call should be execute_action(action_name, action_data, client, context)
-                # So context is the 4th argument (index 3) or in kwargs
-                if len(call_args[0]) > 3:
-                    context = call_args[0][3]
-                else:
-                    context = call_args[1]['context']
-                self.assertEqual(context['character_name'], 'test_character')
-                self.assertEqual(context['character_x'], 5)
-                self.assertEqual(context['character_y'], 10)
+                # With unified context, the signature is execute_action(action_name, client, context)
+                # So context is the 3rd argument (index 2)
+                context = call_args[0][2]
+                
+                # Context should be ActionContext instance with proper attributes
+                self.assertEqual(context.character_name, 'test_character')
+                self.assertEqual(context.character_x, 5)
+                self.assertEqual(context.character_y, 10)
+                # Verify action data was set
+                self.assertEqual(context.x, 15)
+                self.assertEqual(context.y, 20)
     
     @patch('src.controller.action_executor.ActionExecutor')
     @patch('src.lib.state_loader.StateConfigLoader')
@@ -173,8 +178,10 @@ class TestAIPlayerControllerMetaprogramming(unittest.TestCase):
                 )
             mock_executor_instance.execute_action.return_value = mock_result
             
-            # Execute action
-            success, result_data = controller._execute_action('move', {'x': 5, 'y': 10})
+            # Execute action - with unified context, set parameters on context
+            controller.plan_action_context.x = 5
+            controller.plan_action_context.y = 10
+            success, result_data = controller._execute_action('move')
             
             # Verify failure handling
             self.assertFalse(success)

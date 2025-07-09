@@ -18,6 +18,8 @@ from src.game.character.state import CharacterState
 from src.game.globals import CONFIG_PREFIX
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.lib.character_utils import calculate_hp_percentage, is_character_safe, is_hp_critically_low, is_hp_sufficient_for_combat
 
 # GOAP functionality now handled by GOAPExecutionManager
 from src.lib.state_loader import StateManagerMixin
@@ -82,11 +84,13 @@ class AIPlayerController(StateManagerMixin):
         self.current_action_index: int = 0
         self.is_executing: bool = False
         
-        # Action context for passing data between actions
-        self.action_context: Dict[str, Any] = {}
-        
         # Current goal parameters for passing to actions
         self.current_goal_parameters: Dict[str, Any] = {}
+        
+        # Unified ActionContext that persists across all actions in a plan
+        # Initialize immediately as it's a singleton that should always exist
+        self.plan_action_context: ActionContext = ActionContext.from_controller(self, {})
+        self.logger.debug("Initialized singleton ActionContext for plan execution")
         
     def set_client(self, client) -> None:
         """
@@ -185,8 +189,9 @@ class AIPlayerController(StateManagerMixin):
                     
                     # Execute wait action instead of just sleeping - use CooldownManager for duration calculation
                     optimal_duration = self.cooldown_manager.calculate_wait_duration(self.character_state)
-                    wait_action_data = {'wait_duration': optimal_duration}
-                    success, _ = self._execute_action('wait', wait_action_data)
+                    # Set wait duration in unified context
+                    self.plan_action_context.wait_duration = optimal_duration
+                    success, _ = self._execute_action('wait')
                     
                     if success:
                         self.logger.info("Cooldown wait completed successfully")
@@ -231,14 +236,14 @@ class AIPlayerController(StateManagerMixin):
             return False
         
         try:
+            # The unified context should already have all necessary parameters
+            # Actions should read from the unified context, not from action_data
+            
             # Create and execute the appropriate action
-            success, result_data = self._execute_action(action_name, action_data)
+            success, result_data = self._execute_action(action_name)
             
             if success:
-                # Store action result data for use by subsequent actions
-                if result_data and hasattr(self, 'action_context'):
-                    self.action_context.update(result_data)
-                
+                # No need to update context - unified ActionContext persists data automatically
                 self.current_action_index += 1
                 self.logger.debug("Action executed successfully")
                 return True
@@ -252,13 +257,12 @@ class AIPlayerController(StateManagerMixin):
             self.is_executing = False
             return False
             
-    def _execute_action(self, action_name: str, action_data: Dict) -> tuple[bool, dict]:
+    def _execute_action(self, action_name: str) -> tuple[bool, dict]:
         """
         Execute a specific action using YAML-driven metaprogramming approach.
 
         Args:
             action_name: Name of the action to execute
-            action_data: Action data from the plan
 
         Returns:
             Tuple of (success: bool, result_data: dict)
@@ -287,11 +291,11 @@ class AIPlayerController(StateManagerMixin):
                     return False, {}
             
             # Prepare execution context
-            context = self._build_execution_context(action_data, action_name)
+            context = self._build_execution_context(action_name=action_name)
             
             # Execute action through the metaprogramming executor
             result: ActionResult = self.action_executor.execute_action(
-                action_name, action_data, self.client, context
+                action_name, self.client, context
             )
             
             # Extract useful data from action result
@@ -299,25 +303,29 @@ class AIPlayerController(StateManagerMixin):
             if result.data:
                 # Extract location data for move actions
                 if action_name == 'find_monsters' and hasattr(result.data, 'get'):
-                    location = result.data.get('location')
-                    if location:
+                    # Find monsters returns target_x, target_y directly from standardize_coordinate_output
+                    target_x = result.data.get('target_x')
+                    target_y = result.data.get('target_y')
+                    if target_x is not None and target_y is not None:
                         result_data.update({
-                            'x': location[0],
-                            'y': location[1],
-                            'target_x': location[0],
-                            'target_y': location[1]
+                            'x': target_x,
+                            'y': target_y,
+                            'target_x': target_x,
+                            'target_y': target_y
                         })
-                        self.logger.info(f"Found monster location: {location}")
+                        self.logger.info(f"Found monster location: ({target_x}, {target_y})")
                 elif action_name == 'find_workshops' and hasattr(result.data, 'get'):
-                    location = result.data.get('location')
-                    if location:
+                    # Find workshops returns target_x, target_y directly from standardize_coordinate_output
+                    target_x = result.data.get('target_x')
+                    target_y = result.data.get('target_y')
+                    if target_x is not None and target_y is not None:
                         result_data.update({
-                            'target_x': location[0],
-                            'target_y': location[1],
-                            'workshop_x': location[0],
-                            'workshop_y': location[1]
+                            'target_x': target_x,
+                            'target_y': target_y,
+                            'workshop_x': target_x,
+                            'workshop_y': target_y
                         })
-                        self.logger.info(f"Found workshop location: {location}")
+                        self.logger.info(f"Found workshop location: ({target_x}, {target_y})")
                 elif action_name == 'lookup_item_info' and hasattr(result.data, 'get'):
                     # Extract recipe information for use by find_resources
                     if result.data.get('success') and result.data.get('recipe_found'):
@@ -368,15 +376,17 @@ class AIPlayerController(StateManagerMixin):
                         })
                         self.logger.info(f"🗡️ Weapon selected: {result.data.get('weapon_name')} (code: {result.data.get('item_code')})")
                 elif action_name == 'find_resources' and hasattr(result.data, 'get'):
-                    location = result.data.get('location')
-                    if location:
+                    # Find resources returns target_x, target_y directly from standardize_coordinate_output
+                    target_x = result.data.get('target_x')
+                    target_y = result.data.get('target_y')
+                    if target_x is not None and target_y is not None:
                         result_data.update({
-                            'target_x': location[0],
-                            'target_y': location[1],
-                            'resource_x': location[0],
-                            'resource_y': location[1]
+                            'target_x': target_x,
+                            'target_y': target_y,
+                            'resource_x': target_x,
+                            'resource_y': target_y
                         })
-                        self.logger.info(f"Found resource location: {location}")
+                        self.logger.info(f"Found resource location: ({target_x}, {target_y})")
                 elif action_name == 'attack' and hasattr(result.data, 'get'):
                     # Track monster kills internally for goal progress
                     if result.data.get('success') and result.data.get('monster_defeated'):
@@ -468,47 +478,90 @@ class AIPlayerController(StateManagerMixin):
         except Exception as e:
             self.logger.warning(f"Failed to refresh character state: {e}")
     
-    def _build_execution_context(self, action_data: Dict, action_name: str = None) -> 'ActionContext':
+    def _build_execution_context(self, action_name: str = None) -> 'ActionContext':
         """
         Build unified execution context for action execution.
         
         Args:
-            action_data: Action data from the plan
             action_name: Name of the action being executed (optional)
             
         Returns:
             ActionContext instance with all execution dependencies
         """
         
-        # Create unified context from controller state
-        context = ActionContext.from_controller(self, action_data)
+        # Always use the singleton plan context - no fallback needed
+        # Update controller references to ensure they're current
+        # This is important when character_state is set after controller init
+        self.plan_action_context.controller = self
+        self.plan_action_context.client = self.client
+        self.plan_action_context.character_state = self.character_state
+        self.plan_action_context.world_state = self.world_state
+        self.plan_action_context.map_state = self.map_state
+        self.plan_action_context.knowledge_base = self.knowledge_base
         
-        # Add shared action context data from previous actions
-        if hasattr(self, 'action_context') and self.action_context:
-            for key, value in self.action_context.items():
-                context.set_result(key, value)
-                self.logger.debug(f"Added shared action data to context: {key}")
+        # Update character info if character_state is available
+        if self.character_state:
+            if hasattr(self.character_state, 'name'):
+                self.plan_action_context.character_name = self.character_state.name
+            if hasattr(self.character_state, 'data'):
+                char_data = self.character_state.data
+                self.plan_action_context.character_x = char_data.get('x', 0)
+                self.plan_action_context.character_y = char_data.get('y', 0)
+                self.plan_action_context.character_level = char_data.get('level', 1)
+                self.plan_action_context.character_hp = char_data.get('hp', 0)
+                self.plan_action_context.character_max_hp = char_data.get('max_hp', 0)
+                self.plan_action_context.equipment = char_data
         
-        # Add action configurations if available
-        if hasattr(self.action_executor, 'config_data') and self.action_executor.config_data:
-            eval_config = self.action_executor.config_data.data.get('evaluate_weapon_recipes', {})
-            if eval_config:
-                context.set_parameter('action_config', eval_config)
+        # Action context data is now handled through the unified ActionContext singleton
+        # Parameters should already be set on the context before this method is called
+        
+        # Update context with current world state values
+        # This ensures subgoal parameters like current_gathering_goal are available
+        current_world_state = self.get_current_world_state(force_refresh=False)
+        if current_world_state:
+            # Copy relevant world state values to ActionContext
+            if 'current_gathering_goal' in current_world_state:
+                self.plan_action_context.set(StateParameters.CURRENT_GATHERING_GOAL, current_world_state['current_gathering_goal'])
+                self.logger.debug(f"Set current_gathering_goal in ActionContext: {current_world_state['current_gathering_goal']}")
+            
+            # Set unified context properties directly from world state
+            # Use flat properties as per unified context architecture
+            location_context = current_world_state.get('location_context', {})
+            if location_context.get('target_x') is not None:
+                self.plan_action_context.target_x = location_context['target_x']
+            if location_context.get('target_y') is not None:
+                self.plan_action_context.target_y = location_context['target_y']
+            if location_context.get('workshop_x') is not None:
+                self.plan_action_context.workshop_x = location_context['workshop_x']
+                self.plan_action_context.set(StateParameters.WORKSHOP_X, location_context['workshop_x'])
+            if location_context.get('workshop_y') is not None:
+                self.plan_action_context.workshop_y = location_context['workshop_y']
+                self.plan_action_context.set(StateParameters.WORKSHOP_Y, location_context['workshop_y'])
+        
+        # Action configurations are now auto-loaded by ActionFactory
+        # Legacy hardcoded parameter loading removed
         
         # Include current goal parameters if available
         if hasattr(self, 'current_goal_parameters') and self.current_goal_parameters:
             for param_name, param_value in self.current_goal_parameters.items():
-                context.set_parameter(param_name, param_value)
-                self.logger.debug(f"Added goal parameter to action context: {param_name} = {param_value}")
+                # All parameters must be registered in StateParameters - no fallbacks
+                if StateParameters.validate_parameter(param_name):
+                    self.plan_action_context.set(param_name, param_value)
+                else:
+                    self.logger.error(f"Parameter '{param_name}' not registered in StateParameters - skipping")
+                    # Fail fast - don't add backward compatibility
+            
+        
+        context = self.plan_action_context
         
         # For wait actions, calculate and add wait_duration if not already present
-        # Check both action_data.name and action_name parameter
-        detected_action_name = action_name or action_data.get('name')
-        if detected_action_name == 'wait' and 'wait_duration' not in action_data:
+        # All actions now use ActionContext - action_data is legacy
+        detected_action_name = action_name
+        if detected_action_name == 'wait' and getattr(context, 'wait_duration', 1.0) == 1.0:
             # Refresh character state to get current cooldown info
             self._refresh_character_state()
             wait_duration = self.cooldown_manager.calculate_wait_duration(self.character_state)
-            context.set_parameter('wait_duration', wait_duration)
+            context.wait_duration = wait_duration
             self.logger.info(f"Added calculated wait_duration={wait_duration} to wait action context")
         
         return context
@@ -549,10 +602,27 @@ class AIPlayerController(StateManagerMixin):
             self.logger.warning("No plan to execute")
             return False
             
-        # Preserve action context between plan iterations
-        # This allows actions to pass information to subsequent actions
-        if not hasattr(self, 'action_context'):
-            self.action_context = {}
+        # The plan_action_context is already initialized as a singleton in __init__
+        # Just ensure it's updated with latest controller state without losing action_results
+        self.plan_action_context.controller = self
+        self.plan_action_context.client = self.client
+        self.plan_action_context.character_state = self.character_state
+        self.plan_action_context.world_state = self.world_state
+        self.plan_action_context.map_state = self.map_state
+        self.plan_action_context.knowledge_base = self.knowledge_base
+        
+        # Update character info if character_state is available
+        if self.character_state:
+            if hasattr(self.character_state, 'name'):
+                self.plan_action_context.character_name = self.character_state.name
+            if hasattr(self.character_state, 'data'):
+                char_data = self.character_state.data
+                self.plan_action_context.character_x = char_data.get('x', 0)
+                self.plan_action_context.character_y = char_data.get('y', 0)
+                self.plan_action_context.character_level = char_data.get('level', 1)
+                self.plan_action_context.character_hp = char_data.get('hp', 0)
+                self.plan_action_context.character_max_hp = char_data.get('max_hp', 0)
+                self.plan_action_context.equipment = char_data
         self.is_executing = True
         
         while self.is_executing and self.current_action_index < len(self.current_plan):
@@ -577,80 +647,32 @@ class AIPlayerController(StateManagerMixin):
         """
         try:
             # Build execution context
-            context = self._build_execution_context(action_data, action_name)
+            context = self._build_execution_context(action_name)
             
             # Execute the action using the action executor
-            result = self.action_executor.execute_action(action_name, action_data, self.client, context)
+            result = self.action_executor.execute_action(action_name, self.client, context)
+            
+            # Store the result for potential access by GOAP manager
+            self.last_action_result = result
             
             if result and hasattr(result, 'success') and result.success:
-                # Update action context with results for future actions
-                if result.data:
-                    self._update_action_context_from_response(action_name, result.data)
-                
-                # Also capture data stored in the action context results
-                if hasattr(context, 'action_results') and context.action_results:
-                    self._update_action_context_from_results(action_name, context.action_results)
-                
+                # Merge result data into unified context if available
+                if hasattr(result, 'data') and result.data and isinstance(context, ActionContext):
+                    for key, value in result.data.items():
+                        context.set_result(key, value)
+                    self.logger.debug(f"Merged {len(result.data)} result items from {action_name} into context")
+                    
+                    # IMPORTANT: If using plan_action_context, it's the same object as context
+                    # due to line 499 in _build_execution_context, so no need to update separately
                 return True
             else:
                 self.logger.warning(f"Action {action_name} failed: {result}")
-                # Store the failure result for cooldown detection
-                self.last_action_result = result if isinstance(result, dict) else {'error': str(result)}
                 return False
                 
         except Exception as e:
             self.logger.error(f"Error executing single action {action_name}: {e}")
             return False
 
-    def _update_action_context_from_response(self, action_name: str, response) -> None:
-        """
-        Update action context based on action execution response.
-        Used to pass data between actions in a plan.
-        """
-        if not response:
-            return
-            
-        # If response is a dictionary, merge it into action context
-        if isinstance(response, dict):
-            if not hasattr(self, 'action_context'):
-                self.action_context = {}
-            self.action_context.update(response)
-            
-            # Extract coordinates from location tuple if present
-            if 'location' in response and isinstance(response['location'], tuple) and len(response['location']) >= 2:
-                self.action_context['target_x'] = response['location'][0]
-                self.action_context['target_y'] = response['location'][1]
-                self.logger.info(f"Extracted coordinates from {action_name}: ({response['location'][0]}, {response['location'][1]})")
-            
-            # Log coordinate updates if present
-    
-    def _update_action_context_from_results(self, action_name: str, action_results: Dict) -> None:
-        """
-        Update action context based on action context results.
-        Used to pass data stored via context.set_result() between actions in a plan.
-        """
-        if not action_results:
-            return
-            
-        if not hasattr(self, 'action_context'):
-            self.action_context = {}
-        
-        # Merge action results into shared context
-        self.action_context.update(action_results)
-        self.logger.debug(f"Updated shared action context from {action_name} with {len(action_results)} items")
-        
-        # Log key data transfers for important actions
-        if action_name == 'analyze_equipment_gaps' and 'equipment_gap_analysis' in action_results:
-            gap_count = len(action_results['equipment_gap_analysis']) if action_results['equipment_gap_analysis'] else 0
-            self.logger.info(f"📊 Captured equipment gap analysis from {action_name}: {gap_count} slots analyzed")
-        elif action_name == 'select_optimal_slot' and 'target_equipment_slot' in action_results:
-            slot = action_results['target_equipment_slot']
-            self.logger.info(f"🎯 Captured slot selection from {action_name}: {slot}")
-        elif action_name == 'evaluate_recipes' and 'selected_item' in action_results:
-            item = action_results['selected_item']
-            self.logger.info(f"🔧 Captured recipe selection from {action_name}: {item}")
-            if 'target_x' in response and 'target_y' in response:
-                self.logger.info(f"Updated coordinates from {action_name}: ({response['target_x']}, {response['target_y']})")
         
     def is_plan_complete(self) -> bool:
         """
@@ -690,6 +712,71 @@ class AIPlayerController(StateManagerMixin):
         
     # create_world_with_planner and calculate_best_plan moved to GOAPExecutionManager
 
+    def _apply_computed_state_flags(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply computed state flags based on actual data values.
+        
+        This replaces the non-declarative state_mappings that were in YAML configuration,
+        implementing truly computed state based on data rather than configuration logic.
+        
+        Args:
+            state: Current state dictionary
+            
+        Returns:
+            State dictionary with computed boolean flags added
+        """
+        # Character status computed flags (using fresh character data for HP)
+        if 'character_status' in state:
+            char_status = state['character_status']
+            level = char_status.get('level', 1)
+            
+            # Get fresh HP data from character state for accurate calculation
+            current_hp = self.character_state.data.get('hp', 100)
+            max_hp = self.character_state.data.get('max_hp', 100)
+            
+            # Compute derived boolean flags using fresh HP data
+            char_status['hp_critically_low'] = is_hp_critically_low(current_hp, max_hp, 30.0)
+            char_status['hp_sufficient_for_combat'] = is_hp_sufficient_for_combat(current_hp, max_hp, 80.0)
+            char_status['is_low_level'] = level <= 5
+            char_status['safe'] = is_character_safe(current_hp, max_hp, 30.0)
+            
+        # Equipment status computed flags
+        if 'equipment_status' in state:
+            eq_status = state['equipment_status']
+            weapon = eq_status.get('weapon')
+            selected_item = eq_status.get('selected_item')
+            equipped = eq_status.get('equipped', False)
+            
+            # Compute derived boolean flags from data
+            eq_status['has_weapon'] = weapon is not None
+            eq_status['has_selected_item'] = selected_item is not None
+            eq_status['weapon_equipped'] = equipped
+            
+        # Combat context computed flags
+        if 'combat_context' in state:
+            combat = state['combat_context']
+            win_rate = combat.get('recent_win_rate', 1.0)
+            status = combat.get('status', 'idle')
+            
+            # Compute derived boolean flags from data
+            combat['has_recent_combat'] = win_rate > 0
+            combat['is_combat_viable'] = status != 'not_viable'
+            
+        # Goal progress computed flags
+        if 'goal_progress' in state:
+            progress = state['goal_progress']
+            monsters_hunted = progress.get('monsters_hunted', 0)
+            
+            # Compute derived boolean flags from data
+            progress['has_hunted_monsters'] = monsters_hunted > 0
+            
+            # XP percentage calculation from character status
+            if 'character_status' in state:
+                xp_pct = state['character_status'].get('xp_percentage', 0.0)
+                progress['has_gained_xp'] = xp_pct > 0
+            
+        return state
+
     def get_current_world_state(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
         Get the current world state for GOAP planning using configuration-driven state calculation.
@@ -719,15 +806,18 @@ class AIPlayerController(StateManagerMixin):
             for key, value in world_data.items():
                 # Handle nested state merging (e.g., goal_progress)
                 if isinstance(value, dict) and key in state and isinstance(state[key], dict):
-                    # Merge nested dictionaries - persistent values first, then calculated values override
-                    merged_state = value.copy()  # Start with persistent state
-                    merged_state.update(state[key])  # Let calculated state override persistent state
+                    # Merge nested dictionaries - calculated values first, then persistent values override
+                    merged_state = state[key].copy()  # Start with calculated state
+                    merged_state.update(value)  # Let persistent state override calculated state
                     state[key] = merged_state
                     self.logger.debug(f"Merged nested state for {key}: {state[key]}")
                 elif key not in state:
-                    # Only update if the key doesn't already exist in the calculated state
-                    # This allows calculated states to override persisted states when needed
+                    # Add any persisted state keys that don't exist in the calculated state
+                    # This preserves any additional state that actions may have added
                     state[key] = value
+        
+        # Apply computed state calculations (moved from YAML for declarative configuration)
+        state = self._apply_computed_state_flags(state)
         
         self.logger.debug(f"Current world state: {state}")
         return state
@@ -752,11 +842,7 @@ class AIPlayerController(StateManagerMixin):
         
         self.logger.debug(f"Updated world state with {len(state_updates)} changes")
 
-    # DEPRECATED: Use update_world_state() instead
-    # This method is replaced by the unified post-execution handler in ActionExecutor
-
     # load_actions_from_config and achieve_goal_with_goap moved to GOAPExecutionManager
-
     # hunt_until_level moved to MissionExecutor
 
 
@@ -840,7 +926,7 @@ class AIPlayerController(StateManagerMixin):
         """
         Find the nearest level-appropriate monster location and move the character there.
         
-        Now uses composite action execution for YAML-configurable monster search and movement.
+        Now uses GOAP action execution for configurable monster search and movement.
 
         Args:
             search_radius: The maximum radius to search for monsters (default: 10)
@@ -854,13 +940,13 @@ class AIPlayerController(StateManagerMixin):
             return False
 
         try:
-            action_data = {
-                'search_radius': search_radius,
-                'level_range': level_range
-            }
+            # ActionFactory will auto-load parameters from default_actions.yaml
+            # Set search parameters in context for the action to use
+            context = self._build_execution_context('find_and_move_to_monster')
+            context.set(StateParameters.SEARCH_RADIUS, search_radius)
+            context.set(StateParameters.LEVEL_RANGE, level_range)
             
-            context = self._build_execution_context(action_data, 'find_and_move_to_monster')
-            result = self.action_executor.execute_action('find_and_move_to_monster', action_data, self.client, context)
+            result = self.action_executor.execute_action('find_and_move_to_monster', self.client, context)
             
             return result.success
             
@@ -1030,7 +1116,7 @@ class AIPlayerController(StateManagerMixin):
         """
         Intelligent monster search that combines learned knowledge with exploration.
         
-        Now uses composite action execution for YAML-configurable intelligent search.
+        Now uses GOAP action execution for configurable intelligent search.
         
         Args:
             search_radius: Maximum radius to search
@@ -1042,9 +1128,12 @@ class AIPlayerController(StateManagerMixin):
             return False
             
         try:
-            action_data = {'search_radius': search_radius}
-            context = self._build_execution_context(action_data, 'intelligent_monster_search')
-            result = self.action_executor.execute_action('intelligent_monster_search', action_data, self.client, context)
+            # ActionFactory will auto-load parameters from default_actions.yaml
+            # Set search parameters in context for the action to use
+            context = self._build_execution_context('intelligent_monster_search')
+            context.set(StateParameters.SEARCH_RADIUS, search_radius)
+            
+            result = self.action_executor.execute_action('intelligent_monster_search', self.client, context)
             
             return result.success
             

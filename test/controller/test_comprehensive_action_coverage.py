@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from src.controller.action_executor import ActionExecutor, CompositeActionStep
+from src.controller.action_executor import ActionExecutor
 from src.controller.actions.base import ActionResult
 from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
@@ -163,23 +163,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         self.assertEqual(result.data['status'], 'ok')
         self.assertEqual(result.action_name, 'test_action')
         self.assertIsNone(result.error)
-        
-        # Test CompositeActionStep
-        step = CompositeActionStep(
-            name='test_step',
-            action='move',
-            required=True,
-            params={'x': 5, 'y': 10},
-            conditions={'character_alive': True},
-            on_failure='abort'
-        )
-        
-        self.assertEqual(step.name, 'test_step')
-        self.assertEqual(step.action, 'move')
-        self.assertTrue(step.required)
-        self.assertEqual(step.params['x'], 5)
-        self.assertEqual(step.conditions['character_alive'], True)
-        self.assertEqual(step.on_failure, 'abort')
 
     def test_action_executor_basic_functionality(self):
         """Test ActionExecutor basic functionality."""

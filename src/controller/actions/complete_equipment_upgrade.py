@@ -7,6 +7,8 @@ This bridge action completes the equipment upgrade process after the item has be
 from typing import Dict, Optional
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import MaterialStatus, EquipmentStatus
 
 from .base import ActionBase, ActionResult
 
@@ -26,7 +28,7 @@ class CompleteEquipmentUpgradeAction(ActionBase):
             'sufficient': True
         },
         'materials': {
-            'status': 'sufficient'
+            'status': MaterialStatus.SUFFICIENT
         },
         'character_status': {
             'alive': True
@@ -34,7 +36,7 @@ class CompleteEquipmentUpgradeAction(ActionBase):
     }
     reactions = {
         'equipment_status': {
-            'upgrade_status': 'completed',
+            'upgrade_status': EquipmentStatus.COMPLETED,
         },
     }
     weight = 3.0
@@ -51,27 +53,34 @@ class CompleteEquipmentUpgradeAction(ActionBase):
         without making any API calls.
         """
         self._context = context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
         
         try:
-            # Get equipped item information
-            equipment_status = context.get('equipment_status', {})
-            selected_item = equipment_status.get('selected_item', 'unknown')
-            target_slot = equipment_status.get('target_slot', 'unknown')
+            # Get equipped item information using StateParameters
+            selected_item = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM, 'unknown')
+            target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown')
             
             # Log the completion
             self.logger.info(
                 f"🎉 Equipment upgrade complete: {selected_item} equipped in {target_slot} slot"
             )
             
+            # Update ActionContext directly with completion status
+            context.set(StateParameters.EQUIPMENT_UPGRADE_STATUS, 'completed')
+            
             # This is a bridge action - it only updates state, no API calls needed
-            return self.create_success_result(
+            return self.create_result_with_state_changes(
+                success=True,
+                state_changes={
+                    'equipment_status': {
+                        'upgrade_status': 'completed',
+                        'equipped_item': selected_item,
+                        'target_slot': target_slot
+                    }
+                },
                 message=f"Equipment upgrade completed with {selected_item}",
-                equipment_upgrade_completed=True,
-                previous_status='ready',
-                new_status='completed',
                 equipped_item=selected_item,
                 target_slot=target_slot
             )

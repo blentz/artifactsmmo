@@ -12,6 +12,7 @@ from typing import Dict, List
 from src.controller.actions.base import ActionBase, ActionResult
 from src.game.globals import CONFIG_PREFIX
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 from src.lib.yaml_data import YamlData
 
 
@@ -84,9 +85,14 @@ class SelectOptimalSlotAction(ActionBase):
         """
         self._context = context
         
+        # Debug logging to understand context state
+        self.logger.debug(f"Context type: {type(context)}")
+        
         # Get required data from context
-        gap_analysis = context.get_parameter('equipment_gap_analysis')
-        target_skill = context.get_parameter('target_craft_skill')
+        gap_analysis = context.get(StateParameters.EQUIPMENT_GAP_ANALYSIS)
+        target_skill = context.get(StateParameters.TARGET_CRAFT_SKILL)
+        
+        self.logger.debug(f"Retrieved gap_analysis: {gap_analysis is not None}, target_skill: {target_skill}")
         
         # If no target skill specified, determine from character equipment priorities
         if not target_skill:
@@ -155,9 +161,9 @@ class SelectOptimalSlotAction(ActionBase):
         best_slot_data = slot_scores[0]
         
         # Store results in context for next action
-        context.set_result('target_equipment_slot', best_slot_data['slot_name'])
-        context.set_result('target_craft_skill', target_skill)  # Pass the skill forward
-        context.set_result('slot_selection_reasoning', {
+        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, best_slot_data['slot_name'])
+        context.set(StateParameters.TARGET_CRAFT_SKILL, target_skill)  # Pass the skill forward
+        context.set(StateParameters.SLOT_SELECTION_REASONING, {
             'selected_slot': best_slot_data['slot_name'],
             'target_skill': target_skill,
             'combined_score': best_slot_data['combined_score'],
@@ -179,8 +185,15 @@ class SelectOptimalSlotAction(ActionBase):
         self.logger.info(f"✅ Selected '{best_slot_data['slot_name']}' for {target_skill} crafting "
                         f"(score: {best_slot_data['combined_score']:.2f}, reason: {best_slot_data['urgency_reason']})")
         
-        return self.create_success_result(
-            f"Selected slot '{best_slot_data['slot_name']}' for {target_skill} crafting",
+        return self.create_result_with_state_changes(
+            success=True,
+            state_changes={
+                'equipment_status': {
+                    'has_target_slot': True,
+                    'target_slot': best_slot_data['slot_name']
+                }
+            },
+            message=f"Selected slot '{best_slot_data['slot_name']}' for {target_skill} crafting",
             selected_slot=best_slot_data['slot_name'],
             target_skill=target_skill,
             combined_score=best_slot_data['combined_score'],
@@ -239,7 +252,7 @@ class SelectOptimalSlotAction(ActionBase):
         Returns:
             Summary dictionary with selection details
         """
-        reasoning = context.get_parameter('slot_selection_reasoning', {})
+        reasoning = context.get(StateParameters.SLOT_SELECTION_REASONING, {})
         
         return {
             'selected_slot': reasoning.get('selected_slot'),

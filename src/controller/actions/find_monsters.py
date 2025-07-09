@@ -2,9 +2,9 @@
 
 from typing import Dict, List, Optional
 
-from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters_api
-
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import CombatStatus, CommonStatus
 
 from .base import ActionResult
 from .coordinate_mixin import CoordinateStandardizationMixin
@@ -17,7 +17,7 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
     # GOAP parameters - can be overridden by configuration
     conditions = {
             'combat_context': {
-                'status': 'searching',
+                'status': CombatStatus.SEARCHING,
             },
             'resource_availability': {
                 'monsters': False,
@@ -31,11 +31,9 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
                 'monsters': True,
             },
             'combat_context': {
-                'status': 'ready',
+                'status': CombatStatus.READY,
             },
-            'location_context': {
-                'at_target': True,
-            },
+            # location_context.at_target will be set dynamically based on whether movement is needed
         }
     weight = 2.0  # Medium-high priority for exploration
 
@@ -47,48 +45,45 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
 
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Find the nearest monster location using unified search algorithm """
-        # Get parameters from context
-        character_x = context.get('character_x', context.character_x)
-        character_y = context.get('character_y', context.character_y)
-        search_radius = context.get('search_radius', 3)
-        monster_types = context.get('monster_types', [])
-        character_level = context.get('character_level', context.character_level)
-        level_range = context.get('level_range', 2)
-        use_exponential_search = context.get('use_exponential_search', True)
-        max_search_radius = context.get('max_search_radius', 4)
-        
-        # Parameters will be passed directly to helper methods via context
+        # Get parameters from context using StateParameters - direct property access
+        character_x = context.get(StateParameters.CHARACTER_X, 0)
+        character_y = context.get(StateParameters.CHARACTER_Y, 0)
+        search_radius = context.get(StateParameters.SEARCH_RADIUS, 3)
+        target_monster = context.get(StateParameters.TARGET_MONSTER, [])
+        character_level = context.get(StateParameters.CHARACTER_LEVEL, 1)
+        level_range = context.get(StateParameters.LEVEL_RANGE, 2)
         
         self._context = context
         
-        # Validation is now handled by centralized ActionValidator
         if client is None:
             return self.create_error_result("No API client provided")
         
         try:
-            # Get target monster codes from API
-            target_codes = self._get_target_monster_codes(client, monster_types, character_level, level_range)
-            if not target_codes:
-                return self.create_error_result("No suitable monsters found matching criteria")
-
-            # Create monster filter using the unified search base
-            monster_filter = self.create_monster_filter(
-                monster_types=target_codes,
+            # Use knowledge base to find monsters from cached map data
+            knowledge_base = context.knowledge_base
+            map_state = context.map_state
+                
+            # Find monsters using knowledge base search on cached map data
+            found_monsters = knowledge_base.find_monsters_in_map(
+                map_state=map_state,
+                character_x=character_x,
+                character_y=character_y,
+                monster_types=target_monster,
                 character_level=character_level,
-                level_range=level_range
+                level_range=level_range,
+                max_radius=search_radius
             )
             
-            # Convert context to kwargs dict for helper methods
-            kwargs = dict(context) if hasattr(context, '__iter__') else {}
+            if not found_monsters:
+                return self.create_error_result(
+                    f"No suitable monsters found in cached map data within radius {search_radius}",
+                    max_radius_searched=search_radius,
+                    suggestion="Consider map exploration to discover more monsters"
+                )
             
-            # Ensure character_level is available for viability checks
-            if 'character_level' not in kwargs and character_level is not None:
-                kwargs['character_level'] = character_level
+            # Select the best monster using existing logic
+            result = self._select_best_monster_from_candidates(found_monsters, context)
             
-            # Collect all viable monsters across all search radii for smart selection
-            result = self._find_best_monster_target(client, monster_filter, target_codes, context)
-            
-            # If no viable monsters found, provide helpful error
             if not result:
                 return self.create_error_result(
                     f"No viable monsters found within radius {search_radius}",
@@ -101,9 +96,9 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         except Exception as e:
             return self.create_error_result(f"Monster search failed: {str(e)}")
     
-    def _find_best_monster_target(self, client, monster_filter, target_codes, context: ActionContext):
+    def _select_best_monster_from_candidates(self, found_monsters, context: ActionContext):
         """
-        Find the best monster target based on level priority, win rate, and distance.
+        Select the best monster from knowledge base candidates.
         
         Priority order:
         1. Lower level monsters (safer for character)
@@ -111,92 +106,155 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         3. Closer distance (efficiency)
         """
         # Extract parameters from context
-        search_radius = context.get('search_radius', 2)
         character_x = context.get('character_x', context.character_x)
         character_y = context.get('character_y', context.character_y)
         monster_types = context.get('monster_types', [])
         character_level = context.get('character_level', context.character_level)
         level_range = context.get('level_range', 2)
-        use_exponential_search = context.get('use_exponential_search', True)
+        search_radius = context.get('search_radius', 2)
         
         knowledge_base = context.knowledge_base
-        map_state = context.map_state
         action_config = context.get('action_config', {})
         viable_monsters = []
         
-        # Search all radii to collect viable monster candidates
-        for radius in range(0, search_radius + 1):
-            locations_at_radius = self._search_radius_for_content(client, character_x, character_y, radius, monster_filter, map_state)
+        # Get exclusion parameters from context
+        exclude_location = context.get('exclude_location')
+        
+        # Process each monster candidate from knowledge base
+        for monster_info in found_monsters:
+            x, y = monster_info['x'], monster_info['y']
+            monster_code = monster_info['monster_code']
+            monster_data = monster_info['monster_data']
+            distance = monster_info['distance']
             
-            for location, content_code, content_data in locations_at_radius:
-                x, y = location
-                distance = abs(x - character_x) + abs(y - character_y)  # Manhattan distance
-                
-                # Get monster level from knowledge base (with API fallback)
-                monster_data = knowledge_base.get_monster_data(content_code, client=client)
-                if not monster_data:
-                    # Knowledge base couldn't get data, skip this monster
-                    self.logger.warning(f"⚠️ Could not get data for {content_code}, skipping")
+            # Skip excluded location if specified
+            if exclude_location:
+                exclude_x, exclude_y = exclude_location
+                if x == exclude_x and y == exclude_y:
+                    self.logger.debug(f"⏭️ Skipping excluded location ({x}, {y}) with {monster_code}")
                     continue
-                
-                monster_level = monster_data.get('level', 1)
-                
-                # Check combat viability with known monster level
-                win_rate = self._get_monster_win_rate(content_code, knowledge_base, 
-                                                     action_config=action_config) if knowledge_base else None
-                
-                # Pass monster level for viability check
-                viability_context = {
-                    'monster_level': monster_level,
-                    'character_level': character_level,
-                    'monster_types': monster_types,
-                    'level_range': level_range
-                }
-                
-                if not self._is_combat_viable(content_code, win_rate, viability_context):
-                    continue  # Skip non-viable monsters
-                
-                # Store monster candidate with all selection criteria
-                monster_candidate = {
-                    'location': location,
-                    'content_code': content_code,
-                    'content_data': content_data,
-                    'distance': distance,
-                    'monster_level': monster_level,
-                    'win_rate': win_rate if win_rate is not None else 0.0,
-                    'x': x,
-                    'y': y
-                }
-                viable_monsters.append(monster_candidate)
+            
+            monster_level = monster_data.get('level', 1)
+            
+            # Check combat viability with known monster level
+            win_rate = self._get_monster_win_rate(monster_code, knowledge_base, 
+                                                 action_config=action_config) if knowledge_base else None
+            
+            # Pass monster level for viability check
+            viability_context = {
+                'monster_level': monster_level,
+                'character_level': character_level,
+                'monster_types': monster_types,
+                'level_range': level_range,
+                'knowledge_base': knowledge_base,
+                'action_config': action_config,
+                'character_state': getattr(context, 'character_state', None)
+            }
+            
+            if not self._is_combat_viable(monster_code, win_rate, viability_context):
+                continue  # Skip non-viable monsters
+            
+            # Store monster candidate with all selection criteria
+            monster_candidate = {
+                'location': (x, y),
+                'content_code': monster_code,
+                'content_data': monster_info['content_data'],
+                'distance': distance,
+                'monster_level': monster_level,
+                'win_rate': win_rate if win_rate is not None else 0.0,
+                'x': x,
+                'y': y
+            }
+            viable_monsters.append(monster_candidate)
         
         if not viable_monsters:
             return None
         
         # Select the best monster based on priority criteria
-        best_monster = self._select_best_monster(viable_monsters)
+        best_monster_result = self._select_best_monster(viable_monsters)
         
-        if best_monster:
-            x, y = best_monster['x'], best_monster['y']
-            content_code = best_monster['content_code']
-            distance = best_monster['distance']
-            win_rate = best_monster['win_rate']
-            monster_level = best_monster['monster_level']
+        if best_monster_result and best_monster_result.success:
+            # Extract data from ActionResult following ActionContext<->ActionResult pattern
+            x = best_monster_result.data['target_x']
+            y = best_monster_result.data['target_y']
+            content_code = best_monster_result.data['monster_code']
+            distance = best_monster_result.data['distance']
+            win_rate = best_monster_result.data['win_rate']
+            monster_level = best_monster_result.data['monster_level']
             
-            win_rate_str = f"{win_rate:.1%}" if win_rate > 0 else "unknown"
+            win_rate_str = f"{win_rate:.1%}" if win_rate > 0 else CommonStatus.UNKNOWN
             self.logger.info(f"🎯 Selected {content_code} (level {monster_level}) at ({x}, {y}) - distance: {distance:.1f}, win rate: {win_rate_str}")
             
-            # Create standardized coordinate response
-            coordinate_data = self.standardize_coordinate_output(x, y)
-            coordinate_data.update({
-                'distance': distance,
-                'monster_code': content_code,
-                'target_codes': target_codes,
-                'search_radius_used': search_radius,
-                'exponential_search_used': use_exponential_search,
-                'win_rate': win_rate
-            })
+            # Set coordinates directly on ActionContext for unified access
+            if hasattr(self, '_context') and self._context:
+                self._context.target_x = x
+                self._context.target_y = y
+                self._context.monster_code = content_code
+                self.logger.debug(f"Set target coordinates on ActionContext: ({x}, {y}) for {content_code}")
             
-            return self.create_success_result(**coordinate_data)
+            # Get fresh character position before checking movement needs
+            char_x = getattr(self._context, 'character_x', 0)
+            char_y = getattr(self._context, 'character_y', 0)
+            
+            # Refresh character position if possible
+            character_state = context.character_state
+            if character_state and hasattr(character_state, 'refresh'):
+                try:
+                    character_state.refresh()  # Get fresh position data
+                    if hasattr(character_state, 'data') and character_state.data:
+                        char_x = character_state.data.get('x', char_x)
+                        char_y = character_state.data.get('y', char_y)
+                        # Update context with fresh coordinates
+                        self._context.character_x = char_x
+                        self._context.character_y = char_y
+                        self.logger.debug(f"🔄 Refreshed character position for movement check: ({char_x}, {char_y})")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Failed to refresh character position: {e}")
+            
+            # Create base result
+            result = self.create_success_result(
+                distance=distance,
+                monster_code=content_code,
+                target_codes=[content_code],
+                search_radius_used=search_radius,
+                win_rate=win_rate,
+                found=True,
+                target_x=x,
+                target_y=y
+            )
+            
+            # Set reactions dynamically based on whether movement is needed
+            if char_x != x or char_y != y:
+                # Character needs to move - don't set at_target=True yet
+                self.logger.info(f"🚶 Character at ({char_x}, {char_y}) needs to move to monster at ({x}, {y})")
+                result.request_subgoal(
+                    goal_name="move_to_location",
+                    parameters={
+                        "target_x": x,
+                        "target_y": y
+                    },
+                    preserve_context=["monster_code", "target_x", "target_y"]
+                )
+                # Set state changes to indicate monsters found but movement needed
+                result.state_changes = {
+                    'resource_availability': {'monsters': True},
+                    'combat_context': {'status': 'ready'},
+                    # Don't set at_target=True since movement is needed
+                }
+            else:
+                # Character is already at monster location
+                self.logger.info(f"✅ Character already at monster location ({x}, {y})")
+                result.state_changes = {
+                    'resource_availability': {'monsters': True},
+                    'combat_context': {'status': 'ready'},
+                    'location_context': {'at_target': True},
+                }
+            
+            return result
+        else:
+            # Handle error case from _select_best_monster
+            if best_monster_result and not best_monster_result.success:
+                return best_monster_result  # Return the error ActionResult
         
         return None
     
@@ -208,7 +266,13 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
         1. Lowest level (safest)
         2. Highest win rate among same level
         3. Closest distance as tiebreaker
+        
+        Returns:
+            ActionResult: Success with monster data or error if no monsters
         """
+        if not viable_monsters:
+            return self.create_error_result("No viable monsters to select from")
+        
         # Sort by level (ascending), then win rate (descending), then distance (ascending)
         sorted_monsters = sorted(viable_monsters, key=lambda m: (
             m['monster_level'],      # Lower level = safer = better
@@ -223,41 +287,18 @@ class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):
             self.logger.debug(f"  {marker} {monster['content_code']} (lvl {monster['monster_level']}) "
                              f"- win rate: {monster['win_rate']:.1%}, distance: {monster['distance']:.1f}")
         
-        return best
+        # Return ActionResult with monster data following ActionContext<->ActionResult pattern
+        return self.create_success_result(
+            message=f"Selected {best['content_code']} (level {best['monster_level']}) at ({best['x']}, {best['y']})",
+            monster_code=best['content_code'],
+            target_x=best['x'],
+            target_y=best['y'],
+            distance=best['distance'],
+            win_rate=best['win_rate'],
+            monster_level=best['monster_level'],
+            location=best['location']
+        )
     
-    def _get_target_monster_codes(self, client, monster_types: List[str], character_level: int, level_range: int) -> List[str]:
-        """Get list of target monster codes based on filters."""
-        try:
-            monsters_response = get_all_monsters_api(client=client, size=100)
-            if not monsters_response or not monsters_response.data:
-                return []
-
-            target_codes = []
-            for monster in monsters_response.data:
-                # Check type filter if specified
-                type_match = True
-                if monster_types:
-                    name_match = any(monster_type.lower() in monster.name.lower()
-                                    for monster_type in monster_types)
-                    code_match = any(monster_type.lower() in monster.code.lower()
-                                    for monster_type in monster_types)
-                    type_match = name_match or code_match
-                
-                # Check level filter if specified
-                level_match = True
-                if character_level is not None and level_range is not None:
-                    monster_level = getattr(monster, 'level', 1)
-                    # Only fight monsters at or below character level + level_range
-                    # This ensures safety - prefer monsters at character level or below
-                    level_match = monster_level <= character_level + level_range
-                
-                if type_match and level_match:
-                    target_codes.append(monster.code)
-
-            return target_codes
-        except Exception as e:
-            self.logger.warning(f"Error getting target monster codes: {e}")
-            return []
     
     def _is_combat_viable(self, monster_code: str, win_rate: Optional[float], kwargs: Dict) -> bool:
         """Check if combat with this monster is viable based on weighted win rate and combat stats."""

@@ -4,17 +4,20 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.rest import RestAction
-
+from src.lib.state_parameters import StateParameters
 from test.fixtures import create_mock_client
+from test.test_base import UnifiedContextTestBase
 
 
-class TestRestAction(unittest.TestCase):
+class TestRestAction(UnifiedContextTestBase):
     """Test cases for RestAction class."""
 
     def setUp(self) -> None:
         """Set up test fixtures before each test method."""
+        super().setUp()
         self.char_name = "test_character"
         self.rest_action = RestAction()
+        self.context.set(StateParameters.CHARACTER_NAME, self.char_name)
 
     def test_rest_action_initialization(self):
         """Test RestAction initialization."""
@@ -46,9 +49,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Verify API was called correctly
         mock_rest_api.assert_called_once_with(name=self.char_name, client=mock_client)
@@ -75,9 +76,8 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action with previous HP info
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name, previous_hp=60)
-        result = self.rest_action.execute(mock_client, context)
+        self.context.set(StateParameters.CHARACTER_PREVIOUS_HP, 60)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Verify HP recovery was calculated
         self.assertEqual(result.data['hp_recovered'], 20)  # 80 - 60
@@ -98,9 +98,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Verify response shows low HP
         self.assertEqual(result.data['hp_percentage'], 25.0)
@@ -117,9 +115,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Should still return success with default values
         self.assertTrue(result.success)
@@ -140,9 +136,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Should still return success with default values
         self.assertTrue(result.success)
@@ -165,18 +159,14 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Should handle division by zero gracefully
         self.assertEqual(result.data['hp_percentage'], 0)
 
     def test_rest_action_execute_no_client(self):
         """Test executing rest action without client."""
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(None, context)
+        result = self.rest_action.execute(None, self.context)
         
         # Should return error
         self.assertFalse(result.success)
@@ -192,9 +182,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Should return error with cooldown flag
         self.assertFalse(result.success)
@@ -211,9 +199,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Should return appropriate error
         self.assertFalse(result.success)
@@ -229,9 +215,7 @@ class TestRestAction(unittest.TestCase):
         mock_client = create_mock_client()
         
         # Execute action
-        from test.fixtures import MockActionContext
-        context = MockActionContext(character_name=self.char_name)
-        result = self.rest_action.execute(mock_client, context)
+        result = self.rest_action.execute(mock_client, self.context)
         
         # Should return error with original message
         self.assertFalse(result.success)
@@ -240,10 +224,9 @@ class TestRestAction(unittest.TestCase):
     def test_rest_action_validate_no_character_name(self):
         """Test validation fails when character name is empty."""
         action = RestAction()
-        from test.fixtures import MockActionContext, create_mock_client
-        context = MockActionContext(character_name="")
+        self.context.character_name = ""
         mock_client = create_mock_client()
-        result = action.execute(mock_client, context)
+        result = action.execute(mock_client, self.context)
         self.assertFalse(result.success)
 
     def test_rest_action_class_attributes(self):

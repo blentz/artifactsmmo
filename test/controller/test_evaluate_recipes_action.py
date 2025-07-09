@@ -10,13 +10,16 @@ from src.controller.actions.evaluate_recipes import EvaluateRecipesAction
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from test.test_base import UnifiedContextTestBase
 
 
-class TestEvaluateRecipesAction(unittest.TestCase):
+class TestEvaluateRecipesAction(UnifiedContextTestBase):
     """Test suite for general-purpose recipe evaluation action"""
     
     def setUp(self):
         """Set up test fixtures"""
+        super().setUp()
         self.temp_dir = tempfile.mkdtemp()
         
         # Create action instance
@@ -25,9 +28,8 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         # Create mock states
         self.character_state = Mock(spec=CharacterState)
         self.map_state = Mock(spec=MapState)
-        self.action_context = ActionContext()
-        self.action_context.character_state = self.character_state
-        self.action_context.map_state = self.map_state
+        self.context.character_state = self.character_state
+        self.context.map_state = self.map_state
         self.mock_client = Mock()
         
         # Mock character data
@@ -50,11 +52,19 @@ class TestEvaluateRecipesAction(unittest.TestCase):
                 'jewelrycrafting': 1
             }
         }
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        
+        # Base class handles context cleanup
+        super().tearDown()
         
     def test_weapon_slot_evaluation(self):
         """Test evaluating recipes for weapon slot"""
         # Set target slot
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response
         mock_response = Mock()
@@ -68,18 +78,18 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertTrue(result.success)
-            self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'wooden_staff')
-            self.assertEqual(self.action_context.get_parameter('target_equipment_slot'), 'weapon')
-            self.assertEqual(self.action_context.get_parameter('required_craft_skill'), 'weaponcrafting')
-            self.assertEqual(self.action_context.get_parameter('required_workshop_type'), 'weaponcrafting_workshop')
+            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'wooden_staff')
+            self.assertEqual(self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+            self.assertEqual(self.context.get(StateParameters.REQUIRED_CRAFT_SKILL), 'weaponcrafting')
+            self.assertEqual(self.context.get(StateParameters.REQUIRED_WORKSHOP_TYPE), 'weaponcrafting_workshop')
             
     def test_armor_slot_evaluation(self):
         """Test evaluating recipes for armor slot"""
         # Set target slot
-        self.action_context.set_parameter('target_equipment_slot', 'body_armor')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'body_armor')
         
         # Mock API response
         mock_response = Mock()
@@ -92,19 +102,19 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             if not result.success:
                 print(f"Armor test failed with error: {result.error}")
             self.assertTrue(result.success)
-            self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'copper_armor')
-            self.assertEqual(self.action_context.get_parameter('required_craft_skill'), 'gearcrafting')
-            self.assertEqual(self.action_context.get_parameter('required_workshop_type'), 'gearcrafting_workshop')
+            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'copper_armor')
+            self.assertEqual(self.context.get(StateParameters.REQUIRED_CRAFT_SKILL), 'gearcrafting')
+            self.assertEqual(self.context.get(StateParameters.REQUIRED_WORKSHOP_TYPE), 'gearcrafting_workshop')
             
     def test_jewelry_slot_evaluation(self):
         """Test evaluating recipes for jewelry slot"""
         # Set target slot
-        self.action_context.set_parameter('target_equipment_slot', 'ring1')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'ring1')
         
         # Mock character with jewelry materials  
         self.character_state.data['inventory'].append({'code': 'copper_ore', 'quantity': 3})
@@ -120,30 +130,33 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
+            if not result.success:
+                print(f"Jewelry test failed with error: {result.error}")
+                print(f"Target slot: {self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT)}")
             self.assertTrue(result.success)
-            self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'copper_ring')
-            self.assertEqual(self.action_context.get_parameter('required_craft_skill'), 'jewelrycrafting')
-            self.assertEqual(self.action_context.get_parameter('required_workshop_type'), 'jewelrycrafting_workshop')
+            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'copper_ring')
+            self.assertEqual(self.context.get(StateParameters.REQUIRED_CRAFT_SKILL), 'jewelrycrafting')
+            self.assertEqual(self.context.get(StateParameters.REQUIRED_WORKSHOP_TYPE), 'jewelrycrafting_workshop')
             
     def test_no_target_slot_fails(self):
         """Test that missing target slot causes failure"""
-        result = self.action.execute(self.mock_client, self.action_context)
+        result = self.action.execute(self.mock_client, self.context)
         
         self.assertFalse(result.success)
         
     def test_unknown_slot_fails(self):
         """Test that unknown equipment slot causes failure"""
-        self.action_context.set_parameter('target_equipment_slot', 'unknown_slot')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown_slot')
         
-        result = self.action.execute(self.mock_client, self.action_context)
+        result = self.action.execute(self.mock_client, self.context)
         
         self.assertFalse(result.success)
         
     def test_no_craftable_recipes_fails(self):
         """Test that no craftable recipes causes failure"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response with no recipes
         mock_response = Mock()
@@ -152,13 +165,13 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertFalse(result.success)
             
     def test_insufficient_skill_level_filters_out(self):
         """Test that recipes requiring too high skill level are filtered out"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response with high-level recipe
         mock_response = Mock()
@@ -171,13 +184,13 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertFalse(result.success)  # No craftable recipes after filtering
             
     def test_material_availability_scoring(self):
         """Test that recipes with available materials score higher"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response with two recipes
         mock_response = Mock()
@@ -195,15 +208,15 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertTrue(result.success)
             # Should select the one with available materials
-            self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'wooden_staff')
+            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'wooden_staff')
             
     def test_stat_improvement_scoring(self):
         """Test that recipes with better stats score higher"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response with recipes having different stats
         mock_response = Mock()
@@ -221,15 +234,15 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertTrue(result.success)
             # Should select the one with better stats
-            self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'ash_staff')
+            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'ash_staff')
             
     def test_level_appropriateness_filtering(self):
         """Test that recipes too high level or too low level are filtered out"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         # Mock API response with inappropriate level recipes
         mock_response = Mock()
@@ -247,13 +260,13 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertFalse(result.success)  # All recipes filtered out
             
     def test_no_current_equipment_handles_gracefully(self):
         """Test that missing current equipment is handled gracefully"""
-        self.action_context.set_parameter('target_equipment_slot', 'helmet')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'helmet')
         
         # Remove current equipment
         self.character_state.data['equipment'] = {}
@@ -269,27 +282,27 @@ class TestEvaluateRecipesAction(unittest.TestCase):
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.return_value = mock_response
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertTrue(result.success)
-            self.assertEqual(self.action_context.get_parameter('selected_item_code'), 'copper_helmet')
+            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'copper_helmet')
             
     def test_api_error_handling(self):
         """Test that API errors are handled gracefully"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.side_effect = Exception("API Error")
             
-            result = self.action.execute(self.mock_client, self.action_context)
+            result = self.action.execute(self.mock_client, self.context)
             
             self.assertFalse(result.success)
             
     def test_no_api_client_fails(self):
         """Test that missing API client causes failure"""
-        self.action_context.set_parameter('target_equipment_slot', 'weapon')
+        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
         
-        result = self.action.execute(None, self.action_context)
+        result = self.action.execute(None, self.context)
         
         self.assertFalse(result.success)
         

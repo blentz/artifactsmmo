@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.scan import ScanAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestScanAction(unittest.TestCase):
@@ -50,8 +51,9 @@ class TestScanAction(unittest.TestCase):
         mock_get_map.side_effect = [mock_map_response1, mock_map_response2, mock_map_response3] * 10
         
         # Create context
-        context = ActionContext(character_name="test_char")
-        context['search_radius'] = 1
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.SEARCH_RADIUS, 1)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -69,7 +71,8 @@ class TestScanAction(unittest.TestCase):
         mock_get_char.return_value = None
         
         # Create context
-        context = ActionContext(character_name="test_char")
+        context = ActionContext()
+        context.character_name = "test_char"
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -94,8 +97,9 @@ class TestScanAction(unittest.TestCase):
         mock_get_map.side_effect = Exception("API error")
         
         # Create context
-        context = ActionContext(character_name="test_char")
-        context['search_radius'] = 1
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.SEARCH_RADIUS, 1)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

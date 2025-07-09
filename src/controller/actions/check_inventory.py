@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -42,7 +43,7 @@ class CheckInventoryAction(ActionBase):
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Check inventory for required items and update world state """
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         required_items = context.get('required_items', [])
         
         # Handle both single string and list formats for required_items

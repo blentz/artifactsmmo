@@ -47,6 +47,52 @@ class TestGatherResourcesAction(unittest.TestCase):
         # Repr is now simplified
         expected = "GatherResourcesAction()"
         self.assertEqual(repr(self.action), expected)
+    
+    @patch('src.controller.actions.gather_resources.get_map_api')
+    @patch('src.controller.actions.gather_resources.gathering_api')
+    @patch('src.controller.actions.gather_resources.get_resource_api')
+    def test_execute_with_no_position_uses_character_cache(self, mock_get_resource, mock_gathering, mock_get_map):
+        """Test execute uses character cache when position not provided."""
+        # Create context without character position
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_resource=self.target_resource,
+            character_x=None,  # No position provided
+            character_y=None
+        )
+        
+        # Mock map response
+        mock_map_data = Mock()
+        mock_map_data.content = Mock()
+        mock_map_data.content.code = 'copper'  # Changed to match resource code
+        mock_map_response = Mock()
+        mock_map_response.data = mock_map_data
+        mock_get_map.return_value = mock_map_response
+        
+        # Mock resource API
+        mock_resource_data = Mock()
+        mock_resource_data.name = 'Copper Rocks'
+        mock_resource_response = Mock()
+        mock_resource_response.data = mock_resource_data
+        mock_get_resource.return_value = mock_resource_response
+        
+        # Mock successful gather with proper structure
+        mock_skill_data = Mock(spec=[])  # spec=[] prevents iteration errors
+        mock_skill_data.xp = 10
+        mock_skill_data.skill = 'mining'
+        mock_gathering.return_value = Mock(data=mock_skill_data)
+        
+        # Add character cache to client
+        self.mock_client._character_cache = self.mock_character_response
+        
+        result = self.action.execute(self.mock_client, context)
+        
+        # Should use position from character cache
+        if not result.success:
+            print(f"Error: {result.error}")
+            print(f"Data: {result.data}")
+        self.assertTrue(result.success)
+        mock_get_map.assert_called_once_with(x=5, y=3, client=self.mock_client)
 
     def test_gather_resources_action_repr_no_target(self):
         """Test GatherResourcesAction string representation without target."""

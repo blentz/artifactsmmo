@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 
 from src.controller.actions.base import ActionBase, ActionResult
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class VerifySkillRequirementsAction(ActionBase):
@@ -60,7 +61,7 @@ class VerifySkillRequirementsAction(ActionBase):
         """
         self._context = context
         
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         selected_item = context.get('selected_item')
         selected_recipe = context.get('selected_recipe', {})
         
@@ -119,8 +120,18 @@ class VerifySkillRequirementsAction(ActionBase):
                 'shortfall': max(0, required_level - current_level)
             })
             
-            return self.create_success_result(
-                f"Skill verification completed: {required_skill} {current_level}/{required_level}",
+            # Define state changes based on skill verification
+            state_changes = {
+                'skill_requirements': {
+                    'verified': True,
+                    'sufficient': skill_sufficient
+                }
+            }
+            
+            return self.create_result_with_state_changes(
+                success=True,
+                state_changes=state_changes,
+                message=f"Skill verification completed: {required_skill} {current_level}/{required_level}",
                 required_skill=required_skill,
                 required_level=required_level,
                 current_level=current_level,

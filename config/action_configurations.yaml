@@ -47,7 +47,7 @@ action_classes:
   equip_item: "src.controller.actions.equip_item.EquipItemAction"
   unequip_item: "src.controller.actions.unequip_item.UnequipItemAction"
   explore_map: "src.controller.actions.explore_map.ExploreMapAction"
-  analyze_resources: "src.controller.actions.analyze_resources.AnalyzeResourcesAction"
+  analyze_nearby_resources: "src.controller.actions.analyze_nearby_resources.AnalyzeNearbyResourcesAction"
   find_workshops: "src.controller.actions.find_workshops.FindWorkshopsAction"
   move_to_workshop: "src.controller.actions.move_to_workshop.MoveToWorkshopAction"
   move_to_resource: "src.controller.actions.move_to_resource.MoveToResourceAction"
@@ -70,6 +70,13 @@ action_classes:
   find_xp_sources: "src.controller.actions.find_xp_sources.FindXpSourcesAction"
   determine_material_requirements: "src.controller.actions.determine_material_requirements.DetermineMaterialRequirementsAction"
   check_material_availability: "src.controller.actions.check_material_availability.CheckMaterialAvailabilityAction"
+  determine_material_insufficiency: "src.controller.actions.determine_material_insufficiency.DetermineMaterialInsufficencyAction"
+  calculate_material_quantities: "src.controller.actions.calculate_material_quantities.CalculateMaterialQuantitiesAction"
+  gather_resource_quantity: "src.controller.actions.gather_resource_quantity.GatherResourceQuantityAction"
+  gather_missing_materials: "src.controller.actions.gather_missing_materials.GatherMissingMaterialsAction"
+  gather_materials: "src.controller.actions.gather_missing_materials.GatherMissingMaterialsAction"  # Alias
+  check_gathering_complete: "src.controller.actions.check_gathering_complete.CheckGatheringCompleteAction"
+  check_gathering: "src.controller.actions.check_gathering_complete.CheckGatheringCompleteAction"  # Alias
   verify_skill_requirements: "src.controller.actions.verify_skill_requirements.VerifySkillRequirementsAction"
 
 action_configurations:
@@ -89,6 +96,35 @@ action_configurations:
   check_material_availability:
     type: "builtin"
     description: "Check if required materials are available in inventory"
+    
+  determine_material_insufficiency:
+    type: "builtin"
+    description: "Determine that required materials are insufficient and need gathering"
+    
+  calculate_material_quantities:
+    type: "builtin"
+    description: "Calculate total quantities of raw materials needed for crafting chain"
+    
+  gather_resource_quantity:
+    type: "builtin"
+    description: "Gather specific quantity of resources to meet crafting needs"
+    
+    
+  gather_missing_materials:
+    type: "builtin"
+    description: "Gather materials when they are determined to be insufficient"
+    
+  check_gathering_complete:
+    type: "builtin"
+    description: "Check if material gathering is complete and re-verify availability"
+    
+  gather_materials:
+    type: "builtin"
+    description: "Gather materials when they are determined to be insufficient (alias for gather_missing_materials)"
+    
+  check_gathering:
+    type: "builtin"
+    description: "Check if material gathering is complete (alias for check_gathering_complete)"
     
   verify_skill_requirements:
     type: "builtin"
@@ -196,9 +232,9 @@ action_configurations:
     type: "builtin"
     description: "Explore the map to discover content"
     
-  analyze_resources:
+  analyze_nearby_resources:
     type: "builtin"
-    description: "Analyze nearby resources for crafting opportunities"
+    description: "Analyze nearby resources for crafting opportunities using simplified base class approach"
     
   analyze_equipment_gaps:
     type: "builtin"
@@ -352,446 +388,7 @@ parameter_mappings:
     item_code: "copper"
     quantity: 1
     
-# Composite action definitions
-composite_actions:
-  hunt:
-    description: "Complete hunting workflow"
-    steps:
-      - name: "find_target"
-        action: "find_monsters"
-        required: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          use_intelligent_search: true
-          
-      - name: "engage_target"  
-        action: "attack"
-        required: true
-        conditions:
-          monster_found: true
-        on_failure: "abort"
-        
-      - name: "recover_if_needed"
-        action: "rest"
-        required: false
-        conditions:
-          hp_low: true
-        params:
-          force_rest: false
-
-  find_and_move_to_monster:
-    description: "Find level-appropriate monster and move to its location"
-    steps:
-      - name: "search_monsters"
-        action: "find_monsters"
-        required: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          level_range: "${action_data.level_range:2}"
-          character_level: "${context.character_level}"
-          character_x: "${context.character_x}"
-          character_y: "${context.character_y}"
-          
-      - name: "move_to_monster"
-        action: "move"
-        required: true
-        conditions:
-          monster_found: true
-        params:
-          char_name: "${context.character_name}"
-          use_target_coordinates: true
-        on_failure: "abort"
-
-  craft_weapon_chain:
-    description: "Complete weapon crafting workflow with material smelting"
-    steps:
-      - name: "gather_additional_ore"
-        action: "gather_resources"
-        required: true
-        params:
-          character_name: "${context.character_name}"
-          target_resource: "copper_ore"
-        conditions:
-          need_more_ore: true
-          
-      - name: "smelt_copper"
-        action: "craft_item"
-        required: true
-        params:
-          character_name: "${context.character_name}"
-          item_code: "copper"
-          quantity: 1
-        conditions:
-          has_enough_ore: true
-          
-      - name: "craft_weapon"
-        action: "craft_item"  
-        required: true
-        params:
-          character_name: "${context.character_name}"
-          item_code: "${context.recipe_item_code}"
-          quantity: 1
-        conditions:
-          has_copper: true
-          
-      - name: "equip_weapon"
-        action: "equip_item"
-        required: true
-        params:
-          character_name: "${context.character_name}" 
-          item_code: "${context.recipe_item_code}"
-          slot: "weapon"
-        conditions:
-          weapon_crafted: true
-
-  intelligent_monster_search:
-    description: "Search for monsters using learned knowledge with exploration fallback"
-    steps:
-      - name: "check_known_monsters"
-        action: "find_monsters"
-        required: false
-        params:
-          use_knowledge_base: true
-          search_radius: "${action_data.search_radius:5}"
-          character_level: "${context.character_level}"
-          
-      - name: "move_to_known_location"
-        action: "move"
-        required: false
-        conditions:
-          known_monster_found: true
-        params:
-          char_name: "${context.character_name}"
-          use_target_coordinates: true
-          
-      - name: "fallback_exploration"
-        action: "find_and_move_to_monster"
-        required: true
-        conditions:
-          known_monster_found: false
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          
-  # Equipment progression composite workflows
-  upgrade_weapon_workflow:
-    type: "composite"
-    description: "Complete weapon upgrade workflow: analyze, gather, craft, equip"
-    steps:
-      - name: "analyze_equipment_needs"
-        action: "analyze_resources"
-        required: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          equipment_type: "weapon"
-          character_level: "${context.character_level}"
-          
-      - name: "discover_workshops"
-        action: "find_workshops"
-        required: true
-        conditions:
-          workshops_needed: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          
-      - name: "gather_materials"
-        action: "gather_crafting_materials"
-        required: true
-        conditions:
-          materials_needed: true
-        params:
-          target_item_type: "weapon"
-          search_radius: "${action_data.search_radius:5}"
-          
-      - name: "move_to_workshop"
-        action: "move_to_workshop"
-        required: true
-        conditions:
-          materials_ready: true
-        params:
-          workshop_type: "weaponcrafting"
-          
-      - name: "craft_weapon"
-        action: "craft_item"
-        required: true
-        conditions:
-          at_workshop: true
-        params:
-          char_name: "${context.character_name}"
-          item_code: "${action_data.target_weapon}"
-          quantity: 1
-          
-      - name: "equip_weapon"
-        action: "equip_item"
-        required: true
-        conditions:
-          weapon_crafted: true
-        params:
-          char_name: "${context.character_name}"
-          item_code: "${action_data.target_weapon}"
-          slot: "weapon"
-          
-  upgrade_armor_workflow:
-    type: "composite"
-    description: "Complete armor upgrade workflow: analyze, gather, craft, equip"
-    steps:
-      - name: "analyze_equipment_needs"
-        action: "analyze_resources"
-        required: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          equipment_type: "armor"
-          character_level: "${context.character_level}"
-          
-      - name: "discover_workshops"
-        action: "find_workshops"
-        required: true
-        conditions:
-          workshops_needed: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          
-      - name: "gather_materials"
-        action: "gather_crafting_materials"
-        required: true
-        conditions:
-          materials_needed: true
-        params:
-          target_item_type: "armor"
-          search_radius: "${action_data.search_radius:5}"
-          
-      - name: "move_to_workshop"
-        action: "move_to_workshop"
-        required: true
-        conditions:
-          materials_ready: true
-        params:
-          workshop_type: "gearcrafting"
-          
-      - name: "craft_armor"
-        action: "craft_item"
-        required: true
-        conditions:
-          at_workshop: true
-        params:
-          char_name: "${context.character_name}"
-          item_code: "${action_data.target_armor}"
-          quantity: 1
-          
-      - name: "equip_armor"
-        action: "equip_item"
-        required: true
-        conditions:
-          armor_crafted: true
-        params:
-          char_name: "${context.character_name}"
-          item_code: "${action_data.target_armor}"
-          slot: "${action_data.target_slot}"
-          
-  upgrade_weapon:
-    type: "composite"
-    description: "Complete weapon upgrade workflow: evaluate recipes, gather materials, craft, and equip"
-    steps:
-      - name: "check_inventory"
-        action: "check_inventory"
-        required: true
-        params:
-          character_name: "${context.character_name}"
-          
-      - name: "evaluate_weapon_recipes"
-        action: "evaluate_weapon_recipes"
-        required: true
-        params:
-          character_name: "${context.character_name}"
-          current_weapon: "${context.weapon_slot}"
-          character_level: "${context.character_level}"
-          
-      - name: "check_workshops"
-        action: "find_correct_workshop"
-        required: true
-        conditions:
-          selected_weapon: true
-        params:
-          workshop_type: "weaponcrafting"
-          item_code: "${action_result.selected_weapon}"
-          
-      - name: "gather_materials"
-        action: "gather_crafting_materials"
-        required: true
-        conditions:
-          materials_needed: true
-        params:
-          target_item_type: "${action_result.selected_weapon}"
-          required_materials: "${action_result.required_materials}"
-          
-      - name: "move_to_workshop"
-        action: "move"
-        required: true
-        conditions:
-          workshop_location_known: true
-        params:
-          use_target_coordinates: true
-          
-      - name: "craft_weapon"
-        action: "craft_item"
-        required: true
-        conditions:
-          at_workshop: true
-        params:
-          character_name: "${context.character_name}"
-          item_code: "${action_result.selected_weapon}"
-          
-      - name: "equip_weapon"
-        action: "equip_item"
-        required: true
-        conditions:
-          weapon_crafted: true
-        params:
-          character_name: "${context.character_name}"
-          item_code: "${action_result.selected_weapon}"
-          slot: "weapon"
-
-  gather_crafting_materials:
-    type: "composite"
-    description: "Gather materials needed for equipment crafting"
-    steps:
-      - name: "lookup_recipe"
-        action: "lookup_item_info"
-        required: true
-        params:
-          item_code: "${action_data.target_item_type}"
-          
-      - name: "find_material_sources"
-        action: "find_resources"
-        required: true
-        conditions:
-          recipe_known: true
-        params:
-          resource_types: "${action_data.required_materials}"
-          search_radius: "${action_data.search_radius:5}"
-          character_level: "${context.character_level}"
-          
-      - name: "move_to_resources"
-        action: "move"
-        required: true
-        conditions:
-          resource_found: true
-        params:
-          char_name: "${context.character_name}"
-          use_target_coordinates: true
-          
-      - name: "gather_materials"
-        action: "gather_resources"
-        required: true
-        conditions:
-          at_resource_location: true
-        params:
-          character_name: "${context.character_name}"
-          target_resource: "${action_data.material_type}"
-
-  # Complete equipment progression workflow
-  bootstrap_equipment_workflow:
-    type: "composite"
-    description: "Complete bootstrap workflow for new characters: discover → gather → craft → equip"
-    steps:
-      - name: "discover_workshops"
-        action: "find_workshops"
-        required: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          workshop_type: "any"
-          
-      - name: "analyze_equipment_needs"
-        action: "analyze_resources"
-        required: true
-        conditions:
-          workshops_discovered: true
-        params:
-          search_radius: "${action_data.search_radius:5}"
-          equipment_focus: true
-          character_level: "${context.character_level}"
-          
-      - name: "gather_weapon_materials"
-        action: "gather_crafting_materials"
-        required: true
-        conditions:
-          equipment_analysis_available: true
-        params:
-          target_item_type: "weapon"
-          priority_materials: ["copper", "ash_wood"]
-          search_radius: "${action_data.search_radius:5}"
-          
-      - name: "craft_weapon"
-        action: "upgrade_weapon_workflow"
-        required: true
-        conditions:
-          has_crafting_materials: true
-        params:
-          target_weapon_level: "${context.character_level}"
-          
-      - name: "gather_armor_materials"
-        action: "gather_crafting_materials"
-        required: false
-        conditions:
-          weapon_crafted: true
-        params:
-          target_item_type: "armor"
-          priority_materials: ["copper", "ash_wood"]
-          
-      - name: "craft_armor"
-        action: "upgrade_armor_workflow"
-        required: false
-        conditions:
-          has_armor_materials: true
-        params:
-          target_armor_level: "${context.character_level}"
-          
-  # Simplified equipment upgrade workflows for individual pieces
-  basic_weapon_upgrade:
-    type: "composite"
-    description: "Simplified weapon upgrade for level 2-3 characters"
-    steps:
-      - name: "find_workshops"
-        action: "find_workshops"
-        required: true
-        params:
-          workshop_type: "weaponcrafting"
-          search_radius: 5
-          
-      - name: "gather_basic_materials"
-        action: "find_resources"
-        required: true
-        conditions:
-          workshops_discovered: true
-        params:
-          resource_types: ["copper", "ash_wood"]
-          search_radius: 5
-          
-      - name: "collect_materials"
-        action: "gather_resources"
-        required: true
-        conditions:
-          resource_location_known: true
-        params:
-          char_name: "${context.character_name}"
-          
-      - name: "move_to_weaponcrafting"
-        action: "move_to_workshop"
-        required: true
-        conditions:
-          has_resources: true
-        params:
-          workshop_type: "weaponcrafting"
-          
-      - name: "craft_weapon"
-        action: "craft_item"
-        required: true
-        conditions:
-          at_workshop: true
-        params:
-          char_name: "${context.character_name}"
-          item_code: "copper_dagger"  # Basic weapon for level 2
-
-# Configuration for analyze_resources action priorities
+# Configuration for analyze_resources action priorities  
 # These priorities are used when evaluating equipment crafting opportunities
 resource_analysis_priorities:
   equipment_type_priorities:
@@ -924,3 +521,24 @@ action_configurations:
     type: "yaml_defined"
     class_path: "src.controller.actions.reset_equipment_upgrade.ResetEquipmentUpgradeAction"
     description: "Reset equipment upgrade for new cycle"
+  
+  # Healing Flow Bridge Actions
+  assess_healing_needs:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.assess_healing_needs.AssessHealingNeedsAction"
+    description: "Assess if character needs healing"
+  
+  initiate_healing:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.initiate_healing.InitiateHealingAction"
+    description: "Initiate healing process"
+  
+  complete_healing:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.complete_healing.CompleteHealingAction"
+    description: "Complete healing process and set healing_status to complete"
+  
+  reset_healing_state:
+    type: "yaml_defined"
+    class_path: "src.controller.actions.reset_healing_state.ResetHealingStateAction"
+    description: "Reset healing state for new cycle"

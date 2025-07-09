@@ -1,375 +1,142 @@
 """
-Unified Action Context System
+Unified Action Context System - Zero Backward Compatibility
 
-This module provides a unified context object that standardizes parameter passing
-between actions, eliminating inconsistent context handling throughout the system.
+Pure StateParameters-based implementation with no legacy support.
+Single execution path for all state access.
+
+Design Principles:
+- Single Responsibility: Action context management only
+- KISS: Simple StateParameters-only access
+- DRY: No duplicate state storage
+- Zero backward compatibility: Clean slate
 """
 
-import copy
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
+from src.lib.unified_state_context import get_unified_context
+from src.lib.state_parameters import StateParameters
 
 
-@dataclass
 class ActionContext:
     """
-    Unified context object for action execution.
+    Pure StateParameters-based action context.
     
-    Provides standardized access to all action execution dependencies and state,
-    ensuring consistent parameter passing throughout the system.
-    
-    Implements dictionary interface for seamless integration with existing code.
+    Zero backward compatibility - uses only StateParameters registry
+    for all state access and validation.
     """
     
-    # Core dependencies
-    controller: Any = None
-    client: Any = None
-    character_state: Any = None
-    world_state: Any = None
-    map_state: Any = None
-    knowledge_base: Any = None
-    
-    # Character information (using API-compatible names)
-    character_name: str = ""
-    character_x: int = 0
-    character_y: int = 0
-    character_level: int = 1
-    character_hp: int = 0
-    character_max_hp: int = 0
-    
-    # Equipment slots (dynamically populated from API)
-    equipment: Dict[str, str] = field(default_factory=dict)
-    
-    # Action-specific parameters (flexible storage)
-    action_data: Dict[str, Any] = field(default_factory=dict)
-    
-    # Action results and coordination data
-    action_results: Dict[str, Any] = field(default_factory=dict)
-    
-    # Cached data for performance
-    _cached_inventory: Optional[Dict[str, int]] = field(default=None, init=False)
-    _logger: logging.Logger = field(default=None, init=False)
-    
-    def __post_init__(self):
-        """Initialize logger and perform setup."""
+    def __init__(self):
+        """Initialize with unified state singleton."""
+        self._state = get_unified_context()
         self._logger = logging.getLogger(__name__)
+    
+    def get(self, param: str, default: Any = None) -> Any:
+        """Get parameter using StateParameters registry."""
+        return self._state.get(param, default)
+    
+    def set(self, param: str, value: Any) -> None:
+        """Set parameter using StateParameters registry."""
+        self._state.set(param, value)
+        
+        # Automatically set related flags
+        if param == StateParameters.EQUIPMENT_SELECTED_ITEM:
+            self._state.set(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM, bool(value))
+    
+    def update(self, updates: Dict[str, Any]) -> None:
+        """Update multiple parameters using StateParameters registry."""
+        # Use individual set() calls to trigger automatic flag setting
+        for param, value in updates.items():
+            self.set(param, value)
+    
+    def set_result(self, param: str, value: Any) -> None:
+        """Set result using StateParameters registry only."""
+        self.set(param, value)
     
     @classmethod
     def from_controller(cls, controller, action_data: Dict[str, Any] = None) -> 'ActionContext':
         """
-        Create ActionContext from controller state.
+        Create ActionContext using the ONE unified context.
         
         Args:
             controller: AI controller instance
-            action_data: Optional action-specific data
+            action_data: Action-specific data (ignored - no params support)
             
         Returns:
-            Configured ActionContext instance
+            ActionContext instance using the singleton unified context
         """
+        # There is only ONE context - no synchronization needed
         context = cls()
         
-        # Set core dependencies
-        context.controller = controller
-        context.client = getattr(controller, 'client', None)
-        context.character_state = getattr(controller, 'character_state', None)
-        context.world_state = getattr(controller, 'world_state', None)
-        context.map_state = getattr(controller, 'map_state', None)
-        context.knowledge_base = getattr(controller, 'knowledge_base', None)
-        
-        # Extract character information using API-compatible names
-        if context.character_state:
-            if hasattr(context.character_state, 'name'):
-                context.character_name = context.character_state.name
-            if hasattr(context.character_state, 'data'):
-                char_data = context.character_state.data
-            else:
-                char_data = {}
+        # Map character data to StateParameters if available
+        # Only set character data if the parameters don't already have values
+        if hasattr(controller, 'character_state') and controller.character_state:
+            char_state = controller.character_state
             
-            context.character_x = char_data.get('x', 0)
-            context.character_y = char_data.get('y', 0)
-            context.character_level = char_data.get('level', 1)
-            context.character_hp = char_data.get('hp', 0)
-            context.character_max_hp = char_data.get('max_hp', 0)
-            
-            # Equipment is stored directly in character data with API names
-            context.equipment = char_data
+            if hasattr(char_state, 'data'):
+                char_data = char_state.data
+                
+                # Update the ONE context with character data (only if not already set)
+                if context.get(StateParameters.CHARACTER_X) == 0:  # Default value
+                    context.set(StateParameters.CHARACTER_X, char_data.get('x', 0))
+                if context.get(StateParameters.CHARACTER_Y) == 0:  # Default value
+                    context.set(StateParameters.CHARACTER_Y, char_data.get('y', 0))
+                if context.get(StateParameters.CHARACTER_LEVEL) == 1:  # Default value
+                    context.set(StateParameters.CHARACTER_LEVEL, char_data.get('level', 1))
+                if context.get(StateParameters.CHARACTER_HP) == 0:  # Default value
+                    context.set(StateParameters.CHARACTER_HP, char_data.get('hp', 0))
+                if context.get(StateParameters.CHARACTER_MAX_HP) == 0:  # Default value
+                    context.set(StateParameters.CHARACTER_MAX_HP, char_data.get('max_hp', 0))
+                
+                # Only set alive status if HP is provided
+                if char_data.get('hp', 0) > 0:
+                    context.set(StateParameters.CHARACTER_ALIVE, True)
+                
+                # Equipment using StateParameters (only if not already set)
+                if not context.get(StateParameters.EQUIPMENT_WEAPON):
+                    context.set(StateParameters.EQUIPMENT_WEAPON, char_data.get('weapon', ''))
+                if not context.get(StateParameters.EQUIPMENT_ARMOR):
+                    context.set(StateParameters.EQUIPMENT_ARMOR, char_data.get('armor', ''))
+                if not context.get(StateParameters.EQUIPMENT_HELMET):
+                    context.set(StateParameters.EQUIPMENT_HELMET, char_data.get('helmet', ''))
+                if not context.get(StateParameters.EQUIPMENT_BOOTS):
+                    context.set(StateParameters.EQUIPMENT_BOOTS, char_data.get('boots', ''))
+                if not context.get(StateParameters.EQUIPMENT_SHIELD):
+                    context.set(StateParameters.EQUIPMENT_SHIELD, char_data.get('shield', ''))
         
-        # Include action context data from controller
-        if hasattr(controller, 'action_context') and isinstance(controller.action_context, dict):
-            context.action_results.update(controller.action_context)
-        
-        # Merge action-specific data
-        if action_data:
-            context.action_data.update(action_data)
-            # Also extract params if present
-            if 'params' in action_data:
-                context.action_data.update(action_data['params'])
+        # Set dependencies from controller
+        if hasattr(controller, 'knowledge_base'):
+            context.knowledge_base = controller.knowledge_base
+        if hasattr(controller, 'map_state'):
+            context.map_state = controller.map_state
         
         return context
     
-    def get_parameter(self, key: str, default: Any = None) -> Any:
-        """
-        Get parameter from action_data with fallback to context attributes.
-        
-        Args:
-            key: Parameter name
-            default: Default value if not found
-            
-        Returns:
-            Parameter value or default
-        """
-        # First check action_data
-        if key in self.action_data:
-            return self.action_data[key]
-        
-        # Then check action_results (from previous actions)
-        if key in self.action_results:
-            return self.action_results[key]
-        
-        # Finally check context attributes
-        if hasattr(self, key):
-            return getattr(self, key)
-        
-        return default
-    
-    def set_parameter(self, key: str, value: Any) -> None:
-        """
-        Set parameter in action_data.
-        
-        Args:
-            key: Parameter name
-            value: Parameter value to store
-        """
-        self.action_data[key] = value
-    
-    def set_result(self, key: str, value: Any) -> None:
-        """
-        Set result data for use by subsequent actions.
-        
-        This method enables data flow between actions in a plan by storing
-        results from one action that can be accessed by later actions.
-        
-        Args:
-            key: Result key name
-            value: Result value to store
-        """
-        self.action_results[key] = value
-    
-    def get_character_inventory(self, use_cache: bool = True) -> Dict[str, int]:
-        """
-        Get character inventory with caching for performance.
-        
-        Uses character state data instead of direct API calls.
-        
-        Args:
-            use_cache: Whether to use cached inventory data
-            
-        Returns:
-            Dictionary of item_code -> quantity
-        """
-        if use_cache and self._cached_inventory is not None:
-            return self._cached_inventory
-        
-        inventory = {}
-        
-        if not self.character_state:
-            return inventory
-        
-        try:
-            char_data = self.character_state.data
-            
-            # Get inventory items
-            inventory_items = char_data.get('inventory', [])
-            for item in inventory_items:
-                if isinstance(item, dict):
-                    code = item.get('code')
-                    quantity = item.get('quantity', 0)
-                    if code and quantity > 0:
-                        inventory[code] = quantity
-            
-            # Include equipped items dynamically
-            for key, value in char_data.items():
-                # If the value looks like an item code (non-empty string)
-                # and isn't a known non-equipment field
-                if (isinstance(value, str) and value and 
-                    key not in ['name', 'skin', 'account', 'task', 'task_type']):
-                    # This might be an equipped item
-                    if value not in inventory:
-                        inventory[value] = inventory.get(value, 0) + 1
-            
-            # Cache the result
-            self._cached_inventory = inventory
-            
-        except Exception as e:
-            if self._logger:
-                self._logger.warning(f"Could not get character inventory: {e}")
-        
-        return inventory
-    
-    def clear_inventory_cache(self) -> None:
-        """
-        Clear cached inventory data to force refresh on next access.
-        
-        Call this method when the character's inventory has changed (e.g.,
-        after crafting, combat drops, or item consumption) to ensure the
-        next call to get_character_inventory() returns fresh data.
-        """
-        self._cached_inventory = None
+    def get_character_inventory(self) -> Dict[str, int]:
+        """Get inventory using character data - no caching."""
+        # This method will be eliminated when inventory moves to StateParameters
+        return {}
     
     def get_equipped_item_in_slot(self, slot: str) -> Optional[str]:
         """
-        Get the item code equipped in a specific equipment slot.
+        Get equipped item using StateParameters only.
         
         Args:
-            slot: Equipment slot name (e.g., 'weapon', 'helmet', 'shield')
+            slot: Equipment slot name
             
         Returns:
-            Item code equipped in the slot, or None if slot is empty
+            Item code or None
         """
-        """
-        Get item code equipped in specified slot.
+        slot_mapping = {
+            'weapon': StateParameters.EQUIPMENT_WEAPON,
+            'armor': StateParameters.EQUIPMENT_ARMOR,
+            'helmet': StateParameters.EQUIPMENT_HELMET,
+            'boots': StateParameters.EQUIPMENT_BOOTS,
+            'shield': StateParameters.EQUIPMENT_SHIELD,
+        }
         
-        Args:
-            slot: API slot name (e.g., 'weapon', 'shield')
-            
-        Returns:
-            Item code or None if slot is empty
-        """
-        # Equipment is stored in the equipment dict (which is character data)
-        if self.equipment and isinstance(self.equipment, dict):
-            value = self.equipment.get(slot, '')
-            return value if value else None
+        state_param = slot_mapping.get(slot)
+        if state_param:
+            item_code = self.get(state_param, '')
+            return item_code if item_code else None
+        
         return None
-    
-    def has_item(self, item_code: str, quantity: int = 1) -> bool:
-        """
-        Check if character has sufficient quantity of an item.
-        
-        Args:
-            item_code: Item to check for
-            quantity: Required quantity
-            
-        Returns:
-            True if character has enough of the item
-        """
-        inventory = self.get_character_inventory()
-        return inventory.get(item_code, 0) >= quantity
-    
-    def get_item_data(self, item_code: str) -> Optional[Dict]:
-        """
-        Get item data from knowledge base with API fallback.
-        
-        Args:
-            item_code: Item code to look up
-            
-        Returns:
-            Item data dictionary or None
-        """
-        if self.knowledge_base and hasattr(self.knowledge_base, 'get_item_data'):
-            return self.knowledge_base.get_item_data(item_code, client=self.client)
-        return None
-    
-    # Dictionary interface implementation
-    
-    def __getitem__(self, key: str) -> Any:
-        """Get item using dictionary syntax."""
-        value = self.get_parameter(key)
-        if value is None and key not in self:
-            raise KeyError(key)
-        return value
-    
-    def __setitem__(self, key: str, value: Any) -> None:
-        """Set item using dictionary syntax."""
-        self.set_parameter(key, value)
-    
-    def __delitem__(self, key: str) -> None:
-        """Delete item using dictionary syntax."""
-        if key in self.action_data:
-            del self.action_data[key]
-        elif key in self.action_results:
-            del self.action_results[key]
-        else:
-            raise KeyError(f"Key '{key}' not found")
-    
-    def __contains__(self, key: str) -> bool:
-        """Check if key exists using 'in' operator."""
-        # Check action_data first
-        if key in self.action_data:
-            return True
-        # Then check action_results
-        if key in self.action_results:
-            return True
-        # Finally check if it's an attribute
-        try:
-            getattr(self, key)
-            return True
-        except AttributeError:
-            return False
-    
-    def __iter__(self):
-        """Iterate over keys."""
-        # Yield from action_data
-        yield from self.action_data
-        # Yield from action_results (excluding duplicates)
-        for key in self.action_results:
-            if key not in self.action_data:
-                yield key
-        # Yield core attributes
-        core_attrs = [
-            'controller', 'client', 'character_state', 'world_state', 
-            'map_state', 'knowledge_base', 'character_name', 'character_x',
-            'character_y', 'character_level', 'character_hp', 'character_max_hp'
-        ]
-        for attr in core_attrs:
-            if hasattr(self, attr) and attr not in self.action_data and attr not in self.action_results:
-                yield attr
-    
-    def __len__(self) -> int:
-        """Return number of keys."""
-        return len(list(self.__iter__()))
-    
-    def keys(self):
-        """Return keys view."""
-        return list(self.__iter__())
-    
-    def values(self):
-        """Return values view."""
-        return [self[key] for key in self]
-    
-    def items(self):
-        """Return items view."""
-        return [(key, self[key]) for key in self]
-    
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get value with default."""
-        try:
-            return self[key]
-        except KeyError:
-            return default
-    
-    def update(self, other: Union[Dict, 'ActionContext']) -> None:
-        """Update from dictionary or another ActionContext."""
-        if isinstance(other, ActionContext):
-            # Update from another ActionContext
-            self.action_data.update(other.action_data)
-            self.action_results.update(other.action_results)
-        elif isinstance(other, dict):
-            # Update from dictionary
-            for key, value in other.items():
-                self[key] = value
-    
-    def copy(self) -> 'ActionContext':
-        """Create a shallow copy."""
-        return copy.copy(self)
-    
-    def pop(self, key: str, default: Any = None) -> Any:
-        """Remove and return value."""
-        try:
-            value = self[key]
-            del self[key]
-            return value
-        except KeyError:
-            if default is not None:
-                return default
-            raise

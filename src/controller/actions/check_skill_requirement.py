@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -49,7 +50,7 @@ class CheckSkillRequirementAction(ActionBase):
         super().execute(client, context)
         
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         task_type = context.get('task_type', 'crafting')
         target_item = context.get('target_item')
         

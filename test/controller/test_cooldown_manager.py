@@ -8,13 +8,15 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.controller.cooldown_manager import CooldownManager
+from test.test_base import UnifiedContextTestBase
 
 
-class TestCooldownManager(unittest.TestCase):
+class TestCooldownManager(UnifiedContextTestBase):
     """Test cases for CooldownManager class."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Create temporary config file
         self.temp_dir = tempfile.mkdtemp()
         self.config_file = Path(self.temp_dir) / "test_config.yaml"
@@ -292,11 +294,19 @@ thresholds:
         self.assertTrue(result)
         mock_action_executor.execute_action.assert_called_once()
         
-        # Verify call arguments
+        # Verify call arguments with new signature execute_action(action_name, client, context)
         call_args = mock_action_executor.execute_action.call_args
         self.assertEqual(call_args[0][0], 'wait')  # action name
-        self.assertIn('wait_duration', call_args[0][1])  # action data
-        self.assertIn('controller', call_args[0][3])  # context
+        # Client should be second argument (None in this case)
+        client = call_args[0][1]
+        self.assertIsNone(client)  # cooldown_manager passes None as client
+        # Context should be third argument
+        context = call_args[0][2]
+        # Verify wait_duration was set on context
+        self.assertTrue(hasattr(context, 'wait_duration'))
+        self.assertGreater(context.wait_duration, 0)
+        # Verify controller was set on context
+        self.assertIsNotNone(context.controller)  # Context may have inherited controller from unified state
     
     def test_handle_cooldown_with_wait_no_wait_needed(self):
         """Test cooldown handling when no wait is needed."""
@@ -354,10 +364,12 @@ thresholds:
         
         self.assertTrue(result)
         
-        # Verify context doesn't include controller
+        # Verify context was passed correctly
         call_args = mock_action_executor.execute_action.call_args
-        context = call_args[0][3]
-        self.assertNotIn('controller', context)
+        # With new signature, context is third argument
+        context = call_args[0][2]
+        # Context is ActionContext, not a dict
+        self.assertTrue(hasattr(context, 'wait_duration'))
     
     def test_handle_cooldown_with_wait_exception(self):
         """Test cooldown handling with exception during wait action."""

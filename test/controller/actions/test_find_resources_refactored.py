@@ -478,6 +478,26 @@ class TestFindResourcesAction(unittest.TestCase):
             args = mock_unified.call_args[0]
             self.assertEqual(args[1], 25)  # character_x from context
             self.assertEqual(args[2], 30)  # character_y from context
+    
+    def test_execute_exception_handling(self):
+        """Test execute method handles exceptions gracefully."""
+        context = MockActionContext(
+            character_name=self.character_name,
+            character_x=10,
+            character_y=10,
+            resource_types=['iron_ore']
+        )
+        
+        # Mock perform_action to raise exception
+        with patch.object(self.action, 'perform_action', side_effect=Exception("Test exception")):
+            result = self.action.execute(self.mock_client, context)
+        
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "FindResourcesAction failed: Test exception")
+    
+    def test_repr(self):
+        """Test __repr__ method returns correct string representation."""
+        self.assertEqual(repr(self.action), "FindResourcesAction()")
 
 
 if __name__ == '__main__':

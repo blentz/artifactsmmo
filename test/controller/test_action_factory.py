@@ -5,8 +5,10 @@ from unittest.mock import Mock, patch
 
 from src.controller.action_factory import ActionExecutorConfig, ActionFactory
 from src.controller.actions.base import ActionBase, ActionResult
+from src.lib.action_context import ActionContext
 
 from test.fixtures import create_mock_client
+from test.test_base import UnifiedContextTestBase
 
 
 class MockAction(ActionBase):
@@ -16,24 +18,26 @@ class MockAction(ActionBase):
     reactions = {'test_reaction': True}
     weight = 1.5
     
-    def __init__(self, param1: str, param2: int = 10):
+    def __init__(self):
         super().__init__()
-        self.param1 = param1
-        self.param2 = param2
     
-    def execute(self, client, context=None):
-        # Accept context for ActionContext compatibility
+    def execute(self, client, context):
+        # Use context to get parameters
         return ActionResult(
             success=True,
-            data={'param1': self.param1, 'param2': self.param2}
+            data={
+                'param1': getattr(context, 'param1', None),
+                'param2': getattr(context, 'param2', None)
+            }
         )
 
 
-class TestActionFactory(unittest.TestCase):
+class TestActionFactory(UnifiedContextTestBase):
     """Test cases for ActionFactory class."""
     
     def setUp(self) -> None:
         """Set up test fixtures before each test method."""
+        super().setUp()
         self.factory = ActionFactory()
         self.mock_client = create_mock_client()
     
@@ -60,64 +64,35 @@ class TestActionFactory(unittest.TestCase):
     def test_create_action_success(self) -> None:
         """Test successful action creation."""
         # Register test action
-        config = ActionExecutorConfig(
-            action_class=MockAction,
-            constructor_params={'param1': 'test_param', 'param2': 'optional_param'}
-        )
+        config = ActionExecutorConfig(action_class=MockAction)
         self.factory.register_action('test_action', config)
         
-        # Create action with data
-        action_data = {'test_param': 'hello', 'optional_param': 25}
-        action = self.factory.create_action('test_action', action_data)
+        # Create action with context
+        action = self.factory.create_action('test_action', self.context)
         
         self.assertIsNotNone(action)
         self.assertIsInstance(action, MockAction)
-        self.assertEqual(action.param1, 'hello')
-        self.assertEqual(action.param2, 25)
     
-    def test_create_action_with_defaults(self) -> None:
-        """Test action creation with default parameters."""
-        config = ActionExecutorConfig(
-            action_class=MockAction,
-            constructor_params={'param1': 'test_param'}  # param2 will use default
-        )
-        self.factory.register_action('test_action', config)
-        
-        action_data = {'test_param': 'hello'}
-        action = self.factory.create_action('test_action', action_data)
-        
-        self.assertIsNotNone(action)
-        self.assertEqual(action.param1, 'hello')
-        self.assertEqual(action.param2, 10)  # Default value
+    # Removed test_create_action_with_defaults - no longer applicable with unified context
     
     def test_create_action_with_context(self) -> None:
-        """Test action creation with context values."""
-        config = ActionExecutorConfig(
-            action_class=MockAction,
-            constructor_params={'param1': 'context_value', 'param2': 'data_value'}
-        )
+        """Test action creation and execution with context values."""
+        config = ActionExecutorConfig(action_class=MockAction)
         self.factory.register_action('test_action', config)
         
-        action_data = {'data_value': 42}
-        context = {'context_value': 'from_context'}
-        action = self.factory.create_action('test_action', action_data, context)
+        # Set context values
+        self.context.param1 = 'from_context'
+        self.context.param2 = 42
         
+        action = self.factory.create_action('test_action', self.context)
         self.assertIsNotNone(action)
-        self.assertEqual(action.param1, 'from_context')
-        self.assertEqual(action.param2, 42)
+        
+        # Execute and verify context values are used
+        result = action.execute(self.mock_client, self.context)
+        self.assertEqual(result.data['param1'], 'from_context')
+        self.assertEqual(result.data['param2'], 42)
     
-    def test_create_action_missing_required_param(self) -> None:
-        """Test action creation fails with missing required parameter."""
-        config = ActionExecutorConfig(
-            action_class=MockAction,
-            constructor_params={'param1': 'missing_param'}
-        )
-        self.factory.register_action('test_action', config)
-        
-        action_data = {}  # Missing required parameter
-        action = self.factory.create_action('test_action', action_data)
-        
-        self.assertIsNone(action)
+    # Removed test_create_action_missing_required_param - actions no longer have required constructor params
     
     def test_create_action_unknown_action(self) -> None:
         """Test that creating unknown action returns None."""
@@ -126,14 +101,14 @@ class TestActionFactory(unittest.TestCase):
     
     def test_execute_action(self) -> None:
         """Test complete action execution through factory."""
-        config = ActionExecutorConfig(
-            action_class=MockAction,
-            constructor_params={'param1': 'test_param', 'param2': 'optional_param'}
-        )
+        config = ActionExecutorConfig(action_class=MockAction)
         self.factory.register_action('test_action', config)
         
-        action_data = {'test_param': 'executed', 'optional_param': 100}
-        result = self.factory.execute_action('test_action', action_data, self.mock_client)
+        # Set context values
+        self.context.param1 = 'executed'
+        self.context.param2 = 100
+        
+        result = self.factory.execute_action('test_action', self.mock_client, self.context)
         
         self.assertTrue(result.success)
         self.assertIsNotNone(result.data)
@@ -143,92 +118,47 @@ class TestActionFactory(unittest.TestCase):
     def test_execute_action_failure(self) -> None:
         """Test action execution failure handling."""
         # Don't register the action
-        result = self.factory.execute_action('unknown_action', {}, self.mock_client)
+        result = self.factory.execute_action('unknown_action', self.mock_client, self.context)
         
         self.assertFalse(result.success)
         self.assertIsNotNone(result.error)
     
-    @patch('src.controller.action_factory.importlib.import_module')
-    def test_register_action_from_yaml(self, mock_import) -> None:
-        """Test registering action from YAML configuration."""
-        # Mock the import
-        mock_module = Mock()
-        mock_module.MockAction = MockAction
-        mock_import.return_value = mock_module
-        
-        yaml_config = {
-            'class_path': 'test.module.MockAction',
-            'constructor_params': {'param1': 'yaml_param'}
-        }
-        
-        self.factory.register_action_from_yaml('yaml_action', yaml_config)
-        self.assertTrue(self.factory.is_action_registered('yaml_action'))
+    # Removed test_register_action_from_yaml - method is a placeholder only
     
-    def test_register_action_from_yaml_missing_class_path(self) -> None:
-        """Test that YAML registration fails without class_path."""
-        yaml_config = {'constructor_params': {'param1': 'test'}}
-        
-        with self.assertRaises(ValueError):
-            self.factory.register_action_from_yaml('invalid_action', yaml_config)
+    # Removed test_register_action_from_yaml_missing_class_path - YAML registration not implemented
     
-    def test_action_with_preprocessors(self) -> None:
-        """Test action creation with parameter preprocessors."""
-        def uppercase_preprocessor(value):
-            return value.upper() if isinstance(value, str) else value
-        
-        config = ActionExecutorConfig(
-            action_class=MockAction,
-            constructor_params={'param1': 'test_param'},
-            preprocessors={'param1': uppercase_preprocessor}
-        )
-        self.factory.register_action('test_action', config)
-        
-        action_data = {'test_param': 'hello'}
-        action = self.factory.create_action('test_action', action_data)
-        
-        self.assertIsNotNone(action)
-        self.assertEqual(action.param1, 'HELLO')
+    # Removed test_action_with_preprocessors - preprocessors no longer used with unified context
     
     def test_move_action_integration(self) -> None:
         """Test that default move action can be created and executed."""
-        # MoveAction now uses ActionContext pattern - no constructor parameters
-        action_data = {}
-        context = {
-            'character_name': 'test_char',
-            'x': 5,
-            'y': 10
-        }
+        # Set context for move action
+        self.context.character_name = 'test_char'
+        self.context.x = 5
+        self.context.y = 10
         
-        action = self.factory.create_action('move', action_data, context)
+        action = self.factory.create_action('move', self.context)
         self.assertIsNotNone(action)
-        # Actions using ActionContext don't have these as instance attributes
     
     def test_attack_action_integration(self) -> None:
         """Test that default attack action can be created."""
-        # AttackAction now uses ActionContext pattern - no constructor parameters
-        action_data = {}
-        context = {'character_name': 'test_char'}
+        # Set context for attack action  
+        self.context.character_name = 'test_char'
         
-        action = self.factory.create_action('attack', action_data, context)
+        action = self.factory.create_action('attack', self.context)
         self.assertIsNotNone(action)
-        # Actions using ActionContext don't have character_name as instance attribute
     
     def test_find_monsters_action_integration(self) -> None:
         """Test that default find_monsters action can be created."""
-        # FindMonstersAction now uses ActionContext pattern - no constructor parameters
-        action_data = {}
-        context = {
-            'character_x': 0,
-            'character_y': 0,
-            'search_radius': 15,
-            'monster_types': ['chicken'],
-            'character_level': 5,
-            'level_range': 3
-        }
+        # Set context for find_monsters action
+        self.context.character_x = 0
+        self.context.character_y = 0
+        self.context.search_radius = 15
+        self.context.monster_types = ['chicken']
+        self.context.character_level = 5
+        self.context.level_range = 3
         
-        action = self.factory.create_action('find_monsters', action_data, context)
+        action = self.factory.create_action('find_monsters', self.context)
         self.assertIsNotNone(action)
-        # Actions using ActionContext don't have these as instance attributes
 
 
 if __name__ == '__main__':

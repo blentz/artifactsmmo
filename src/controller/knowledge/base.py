@@ -42,6 +42,12 @@ class KnowledgeBase(GoapData):
         if not self.data:
             self.data = {}
             
+        # Configuration caching for performance optimization
+        self._action_cache = None
+        self._goal_cache = None
+        self._cache_timestamp = None
+        self._cache_duration = 300  # 5 minutes
+            
         self._ensure_learning_structure()
         
     def _ensure_learning_structure(self):
@@ -89,6 +95,80 @@ class KnowledgeBase(GoapData):
         for category, default_value in learning_structure.items():
             if category not in self.data:
                 self.data[category] = default_value
+    
+    def _needs_cache_refresh(self, config_file: str) -> bool:
+        """Check if configuration cache needs refresh."""
+        import os
+        import time
+        
+        if self._cache_timestamp is None:
+            return True
+            
+        # Check if cache is older than duration
+        if time.time() - self._cache_timestamp > self._cache_duration:
+            return True
+            
+        # Check if config file was modified since cache
+        try:
+            config_mtime = os.path.getmtime(config_file)
+            return config_mtime > self._cache_timestamp
+        except (OSError, IOError):
+            return True
+    
+    def get_cached_actions(self, config_file: str = "config/default_actions.yaml") -> Dict:
+        """Cache and return parsed action configurations for performance."""
+        if self._action_cache is None or self._needs_cache_refresh(config_file):
+            import time
+            start_time = time.time()
+            
+            # Load actions using existing YAML infrastructure
+            from src.lib.yaml_data import YamlData
+            yaml_data = YamlData(config_file)
+            self._action_cache = yaml_data.data.get('actions', {})
+            self._cache_timestamp = time.time()
+            
+            load_time = time.time() - start_time
+            self.logger.info(f"🕐 Action Config Cache Refresh: {load_time:.3f}s ({len(self._action_cache)} actions)")
+            
+        return self._action_cache
+    
+    def get_relevant_actions(self, goal_state: Dict, start_state: Dict = None) -> List[str]:
+        """Return only actions relevant to goal state and start state to reduce search space."""
+        cached_actions = self.get_cached_actions()
+        
+        if not goal_state:
+            return list(cached_actions.keys())
+        
+        # Filter actions based on both goal state and start state analysis
+        relevant_actions = set()
+        
+        # Analyze all relevant state keys (both goal and start state)
+        all_state_keys = set(goal_state.keys())
+        if start_state:
+            all_state_keys.update(start_state.keys())
+        
+        for state_key in all_state_keys:
+            # Get actions that have conditions or reactions matching the state key
+            for action_name, action_config in cached_actions.items():
+                conditions = action_config.get('conditions', {})
+                reactions = action_config.get('reactions', {})
+                
+                # Include action if it affects or depends on the state key
+                if state_key in conditions or state_key in reactions:
+                    relevant_actions.add(action_name)
+        
+        # Always include core movement and utility actions
+        core_actions = ['move', 'wait', 'rest']
+        for action_name in core_actions:
+            if action_name in cached_actions:
+                relevant_actions.add(action_name)
+        
+        # Log performance gain
+        total_actions = len(cached_actions)
+        filtered_actions = len(relevant_actions)
+        self.logger.debug(f"🎯 Action Filtering: {total_actions} → {filtered_actions} actions for goal state: {list(goal_state.keys())}")
+        
+        return list(relevant_actions)
     
     def learn_from_content_discovery(self, content_type: str, content_code: str, 
                                    x: int, y: int, content_data: Dict = None) -> None:
@@ -356,6 +436,94 @@ class KnowledgeBase(GoapData):
         location_key = f"{x},{y}"
         return map_state.data.get(location_key)
         
+    def find_monsters_in_map(self, map_state, character_x: int, character_y: int, 
+                            monster_types: List[str] = None, character_level: int = None, 
+                            level_range: int = 2, max_radius: int = 10) -> List[Dict]:
+        """
+        Find monsters from cached map data, using knowledge base for monster details.
+        
+        Args:
+            map_state: MapState instance with cached map data
+            character_x: Character's current X coordinate
+            character_y: Character's current Y coordinate
+            monster_types: Optional list of monster types to filter by
+            character_level: Character level for level-appropriate filtering
+            level_range: Level range for monster selection
+            max_radius: Maximum search radius
+            
+        Returns:
+            List of monster location dictionaries with distance and monster data
+        """
+        if not map_state or not map_state.data:
+            return []
+            
+        found_monsters = []
+        
+        # Search through all cached map locations
+        for location_key, location_data in map_state.data.items():
+            if not isinstance(location_data, dict):
+                continue
+                
+            content = location_data.get('content')
+            if not content or content.get('type') != 'monster':
+                continue
+                
+            # Parse coordinates
+            try:
+                x, y = map(int, location_key.split(','))
+            except (ValueError, AttributeError):
+                continue
+                
+            # Check if within search radius
+            distance = ((x - character_x) ** 2 + (y - character_y) ** 2) ** 0.5
+            if distance > max_radius:
+                continue
+                
+            monster_code = content.get('code')
+            if not monster_code:
+                continue
+                
+            # Get monster details from knowledge base
+            monster_data = self.get_monster_data(monster_code)
+            if not monster_data:
+                # If no detailed data, create basic entry from map content
+                monster_data = {
+                    'code': monster_code,
+                    'name': monster_code,
+                    'level': 1,  # Default level
+                    'hp': 0
+                }
+                
+            # Apply filters
+            if monster_types:
+                type_match = any(monster_type.lower() in monster_code.lower() or 
+                               monster_type.lower() in monster_data.get('name', '').lower() 
+                               for monster_type in monster_types)
+                if not type_match:
+                    continue
+                    
+            if character_level is not None and level_range is not None:
+                monster_level = monster_data.get('level', 1)
+                if monster_level > character_level + level_range:
+                    continue
+                    
+            # Add to results
+            found_monsters.append({
+                'location': (x, y),
+                'x': x,
+                'y': y,
+                'distance': distance,
+                'monster_code': monster_code,
+                'monster_data': monster_data,
+                'content_data': content
+            })
+            
+        # Sort by distance
+        found_monsters.sort(key=lambda m: m['distance'])
+        
+        self.logger.info(f"🔍 Found {len(found_monsters)} monsters in cached map data within radius {max_radius}")
+        return found_monsters
+
     def get_monster_data(self, monster_code: str, client=None) -> Optional[Dict]:
         """
         Get monster data from knowledge base, with API fallback if not found.
@@ -1007,6 +1175,7 @@ class KnowledgeBase(GoapData):
                         'effects': self._sanitize_object(getattr(item, 'effects', [])),
                         'description': getattr(item, 'description', ''),
                         'tradeable': getattr(item, 'tradeable', False),
+                        'craft': self._sanitize_object(getattr(item, 'craft', None)),
                         'first_discovered': datetime.now().isoformat(),
                         'discovery_count': 1,
                         'sources': [],
@@ -1081,3 +1250,142 @@ class KnowledgeBase(GoapData):
                 self.logger.error(f"Failed to fetch NPC data from API: {e}")
         
         return None
+    
+    def get_recipe_chain(self, item_code: str) -> List[Dict]:
+        """
+        Get the complete recipe chain for an item, traversing all dependencies.
+        
+        Args:
+            item_code: The item to find the recipe chain for
+            
+        Returns:
+            List of recipe steps from final item back to raw materials
+        """
+        chain = []
+        visited = set()  # Prevent infinite loops
+        
+        def _traverse_recipe(current_item):
+            if current_item in visited:
+                return
+            visited.add(current_item)
+            
+            # Get item data
+            item_data = self.data.get('items', {}).get(current_item)
+            if not item_data:
+                return
+                
+            craft_data = item_data.get('craft')
+            if not craft_data:
+                # This is a raw material (no craft recipe)
+                chain.append({
+                    'item': current_item,
+                    'type': 'raw_material',
+                    'subtype': item_data.get('subtype'),
+                    'skill': None,
+                    'level': item_data.get('level', 1),
+                    'quantity': 1
+                })
+                return
+            
+            # This is a craftable item
+            chain.append({
+                'item': current_item,
+                'type': 'craftable',
+                'skill': craft_data.get('skill'),
+                'level': craft_data.get('level', 1),
+                'quantity': craft_data.get('quantity', 1),
+                'materials': craft_data.get('items', [])
+            })
+            
+            # Traverse each material requirement
+            for material in craft_data.get('items', []):
+                material_code = material.get('code')
+                if material_code:
+                    _traverse_recipe(material_code)
+        
+        _traverse_recipe(item_code)
+        return chain
+    
+    def get_resource_for_material(self, material_code: str) -> Optional[str]:
+        """
+        Find the resource that produces a given material.
+        
+        Args:
+            material_code: The material item code
+            
+        Returns:
+            Resource code that produces this material, or None if not found
+        """
+        # Check if the material itself is a raw material with mining/woodcutting/etc subtype
+        item_data = self.data.get('items', {}).get(material_code)
+        if item_data:
+            craft_data = item_data.get('craft')
+            subtype = item_data.get('subtype', '')
+            
+            # If craft is null and subtype indicates it's gathered from resources
+            if craft_data is None and subtype in ['mining', 'woodcutting', 'fishing']:
+                # Look for a resource with a similar name pattern
+                resource_pattern = f"{material_code.replace('_ore', '_rocks').replace('_wood', '_tree').replace('_fish', '_spot')}"
+                
+                # Check if there's a resource with this pattern
+                resources = self.data.get('resources', {})
+                for resource_code in resources:
+                    if (resource_code.startswith(material_code.split('_')[0]) and 
+                        resources[resource_code].get('skill_required') == subtype):
+                        return resource_code
+                
+                # Direct pattern matching
+                if resource_pattern in resources:
+                    return resource_pattern
+        
+        # Search through resources to find which one drops this material
+        resources = self.data.get('resources', {})
+        for resource_code, resource_info in resources.items():
+            # Check drops from API data
+            api_data = resource_info.get('api_data', {})
+            drops = api_data.get('drops', [])
+            
+            for drop in drops:
+                if isinstance(drop, dict) and drop.get('code') == material_code:
+                    return resource_code
+        
+        return None
+    
+    def get_raw_materials_needed(self, item_code: str, quantity: int = 1) -> Dict[str, int]:
+        """
+        Calculate all raw materials needed to craft an item, following the complete recipe chain.
+        
+        Args:
+            item_code: The item to craft
+            quantity: How many of the item to craft
+            
+        Returns:
+            Dictionary of {material_code: total_quantity_needed}
+        """
+        raw_materials = {}
+        
+        def _calculate_materials(current_item, needed_quantity):
+            item_data = self.data.get('items', {}).get(current_item)
+            if not item_data:
+                return
+                
+            craft_data = item_data.get('craft')
+            if not craft_data:
+                # This is a raw material
+                if current_item in raw_materials:
+                    raw_materials[current_item] += needed_quantity
+                else:
+                    raw_materials[current_item] = needed_quantity
+                return
+            
+            # This is craftable - calculate material requirements
+            for material in craft_data.get('items', []):
+                material_code = material.get('code')
+                material_quantity = material.get('quantity', 1)
+                total_needed = material_quantity * needed_quantity
+                
+                if material_code:
+                    _calculate_materials(material_code, total_needed)
+        
+        _calculate_materials(item_code, quantity)
+        return raw_materials

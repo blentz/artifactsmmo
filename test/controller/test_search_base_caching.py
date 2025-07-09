@@ -125,40 +125,6 @@ class TestSearchBaseCaching(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.data['content_code'], 'iron_rocks')
 
-    def test_unified_search_without_mapstate_fallback(self):
-        """Test unified search falls back to direct API when MapState unavailable."""
-        # Mock API response
-        mock_response = Mock()
-        mock_response.data = Mock()
-        
-        # Create mock content for coal_rocks
-        mock_coal_content = Mock()
-        mock_coal_content.code = 'coal_rocks'
-        mock_coal_content.type_ = 'resource'
-        mock_coal_content.to_dict.return_value = {'code': 'coal_rocks', 'type_': 'resource'}
-        
-        mock_response.data.to_dict.return_value = {
-            'x': 6, 'y': 3, 'content': mock_coal_content  # Place at radius 1
-        }
-        
-        # Create content filter
-        def content_filter(content_dict, x, y):
-            return content_dict.get('code') == 'coal_rocks'
-        
-        with patch('src.controller.actions.search_base.get_map_api', return_value=mock_response):
-            # Execute search without MapState
-            result = self.search_action.unified_search(
-                self.mock_client,
-                self.character_x,
-                self.character_y,
-                self.search_radius,
-                content_filter,
-                map_state=None  # No MapState provided
-            )
-        
-        # Verify successful result using direct API
-        self.assertTrue(result.success)
-        self.assertEqual(result.data['content_code'], 'coal_rocks')
 
     def test_unified_search_with_mapstate_scan_exception(self):
         """Test unified search handles MapState scan exceptions."""

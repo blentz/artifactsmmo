@@ -10,6 +10,8 @@ from typing import Dict, List, Optional
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import CombatStatus
 
 from .base import ActionBase, ActionResult
 
@@ -50,7 +52,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
     def execute(self, client, context: 'ActionContext') -> ActionResult:
         """Analyze combat viability in current area."""
         # Get character name from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
@@ -63,8 +65,8 @@ class AnalyzeCombatViabilityAction(ActionBase):
             # Get current character data from context or API
             if context.character_state and hasattr(context.character_state, 'data'):
                 character_data = context.character_state
-                character_x = context.character_x
-                character_y = context.character_y
+                character_x = context.get(StateParameters.CHARACTER_X)
+                character_y = context.get(StateParameters.CHARACTER_Y)
             else:
                 # Fallback to API call
                 character_response = get_character_api(name=character_name, client=client)
@@ -488,11 +490,11 @@ class AnalyzeCombatViabilityAction(ActionBase):
             
             # Determine combat context status
             if combat_not_viable:
-                combat_status = 'not_viable'
+                combat_status = CombatStatus.NOT_VIABLE
             elif primary_rec in ['engage_combat', 'cautious_combat'] and ready_for_combat:
-                combat_status = 'searching'
+                combat_status = CombatStatus.SEARCHING
             else:
-                combat_status = 'idle'
+                combat_status = CombatStatus.IDLE
             
             # Return consolidated state format
             return {
@@ -511,7 +513,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
             self.logger.warning(f"Combat state update determination failed: {e}")
             return {
                 'combat_context': {
-                    'status': 'not_viable'
+                    'status': CombatStatus.NOT_VIABLE
                 }
             }
 

@@ -3,6 +3,7 @@
 from typing import Optional, Tuple
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .coordinate_mixin import CoordinateStandardizationMixin
 from .movement_base import MovementActionBase
@@ -33,7 +34,7 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
 
     def get_target_coordinates(self, context: 'ActionContext') -> Tuple[Optional[int], Optional[int]]:
         """
-        Get target coordinates from action parameters or context using standardized format.
+        Get target coordinates from context using unified StateParameters approach.
         
         Args:
             context: ActionContext with parameters
@@ -41,26 +42,11 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
         Returns:
             Tuple of (target_x, target_y) coordinates
         """
-        # Check for target coordinates from previous actions (find_monsters, etc.)
-        target_x = context.get('target_x')
-        target_y = context.get('target_y')
-        if target_x is not None and target_y is not None:
-            return target_x, target_y
+        # Use unified StateParameters approach - no fallbacks or backward compatibility
+        target_x = context.get(StateParameters.TARGET_X)
+        target_y = context.get(StateParameters.TARGET_Y)
         
-        # Check for direct x,y coordinates in context
-        x = context.get('x')
-        y = context.get('y')
-        if x is not None and y is not None:
-            return x, y
-        
-        # Check use_target_coordinates flag
-        use_target_coordinates = context.get('use_target_coordinates', False)
-        if use_target_coordinates:
-            # Convert context to dict for get_standardized_coordinates
-            context_dict = dict(context) if hasattr(context, '__iter__') else {}
-            return self.get_standardized_coordinates(context_dict)
-        
-        return None, None
+        return target_x, target_y
 
     def __repr__(self):
         return "MoveAction()"

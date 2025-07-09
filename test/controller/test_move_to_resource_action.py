@@ -154,7 +154,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         # Mock API response
         mock_response = Mock()
-        mock_response.data = Mock(cooldown={"total_seconds": 3})
+        mock_character = Mock()
+        mock_character.x = 15
+        mock_character.y = 25
+        mock_response.data = Mock(cooldown={"total_seconds": 3}, character=mock_character)
         mock_move_api.return_value = mock_response
         
         # Execute action
@@ -187,7 +190,10 @@ class TestMoveToResourceAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         # Mock API response
         mock_response = Mock()
-        mock_response.data = Mock(cooldown=None)
+        mock_character = Mock()
+        mock_character.x = 30
+        mock_character.y = 40
+        mock_response.data = Mock(cooldown=None, character=mock_character)
         mock_move_api.return_value = mock_response
         
         # Execute action

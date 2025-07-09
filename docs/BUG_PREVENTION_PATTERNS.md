@@ -152,32 +152,30 @@ goal_selection_rules:
 - **BOOTSTRAP** low-level characters through multi-step equipment progression
 - **VERIFY** goal execution proceeds without parsing errors or termination
 
-### 8. Action Context Preservation
+### 8. Unified State Context Usage
 
 **Problem**: Information from one action (like weapon selection) not being available to subsequent actions
 ```
 Knowledge-based planning failed: No target item specified for analysis
 ```
 
-**Root Cause**: Actions were not properly using ActionContext to preserve information for subsequent actions.
+**Root Cause**: Actions were not properly using UnifiedStateContext to preserve information for subsequent actions.
 
 **Prevention**:
-- **USE** ActionContext's `set_result()` method to preserve data
-- **AVOID** hard-coded key mappings for preserved data
-- **ENSURE** actions include all necessary keys for compatibility
-- **PRESERVE** entire action context between plan iterations
+- **USE** UnifiedStateContext singleton with direct property access
+- **AVOID** nested state dictionaries or complex key mappings
+- **ENSURE** actions update context properties directly
+- **PRESERVE** state automatically through singleton pattern
 
 **Fix Pattern**:
 ```python
 # In action that generates data
-if hasattr(self, '_context') and self._context:
-    self._context.set_result('target_item', selected_item)
-    self._context.set_result('item_code', selected_item)
+context.selected_item = selected_item
+context.has_selected_item = True
+context.upgrade_status = "ready"
 
-# In controller - avoid hard-coded preservation
-if not hasattr(self, 'action_context'):
-    self.action_context = {}
-# Context persists automatically between actions
+# Context persists automatically - no manual preservation needed
+# All actions use same UnifiedStateContext singleton
 ```
 
 ## Validation Requirements

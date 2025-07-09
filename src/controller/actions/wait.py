@@ -34,7 +34,7 @@ class WaitAction(ActionBase):
         """ Execute the wait action - wait for cooldown to expire """
         # Get wait duration from context - this is calculated by GOAP planning
         # GOAP's _handle_cooldown_with_plan_insertion already calculates the exact remaining time
-        wait_duration = context.get('wait_duration', 1.0)
+        wait_duration = getattr(context, 'wait_duration', 1.0)
         
         self._context = context
         

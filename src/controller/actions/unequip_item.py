@@ -9,6 +9,7 @@ from artifactsmmo_api_client.models.item_slot import ItemSlot
 from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -25,7 +26,7 @@ class UnequipItemAction(ActionBase):
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Unequip an item from the specified equipment slot to inventory """
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         slot = context.get('slot')
         quantity = context.get('quantity', 1)
         

@@ -4,18 +4,17 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.wait import WaitAction
-
-from test.base_test import BaseTest
-from test.fixtures import MockActionContext, create_mock_client
+from test.test_base import UnifiedContextTestBase
 
 
-class TestWaitAction(BaseTest):
+class TestWaitAction(UnifiedContextTestBase):
     """ Test cases for WaitAction """
 
     def setUp(self):
         """ Set up test fixtures """
+        super().setUp()
         self.wait_action = WaitAction()
-        self.mock_client = create_mock_client()
+        self.mock_client = Mock()
     
     def tearDown(self):
         """Clean up test fixtures."""
@@ -25,6 +24,9 @@ class TestWaitAction(BaseTest):
         
         # Clear any patches that might be active
         patch.stopall()
+        
+        # Base class handles context cleanup
+        super().tearDown()
 
     def test_init(self):
         """ Test WaitAction initialization """
@@ -42,8 +44,8 @@ class TestWaitAction(BaseTest):
     @patch('time.sleep')
     def test_execute_default_wait(self, mock_sleep):
         """ Test execute with default wait duration """
-        context = MockActionContext(wait_duration=1.0)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.wait_duration = 1.0
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -59,9 +61,10 @@ class TestWaitAction(BaseTest):
             'cooldown_expiration': None
         }
         
-        # With default wait_duration
-        context = MockActionContext(character_state=mock_character_state)
-        result = self.wait_action.execute(self.mock_client, context)
+        # With default wait_duration (not setting wait_duration to test default)
+        self.context.character_state = mock_character_state
+        # Don't set wait_duration to test the default behavior
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -77,8 +80,9 @@ class TestWaitAction(BaseTest):
         }
         
         # GOAP provides the calculated wait duration
-        context = MockActionContext(character_state=mock_character_state, wait_duration=5.5)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.character_state = mock_character_state
+        self.context.wait_duration = 5.5
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -95,8 +99,9 @@ class TestWaitAction(BaseTest):
         }
         
         # GOAP would provide 0.1 for expired/no cooldown (minimum wait)
-        context = MockActionContext(character_state=mock_character_state, wait_duration=0.1)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.character_state = mock_character_state
+        self.context.wait_duration = 0.1
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -112,8 +117,9 @@ class TestWaitAction(BaseTest):
         }
         
         # GOAP provides wait duration
-        context = MockActionContext(character_state=mock_character_state, wait_duration=3.0)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.character_state = mock_character_state
+        self.context.wait_duration = 3.0
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -129,8 +135,9 @@ class TestWaitAction(BaseTest):
         }
         
         # GOAP would already clamp this, but wait action also clamps for safety
-        context = MockActionContext(character_state=mock_character_state, wait_duration=120.0)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.character_state = mock_character_state
+        self.context.wait_duration = 120.0
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -146,8 +153,9 @@ class TestWaitAction(BaseTest):
         }
         
         # GOAP calculates and provides the wait duration
-        context = MockActionContext(character_state=mock_character_state, wait_duration=2.5)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.character_state = mock_character_state
+        self.context.wait_duration = 2.5
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -163,8 +171,9 @@ class TestWaitAction(BaseTest):
         }
         
         # GOAP would handle parse errors and provide a fallback duration
-        context = MockActionContext(character_state=mock_character_state, wait_duration=4.0)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.character_state = mock_character_state
+        self.context.wait_duration = 4.0
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
@@ -175,12 +184,20 @@ class TestWaitAction(BaseTest):
         """ Test execute handles exceptions gracefully """
         mock_sleep.side_effect = Exception("Sleep interrupted")
         
-        context = MockActionContext(wait_duration=1.0)
-        result = self.wait_action.execute(self.mock_client, context)
+        self.context.wait_duration = 1.0
+        result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertFalse(result.success)
         self.assertIn('Wait failed', result.error)
+
+    def test_execute_without_context(self):
+        """ Test execute without context (uses default) """
+        self.context.wait_duration = 1.0
+        result = self.wait_action.execute(self.mock_client, self.context)
+        
+        self.assertIsNotNone(result)
+        self.assertTrue(result.success)
 
     def test_repr(self):
         """ Test string representation """

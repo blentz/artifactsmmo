@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from src.controller.actions.reset_equipment_upgrade import ResetEquipmentUpgradeAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestResetEquipmentUpgradeAction(unittest.TestCase):
@@ -18,11 +19,10 @@ class TestResetEquipmentUpgradeAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful execution of reset equipment upgrade."""
         # Create context
-        context = ActionContext(character_name="test_char")
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
         # Set equipment_status in context
-        context['equipment_status'] = {
-            'selected_item': 'iron_sword'
-        }
+        context.set(StateParameters.EQUIPMENT_STATUS, {'selected_item': 'iron_sword'})
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -34,12 +34,11 @@ class TestResetEquipmentUpgradeAction(unittest.TestCase):
     def test_execute_with_previous_upgrade_context(self):
         """Test execution with previous upgrade context."""
         # Create context with previous upgrade data
-        context = ActionContext(character_name="test_char")
-        context['previous_weapon'] = 'copper_sword'
-        context['previous_target_slot'] = 'weapon'
-        context['equipment_status'] = {
-            'selected_item': 'copper_sword'
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.EQUIPMENT_PREVIOUS_WEAPON, 'copper_sword')
+        context.set(StateParameters.EQUIPMENT_PREVIOUS_TARGET_SLOT, 'weapon')
+        context.set(StateParameters.EQUIPMENT_STATUS, {'selected_item': 'copper_sword'})
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

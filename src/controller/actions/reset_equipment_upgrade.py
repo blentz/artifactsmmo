@@ -7,6 +7,8 @@ This bridge action resets the equipment upgrade process, allowing for a new upgr
 from typing import Dict
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import EquipmentStatus
 
 from .base import ActionBase, ActionResult
 
@@ -22,12 +24,12 @@ class ResetEquipmentUpgradeAction(ActionBase):
     # GOAP parameters
     conditions = {
         'equipment_status': {
-            'upgrade_status': 'completed',
+            'upgrade_status': EquipmentStatus.COMPLETED,
         },
     }
     reactions = {
         'equipment_status': {
-            'upgrade_status': 'needs_analysis',
+            'upgrade_status': EquipmentStatus.NEEDS_ANALYSIS,
             'selected_item': None,
             'target_slot': None,
         },
@@ -45,7 +47,7 @@ class ResetEquipmentUpgradeAction(ActionBase):
         This is a state-only action that updates the equipment status
         without making any API calls.
         """
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
@@ -53,7 +55,7 @@ class ResetEquipmentUpgradeAction(ActionBase):
         
         try:
             # Get previous upgrade information for logging
-            equipment_status = context.get('equipment_status', {})
+            equipment_status = context.get(StateParameters.EQUIPMENT_STATUS, {})
             previous_item = equipment_status.get('selected_item', 'unknown')
             
             # Log the reset
@@ -64,8 +66,8 @@ class ResetEquipmentUpgradeAction(ActionBase):
             # This is a bridge action - it only updates state, no API calls needed
             result = self.create_success_result(
                 equipment_upgrade_reset=True,
-                previous_status='completed',
-                new_status='none',
+                previous_status=EquipmentStatus.COMPLETED,
+                new_status=EquipmentStatus.NONE,
                 previous_item=previous_item,
                 message="Equipment upgrade status reset, ready for new upgrade"
             )

@@ -153,7 +153,10 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         """Test successful execution with coordinates from initialization."""
         # Mock API response
         mock_response = Mock()
-        mock_response.data = Mock(cooldown={"total_seconds": 4})
+        mock_character = Mock()
+        mock_character.x = 25
+        mock_character.y = 35
+        mock_response.data = Mock(cooldown={"total_seconds": 4}, character=mock_character)
         mock_move_api.return_value = mock_response
         
         # Execute action
@@ -186,7 +189,10 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         """Test successful execution with coordinates from context."""
         # Mock API response
         mock_response = Mock()
-        mock_response.data = Mock(cooldown=None)
+        mock_character = Mock()
+        mock_character.x = 40
+        mock_character.y = 50
+        mock_response.data = Mock(cooldown=None, character=mock_character)
         mock_move_api.return_value = mock_response
         
         # Execute action

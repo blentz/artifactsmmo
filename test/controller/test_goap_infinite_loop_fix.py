@@ -139,6 +139,10 @@ class TestGOAPInfiniteLoopFix(unittest.TestCase):
         # Mock replan method to return empty list (no more actions needed)
         self.manager._replan_from_current_position = Mock(return_value=[])
         
+        # Mock last_action_result to avoid subgoal_request errors
+        self.controller.last_action_result = Mock()
+        self.controller.last_action_result.subgoal_request = None
+        
         # Execute the plan
         with patch.object(self.manager, '_load_actions_from_config', return_value=self.test_actions_config):
             result = self.manager._execute_plan_with_selective_replanning(

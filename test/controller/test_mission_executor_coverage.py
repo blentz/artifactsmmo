@@ -7,13 +7,15 @@ from unittest.mock import Mock, MagicMock, patch, PropertyMock
 
 from src.controller.mission_executor import MissionExecutor
 from src.controller.ai_player_controller import AIPlayerController
+from test.test_base import UnifiedContextTestBase
 
 
-class TestMissionExecutorCoverage(unittest.TestCase):
+class TestMissionExecutorCoverage(UnifiedContextTestBase):
     """Additional test cases to improve MissionExecutor coverage."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         self.controller = Mock(spec=AIPlayerController)
         self.goal_manager = Mock()
         self.mission_executor = MissionExecutor(self.goal_manager, self.controller)
@@ -36,6 +38,8 @@ class TestMissionExecutorCoverage(unittest.TestCase):
             }
         })
         self.controller.update_world_state = Mock()
+        # Add plan_action_context for unified context
+        self.controller.plan_action_context = self.context
         
     def test_load_configuration_exception(self):
         """Test _load_configuration with exception during file loading."""
@@ -151,7 +155,9 @@ class TestMissionExecutorCoverage(unittest.TestCase):
         
         # Mock the reset action
         mock_reset_action = Mock()
-        mock_reset_action.execute.return_value = {'success': True}
+        mock_result = Mock()
+        mock_result.success = True
+        mock_reset_action.execute.return_value = mock_result
         
         with patch('src.controller.actions.reset_combat_context.ResetCombatContextAction', 
                   return_value=mock_reset_action):
@@ -191,7 +197,9 @@ class TestMissionExecutorCoverage(unittest.TestCase):
         
         # Mock the reset action to fail
         mock_reset_action = Mock()
-        mock_reset_action.execute.return_value = {'success': False}
+        mock_result = Mock()
+        mock_result.success = False
+        mock_reset_action.execute.return_value = mock_result
         
         with patch('src.controller.actions.reset_combat_context.ResetCombatContextAction', 
                   return_value=mock_reset_action):
@@ -360,7 +368,9 @@ class TestMissionExecutorCoverage(unittest.TestCase):
         
         # Mock rest action
         mock_rest_action = Mock()
-        mock_rest_action.execute.return_value = {'success': True}
+        mock_result = Mock()
+        mock_result.success = True
+        mock_rest_action.execute.return_value = mock_result
         
         # Mock _is_goal_already_achieved to return True after rest
         with patch('src.controller.actions.rest.RestAction', return_value=mock_rest_action):

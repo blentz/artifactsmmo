@@ -16,13 +16,16 @@ from src.controller.goal_manager import GOAPGoalManager
 from src.controller.goap_execution_manager import GOAPExecutionManager
 from src.controller.mission_executor import MissionExecutor
 from src.lib.goap_data import GoapData
+from src.lib.state_parameters import StateParameters
+from test.test_base import UnifiedContextTestBase
 
 
-class TestXPSeekingCycle(unittest.TestCase):
+class TestXPSeekingCycle(UnifiedContextTestBase):
     """Test the complete XP-seeking cycle for goal achievement."""
 
     def setUp(self):
         """Set up test fixtures with isolated temporary files."""
+        super().setUp()
         # Create temporary directory for test data
         self.temp_dir = tempfile.mkdtemp()
         self.temp_world_file = os.path.join(self.temp_dir, "world.yaml")
@@ -85,7 +88,8 @@ class TestXPSeekingCycle(unittest.TestCase):
         
         # Verify that initialization completed without errors
         # and action context is cleared (main purpose of this method)
-        self.assertEqual(self.controller.action_context, {})
+        self.assertIsNotNone(self.controller.plan_action_context)
+        # With unified context, we don't have action_data attribute
         
         # Verify GOAP data structure exists
         self.assertIsNotNone(self.controller.goap_data)
@@ -93,42 +97,37 @@ class TestXPSeekingCycle(unittest.TestCase):
 
     def test_coordinate_preservation_in_action_context(self):
         """Test that coordinates from find_monsters are preserved for move action."""
-        # Mock find_monsters response
-        find_monsters_response = {
-            'success': True,
-            'target_x': 0,
-            'target_y': -1,
-            'monster_code': 'green_slime'
-        }
+        # Simulate find_monsters storing results in ActionContext
+        # This is what happens in _execute_single_action when result.data is processed
+        self.controller.plan_action_context.set_result(StateParameters.TARGET_X, 0)
+        self.controller.plan_action_context.set_result(StateParameters.TARGET_Y, -1)
+        self.controller.plan_action_context.set_result(StateParameters.COMBAT_TARGET, 'green_slime')
         
-        # Update action context from find_monsters response
-        self.controller._update_action_context_from_response(
-            'find_monsters', find_monsters_response
-        )
-        
-        # Verify coordinates are preserved correctly
-        self.assertEqual(self.controller.action_context.get('target_x'), 0)
-        self.assertEqual(self.controller.action_context.get('target_y'), -1)
-        self.assertEqual(self.controller.action_context.get('monster_code'), 'green_slime')
+        # Verify coordinates are preserved correctly in ActionContext singleton
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_X), 0)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_Y), -1)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.COMBAT_TARGET), 'green_slime')
 
     def test_coordinate_failure_detection(self):
-        """Test that coordinate failures are detected and trigger recovery."""
-        goap_manager = GOAPExecutionManager()
+        """Test that coordinates are properly stored in ActionContext singleton."""
+        # ActionContext uses unified state - no need to clear action_results
         
-        # Test with missing coordinates
-        self.controller.action_context = {}
-        result = goap_manager._is_coordinate_failure('move', self.controller)
-        self.assertTrue(result)
+        # Test setting coordinates
+        self.controller.plan_action_context.set_result(StateParameters.TARGET_X, 0)
+        self.controller.plan_action_context.set_result(StateParameters.TARGET_Y, -1)
         
-        # Test with valid coordinates
-        self.controller.action_context = {'target_x': 0, 'target_y': -1}
-        result = goap_manager._is_coordinate_failure('move', self.controller)
-        self.assertFalse(result)
+        # Verify coordinates are stored
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_X), 0)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_Y), -1)
 
     @patch('src.controller.goap_execution_manager.GOAPExecutionManager.create_plan')
-    def test_recovery_plan_creation(self, mock_create_plan):
+    @patch('src.controller.goap_execution_manager.GOAPExecutionManager._load_actions_from_config')
+    def test_recovery_plan_creation(self, mock_load_actions, mock_create_plan):
         """Test that recovery plans are created correctly for coordinate failures."""
         goap_manager = GOAPExecutionManager()
+        
+        # Mock actions config
+        mock_load_actions.return_value = {'find_monsters': {}, 'move': {}, 'attack': {}}
         
         # Mock a recovery plan
         mock_recovery_plan = [
@@ -138,22 +137,29 @@ class TestXPSeekingCycle(unittest.TestCase):
         ]
         mock_create_plan.return_value = mock_recovery_plan
         
-        # Create recovery plan
-        goal_state = {'goal_progress': {'monsters_hunted': '>0'}}
-        recovery_plan = goap_manager._create_recovery_plan_with_find_monsters(
-            self.controller, goal_state
-        )
-        
-        # Verify plan structure
-        self.assertIsNotNone(recovery_plan)
-        self.assertEqual(len(recovery_plan), 3)
-        self.assertEqual(recovery_plan[0]['name'], 'find_monsters')
+        # Mock controller's get_current_world_state
+        with patch.object(self.controller, 'get_current_world_state') as mock_get_state:
+            mock_get_state.return_value = {
+                'character_status': {'alive': True},
+                'monsters_available': True
+            }
+            
+            # Create recovery plan
+            goal_state = {'goal_progress': {'monsters_hunted': 1}}
+            recovery_plan = goap_manager._create_recovery_plan_with_find_monsters(
+                self.controller, goal_state
+            )
+            
+            # Verify plan structure
+            self.assertIsNotNone(recovery_plan)
+            self.assertEqual(len(recovery_plan), 3)
+            self.assertEqual(recovery_plan[0]['name'], 'find_monsters')
 
     @patch('src.controller.action_executor.ActionExecutor.execute_action')
     def test_xp_seeking_action_sequence(self, mock_execute_action):
         """Test the complete XP-seeking action sequence."""
         # Mock successful action executions
-        def mock_action_execution(action_name, action_data, client, context):
+        def mock_action_execution(action_name, client, context):
             result = Mock()
             result.success = True
             
@@ -197,9 +203,9 @@ class TestXPSeekingCycle(unittest.TestCase):
         goap_manager = GOAPExecutionManager()
         
         # Mock successful plan execution
-        with patch.object(goap_manager, '_develop_complete_plan') as mock_develop_plan, \
+        with patch.object(goap_manager, 'create_plan') as mock_create_plan, \
              patch.object(goap_manager, '_execute_plan_with_selective_replanning') as mock_execute_plan:
-            mock_develop_plan.return_value = [
+            mock_create_plan.return_value = [
                 {'name': 'find_monsters'},
                 {'name': 'move'},
                 {'name': 'attack'}
@@ -208,8 +214,8 @@ class TestXPSeekingCycle(unittest.TestCase):
             # Mock execute plan to update action context and return True
             def execute_plan_side_effect(plan, controller, goal_state, config_file, max_iterations):
                 # Simulate find_monsters updating the action context
-                controller.action_context['target_x'] = 0
-                controller.action_context['target_y'] = -1
+                controller.plan_action_context.set_result(StateParameters.TARGET_X, 0)
+                controller.plan_action_context.set_result(StateParameters.TARGET_Y, -1)
                 return True
                 
             mock_execute_plan.side_effect = execute_plan_side_effect
@@ -221,37 +227,23 @@ class TestXPSeekingCycle(unittest.TestCase):
             
         # Verify success and action context updates
         self.assertTrue(success)
-        self.assertIn('target_x', self.controller.action_context)
-        self.assertIn('target_y', self.controller.action_context)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_X), 0)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_Y), -1)
 
     def test_action_context_preservation_across_plans(self):
         """Test that important action context is preserved between plan iterations."""
-        # Set up initial action context
-        self.controller.action_context = {
-            'target_x': 0,
-            'target_y': -1,
-            'item_code': 'copper_dagger',
-            'some_temp_data': 'should_be_cleared'
-        }
+        # Set up initial action context in ActionContext singleton
+        self.controller.plan_action_context.set_result(StateParameters.TARGET_X, 0)
+        self.controller.plan_action_context.set_result(StateParameters.TARGET_Y, -1)
+        self.controller.plan_action_context.set_result(StateParameters.ITEM_CODE, 'copper_dagger')
+        self.controller.plan_action_context.set_result(StateParameters.WORKFLOW_STEP, 'should_persist')
         
-        # Simulate plan execution reset (similar to what happens in _execute_plan)
-        preserved_data = {}
-        preservation_keys = [
-            'x', 'y', 'target_x', 'target_y', 'item_code', 'recipe_item_code', 
-            'recipe_item_name', 'craft_skill', 'materials_needed', 'resource_types',
-            'smelt_item_code', 'smelt_item_name', 'smelt_skill', 'smelting_required',
-            'crafting_chain'
-        ]
-        
-        for key in preservation_keys:
-            if key in self.controller.action_context:
-                preserved_data[key] = self.controller.action_context[key]
-        
-        # Verify important data is preserved
-        self.assertEqual(preserved_data['target_x'], 0)
-        self.assertEqual(preserved_data['target_y'], -1)
-        self.assertEqual(preserved_data['item_code'], 'copper_dagger')
-        self.assertNotIn('some_temp_data', preserved_data)
+        # Data persists in the ActionContext singleton throughout plan execution
+        # Verify all data is available
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_X), 0)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_Y), -1)
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.ITEM_CODE), 'copper_dagger')
+        self.assertEqual(self.controller.plan_action_context.get(StateParameters.WORKFLOW_STEP), 'should_persist')
 
     def test_clean_state_structure_for_monster_hunting(self):
         """Test that clean state structure properly indicates need for monster hunting."""

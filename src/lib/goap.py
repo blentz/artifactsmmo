@@ -655,7 +655,7 @@ def walk_path(path):
     _olist = path["olist"]
     
     # Add iteration limit to prevent infinite loops
-    max_iterations = 10000
+    max_iterations = 10000  # Increased limit for complex equipment upgrade chains (10+ actions)
     iterations = 0
     
     # Log entry to walk_path
@@ -664,6 +664,11 @@ def walk_path(path):
 
     while len(_olist) and iterations < max_iterations:
         iterations += 1
+        
+        # Add periodic logging to track progress
+        if iterations % 100 == 0:
+            logger.debug(f"GOAP A* iteration {iterations}/{max_iterations}, open list: {len(_olist)}, closed list: {len(_clist)}")
+        
         ####################
         ##Find lowest node##
         ####################
@@ -766,12 +771,16 @@ def walk_path(path):
 
                 _olist[next_node["id"]] = next_node
     
-    # Log if we hit the iteration limit
+    # Log completion status
+    logger = logging.getLogger(__name__)
     if iterations >= max_iterations:
-        logger = logging.getLogger(__name__)
-        logger.error(f"GOAP A* search hit iteration limit ({max_iterations}). Open list size: {len(_olist)}, Closed list size: {len(_clist)}")
-        logger.error(f"Goal state: {path['goal']}")
+        logger.warning(f"GOAP A* search hit iteration limit ({max_iterations}) after {iterations} iterations")
+        logger.warning(f"Open list size: {len(_olist)}, Closed list size: {len(_clist)}")
+        logger.warning(f"Goal state: {path['goal']}")
         # Return empty list to indicate no path found
         return []
+    else:
+        logger.debug(f"GOAP A* search completed normally after {iterations} iterations, no path found")
+        logger.debug(f"Open list size: {len(_olist)}, Closed list size: {len(_clist)}")
 
     return []

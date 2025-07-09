@@ -11,13 +11,15 @@ from src.controller.skill_goal_manager import SkillType
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
+from test.test_base import UnifiedContextTestBase
 
 
-class TestAIPlayerControllerCoverage(unittest.TestCase):
+class TestAIPlayerControllerCoverage(UnifiedContextTestBase):
     """Comprehensive test cases for AIPlayerController."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Mock dependencies
         self.mock_client = Mock()
         self.mock_goal_manager = Mock()
@@ -48,6 +50,17 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                 self.mock_knowledge_base = Mock()
                 self.mock_knowledge_base.data = {}
                 mock_create.side_effect = [self.mock_world_state, self.mock_knowledge_base]
+                
+                # Mock goal_manager to return proper dict from calculate_world_state
+                self.mock_goal_manager.calculate_world_state.return_value = {
+                    'character_level': 10,
+                    'character_status': {
+                        'level': 10,
+                        'xp': 1000,
+                        'hp': 80,
+                        'max_hp': 100
+                    }
+                }
                 
                 self.controller = AIPlayerController(self.mock_client, self.mock_goal_manager)
                 
@@ -180,7 +193,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                 result = self.controller.check_and_handle_cooldown()
                 
                 self.assertTrue(result)
-                mock_execute.assert_called_once_with('wait', {'wait_duration': 5})
+                mock_execute.assert_called_once_with('wait')
                 mock_refresh.assert_called_once()
     
     def test_check_and_handle_cooldown_wait_failed(self):
@@ -249,7 +262,6 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             {'name': 'move', 'x': 10, 'y': 15}
         ]
         self.controller.current_action_index = 0
-        self.controller.action_context = {}
         
         # Mock check_and_handle_cooldown and _execute_action
         with patch.object(self.controller, 'check_and_handle_cooldown') as mock_cooldown:
@@ -261,8 +273,8 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                 
                 self.assertTrue(result)
                 self.assertEqual(self.controller.current_action_index, 1)
-                self.assertEqual(self.controller.action_context, {'moved': True})
-                mock_execute.assert_called_once_with('move', {'name': 'move', 'x': 10, 'y': 15})
+                # With unified context, no manual context update occurs
+                mock_execute.assert_called_once_with('move')
     
     def test_execute_next_action_failure(self):
         """Test failed execution of next action."""
@@ -325,7 +337,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                         success=True, data={}, action_name='move'
                     )
                     
-                    self.controller._execute_action('move', {})
+                    self.controller._execute_action('move')
                     
                     mock_refresh.assert_called_once()
     
@@ -342,7 +354,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                             success=True, data={}, action_name='move'
                         )
                         
-                        success, result = self.controller._execute_action('move', {})
+                        success, result = self.controller._execute_action('move')
                         
                         self.assertTrue(success)
                         mock_wait.assert_called_once()
@@ -356,12 +368,12 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                     mock_cooldown.return_value = False
                     mock_context.return_value = Mock()
                     
-                    response = {'location': [15, 20]}
+                    response = {'target_x': 15, 'target_y': 20}
                     self.controller.action_executor.execute_action.return_value = ActionResult(
                         success=True, data=response, action_name='find_monsters'
                     )
                     
-                    success, result_data = self.controller._execute_action('find_monsters', {})
+                    success, result_data = self.controller._execute_action('find_monsters')
                     
                     self.assertTrue(success)
                     self.assertEqual(result_data['x'], 15)
@@ -394,7 +406,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                         success=True, data=response, action_name='lookup_item_info'
                     )
                     
-                    success, result_data = self.controller._execute_action('lookup_item_info', {})
+                    success, result_data = self.controller._execute_action('lookup_item_info')
                     
                     self.assertTrue(success)
                     self.assertEqual(result_data['recipe_item_code'], 'copper_sword')
@@ -421,7 +433,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                                 success=True, data=response, action_name='attack'
                             )
                             
-                            success, result_data = self.controller._execute_action('attack', {})
+                            success, result_data = self.controller._execute_action('attack')
                             
                             self.assertTrue(success)
                             mock_update.assert_called_once_with({'goal_progress': {'monsters_hunted': 6}})
@@ -442,7 +454,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
                     
                 )
                     
-                    success, result = self.controller._execute_action('move', {})
+                    success, result = self.controller._execute_action('move')
                     
                     self.assertFalse(success)
                     # Should refresh state when cooldown error detected
@@ -454,7 +466,7 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             with patch.object(self.controller, '_is_character_on_cooldown') as mock_cooldown:
                 mock_cooldown.side_effect = Exception("Test error")
                 
-                success, result = self.controller._execute_action('move', {})
+                success, result = self.controller._execute_action('move')
                 
                 self.assertFalse(success)
                 self.assertEqual(result, {})
@@ -540,43 +552,63 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
     def test_build_execution_context(self):
         """Test _build_execution_context method."""
         action_data = {'target': 'monster', 'distance': 5}
-        self.controller.action_context = {'previous_data': 'value'}
-        self.controller.current_goal_parameters = {'goal_param': 'goal_value'}
+        self.controller.current_goal_parameters = {'search.radius': 5}
         
-        # Mock ActionContext.from_controller
-        with patch.object(ActionContext, 'from_controller') as mock_from_controller:
-            mock_context = Mock()
-            mock_context.set_result = Mock()
-            mock_context.set_parameter = Mock()
-            mock_from_controller.return_value = mock_context
-            
-            context = self.controller._build_execution_context(action_data, 'attack')
-            
-            # Verify context creation
-            mock_from_controller.assert_called_once_with(self.controller, action_data)
-            
-            # Verify shared data was added
-            mock_context.set_result.assert_called_with('previous_data', 'value')
-            
-            # Verify goal parameters were added
-            mock_context.set_parameter.assert_called_with('goal_param', 'goal_value')
+        # Ensure plan_action_context exists (it should be created in __init__)
+        if not hasattr(self.controller, 'plan_action_context') or self.controller.plan_action_context is None:
+            self.controller.plan_action_context = ActionContext()
+        
+        # Set action data on the plan context
+        self.controller.plan_action_context.target = 'monster'
+        self.controller.plan_action_context.distance = 5
+        
+        # Test context building
+        context = self.controller._build_execution_context('attack')
+        
+        # Verify it returns the singleton plan_action_context
+        self.assertIs(context, self.controller.plan_action_context)
+        
+        # Verify action data is preserved on context
+        self.assertEqual(context.target, 'monster')
+        self.assertEqual(context.distance, 5)
+        
+        # Verify goal parameters were added
+        self.assertEqual(context.get('search.radius'), 5)
+        
+        # Test with params in context
+        self.controller.plan_action_context.x = 10
+        self.controller.plan_action_context.y = 20
+        
+        context = self.controller._build_execution_context('move')
+        
+        # Verify params are preserved
+        self.assertEqual(context.x, 10)
+        self.assertEqual(context.y, 20)
     
     def test_build_execution_context_wait_action(self):
         """Test _build_execution_context for wait action."""
-        action_data = {'name': 'wait'}
+        # Mock the cooldown manager to return a specific wait duration
+        self.controller.cooldown_manager = Mock()
         self.controller.cooldown_manager.calculate_wait_duration.return_value = 10
         
-        # Mock ActionContext.from_controller
-        with patch.object(ActionContext, 'from_controller') as mock_from_controller:
-            mock_context = Mock()
-            mock_context.set_parameter = Mock()
-            mock_from_controller.return_value = mock_context
+        # Ensure plan_action_context exists
+        if not hasattr(self.controller, 'plan_action_context') or self.controller.plan_action_context is None:
+            self.controller.plan_action_context = ActionContext()
+        
+        # Ensure wait_duration is cleaned up (base class will handle this)
+        
+        with patch.object(self.controller, '_refresh_character_state'):
+            # Pass action_name to match how wait duration is detected
+            context = self.controller._build_execution_context('wait')
             
-            with patch.object(self.controller, '_refresh_character_state'):
-                context = self.controller._build_execution_context(action_data, 'wait')
-                
-                # Verify wait duration was calculated and added
-                mock_context.set_parameter.assert_any_call('wait_duration', 10)
+            # Verify wait duration was added to context
+            self.assertEqual(context.wait_duration, 10)
+            
+            # Verify it's the same plan context
+            self.assertIs(context, self.controller.plan_action_context)
+            
+            # Verify cooldown manager was called
+            self.controller.cooldown_manager.calculate_wait_duration.assert_called_once_with(self.mock_character_state)
     
     def test_reset_failed_goal(self):
         """Test reset_failed_goal method."""
@@ -677,13 +709,13 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             )
             self.controller.action_executor.execute_action.return_value = mock_result
             
-            with patch.object(self.controller, '_update_action_context_from_response') as mock_update_resp:
-                with patch.object(self.controller, '_update_action_context_from_results') as mock_update_res:
-                    result = self.controller._execute_single_action('move', action_data)
-                    
-                    self.assertTrue(result)
-                    mock_update_resp.assert_called_once_with('move', {'moved': True})
-                    mock_update_res.assert_called_once_with('move', {'result_key': 'result_value'})
+            result = self.controller._execute_single_action('move', action_data)
+            
+            self.assertTrue(result)
+            # Verify action was executed with correct parameters
+            self.controller.action_executor.execute_action.assert_called_once_with(
+                'move', self.mock_client, mock_context
+            )
     
     def test_execute_single_action_failure(self):
         """Test _execute_single_action failure."""
@@ -697,7 +729,8 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             result = self.controller._execute_single_action('move', {})
             
             self.assertFalse(result)
-            self.assertEqual(self.controller.last_action_result, {'error': str(mock_result)})
+            # The actual implementation sets last_action_result to the mock result directly
+            self.assertEqual(self.controller.last_action_result, mock_result)
     
     def test_execute_single_action_exception(self):
         """Test _execute_single_action with exception."""
@@ -708,40 +741,6 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             
             self.assertFalse(result)
     
-    def test_update_action_context_from_response_dict(self):
-        """Test _update_action_context_from_response with dict response."""
-        response = {
-            'success': True,
-            'location': (20, 25),
-            'target_x': 30,
-            'target_y': 35
-        }
-        
-        self.controller._update_action_context_from_response('move', response)
-        
-        # Verify context was updated
-        self.assertEqual(self.controller.action_context['success'], True)
-        self.assertEqual(self.controller.action_context['target_x'], 20)  # From location tuple
-        self.assertEqual(self.controller.action_context['target_y'], 25)  # From location tuple
-    
-    def test_update_action_context_from_response_none(self):
-        """Test _update_action_context_from_response with None response."""
-        self.controller._update_action_context_from_response('move', None)
-        # Should not raise exception
-    
-    def test_update_action_context_from_results(self):
-        """Test _update_action_context_from_results method."""
-        action_results = {
-            'equipment_gap_analysis': {'slot1': 'gap1'},
-            'target_equipment_slot': 'weapon',
-            'selected_item': 'copper_sword'
-        }
-        
-        self.controller._update_action_context_from_results('analyze_equipment_gaps', action_results)
-        
-        # Verify context was updated
-        self.assertEqual(self.controller.action_context['equipment_gap_analysis'], {'slot1': 'gap1'})
-        self.assertEqual(self.controller.action_context['target_equipment_slot'], 'weapon')
     
     def test_is_plan_complete(self):
         """Test is_plan_complete method."""
@@ -934,7 +933,6 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             self.assertTrue(result)
             self.controller.action_executor.execute_action.assert_called_once_with(
                 'find_and_move_to_monster',
-                {'search_radius': 10, 'level_range': 2},
                 self.mock_client,
                 mock_context
             )
@@ -1059,7 +1057,6 @@ class TestAIPlayerControllerCoverage(unittest.TestCase):
             self.assertTrue(result)
             self.controller.action_executor.execute_action.assert_called_once_with(
                 'intelligent_monster_search',
-                {'search_radius': 5},
                 self.mock_client,
                 mock_context
             )

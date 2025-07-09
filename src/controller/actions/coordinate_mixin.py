@@ -56,9 +56,14 @@ class CoordinateStandardizationMixin:
     @staticmethod
     def standardize_coordinate_output(x: int, y: int) -> Dict[str, Any]:
         """
-        Create standardized coordinate output for action responses.
+        DEPRECATED: Create standardized coordinate output for action responses.
         
-        Returns only the standardized target_x, target_y format.
+        This method is deprecated in favor of unified action parameters.
+        Actions should set coordinates directly on the ActionContext instead
+        of returning coordinate dictionaries.
+        
+        Use: context.target_x = x; context.target_y = y
+        Instead of: return self.create_success_result(**self.standardize_coordinate_output(x, y))
         
         Args:
             x: X coordinate
@@ -67,6 +72,12 @@ class CoordinateStandardizationMixin:
         Returns:
             Dictionary with standardized coordinate formats
         """
+        import warnings
+        warnings.warn(
+            "standardize_coordinate_output is deprecated. Use unified ActionContext properties instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return {
             'target_x': x,
             'target_y': y

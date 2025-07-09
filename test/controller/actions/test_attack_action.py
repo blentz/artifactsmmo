@@ -41,6 +41,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Verify the API was called with correct parameters
@@ -74,6 +83,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Verify response shows loss
@@ -92,6 +110,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should still return success with default values
@@ -112,6 +139,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should still return success with default values
@@ -122,6 +158,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(None, context)
         
         # Should return error
@@ -136,6 +181,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should return error with cooldown flag
@@ -151,6 +205,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should return error with no_monster flag
@@ -166,6 +229,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should return error with wrong_location flag
@@ -181,6 +253,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should return error with action_not_allowed flag
@@ -196,6 +277,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should return appropriate error
@@ -210,6 +300,15 @@ class TestAttackAction(unittest.TestCase):
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         
         # Should return error with original message
@@ -221,6 +320,15 @@ class TestAttackAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         action = AttackAction()
         context = MockActionContext(character_name="")
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,0"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
         result = action.execute(self.client, context)
         self.assertFalse(result.success)
         self.assertIn('character name', result.error.lower())

@@ -8,6 +8,7 @@ allowing the character to resume combat activities.
 from typing import Dict
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -49,16 +50,15 @@ class RecoverCombatViabilityAction(ActionBase):
         This is a state-only action that updates the combat context
         without making any API calls.
         """
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
         self._context = context
         
         try:
-            # Get equipment upgrade information
-            equipment_status = context.get('equipment_status', {})
-            upgraded_item = equipment_status.get('selected_item', 'unknown')
+            # Get equipment upgrade information using StateParameters
+            upgraded_item = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM, 'unknown')
             
             # Log the recovery
             self.logger.info(

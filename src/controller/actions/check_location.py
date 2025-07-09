@@ -11,6 +11,7 @@ from typing import Dict
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -42,7 +43,7 @@ class CheckLocationAction(ActionBase):
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Check current location and update spatial context """
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
             
         self._context = context
         

@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_p
 from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 from .mixins import CharacterDataMixin
@@ -36,7 +37,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
     
     def get_target_coordinates(self, context: 'ActionContext') -> Tuple[Optional[int], Optional[int]]:
         """
-        Get target coordinates for movement.
+        Get target coordinates for movement using unified StateParameters approach.
         To be overridden by subclasses for custom coordinate extraction.
         
         Args:
@@ -45,9 +46,9 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         Returns:
             Tuple of (x, y) coordinates or (None, None)
         """
-        # Default implementation - use unified context properties
-        target_x = getattr(context, 'target_x', None)
-        target_y = getattr(context, 'target_y', None)
+        # Default implementation - use unified StateParameters approach
+        target_x = context.get(StateParameters.TARGET_X)
+        target_y = context.get(StateParameters.TARGET_Y)
         return target_x, target_y
     
     def execute_movement(self, client, target_x: int, target_y: int, 
@@ -167,7 +168,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
             Action result dictionary
         """
         # Get character name from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         
         # Debug logging for character name issue
         if not character_name:

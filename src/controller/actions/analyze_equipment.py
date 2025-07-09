@@ -11,6 +11,8 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import EquipmentStatus
 
 from .base import ActionBase, ActionResult
 
@@ -32,7 +34,7 @@ class AnalyzeEquipmentAction(ActionBase):
     }
     reactions = {
         "equipment_status": {
-            "upgrade_status": "analyzing",
+            "upgrade_status": EquipmentStatus.ANALYZING,
             "target_slot": "weapon"
         }
     }
@@ -50,7 +52,7 @@ class AnalyzeEquipmentAction(ActionBase):
         super().execute(client, context)
         
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         analysis_type = context.get('analysis_type', 'comprehensive')
         
         self._context = context
@@ -69,17 +71,20 @@ class AnalyzeEquipmentAction(ActionBase):
             # Determine equipment needs and priorities
             equipment_needs = self._determine_equipment_needs(analysis_results, character_data)
             
-            # Create result with consolidated state updates
-            result = self.create_success_result(
-                equipment_status={
-                    "upgrade_status": "analyzing",
-                    "target_slot": equipment_needs.get('equipment_upgrade_priority', 'weapon'),
-                    "analysis_complete": True,
-                    "needs_upgrade": equipment_needs.get('need_equipment', False)
+            # Create result with proper state changes
+            result = self.create_result_with_state_changes(
+                success=True,
+                state_changes={
+                    "equipment_status": {
+                        "upgrade_status": EquipmentStatus.ANALYZING,
+                        "target_slot": equipment_needs.get('equipment_upgrade_priority', 'weapon'),
+                        "analysis_complete": True,
+                        "needs_upgrade": equipment_needs.get('need_equipment', False)
+                    }
                 },
                 analysis_type=analysis_type,
                 character_level=getattr(character_data, 'level', 1),
-                # Include equipment needs at top level for backward compatibility
+                # Include equipment needs at top level
                 **equipment_needs,
                 # Include analysis results
                 **analysis_results,

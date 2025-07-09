@@ -23,6 +23,24 @@ Before running, ensure you have:
 2. Virtual environment activated: `workon artifactsmmo`
 3. API token set: `export TOKEN=your_api_token`
 
+### Quick Start
+```bash
+# Run with default settings (normal operation)
+python -m src.main
+
+# Run with debug logging
+python -m src.main -l DEBUG
+
+# Create a new character with random name
+python -m src.main -c
+
+# Test a goal plan (offline simulation)
+python -m src.main -g "upgrade_weapon"
+
+# Execute a goal plan with live API
+python -m src.main -g "upgrade_weapon" --online
+```
+
 ## Command-Line Arguments
 
 ### Logging Control
@@ -44,20 +62,16 @@ python -m src.main -l ERROR
 
 ### Character Management
 
-#### `-c, --create-character CHARACTER_NAME`
-Create a new character with the specified name.
-
-**Note**: Currently not implemented - placeholder for future API integration.
+#### `-c, --create-character`
+Create a new character with a randomly generated 8-character name (a-zA-Z).
 
 **Example**:
 ```bash
-python -m src.main -c "MyHeroChar"
+python -m src.main -c
 ```
 
 #### `-d, --delete-character CHARACTER_NAME`
 Delete an existing character.
-
-**Note**: Currently not implemented - placeholder for future API integration.
 
 **Example**:
 ```bash
@@ -102,22 +116,23 @@ Show the GOAP (Goal-Oriented Action Planning) plan for achieving a specified goa
 
 **Goal String Formats**:
 - Goal templates: Predefined goals from goal_templates.yaml
-- State expressions: `"path.to.state=value"` (e.g., `"character_status.level=5"`)
-- Nested paths: `"category.subcategory.field=value"`
+- State expressions: `"property=value"` (e.g., `"character_level=5"`)
 - Simple flags: `"flag_name"` (assumes true)
 - Level patterns: `"reach level N"` or `"level_N"`
 
 **Examples**:
 ```bash
 # Show plan to reach level 5
-python -m src.main -g "character_status.level=5"
+python -m src.main -g "character_level=5"
 
 # Show plan for combat readiness
-python -m src.main -g "combat_context.status=ready"
+python -m src.main -g "combat_status=ready"
 
 # Use a goal template
 python -m src.main -g "hunt_monsters"
 ```
+
+**Note**: The system now uses flattened property names. Instead of nested paths like `character_status.level`, use direct properties like `character_level`.
 
 #### `-e, --evaluate-plan PLAN_STRING`
 Evaluate a user-defined sequence of actions to check if it's valid and executable. Shows step-by-step validation of conditions and state changes.
@@ -165,7 +180,7 @@ The diagnostic tools provide powerful debugging capabilities for GOAP planning a
 #### `--offline`
 Run diagnostic tools in offline mode without API access (default). This simulates action execution without making real API calls.
 
-#### `--live`
+#### `--online`
 Execute diagnostic plans with live API calls (requires authentication). Actions are actually executed against the game API.
 
 #### `--clean-state`
@@ -249,10 +264,16 @@ Fix the issues above before the plan can work
 #### Live Execution Mode
 ```bash
 # Execute a goal plan with live API calls
-python -m src.main -g "hunt_monsters" --live
+python -m src.main -g "hunt_monsters" --online
 
 # Evaluate and execute a plan with live API
-python -m src.main -e "move->attack" --live
+python -m src.main -e "move->attack" --online
+
+# Set TOKEN from file for authenticated API access
+export TOKEN=$(cat TOKEN) && python -m src.main -g "upgrade_weapon" --online
+
+# Test specific action sequences with real character state
+export TOKEN=$(cat TOKEN) && python -m src.main -e "determine_material_requirements->determine_material_insufficiency" --online
 ```
 
 #### Complex State Initialization
@@ -261,7 +282,7 @@ python -m src.main -e "move->attack" --live
 python -m src.main -g "equipment_status.equipped=true" \
   --state '{
     "character_status": {"alive": true, "level": 5},
-    "equipment_status": {"item_crafted": true, "equipped": false},
+    "equipment_status": {"item_crafted": true, "equipped": false, "selected_item": "copper_dagger"},
     "location_context": {"at_workshop": true}
   }'
 ```
@@ -319,8 +340,8 @@ python -m src.main -g "equipment_status.equipped=true" \
 Options can be combined, but some are mutually exclusive:
 - Cannot use `--daemon` with planning options (`-g`, `-e`)
 - Cannot use `--clean` with character management (`-c`, `-d`)
-- Cannot use both `--offline` and `--live` modes
-- `--live` mode requires either `--goal-planner` or `--evaluate-plan`
+- Cannot use both `--offline` and `--online` modes
+- `--online` mode requires either `--goal-planner` or `--evaluate-plan`
 - `--state` requires either `--goal-planner` or `--evaluate-plan`
 - Character management options (`-c`, `-d`) are mutually exclusive
 - Planning options (`-g`, `-e`) are mutually exclusive
@@ -334,6 +355,37 @@ Options can be combined, but some are mutually exclusive:
 When running with `--daemon`, the program responds to:
 - `SIGTERM`: Graceful shutdown
 - `SIGINT` (Ctrl+C): Graceful shutdown
+
+### API Authentication for Live Testing
+
+The diagnostic tools support live API testing using a TOKEN file:
+
+```bash
+# The TOKEN file contains your API authentication token
+# Set it as environment variable for live testing
+export TOKEN=$(cat TOKEN)
+
+# Now you can use --online mode with full API access
+python -m src.main -g "upgrade_weapon" --online
+
+# Test specific action behaviors with real character data
+python -m src.main -e "check_material_availability" --online
+
+# Combine with custom states to test edge cases
+python -m src.main -g "upgrade_weapon" --online --state '{"equipment_status": {"selected_item": "copper_dagger"}}'
+```
+
+**Benefits of TOKEN-based testing:**
+- Validates action behavior with real API responses
+- Tests actual character inventory and game state
+- Identifies issues that offline simulation might miss
+- Allows prototyping complex action sequences safely
+
+**Best practices:**
+- Use `export TOKEN=$(cat TOKEN)` before diagnostic commands
+- Start with simple single-action tests before complex goals
+- Monitor session.log for detailed execution traces
+- Use `--clean-state` to reset between tests when needed
 
 ### Performance Considerations
 - The `-p` parallel mode creates separate async tasks for each character
@@ -362,6 +414,13 @@ When running with `--daemon`, the program responds to:
    
    # Debug with custom state
    python -m src.main -g "goal" --state '{"key": "value"}' -l DEBUG
+   
+   # Test with real API data (requires TOKEN file)
+   export TOKEN=$(cat TOKEN) && python -m src.main -g "upgrade_weapon" --online
+   
+   # Validate action execution with live character
+   # Note: For ActionContext properties, place them in the appropriate state category
+   export TOKEN=$(cat TOKEN) && python -m src.main -e "determine_material_insufficiency" --online --state '{"materials": {"requirements_determined": true, "status": "checking"}, "equipment_status": {"selected_item": "copper_dagger", "has_selected_item": true}}'
    ```
 
 4. **Check State Files**
@@ -371,7 +430,7 @@ When running with `--daemon`, the program responds to:
 
 ### State Format Reference
 
-The `--state` parameter accepts JSON with the consolidated state structure:
+The `--state` parameter accepts JSON with the consolidated state structure. Note that ActionContext flattened properties should be placed in their appropriate state categories:
 
 ```json
 {
@@ -388,12 +447,26 @@ The `--state` parameter accepts JSON with the consolidated state structure:
   },
   "equipment_status": {
     "equipped": false,
-    "selected_item": null
+    "selected_item": "copper_dagger",    // ActionContext property
+    "has_selected_item": true,             // Required for actions that check selected_item
+    "target_slot": "weapon",               // ActionContext property
+    "upgrade_status": "ready"              // ActionContext property
   },
   "location_context": {
     "at_target": false,
     "at_workshop": false,
-    "current": {"x": 0, "y": 0, "type": "spawn"}
+    "current": {"x": 0, "y": 0, "type": "spawn"},
+    "target_x": 2,                          // ActionContext property
+    "target_y": 0,                          // ActionContext property
+    "resource_code": "copper_rocks"        // ActionContext property
+  },
+  "materials": {
+    "material_requirements": {              // ActionContext property
+      "copper_ore": 5
+    },
+    "missing_materials": {                  // ActionContext property
+      "copper_ore": 3
+    }
   }
 }
 ```

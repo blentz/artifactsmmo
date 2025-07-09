@@ -97,6 +97,36 @@ class TestEquipItemAction(unittest.TestCase):
         self.assertEqual(result.data['character_hp'], 80)
         self.assertEqual(result.data['character_max_hp'], 100)
 
+    def test_execute_no_item_code(self):
+        """ Test execute when no item code is provided """
+        client = create_mock_client()
+        # Create context without item_code
+        context = MockActionContext(
+            character_name="TestCharacter",
+            slot="weapon"
+            # No item_code provided
+        )
+        
+        result = self.action.execute(client, context)
+        
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "No item code provided")
+
+    def test_execute_no_slot(self):
+        """ Test execute when no slot is provided """
+        client = create_mock_client()
+        # Create context without slot
+        context = MockActionContext(
+            character_name="TestCharacter",
+            item_code="iron_sword"
+            # No slot provided
+        )
+        
+        result = self.action.execute(client, context)
+        
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "No slot provided")
+
     def test_execute_api_failure(self):
         """ Test execute when API returns no data """
         client = create_mock_client()
@@ -208,6 +238,12 @@ class TestEquipItemAction(unittest.TestCase):
         if hasattr(self.action, '_get_item_slot_enum'):
             result = self.action._get_item_slot_enum("weapon")
             self.assertEqual(result, ItemSlot.WEAPON)
+
+    def test_get_item_slot_enum_empty(self):
+        """ Test empty slot name """
+        if hasattr(self.action, '_get_item_slot_enum'):
+            result = self.action._get_item_slot_enum("")
+            self.assertIsNone(result)
 
     def test_get_item_slot_enum_invalid(self):
         """ Test invalid slot name """

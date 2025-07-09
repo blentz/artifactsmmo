@@ -1,460 +1,386 @@
-# ArtifactsMMO AI Player - YAML Configuration Guide
+# YAML Configuration Guide
 
 This guide documents the YAML configuration file formats used by the ArtifactsMMO AI Player system.
 
-## Table of Contents
-- [Overview](#overview)
-- [Action Configurations](#action-configurations)
-- [GOAP Actions](#goap-actions)
-- [Goal Templates](#goal-templates)
-- [Skill Goals](#skill-goals)
-- [State Engine](#state-engine)
-- [World State](#world-state)
-- [State Configurations](#state-configurations)
-
 ## Overview
 
-The ArtifactsMMO AI Player uses YAML files for configuration and data persistence:
+The ArtifactsMMO AI Player uses simple, declarative YAML files for configuration:
 
-- **Configuration Files** (`config/`): Define behavior and rules
+- **Configuration Files** (`config/`): Define behavior and rules  
 - **Data Files** (`data/`): Store runtime state and learned information
 
-## Action Configurations
+## Configuration Files
+
+### Action Class Registry
 
 **File**: `config/action_configurations.yaml`
 
-Defines how actions are executed, including both simple and composite actions.
-
-### Structure
+Maps action names to Python implementation classes.
 
 ```yaml
-# Action definitions
-action_configurations:
-  action_name:
-    type: "builtin"  # or "composite"
-    description: "What this action does"
-    # Additional action-specific parameters
-
-# Composite action workflows
-composite_actions:
-  workflow_name:
-    description: "Multi-step action sequence"
-    steps:
-      - name: "step_identifier"
-        action: "action_to_execute"
-        required: true/false
-        params:
-          param_name: "${template_variable}"
-        conditions:
-          condition_key: expected_value
+action_classes:
+  move: "src.controller.actions.move.MoveAction"
+  attack: "src.controller.actions.attack.AttackAction"
+  rest: "src.controller.actions.rest.RestAction"
+  gather_resources: "src.controller.actions.gather_resources.GatherResourcesAction"
+  find_monsters: "src.controller.actions.find_monsters.FindMonstersAction"
 ```
 
-### Example
+### GOAP Actions
 
-```yaml
-action_configurations:
-  move:
-    type: "builtin"
-    description: "Move character to specified coordinates"
-  
-  gather_resources:
-    type: "builtin"
-    description: "Gather resources at current location"
+**File**: `config/default_actions.yaml`
 
-composite_actions:
-  find_and_gather:
-    description: "Find resources and gather them"
-    steps:
-      - name: "search"
-        action: "find_resources"
-        required: true
-        params:
-          resource_type: "${action_data.target_resource}"
-      - name: "move_to_resource"
-        action: "move"
-        required: true
-        params:
-          x: "${steps.search.result.x}"
-          y: "${steps.search.result.y}"
-      - name: "gather"
-        action: "gather_resources"
-        required: true
-```
+Defines actions for Goal-Oriented Action Planning with simple conditions and reactions.
 
-## GOAP Actions
-
-**File**: `config/actions.yaml`
-
-Defines actions for the Goal-Oriented Action Planner with conditions, reactions, and weights.
-
-### Structure
+#### Structure
 
 ```yaml
 actions:
   action_name:
     conditions:
-      state_variable: required_value
-      # Special operators:
-      # variable_ge: value  # Greater than or equal
-      # variable_lt: value  # Less than
+      field_name: required_value
     reactions:
-      state_variable: new_value
-    weight: 1.0  # Cost of this action (lower is preferred)
+      field_name: new_value
+    weight: 1.0
+    description: "What this action does"
 ```
 
-### Example
+**Note**: The system now uses flattened property names instead of nested state groups. For example, instead of `character_status.alive`, use `character_alive`.
+
+#### Example
 
 ```yaml
 actions:
+  move:
+    conditions:
+      character_alive: true
+      character_cooldown_active: false
+    reactions:
+      at_target: true
+    weight: 1.0
+    description: "Move character to target location"
+    
   attack:
     conditions:
       character_alive: true
-      has_target: true
-      character_hp_ge: 20
+      character_cooldown_active: false
+      combat_status: 'ready'
     reactions:
-      has_xp: true
-      has_target: false
-      need_rest: true
-    weight: 2.0
-  
+      combat_status: 'engaged'
+      has_gained_xp: true
+    weight: 3.0
+    description: "Attack target monster"
+    
   rest:
     conditions:
       character_alive: true
-      need_rest: true
+      healing_status: 'needed'
     reactions:
-      need_rest: false
-      character_hp: 100
+      healing_status: 'complete'
+      character_safe: true
     weight: 1.0
-  
-  find_monsters:
-    conditions:
-      need_combat: true
-      monsters_available: false
-      can_attack: true
-    reactions:
-      monsters_available: true
-      has_target: true
-    weight: 3.0
+    description: "Rest to restore HP"
 ```
 
-## Goal Templates
+**Note**: The system now uses flattened property names. Instead of nested groups like `character_status.alive`, use direct properties like `character_alive`.
+
+### Goal Templates
 
 **File**: `config/goal_templates.yaml`
 
-Defines reusable goal templates for common objectives.
+Defines reusable goal templates with simple target states.
 
-### Structure
+#### Structure
 
 ```yaml
 goal_templates:
-  template_name:
+  goal_name:
     description: "What this goal achieves"
-    goal_state:
-      state_variable: target_value
-    priority: 1-10  # Higher = more important
-    prerequisites:
-      - prerequisite_state: value
+    objective_type: "category"
+    target_state:
+      state_group:
+        field_name: target_value
+    strategy:
+      parameter: value
 ```
 
-### Example
+#### Example
 
 ```yaml
 goal_templates:
-  gain_combat_xp:
-    description: "Gain XP through combat"
-    goal_state:
-      has_xp: true
-      combat_skill_increased: true
-    priority: 8
-    prerequisites:
-      - character_level_lt: 40
-  
-  reach_level_10:
-    description: "Reach character level 10"
-    goal_state:
-      character_level_ge: 10
-    priority: 10
-  
-  gather_iron:
-    description: "Gather iron ore"
-    goal_state:
-      has_iron_ore: true
-    priority: 5
-    prerequisites:
-      - mining_skill_ge: 5
+  hunt_monsters:
+    description: "Hunt monsters for experience and loot"
+    objective_type: "combat"
+    target_state:
+      goal_progress:
+        has_gained_xp: true
+    strategy:
+      search_radius: 4
+      max_search_attempts: 5
+      
+  upgrade_weapon:
+    description: "Craft and equip a better weapon"
+    objective_type: "equipment_progression"
+    target_state:
+      equipment_status:
+        upgrade_status: "completed"
+    strategy:
+      equipment_type: "weapon"
+      search_radius: 4
+      
+  get_to_safety:
+    description: "Rest to restore HP when in danger"
+    objective_type: "maintenance"
+    target_state:
+      character_status:
+        safe: true
+      healing_context:
+        healing_status: "complete"
+    strategy:
+      max_iterations: 5
 ```
 
-## Skill Goals
+### State Defaults
 
-**File**: `config/skill_goals.yaml`
+**File**: `config/consolidated_state_defaults.yaml`
 
-Defines skill progression strategies and goals for each skill.
+Defines the default initial state structure for the GOAP system.
 
-### Structure
+#### Structure
 
 ```yaml
-skill_goals:
-  skill_name:
-    description: "Skill description"
-    max_level: 30
-    progression:
-      - level: 1
-        goals:
-          - goal_template: "template_name"
-            priority: 1-10
-            conditions:
-              condition_key: value
-      - level: 10
-        goals:
-          - goal_template: "advanced_template"
-            priority: 8
+state_defaults:
+  state_group:
+    field_name: default_value
 ```
 
-### Example
+#### Example
 
 ```yaml
-skill_goals:
-  mining:
-    description: "Extract minerals and ores"
-    max_level: 30
-    progression:
-      - level: 1
-        goals:
-          - goal_template: "gather_copper"
-            priority: 7
-            conditions:
-              has_pickaxe: true
-      - level: 5
-        goals:
-          - goal_template: "gather_iron"
-            priority: 8
-          - goal_template: "craft_iron_pickaxe"
-            priority: 6
-      - level: 10
-        goals:
-          - goal_template: "gather_gold"
-            priority: 9
-  
-  combat:
-    description: "Fighting and warfare skills"
-    max_level: 30
-    progression:
-      - level: 1
-        goals:
-          - goal_template: "fight_chickens"
-            priority: 5
-      - level: 5
-        goals:
-          - goal_template: "fight_wolves"
-            priority: 7
-            conditions:
-              has_weapon: true
-```
-
-## State Engine
-
-**File**: `config/state_engine.yaml`
-
-Defines state calculation rules and derived state computation.
-
-### Structure
-
-```yaml
-state_engine:
-  rules:
-    - name: "rule_name"
-      conditions:
-        state_var: value
-      derived_states:
-        new_state_var: computed_value
-      priority: 1-10  # Order of rule evaluation
-
-  thresholds:
-    variable_name:
-      low: 20
-      medium: 50
-      high: 80
-```
-
-### Example
-
-```yaml
-state_engine:
-  rules:
-    - name: "low_health_detection"
-      conditions:
-        character_hp_lt: 30
-      derived_states:
-        need_rest: true
-        can_attack: false
-      priority: 10
+state_defaults:
+  equipment_status:
+    weapon: null
+    upgrade_status: "needs_analysis"
+    target_slot: null
+    equipped: false
     
-    - name: "combat_readiness"
-      conditions:
-        character_hp_ge: 50
-        has_weapon: true
-      derived_states:
-        can_attack: true
-        combat_ready: true
-      priority: 5
-  
-  thresholds:
-    character_hp:
-      critical: 10
-      low: 30
-      healthy: 70
-    character_level:
-      beginner: 5
-      intermediate: 15
-      advanced: 25
+  location_context:
+    current:
+      x: 0
+      y: 0
+    at_target: false
+    at_workshop: false
+    workshop_known: false
+    
+  materials:
+    status: "unknown"
+    gathered: false
+    ready_to_craft: false
+    requirements_determined: false
+    
+  combat_context:
+    status: "idle"
+    recent_win_rate: 1.0
+    low_win_rate: false
+    
+  character_status:
+    alive: true
+    cooldown_active: false
+    safe: true
+    hp_percentage: 100.0
+    
+  goal_progress:
+    has_gained_xp: false
+    monsters_hunted: 0
 ```
 
-## World State
+## Data Files
+
+### World State
 
 **File**: `data/world.yaml`
 
 Persists the current GOAP world state between runs.
 
-### Structure
+#### Structure
+
+Simple nested dictionaries with boolean, string, and numeric values:
 
 ```yaml
-# Boolean flags and state variables
-state_variable: true/false
-numeric_variable: 123
-string_variable: "value"
-
-# Special variables:
-character_alive: true
-character_level: 15
-character_hp: 85
-monsters_available: false
-resources_available: true
-```
-
-### Example
-
-```yaml
-character_alive: true
-character_level: 12
-character_hp: 75
-character_xp: 45000
-combat_skill: 8
-mining_skill: 5
-has_weapon: true
-has_pickaxe: true
-has_iron_ore: false
-monsters_available: true
-resources_available: true
-need_rest: false
-can_attack: true
-is_on_cooldown: false
-last_combat_result: "victory"
-```
-
-## State Configurations
-
-**File**: `config/state_configurations.yaml`
-
-Defines object-oriented state class configurations with dependency injection.
-
-### Structure
-
-```yaml
-state_configurations:
-  class_name:
-    module: "src.module.path"
-    class: "ClassName"
-    singleton: true/false
-    dependencies:
-      - name: "dependency_name"
-        type: "DependencyClass"
-        config:
-          param: value
-    config:
-      parameter: value
-```
-
-### Example
-
-```yaml
-state_configurations:
-  CharacterState:
-    module: "src.game.character.state"
-    class: "CharacterState"
-    singleton: true
-    config:
-      name: "default_character"
+equipment_status:
+  weapon: "iron_sword"
+  upgrade_status: "ready"
+  equipped: true
   
-  MapState:
-    module: "src.game.map.state"
-    class: "MapState"
-    singleton: false
-    dependencies:
-      - name: "client"
-        type: "APIClient"
-    config:
-      cache_duration: 300  # 5 minutes
+location_context:
+  current:
+    x: 5
+    y: 10
+  at_target: false
   
-  KnowledgeBase:
-    module: "src.controller.knowledge.base"
-    class: "KnowledgeBase"
-    singleton: true
-    config:
-      filename: "knowledge.yaml"
-      max_combat_records: 1000
+character_status:
+  alive: true
+  cooldown_active: false
+  hp_percentage: 85.0
+  level: 12
 ```
+
+### Knowledge Base
+
+**File**: `data/knowledge.yaml`
+
+Stores learned information from API interactions.
+
+```yaml
+monsters:
+  chicken:
+    locations:
+      - x: 0
+        y: 1
+    combat_data:
+      win_rate: 0.95
+      avg_damage: 15
+      
+resources:
+  copper_ore:
+    locations:
+      - x: 2
+        y: 0
+    quantity_available: 50
+```
+
+### Map Data
+
+**File**: `data/map.yaml`
+
+Caches explored map locations and their contents.
+
+```yaml
+"0,0":
+  content:
+    type: "spawn"
+    name: "spawn"
+"2,0":
+  content:
+    type: "resource"
+    code: "copper_ore"
+```
+
+## Configuration Rules
+
+### Value Types
+
+All configuration uses simple value types:
+
+- **Boolean**: `true`, `false`
+- **String**: `"value"`, `'value'`
+- **Number**: `123`, `45.6`
+- **Null**: `null`
+
+### No Complex Logic
+
+Configuration files contain **only data**, no logic:
+
+- ❌ No complex operators (`>=`, `<`, `!=`)
+- ❌ No templating (`${variable}`)
+- ❌ No conditional expressions
+- ❌ No computed values
+
+### State Structure
+
+State is organized in nested groups:
+
+```yaml
+state_group:
+  field1: value1
+  field2: value2
+  nested_group:
+    field3: value3
+```
+
+Common state groups:
+- `character_status`: Character health, level, cooldown
+- `equipment_status`: Equipment and upgrade status
+- `location_context`: Position and location states
+- `combat_context`: Combat status and statistics
+- `materials`: Crafting materials and inventory
+- `goal_progress`: Progress tracking for current goals
 
 ## Best Practices
 
-1. **Use Descriptive Names**: Action and state names should clearly indicate their purpose
-2. **Document Complex Logic**: Add description fields to explain non-obvious behavior
-3. **Version Control**: Track changes to configuration files in git
-4. **Validate Syntax**: Use a YAML validator before committing changes
-5. **Backup Data Files**: Keep backups of world.yaml and other runtime data
-6. **Use Templates**: Leverage template variables in composite actions for reusability
-7. **Set Appropriate Weights**: Action weights affect GOAP planning efficiency
-8. **Test Changes**: Use `--goal-planner` and `--evaluate-plan` CLI options to test
+### 1. Naming Conventions
+- Use `snake_case` for all field names
+- Use descriptive names that clearly indicate purpose
+- Group related fields under common state groups
+
+### 2. State Design
+- Design fields for clear true/false decisions
+- Use string enums for status fields (`"idle"`, `"ready"`, `"completed"`)
+- Keep numeric values simple (avoid complex calculations)
+
+### 3. Action Design
+- Each action should have minimal, specific conditions
+- Reactions should be direct state updates
+- Use appropriate weights (higher = more preferred by GOAP)
+
+### 4. Goal Design
+- Target states should be specific and achievable
+- Use boolean flags for completion status
+- Keep strategy parameters simple
+
+### 5. Configuration Management
+- Validate YAML syntax before committing
+- Use version control for all configuration files
+- Test configuration changes before deployment
+- Keep data files backed up
 
 ## Common Patterns
 
-### Conditional Actions
+### Simple State Flags
+
 ```yaml
-actions:
-  conditional_action:
-    conditions:
-      prerequisite_met: true
-      resource_available: true
-    reactions:
-      action_completed: true
-      resource_available: false
+# Boolean state flags
+character_status:
+  alive: true
+  safe: false
+  
+# String status values  
+materials:
+  status: "insufficient"  # or "gathered", "ready"
 ```
 
-### Progressive Goals
+### Equipment Workflows
+
 ```yaml
-goal_templates:
-  level_progression:
-    goal_state:
-      character_level_ge: "${params.target_level}"
-    priority: "${params.priority}"
+equipment_status:
+  upgrade_status: "needs_analysis"  # → "ready" → "completed"
+  target_slot: "weapon"
+  selected_item: "iron_sword"
 ```
 
-### Multi-Step Workflows
+### Location Tracking
+
 ```yaml
-composite_actions:
-  complete_quest:
-    steps:
-      - name: "accept"
-        action: "accept_quest"
-      - name: "complete_objectives"
-        action: "do_quest_objectives"
-      - name: "turn_in"
-        action: "turn_in_quest"
+location_context:
+  at_target: false
+  at_workshop: false
+  workshop_known: true
 ```
 
 ## Troubleshooting
 
-- **Actions not executing**: Check conditions in actions.yaml
-- **Goals not being selected**: Verify goal templates and priorities
-- **State not persisting**: Ensure world.yaml has write permissions
-- **Composite actions failing**: Check step dependencies and parameter templates
-- **Planning failures**: Use CLI debugging tools to analyze state and conditions
+### Common Issues
+
+- **Actions not executing**: Check that conditions match current state exactly
+- **Goals not achieved**: Verify target state uses correct field names and values
+- **State not persisting**: Ensure data files have write permissions
+- **Planning failures**: Check that all state fields referenced in conditions have defaults
+
+### Debugging Tips
+
+1. Use logging to see current state values
+2. Check that action conditions match exactly (case-sensitive)
+3. Verify all referenced state fields exist in defaults
+4. Ensure boolean values are `true`/`false`, not `True`/`False`
+
+This simple, declarative approach makes the system predictable and easy to modify without complex configuration syntax.

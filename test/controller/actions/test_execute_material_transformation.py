@@ -7,19 +7,21 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.execute_material_transformation import ExecuteMaterialTransformationAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from test.test_base import UnifiedContextTestBase
 
 
-class TestExecuteMaterialTransformationAction(unittest.TestCase):
+class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
     """Test cases for ExecuteMaterialTransformationAction."""
     
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         self.action = ExecuteMaterialTransformationAction()
         self.client = Mock()
         
-        # Create context
-        self.context = ActionContext()
-        self.context.character_name = "test_character"
+        # Set character name in context
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
         
     def test_initialization(self):
         """Test action initialization."""
@@ -32,21 +34,23 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
     def test_execute_missing_parameters(self):
         """Test execution with missing parameters."""
         # Missing all parameters
-        result = self.action.execute(self.client, self.context)
-        self.assertFalse(result.success)
-        self.assertIn("Missing transformation parameters", result.error)
+        with patch.object(self.action, '_wait_for_cooldown'):
+            result = self.action.execute(self.client, self.context)
+            self.assertFalse(result.success)
+            self.assertIn("Missing transformation parameters", result.error)
         
         # Missing refined_material
-        self.context['raw_material'] = 'copper_ore'
-        result = self.action.execute(self.client, self.context)
-        self.assertFalse(result.success)
-        self.assertIn("Missing transformation parameters", result.error)
+        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
+        with patch.object(self.action, '_wait_for_cooldown'):
+            result = self.action.execute(self.client, self.context)
+            self.assertFalse(result.success)
+            self.assertIn("Missing transformation parameters", result.error)
         
     def test_execute_successful_transformation(self):
         """Test successful material transformation."""
-        self.context['raw_material'] = 'copper_ore'
-        self.context['refined_material'] = 'copper'
-        self.context['quantity'] = 5
+        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
+        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.QUANTITY, 5)
         
         # Mock crafting response
         craft_response = Mock()
@@ -69,7 +73,7 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 self.assertEqual(result.data['items_produced'][0]['quantity'], 5)
                 
                 # Check context was updated
-                last_transformation = self.context.get('last_transformation')
+                last_transformation = self.context.get(StateParameters.LAST_TRANSFORMATION)
                 self.assertIsNotNone(last_transformation)
                 self.assertTrue(last_transformation['success'])
                 self.assertEqual(last_transformation['raw_material'], 'copper_ore')
@@ -77,8 +81,8 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
     def test_execute_with_default_quantity(self):
         """Test execution with default quantity."""
-        self.context['raw_material'] = 'copper_ore'
-        self.context['refined_material'] = 'copper'
+        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
+        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
         # No quantity specified, should default to 1
         
         craft_response = Mock()
@@ -104,9 +108,9 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
     def test_execute_crafting_fails(self):
         """Test when crafting API fails."""
-        self.context['raw_material'] = 'copper_ore'
-        self.context['refined_material'] = 'copper'
-        self.context['quantity'] = 5
+        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
+        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.QUANTITY, 5)
         
         with patch.object(self.action, '_wait_for_cooldown'):
             with patch('src.controller.actions.execute_material_transformation.crafting_api') as mock_craft:
@@ -119,9 +123,9 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
     def test_execute_exception_handling(self):
         """Test exception handling."""
-        self.context['raw_material'] = 'copper_ore'
-        self.context['refined_material'] = 'copper'
-        self.context['quantity'] = 5
+        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
+        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.QUANTITY, 5)
         
         with patch.object(self.action, '_wait_for_cooldown'):
             with patch('src.controller.actions.execute_material_transformation.crafting_api') as mock_craft:
@@ -139,9 +143,7 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
         char_response.data = Mock()
         char_response.data.cooldown = 3  # 3 second cooldown
         
-        self.context['action_config'] = {
-            'cooldown_buffer_seconds': 0.5
-        }
+        # No longer using nested action_config - using default buffer
         
         with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync') as mock_get:
             mock_get.return_value = char_response
@@ -149,8 +151,8 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
             with patch('src.controller.actions.execute_material_transformation.time.sleep') as mock_sleep:
                 self.action._wait_for_cooldown(self.client, 'test_character', self.context)
                 
-                # Should sleep for cooldown + buffer
-                mock_sleep.assert_called_once_with(3.5)
+                # Should sleep for cooldown + default buffer (1)
+                mock_sleep.assert_called_once_with(4)
                 
     def test_wait_for_cooldown_none(self):
         """Test when no cooldown active."""
@@ -182,7 +184,7 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
         char_response.data = Mock()
         char_response.data.cooldown = 2
         
-        # No action_config, should use default buffer of 1
+        # Using default buffer of 1
         
         with patch('artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync') as mock_get:
             mock_get.return_value = char_response
@@ -195,9 +197,9 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
     def test_transformation_result_structure(self):
         """Test the structure of transformation result."""
-        self.context['raw_material'] = 'copper_ore'
-        self.context['refined_material'] = 'copper'
-        self.context['quantity'] = 5
+        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
+        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.QUANTITY, 5)
         
         craft_response = Mock()
         craft_response.data = Mock()
@@ -227,9 +229,9 @@ class TestExecuteMaterialTransformationAction(unittest.TestCase):
                 
     def test_crafting_with_no_items_produced(self):
         """Test crafting that produces no items (edge case)."""
-        self.context['raw_material'] = 'test'
-        self.context['refined_material'] = 'test'
-        self.context['quantity'] = 1
+        self.context.set(StateParameters.RAW_MATERIAL, 'test')
+        self.context.set(StateParameters.REFINED_MATERIAL, 'test')
+        self.context.set(StateParameters.QUANTITY, 1)
         
         craft_response = Mock()
         craft_response.data = Mock()

@@ -10,8 +10,10 @@ from typing import Dict, List, Optional
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from .base import ActionBase, ActionResult
+from src.game.globals import EquipmentStatus
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 class SelectRecipeAction(ActionBase):
     """
@@ -25,13 +27,13 @@ class SelectRecipeAction(ActionBase):
     # GOAP parameters - consolidated state format
     conditions = {
         "equipment_status": {
-            "upgrade_status": "analyzing",
+            "upgrade_status": EquipmentStatus.ANALYZING,
             "has_target_slot": True
         }
     }
     reactions = {
         "equipment_status": {
-            "upgrade_status": "ready",
+            "upgrade_status": EquipmentStatus.READY,
             "has_selected_item": True
         }
     }
@@ -46,9 +48,9 @@ class SelectRecipeAction(ActionBase):
         # Call superclass to set self._context
         super().execute(client, context)
         
-        # Get parameters from context
-        character_name = context.character_name
-        target_slot = context.get('target_slot', 'weapon')
+        # Get parameters from context using flattened properties
+        character_name = context.get(StateParameters.CHARACTER_NAME)
+        target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
         
         self._context = context
         
@@ -67,18 +69,29 @@ class SelectRecipeAction(ActionBase):
             if not selected_recipe:
                 return self.create_error_result(f"No suitable recipe found for {target_slot}")
             
-            # Create result with consolidated state updates
-            result = self.create_success_result(
-                equipment_status={
-                    "upgrade_status": "ready",
-                    "selected_item": selected_recipe['item_code'],
-                    "target_slot": target_slot,
-                    "recipe_selected": True
+            # Update ActionContext using StateParameters  
+            context.set_result(StateParameters.SELECTED_ITEM, selected_recipe['item_code'])
+            context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, target_slot)
+            context.set_result(StateParameters.UPGRADE_STATUS, "ready")
+            context.set_result(StateParameters.TARGET_RECIPE, selected_recipe)
+            
+            # Store additional results for other actions
+            context.set_result(StateParameters.SELECTED_RECIPE, selected_recipe)
+            context.set_result(StateParameters.CHARACTER_LEVEL, character_level)
+            
+            # Create result with state changes for world state persistence
+            result = self.create_result_with_state_changes(
+                success=True,
+                state_changes={
+                    "equipment_status": {
+                        "upgrade_status": "ready",
+                        "selected_item": selected_recipe['item_code'],
+                        "target_slot": target_slot,
+                    }
                 },
+                selected_item=selected_recipe['item_code'],
                 selected_recipe=selected_recipe,
                 character_level=character_level,
-                # Add top-level keys for template resolution
-                selected_item=selected_recipe['item_code'],
                 target_slot=target_slot
             )
             
@@ -93,7 +106,7 @@ class SelectRecipeAction(ActionBase):
         """Select the optimal recipe for the target slot and character level."""
         try:
             # First check if we have a skill passed from context (from select_optimal_slot)
-            skill_name = context.get_parameter('target_craft_skill')
+            skill_name = context.get(StateParameters.TARGET_CRAFT_SKILL)
             
             if skill_name:
                 self.logger.info(f"Using skill '{skill_name}' from context for slot '{target_slot}'")

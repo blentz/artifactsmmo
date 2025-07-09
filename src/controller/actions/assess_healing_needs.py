@@ -1,75 +1,91 @@
 """
-Assess Healing Needs Action
+Simple Assess Healing Needs Action
 
-This bridge action evaluates the character's current HP and determines
-if healing is needed. It sets appropriate state flags for the healing flow.
+This action follows the architecture principles:
+- Simple boolean conditions
+- Uses StateParameters for all data access
+- Declarative GOAP configuration
+- No backward compatibility code
 """
 
+import logging
 from typing import Dict, Any
 
+from src.controller.actions.base import ActionBase, ActionResult
 from src.lib.action_context import ActionContext
-from .base import ActionBase, ActionResult
+from src.lib.state_parameters import StateParameters
 
 
 class AssessHealingNeedsAction(ActionBase):
     """
-    Bridge action to assess if character needs healing.
+    Simple action to assess if character needs healing.
     
-    This action evaluates the current HP percentage and sets state flags
-    to indicate whether healing is needed. This allows GOAP to plan
-    appropriate healing actions.
+    Follows architecture principles:
+    - Simple boolean conditions
+    - Uses StateParameters for all data
+    - No complex business logic
     """
     
+    # GOAP parameters - simple boolean conditions
+    conditions = {
+        'character_status': {
+            'alive': True,
+        },
+    }
+    
+    reactions = {
+        'healing_context': {
+            'healing_needed': True
+        }
+    }
+    
+    weight = 1.0
+    
     def __init__(self):
-        """Initialize assess healing needs action."""
+        """Initialize the simple healing assessment action."""
         super().__init__()
-        self.healing_threshold = 100  # Default: need healing if HP < 100%
-        
-    def execute(self, client, context: 'ActionContext') -> ActionResult:
+        self.logger = logging.getLogger(__name__)
+    
+    def execute(self, client, context: ActionContext) -> ActionResult:
         """
-        Assess if character needs healing based on current HP.
+        Simple healing assessment using StateParameters.
         
         Args:
             client: API client
-            context: Action context with character state
+            context: ActionContext containing character state
             
         Returns:
-            Dict with healing assessment results
+            Action result with healing assessment
         """
-        self._context = context
+        # Call superclass to set self._context
+        super().execute(client, context)
         
-        try:
-            # Get current HP from world state
-            world_state_obj = context.get('world_state')
-            if world_state_obj and hasattr(world_state_obj, 'data'):
-                # Production case: WorldState object with .data attribute
-                world_state = world_state_obj.data
-            elif isinstance(world_state_obj, dict):
-                # Test case: world_state is already a dictionary
-                world_state = world_state_obj
-            else:
-                world_state = {}
-            character_status = world_state.get('character_status', {})
-            hp_percentage = character_status.get('hp_percentage', 100)
-            
-            # Check if healing is needed
-            healing_needed = hp_percentage < self.healing_threshold
-            
-            if healing_needed:
-                self.logger.info(f"💔 Healing needed: HP at {hp_percentage:.1f}%")
-            else:
-                self.logger.debug(f"💚 No healing needed: HP at {hp_percentage:.1f}%")
-            
-            # This is a state update action - no API call needed
-            return self.create_success_result(
-                f"Healing assessment: {'needed' if healing_needed else 'not needed'} (HP: {hp_percentage:.1f}%)",
-                healing_needed=healing_needed,
-                current_hp_percentage=hp_percentage,
-                healing_threshold=self.healing_threshold
-            )
-            
-        except Exception as e:
-            return self.create_error_result(f"Failed to assess healing needs: {e}")
-    
-    def __repr__(self):
-        return f"AssessHealingNeedsAction(threshold={self.healing_threshold})"
+        # Get HP values from StateParameters
+        current_hp = context.get(StateParameters.CHARACTER_HP, 100)
+        max_hp = context.get(StateParameters.CHARACTER_MAX_HP, 100)
+        
+        if max_hp == 0:
+            return self.create_error_result("Invalid character state: max_hp is 0")
+        
+        # Calculate HP percentage
+        hp_percentage = (current_hp / max_hp) * 100
+        
+        # Simple healing threshold - needs healing if not at full HP
+        healing_needed = current_hp < max_hp
+        
+        # Log result
+        if healing_needed:
+            self.logger.info(f"💔 Healing needed: HP at {current_hp}/{max_hp} ({hp_percentage:.1f}%)")
+        else:
+            self.logger.debug(f"💚 No healing needed: HP at {current_hp}/{max_hp} ({hp_percentage:.1f}%)")
+        
+        # Update context with results using StateParameters
+        context.set_result(StateParameters.HEALING_NEEDED, healing_needed)
+        
+        return self.create_success_result(
+            message=f"Healing assessment: {'needed' if healing_needed else 'not needed'} (HP: {current_hp}/{max_hp})",
+            healing_needed=healing_needed,
+            current_hp=current_hp,
+            max_hp=max_hp,
+            hp_percentage=hp_percentage
+        )

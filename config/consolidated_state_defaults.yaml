@@ -15,9 +15,11 @@ state_defaults:
     gaps_analyzed: false
     item_crafted: false
     equipped: false
-    recipe_evaluated: false
+    # Boolean flags computed from the above values
     has_target_slot: false
     has_selected_item: false
+    has_weapon: false
+    weapon_equipped: false
     
   location_context:
     current:
@@ -30,6 +32,7 @@ state_defaults:
     at_resource: false
     at_target: false
     workshop_known: false
+    resource_known: false
     
   materials:
     inventory: {}
@@ -38,6 +41,10 @@ state_defaults:
     gathered: false
     requirements_determined: false
     availability_checked: false
+    transformation_complete: false
+    ready_to_craft: false
+    quantities_calculated: false
+    raw_materials_needed: false
     
   combat_context:
     status: "idle"
@@ -56,7 +63,6 @@ state_defaults:
       
   character_status:
     level: 1
-    hp_percentage: 100.0
     xp_percentage: 0.0
     alive: true
     safe: true

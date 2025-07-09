@@ -11,9 +11,9 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 
 from src.controller.actions.base import ActionBase, ActionResult
 from src.lib.action_context import ActionContext
-from src.controller.actions.find_resources import FindResourcesAction
-from src.controller.actions.move_to_resource import MoveToResourceAction
-from src.controller.actions.gather_resources import GatherResourcesAction
+from src.lib.state_parameters import StateParameters
+from src.lib.recipe_utils import get_recipe_from_context, get_recipe_materials
+from src.game.globals import MaterialStatus
 
 
 class GatherMissingMaterialsAction(ActionBase):
@@ -30,7 +30,7 @@ class GatherMissingMaterialsAction(ActionBase):
     # GOAP parameters
     conditions = {
         'materials': {
-            'status': 'insufficient',
+            'status': MaterialStatus.INSUFFICIENT,
             'availability_checked': True
         },
         'character_status': {
@@ -40,11 +40,16 @@ class GatherMissingMaterialsAction(ActionBase):
     
     reactions = {
         'materials': {
-            'status': 'gathering',
+            'status': [MaterialStatus.GATHERING, MaterialStatus.SUFFICIENT],  # Can be either gathering or sufficient
             'gathering_initiated': True
         },
         'resource_availability': {
-            'resources': True
+            'resources': True,
+            'resource_known': True
+        },
+        'location_context': {
+            'target_known': True,
+            'needs_movement': True
         }
     }
     
@@ -53,13 +58,14 @@ class GatherMissingMaterialsAction(ActionBase):
     def __init__(self):
         """Initialize the gather missing materials action."""
         super().__init__()
-        self.find_resources_action = FindResourcesAction()
-        self.move_to_resource_action = MoveToResourceAction()
-        self.gather_resources_action = GatherResourcesAction()
         
     def execute(self, client, context: ActionContext) -> ActionResult:
         """
-        Execute material gathering for missing materials.
+        Execute material gathering for missing materials with proper continuation logic.
+        
+        This action implements stateful continuation:
+        1. First execution: Find resource location and request move subgoal
+        2. Continuation: Check if at target location and proceed to gather
         
         Args:
             client: API client for character data
@@ -70,120 +76,118 @@ class GatherMissingMaterialsAction(ActionBase):
         """
         self._context = context
         
-        character_name = context.character_name
-        missing_materials = context.get('missing_materials', {})
+        character_name = context.get(StateParameters.CHARACTER_NAME)
+        
+        # Check for missing materials in context first, then calculate from recipe if needed
+        missing_materials_raw = context.get(StateParameters.MISSING_MATERIALS, {})
+        
+        # Handle both dict and list formats for missing_materials
+        if isinstance(missing_materials_raw, list):
+            # Convert list format ['item1', 'item2'] to dict format {'item1': 1, 'item2': 1}
+            missing_materials = {item: 1 for item in missing_materials_raw}
+        elif isinstance(missing_materials_raw, dict):
+            missing_materials = missing_materials_raw
+        else:
+            missing_materials = {}
         
         if not missing_materials:
-            return self.create_error_result("No missing materials specified")
+            # No missing materials in context, calculate from recipe
+            try:
+                target_recipe = get_recipe_from_context(context)
+                if target_recipe:
+                    recipe_materials = get_recipe_materials(target_recipe)
+                    if recipe_materials:
+                        # Check current inventory against recipe requirements
+                        current_inventory = context.get_character_inventory()
+                        
+                        for material_code, required_quantity in recipe_materials.items():
+                            current_quantity = current_inventory.get(material_code, 0)
+                            if current_quantity < required_quantity:
+                                missing_materials[material_code] = required_quantity - current_quantity
+            except ValueError:
+                # Recipe not available, check if missing_materials was provided directly
+                pass
+        
+        if not missing_materials:
+            return self.create_error_result("No materials required for recipe")
+        
+        if not missing_materials:
+            # We have all materials needed
+            state_changes = {
+                'materials': {
+                    'status': MaterialStatus.SUFFICIENT,
+                    'gathered': True
+                }
+            }
+            return self.create_result_with_state_changes(
+                success=True,
+                state_changes=state_changes,
+                message="All required materials gathered"
+            )
             
         self.logger.info(f"🔨 Need to gather materials: {missing_materials}")
         
         try:
             # Get the first missing material and quantity needed
-            if isinstance(missing_materials, dict):
-                # Handle dict format: {'copper_ore': 10}
-                target_material = list(missing_materials.keys())[0]
-                quantity_needed = missing_materials[target_material]
-            else:
-                # Handle list format: ['copper_ore']
-                target_material = missing_materials[0] if isinstance(missing_materials, list) else str(missing_materials)
-                quantity_needed = 1
+            target_material = list(missing_materials.keys())[0]
+            quantity_needed = missing_materials[target_material]
                 
-            self.logger.info(f"🎯 Targeting {quantity_needed}x {target_material}")
+            # Check if we're continuing from a previous execution (resource coordinates already found)
+            target_x = context.get(StateParameters.TARGET_X)
+            target_y = context.get(StateParameters.TARGET_Y)
+            stored_material = context.get(StateParameters.TARGET_MATERIAL)
             
-            # Step 1: Find resource location
-            context['resource_types'] = [target_material]
-            find_result = self.find_resources_action.execute(client, context)
-            
-            if not find_result.success:
-                return self.create_error_result(f"Could not find resource location for {target_material}")
+            # Step 1: Check if we're at the target location and can proceed to gathering
+            if (target_x is not None and target_y is not None and 
+                stored_material == target_material):
                 
-            # Get coordinates from find_result data
-            target_x = find_result.data.get('target_x')
-            target_y = find_result.data.get('target_y')
-            
-            if target_x is None or target_y is None:
-                return self.create_error_result(f"FindResourcesAction did not return valid coordinates for {target_material}. Got target_x={target_x}, target_y={target_y}")
+                # Get current character location to check if we're at target
+                from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+                char_response = get_character_api(character_name, client=client)
                 
-            self.logger.info(f"📍 Found {target_material} at ({target_x}, {target_y})")
-            
-            # Ensure coordinates are set on context for MoveToResourceAction
-            context.target_x = target_x
-            context.target_y = target_y
-            
-            # Step 2: Move to resource location
-            move_result = self.move_to_resource_action.execute(client, context)
-            
-            if not move_result.success:
-                # Preserve the actual error from the movement action
-                actual_error = getattr(move_result, 'error', 'Unknown movement error')
-                return self.create_error_result(f"Could not move to resource location ({target_x}, {target_y}): {actual_error}")
-                
-            self.logger.info(f"✅ Moved to resource location")
-            
-            # Step 3: Gather resources
-            gathered_total = 0
-            attempts = 0
-            max_attempts = 10  # Limit gathering attempts
-            
-            while gathered_total < quantity_needed and attempts < max_attempts:
-                gather_result = self.gather_resources_action.execute(client, context)
-                
-                if not gather_result.success:
-                    self.logger.warning(f"Gathering attempt {attempts + 1} failed")
-                    break
+                if not char_response.data:
+                    return self.create_error_result("Could not get character data")
                     
-                # Check items obtained
-                items_obtained = gather_result.data.get('items_obtained', [])
-                for item in items_obtained:
-                    if item.get('code') == target_material:
-                        gathered_total += item.get('quantity', 0)
-                        
-                attempts += 1
-                self.logger.info(f"🛠️ Gathered {gathered_total}/{quantity_needed} {target_material} (attempt {attempts})")
+                current_x = char_response.data.x
+                current_y = char_response.data.y
                 
-                if gathered_total >= quantity_needed:
-                    break
+                # If we're at the target location, proceed with gathering
+                if current_x == target_x and current_y == target_y:
+                    self.logger.info(f"📍 At target location ({target_x}, {target_y}), proceeding to gather {target_material}")
                     
-            # Determine if we gathered enough
-            gathering_complete = gathered_total >= quantity_needed
+                    # Request gather_resource subgoal to perform the actual gathering
+                    result = self.create_success_result(f"At target location, requesting gather operation for {target_material}")
+                    
+                    result.request_subgoal(
+                        goal_name="gather_resource",
+                        parameters={
+                            "target_resource": target_material,
+                            "quantity_needed": quantity_needed
+                        }
+                    )
+                    
+                    self.logger.info(f"🎯 Requesting gather_resource subgoal for {target_material}")
+                    return result
             
-            state_changes = {
-                'materials': {
-                    'status': 'gathering' if not gathering_complete else 'checking',
-                    'gathering_initiated': True,
-                    'last_gathered': target_material
-                },
-                'location_context': {
-                    'at_resource': True,
-                    'current_resource': target_material
-                },
-                'resource_availability': {
-                    'resources': True
+            # Step 2: Need to find resource location first
+            self.logger.info(f"🎯 Need to find location for {target_material}")
+            
+            # Store the target material in context for the find_resources subgoal
+            context.set_result(StateParameters.TARGET_MATERIAL, target_material)
+            context.set_result(StateParameters.QUANTITY_NEEDED, quantity_needed)
+            
+            # Request find_resources subgoal to locate the material
+            result = self.create_success_result(f"Need to find location for {target_material}")
+            
+            result.request_subgoal(
+                goal_name="find_resources", 
+                parameters={
+                    "resource_types": [target_material]
                 }
-            }
-            
-            # Store results in context for other actions
-            context.set_result('target_material', target_material)
-            context.set_result('materials_gathered', {target_material: gathered_total})
-            context.set_result('gathering_complete', gathering_complete)
-            context.set_result('quantity_needed', quantity_needed)
-            context.set_result('quantity_gathered', gathered_total)
-            
-            if gathering_complete:
-                message = f"Successfully gathered {gathered_total} {target_material}"
-            else:
-                message = f"Partially gathered {gathered_total}/{quantity_needed} {target_material}"
-                
-            return self.create_result_with_state_changes(
-                success=True,
-                state_changes=state_changes,
-                message=message,
-                target_material=target_material,
-                quantity_gathered=gathered_total,
-                quantity_needed=quantity_needed,
-                gathering_complete=gathering_complete
             )
+            
+            self.logger.info(f"🎯 Requesting find_resources subgoal for {target_material}")
+            return result
             
         except Exception as e:
             return self.create_error_result(f"Material gathering failed: {str(e)}")

@@ -261,12 +261,11 @@ class TestGOAPGoalManagerComprehensive(unittest.TestCase):
         
         result = self.goal_manager.calculate_world_state(mock_character_state, mock_map_state)
         
-        # Validate character status
+        # Validate character status (hp_percentage is no longer stored)
         self.assertEqual(result['character_status']['level'], 5)
-        self.assertEqual(result['character_status']['hp_percentage'], 80)
         self.assertEqual(result['character_status']['xp_percentage'], 80)
         self.assertTrue(result['character_status']['alive'])
-        self.assertTrue(result['character_status']['safe'])
+        self.assertTrue(result['character_status']['safe'])  # 80 HP > 30% threshold
         self.assertFalse(result['character_status']['cooldown_active'])
         
         # Validate equipment status

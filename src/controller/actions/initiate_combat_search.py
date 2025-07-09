@@ -8,6 +8,7 @@ from idle combat state to actively searching for monsters.
 import logging
 
 from src.lib.action_context import ActionContext
+from src.game.globals import CombatStatus
 
 from .base import ActionBase, ActionResult
 
@@ -23,7 +24,7 @@ class InitiateCombatSearchAction(ActionBase):
     # GOAP parameters - consolidated state format
     conditions = {
         'combat_context': {
-            'status': 'idle'
+            'status': CombatStatus.IDLE
         },
         'character_status': {
             'alive': True,
@@ -33,7 +34,7 @@ class InitiateCombatSearchAction(ActionBase):
     
     reactions = {
         'combat_context': {
-            'status': 'searching'
+            'status': CombatStatus.SEARCHING
         }
     }
     
@@ -70,7 +71,7 @@ class InitiateCombatSearchAction(ActionBase):
             return self.create_success_result(
                 "Combat search initiated - ready to find monsters",
                 combat_context={
-                    'status': 'searching',
+                    'status': CombatStatus.SEARCHING,
                     'target': None,
                     'location': None
                 }

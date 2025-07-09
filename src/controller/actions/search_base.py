@@ -9,8 +9,6 @@ All search-related actions can inherit from this class to use consistent search 
 import math
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
-from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
-
 from .base import ActionBase, ActionResult
 from .mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
 
@@ -119,47 +117,31 @@ class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin
                 continue
             
             try:
-                # Use MapState cache if available, otherwise fall back to direct API calls
-                if map_state:
-                    # Check if we have fresh cached data first
-                    if map_state.is_cache_fresh(x, y):
+                # Use MapState cache - knowledge base handles all cache freshness decisions
+                # Check if we have fresh cached data first
+                if map_state.is_cache_fresh(x, y):
+                    coord_key = f"{x},{y}"
+                    map_data = map_state.data.get(coord_key, {})
+                    self.logger.debug(f"✅ Cache hit: location ({x}, {y})")
+                else:
+                    # Scan the location (which will use cache or fetch from API as needed)
+                    try:
+                        scan_result = map_state.scan(x, y, cache=True)
+                        # Check if scan returned None (boundary hit)
+                        if scan_result is None:
+                            self._record_boundary_hit(character_x, character_y, x, y)
+                            self.logger.debug(f"Map boundary detected at ({x}, {y})")
+                            continue
                         coord_key = f"{x},{y}"
                         map_data = map_state.data.get(coord_key, {})
-                        self.logger.debug(f"✅ Cache hit: location ({x}, {y})")
-                    else:
-                        # Scan the location (which will use cache or fetch from API as needed)
-                        try:
-                            scan_result = map_state.scan(x, y, cache=True)
-                            # Check if scan returned None (boundary hit)
-                            if scan_result is None:
-                                self._record_boundary_hit(character_x, character_y, x, y)
-                                self.logger.debug(f"Map boundary detected at ({x}, {y})")
-                                continue
-                            coord_key = f"{x},{y}"
-                            map_data = map_state.data.get(coord_key, {})
-                            self.logger.debug(f"🔄 Cache refresh: location ({x}, {y})")
-                        except Exception as scan_error:
-                            # Handle scan errors (including 404s that throw exceptions)
-                            if "404" in str(scan_error) or "not found" in str(scan_error).lower():
-                                self._record_boundary_hit(character_x, character_y, x, y)
-                                self.logger.debug(f"Map boundary detected at ({x}, {y}) via exception: {scan_error}")
-                            else:
-                                self.logger.debug(f"Error scanning ({x}, {y}): {scan_error}")
-                            continue
-                else:
-                    # Fallback to direct API call if no MapState provided
-                    self.logger.debug(f"Direct API call: location ({x}, {y})")
-                    map_response = get_map_api(x=x, y=y, client=client)
-                    
-                    # Handle 404 responses (coordinates outside map)
-                    if map_response is None:
-                        self._record_boundary_hit(character_x, character_y, x, y)
-                        self.logger.debug(f"Map boundary detected at ({x}, {y})")
-                        continue
-                    
-                    if map_response and map_response.data:
-                        map_data = map_response.data.to_dict() if hasattr(map_response.data, 'to_dict') else map_response.data.__dict__
-                    else:
+                        self.logger.debug(f"🔄 Cache refresh: location ({x}, {y})")
+                    except Exception as scan_error:
+                        # Handle scan errors (including 404s that throw exceptions)
+                        if "404" in str(scan_error) or "not found" in str(scan_error).lower():
+                            self._record_boundary_hit(character_x, character_y, x, y)
+                            self.logger.debug(f"Map boundary detected at ({x}, {y}) via exception: {scan_error}")
+                        else:
+                            self.logger.debug(f"Error scanning ({x}, {y}): {scan_error}")
                         continue
                 
                 # Extract content from map data

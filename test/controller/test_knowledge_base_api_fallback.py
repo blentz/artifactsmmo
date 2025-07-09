@@ -107,8 +107,8 @@ class TestKnowledgeBaseAPIFallback(unittest.TestCase):
     @patch('src.controller.knowledge.base.get_item_api')
     def test_get_item_data_with_fallback(self, mock_get_item):
         """Test get_item_data uses API fallback when not in knowledge base."""
-        # Setup mock response
-        mock_item = Mock()
+        # Setup mock response using a simple object instead of Mock to avoid serialization issues
+        mock_item = type('MockItem', (), {})()
         mock_item.code = 'iron_sword'
         mock_item.name = 'Iron Sword'
         mock_item.type = 'weapon'
@@ -117,6 +117,7 @@ class TestKnowledgeBaseAPIFallback(unittest.TestCase):
         mock_item.effects = []
         mock_item.description = 'A basic iron sword'
         mock_item.tradeable = True
+        mock_item.craft = None  # Explicitly set craft to avoid Mock issues
         
         mock_response = Mock()
         mock_response.data = mock_item

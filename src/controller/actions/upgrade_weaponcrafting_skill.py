@@ -12,6 +12,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as craft_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -58,7 +59,7 @@ class UpgradeWeaponcraftingSkillAction(ActionBase):
     def execute(self, client, context: ActionContext) -> ActionResult:
         """Execute weaponcrafting skill upgrade through item crafting."""
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         target_level = context.get('target_level', 1)
         current_level = context.get('current_level', 0)
             

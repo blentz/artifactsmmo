@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch, MagicMock
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
 from src.controller.actions.base import ActionResult
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestAnalyzeResourcesComprehensive(unittest.TestCase):
@@ -20,14 +21,14 @@ class TestAnalyzeResourcesComprehensive(unittest.TestCase):
         self.action = AnalyzeResourcesAction()
         self.client = Mock()
         self.context = ActionContext()
-        self.context.character_name = "test_character"
-        self.context.character_x = 0
-        self.context.character_y = 0
-        self.context.character_level = 5
-        self.context.analysis_radius = 2
-        self.context.equipment_types = ["weapon", "armor"]
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
+        self.context.set(StateParameters.CHARACTER_X, 0)
+        self.context.set(StateParameters.CHARACTER_Y, 0)
+        self.context.set(StateParameters.CHARACTER_LEVEL, 5)
+        self.context.set(StateParameters.ANALYSIS_RADIUS, 2)
+        self.context.set(StateParameters.EQUIPMENT_TYPES, ["weapon", "armor"])
         self.context.knowledge_base = Mock()
-        self.context.config_data = Mock()
+        self.context.set(StateParameters.CONFIG_DATA, Mock())
         
     def test_find_nearby_resources_success(self):
         """Test _find_nearby_resources finds resources correctly."""
@@ -646,6 +647,23 @@ class TestAnalyzeResourcesComprehensive(unittest.TestCase):
                     self.client, 'iron', self.context.knowledge_base, 5, ['weapon']
                 )
                 
+                self.assertEqual(uses, [])
+    
+    def test_find_crafting_uses_for_item_exception_handling(self):
+        """Test _find_crafting_uses_for_item handles exceptions gracefully."""
+        # Mock to raise exception when iterating over equipment items
+        with patch.object(self.action, '_get_equipment_items_from_knowledge') as mock_get_kb:
+            # Return an object that raises exception when iterated
+            mock_get_kb.return_value = Mock()
+            mock_get_kb.return_value.__iter__ = Mock(side_effect=Exception("Database error"))
+            
+            with patch.object(self.action, 'logger') as mock_logger:
+                uses = self.action._find_crafting_uses_for_item(
+                    self.client, 'iron', self.context.knowledge_base, 5, ['weapon']
+                )
+                
+                # Should log warning and return empty list
+                mock_logger.warning.assert_called_once_with("Failed to find crafting uses for iron: Database error")
                 self.assertEqual(uses, [])
     
     def test_find_crafting_uses_for_item_inner_exception(self):

@@ -8,6 +8,8 @@ after a recipe has been selected.
 from typing import Dict
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import EquipmentStatus
 
 from .base import ActionBase, ActionResult
 
@@ -23,13 +25,13 @@ class MarkEquipmentCraftingAction(ActionBase):
     # GOAP parameters
     conditions = {
         'equipment_status': {
-            'upgrade_status': 'ready',
+            'upgrade_status': EquipmentStatus.READY,
             'has_selected_item': True,
         },
     }
     reactions = {
         'equipment_status': {
-            'upgrade_status': 'crafting',
+            'upgrade_status': EquipmentStatus.CRAFTING,
         },
     }
     weight = 1.5
@@ -45,7 +47,7 @@ class MarkEquipmentCraftingAction(ActionBase):
         This is a state-only action that updates the equipment status
         without making any API calls.
         """
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
@@ -53,9 +55,8 @@ class MarkEquipmentCraftingAction(ActionBase):
         
         try:
             # Get selected item information
-            equipment_status = context.get('equipment_status', {})
-            selected_item = equipment_status.get('selected_item', 'unknown')
-            target_slot = equipment_status.get('target_slot', 'unknown')
+            selected_item = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM, 'unknown')
+            target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown')
             
             # Log the transition
             self.logger.info(

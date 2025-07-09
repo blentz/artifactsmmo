@@ -214,7 +214,13 @@ class TestSearchComprehensive(unittest.TestCase):
             character_y=3,
             search_radius=2,
             resource_types=['iron_rocks'],
-            map_state=map_state
+            map_state=map_state,
+            character_level=10,
+            skill_type=None,
+            level_range=5,
+            current_gathering_goal=None,
+            missing_materials={},
+            raw_material_needs={}
         )
         result = action.execute(self.mock_client, context)
         

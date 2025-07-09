@@ -42,7 +42,8 @@ class TestAnalyzeWorkshopRequirementsAction(unittest.TestCase):
 
     def test_execute_no_client(self):
         """Test execute fails without client."""
-        context = MockActionContext(character_name="test_character")
+        context = MockActionContext()
+        context.character_name = "test_character"
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
         self.assertFalse(result.success)

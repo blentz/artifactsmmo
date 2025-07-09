@@ -1,6 +1,6 @@
 """ Actions package """
 
-from .analyze_resources import AnalyzeResourcesAction
+from .analyze_nearby_resources import AnalyzeNearbyResourcesAction
 from .attack import AttackAction
 from .base import ActionBase
 from .craft_item import CraftItemAction
@@ -18,4 +18,4 @@ from .wait import WaitAction
 
 __all__ = ['ActionBase', 'MoveAction', 'MapLookupAction', 'FindMonstersAction', 'AttackAction', 'RestAction',
            'WaitAction', 'GatherResourcesAction', 'CraftItemAction', 'LookupItemInfoAction', 'FindResourcesAction',
-           'EquipItemAction', 'UnequipItemAction', 'ExploreMapAction', 'AnalyzeResourcesAction']
+           'EquipItemAction', 'UnequipItemAction', 'ExploreMapAction', 'AnalyzeNearbyResourcesAction']

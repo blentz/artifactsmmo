@@ -34,17 +34,17 @@ class MoveToResourceAction(MovementActionBase):
 
     def get_target_coordinates(self, context: ActionContext) -> Tuple[Optional[int], Optional[int]]:
         """
-        Get target coordinates from action parameters or context.
+        Get target coordinates from unified context properties.
         
         Args:
-            context: ActionContext with parameters
+            context: ActionContext with unified properties
             
         Returns:
             Tuple of (x, y) coordinates
         """
-        # Get from context (e.g., from find_resources action)
-        target_x = context.get('target_x') or context.get('resource_x')
-        target_y = context.get('target_y') or context.get('resource_y')
+        # Use unified context properties instead of deprecated nested dicts
+        target_x = getattr(context, 'target_x', None) or getattr(context, 'resource_x', None)
+        target_y = getattr(context, 'target_y', None) or getattr(context, 'resource_y', None)
         
         return target_x, target_y
 
@@ -53,7 +53,7 @@ class MoveToResourceAction(MovementActionBase):
         Build resource-specific movement context.
         
         Args:
-            context: ActionContext with parameters
+            context: ActionContext with unified properties
             
         Returns:
             Movement context dictionary
@@ -62,12 +62,12 @@ class MoveToResourceAction(MovementActionBase):
             'at_resource_location': True
         }
         
-        # Include resource information if available
-        resource_code = context.get('resource_code')
+        # Include resource information if available using unified context properties
+        resource_code = getattr(context, 'resource_code', None)
         if resource_code:
             movement_context['resource_code'] = resource_code
             
-        resource_name = context.get('resource_name')
+        resource_name = getattr(context, 'resource_name', None)
         if resource_name:
             movement_context['resource_name'] = resource_name
             

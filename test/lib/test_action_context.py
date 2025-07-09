@@ -1,28 +1,27 @@
 """
-Tests for the unified ActionContext system.
+Tests for the unified ActionContext system - Zero Backward Compatibility
+
+Tests the new StateParameters-only ActionContext implementation.
+No legacy attribute testing - only StateParameters validation.
 """
 
 import unittest
 from unittest.mock import Mock
-
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestActionContext(unittest.TestCase):
-    """Test cases for ActionContext class."""
+    """Test cases for new StateParameters-only ActionContext."""
     
     def setUp(self):
-        """Set up test fixtures."""
-        self.mock_controller = Mock()
-        self.mock_controller.client = Mock()
-        self.mock_controller.character_state = Mock()
-        self.mock_controller.world_state = Mock()
-        self.mock_controller.map_state = Mock()
-        self.mock_controller.knowledge_base = Mock()
-        self.mock_controller.action_context = {'previous_result': 'test'}
+        """Set up test fixtures with singleton reset."""
+        # Reset singleton state before each test
+        import src.lib.unified_state_context
+        src.lib.unified_state_context._unified_instance = None
         
-        # Set up character state mock
-        self.mock_controller.character_state.name = 'TestChar'
+        self.mock_controller = Mock()
+        self.mock_controller.character_state = Mock()
         self.mock_controller.character_state.data = {
             'x': 10,
             'y': 20,
@@ -30,278 +29,179 @@ class TestActionContext(unittest.TestCase):
             'hp': 100,
             'max_hp': 125,
             'weapon': 'iron_sword',
-            'shield': 'wooden_shield',
-            'inventory': [
-                {'code': 'copper_ore', 'quantity': 5},
-                {'code': 'ash_wood', 'quantity': 10}
-            ]
+            'armor': 'leather_armor',
+            'helmet': 'iron_helmet',
+            'boots': '',
+            'shield': 'wooden_shield'
         }
     
-    def test_context_creation_empty(self):
-        """Test creating an empty ActionContext."""
-        context = ActionContext()
-        self.assertIsNone(context.controller)
-        self.assertIsNone(context.client)
-        self.assertEqual(context.character_name, "")
-        self.assertEqual(context.character_x, 0)
-        self.assertEqual(context.character_y, 0)
-        self.assertEqual(context.character_level, 1)
-        self.assertEqual(context.character_hp, 0)
-        self.assertEqual(context.character_max_hp, 0)
-        self.assertEqual(context.equipment, {})
-        self.assertEqual(context.action_data, {})
-        self.assertEqual(context.action_results, {})
+    def test_context_creation_uses_singleton(self):
+        """Test ActionContext uses unified singleton context."""
+        context1 = ActionContext()
+        context2 = ActionContext()
+        
+        # Both contexts should use the same singleton
+        self.assertIs(context1._state, context2._state)
+        
+        # Setting value in one should appear in other
+        context1.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'test_item')
+        self.assertEqual(context2.get(StateParameters.EQUIPMENT_SELECTED_ITEM), 'test_item')
     
-    def test_from_controller(self):
-        """Test creating ActionContext from controller."""
+    def test_get_and_set_with_state_parameters(self):
+        """Test get/set operations using StateParameters registry."""
+        context = ActionContext()
+        
+        # Test setting and getting valid parameters
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'copper_sword')
+        context.set(StateParameters.CHARACTER_LEVEL, 42)
+        context.set(StateParameters.MATERIALS_STATUS, 'sufficient')
+        
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_SELECTED_ITEM), 'copper_sword')
+        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 42)
+        self.assertEqual(context.get(StateParameters.MATERIALS_STATUS), 'sufficient')
+    
+    def test_parameter_validation_enforcement(self):
+        """Test that invalid parameters raise ValueError."""
+        context = ActionContext()
+        
+        # Invalid parameters should raise ValueError
+        with self.assertRaises(ValueError, msg="Parameter 'invalid.parameter' not registered"):
+            context.get('invalid.parameter')
+        
+        with self.assertRaises(ValueError, msg="Parameter 'another.invalid' not registered"):
+            context.set('another.invalid', 'value')
+    
+    def test_automatic_flag_setting(self):
+        """Test automatic related flag setting."""
+        context = ActionContext()
+        
+        # Setting selected item should automatically set has_selected_item flag
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'test_weapon')
+        self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
+        
+        # Setting empty/None selected item should set flag to False
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, None)
+        self.assertFalse(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
+        
+        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, '')
+        self.assertFalse(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
+    
+    def test_from_controller_character_data_mapping(self):
+        """Test from_controller maps character data to StateParameters."""
         context = ActionContext.from_controller(self.mock_controller)
         
-        # Core dependencies
-        self.assertEqual(context.controller, self.mock_controller)
-        self.assertEqual(context.client, self.mock_controller.client)
-        self.assertEqual(context.character_state, self.mock_controller.character_state)
-        self.assertEqual(context.world_state, self.mock_controller.world_state)
-        self.assertEqual(context.map_state, self.mock_controller.map_state)
-        self.assertEqual(context.knowledge_base, self.mock_controller.knowledge_base)
+        # Verify character data mapped to StateParameters
+        self.assertEqual(context.get(StateParameters.CHARACTER_X), 10)
+        self.assertEqual(context.get(StateParameters.CHARACTER_Y), 20)
+        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 5)
+        self.assertEqual(context.get(StateParameters.CHARACTER_HP), 100)
+        self.assertEqual(context.get(StateParameters.CHARACTER_MAX_HP), 125)
+        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))  # hp > 0
         
-        # Character information
-        self.assertEqual(context.character_name, 'TestChar')
-        self.assertEqual(context.character_x, 10)
-        self.assertEqual(context.character_y, 20)
-        self.assertEqual(context.character_level, 5)
-        self.assertEqual(context.character_hp, 100)
-        self.assertEqual(context.character_max_hp, 125)
-        
-        # Equipment should be the entire character data dict
-        self.assertEqual(context.equipment, self.mock_controller.character_state.data)
-        
-        # Action results from controller context
-        self.assertEqual(context.action_results, {'previous_result': 'test'})
+        # Verify equipment mapped to StateParameters
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_WEAPON), 'iron_sword')
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_ARMOR), 'leather_armor')
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_HELMET), 'iron_helmet')
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_BOOTS), '')
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_SHIELD), 'wooden_shield')
     
-    def test_from_controller_with_action_data(self):
-        """Test creating ActionContext with action data."""
-        action_data = {
-            'name': 'test_action',
-            'params': {
-                'slot': 'weapon',
-                'item_code': 'copper_sword'
-            }
+    def test_from_controller_no_character_state(self):
+        """Test from_controller handles missing character state gracefully."""
+        mock_controller = Mock()
+        mock_controller.character_state = None
+        
+        context = ActionContext.from_controller(mock_controller)
+        
+        # Should still work with defaults
+        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 1)  # Default
+        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))  # Default
+    
+    def test_update_multiple_parameters(self):
+        """Test updating multiple parameters at once."""
+        context = ActionContext()
+        
+        updates = {
+            StateParameters.EQUIPMENT_SELECTED_ITEM: 'iron_sword',
+            StateParameters.CHARACTER_LEVEL: 15,
+            StateParameters.MATERIALS_STATUS: 'ready'
         }
         
-        context = ActionContext.from_controller(self.mock_controller, action_data)
+        context.update(updates)
         
-        # Action data should be merged
-        self.assertEqual(context.action_data['name'], 'test_action')
-        self.assertEqual(context.action_data['slot'], 'weapon')
-        self.assertEqual(context.action_data['item_code'], 'copper_sword')
+        # Verify all updates applied
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_SELECTED_ITEM), 'iron_sword')
+        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 15)
+        self.assertEqual(context.get(StateParameters.MATERIALS_STATUS), 'ready')
+        
+        # Verify automatic flag setting worked
+        self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
     
-    def test_get_parameter(self):
-        """Test parameter retrieval with fallback."""
-        context = ActionContext()
-        context.action_data = {'action_param': 'value1'}
-        context.action_results = {'result_param': 'value2'}
-        context.character_level = 10
-        
-        # From action_data
-        self.assertEqual(context.get_parameter('action_param'), 'value1')
-        
-        # From action_results
-        self.assertEqual(context.get_parameter('result_param'), 'value2')
-        
-        # From context attributes
-        self.assertEqual(context.get_parameter('character_level'), 10)
-        
-        # Default value
-        self.assertEqual(context.get_parameter('missing_param', 'default'), 'default')
-        self.assertIsNone(context.get_parameter('missing_param'))
-    
-    def test_set_parameter_and_result(self):
-        """Test setting parameters and results."""
+    def test_set_result_uses_state_parameters(self):
+        """Test set_result delegates to StateParameters set method."""
         context = ActionContext()
         
-        context.set_parameter('test_param', 'test_value')
-        self.assertEqual(context.action_data['test_param'], 'test_value')
+        context.set_result(StateParameters.EQUIPMENT_SELECTED_ITEM, 'result_item')
+        context.set_result(StateParameters.COMBAT_STATUS, 'active')
         
-        context.set_result('test_result', 'result_value')
-        self.assertEqual(context.action_results['test_result'], 'result_value')
-    
-    def test_get_character_inventory(self):
-        """Test getting character inventory."""
-        context = ActionContext.from_controller(self.mock_controller)
+        self.assertEqual(context.get(StateParameters.EQUIPMENT_SELECTED_ITEM), 'result_item')
+        self.assertEqual(context.get(StateParameters.COMBAT_STATUS), 'active')
         
-        inventory = context.get_character_inventory()
-        
-        # Should include inventory items
-        self.assertEqual(inventory['copper_ore'], 5)
-        self.assertEqual(inventory['ash_wood'], 10)
-        
-        # Should include equipped items
-        self.assertEqual(inventory['iron_sword'], 1)
-        self.assertEqual(inventory['wooden_shield'], 1)
-    
-    def test_get_character_inventory_caching(self):
-        """Test inventory caching behavior."""
-        context = ActionContext.from_controller(self.mock_controller)
-        
-        # First call
-        inventory1 = context.get_character_inventory()
-        
-        # Modify character state
-        context.character_state.data['inventory'].append({'code': 'new_item', 'quantity': 1})
-        
-        # Second call with cache should return same result
-        inventory2 = context.get_character_inventory(use_cache=True)
-        self.assertEqual(inventory1, inventory2)
-        self.assertNotIn('new_item', inventory2)
-        
-        # Clear cache and get fresh data
-        context.clear_inventory_cache()
-        inventory3 = context.get_character_inventory()
-        self.assertEqual(inventory3['new_item'], 1)
+        # Should trigger automatic flag setting
+        self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
     
     def test_get_equipped_item_in_slot(self):
-        """Test getting equipped item in slot."""
-        context = ActionContext.from_controller(self.mock_controller)
-        
-        # Since equipment is the whole character data dict
-        self.assertEqual(context.get_equipped_item_in_slot('weapon'), 'iron_sword')
-        self.assertEqual(context.get_equipped_item_in_slot('shield'), 'wooden_shield')
-        self.assertIsNone(context.get_equipped_item_in_slot('helmet'))
-    
-    def test_has_item(self):
-        """Test checking if character has item."""
-        context = ActionContext.from_controller(self.mock_controller)
-        
-        # Inventory items
-        self.assertTrue(context.has_item('copper_ore', 5))
-        self.assertTrue(context.has_item('copper_ore', 3))
-        self.assertFalse(context.has_item('copper_ore', 10))
-        
-        # Equipped items
-        self.assertTrue(context.has_item('iron_sword', 1))
-        self.assertFalse(context.has_item('iron_sword', 2))
-        
-        # Non-existent items
-        self.assertFalse(context.has_item('gold_ore', 1))
-    
-    def test_get_item_data(self):
-        """Test getting item data from knowledge base."""
-        context = ActionContext.from_controller(self.mock_controller)
-        
-        # Mock knowledge base method
-        mock_item_data = {'code': 'iron_sword', 'type': 'weapon', 'level': 5}
-        context.knowledge_base.get_item_data = Mock(return_value=mock_item_data)
-        
-        result = context.get_item_data('iron_sword')
-        self.assertEqual(result, mock_item_data)
-        context.knowledge_base.get_item_data.assert_called_once_with('iron_sword', client=context.client)
-    
-    def test_get_item_data_no_knowledge_base(self):
-        """Test getting item data when knowledge base is not available."""
+        """Test equipment slot retrieval using StateParameters."""
         context = ActionContext()
-        self.assertIsNone(context.get_item_data('iron_sword'))
+        
+        # Set equipment in various slots
+        context.set(StateParameters.EQUIPMENT_WEAPON, 'test_sword')
+        context.set(StateParameters.EQUIPMENT_ARMOR, 'test_armor')
+        context.set(StateParameters.EQUIPMENT_HELMET, 'test_helmet')
+        context.set(StateParameters.EQUIPMENT_BOOTS, '')  # Empty slot
+        
+        # Test slot retrieval
+        self.assertEqual(context.get_equipped_item_in_slot('weapon'), 'test_sword')
+        self.assertEqual(context.get_equipped_item_in_slot('armor'), 'test_armor')
+        self.assertEqual(context.get_equipped_item_in_slot('helmet'), 'test_helmet')
+        self.assertIsNone(context.get_equipped_item_in_slot('boots'))  # Empty returns None
+        self.assertIsNone(context.get_equipped_item_in_slot('invalid_slot'))  # Invalid slot
     
-    def test_to_dict(self):
-        """Test converting context to dictionary."""
-        context = ActionContext.from_controller(self.mock_controller)
-        context.set_parameter('test_param', 'test_value')
-        context.set_result('test_result', 'result_value')
+    def test_get_character_inventory_returns_empty(self):
+        """Test get_character_inventory returns empty dict (legacy method)."""
+        context = ActionContext()
         
-        result = dict(context)
-        
-        # Core dependencies
-        self.assertEqual(result['controller'], self.mock_controller)
-        self.assertEqual(result['character_state'], self.mock_controller.character_state)
-        self.assertEqual(result['world_state'], self.mock_controller.world_state)
-        self.assertEqual(result['map_state'], self.mock_controller.map_state)
-        self.assertEqual(result['knowledge_base'], self.mock_controller.knowledge_base)
-        
-        # Character information
-        self.assertEqual(result['character_name'], 'TestChar')
-        self.assertEqual(result['character_x'], 10)
-        self.assertEqual(result['character_y'], 20)
-        self.assertEqual(result['character_level'], 5)
-        # Check if pre_combat_hp exists or use character_hp
-        if 'pre_combat_hp' in result:
-            self.assertEqual(result['pre_combat_hp'], 100)
-        else:
-            self.assertEqual(result['character_hp'], 100)
-        
-        # Action data and results
-        self.assertEqual(result['test_param'], 'test_value')
-        self.assertEqual(result['test_result'], 'result_value')
-        self.assertEqual(result['previous_result'], 'test')
+        # This method is marked for elimination - should return empty dict
+        inventory = context.get_character_inventory()
+        self.assertEqual(inventory, {})
+        self.assertIsInstance(inventory, dict)
     
-    def test_edge_cases(self):
-        """Test edge cases and error handling."""
-        # Empty controller
-        empty_controller = Mock()
-        empty_controller.action_context = {}  # Ensure it's a dict, not a Mock
-        empty_controller.character_state = None  # No character state
-        context = ActionContext.from_controller(empty_controller)
-        self.assertEqual(context.character_name, "")
-        self.assertEqual(context.equipment, {})
+    def test_default_values_from_unified_context(self):
+        """Test that ActionContext gets default values from UnifiedStateContext."""
+        context = ActionContext()
         
-        # No character state
-        controller_no_char = Mock()
-        controller_no_char.character_state = None
-        context = ActionContext.from_controller(controller_no_char)
-        self.assertEqual(context.character_name, "")
-        self.assertEqual(context.get_character_inventory(), {})
-        
-        # Character state without name
-        controller_no_name = Mock()
-        controller_no_name.character_state = Mock()
-        del controller_no_name.character_state.name
-        context = ActionContext.from_controller(controller_no_name)
-        self.assertEqual(context.character_name, "")
+        # Test some key default values
+        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))
+        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 1)
+        self.assertFalse(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
+        self.assertFalse(context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE))
+        self.assertEqual(context.get(StateParameters.MATERIALS_STATUS), "unknown")
     
-    def test_dynamic_equipment_detection(self):
-        """Test that equipment is dynamically detected without hardcoded lists."""
-        # Create character with non-standard equipment slots
-        self.mock_controller.character_state.data = {
-            'x': 10,
-            'y': 20,
-            'level': 5,
-            'hp': 100,
-            'max_hp': 125,
-            'custom_slot': 'custom_item',
-            'another_slot': 'another_item',
-            'inventory': []
+    def test_parameter_validation_on_invalid_updates(self):
+        """Test parameter validation during bulk updates."""
+        context = ActionContext()
+        
+        # Valid updates should work
+        valid_updates = {
+            StateParameters.EQUIPMENT_SELECTED_ITEM: 'valid_item',
+            StateParameters.CHARACTER_LEVEL: 10
+        }
+        context.update(valid_updates)
+        
+        # Invalid updates should raise ValueError
+        invalid_updates = {
+            StateParameters.EQUIPMENT_SELECTED_ITEM: 'valid_item',
+            'invalid.parameter': 'invalid_value'
         }
         
-        context = ActionContext.from_controller(self.mock_controller)
-        inventory = context.get_character_inventory()
-        
-        # Should detect custom equipment slots dynamically
-        self.assertEqual(inventory['custom_item'], 1)
-        self.assertEqual(inventory['another_item'], 1)
-    
-    def test_non_equipment_fields_excluded(self):
-        """Test that known non-equipment fields are excluded from inventory."""
-        self.mock_controller.character_state.data = {
-            'name': 'TestChar',
-            'skin': 'default',
-            'account': 'test_account',
-            'task': 'some_task',
-            'task_type': 'some_type',
-            'weapon': 'iron_sword',
-            'inventory': []
-        }
-        
-        context = ActionContext.from_controller(self.mock_controller)
-        inventory = context.get_character_inventory()
-        
-        # Should not include non-equipment fields
-        self.assertNotIn('TestChar', inventory)
-        self.assertNotIn('default', inventory)
-        self.assertNotIn('test_account', inventory)
-        self.assertNotIn('some_task', inventory)
-        self.assertNotIn('some_type', inventory)
-        
-        # Should include actual equipment
-        self.assertEqual(inventory['iron_sword'], 1)
-
-
-if __name__ == '__main__':
-    unittest.main()
+        with self.assertRaises(ValueError, msg="Parameter 'invalid.parameter' not registered"):
+            context.update(invalid_updates)

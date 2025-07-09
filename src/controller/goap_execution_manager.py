@@ -5,14 +5,18 @@ This module provides centralized GOAP planning and execution services,
 eliminating redundant GOAP methods from the AI controller.
 """
 
+import copy
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from src.lib.goap import World, Planner, Action_List
+from src.lib.hierarchical_goap import HierarchicalPlanner, HierarchicalWorld
 from src.lib.actions_data import ActionsData
 from src.lib.yaml_data import YamlData
 from src.game.globals import CONFIG_PREFIX
+from src.controller.knowledge.base import KnowledgeBase
 
 
 class GOAPExecutionManager:
@@ -24,7 +28,7 @@ class GOAPExecutionManager:
     """
     
     def __init__(self):
-        """Initialize GOAP execution manager."""
+        """Initialize GOAP execution manager with hierarchical planning for performance."""
         self.logger = logging.getLogger(__name__)
         
         # Current GOAP state
@@ -34,8 +38,288 @@ class GOAPExecutionManager:
         # Cached start state configuration
         self._start_state_config = None
         
+        # Goal context stack for recursive subgoal execution
+        self.goal_stack = []  # Stack of (goal_name, goal_state, plan, action_index)
+        
         # Load state mappings for consolidated-to-flat transformation
         
+    def _handle_subgoal_request(self, subgoal_request: Dict[str, Any], controller, 
+                               current_plan: List, action_index: int, current_goal_state: Dict,
+                               config_file: str, parent_world: Any = None, parent_planner: Any = None) -> bool:
+        """
+        Handle a subgoal request by executing the subgoal recursively.
+        
+        Args:
+            subgoal_request: Subgoal request from action result
+            controller: AI controller
+            current_plan: Current plan being executed
+            action_index: Current action index
+            current_goal_state: Current goal state
+            config_file: Action configuration file
+            parent_world: Parent GOAP world (passed from caller)
+            parent_planner: Parent GOAP planner (passed from caller)
+            
+        Returns:
+            True if subgoal was completed successfully, False otherwise
+        """
+        goal_name = subgoal_request.get("goal_name")
+        parameters = subgoal_request.get("parameters", {})
+        preserve_context = subgoal_request.get("preserve_context", [])
+        
+        self.logger.info(f"🎯 Executing subgoal: {goal_name} with parameters: {parameters}")
+        
+        # Use passed world references if available, otherwise use instance variables
+        if parent_world is None:
+            parent_world = self.current_world
+            parent_planner = self.current_planner
+            
+        # Validate we have a valid world with the expected structure
+        if not parent_world:
+            self.logger.error("No parent world available for subgoal execution")
+            return False
+            
+        # Check if this is a GOAP World object with values
+        if hasattr(parent_world, 'values'):
+            world_values = parent_world.values
+        # Or if it's a planner with values
+        elif hasattr(parent_world, 'planners') and parent_world.planners and hasattr(parent_world.planners[0], 'values'):
+            world_values = parent_world.planners[0].values
+        else:
+            self.logger.error(f"Parent world has unexpected structure: {type(parent_world)}")
+            return False
+            
+        self.logger.debug(f"Parent world type: {type(parent_world)}, has values: {world_values is not None}")
+        
+        # Store goal stack for resumption (ActionContext is singleton - no context capture needed)
+        self.goal_stack.append({
+            "goal_state": current_goal_state,
+            "plan": current_plan,
+            "action_index": action_index
+        })
+        
+        try:
+            # Get current state from the parent world
+            current_state = copy.deepcopy(world_values)
+            
+            # ActionContext is now a unified singleton - state is maintained throughout execution
+            
+            # Generate subgoal state using the current state
+            # Get the goal template from the goal manager
+            goal_template = controller.goal_manager.goal_templates.get(goal_name)
+            if not goal_template:
+                self.logger.error(f"No goal template found for subgoal: {goal_name}")
+                return False
+            
+            # Merge subgoal parameters into the current state before goal generation
+            # This ensures subgoal starts with the right context from parent goal
+            if parameters:
+                # Handle special subgoal parameter mappings
+                if 'missing_materials' in parameters and parameters['missing_materials']:
+                    # Set materials as insufficient and store the missing materials
+                    if 'materials' not in current_state:
+                        current_state['materials'] = {}
+                    current_state['materials'].update({
+                        'status': 'insufficient',
+                        'availability_checked': True,
+                        'requirements_determined': True,
+                        'gathered': False
+                    })
+                    # Store missing materials for action access
+                    current_state['missing_materials'] = parameters['missing_materials']
+                    self.logger.debug(f"Subgoal inheriting missing materials: {parameters['missing_materials']}")
+                
+                if 'selected_item' in parameters and parameters['selected_item']:
+                    # Use UnifiedStateContext directly - no nested state
+                    from src.lib.unified_state_context import UnifiedStateContext
+                    context = UnifiedStateContext()
+                    context.selected_item = parameters['selected_item']
+                    context.has_selected_item = True
+                    context.upgrade_status = 'ready'
+                    # Update current_state to match flattened format
+                    current_state['selected_item'] = parameters['selected_item']
+                    current_state['has_selected_item'] = True
+                    current_state['upgrade_status'] = 'ready'
+                    self.logger.debug(f"Subgoal inheriting selected item: {parameters['selected_item']}")
+                
+                # Handle gather_resource parameters
+                if goal_name == 'gather_resource' and 'resource' in parameters:
+                    # Set up gathering goal for gather_resource_quantity action
+                    current_state['current_gathering_goal'] = {
+                        'material': parameters.get('resource'),
+                        'quantity': parameters.get('quantity', 1)
+                    }
+                    self.logger.debug(f"Set current_gathering_goal: {current_state['current_gathering_goal']}")
+                    
+                    # For gather_resource, ensure materials are set up for resource gathering
+                    if 'materials' not in current_state:
+                        current_state['materials'] = {}
+                    current_state['materials'].update({
+                        'status': 'insufficient',
+                        'quantities_calculated': True,
+                        'raw_materials_needed': True
+                    })
+                    self.logger.debug(f"Set up materials state for resource gathering")
+            
+            # Generate goal state using the existing goal manager logic
+            subgoal_state = controller.goal_manager.generate_goal_state(
+                goal_name, goal_template, current_state, **parameters
+            )
+            
+            # Check if subgoal is already achieved
+            if self._is_goal_achieved(subgoal_state, current_state):
+                self.logger.info(f"🎯 Subgoal {goal_name} already achieved!")
+                return True
+            
+            # Load actions configuration
+            actions_config = self._load_actions_from_config(config_file)
+            if not actions_config:
+                self.logger.error("No actions available for subgoal planning")
+                return False
+            
+            # Create subgoal plan - preserve the current world's state
+            self.logger.info(f"📋 Creating plan for subgoal: {goal_name}")
+            self.logger.debug(f"Current state for subgoal planning: materials={current_state.get('materials', {})}")
+            self.logger.debug(f"SUBGOAL STATE ANALYSIS:")
+            self.logger.debug(f"  current_state.equipment_status: {current_state.get('equipment_status', {})}")
+            self.logger.debug(f"  current_state.materials: {current_state.get('materials', {})}")
+            self.logger.debug(f"  subgoal_state: {subgoal_state}")
+            
+            # Create a new world and planner for the subgoal but use current state
+            subgoal_world = self.create_world_with_planner(
+                current_state, subgoal_state, actions_config
+            )
+            subgoal_planner = self.current_planner
+            
+            # Store the subgoal world temporarily
+            saved_world = self.current_world
+            saved_planner = self.current_planner
+            self.current_world = subgoal_world
+            self.current_planner = subgoal_planner
+            
+            # Create the plan using the subgoal world
+            # Extract the plan from the planner
+            best_plan = subgoal_planner.calculate()
+            
+            if best_plan:
+                # Convert GOAP actions to controller-compatible format
+                subgoal_plan = []
+                for action in best_plan:
+                    if isinstance(action, dict):
+                        # GOAP node is a dictionary with action name
+                        action_name = action.get('name', 'unknown')
+                        action_dict = {'name': action_name}
+                        subgoal_plan.append(action_dict)
+                    else:
+                        # Action is an object with name and reactions
+                        action_dict = {
+                            'name': getattr(action, 'name', str(action)),
+                            **getattr(action, 'reactions', {})
+                        }
+                        subgoal_plan.append(action_dict)
+            else:
+                subgoal_plan = None
+            
+            if not subgoal_plan:
+                self.logger.error(f"Could not create plan for subgoal: {goal_name}")
+                return False
+            
+            # Execute subgoal plan
+            self.logger.info(f"🚀 Executing subgoal plan with {len(subgoal_plan)} actions")
+            subgoal_success = self._execute_plan_with_selective_replanning(
+                subgoal_plan, controller, subgoal_state, config_file, max_iterations=25
+            )
+            
+            # Restore parent world and planner
+            self.current_world = parent_world
+            self.current_planner = parent_planner
+            
+            # Update parent world with subgoal's state changes
+            if subgoal_success and subgoal_world and hasattr(subgoal_world, 'values'):
+                # Merge subgoal state changes back to parent world
+                if parent_world and hasattr(parent_world, 'values'):
+                    # Direct GOAP World object
+                    for key, value in subgoal_world.values.items():
+                        if key in parent_world.values:
+                            parent_world.values[key] = copy.deepcopy(value)
+                    self.logger.debug("Merged subgoal state changes back to parent world")
+                elif parent_world and hasattr(parent_world, 'planners') and parent_world.planners:
+                    # World with planners
+                    for planner in parent_world.planners:
+                        if hasattr(planner, 'values'):
+                            for key, value in subgoal_world.values.items():
+                                if key in planner.values:
+                                    planner.values[key] = copy.deepcopy(value)
+                    self.logger.debug("Merged subgoal state changes back to parent world planners")
+            
+            # ActionContext is a singleton that maintains state - no restoration needed
+            self.logger.debug("Subgoal execution completed, ActionContext state preserved throughout")
+            
+            return subgoal_success
+            
+        finally:
+            # Pop goal stack
+            if self.goal_stack:
+                self.goal_stack.pop()
+            # Ensure parent world is still active after subgoal
+            if parent_world and parent_planner:
+                self.current_world = parent_world
+                self.current_planner = parent_planner
+                self.logger.debug("Ensured parent world is active after subgoal completion")
+    
+        
+    def _create_plan_from_current_state(self, goal_state: Dict, current_state: Dict, config_file: str) -> List[Dict]:
+        """
+        Create a new plan from the current world state to achieve the goal.
+        
+        Args:
+            goal_state: The target goal state
+            current_state: Current world state
+            config_file: Path to action configuration file
+            
+        Returns:
+            List of actions to execute, or empty list if goal is achieved
+        """
+        try:
+            # Check if goal is already achieved
+            if self._is_goal_achieved(goal_state, current_state):
+                self.logger.info("🎯 Goal already achieved in current state")
+                return []
+            
+            # Load actions configuration
+            actions_config = self._load_actions_from_config(config_file)
+            if not actions_config:
+                self.logger.error("No actions available for replanning")
+                return []
+            
+            # Create a new planner with current state
+            temp_world = self.create_world_with_planner(
+                start_state=current_state,
+                goal_state=goal_state,
+                actions_config=actions_config
+            )
+            temp_planner = self.current_planner
+            
+            if not temp_planner:
+                self.logger.error("Failed to create planner for replanning")
+                return []
+            
+            # Generate plan
+            plan = temp_planner.calculate()
+            
+            if plan:
+                self.logger.debug(f"Created new plan with {len(plan)} actions")
+                # Update current world and planner
+                self.current_world = temp_world
+                self.current_planner = temp_planner
+                return plan
+            else:
+                self.logger.warning("No valid plan found from current state")
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"Error creating plan from current state: {e}")
+            return []
+    
     def _load_start_state_defaults(self) -> Dict[str, Any]:
         """
         Load default start state configuration from YAML file.
@@ -88,7 +372,22 @@ class GOAPExecutionManager:
                 return None
         return current
     
-    
+    def _check_conditions_for_action(self, state: Dict[str, Any], conditions: Dict[str, Any]) -> bool:
+        """Check if all conditions are met in the current state"""
+        for cond_key, cond_value in conditions.items():
+            if cond_key not in state:
+                return False
+            current = state[cond_key]
+            if isinstance(cond_value, dict) and isinstance(current, dict):
+                # Check nested conditions
+                for sub_key, sub_value in cond_value.items():
+                    if sub_key not in current:
+                        return False
+                    if current[sub_key] != sub_value:
+                        return False
+            elif current != cond_value:
+                return False
+        return True
     
     def _convert_goal_value_to_goap_format(self, goal_value: Any) -> Any:
         """
@@ -196,7 +495,7 @@ class GOAPExecutionManager:
         Returns:
             A World instance with the planner added
         """
-        world = World()
+        world = HierarchicalWorld()
         
         # Load default start state configuration first to get all possible state keys
         start_state_defaults = self._load_start_state_defaults()
@@ -210,9 +509,9 @@ class GOAPExecutionManager:
         # Don't flatten nested keys - GOAP library handles nested dictionaries natively
         # Only collect top-level state categories like 'equipment_status', 'combat_context', etc.
         
-        # Create planner with only top-level state keys
-        self.logger.debug(f"Creating planner with top-level keys: {sorted(top_level_keys)}")
-        planner = Planner(*top_level_keys)
+        # Create hierarchical planner with only top-level state keys for optimization
+        self.logger.debug(f"Creating hierarchical planner with top-level keys: {sorted(top_level_keys)}")
+        planner = HierarchicalPlanner(*top_level_keys)
         
         # Override the planner's default -1 values with proper defaults
         # This is crucial for nested dictionary states
@@ -282,19 +581,53 @@ class GOAPExecutionManager:
         for key, value in goal_state.items():
             planner.goal_state[key] = value
         
-        # Create actions from configuration
+        # Filter actions based on goal state to reduce A* search complexity
+        try:
+            knowledge_base = KnowledgeBase()
+            relevant_action_names = knowledge_base.get_relevant_actions(goal_state, complete_start_state)
+            
+            # Filter actions_config to only include relevant actions
+            filtered_actions_config = {}
+            for action_name in relevant_action_names:
+                if action_name in actions_config:
+                    filtered_actions_config[action_name] = actions_config[action_name]
+            
+            original_count = len(actions_config)
+            filtered_count = len(filtered_actions_config)
+            self.logger.info(f"🎯 Pre-filtering action space: {original_count} → {filtered_count} actions")
+            
+            # Use filtered actions for planning
+            planning_actions_config = filtered_actions_config if filtered_actions_config else actions_config
+            
+        except Exception as e:
+            self.logger.warning(f"Action filtering failed, using full action set: {e}")
+            planning_actions_config = actions_config
+        
+        # Create actions from filtered configuration
         action_list = Action_List()
-        for action_name, action_config in actions_config.items():
+        eligible_actions = []
+        for action_name, action_config in planning_actions_config.items():
+            conditions = action_config.get('conditions', {})
+            weight = action_config.get('weight', 1.0)
+            
+            # Check if action conditions are met by current start state
+            conditions_met = self._check_conditions_for_action(complete_start_state, conditions)
+            if conditions_met:
+                eligible_actions.append((action_name, weight))
+            
             action_list.add_condition(
                 action_name,
-                **action_config.get('conditions', {})
+                **conditions
             )
             action_list.add_reaction(
                 action_name,
                 **action_config.get('reactions', {})
             )
-            weight = action_config.get('weight', 1.0)
             action_list.set_weight(action_name, weight)
+        
+        # Log eligible actions for debugging
+        eligible_actions.sort(key=lambda x: x[1], reverse=True)  # Sort by weight descending
+        self.logger.debug(f"ELIGIBLE ACTIONS for planning: {eligible_actions[:10]}")  # Top 10
         
         # Set action list on planner
         planner.set_action_list(action_list)
@@ -322,13 +655,29 @@ class GOAPExecutionManager:
         Returns:
             List of action dictionaries or None if no plan found
         """
+        # 🕐 Performance timing for optimization
+        planning_start_time = time.time()
+        self.logger.info(f"🕐 GOAP Planning Started at: {time.strftime('%H:%M:%S.%f')[:-3]}")
+        
         try:
+            # World creation timing
+            world_creation_start = time.time()
             world = self.create_world_with_planner(start_state, goal_state, actions_config)
+            world_creation_time = time.time() - world_creation_start
+            self.logger.info(f"🕐 World Creation Time: {world_creation_time:.3f}s")
+            
             planner = self.current_planner
             
-            self.logger.debug(f"📊 Starting GOAP calculation with {len(actions_config)} actions...")
-            plans = planner.calculate()
-            self.logger.debug(f"📊 GOAP calculation completed successfully")
+            # GOAP calculation timing - using hierarchical optimization
+            calculation_start = time.time()
+            self.logger.debug(f"📊 Starting hierarchical GOAP calculation with {len(actions_config)} actions...")
+            if isinstance(planner, HierarchicalPlanner):
+                plans = planner.calculate_with_subgoal_optimization()
+            else:
+                plans = planner.calculate()
+            calculation_time = time.time() - calculation_start
+            self.logger.info(f"🕐 GOAP Calculation Time: {calculation_time:.3f}s")
+            self.logger.debug(f"📊 Hierarchical GOAP calculation completed successfully")
             
             if plans:
                 best_plan = plans  # Plans is already the list of nodes
@@ -376,20 +725,25 @@ class GOAPExecutionManager:
                 return None
                 
         except Exception as e:
+            total_planning_time = time.time() - planning_start_time
+            self.logger.info(f"🕐 GOAP Planning FAILED - Total Time: {total_planning_time:.3f}s")
             self.logger.error(f"Error creating GOAP plan: {e}")
             return None
+        finally:
+            total_planning_time = time.time() - planning_start_time
+            self.logger.info(f"🕐 GOAP Planning COMPLETED - Total Time: {total_planning_time:.3f}s")
     
     def achieve_goal_with_goap(self, goal_state: Dict[str, Any], 
                              controller, 
                              config_file: str = None, 
                              max_iterations: int = 50) -> bool:
         """
-        Use knowledge-based GOAP planning to achieve a specific goal.
+        Use GOAP planning to achieve a specific goal.
         
-        Architecture:
-        1. Knowledge Loading: Load all available knowledge and develop complete plan
-        2. Plan Execution: Execute plan steps, only replanning on discovery actions
-        3. Cooldown Handling: Insert wait actions into current plan
+        Simplified Architecture:
+        1. Create complete GOAP plan
+        2. Execute plan through to completion
+        3. Handle failures with targeted replanning
         
         Args:
             goal_state: The desired end state
@@ -404,66 +758,41 @@ class GOAPExecutionManager:
             self.logger.error("Cannot achieve goal without API client")
             return False
         
-        # Phase 1: Knowledge Loading and Plan Development
-        self.logger.info("🧠 Phase 1: Loading knowledge and developing complete plan")
-        complete_plan = self._develop_complete_plan(controller, goal_state, config_file)
-        
-        if not complete_plan:
-            self.logger.error("Could not develop a complete plan with available knowledge")
-            return False
-        
-        # Phase 2: Plan Execution with Selective Replanning
-        self.logger.info(f"🚀 Phase 2: Executing plan with {len(complete_plan)} actions")
-        self.logger.debug(f"🚀 Plan: {[i['name'] for i in complete_plan]}")
-        return self._execute_plan_with_selective_replanning(
-            complete_plan, controller, goal_state, config_file, max_iterations
-        )
-    
-    def _develop_complete_plan(self, controller, goal_state: Dict[str, Any], 
-                             config_file: str = None) -> Optional[List[Dict]]:
-        """
-        Develop a complete plan using available knowledge without API calls.
-        
-        This phase should use the analyze_crafting_chain action and existing
-        knowledge to build a comprehensive plan before execution begins.
-        """
-        # Get current state with fresh data to ensure accurate planning
-        # This is critical for cooldown detection and other time-sensitive state
-        current_state = controller.get_current_world_state(force_refresh=True)
+        # Get current state - use active world if available (for subgoals), 
+        # otherwise get from controller (for top-level goals)
+        if self.current_world and hasattr(self.current_world, 'values'):
+            # Subgoal execution - use in-memory state
+            current_state = copy.deepcopy(self.current_world.values)
+            self.logger.debug("Using in-memory world state for planning")
+        else:
+            # Top-level goal - get fresh state
+            current_state = controller.get_current_world_state(force_refresh=False)
         
         # Check if goal is already achieved
         if self._is_goal_achieved(goal_state, current_state):
             self.logger.info("🎯 Goal already achieved!")
-            return []
+            return True
         
         # Load actions configuration
         actions_config = self._load_actions_from_config(config_file)
         if not actions_config:
             self.logger.error("No actions available for planning")
-            return None
+            return False
         
-        # First, try to use existing knowledge to create a complete plan
-        self.logger.info("🧠 Attempting knowledge-based planning...")
-        knowledge_based_plan = self._create_knowledge_based_plan(
-            current_state, goal_state, actions_config, controller
+        # Create complete GOAP plan
+        self.logger.info("📋 Creating GOAP plan...")
+        plan = self.create_plan(current_state, goal_state, actions_config)
+        
+        if not plan:
+            self.logger.error("Could not create GOAP plan")
+            return False
+        
+        # Execute complete plan
+        self.logger.info(f"🚀 Executing plan with {len(plan)} actions: {[action.get('name', 'unknown') for action in plan]}")
+        return self._execute_plan_with_selective_replanning(
+            plan, controller, goal_state, config_file, max_iterations
         )
-        
-        if knowledge_based_plan:
-            self.logger.info(f"📋 Created knowledge-based plan with {len(knowledge_based_plan)} actions")
-            return knowledge_based_plan
-        
-        # If knowledge-based planning fails, create a discovery plan
-        self.logger.info("🔍 Knowledge-based planning failed, attempting discovery planning...")
-        discovery_plan = self._create_discovery_plan(
-            current_state, goal_state, actions_config
-        )
-        
-        if discovery_plan:
-            self.logger.info(f"🔍 Created discovery plan with {len(discovery_plan)} actions")
-            return discovery_plan
-        
-        self.logger.error("❌ Both knowledge-based and discovery planning failed")
-        return None
+    
     
     def _execute_plan_with_selective_replanning(self, plan: List[Dict], controller, 
                                               goal_state: Dict[str, Any], 
@@ -478,6 +807,13 @@ class GOAPExecutionManager:
         current_plan = plan.copy()
         action_index = 0
         iterations = 0
+        
+        # The controller should always have a plan_action_context - it's a singleton
+        if not hasattr(controller, 'plan_action_context') or controller.plan_action_context is None:
+            self.logger.error("Controller missing plan_action_context - this should be initialized by AIPlayerController")
+            return False
+        
+        self.logger.debug("Using existing ActionContext singleton for GOAP plan execution")
         
         while action_index < len(current_plan) and iterations < max_iterations:
             iterations += 1
@@ -518,6 +854,69 @@ class GOAPExecutionManager:
             # Execute the action
             success = controller._execute_single_action(action_name, current_action)
             
+            # Update GOAP world state with any changes from the action
+            if success and self.current_world and hasattr(self.current_world, 'values'):
+                # Get the latest world state which includes action updates
+                updated_state = controller.get_current_world_state(force_refresh=False)
+                # Update the GOAP world's values with the new state
+                for key, value in updated_state.items():
+                    if key in self.current_world.values:
+                        self.current_world.values[key] = copy.deepcopy(value)
+                    # Also update planner values if it exists
+                    if self.current_planner and hasattr(self.current_planner, 'values') and key in self.current_planner.values:
+                        self.current_planner.values[key] = copy.deepcopy(value)
+                self.logger.debug(f"Updated GOAP world state after {action_name} execution")
+            
+            # Check if action requested a subgoal
+            if hasattr(controller, 'last_action_result') and controller.last_action_result:
+                action_result = controller.last_action_result
+                if hasattr(action_result, 'subgoal_request') and action_result.subgoal_request:
+                    subgoal_success = self._handle_subgoal_request(
+                        action_result.subgoal_request, 
+                        controller, 
+                        current_plan, 
+                        action_index, 
+                        goal_state,
+                        config_file,
+                        self.current_world,
+                        self.current_planner
+                    )
+                    if subgoal_success:
+                        # Subgoal completed successfully
+                        # Resume parent goal context instead of complete replanning
+                        self.logger.info(f"✅ Subgoal completed successfully, resuming parent goal context")
+                        
+                        # Get fresh world state that includes subgoal changes
+                        current_state = controller.get_current_world_state(force_refresh=True)
+                        
+                        # Update GOAP world with fresh state
+                        if self.current_world and hasattr(self.current_world, 'values'):
+                            for key, value in current_state.items():
+                                if key in self.current_world.values:
+                                    self.current_world.values[key] = copy.deepcopy(value)
+                        
+                        # ActionContext is singleton - no context restoration needed
+                        
+                        # Resume parent plan intelligently instead of complete replanning
+                        resumed_plan = self._resume_parent_plan_after_subgoal(
+                            current_plan, action_index, goal_state, current_state, config_file
+                        )
+                        
+                        if resumed_plan:
+                            current_plan = resumed_plan
+                            # DO NOT increment action_index - re-execute the same action for continuation
+                            # The action that requested the subgoal should handle continuation logic
+                            self.logger.info(f"🔄 Re-executing action {action_index + 1}/{len(current_plan)}: {current_action.get('name')} for continuation")
+                        else:
+                            # No plan needed - goal might be achieved
+                            self.logger.info("✅ No further actions needed after subgoal")
+                            action_index = len(current_plan)
+                        continue
+                    else:
+                        # Subgoal failed, current goal also fails
+                        self.logger.error(f"Subgoal failed for action {action_name}")
+                        return False
+            
             if not success:
                 self.logger.warning(f"Action {action_name} failed")
                 
@@ -534,27 +933,16 @@ class GOAPExecutionManager:
                     # Don't increment action_index - retry the same action after wait
                     continue
                 elif self._is_coordinate_failure(action_name, controller):
-                    self.logger.warning("📍 Coordinate failure detected - forcing find_monsters replan")
-                    # Force a complete replan starting with find_monsters
-                    remaining_plan = self._create_recovery_plan_with_find_monsters(
-                        controller, goal_state, config_file
-                    )
-                    if remaining_plan:
-                        current_plan = remaining_plan
-                        action_index = 0  # Reset to start of new plan
-                        continue
-                    else:
-                        return False
+                    self.logger.error("📍 Coordinate failure detected - goal execution failed")
+                    return False
+                elif self._is_hp_validation_failure(action_name, controller):
+                    self.logger.error("💚 HP validation failure detected - goal execution failed")
+                    return False
                 else:
-                    # For other failures, try replanning from current position
-                    remaining_plan = self._replan_from_current_position(
-                        controller, goal_state, config_file, current_plan[action_index:]
-                    )
-                    if remaining_plan:
-                        current_plan = current_plan[:action_index] + remaining_plan
-                        continue
-                    else:
-                        return False
+                    # Action failed and no specific recovery strategy applies
+                    # Propagate failure up the recursion stack - no replanning at this level
+                    self.logger.error(f"❌ Action {action_name} failed - propagating failure up recursion stack")
+                    return False
             
             # Check if this action requires replanning
             if self._is_discovery_action(action_name):
@@ -589,64 +977,10 @@ class GOAPExecutionManager:
                             current_plan, action_index, controller
                         )
         
-        # Check final goal achievement
+        # Check final goal achievement after all actions complete
         final_state = controller.get_current_world_state(force_refresh=True)
         return self._is_goal_achieved(goal_state, final_state)
     
-    def _create_knowledge_based_plan(self, current_state: Dict[str, Any], 
-                                   goal_state: Dict[str, Any], 
-                                   actions_config: Dict[str, Dict],
-                                   controller) -> Optional[List[Dict]]:
-        """
-        Create a complete plan using existing knowledge without API discovery calls.
-        """
-        self.logger.debug("📊 Starting knowledge-based plan creation")
-        
-        # Check if we have sufficient knowledge to plan
-        knowledge_base = getattr(controller, 'knowledge_base', None)
-        if not knowledge_base or not hasattr(knowledge_base, 'data'):
-            self.logger.debug("📊 No knowledge base available for planning")
-            return None
-        
-        # For equipment goals, try to use analyze_crafting_chain
-        if goal_state.get('has_better_weapon') or goal_state.get('need_equipment'):
-            # First check if we already know what weapon to craft
-            if hasattr(controller, 'action_context') and controller.action_context.get('item_code'):
-                target_item = controller.action_context['item_code']
-                
-                # Use crafting chain analysis to build complete plan
-                try:
-                    chain_action_data = {'target_item': target_item}
-                    context = controller._build_execution_context(chain_action_data)
-                    
-                    # Execute crafting chain analysis (this uses existing knowledge, no API calls)
-                    from .actions.analyze_crafting_chain import AnalyzeCraftingChainAction
-                    chain_analyzer = AnalyzeCraftingChainAction(controller.character_state.name, target_item)
-                    
-                    # This should use only existing knowledge
-                    chain_result = chain_analyzer.execute(controller.client, **context)
-                    
-                    if chain_result and chain_result.get('success'):
-                        action_sequence = chain_result.get('action_sequence', [])
-                        if action_sequence:
-                            self.logger.info(f"📋 Built {len(action_sequence)}-step plan from knowledge")
-                            return action_sequence
-                            
-                except Exception as e:
-                    self.logger.warning(f"Knowledge-based planning failed: {e}")
-        
-        # Fall back to standard GOAP planning
-        self.logger.debug("📊 Falling back to standard GOAP planning")
-        try:
-            plan = self.create_plan(current_state, goal_state, actions_config)
-            if plan:
-                self.logger.debug(f"📊 Standard GOAP planning created {len(plan)} action plan")
-            else:
-                self.logger.debug("📊 Standard GOAP planning found no valid plan")
-            return plan
-        except Exception as e:
-            self.logger.warning(f"📊 Standard GOAP planning failed: {e}")
-            return None
     
     def _create_discovery_plan(self, current_state: Dict[str, Any], 
                              goal_state: Dict[str, Any], 
@@ -766,24 +1100,25 @@ class GOAPExecutionManager:
         """
         action_name = action.get('name', '')
         
-        # Only replan if discovery action provided NEW knowledge
+        # Configuration-driven replan decisions with lazy evaluation
         if action_name == 'find_correct_workshop':
-            # Don't replan if workshop was already found in knowledge base
-            # (no new API discovery was needed)
-            return False
+            return False  # Don't replan if workshop was already found
         elif action_name == 'analyze_crafting_chain':
-            # Only replan if this provided new crafting knowledge
-            # For now, allow one replan per chain analysis
-            chain_replans = getattr(self, '_chain_analysis_replans', 0)
-            if chain_replans >= 1:
-                return False
-            self._chain_analysis_replans = chain_replans + 1
-            return True
+            return self._should_replan_chain_analysis()
         elif action_name == 'evaluate_weapon_recipes':
-            # Replan after weapon evaluation to incorporate weapon selection
-            return True
-        
-        return False
+            return True  # Replan after weapon evaluation
+        else:
+            return False
+    
+    def _should_replan_chain_analysis(self) -> bool:
+        """Determine if chain analysis should trigger replanning."""
+        # Only replan if this provided new crafting knowledge
+        # For now, allow one replan per chain analysis
+        chain_replans = getattr(self, '_chain_analysis_replans', 0)
+        if chain_replans >= 1:
+            return False
+        self._chain_analysis_replans = chain_replans + 1
+        return True
     
     def _replan_from_current_position(self, controller, goal_state: Dict[str, Any],
                                     config_file: str = None, 
@@ -797,10 +1132,8 @@ class GOAPExecutionManager:
         if not actions_config:
             return None
         
-        # Try knowledge-based planning first
-        new_plan = self._create_knowledge_based_plan(
-            current_state, goal_state, actions_config, controller
-        )
+        # Create new plan using standard GOAP planning
+        new_plan = self.create_plan(current_state, goal_state, actions_config)
         
         if new_plan:
             return new_plan
@@ -808,47 +1141,6 @@ class GOAPExecutionManager:
         # Fall back to discovery planning
         return self._create_discovery_plan(current_state, goal_state, actions_config)
     
-    def _execute_single_action_with_learning(self, plan: List[Dict], controller, 
-                                           current_state: Dict, goal_state: Dict) -> str:
-        """
-        Execute a single action from the plan, learn from the response, and determine next step.
-        
-        Returns:
-            "goal_achieved" - Goal has been reached
-            "continue" - Continue to next planning iteration  
-            "failed" - Action failed, should replan
-        """
-        if not plan:
-            return "failed"
-            
-        # Execute only the first action in the plan
-        next_action = plan[0]
-        action_name = next_action.get('name', 'unknown')
-        
-        self.logger.info(f"Executing single action: {action_name}")
-        
-        # Set up execution context
-        controller.current_plan = plan
-        controller.current_action_index = 0
-        
-        # Execute the single action
-        action_success = controller._execute_single_action(action_name, next_action)
-        
-        if not action_success:
-            self.logger.warning(f"Action {action_name} failed")
-            return "failed"
-        
-        # Learn from the action execution
-        self._learn_from_action_response(action_name, controller)
-        
-        # Check if goal was achieved after this action
-        updated_state = controller.get_current_world_state(force_refresh=True)
-        if self._is_goal_achieved(goal_state, updated_state):
-            return "goal_achieved"
-        
-        # Action succeeded but goal not yet achieved - continue planning
-        self.logger.info(f"Action {action_name} completed successfully - continuing to replan")
-        return "continue"
     
     def _learn_from_action_response(self, action_name: str, controller) -> None:
         """
@@ -861,17 +1153,21 @@ class GOAPExecutionManager:
             # Update character state to reflect any changes
             controller._refresh_character_state()
             
-            # Action-specific learning patterns
-            if action_name == "evaluate_weapon_recipes":
-                self._learn_from_weapon_evaluation(controller)
-            elif action_name == "find_correct_workshop":
-                self._learn_from_workshop_discovery(controller)
-            elif action_name == "transform_raw_materials":
-                self._learn_from_material_transformation(controller)
-            elif action_name == "craft_item":
-                self._learn_from_crafting(controller)
-            elif action_name in ["move", "gather_resources", "find_resources"]:
-                self._learn_from_exploration(controller)
+            # Configuration-driven learning patterns
+            learning_callbacks = {
+                "evaluate_weapon_recipes": self._learn_from_weapon_evaluation,
+                "find_correct_workshop": self._learn_from_workshop_discovery,
+                "transform_raw_materials": self._learn_from_material_transformation,
+                "craft_item": self._learn_from_crafting,
+                "move": self._learn_from_exploration,
+                "gather_resources": self._learn_from_exploration,
+                "find_resources": self._learn_from_exploration
+            }
+            
+            # Execute learning callback if configured
+            learning_callback = learning_callbacks.get(action_name)
+            if learning_callback:
+                learning_callback(controller)
             
             # Save learned knowledge
             if hasattr(controller, 'knowledge_base') and controller.knowledge_base:
@@ -1151,6 +1447,44 @@ class GOAPExecutionManager:
             self.logger.warning(f"Error checking cooldown failure: {e}")
             return False
     
+    def _is_hp_validation_failure(self, action_name: str, controller) -> bool:
+        """
+        Detect if action failed due to character HP validation (HP too low).
+        
+        This happens when the action validator detects that character HP is below
+        the required threshold for the action. When this occurs, we need to force
+        a fresh world state calculation and replan to include healing actions.
+        
+        Args:
+            action_name: Name of the failed action
+            controller: AI controller instance
+            
+        Returns:
+            True if HP validation failure detected, False otherwise
+        """
+        try:
+            # Check if the last action result indicates HP validation failure
+            if hasattr(controller, 'last_action_result'):
+                result = controller.last_action_result
+                if isinstance(result, dict):
+                    # Check for validation errors indicating HP issues
+                    validation_errors = result.get('data', {}).get('validation_errors', [])
+                    for error in validation_errors:
+                        if isinstance(error, dict) and error.get('validator') == 'character_hp_above':
+                            self.logger.info(f"💚 Action {action_name} failed due to low HP validation")
+                            return True
+                    
+                    # Check error message for HP-related issues
+                    error_msg = result.get('error', '').lower()
+                    if 'character hp' in error_msg and 'below' in error_msg:
+                        self.logger.info(f"💚 Action {action_name} failed due to HP requirement")
+                        return True
+                        
+            return False
+        except Exception as e:
+            self.logger.warning(f"Error checking HP validation failure: {e}")
+            return False
+    
     def _create_recovery_plan_with_find_monsters(self, controller, goal_state: Dict[str, Any],
                                                config_file: str = None) -> Optional[List[Dict]]:
         """
@@ -1199,6 +1533,81 @@ class GOAPExecutionManager:
         except Exception as e:
             self.logger.error(f"Error creating recovery plan: {e}")
             return None
+    
+    
+    def _resume_parent_plan_after_subgoal(self, current_plan: List[Dict], action_index: int, 
+                                        goal_state: Dict[str, Any], current_state: Dict[str, Any],
+                                        config_file: str) -> Optional[List[Dict]]:
+        """
+        Resume parent plan intelligently after subgoal completion.
+        
+        Instead of creating a completely new plan, this method:
+        1. Checks if the current plan is still valid
+        2. Only replans if absolutely necessary
+        3. Preserves parent plan structure when possible
+        
+        Args:
+            current_plan: Current plan being executed
+            action_index: Current action index in plan
+            goal_state: Target goal state
+            current_state: Current world state
+            config_file: Action configuration file
+            
+        Returns:
+            Plan to continue execution (may be original plan or new plan)
+        """
+        # Check if goal is already achieved
+        if self._is_goal_achieved(goal_state, current_state):
+            self.logger.info("🎯 Goal achieved after subgoal completion")
+            return []
+            
+        # Check if remaining actions in current plan are still valid
+        remaining_actions = current_plan[action_index + 1:] if action_index + 1 < len(current_plan) else []
+        
+        if remaining_actions:
+            # Validate remaining actions against current state
+            actions_config = self._load_actions_from_config(config_file)
+            if actions_config and self._are_remaining_actions_valid(remaining_actions, current_state, actions_config):
+                self.logger.info(f"📋 Resuming parent plan with {len(remaining_actions)} remaining actions")
+                return current_plan  # Continue with original plan
+        
+        # Only create new plan if necessary
+        self.logger.info("📋 Creating new plan due to invalid remaining actions")
+        return self._create_plan_from_current_state(goal_state, current_state, config_file)
+    
+    def _are_remaining_actions_valid(self, remaining_actions: List[Dict], current_state: Dict[str, Any], 
+                                   actions_config: Dict[str, Dict]) -> bool:
+        """
+        Check if remaining actions in the plan are still valid given current state.
+        
+        Args:
+            remaining_actions: List of remaining actions to validate
+            current_state: Current world state
+            actions_config: Available actions configuration
+            
+        Returns:
+            True if remaining actions are valid, False otherwise
+        """
+        if not remaining_actions:
+            return False
+            
+        # Check first few remaining actions for validity
+        for i, action in enumerate(remaining_actions[:3]):  # Check first 3 actions
+            action_name = action.get('name', '')
+            if action_name not in actions_config:
+                self.logger.debug(f"Action {action_name} not available in config")
+                return False
+                
+            action_config = actions_config[action_name]
+            conditions = action_config.get('conditions', {})
+            
+            # Check if action conditions are met
+            if not self._check_conditions_for_action(current_state, conditions):
+                self.logger.debug(f"Action {action_name} conditions not met in current state")
+                return False
+                
+        self.logger.debug(f"Remaining {len(remaining_actions)} actions are valid")
+        return True
     
     def _calculate_initial_boolean_flags(self, world_state: Dict[str, Any]) -> None:
         """

@@ -8,6 +8,7 @@ the equipment status from 'none' to 'analyzing'.
 from typing import Dict
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -48,7 +49,7 @@ class InitiateEquipmentAnalysisAction(ActionBase):
         This is a state-only action that updates the equipment status
         without making any API calls.
         """
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         if not character_name:
             return self.create_error_result("No character name provided")
             
@@ -56,8 +57,7 @@ class InitiateEquipmentAnalysisAction(ActionBase):
         
         try:
             # Get current character level for context
-            character_status = context.get('character_status', {})
-            character_level = character_status.get('level', 1)
+            character_level = context.get(StateParameters.CHARACTER_LEVEL, 1)
             
             # Log the initiation
             self.logger.info(
@@ -65,12 +65,18 @@ class InitiateEquipmentAnalysisAction(ActionBase):
             )
             
             # This is a bridge action - it only updates state, no API calls needed
-            result = self.create_success_result(
+            result = self.create_result_with_state_changes(
+                success=True,
+                state_changes={
+                    'equipment_status': {
+                        'upgrade_status': 'analyzing'
+                    }
+                },
+                message="Equipment upgrade analysis initiated",
                 equipment_analysis_initiated=True,
                 previous_status='none',
                 new_status='analyzing',
-                character_level=character_level,
-                message="Equipment upgrade analysis initiated"
+                character_level=character_level
             )
             
             return result

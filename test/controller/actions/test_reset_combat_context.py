@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.reset_combat_context import ResetCombatContextAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestResetCombatContextAction(unittest.TestCase):
@@ -18,7 +19,7 @@ class TestResetCombatContextAction(unittest.TestCase):
         """Set up test fixtures."""
         self.mock_client = Mock()
         self.context = ActionContext()
-        self.context.character_name = "test_character"
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
         self.action = ResetCombatContextAction()
         
     def test_init(self):
@@ -38,7 +39,7 @@ class TestResetCombatContextAction(unittest.TestCase):
         
     def test_execute_no_character_name(self):
         """Test execution when no character name is provided."""
-        self.context.character_name = None
+        self.context.set(StateParameters.CHARACTER_NAME, None)
         
         result = self.action.execute(self.mock_client, self.context)
         

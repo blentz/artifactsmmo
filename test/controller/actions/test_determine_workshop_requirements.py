@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.determine_workshop_requirements import DetermineWorkshopRequirementsAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
@@ -19,7 +20,7 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
         
         # Create context with knowledge base
         self.context = ActionContext()
-        self.context.character_name = "test_character"
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
         self.context.knowledge_base = Mock()
         self.context.knowledge_base.data = {}
         
@@ -34,10 +35,10 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful workshop requirements determination."""
         # Setup transformations
-        self.context['transformations_needed'] = [
+        self.context.set(StateParameters.TRANSFORMATIONS_NEEDED, [
             ('copper_ore', 'copper', 5),
             ('iron_ore', 'iron', 3)
-        ]
+        ])
         
         # Mock workshop determination
         with patch.object(self.action, '_determine_workshop_for_transformation') as mock_determine:
@@ -50,16 +51,16 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
             self.assertEqual(result.data['unique_workshops'], ['mining'])
             
             # Check stored context
-            workshop_reqs = self.context.get('workshop_requirements')
+            workshop_reqs = self.context.get(StateParameters.WORKSHOP_REQUIREMENTS)
             self.assertEqual(len(workshop_reqs), 2)
             self.assertEqual(workshop_reqs[0]['workshop_type'], 'mining')
             
     def test_execute_mixed_workshops(self):
         """Test with different workshop types."""
-        self.context['transformations_needed'] = [
+        self.context.set(StateParameters.TRANSFORMATIONS_NEEDED, [
             ('copper_ore', 'copper', 5),
             ('ash_wood', 'ash_plank', 10)
-        ]
+        ])
         
         with patch.object(self.action, '_determine_workshop_for_transformation') as mock_determine:
             mock_determine.side_effect = ['mining', 'woodcutting']
@@ -71,7 +72,7 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
             
     def test_execute_no_transformations(self):
         """Test with no transformations needed."""
-        self.context['transformations_needed'] = []
+        self.context.set(StateParameters.TRANSFORMATIONS_NEEDED, [])
         
         result = self.action.execute(self.client, self.context)
         
@@ -81,7 +82,7 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
         
     def test_execute_exception_handling(self):
         """Test exception handling."""
-        self.context['transformations_needed'] = [('test', 'test', 1)]
+        self.context.set(StateParameters.TRANSFORMATIONS_NEEDED, [('test', 'test', 1)])
         
         with patch.object(self.action, '_determine_workshop_for_transformation') as mock_determine:
             mock_determine.side_effect = Exception("Test error")
@@ -171,16 +172,16 @@ class TestDetermineWorkshopRequirementsAction(unittest.TestCase):
         
     def test_workshop_requirements_structure(self):
         """Test the structure of workshop requirements output."""
-        self.context['transformations_needed'] = [
+        self.context.set(StateParameters.TRANSFORMATIONS_NEEDED, [
             ('copper_ore', 'copper', 5)
-        ]
+        ])
         
         with patch.object(self.action, '_determine_workshop_for_transformation') as mock_determine:
             mock_determine.return_value = 'mining'
             
             result = self.action.execute(self.client, self.context)
             
-            workshop_reqs = self.context.get('workshop_requirements')
+            workshop_reqs = self.context.get(StateParameters.WORKSHOP_REQUIREMENTS)
             self.assertEqual(len(workshop_reqs), 1)
             
             req = workshop_reqs[0]

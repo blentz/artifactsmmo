@@ -8,6 +8,7 @@ the combat context from 'searching' back to 'idle'.
 from typing import Dict, Optional
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -52,7 +53,7 @@ class AbortCombatSearchAction(ActionBase):
         """
         self._context = context
         
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME, "")
         if not character_name:
             return self.create_error_result("No character name provided")
         

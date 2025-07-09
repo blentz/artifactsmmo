@@ -7,6 +7,7 @@ from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -42,7 +43,7 @@ class EquipItemAction(ActionBase):
     def execute(self, client, context: ActionContext) -> ActionResult:
         """ Equip the specified item """
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         item_code = context.get('item_code')
         slot = context.get('slot')
         quantity = context.get('quantity', 1)

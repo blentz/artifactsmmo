@@ -123,9 +123,7 @@ class TestGOAPWeaponSelectionPreservation(unittest.TestCase):
                 actions_config = {}
                 current_state = {'best_weapon_selected': True}
                 
-                plan = self.goap_manager._create_knowledge_based_plan(
-                    current_state, goal_state, actions_config, self.controller
-                )
+                plan = self.goap_manager.create_plan(current_state, goal_state, actions_config)
                 
                 # Verify plan was created
                 self.assertIsNotNone(plan)
@@ -151,9 +149,7 @@ class TestGOAPWeaponSelectionPreservation(unittest.TestCase):
             actions_config = {}
             current_state = {}
             
-            plan = self.goap_manager._create_knowledge_based_plan(
-                current_state, goal_state, actions_config, self.controller
-            )
+            plan = self.goap_manager.create_plan(current_state, goal_state, actions_config)
             
             # Verify plan was created without modifications
             self.assertIsNotNone(plan)

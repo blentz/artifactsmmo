@@ -32,8 +32,10 @@ class TestMovementActionBase(unittest.TestCase):
     def test_execute_movement_success(self, mock_move_api):
         # Mock successful API response
         mock_response = Mock()
-        mock_response.data = Mock()
-        mock_response.data.cooldown = 10
+        mock_character = Mock()
+        mock_character.x = 5
+        mock_character.y = 10
+        mock_response.data = Mock(cooldown=10, character=mock_character)
         mock_move_api.return_value = mock_response
         
         action = TestMovementAction()
@@ -100,8 +102,10 @@ class TestMovementActionBase(unittest.TestCase):
     def test_execute_with_context(self, mock_move_api):
         # Mock successful API response
         mock_response = Mock()
-        mock_response.data = Mock()
-        mock_response.data.cooldown = 5
+        mock_character = Mock()
+        mock_character.x = 15
+        mock_character.y = 20
+        mock_response.data = Mock(cooldown=5, character=mock_character)
         mock_move_api.return_value = mock_response
         
         action = TestMovementAction()
@@ -127,7 +131,10 @@ class TestMovementActionBase(unittest.TestCase):
     def test_movement_context_building(self, mock_move_api):
         """Test that movement context is properly included in response."""
         mock_response = Mock()
-        mock_response.data = Mock()
+        mock_character = Mock()
+        mock_character.x = 10
+        mock_character.y = 20
+        mock_response.data = Mock(character=mock_character)
         mock_move_api.return_value = mock_response
         
         # Create custom action with context building

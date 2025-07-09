@@ -26,6 +26,100 @@ class TestPlanCraftingMaterialsAction(unittest.TestCase):
         self.assertFalse(hasattr(self.action, 'character_name'))
         self.assertFalse(hasattr(self.action, 'target_item'))
     
+    def test_execute_no_item_data(self):
+        """Test execution when item data not found"""
+        # Mock knowledge base to return None for item data
+        self.mock_knowledge_base.get_item_data.return_value = None
+        
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item='nonexistent_item',
+            knowledge_base=self.mock_knowledge_base
+        )
+        
+        result = self.action.execute(self.mock_client, context)
+        
+        self.assertFalse(result.success)
+        self.assertIn('Could not find item data for nonexistent_item', result.error)
+    
+    def test_execute_no_materials_required(self):
+        """Test execution when item has no required materials"""
+        # Mock item data with empty materials list
+        self.mock_knowledge_base.get_item_data.return_value = {
+            'name': 'Test Item',
+            'craft_data': {
+                'skill': 'crafting',
+                'items': []  # Empty materials list
+            }
+        }
+        
+        context = MockActionContext(
+            character_name=self.character_name,
+            target_item='test_item',
+            knowledge_base=self.mock_knowledge_base
+        )
+        
+        result = self.action.execute(self.mock_client, context)
+        
+        self.assertFalse(result.success)
+        self.assertIn('No materials required for test_item', result.error)
+    
+    @patch('src.controller.actions.plan_crafting_materials.get_character_api')
+    def test_get_character_inventory_api_fails(self, mock_get_character):
+        """Test _get_character_inventory when character API returns None"""
+        # Mock character API to return None
+        mock_get_character.return_value = None
+        
+        result = self.action._get_character_inventory(self.mock_client, self.character_name)
+        
+        self.assertEqual(result, {})
+    
+    def test_plan_includes_craft_material_step(self):
+        """Test execute includes craft step for craftable materials"""
+        # Mock knowledge base to return item with craftable material
+        self.mock_knowledge_base.get_item_data.return_value = {
+            'name': 'Test Item',
+            'craft_data': {
+                'skill': 'crafting',
+                'items': [
+                    {'code': 'refined_material', 'quantity': 5}
+                ]
+            }
+        }
+        
+        # Mock character with no materials
+        with patch('src.controller.actions.plan_crafting_materials.get_character_api') as mock_get_char:
+            mock_char = Mock()
+            mock_char.data = Mock()
+            mock_char.data.inventory = []  # No materials
+            mock_get_char.return_value = mock_char
+            
+            # Mock material as craftable
+            self.mock_knowledge_base.get_material_info.return_value = {
+                'craftable': True,
+                'craft_skill': 'smithing',
+                'craft_materials': [{'code': 'raw_material', 'quantity': 5}]
+            }
+            
+            context = MockActionContext(
+                character_name=self.character_name,
+                target_item='test_item',
+                knowledge_base=self.mock_knowledge_base
+            )
+            
+            result = self.action.execute(self.mock_client, context)
+            
+            # Check that the plan includes craft_material step
+            self.assertTrue(result.success)
+            self.assertIn('crafting_plan', result.data)
+            plan = result.data['crafting_plan']
+            
+            # Find the craft_material step
+            craft_steps = [s for s in plan['steps'] if s['action'] == 'craft_material']
+            self.assertEqual(len(craft_steps), 1)
+            self.assertEqual(craft_steps[0]['item'], 'refined_material')
+            self.assertEqual(craft_steps[0]['quantity'], 5)
+    
     @patch('src.controller.actions.plan_crafting_materials.get_character_api')
     def test_execute_success_all_materials_available(self, mock_get_character):
         """Test successful execution when all materials are available"""

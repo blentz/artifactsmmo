@@ -5,13 +5,14 @@ from typing import Dict, Optional, Tuple
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionResult
 from .find_workshops import FindWorkshopsAction
-from .move import MoveAction
+from .subgoal_mixins import MovementSubgoalMixin
 
 
-class FindCorrectWorkshopAction(FindWorkshopsAction):
+class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
     """ Action to find the correct workshop type for a specific item """
 
     # GOAP parameters
@@ -32,20 +33,29 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
         super().__init__()
 
     def execute(self, client, context: ActionContext) -> ActionResult:
-        """ Find the correct workshop for the specified item and move there """        
-        # Get parameters from context
-        character_x = context.get('character_x', context.character_x)
-        character_y = context.get('character_y', context.character_y)
-        search_radius = context.get('search_radius', 10)
-        item_code = context.get('item_code') or context.get('selected_item_code')
-        character_name = context.character_name
+        """
+        Find the correct workshop for the specified item and move there using subgoal patterns.
         
-        # Parameters will be passed directly to helper methods via context
-            
+        Continuation logic:
+        - First execution: Find workshop location and request movement
+        - After movement: Verify arrival at workshop
+        """
+        self._context = context
+        
+        # Check for continuation from movement subgoal
+        if self.is_at_target_location(client, context):
+            # Continuation: We've arrived at the workshop
+            return self._verify_workshop_arrival(context)
+        
+        # Initial execution: Find workshop and request movement
+        character_x = context.get(StateParameters.CHARACTER_X)
+        character_y = context.get(StateParameters.CHARACTER_Y)
+        search_radius = context.get(StateParameters.SEARCH_RADIUS, 10)
+        item_code = context.get(StateParameters.ITEM_CODE) or context.get(StateParameters.SELECTED_ITEM)
+        character_name = context.get(StateParameters.CHARACTER_NAME)
+        
         if not item_code:
             return self.create_error_result("No item code specified")
-            
-        self._context = context
         
         try:
             # 1. Look up item details to determine required workshop type
@@ -65,96 +75,122 @@ class FindCorrectWorkshopAction(FindWorkshopsAction):
             # 2. Skills and workshops have identical names, so direct assignment
             required_workshop = required_skill
             
+            # Store workshop info for continuation
+            context.set_result(StateParameters.REQUIRED_WORKSHOP_TYPE, required_workshop)
+            context.set_result(StateParameters.REQUIRED_CRAFT_SKILL, required_skill)
+            context.set_result(StateParameters.ITEM_CODE, item_code)
+            
             # 3. Set the workshop type and search for it
             self.workshop_type = required_workshop
             
             # Create workshop filter for the specific type
             workshop_filter = self.create_workshop_filter(workshop_type=required_workshop)
             
-            # Define result processor for workshop-specific response format
-            def workshop_result_processor(location, content_code, content_data):
-                x, y = location
-                distance = self._calculate_distance(character_x, character_y, x, y)
-                return self.create_success_result(
-                    location=location,
-                    distance=distance,
-                    workshop_code=content_code,
-                    workshop_type=required_workshop,
-                    required_skill=required_skill,
-                    item_code=item_code,
-                    target_x=x,
-                    target_y=y
-                )
-            
             # 4. Get map_state and knowledge_base from context for cached access
             map_state = context.map_state
             knowledge_base = context.knowledge_base
-            
-            # Store map_state for use in helper methods
             self._map_state_context = map_state
             
-            # 5. First try to find workshop in knowledge base (previously discovered workshops)
+            # 5. First try to find workshop in knowledge base
             known_workshop = self._search_knowledge_base_for_workshop(knowledge_base, required_workshop, character_x, character_y)
             if known_workshop:
-                location = (known_workshop['x'], known_workshop['y'])
-                result = workshop_result_processor(location, known_workshop['code'], known_workshop)
-                self.logger.info(f"Found {required_workshop} workshop in knowledge base at {location}")
+                target_x, target_y = known_workshop['x'], known_workshop['y']
+                self.logger.info(f"Found {required_workshop} workshop in knowledge base at ({target_x}, {target_y})")
             else:
                 # 6. Use unified search algorithm to discover new workshops
-                result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
-            
-            if result and result.success:
-                # 7. If we found a workshop, move to it if we have character_name
-                if character_name and result.data.get('target_x') is not None:
-                    target_x = result.data['target_x']
-                    target_y = result.data['target_y']
-                    
-                    # Only move if we're not already there
-                    if character_x != target_x or character_y != target_y:
-                        move_action = MoveAction()
-                        move_context = ActionContext(
-                            character_name=character_name,
-                            knowledge_base=knowledge_base,
-                            map_state=map_state,
-                            action_data={'x': target_x, 'y': target_y}
-                        )
-                        move_result = move_action.execute(client, move_context)
-                        
-                        # Handle both dict and API response object formats
-                        if move_result:
-                            if hasattr(move_result, 'data') and move_result.data:
-                                # API response object format
-                                result.data['moved_to_workshop'] = True
-                                result.data['move_result'] = f"Moved successfully: {move_result.data}"
-                            elif isinstance(move_result, dict) and move_result.get('success'):
-                                # Dict format
-                                result.data['moved_to_workshop'] = True
-                                result.data['move_result'] = move_result
-                            else:
-                                result.data['moved_to_workshop'] = False
-                                move_error = move_result.get('error', 'Unknown move error') if isinstance(move_result, dict) else str(move_result)
-                                result.data['move_error'] = move_error
-                        else:
-                            result.data['moved_to_workshop'] = False
-                            result.data['move_error'] = 'Move failed - no result'
-                    else:
-                        result.data['moved_to_workshop'] = True
-                        result.data['already_at_workshop'] = True
+                def workshop_result_processor(location, content_code, content_data):
+                    x, y = location
+                    return self.create_success_result(
+                        location=location,
+                        distance=self._calculate_distance(character_x, character_y, x, y),
+                        workshop_code=content_code,
+                        workshop_type=required_workshop,
+                        target_x=x,
+                        target_y=y
+                    )
                 
-                return result
-            else:
-                error_msg = f'No {required_workshop} workshop found within radius {search_radius}'
-                error_response = self.create_error_result(
-                    error_msg,
+                search_result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
+                
+                if not search_result or not search_result.success:
+                    return self.create_error_result(
+                        f'No {required_workshop} workshop found within radius {search_radius}',
+                        required_skill=required_skill,
+                        required_workshop=required_workshop,
+                        item_code=item_code
+                    )
+                
+                target_x = search_result.data.get('target_x')
+                target_y = search_result.data.get('target_y')
+                
+                if target_x is None or target_y is None:
+                    return self.create_error_result("Workshop found but no coordinates available")
+            
+            # Check if already at workshop
+            if character_x == target_x and character_y == target_y:
+                self.logger.info(f"Already at {required_workshop} workshop")
+                return self.create_success_result(
+                    message=f"Already at {required_workshop} workshop",
+                    workshop_code=required_workshop,
+                    workshop_type=required_workshop,
                     required_skill=required_skill,
-                    required_workshop=required_workshop,
-                    item_code=item_code
+                    item_code=item_code,
+                    workshop_x=target_x,
+                    workshop_y=target_y,
+                    location=(target_x, target_y),  # For test compatibility
+                    target_x=target_x,  # For consistency
+                    target_y=target_y,  # For consistency
+                    distance=0,  # Already at workshop
+                    already_at_workshop=True
                 )
-                return error_response
+            
+            # Request movement subgoal but include workshop data for testability
+            self.logger.info(f"🎯 Requesting movement to {required_workshop} workshop at ({target_x}, {target_y})")
+            result = self.request_movement_subgoal(
+                context,
+                target_x,
+                target_y,
+                preserve_keys=['required_workshop', 'required_skill', 'item_code']
+            )
+            
+            # Add workshop data to result for consistent testing
+            result.data.update({
+                'workshop_code': required_workshop,
+                'workshop_type': required_workshop,
+                'required_skill': required_skill,
+                'item_code': item_code,
+                'workshop_x': target_x,
+                'workshop_y': target_y,
+                'location': (target_x, target_y),  # For test compatibility
+                'target_x': target_x,  # For subgoal compatibility
+                'target_y': target_y,  # For subgoal compatibility  
+                'distance': self._calculate_distance(character_x, character_y, target_x, target_y),
+                'already_at_workshop': False
+            })
+            
+            return result
                 
         except Exception as e:
-            error_response = self.create_error_result(f"Workshop search failed: {str(e)}")
-            return error_response
+            return self.create_error_result(f"Workshop search failed: {str(e)}")
+    
+    def _verify_workshop_arrival(self, context: ActionContext) -> ActionResult:
+        """Verify that we've arrived at the correct workshop."""
+        required_workshop = context.get(StateParameters.REQUIRED_WORKSHOP_TYPE)
+        required_skill = context.get(StateParameters.REQUIRED_CRAFT_SKILL)
+        item_code = context.get(StateParameters.ITEM_CODE)
+        target_x = context.get(StateParameters.TARGET_X)
+        target_y = context.get(StateParameters.TARGET_Y)
+        
+        self.logger.info(f"✅ Arrived at {required_workshop} workshop at ({target_x}, {target_y})")
+        return self.create_success_result(
+            message=f"Successfully found and moved to {required_workshop} workshop",
+            workshop_code=required_workshop,
+            workshop_type=required_workshop,
+            required_skill=required_skill,
+            item_code=item_code,
+            workshop_x=target_x,
+            workshop_y=target_y,
+            moved_to_workshop=True
+        )
 
     def _search_knowledge_base_for_workshop(self, knowledge_base, workshop_type: str, character_x: int, character_y: int) -> Optional[Dict]:
         """

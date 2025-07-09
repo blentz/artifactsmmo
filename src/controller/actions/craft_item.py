@@ -10,6 +10,8 @@ from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_cr
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
+from src.game.globals import MaterialStatus
 
 from .base import ActionBase, ActionResult
 from .coordinate_mixin import CoordinateStandardizationMixin
@@ -24,7 +26,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             'at_workshop': True
         },
         'materials': {
-            'status': 'sufficient'
+            'status': MaterialStatus.SUFFICIENT
         },
         'skill_status': {
             'sufficient': True
@@ -54,7 +56,7 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
         """ Craft the specified item """
             
         # Get parameters from context
-        character_name = context.character_name
+        character_name = context.get(StateParameters.CHARACTER_NAME)
         item_code = context.get('item_code')
         quantity = context.get('quantity', 1)
         
@@ -62,8 +64,8 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
         
         try:
             # Get current character position from context
-            character_x = context.character_x
-            character_y = context.character_y
+            character_x = context.get(StateParameters.CHARACTER_X)
+            character_y = context.get(StateParameters.CHARACTER_Y)
             
             # If position not available, get from API
             if character_x is None or character_y is None:
@@ -79,10 +81,15 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             # Note: Workshop presence and compatibility are now validated by ActionValidator
             map_response = get_map_api(x=character_x, y=character_y, client=client)
             if not map_response or not map_response.data:
-                error_data = self.standardize_coordinate_output(character_x, character_y)
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = character_x
+                    self._context.target_y = character_y
+                
                 return self.create_error_result(
                     'Could not get map information',
-                    **error_data
+                    target_x=character_x,
+                    target_y=character_y
                 )
                 
             map_data = map_response.data
@@ -91,10 +98,15 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             # Get item details for response enrichment
             item_details = get_item_api(code=item_code, client=client)
             if not item_details or not item_details.data:
-                error_data = self.standardize_coordinate_output(character_x, character_y)
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = character_x
+                    self._context.target_y = character_y
+                
                 return self.create_error_result(
                     f'Could not get details for item {item_code}',
-                    **error_data
+                    target_x=character_x,
+                    target_y=character_y
                 )
             
             item_data = item_details.data
@@ -126,26 +138,30 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                     # If this is the last attempt or not a timeout error, don't retry
                     if attempt == max_retries - 1 or not is_timeout:
                         if "598" in error_msg:
-                            error_data = self.standardize_coordinate_output(character_x, character_y)
-                            error_data.update({
-                                'workshop_code': workshop_code,
-                                'api_error': error_msg,
-                                'item_code': item_code,
-                                'attempts': attempt + 1
-                            })
+                            # Set coordinates directly on ActionContext for unified access
+                            if hasattr(self, '_context') and self._context:
+                                self._context.target_x = character_x
+                                self._context.target_y = character_y
+                                self._context.workshop_code = workshop_code
+                                self._context.item_code = item_code
+                            
                             return self.create_error_result(
                                 f'Workshop not found on map - API returned HTTP 598. Found {workshop_code} workshop',
-                                **error_data
+                                workshop_code=workshop_code,
+                                api_error=error_msg,
+                                item_code=item_code,
+                                attempts=attempt + 1
                             )
                         else:
-                            error_data = self.standardize_coordinate_output(character_x, character_y)
-                            error_data.update({
-                                'api_error': error_msg,
-                                'attempts': attempt + 1
-                            })
+                            # Set coordinates directly on ActionContext for unified access
+                            if hasattr(self, '_context') and self._context:
+                                self._context.target_x = character_x
+                                self._context.target_y = character_y
+                            
                             return self.create_error_result(
                                 f'Crafting API call failed after {attempt + 1} attempts: {error_msg}',
-                                **error_data
+                                api_error=error_msg,
+                                attempts=attempt + 1
                             )
                     
                     # Calculate exponential backoff delay
@@ -156,16 +172,25 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
             if crafting_response and crafting_response.data:
                 # Extract useful information from the response
                 skill_data = crafting_response.data
-                success_data = self.standardize_coordinate_output(character_x, character_y)
-                success_data.update({
+                
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = character_x
+                    self._context.target_y = character_y
+                    self._context.item_code = item_code
+                    self._context.workshop_code = workshop_code
+                
+                success_data = {
                     'item_code': item_code,
                     'item_name': item_details.data.name,
                     'quantity_crafted': quantity,
                     'workshop_code': workshop_code,
                     'cooldown': getattr(skill_data.cooldown, 'total_seconds', 0) if hasattr(skill_data, 'cooldown') else 0,
                     'xp_gained': getattr(skill_data, 'xp', 0),
-                    'skill': getattr(skill_data, 'skill', 'unknown')
-                })
+                    'skill': getattr(skill_data, 'skill', 'unknown'),
+                    'target_x': character_x,
+                    'target_y': character_y
+                }
                 
                 # Add character data if available
                 if hasattr(skill_data, 'character'):
@@ -197,19 +222,84 @@ class CraftItemAction(ActionBase, CoordinateStandardizationMixin):
                     **success_data
                 )
             else:
-                error_data = self.standardize_coordinate_output(character_x, character_y)
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = character_x
+                    self._context.target_y = character_y
+                
                 return self.create_error_result(
-                    'Crafting action failed - no response data',
-                    **error_data
+                    'Crafting action failed - no response data'
                 )
                 
         except Exception as e:
-            # Use default coordinates if we don't have character position
-            error_data = self.standardize_coordinate_output(0, 0)
+            # Set default coordinates on ActionContext if we don't have character position
+            if hasattr(self, '_context') and self._context:
+                self._context.target_x = 0
+                self._context.target_y = 0
+            
             return self.create_error_result(
-                f'Crafting action failed: {str(e)}',
-                **error_data
+                f'Crafting action failed: {str(e)}'
             )
+    
+    def _verify_workshop_compatibility(self, client, character_x: int, character_y: int, item_data) -> Dict[str, any]:
+        """Verify that the character is at the correct workshop type for crafting the item."""
+        try:
+            # Get map information for workshop details
+            map_response = get_map_api(x=character_x, y=character_y, client=client)
+            if not map_response or not map_response.data:
+                return {
+                    'valid': False,
+                    'error': 'Could not get map information'
+                }
+            
+            map_data = map_response.data
+            
+            # Check if current location is a workshop
+            if not hasattr(map_data, 'content') or not map_data.content:
+                return {
+                    'valid': False,
+                    'error': 'Current location is not a workshop'
+                }
+            
+            if not hasattr(map_data.content, 'type_') or map_data.content.type_ != 'workshop':
+                return {
+                    'valid': False,
+                    'error': 'Current location is not a workshop'
+                }
+            
+            current_workshop = getattr(map_data.content, 'code', 'unknown')
+            
+            # Determine required workshop type from item data
+            required_workshop = None
+            if hasattr(item_data, 'craft') and item_data.craft:
+                required_workshop = getattr(item_data.craft, 'skill', None)
+            
+            if not required_workshop:
+                return {
+                    'valid': False,
+                    'error': f'Item {item_data.code} is not craftable or has no skill requirement',
+                    'current_workshop': current_workshop
+                }
+            
+            # Check if current workshop matches required workshop
+            if current_workshop != required_workshop:
+                return {
+                    'valid': False,
+                    'error': f'Wrong workshop type. Need {required_workshop}, currently at {current_workshop}',
+                    'required_workshop': required_workshop,
+                    'current_workshop': current_workshop
+                }
+            
+            return {
+                'valid': True,
+                'workshop_code': current_workshop
+            }
+            
+        except Exception as e:
+            return {
+                'valid': False,
+                'error': f'Workshop verification failed: {str(e)}'
+            }
 
     def __repr__(self):
         return "CraftItemAction()"

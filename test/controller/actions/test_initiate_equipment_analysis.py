@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from src.controller.actions.initiate_equipment_analysis import InitiateEquipmentAnalysisAction
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestInitiateEquipmentAnalysisAction(unittest.TestCase):
@@ -18,11 +19,10 @@ class TestInitiateEquipmentAnalysisAction(unittest.TestCase):
     def test_execute_success(self):
         """Test successful execution of initiate equipment analysis."""
         # Create context
-        context = ActionContext(character_name="test_char")
-        # Set character_status in context
-        context['character_status'] = {
-            'level': 3
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        # Set character level in context
+        context.set(StateParameters.CHARACTER_LEVEL, 3)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -34,11 +34,10 @@ class TestInitiateEquipmentAnalysisAction(unittest.TestCase):
     def test_execute_with_equipment_context(self):
         """Test execution with existing equipment context."""
         # Create context with equipment data
-        context = ActionContext(character_name="test_char")
-        context['current_weapon'] = 'wooden_stick'
-        context['character_status'] = {
-            'level': 2
-        }
+        context = ActionContext()
+        context.set(StateParameters.CHARACTER_NAME, "test_char")
+        context.set(StateParameters.EQUIPMENT_CURRENT_WEAPON, 'wooden_stick')
+        context.set(StateParameters.CHARACTER_LEVEL, 2)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
