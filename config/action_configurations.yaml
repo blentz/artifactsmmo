@@ -198,17 +198,9 @@ action_configurations:
     type: "builtin"
     description: "Initiate equipment analysis to prepare for upgrades"
     
-  analyze_equipment_gaps:
-    type: "builtin"
-    description: "Analyze gaps in character equipment to identify upgrade needs"
-    
   select_optimal_slot:
     type: "builtin"
     description: "Select the optimal equipment slot for crafting based on gaps and skill"
-    
-  select_recipe:
-    type: "builtin"
-    description: "Select the best recipe for crafting equipment in chosen slot"
     
   mark_equipment_crafting:
     type: "builtin"
@@ -405,21 +397,11 @@ action_configurations:
     description: "Recover combat viability after equipment upgrade"
   
   # Equipment Flow Bridge Actions
-  initiate_equipment_analysis:
-    type: "builtin"
-    description: "Start equipment upgrade analysis process"
-  
-  mark_equipment_crafting:
-    type: "builtin"
-    description: "Mark equipment as being crafted"
   
   mark_equipment_ready:
     type: "builtin"
     description: "Mark equipment as ready for equipping"
   
-  complete_equipment_upgrade:
-    type: "builtin"
-    description: "Complete equipment upgrade process"
   
   reset_equipment_upgrade:
     type: "builtin"
