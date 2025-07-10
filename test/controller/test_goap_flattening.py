@@ -6,6 +6,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.goap_execution_manager import GOAPExecutionManager
+from src.lib.unified_state_context import UnifiedStateContext
+from src.lib.state_parameters import StateParameters
 
 
 class TestGOAPConsolidatedStates(unittest.TestCase):
@@ -75,8 +77,12 @@ class TestGOAPConsolidatedStates(unittest.TestCase):
             'equipment_status': {'upgrade_status': 'ready'}
         }
         
-        # Create plan should work with nested states
-        plan = self.goap_manager.create_plan(start_state, goal_state, mock_actions)
+        # Architecture compliant - set initial state in UnifiedStateContext
+        context = UnifiedStateContext()
+        context.set(StateParameters.CHARACTER_ALIVE, True)
+        
+        # Create plan with correct signature (goal_state, actions_config)
+        plan = self.goap_manager.create_plan(goal_state, mock_actions)
         
         # Should find a plan (or properly handle nested format)
         # Note: This may fail if GOAP planner needs updates for nested format

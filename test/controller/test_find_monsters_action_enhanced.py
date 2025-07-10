@@ -314,7 +314,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_inheritance_from_search_base(self):
         """Test that FindMonstersAction properly inherits from SearchActionBase."""
-        from src.controller.actions.search_base import SearchActionBase
+        from src.controller.actions.base.search import SearchActionBase
         self.assertIsInstance(self.action, SearchActionBase)
 
     @patch('src.game.map.state.MapState')

@@ -50,7 +50,7 @@ class SelectRecipeAction(ActionBase):
         
         # Get parameters from context using flattened properties
         character_name = context.get(StateParameters.CHARACTER_NAME)
-        target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        target_slot = context.get(StateParameters.TARGET_SLOT)
         
         self._context = context
         
@@ -70,8 +70,8 @@ class SelectRecipeAction(ActionBase):
                 return self.create_error_result(f"No suitable recipe found for {target_slot}")
             
             # Update ActionContext using StateParameters  
-            context.set_result(StateParameters.SELECTED_ITEM, selected_recipe['item_code'])
-            context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, target_slot)
+            context.set_result(StateParameters.TARGET_ITEM, selected_recipe['item_code'])
+            context.set_result(StateParameters.TARGET_SLOT, target_slot)
             context.set_result(StateParameters.UPGRADE_STATUS, "ready")
             context.set_result(StateParameters.TARGET_RECIPE, selected_recipe)
             

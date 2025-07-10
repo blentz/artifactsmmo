@@ -15,7 +15,7 @@ from src.lib.state_parameters import StateParameters
 from src.game.globals import MaterialStatus
 
 
-class DetermineMaterialInsufficencyAction(ActionBase):
+class DetermineMaterialInsufficiencyAction(ActionBase):
     """
     Action to determine that materials are insufficient.
     
@@ -65,28 +65,19 @@ class DetermineMaterialInsufficencyAction(ActionBase):
         self._context = context
         
         character_name = context.get(StateParameters.CHARACTER_NAME)
-        # Prioritize material_requirements (with quantities) over required_materials (just names)
-        material_requirements = context.get(StateParameters.MATERIAL_REQUIREMENTS, {})
-        required_materials = context.get(StateParameters.REQUIRED_MATERIALS, [])
         
-        # Use material_requirements if available, otherwise fall back to required_materials
-        if material_requirements:
-            self.logger.info(f"🔍 Using material requirements with quantities: {material_requirements}")
-        elif required_materials:
-            # Convert to requirements dict with default quantity 1
-            material_requirements = {material: 1 for material in required_materials}
-            self.logger.info(f"🔍 Converting required materials to requirements: {material_requirements}")
-        else:
-            # If no materials specified but we have a selected item, use common defaults
-            selected_item = context.get(StateParameters.SELECTED_ITEM, '')
-            if 'copper' in selected_item.lower():
-                material_requirements = {'copper_ore': 1}
-                self.logger.info(f"Using default materials for copper item: {material_requirements}")
-            elif 'iron' in selected_item.lower():
-                material_requirements = {'iron_ore': 1}
-                self.logger.info(f"Using default materials for iron item: {material_requirements}")
-            else:
-                return self.create_error_result("No required materials specified and cannot infer from selected item")
+        # Get the target recipe we're working with
+        target_recipe = context.get(StateParameters.TARGET_RECIPE)
+        if not target_recipe:
+            return self.create_error_result("No target recipe to check material insufficiency for")
+            
+        self.logger.info(f"🔍 Checking material insufficiency for recipe: {target_recipe}")
+        
+        # Get required materials from knowledge base
+        knowledge_base = context.knowledge_base
+        material_requirements = knowledge_base.get_material_requirements(target_recipe)
+        if not material_requirements:
+            return self.create_error_result(f"Could not determine requirements for recipe: {target_recipe}")
             
         self.logger.info(f"🔍 Determining insufficiency of {len(material_requirements)} materials")
         
@@ -120,12 +111,13 @@ class DetermineMaterialInsufficencyAction(ActionBase):
             else:
                 self.logger.info("⚠️ All materials are actually available, but forcing insufficient status for GOAP path")
             
-            # Store detailed results in context
-            context.set_result(StateParameters.MATERIAL_AVAILABILITY, availability_results)
-            # Store missing materials as a dict with quantities
+            # Store results in context using available StateParameters
             missing_materials_dict = {item['material']: item['shortfall'] for item in missing_materials}
-            context.set_result(StateParameters.MISSING_MATERIALS, missing_materials_dict)
-            context.set_result(StateParameters.SUFFICIENT_MATERIALS, [item['material'] for item in availability_results if item['sufficient']])
+            context.set_result(StateParameters.CURRENT_GATHERING_GOAL, {
+                'material': list(missing_materials_dict.keys())[0] if missing_materials_dict else None,
+                'quantity': list(missing_materials_dict.values())[0] if missing_materials_dict else 0
+            })
+            context.set_result(StateParameters.TOTAL_REQUIREMENTS, material_requirements)
             
             # Create the result with state changes
             result = self.create_result_with_state_changes(
@@ -138,17 +130,21 @@ class DetermineMaterialInsufficencyAction(ActionBase):
                 availability_details=availability_results
             )
             
-            # If materials are missing, request a gather_materials subgoal
+            # If materials are missing, request a gather_resource subgoal for the first material
             if has_missing:
+                first_material = list(missing_materials_dict.keys())[0]
+                quantity_needed = missing_materials_dict[first_material]
+                
                 result.request_subgoal(
-                    goal_name="gather_materials",
+                    goal_name="gather_resource",
                     parameters={
-                        "missing_materials": missing_materials_dict,
-                        "selected_item": context.get(StateParameters.SELECTED_ITEM)
+                        "resource": first_material,
+                        "quantity": quantity_needed,
+                        "missing_materials": missing_materials_dict
                     },
-                    preserve_context=["selected_item", "target_slot", "recipe_selected"]
+                    preserve_context=["target_recipe", "target_slot", "total_requirements"]
                 )
-                self.logger.info(f"🎯 Requesting gather_materials subgoal for {list(missing_materials_dict.keys())}")
+                self.logger.info(f"🎯 Requesting gather_resource subgoal: {quantity_needed} {first_material}")
             
             return result
             
@@ -182,4 +178,4 @@ class DetermineMaterialInsufficencyAction(ActionBase):
         return results
         
     def __repr__(self):
-        return "DetermineMaterialInsufficencyAction()"
+        return "DetermineMaterialInsufficiencyAction()"

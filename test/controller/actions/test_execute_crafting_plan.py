@@ -23,7 +23,7 @@ class TestExecuteCraftingPlanAction(UnifiedContextTestBase):
         self.action = ExecuteCraftingPlanAction()
         self.client = Mock()
         self.context.set(StateParameters.CHARACTER_NAME, "test_character")
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, "iron_sword")
+        self.context.set(StateParameters.TARGET_ITEM, "iron_sword")
         
         # Mock knowledge base
         self.mock_kb = Mock()
@@ -43,7 +43,7 @@ class TestExecuteCraftingPlanAction(UnifiedContextTestBase):
         """Test GOAP parameters are properly defined."""
         # Test conditions exist
         self.assertIn('character_status', self.action.conditions)
-        self.assertIn('craft_plan_available', self.action.conditions)
+        self.assertIn('materials_sufficient', self.action.conditions)
         
         # Test reactions exist  
         self.assertIn('has_equipment', self.action.reactions)
@@ -65,7 +65,7 @@ class TestExecuteCraftingPlanAction(UnifiedContextTestBase):
 
     def test_execute_no_target_item(self):
         """Test execute with no target item."""
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, None)
+        self.context.set(StateParameters.TARGET_ITEM, None)
         
         result = self.action.execute(self.client, self.context)
         
@@ -104,53 +104,17 @@ class TestExecuteCraftingPlanAction(UnifiedContextTestBase):
         self.assertFalse(result.success)
         self.assertIn("Crafting execution failed", result.error)
 
-    def test_determine_target_item_from_target_item(self):
-        """Test _determine_target_item with explicit target_item."""
-        # Clear any other fields that might have higher priority
-        self.context.set(StateParameters.EQUIPMENT_WEAPON, None)
-        self.context.set(StateParameters.ITEM_CODE, None)
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, "iron_sword")
+    def test_determine_target_item_with_target_item(self):
+        """Test _determine_target_item with TARGET_ITEM."""
+        self.context.set(StateParameters.TARGET_ITEM, "iron_sword")
         
         result = self.action._determine_target_item(self.context)
         
         self.assertEqual(result, "iron_sword")
 
-    def test_determine_target_item_from_selected_item(self):
-        """Test _determine_target_item with selected_item."""
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, None)
-        self.context.set(StateParameters.SELECTED_ITEM, "copper_dagger")
-        
-        result = self.action._determine_target_item(self.context)
-        
-        self.assertEqual(result, "copper_dagger")
-
-    def test_determine_target_item_from_selected_weapon(self):
-        """Test _determine_target_item with selected_weapon."""
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, None)
-        self.context.set(StateParameters.SELECTED_ITEM, None)
-        self.context.set(StateParameters.EQUIPMENT_WEAPON, "bronze_sword")
-        
-        result = self.action._determine_target_item(self.context)
-        
-        self.assertEqual(result, "bronze_sword")
-
-    def test_determine_target_item_from_item_code(self):
-        """Test _determine_target_item with item_code."""
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, None)
-        self.context.set(StateParameters.SELECTED_ITEM, None)
-        self.context.set(StateParameters.EQUIPMENT_WEAPON, None)
-        self.context.set(StateParameters.ITEM_CODE, "bronze_dagger")
-        
-        result = self.action._determine_target_item(self.context)
-        
-        self.assertEqual(result, "bronze_dagger")
-
     def test_determine_target_item_none(self):
         """Test _determine_target_item with no item specified."""
-        self.context.set(StateParameters.MATERIALS_TARGET_ITEM, None)
-        self.context.set(StateParameters.SELECTED_ITEM, None)
-        self.context.set(StateParameters.EQUIPMENT_WEAPON, None)
-        self.context.set(StateParameters.ITEM_CODE, None)
+        self.context.set(StateParameters.TARGET_ITEM, None)
         
         result = self.action._determine_target_item(self.context)
         

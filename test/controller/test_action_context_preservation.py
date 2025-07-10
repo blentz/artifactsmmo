@@ -8,7 +8,6 @@ for subsequent actions to use.
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
-from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
 from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
@@ -37,7 +36,7 @@ class TestActionContextPreservation(UnifiedContextTestBase):
         # Use unified context from test base
         self.context.set(StateParameters.CHARACTER_NAME, "TestChar")
         self.context.set(StateParameters.CHARACTER_LEVEL, 5)
-        self.context.set(StateParameters.EQUIPMENT_WEAPON, None)  # No current weapon to encourage upgrade
+        # Equipment status will be determined from character API - no state parameter needed
         
         # Mock character state
         character_state = Mock()
@@ -45,7 +44,8 @@ class TestActionContextPreservation(UnifiedContextTestBase):
         character_state.data = {
             'level': 5,
             'weaponcrafting_level': 3,
-            'inventory': []
+            'inventory': [],
+            'weapon_slot': None  # No current weapon to encourage upgrade
         }
         self.context.character_state = character_state
         
@@ -107,50 +107,6 @@ class TestActionContextPreservation(UnifiedContextTestBase):
         # Note: The actual action might not set these values, 
         # this test is more about the mechanism than the specific action behavior
     
-    def test_analyze_crafting_chain_reads_target_item_from_context(self):
-        """Test that analyze_crafting_chain can read target_item from context set by previous action."""
-        # Create action
-        action = AnalyzeCraftingChainAction()
-        
-        # Use unified context with target_item set by previous action
-        self.context.set(StateParameters.CHARACTER_NAME, "TestChar")
-        self.context.set_result(StateParameters.MATERIALS_TARGET_ITEM, 'wooden_staff')  # Set by previous action
-        self.context.set_result(StateParameters.ITEM_CODE, 'wooden_staff')
-        
-        # Mock knowledge base with proper data structure
-        knowledge_base = Mock()
-        # Create a Mock for data that behaves like a dict
-        mock_data = Mock()
-        mock_data.get = Mock(return_value={'wooden_staff': {
-            'code': 'wooden_staff',
-            'name': 'Wooden Staff',
-            'craft_data': {
-                'items': [{'code': 'ash_wood', 'quantity': 2}]
-            }
-        }})  # Return dict with the item when accessing items
-        knowledge_base.data = mock_data
-        knowledge_base.get_item_data = MagicMock(return_value={
-            'code': 'wooden_staff',
-            'name': 'Wooden Staff',
-            'craft_data': {
-                'items': [{'code': 'ash_wood', 'quantity': 2}]
-            }
-        })
-        self.context.knowledge_base = knowledge_base
-        
-        # Mock map state
-        map_state = Mock()
-        map_state.find_closest_location = MagicMock(return_value=(5, 5))
-        self.context.map_state = map_state
-        
-        # Execute the action
-        result = action.execute(self.client, self.context)
-        
-        # Verify the action was successful
-        self.assertTrue(result.data.get('success', False) if isinstance(result, dict) else result.success)
-        
-        # Verify it used the correct target_item
-        self.assertEqual(result.data['target_item'], 'wooden_staff')
     
     def test_action_context_get_method_with_unified_context(self):
         """Test that ActionContext.get() works with unified context pattern."""

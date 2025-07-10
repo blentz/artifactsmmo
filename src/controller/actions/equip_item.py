@@ -27,10 +27,8 @@ class EquipItemAction(ActionBase):
         }
     }
     reactions = {
-        'equipment_status': {
-            'equipped': True,
-            'upgrade_status': 'completed'
-        }
+        StateParameters.EQUIPMENT_UPGRADE_STATUS: 'completed'
+        # Note: equipped status is determined from character API - no state parameter needed
     }
     weight = 2
 
@@ -44,9 +42,8 @@ class EquipItemAction(ActionBase):
         """ Equip the specified item """
         # Get parameters from context
         character_name = context.get(StateParameters.CHARACTER_NAME)
-        item_code = context.get('item_code')
-        slot = context.get('slot')
-        quantity = context.get('quantity', 1)
+        item_code = context.get(StateParameters.TARGET_ITEM)
+        slot = context.get(StateParameters.TARGET_SLOT)
         
         if not item_code:
             return self.create_error_result("No item code provided")

@@ -15,13 +15,12 @@ class TestUnifiedStateManagement(unittest.TestCase):
     @patch('src.controller.ai_player_controller.StateManagerMixin.__init__', return_value=None)
     @patch('src.controller.ai_player_controller.GOAPGoalManager')
     @patch('src.controller.ai_player_controller.ActionExecutor')
-    @patch('src.controller.ai_player_controller.CooldownManager')
     @patch('src.controller.ai_player_controller.MissionExecutor')
     @patch('src.controller.ai_player_controller.SkillGoalManager')
     @patch('src.controller.ai_player_controller.GOAPExecutionManager')
     @patch('src.controller.ai_player_controller.LearningManager')
     def setUp(self, mock_learning, mock_goap, mock_skill, mock_mission, 
-              mock_cooldown, mock_executor, mock_goal, mock_init):
+              mock_executor, mock_goal, mock_init):
         """Set up test fixtures."""
         self.mock_client = Mock()
         
@@ -45,7 +44,6 @@ class TestUnifiedStateManagement(unittest.TestCase):
         }
         
         # Mock additional required attributes
-        self.controller.cooldown_manager = Mock()
         self.controller.update_world_state = Mock()
         self.controller.get_current_world_state = Mock(return_value={})
         
@@ -65,7 +63,7 @@ class TestUnifiedStateManagement(unittest.TestCase):
         # Set up reactions using flat StateParameters (no nested dictionaries)
         mock_action.__class__.reactions = {
             StateParameters.EQUIPMENT_UPGRADE_STATUS: 'analyzing',
-            StateParameters.EQUIPMENT_TARGET_SLOT: 'weapon'
+            StateParameters.TARGET_SLOT: 'weapon'
         }
         
         with patch.object(executor.factory, 'create_action', return_value=mock_action), \
@@ -83,7 +81,7 @@ class TestUnifiedStateManagement(unittest.TestCase):
             
             # Verify state was updated in context using StateParameters
             self.assertEqual(context.get(StateParameters.EQUIPMENT_UPGRADE_STATUS), 'analyzing')
-            self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+            self.assertEqual(context.get(StateParameters.TARGET_SLOT), 'weapon')
             
             # Verify boolean flags were recalculated
             self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_TARGET_SLOT))
@@ -102,8 +100,8 @@ class TestUnifiedStateManagement(unittest.TestCase):
         
         # Set up reactions with direct values (no template variables)
         mock_action.__class__.reactions = {
-            StateParameters.EQUIPMENT_SELECTED_ITEM: 'wooden_staff',
-            StateParameters.EQUIPMENT_TARGET_SLOT: 'weapon'
+            StateParameters.TARGET_ITEM: 'wooden_staff',
+            StateParameters.TARGET_SLOT: 'weapon'
         }
         
         with patch.object(executor.factory, 'create_action', return_value=mock_action), \
@@ -116,31 +114,30 @@ class TestUnifiedStateManagement(unittest.TestCase):
             self.assertTrue(result.success)
             
             # Verify direct value assignment worked
-            self.assertEqual(context.get(StateParameters.EQUIPMENT_SELECTED_ITEM), 'wooden_staff')
-            self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+            self.assertEqual(context.get(StateParameters.TARGET_ITEM), 'wooden_staff')
+            self.assertEqual(context.get(StateParameters.TARGET_SLOT), 'weapon')
             
             # Verify boolean flags were recalculated
             self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_TARGET_SLOT))
-            self.assertTrue(context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM))
     
     def test_action_context_preserved_between_actions(self):
         """Test that StateParameters persist correctly across action executions."""
         context = ActionContext()
         
         # First action sets data using StateParameters
-        context.set_result(StateParameters.SELECTED_ITEM, 'copper_sword')
-        context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        context.set_result(StateParameters.TARGET_ITEM, 'copper_sword')
+        context.set_result(StateParameters.TARGET_SLOT, 'weapon')
         
         # Verify data persists (simulating between-action state)
-        self.assertEqual(context.get(StateParameters.SELECTED_ITEM), 'copper_sword')
-        self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+        self.assertEqual(context.get(StateParameters.TARGET_ITEM), 'copper_sword')
+        self.assertEqual(context.get(StateParameters.TARGET_SLOT), 'weapon')
         
         # Second action can access the data and add more
         context.set_result(StateParameters.WORKFLOW_STEP, 'crafting_ready')
         
         # All data should still be accessible through unified context
-        self.assertEqual(context.get(StateParameters.SELECTED_ITEM), 'copper_sword')
-        self.assertEqual(context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+        self.assertEqual(context.get(StateParameters.TARGET_ITEM), 'copper_sword')
+        self.assertEqual(context.get(StateParameters.TARGET_SLOT), 'weapon')
         self.assertEqual(context.get(StateParameters.WORKFLOW_STEP), 'crafting_ready')
     
     def test_no_state_updates_on_failed_action(self):

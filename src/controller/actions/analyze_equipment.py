@@ -3,9 +3,12 @@ Analyze Equipment Action
 
 This action performs comprehensive equipment analysis for the character,
 determining upgrade needs and equipment priorities for GOAP planning.
+
+Refactored to use dynamic configuration instead of hardcoded values.
 """
 
 from typing import Dict, List
+import logging
 
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as get_item_api
@@ -13,6 +16,7 @@ from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as ge
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 from src.game.globals import EquipmentStatus
+from src.lib.yaml_data import YamlData
 
 from .base import ActionBase, ActionResult
 
@@ -45,6 +49,18 @@ class AnalyzeEquipmentAction(ActionBase):
         Initialize the equipment analysis action.
         """
         super().__init__()
+        self.logger = logging.getLogger(__name__)
+        
+        # Load equipment analysis configuration
+        self.config = YamlData('config/equipment_analysis.yaml')
+        
+        # Cache configuration data
+        self.equipment_slots = self.config.data.get('equipment_slot_mappings', {})
+        self.starter_equipment = self.config.data.get('starter_equipment', {})
+        self.tier_thresholds = self.config.data.get('tier_thresholds', {})
+        self.priority_categories = self.config.data.get('priority_categories', {})
+        self.upgrade_priorities = self.config.data.get('upgrade_priorities', {})
+        self.skill_slot_mappings = self.config.data.get('skill_slot_mappings', {})
 
     def execute(self, client, context: ActionContext) -> ActionResult:
         """Perform comprehensive equipment analysis."""
@@ -132,43 +148,46 @@ class AnalyzeEquipmentAction(ActionBase):
             return {}
 
     def _extract_current_equipment(self, character_data) -> Dict:
-        """Extract current equipment from character data."""
-        equipment_slots = [
-            'weapon_slot', 'shield_slot', 'helmet_slot', 'body_armor_slot',
-            'leg_armor_slot', 'boots_slot', 'ring1_slot', 'ring2_slot',
-            'amulet_slot', 'artifact1_slot', 'artifact2_slot', 'artifact3_slot'
-        ]
-        
+        """Extract current equipment from character data using configuration."""
         current_equipment = {}
-        for slot in equipment_slots:
-            item_code = getattr(character_data, slot, '')
-            current_equipment[slot] = item_code if item_code else None
+        
+        # Use configuration for equipment slots instead of hardcoded list
+        for slot_name, slot_field in self.equipment_slots.items():
+            item_code = getattr(character_data, slot_field, '')
+            current_equipment[slot_name] = item_code if item_code else None
             
         return current_equipment
 
     def _analyze_weapon_equipment(self, current_equipment: Dict, character_data, client) -> Dict:
-        """Analyze weapon equipment and upgrade needs."""
+        """Analyze weapon equipment and upgrade needs using configuration."""
         try:
-            weapon_code = current_equipment.get('weapon_slot')
+            weapon_code = current_equipment.get('weapon')
             character_level = getattr(character_data, 'level', 1)
+            
+            # Check if weapon is starter equipment using configuration
+            starter_weapons = self.starter_equipment.get('weapons', [])
+            threshold_level = self.starter_equipment.get('default_threshold_level', 2)
             
             analysis = {
                 'current_weapon': weapon_code,
                 'weapon_equipped': weapon_code is not None and weapon_code != '',
-                'is_starter_weapon': weapon_code in ['wooden_stick', '', None],
+                'is_starter_weapon': weapon_code in starter_weapons,
                 'needs_upgrade': False,
                 'upgrade_priority': 'low',
                 'weapon_tier': 'starter'
             }
             
-            # Determine if weapon upgrade is needed
-            if analysis['is_starter_weapon'] and character_level >= 2:
+            # Determine if weapon upgrade is needed using configuration
+            if analysis['is_starter_weapon'] and character_level >= threshold_level:
                 analysis['needs_upgrade'] = True
-                analysis['upgrade_priority'] = 'high'
+                # Use configuration for weapon upgrade priority
+                weapon_priority = self.upgrade_priorities.get('weapon', {}).get('priority', 'medium')
+                analysis['upgrade_priority'] = weapon_priority
                 analysis['recommended_action'] = 'Get basic weapon (copper dagger or wooden staff)'
             elif weapon_code and character_level >= 5:
                 # For higher levels, check if weapon is appropriate for level
                 analysis['needs_upgrade'] = True
+                # Use medium priority for weapon upgrades
                 analysis['upgrade_priority'] = 'medium'
                 analysis['recommended_action'] = f'Consider upgrading from {weapon_code}'
                 
@@ -216,10 +235,12 @@ class AnalyzeEquipmentAction(ActionBase):
                 'upgrade_priority': 'low'
             }
             
-            # Determine armor upgrade needs
+            # Determine armor upgrade needs using configuration
             if character_level >= 2 and equipped_armor_count < 2:
                 analysis['needs_upgrade'] = True
-                analysis['upgrade_priority'] = 'high'
+                # Use configuration for armor upgrade priority
+                armor_priority = self.upgrade_priorities.get('body_armor', {}).get('priority', 'medium')
+                analysis['upgrade_priority'] = armor_priority
                 analysis['recommended_action'] = 'Get basic armor pieces'
             elif character_level >= 4 and armor_coverage < 0.75:
                 analysis['needs_upgrade'] = True
@@ -262,7 +283,9 @@ class AnalyzeEquipmentAction(ActionBase):
             # Accessories are lower priority than weapons/armor
             if character_level >= 5 and equipped_accessories == 0:
                 analysis['needs_upgrade'] = True
-                analysis['upgrade_priority'] = 'low'
+                # Use configuration for accessory upgrade priority
+                accessory_priority = self.upgrade_priorities.get('amulet', {}).get('priority', 'low')
+                analysis['upgrade_priority'] = accessory_priority
                 analysis['recommended_action'] = 'Consider getting basic accessories'
             
             return analysis
@@ -272,34 +295,15 @@ class AnalyzeEquipmentAction(ActionBase):
             return {'needs_upgrade': False}
 
     def _calculate_equipment_coverage(self, current_equipment: Dict) -> Dict:
-        """Calculate overall equipment coverage statistics."""
-        try:
-            # Define equipment categories
-            essential_slots = ['weapon_slot', 'helmet_slot', 'body_armor_slot', 'leg_armor_slot', 'boots_slot']
-            optional_slots = ['shield_slot', 'ring1_slot', 'ring2_slot', 'amulet_slot']
-            artifact_slots = ['artifact1_slot', 'artifact2_slot', 'artifact3_slot']
-            
-            # Count equipped items
-            essential_equipped = sum(1 for slot in essential_slots if current_equipment.get(slot))
-            optional_equipped = sum(1 for slot in optional_slots if current_equipment.get(slot))
-            artifact_equipped = sum(1 for slot in artifact_slots if current_equipment.get(slot))
-            
-            total_equipped = essential_equipped + optional_equipped + artifact_equipped
-            total_slots = len(essential_slots) + len(optional_slots) + len(artifact_slots)
-            
-            return {
-                'essential_coverage': essential_equipped / len(essential_slots),
-                'optional_coverage': optional_equipped / len(optional_slots),
-                'artifact_coverage': artifact_equipped / len(artifact_slots),
-                'total_coverage': total_equipped / total_slots,
-                'essential_equipped': essential_equipped,
-                'total_equipped': total_equipped,
-                'total_slots': total_slots
-            }
-            
-        except Exception as e:
-            self.logger.warning(f"Equipment coverage calculation failed: {e}")
-            return {'total_coverage': 0, 'essential_coverage': 0}
+        """Calculate overall equipment coverage statistics using configuration."""
+        total_equipped = sum(1 for slot in current_equipment.values() if slot)
+        total_slots = len(current_equipment)
+        
+        return {
+            'total_coverage': total_equipped / total_slots,
+            'total_equipped': total_equipped,
+            'total_slots': total_slots
+        }
 
     def _determine_upgrade_priorities(self, weapon_analysis: Dict, armor_analysis: Dict, 
                                     accessory_analysis: Dict, character_data) -> List[Dict]:
@@ -348,12 +352,12 @@ class AnalyzeEquipmentAction(ActionBase):
             return []
 
     def _calculate_urgency_score(self, category: str, priority: str, character_level: int) -> int:
-        """Calculate urgency score for equipment upgrade."""
-        # Base scores by priority
-        priority_scores = {'high': 100, 'medium': 50, 'low': 20}
-        base_score = priority_scores.get(priority, 20)
+        """Calculate urgency score for equipment upgrade using configuration."""
+        # Use configuration for priority scores instead of hardcoded values
+        priority_weight = self.priority_categories.get(priority, 1)
+        base_score = priority_weight * 33  # Scale to similar range as before
         
-        # Category modifiers
+        # Category modifiers - could be moved to config if needed
         category_modifiers = {'weapon': 1.5, 'armor': 1.2, 'accessories': 0.8}
         modifier = category_modifiers.get(category, 1.0)
         
@@ -414,19 +418,21 @@ class AnalyzeEquipmentAction(ActionBase):
         return summary
 
     def _determine_item_tier(self, item_data) -> str:
-        """Determine the tier of an item based on its properties."""
+        """Determine the tier of an item based on its properties using configuration."""
         try:
             item_level = getattr(item_data, 'level', 1)
-            item_type = getattr(item_data, 'type', '')
             
-            if item_level <= 1:
-                return 'starter'
-            elif item_level <= 10:
-                return 'basic'
-            elif item_level <= 20:
-                return 'intermediate'
-            else:
-                return 'advanced'
+            # Use configuration for tier thresholds instead of hardcoded values
+            tier = 'starter'  # Default tier
+            
+            # Find the appropriate tier based on level thresholds
+            for threshold_level, tier_name in sorted(self.tier_thresholds.items()):
+                if item_level >= threshold_level:
+                    tier = tier_name
+                else:
+                    break
+                    
+            return tier
                 
         except Exception:
             return 'unknown'

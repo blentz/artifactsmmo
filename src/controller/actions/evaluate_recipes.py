@@ -162,7 +162,7 @@ class EvaluateRecipesAction(ActionBase):
         self._context = context
         
         # Get target slot from action context (set by SelectOptimalSlotAction)
-        target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        target_slot = context.get(StateParameters.TARGET_SLOT)
         if not target_slot:
             return self.create_error_result("No target equipment slot specified - run SelectOptimalSlotAction first")
             
@@ -219,9 +219,9 @@ class EvaluateRecipesAction(ActionBase):
             
         # Update action context with selected item
         selected_item = best_recipe['item']['code']
-        context.set_result(StateParameters.SELECTED_ITEM, selected_item)
-        context.set_result(StateParameters.EQUIPMENT_TARGET_RECIPE, best_recipe)
-        context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, target_slot)
+        context.set_result(StateParameters.TARGET_ITEM, selected_item)
+        context.set_result(StateParameters.TARGET_RECIPE, best_recipe)
+        context.set_result(StateParameters.TARGET_SLOT, target_slot)
         context.set_result(StateParameters.REQUIRED_CRAFT_SKILL, craft_skill)
         context.set_result(StateParameters.REQUIRED_CRAFT_LEVEL, best_recipe.get('level', 1))
         

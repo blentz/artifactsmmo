@@ -4,7 +4,7 @@ from typing import Dict, Optional, Tuple
 
 from src.lib.action_context import ActionContext
 
-from .movement_base import MovementActionBase
+from .base.movement import MovementActionBase
 
 
 class MoveToResourceAction(MovementActionBase):

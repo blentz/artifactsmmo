@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, List
 
-from src.controller.actions.resource_analysis_base import (
+from src.controller.actions.base.resource_analysis import (
     ResourceDiscoveryMixin,
     EquipmentDiscoveryMixin, 
     CraftingAnalysisMixin,
@@ -27,7 +27,7 @@ class TestResourceDiscoveryMixin(unittest.TestCase):
         self.mixin = ResourceDiscoveryMixin()
         self.mock_client = Mock()
     
-    @patch('src.controller.actions.resource_analysis_base.get_map_api')
+    @patch('src.controller.actions.base.resource_analysis.get_map_api')
     def test_find_nearby_resources_success(self, mock_get_map_api):
         """Test successful resource discovery."""
         # Mock map response with resource
@@ -59,7 +59,7 @@ class TestResourceDiscoveryMixin(unittest.TestCase):
         center_resource = [r for r in result if r['x'] == 0 and r['y'] == 0][0]
         self.assertEqual(center_resource['distance'], 0)
     
-    @patch('src.controller.actions.resource_analysis_base.get_map_api')
+    @patch('src.controller.actions.base.resource_analysis.get_map_api')
     def test_find_nearby_resources_no_content(self, mock_get_map_api):
         """Test resource discovery with no map content."""
         mock_map_data = Mock()
@@ -76,7 +76,7 @@ class TestResourceDiscoveryMixin(unittest.TestCase):
         result = self.mixin.find_nearby_resources(self.mock_client, mock_context)
         self.assertEqual(len(result), 0)
     
-    @patch('src.controller.actions.resource_analysis_base.get_map_api')
+    @patch('src.controller.actions.base.resource_analysis.get_map_api')
     def test_find_nearby_resources_api_error(self, mock_get_map_api):
         """Test resource discovery with API errors."""
         mock_get_map_api.side_effect = Exception("API Error")
@@ -88,7 +88,7 @@ class TestResourceDiscoveryMixin(unittest.TestCase):
         result = self.mixin.find_nearby_resources(self.mock_client, mock_context)
         self.assertEqual(len(result), 0)
     
-    @patch('src.controller.actions.resource_analysis_base.get_resource_api')
+    @patch('src.controller.actions.base.resource_analysis.get_resource_api')
     def test_get_resource_details_success(self, mock_get_resource_api):
         """Test successful resource details retrieval."""
         mock_resource_data = Mock()
@@ -109,7 +109,7 @@ class TestResourceDiscoveryMixin(unittest.TestCase):
         self.assertEqual(result, mock_resource_data)
         mock_get_resource_api.assert_called_once_with(code='copper_rocks', client=self.mock_client)
     
-    @patch('src.controller.actions.resource_analysis_base.get_resource_api')
+    @patch('src.controller.actions.base.resource_analysis.get_resource_api')
     def test_get_resource_details_no_data(self, mock_get_resource_api):
         """Test resource details with no data."""
         mock_response = Mock()
@@ -123,7 +123,7 @@ class TestResourceDiscoveryMixin(unittest.TestCase):
         result = self.mixin.get_resource_details(self.mock_client, 'copper_rocks', mock_context)
         self.assertIsNone(result)
     
-    @patch('src.controller.actions.resource_analysis_base.get_resource_api')
+    @patch('src.controller.actions.base.resource_analysis.get_resource_api')
     def test_get_resource_details_api_error(self, mock_get_resource_api):
         """Test resource details with API error."""
         self.mixin.logger = Mock()  # Add logger for error handling
@@ -222,7 +222,7 @@ class TestEquipmentDiscoveryMixin(unittest.TestCase):
         self.assertEqual(len(result), 0)
         self.mixin.logger.warning.assert_called_once()
     
-    @patch('src.controller.actions.resource_analysis_base.get_all_items_api')
+    @patch('src.controller.actions.base.resource_analysis.get_all_items_api')
     def test_discover_equipment_items_from_api_success(self, mock_get_all_items_api):
         """Test successful equipment discovery from API."""
         # Mock API response
@@ -256,7 +256,7 @@ class TestEquipmentDiscoveryMixin(unittest.TestCase):
         self.assertGreater(len(result), 0)
         self.assertIn('iron_sword', result)
     
-    @patch('src.controller.actions.resource_analysis_base.get_all_items_api')
+    @patch('src.controller.actions.base.resource_analysis.get_all_items_api')
     def test_discover_equipment_items_from_api_no_data(self, mock_get_all_items_api):
         """Test equipment discovery with no API data."""
         mock_response = Mock()
@@ -283,7 +283,7 @@ class TestEquipmentDiscoveryMixin(unittest.TestCase):
         result = self.mixin.discover_equipment_items_from_api(self.mock_client, mock_context)
         self.assertEqual(len(result), 0)
     
-    @patch('src.controller.actions.resource_analysis_base.get_all_items_api')
+    @patch('src.controller.actions.base.resource_analysis.get_all_items_api')
     def test_discover_equipment_items_from_api_exception(self, mock_get_all_items_api):
         """Test equipment discovery with API exception."""
         mock_get_all_items_api.side_effect = Exception("API Error")
@@ -349,7 +349,7 @@ class TestCraftingAnalysisMixin(unittest.TestCase):
         result = self.mixin.extract_all_materials(mock_craft_data)
         self.assertEqual(len(result), 0)
     
-    @patch('src.controller.actions.resource_analysis_base.get_item_api')
+    @patch('src.controller.actions.base.resource_analysis.get_item_api')
     def test_find_crafting_uses_for_item_success(self, mock_get_item_api):
         """Test successful crafting uses discovery."""
         # Mock equipment discovery methods
@@ -425,7 +425,7 @@ class TestWorkshopDiscoveryMixin(unittest.TestCase):
         self.mixin.logger = Mock()
         self.mock_client = Mock()
     
-    @patch('src.controller.actions.resource_analysis_base.get_map_api')
+    @patch('src.controller.actions.base.resource_analysis.get_map_api')
     def test_find_nearby_workshops_success(self, mock_get_map_api):
         """Test successful workshop discovery."""
         # Mock map response with workshop
@@ -455,7 +455,7 @@ class TestWorkshopDiscoveryMixin(unittest.TestCase):
         center_workshop = [w for w in result if w['x'] == 0 and w['y'] == 0][0]
         self.assertEqual(center_workshop['distance'], 0)
     
-    @patch('src.controller.actions.resource_analysis_base.get_map_api')
+    @patch('src.controller.actions.base.resource_analysis.get_map_api')
     def test_find_nearby_workshops_filtered(self, mock_get_map_api):
         """Test workshop discovery with type filtering."""
         # Mock map response with different workshop

@@ -1,83 +1,9 @@
 # Action Configuration for Metaprogramming
 # This file defines how actions are instantiated and executed dynamically
 
-# Action class registry - replaces hardcoded action_class_map
-action_classes:
-  # Core consolidated actions
-  analyze_equipment: "src.controller.actions.analyze_equipment.AnalyzeEquipmentAction"
-  select_recipe: "src.controller.actions.select_recipe.SelectRecipeAction"
-  fight: "src.controller.actions.fight.FightAction"
-  scan: "src.controller.actions.scan.ScanAction"
-  move: "src.controller.actions.move.MoveAction"
-  rest: "src.controller.actions.rest.RestAction"
-  wait: "src.controller.actions.wait.WaitAction"
-  gather: "src.controller.actions.gather_resources.GatherResourcesAction"
-  craft: "src.controller.actions.craft_item.CraftItemAction"
-  equip: "src.controller.actions.equip_item.EquipItemAction"
-  unequip: "src.controller.actions.unequip_item.UnequipItemAction"
-  
-  # Bridge actions - Combat Flow
-  initiate_combat_search: "src.controller.actions.initiate_combat_search.InitiateCombatSearchAction"
-  reset_combat_context: "src.controller.actions.reset_combat_context.ResetCombatContextAction"
-  abort_combat_search: "src.controller.actions.abort_combat_search.AbortCombatSearchAction"
-  mark_combat_not_viable: "src.controller.actions.mark_combat_not_viable.MarkCombatNotViableAction"
-  recover_combat_viability: "src.controller.actions.recover_combat_viability.RecoverCombatViabilityAction"
-  
-  # Bridge actions - Equipment Flow
-  initiate_equipment_analysis: "src.controller.actions.initiate_equipment_analysis.InitiateEquipmentAnalysisAction"
-  mark_equipment_crafting: "src.controller.actions.mark_equipment_crafting.MarkEquipmentCraftingAction"
-  mark_equipment_ready: "src.controller.actions.mark_equipment_ready.MarkEquipmentReadyAction"
-  complete_equipment_upgrade: "src.controller.actions.complete_equipment_upgrade.CompleteEquipmentUpgradeAction"
-  reset_equipment_upgrade: "src.controller.actions.reset_equipment_upgrade.ResetEquipmentUpgradeAction"
-  
-  # Bridge actions - Healing Flow
-  assess_healing_needs: "src.controller.actions.assess_healing_needs.AssessHealingNeedsAction"
-  initiate_healing: "src.controller.actions.initiate_healing.InitiateHealingAction"
-  complete_healing: "src.controller.actions.complete_healing.CompleteHealingAction"
-  reset_healing_state: "src.controller.actions.reset_healing_state.ResetHealingStateAction"
-  
-  # Legacy actions (for backward compatibility during transition)
-  attack: "src.controller.actions.attack.AttackAction"
-  map_lookup: "src.controller.actions.map_lookup.MapLookupAction"
-  find_monsters: "src.controller.actions.find_monsters.FindMonstersAction"
-  gather_resources: "src.controller.actions.gather_resources.GatherResourcesAction"
-  find_resources: "src.controller.actions.find_resources.FindResourcesAction"
-  craft_item: "src.controller.actions.craft_item.CraftItemAction"
-  lookup_item_info: "src.controller.actions.lookup_item_info.LookupItemInfoAction"
-  equip_item: "src.controller.actions.equip_item.EquipItemAction"
-  unequip_item: "src.controller.actions.unequip_item.UnequipItemAction"
-  explore_map: "src.controller.actions.explore_map.ExploreMapAction"
-  analyze_nearby_resources: "src.controller.actions.analyze_nearby_resources.AnalyzeNearbyResourcesAction"
-  find_workshops: "src.controller.actions.find_workshops.FindWorkshopsAction"
-  move_to_workshop: "src.controller.actions.move_to_workshop.MoveToWorkshopAction"
-  move_to_resource: "src.controller.actions.move_to_resource.MoveToResourceAction"
-  lookup_material_requirements: "src.controller.actions.lookup_item_info.LookupItemInfoAction"
-  transform_material: "src.controller.actions.transform_materials_coordinator.TransformMaterialsCoordinatorAction"
-  transform_raw_materials: "src.controller.actions.transform_materials_coordinator.TransformMaterialsCoordinatorAction"
-  # Bridge actions for material transformation
-  analyze_materials_for_transformation: "src.controller.actions.analyze_materials_for_transformation.AnalyzeMaterialsForTransformationAction"
-  determine_workshop_requirements: "src.controller.actions.determine_workshop_requirements.DetermineWorkshopRequirementsAction"
-  navigate_to_workshop: "src.controller.actions.navigate_to_workshop.NavigateToWorkshopAction"
-  execute_material_transformation: "src.controller.actions.execute_material_transformation.ExecuteMaterialTransformationAction"
-  verify_transformation_results: "src.controller.actions.verify_transformation_results.VerifyTransformationResultsAction"
-  find_correct_workshop: "src.controller.actions.find_correct_workshop.FindCorrectWorkshopAction"
-  evaluate_weapon_recipes: "src.controller.actions.evaluate_weapon_recipes.EvaluateWeaponRecipesAction"
-  analyze_equipment_gaps: "src.controller.actions.analyze_equipment_gaps.AnalyzeEquipmentGapsAction"
-  select_optimal_slot: "src.controller.actions.select_optimal_slot.SelectOptimalSlotAction"
-  evaluate_recipes: "src.controller.actions.evaluate_recipes.EvaluateRecipesAction"
-  upgrade_weaponcrafting_skill: "src.controller.actions.upgrade_weaponcrafting_skill.UpgradeWeaponcraftingSkillAction"
-  check_skill_requirement: "src.controller.actions.check_skill_requirement.CheckSkillRequirementAction"
-  find_xp_sources: "src.controller.actions.find_xp_sources.FindXpSourcesAction"
-  determine_material_requirements: "src.controller.actions.determine_material_requirements.DetermineMaterialRequirementsAction"
-  check_material_availability: "src.controller.actions.check_material_availability.CheckMaterialAvailabilityAction"
-  determine_material_insufficiency: "src.controller.actions.determine_material_insufficiency.DetermineMaterialInsufficencyAction"
-  calculate_material_quantities: "src.controller.actions.calculate_material_quantities.CalculateMaterialQuantitiesAction"
-  gather_resource_quantity: "src.controller.actions.gather_resource_quantity.GatherResourceQuantityAction"
-  gather_missing_materials: "src.controller.actions.gather_missing_materials.GatherMissingMaterialsAction"
-  gather_materials: "src.controller.actions.gather_missing_materials.GatherMissingMaterialsAction"  # Alias
-  check_gathering_complete: "src.controller.actions.check_gathering_complete.CheckGatheringCompleteAction"
-  check_gathering: "src.controller.actions.check_gathering_complete.CheckGatheringCompleteAction"  # Alias
-  verify_skill_requirements: "src.controller.actions.verify_skill_requirements.VerifySkillRequirementsAction"
+# Action configurations using snake_case to CamelCase naming convention
+# Snake case action names are dynamically mapped to CamelCase class names
+# Example: analyze_equipment -> AnalyzeEquipmentAction
 
 action_configurations:
   # Core consolidated actions
@@ -89,9 +15,6 @@ action_configurations:
     type: "builtin"
     description: "Select optimal recipe for equipment crafting"
     
-  determine_material_requirements:
-    type: "builtin"
-    description: "Determine what materials are needed for the selected recipe"
     
   check_material_availability:
     type: "builtin"
@@ -101,9 +24,6 @@ action_configurations:
     type: "builtin"
     description: "Determine that required materials are insufficient and need gathering"
     
-  calculate_material_quantities:
-    type: "builtin"
-    description: "Calculate total quantities of raw materials needed for crafting chain"
     
   gather_resource_quantity:
     type: "builtin"
@@ -135,8 +55,7 @@ action_configurations:
     description: "Fight monsters using consolidated state format"
     
   initiate_combat_search:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.initiate_combat_search.InitiateCombatSearchAction"
+    type: "builtin"
     description: "Bridge action to transition combat context from idle to searching"
     
   scan:
@@ -208,13 +127,6 @@ action_configurations:
     type: "builtin"
     description: "Look up item information and crafting recipes"
     
-  analyze_crafting_chain:
-    type: "builtin"
-    description: "Recursively analyze complete crafting dependency chain from raw materials to final equipment"
-    
-  plan_crafting_materials:
-    type: "builtin"
-    description: "Plan material gathering for selected item to craft"
     
   execute_crafting_plan:
     type: "builtin"
@@ -477,68 +389,55 @@ evaluate_weapon_recipes:
 action_configurations:
   # Combat Flow Bridge Actions
   reset_combat_context:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.reset_combat_context.ResetCombatContextAction"
+    type: "builtin"
     description: "Reset combat context from completed to idle"
   
   abort_combat_search:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.abort_combat_search.AbortCombatSearchAction"
+    type: "builtin"
     description: "Abort combat search when no monsters found"
   
   mark_combat_not_viable:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.mark_combat_not_viable.MarkCombatNotViableAction"
+    type: "builtin"
     description: "Mark combat as not viable when win rate too low"
   
   recover_combat_viability:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.recover_combat_viability.RecoverCombatViabilityAction"
+    type: "builtin"
     description: "Recover combat viability after equipment upgrade"
   
   # Equipment Flow Bridge Actions
   initiate_equipment_analysis:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.initiate_equipment_analysis.InitiateEquipmentAnalysisAction"
+    type: "builtin"
     description: "Start equipment upgrade analysis process"
   
   mark_equipment_crafting:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.mark_equipment_crafting.MarkEquipmentCraftingAction"
+    type: "builtin"
     description: "Mark equipment as being crafted"
   
   mark_equipment_ready:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.mark_equipment_ready.MarkEquipmentReadyAction"
+    type: "builtin"
     description: "Mark equipment as ready for equipping"
   
   complete_equipment_upgrade:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.complete_equipment_upgrade.CompleteEquipmentUpgradeAction"
+    type: "builtin"
     description: "Complete equipment upgrade process"
   
   reset_equipment_upgrade:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.reset_equipment_upgrade.ResetEquipmentUpgradeAction"
+    type: "builtin"
     description: "Reset equipment upgrade for new cycle"
   
   # Healing Flow Bridge Actions
   assess_healing_needs:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.assess_healing_needs.AssessHealingNeedsAction"
+    type: "builtin"
     description: "Assess if character needs healing"
   
   initiate_healing:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.initiate_healing.InitiateHealingAction"
+    type: "builtin"
     description: "Initiate healing process"
   
   complete_healing:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.complete_healing.CompleteHealingAction"
+    type: "builtin"
     description: "Complete healing process and set healing_status to complete"
   
   reset_healing_state:
-    type: "yaml_defined"
-    class_path: "src.controller.actions.reset_healing_state.ResetHealingStateAction"
+    type: "builtin"
     description: "Reset healing state for new cycle"

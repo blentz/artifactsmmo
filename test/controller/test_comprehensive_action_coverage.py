@@ -6,7 +6,6 @@ import unittest
 
 from src.controller.action_executor import ActionExecutor
 from src.controller.actions.base import ActionResult
-from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
 from src.controller.actions.evaluate_weapon_recipes import EvaluateWeaponRecipesAction
 from src.controller.actions.find_xp_sources import FindXpSourcesAction
@@ -52,39 +51,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertFalse(result.success)
 
-    def test_analyze_crafting_chain_basic(self):
-        """Test AnalyzeCraftingChainAction basic functionality."""
-        action = AnalyzeCraftingChainAction()
-        # Action no longer stores these as instance attributes
-        self.assertFalse(hasattr(action, 'character_name'))
-        self.assertFalse(hasattr(action, 'target_item'))
-        
-        # Test repr
-        expected = "AnalyzeCraftingChainAction()"
-        self.assertEqual(repr(action), expected)
-        
-        # Test initialization data structures if they exist
-        if hasattr(action, 'analyzed_items'):
-            self.assertEqual(action.analyzed_items, set())
-        if hasattr(action, 'resource_nodes'):
-            self.assertEqual(action.resource_nodes, {})
-        if hasattr(action, 'workshops'):
-            self.assertEqual(action.workshops, {})
-        if hasattr(action, 'crafting_dependencies'):
-            self.assertEqual(action.crafting_dependencies, {})
-        if hasattr(action, 'transformation_chains'):
-            self.assertEqual(action.transformation_chains, [])
-        
-        # Test GOAP attributes
-        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'conditions'))
-        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'reactions'))
-        self.assertTrue(hasattr(AnalyzeCraftingChainAction, 'weight'))
-        
-        # Test no client
-        context = MockActionContext(character_name="player", target_item="sword")
-        result = action.execute(None, context)
-        self.assertFalse(result.success)
-        self.assertFalse(result.success)
 
     def test_analyze_resources_basic(self):
         """Test AnalyzeResourcesAction basic functionality."""
@@ -208,27 +174,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
             drops = action._analyze_resource_drops({})
             self.assertEqual(drops, [])
 
-    def test_analyze_crafting_chain_helper_methods(self):
-        """Test AnalyzeCraftingChainAction helper methods."""
-        action = AnalyzeCraftingChainAction()
-        
-        # Action no longer stores these as instance attributes
-        self.assertFalse(hasattr(action, 'character_name'))
-        self.assertFalse(hasattr(action, 'target_item'))
-        
-        # Test attributes if they exist
-        if hasattr(action, 'analyzed_items'):
-            self.assertIsInstance(action.analyzed_items, set)
-            self.assertEqual(len(action.analyzed_items), 0)
-        if hasattr(action, 'resource_nodes'):
-            self.assertIsInstance(action.resource_nodes, dict)
-            self.assertEqual(len(action.resource_nodes), 0)
-        if hasattr(action, 'workshops'):
-            self.assertIsInstance(action.workshops, dict)
-        if hasattr(action, 'crafting_dependencies'):
-            self.assertIsInstance(action.crafting_dependencies, dict)
-        if hasattr(action, 'transformation_chains'):
-            self.assertIsInstance(action.transformation_chains, list)
 
     def test_transform_raw_materials_helper_methods(self):
         """Test TransformMaterialsCoordinatorAction helper methods if they exist."""
@@ -252,7 +197,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         """Test common error handling patterns across actions."""
         actions = [
             TransformMaterialsCoordinatorAction(),
-            AnalyzeCraftingChainAction(),
             AnalyzeResourcesAction(),
             EvaluateWeaponRecipesAction(),
             FindXpSourcesAction()
@@ -274,7 +218,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         """Test GOAP attribute consistency across actions."""
         action_classes = [
             TransformMaterialsCoordinatorAction,
-            AnalyzeCraftingChainAction,
             AnalyzeResourcesAction,
             EvaluateWeaponRecipesAction,
             FindXpSourcesAction
@@ -299,10 +242,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         self.assertFalse(hasattr(action1, 'character_name'))
         self.assertFalse(hasattr(action1, 'target_item'))
         
-        action2 = AnalyzeCraftingChainAction()
-        self.assertFalse(hasattr(action2, 'character_name'))
-        self.assertFalse(hasattr(action2, 'target_item'))
-        
         action3 = AnalyzeResourcesAction()
         self.assertFalse(hasattr(action3, 'character_x'))
         self.assertFalse(hasattr(action3, 'character_y'))
@@ -320,9 +259,6 @@ class TestComprehensiveActionCoverage(unittest.TestCase):
         # Test consistent repr format
         action1 = TransformMaterialsCoordinatorAction()
         self.assertEqual("TransformMaterialsCoordinatorAction()", repr(action1))
-        
-        action2 = AnalyzeCraftingChainAction()
-        self.assertEqual("AnalyzeCraftingChainAction()", repr(action2))
         
         action3 = AnalyzeResourcesAction()
         self.assertEqual("AnalyzeResourcesAction()", repr(action3))

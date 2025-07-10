@@ -11,6 +11,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, Mock, patch
 
 from src.diagnostic_tools import DiagnosticTools
+from src.lib.state_parameters import StateParameters
 
 
 class TestDiagnosticTools(TestCase):
@@ -42,39 +43,35 @@ class TestDiagnosticTools(TestCase):
         """Test initialization with clean state."""
         tools = DiagnosticTools(client=self.mock_client, clean_state=True)
         
-        # Verify clean state structure
-        self.assertIn('character_status', tools.current_state)
-        self.assertIn('combat_context', tools.current_state)
-        self.assertIn('equipment_status', tools.current_state)
-        self.assertTrue(tools.current_state['character_status']['alive'])
-        self.assertEqual(tools.current_state['character_status']['level'], 1)
+        # Verify clean state structure uses flat parameters
+        self.assertIn(StateParameters.CHARACTER_ALIVE, tools.current_state)
+        self.assertIn(StateParameters.COMBAT_STATUS, tools.current_state)
+        self.assertIn(StateParameters.EQUIPMENT_UPGRADE_STATUS, tools.current_state)
+        self.assertTrue(tools.current_state[StateParameters.CHARACTER_ALIVE])
+        self.assertEqual(tools.current_state[StateParameters.CHARACTER_LEVEL], 1)
         
     def test_init_custom_state_json(self):
         """Test initialization with custom JSON state."""
         custom_state = json.dumps({
-            'character_status': {
-                'alive': True,
-                'level': 5
-            }
+            StateParameters.CHARACTER_ALIVE: True,
+            StateParameters.CHARACTER_LEVEL: 5
         })
         
         tools = DiagnosticTools(client=self.mock_client, custom_state=custom_state)
         
-        self.assertEqual(tools.current_state['character_status']['level'], 5)
+        self.assertEqual(tools.current_state[StateParameters.CHARACTER_LEVEL], 5)
         
     def test_init_custom_state_dict(self):
         """Test initialization with custom dict state."""
         custom_state = {
-            'character_status': {
-                'alive': False,
-                'level': 10
-            }
+            StateParameters.CHARACTER_ALIVE: False,
+            StateParameters.CHARACTER_LEVEL: 10
         }
         
         tools = DiagnosticTools(client=self.mock_client, custom_state=custom_state)
         
-        self.assertEqual(tools.current_state['character_status']['level'], 10)
-        self.assertFalse(tools.current_state['character_status']['alive'])
+        self.assertEqual(tools.current_state[StateParameters.CHARACTER_LEVEL], 10)
+        self.assertFalse(tools.current_state[StateParameters.CHARACTER_ALIVE])
         
     @patch('src.diagnostic_tools.AIPlayerController')
     @patch('src.diagnostic_tools.CharacterState')
@@ -126,10 +123,9 @@ class TestDiagnosticTools(TestCase):
         
         result = tools._parse_goal_string('character_status.alive=true')
         
+        # Architecture compliance - system now uses flattened StateParameters
         self.assertEqual(result, {
-            'character_status': {
-                'alive': True
-            }
+            'character_status.alive': True
         })
         
     def test_parse_goal_string_simple_expression(self):
@@ -146,10 +142,9 @@ class TestDiagnosticTools(TestCase):
         
         result = tools._parse_goal_string('reach level 25')
         
+        # Architecture compliance - system now uses flattened StateParameters
         self.assertEqual(result, {
-            'character_status': {
-                'level': 25
-            }
+            'character_status.level': 25
         })
         
     def test_parse_value_types(self):
@@ -212,10 +207,16 @@ class TestDiagnosticTools(TestCase):
             'extra_field': 'ignored'
         }
         
-        success, failures = tools._check_conditions_nested(conditions, state)
+        # Use _simulate_action_with_goap_logic which includes condition checking
+        action_cfg = {
+            'conditions': conditions,
+            'reactions': {},
+            'weight': 1.0
+        }
+        success, cost = tools._simulate_action_with_goap_logic('test_action', action_cfg, state)
         
         self.assertTrue(success)
-        self.assertEqual(failures, [])
+        self.assertGreater(cost, 0)  # Should return positive cost when successful
         
     def test_check_conditions_nested_failure(self):
         """Test checking nested conditions that fail."""
@@ -237,12 +238,16 @@ class TestDiagnosticTools(TestCase):
             'simple_flag': True
         }
         
-        success, failures = tools._check_conditions_nested(conditions, state)
+        # Use _simulate_action_with_goap_logic which includes condition checking
+        action_cfg = {
+            'conditions': conditions,
+            'reactions': {},
+            'weight': 1.0
+        }
+        success, cost = tools._simulate_action_with_goap_logic('test_action', action_cfg, state)
         
-        self.assertFalse(success)
-        self.assertEqual(len(failures), 2)
-        self.assertIn('character_status.level: required=10, current=5', failures)
-        self.assertIn('simple_flag: required=False, current=True', failures)
+        self.assertFalse(success)  # Should fail because conditions don't match
+        self.assertEqual(cost, 0)   # Should return 0 cost when failed
         
     @patch('src.diagnostic_tools.ActionsData')
     @patch('logging.Logger.info')
@@ -267,8 +272,8 @@ class TestDiagnosticTools(TestCase):
         # Mock actions data
         mock_actions = {
             'move': {
-                'conditions': {'character_status': {'alive': True}},
-                'reactions': {'location_context': {'at_target': True}},
+                'conditions': {StateParameters.CHARACTER_ALIVE: True},
+                'reactions': {'location_context.at_target': True},
                 'weight': 1
             }
         }
@@ -322,8 +327,8 @@ class TestDiagnosticTools(TestCase):
         """Test evaluating valid plan in offline mode."""
         mock_actions = {
             'rest': {
-                'conditions': {'character_status': {'alive': True}},
-                'reactions': {'character_status': {'hp_percentage': 100}},
+                'conditions': {StateParameters.CHARACTER_ALIVE: True},
+                'reactions': {StateParameters.CHARACTER_HP: 100},
                 'weight': 1
             }
         }
@@ -349,10 +354,11 @@ class TestDiagnosticTools(TestCase):
         }
         
         state = tools.current_state.copy()
-        success, cost = tools._simulate_action('test', action_cfg, state)
+        # Use _simulate_action_with_goap_logic instead of removed _simulate_action
+        success, cost = tools._simulate_action_with_goap_logic('test', action_cfg, state)
         
-        self.assertFalse(success)
-        self.assertEqual(cost, 0)
+        self.assertFalse(success)  # Should fail because level requirement not met
+        self.assertEqual(cost, 0)   # Should return 0 cost when failed
         
     def test_simulate_action_with_nested_reactions(self):
         """Test simulating action with nested reactions."""
@@ -360,24 +366,25 @@ class TestDiagnosticTools(TestCase):
         
         action_cfg = {
             'conditions': {
-                'character_status': {'alive': True}
+                StateParameters.CHARACTER_ALIVE: True
             },
             'reactions': {
-                'character_status': {
-                    'level': 2,
-                    'xp_percentage': 50
-                }
+                StateParameters.CHARACTER_LEVEL: 2,
+                StateParameters.CHARACTER_XP_PERCENTAGE: 50
             },
             'weight': 2.5
         }
         
         state = tools.current_state.copy()
-        success, cost = tools._simulate_action('test', action_cfg, state)
+        # Use _simulate_action_with_goap_logic instead of removed _simulate_action
+        success, cost = tools._simulate_action_with_goap_logic('test', action_cfg, state)
         
         self.assertTrue(success)
-        self.assertEqual(cost, 2.5)
-        self.assertEqual(state['character_status']['level'], 2)
-        self.assertEqual(state['character_status']['xp_percentage'], 50)
+        self.assertEqual(cost, 2.5)  # Should return the weight value as cost
+        
+        # Check reactions were applied to the state
+        self.assertEqual(state[StateParameters.CHARACTER_LEVEL], 2)
+        self.assertEqual(state[StateParameters.CHARACTER_XP_PERCENTAGE], 50)
         
     def test_execute_action_live_no_controller(self):
         """Test live execution without controller."""
@@ -500,10 +507,10 @@ class TestDiagnosticToolsIntegration(TestCase):
         mock_actions_data.return_value.get_actions.return_value = {
             'level_up': {
                 'conditions': {
-                    'character_status': {'alive': True}
+                    StateParameters.CHARACTER_ALIVE: True
                 },
                 'reactions': {
-                    'character_status': {'level': 2}
+                    StateParameters.CHARACTER_LEVEL: 2
                 },
                 'weight': 5
             }
@@ -527,14 +534,14 @@ class TestDiagnosticToolsIntegration(TestCase):
         """Test complete plan evaluation workflow."""
         mock_actions = {
             'move': {
-                'conditions': {'character_status': {'alive': True}},
-                'reactions': {'location_context': {'at_target': True}},
+                'conditions': {StateParameters.CHARACTER_ALIVE: True},
+                'reactions': {'location_context.at_target': True},
                 'weight': 1
             },
             'attack': {
                 'conditions': {
-                    'location_context': {'at_target': True},
-                    'character_status': {'alive': True}
+                    'location_context.at_target': True,
+                    StateParameters.CHARACTER_ALIVE: True
                 },
                 'reactions': {'combat_context': {'status': 'completed'}},
                 'weight': 3

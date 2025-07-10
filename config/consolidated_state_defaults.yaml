@@ -11,7 +11,7 @@ state_defaults:
     boots: null
     target_slot: null
     upgrade_status: "needs_analysis"
-    selected_item: null
+    target_item: null
     gaps_analyzed: false
     item_crafted: false
     equipped: false

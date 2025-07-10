@@ -4,8 +4,8 @@ from typing import Dict, Optional
 
 from src.lib.action_context import ActionContext
 
-from .coordinate_mixin import CoordinateStandardizationMixin
-from .search_base import SearchActionBase
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
+from .base.search import SearchActionBase
 from .base import ActionResult
 
 

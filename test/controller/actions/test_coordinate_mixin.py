@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.controller.actions.coordinate_mixin import CoordinateStandardizationMixin
+from src.controller.actions.mixins.coordinate_mixin import CoordinateStandardizationMixin
 
 
 class TestCoordinateStandardizationMixin(unittest.TestCase):

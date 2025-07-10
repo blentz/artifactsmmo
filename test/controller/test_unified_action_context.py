@@ -241,7 +241,7 @@ class TestUnifiedActionContext(unittest.TestCase):
             if action_name == 'action1':
                 # First action stores complex data
                 context.set_result(StateParameters.EQUIPMENT_GAP_ANALYSIS, complex_data)
-                context.set_result(StateParameters.SELECTED_ITEM, 'value1')
+                context.set_result(StateParameters.TARGET_ITEM, 'value1')
             elif action_name == 'action2':
                 # Second action reads and modifies
                 data = context.get(StateParameters.EQUIPMENT_GAP_ANALYSIS)
@@ -253,7 +253,7 @@ class TestUnifiedActionContext(unittest.TestCase):
             elif action_name == 'action3':
                 # Third action verifies all data is available
                 results_by_action['action3_complex'] = context.get(StateParameters.EQUIPMENT_GAP_ANALYSIS)
-                results_by_action['action3_data1'] = context.get(StateParameters.SELECTED_ITEM)
+                results_by_action['action3_data1'] = context.get(StateParameters.TARGET_ITEM)
                 results_by_action['action3_data2'] = context.get(StateParameters.SELECTED_RECIPE)
             
             return ActionResult(success=True, data={})
@@ -313,7 +313,7 @@ class TestUnifiedActionContext(unittest.TestCase):
                 gap_analysis = context.get(StateParameters.EQUIPMENT_GAP_ANALYSIS)
                 if gap_analysis:
                     # Select weapon slot as highest priority
-                    context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+                    context.set_result(StateParameters.TARGET_SLOT, 'weapon')
                     context.set_result(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
                     execution_log.append(f"{action_name}: found gap analysis, selected weapon")
                 else:
@@ -322,10 +322,10 @@ class TestUnifiedActionContext(unittest.TestCase):
                     
             elif action_name == 'select_recipe':
                 # This action should find the selected slot
-                slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+                slot = context.get(StateParameters.TARGET_SLOT)
                 skill = context.get(StateParameters.TARGET_CRAFT_SKILL)
                 if slot and skill:
-                    context.set_result(StateParameters.SELECTED_ITEM, 'copper_dagger')
+                    context.set_result(StateParameters.TARGET_ITEM, 'copper_dagger')
                     execution_log.append(f"{action_name}: found slot={slot}, skill={skill}, selected copper_dagger")
                 else:
                     execution_log.append(f"{action_name}: ERROR - no slot/skill found!")
@@ -348,8 +348,8 @@ class TestUnifiedActionContext(unittest.TestCase):
         # Verify final context has all the data
         final_context = self.controller.plan_action_context
         self.assertIsNotNone(final_context.get(StateParameters.EQUIPMENT_GAP_ANALYSIS))
-        self.assertEqual(final_context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
-        self.assertEqual(final_context.get(StateParameters.SELECTED_ITEM), 'copper_dagger')
+        self.assertEqual(final_context.get(StateParameters.TARGET_SLOT), 'weapon')
+        self.assertEqual(final_context.get(StateParameters.TARGET_ITEM), 'copper_dagger')
 
 
 if __name__ == '__main__':

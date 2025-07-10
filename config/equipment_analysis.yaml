@@ -88,3 +88,84 @@ all_equipment_slots:
   - ring2
   - consumable
   - potion
+
+# Equipment slots with API field names for character data extraction
+equipment_slot_mappings:
+  weapon: weapon_slot
+  shield: shield_slot
+  helmet: helmet_slot
+  body_armor: body_armor_slot
+  leg_armor: leg_armor_slot
+  boots: boots_slot
+  ring1: ring1_slot
+  ring2: ring2_slot
+  amulet: amulet_slot
+  artifact1: artifact1_slot
+  artifact2: artifact2_slot
+  artifact3: artifact3_slot
+
+# Starter equipment identification
+starter_equipment:
+  weapons:
+    - wooden_stick
+    - ""
+    - null
+  default_threshold_level: 2  # Level at which starter equipment needs upgrading
+
+# Equipment tier determination by level
+tier_thresholds:
+  1: "starter"
+  5: "basic"
+  10: "intermediate"
+  15: "advanced"
+  20: "expert"
+  25: "master"
+  30: "legendary"
+  35: "mythical"
+  40: "divine"
+
+# Priority categories
+priority_categories:
+  high: 3
+  medium: 2
+  low: 1
+
+# Equipment upgrade priority mapping
+upgrade_priorities:
+  weapon:
+    priority: high
+    reason: "Primary damage source"
+  shield:
+    priority: medium
+    reason: "Defensive capability"
+  helmet:
+    priority: medium
+    reason: "Head protection"
+  body_armor:
+    priority: high
+    reason: "Main armor piece"
+  leg_armor:
+    priority: medium
+    reason: "Leg protection"
+  boots:
+    priority: low
+    reason: "Minimal stat impact"
+  ring1:
+    priority: low
+    reason: "Supplemental stats"
+  ring2:
+    priority: low
+    reason: "Supplemental stats"
+  amulet:
+    priority: medium
+    reason: "Significant stat boost"
+  artifact1:
+    priority: low
+    reason: "Situational benefits"
+  artifact2:
+    priority: low
+    reason: "Situational benefits"
+  artifact3:
+    priority: low
+    reason: "Situational benefits"
+

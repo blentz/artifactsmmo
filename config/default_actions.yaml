@@ -210,24 +210,6 @@ actions:
     weight: 1.0
     description: "Determine that required materials are insufficient and need gathering"
     
-  # Material quantity calculation
-  calculate_material_quantities:
-    conditions:
-      materials:
-        requirements_determined: true
-        status: 'insufficient'
-        availability_checked: true
-      equipment_status:
-        has_selected_item: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        quantities_calculated: true
-        raw_materials_needed: true
-    weight: 1.0
-    description: "Calculate total quantities of raw materials needed"
-    
   # Material gathering chain
   find_resources:
     conditions:

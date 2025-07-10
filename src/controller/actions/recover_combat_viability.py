@@ -58,7 +58,7 @@ class RecoverCombatViabilityAction(ActionBase):
         
         try:
             # Get equipment upgrade information using StateParameters
-            upgraded_item = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM, 'unknown')
+            upgraded_item = context.get(StateParameters.TARGET_ITEM, 'unknown')
             
             # Log the recovery
             self.logger.info(

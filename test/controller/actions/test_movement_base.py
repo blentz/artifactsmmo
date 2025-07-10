@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from src.controller.actions.movement_base import MovementActionBase
+from src.controller.actions.base.movement import MovementActionBase
 from src.lib.action_context import ActionContext
 from test.fixtures import MockActionContext, create_mock_client
 
@@ -62,7 +62,7 @@ class TestMovementActionBase(unittest.TestCase):
         movement_context = self.action.build_movement_context(context)
         self.assertEqual(movement_context, {})
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_success(self, mock_move_api):
         """Test successful movement execution."""
         # Mock response
@@ -94,7 +94,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertTrue(result.data['movement_completed'])
         self.assertEqual(result.data['extra_info'], 'test')
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_no_context(self, mock_move_api):
         """Test movement execution with no context provided."""
         # Mock response
@@ -116,7 +116,7 @@ class TestMovementActionBase(unittest.TestCase):
         call_args = mock_move_api.call_args
         self.assertEqual(call_args[1]['name'], 'unknown')
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_no_response_data(self, mock_move_api):
         """Test movement execution when API returns no response."""
         # Mock None response
@@ -129,7 +129,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertEqual(result.data['target_x'], 10)
         self.assertEqual(result.data['target_y'], 20)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_already_at_destination(self, mock_move_api):
         """Test movement execution when already at destination."""
         # Mock 490 error
@@ -150,7 +150,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertEqual(result.data['current_x'], 10)
         self.assertEqual(result.data['current_y'], 20)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_general_error(self, mock_move_api):
         """Test movement execution with general error."""
         # Mock general error
@@ -174,7 +174,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertIsNone(result.data['provided_x'])
         self.assertIsNone(result.data['provided_y'])
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_success(self, mock_move_api):
         """Test successful execute method."""
         # Mock response
@@ -202,7 +202,7 @@ class TestMovementActionBase(unittest.TestCase):
         # Verify context was stored
         self.assertEqual(self.action._context, context)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_validation_failure(self, mock_move_api):
         """Test movement execution when character doesn't reach target position."""
         # Mock response where character ends up at different location

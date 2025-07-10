@@ -75,21 +75,19 @@ class UnifiedStateContext:
             StateParameters.CHARACTER_NAME: "",
             StateParameters.CHARACTER_X: 0,
             StateParameters.CHARACTER_Y: 0,
-            StateParameters.EQUIPMENT_HAS_SELECTED_ITEM: False,
+            
+            # Target item parameters
+            StateParameters.TARGET_ITEM: None,
+            StateParameters.TARGET_SLOT: None,
+            StateParameters.TARGET_RECIPE: None,
+            
+            # Equipment parameters
             StateParameters.EQUIPMENT_UPGRADE_STATUS: "needs_analysis",
             StateParameters.EQUIPMENT_GAPS_ANALYZED: False,
             StateParameters.EQUIPMENT_ITEM_CRAFTED: False,
             StateParameters.EQUIPMENT_EQUIPPED: False,
             StateParameters.MATERIALS_STATUS: "unknown",
             StateParameters.MATERIALS_GATHERED: False,
-            StateParameters.MATERIALS_REQUIREMENTS_DETERMINED: False,
-            StateParameters.MATERIALS_AVAILABILITY_CHECKED: False,
-            StateParameters.MATERIALS_QUANTITIES_CALCULATED: False,
-            StateParameters.MATERIALS_RAW_MATERIALS_NEEDED: False,
-            StateParameters.MATERIALS_READY_TO_CRAFT: False,
-            StateParameters.MATERIALS_TRANSFORMATION_COMPLETE: False,
-            StateParameters.MATERIALS_INVENTORY: {},
-            StateParameters.MATERIALS_REQUIRED: {},
             StateParameters.COMBAT_STATUS: "idle",
             StateParameters.COMBAT_RECENT_WIN_RATE: 1.0,
             StateParameters.COMBAT_LOW_WIN_RATE: False,
@@ -219,6 +217,15 @@ class UnifiedStateContext:
         """
         return self._state.copy()
     
+    def get_all_parameters(self) -> Dict[str, Any]:
+        """
+        Get all parameters from unified state context.
+        
+        Returns:
+            Dictionary with all current parameter values
+        """
+        return self._state.copy()
+    
     def reset(self) -> None:
         """Reset state to defaults (useful for testing)."""
         self._state.clear()
@@ -275,6 +282,58 @@ class UnifiedStateContext:
     def items(self):
         """Return all parameter key-value pairs."""
         return self._state.items()
+    
+    def update_from_context(self, character_state=None, map_state=None, knowledge_base=None) -> None:
+        """
+        Update unified state directly from external context sources.
+        
+        This eliminates the need for separate world state creation/merging
+        by updating the single source of truth directly.
+        
+        Args:
+            character_state: Character state to extract data from
+            map_state: Map state to extract data from
+            knowledge_base: Knowledge base to extract data from
+        """
+        try:
+            # Update character parameters directly
+            if character_state and hasattr(character_state, 'data'):
+                char_data = character_state.data
+                self.update({
+                    StateParameters.CHARACTER_LEVEL: char_data.get('level', 1),
+                    StateParameters.CHARACTER_HP: char_data.get('hp', 0),
+                    StateParameters.CHARACTER_MAX_HP: char_data.get('max_hp', 0),
+                    StateParameters.CHARACTER_X: char_data.get('x', 0),
+                    StateParameters.CHARACTER_Y: char_data.get('y', 0),
+                    StateParameters.CHARACTER_ALIVE: char_data.get('hp', 0) > 0,
+                    StateParameters.CHARACTER_SAFE: char_data.get('hp', 0) > (char_data.get('max_hp', 0) * 0.2),
+                    StateParameters.CHARACTER_COOLDOWN_ACTIVE: char_data.get('cooldown_expiry', 0) > 0,
+                })
+            
+            # Update map parameters directly
+            if map_state and hasattr(map_state, 'data'):
+                map_data = map_state.data
+                self.update({
+                    StateParameters.RESOURCE_AVAILABILITY_MONSTERS: len(map_data.get('monsters', [])) > 0,
+                    StateParameters.RESOURCE_AVAILABILITY_RESOURCES: len(map_data.get('resources', [])) > 0,
+                    StateParameters.WORKSHOP_LOCATIONS: map_data.get('workshops', {}),
+                    StateParameters.WORKSHOP_DISCOVERED: len(map_data.get('workshops', {})) > 0,
+                })
+            
+            # Update knowledge base parameters directly
+            if knowledge_base and hasattr(knowledge_base, 'data'):
+                kb_data = knowledge_base.data
+                self.update({
+                    StateParameters.MATERIALS_REQUIRED: kb_data.get('required_materials', {}),
+                })
+            
+            # Ensure critical state is updated
+            self.set(StateParameters.INVENTORY_UPDATED, True)
+            
+            self._logger.debug("Updated unified state from external context")
+            
+        except Exception as e:
+            self._logger.error(f"Failed to update from context: {e}")
 
 
 # Convenience function for getting the singleton instance

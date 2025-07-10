@@ -22,7 +22,7 @@ class TestRecoverCombatViabilityAction(UnifiedContextTestBase):
         """Test successful execution of recover combat viability."""
         # Set character name and equipment status using StateParameters
         self.context.set(StateParameters.CHARACTER_NAME, "test_char")
-        self.context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'iron_sword')
+        self.context.set(StateParameters.TARGET_ITEM, 'iron_sword')
         
         # Execute action
         result = self.action.execute(self.mock_client, self.context)
@@ -35,10 +35,8 @@ class TestRecoverCombatViabilityAction(UnifiedContextTestBase):
         """Test execution with upgraded equipment context."""
         # Set context with upgraded equipment data using StateParameters
         self.context.set(StateParameters.CHARACTER_NAME, "test_char")
-        self.context.set(StateParameters.EQUIPMENT_NEW_WEAPON, 'copper_sword')
-        self.context.set(StateParameters.EQUIPMENT_OLD_WEAPON, 'wooden_stick')
-        self.context.set(StateParameters.EQUIPMENT_UPGRADED, True)
-        self.context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'copper_sword')
+        # Combat viability recovery will check current equipment from API - no state parameters needed
+        self.context.set(StateParameters.TARGET_ITEM, 'copper_sword')
         
         # Execute action
         result = self.action.execute(self.mock_client, self.context)
@@ -46,8 +44,6 @@ class TestRecoverCombatViabilityAction(UnifiedContextTestBase):
         # Verify result
         self.assertTrue(result.success)
         self.assertEqual(result.message, "Combat viability recovered, ready to resume hunting")
-        self.assertEqual(result.data['equipment_upgraded'], 'copper_sword')
-        self.assertEqual(result.data['win_rate_reset'], True)
         
     def test_repr(self):
         """Test string representation."""

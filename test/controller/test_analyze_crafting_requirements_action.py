@@ -104,13 +104,14 @@ class TestAnalyzeCraftingRequirementsAction(UnifiedContextTestBase):
         self.assertIn("No knowledge base available", result.error)
 
     def test_execute_item_not_found(self):
-        """Test execute with item not found in knowledge base."""
+        """Test execute with item not found in knowledge base - should request subgoal."""
         client = create_mock_client()
         self.context.set(StateParameters.TARGET_ITEM, "unknown_item")
         
         result = self.action.execute(client, self.context)
-        self.assertFalse(result.success)
-        self.assertIn("No data found for item: unknown_item", result.error)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data['subgoal_requested'], True)
+        self.assertEqual(result.data['subgoal_name'], 'lookup_item_info')
 
     def test_execute_item_not_craftable(self):
         """Test execute with item that has no craft data."""

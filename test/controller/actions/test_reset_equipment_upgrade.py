@@ -36,8 +36,7 @@ class TestResetEquipmentUpgradeAction(unittest.TestCase):
         # Create context with previous upgrade data
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
-        context.set(StateParameters.EQUIPMENT_PREVIOUS_WEAPON, 'copper_sword')
-        context.set(StateParameters.EQUIPMENT_PREVIOUS_TARGET_SLOT, 'weapon')
+        # Reset equipment upgrade will check current equipment from API - no state parameters needed
         context.set(StateParameters.EQUIPMENT_STATUS, {'selected_item': 'copper_sword'})
         
         # Execute action

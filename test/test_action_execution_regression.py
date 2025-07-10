@@ -218,11 +218,11 @@ class TestActionExecutionRegression(UnifiedContextTestBase):
                 self.assertTrue(factory.is_action_registered(action_name),
                               f"Action {action_name} should be registered")
                 
-                # Should be able to get configuration
-                config = factory._action_registry.get(action_name)
-                self.assertIsNotNone(config, f"Action {action_name} should have configuration")
-                self.assertIsNotNone(config.action_class, 
-                                   f"Action {action_name} should have action class")
+                # Should be able to get action class (behavioral outcome instead of implementation detail)
+                action_class_map = factory.action_class_map
+                self.assertIn(action_name, action_class_map, f"Action {action_name} should have class")
+                action_class = action_class_map[action_name]
+                self.assertIsNotNone(action_class, f"Action {action_name} should have action class")
     
     def test_action_execution_error_handling(self):
         """Test that action execution handles errors gracefully."""

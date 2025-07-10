@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 from src.controller.actions.equip_item import EquipItemAction
+from src.lib.state_parameters import StateParameters
 
 from test.fixtures import MockActionContext, create_mock_client
 
@@ -35,7 +36,9 @@ class TestEquipItemAction(unittest.TestCase):
 
     def test_execute_no_client(self):
         """ Test execute with no API client """
-        context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
+        context = MockActionContext(character_name=self.character_name)
+        context.set_parameter(StateParameters.TARGET_ITEM, self.item_code)
+        context.set_parameter(StateParameters.TARGET_SLOT, self.slot)
         result = self.action.execute(None, context)
         # With centralized validation, None client triggers validation error
         self.assertFalse(result.success)
@@ -47,7 +50,9 @@ class TestEquipItemAction(unittest.TestCase):
         client = create_mock_client()
         action = EquipItemAction()
         
-        context = MockActionContext(character_name="char", item_code="item", slot="invalid_slot")
+        context = MockActionContext(character_name="char")
+        context.set_parameter(StateParameters.TARGET_ITEM, "item")
+        context.set_parameter(StateParameters.TARGET_SLOT, "invalid_slot")
         result = action.execute(client, context)
         
         self.assertFalse(result.success)
@@ -85,7 +90,9 @@ class TestEquipItemAction(unittest.TestCase):
         
         # Patch the API call
         with unittest.mock.patch('src.controller.actions.equip_item.equip_api', return_value=mock_response):
-            context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
+            context = MockActionContext(character_name=self.character_name)
+            context.set_parameter(StateParameters.TARGET_ITEM, self.item_code)
+            context.set_parameter(StateParameters.TARGET_SLOT, self.slot)
             result = self.action.execute(client, context)
         
         self.assertTrue(result.success)
@@ -101,11 +108,9 @@ class TestEquipItemAction(unittest.TestCase):
         """ Test execute when no item code is provided """
         client = create_mock_client()
         # Create context without item_code
-        context = MockActionContext(
-            character_name="TestCharacter",
-            slot="weapon"
-            # No item_code provided
-        )
+        context = MockActionContext(character_name="TestCharacter")
+        context.set_parameter(StateParameters.TARGET_SLOT, "weapon")
+        # No item_code provided
         
         result = self.action.execute(client, context)
         
@@ -116,11 +121,9 @@ class TestEquipItemAction(unittest.TestCase):
         """ Test execute when no slot is provided """
         client = create_mock_client()
         # Create context without slot
-        context = MockActionContext(
-            character_name="TestCharacter",
-            item_code="iron_sword"
-            # No slot provided
-        )
+        context = MockActionContext(character_name="TestCharacter")
+        context.set_parameter(StateParameters.TARGET_ITEM, "iron_sword")
+        # No slot provided
         
         result = self.action.execute(client, context)
         
@@ -134,7 +137,9 @@ class TestEquipItemAction(unittest.TestCase):
         mock_response.data = None
         
         with unittest.mock.patch('src.controller.actions.equip_item.equip_api', return_value=mock_response):
-            context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
+            context = MockActionContext(character_name=self.character_name)
+            context.set_parameter(StateParameters.TARGET_ITEM, self.item_code)
+            context.set_parameter(StateParameters.TARGET_SLOT, self.slot)
             result = self.action.execute(client, context)
         
         self.assertFalse(result.success)
@@ -145,7 +150,9 @@ class TestEquipItemAction(unittest.TestCase):
         client = create_mock_client()
         
         with unittest.mock.patch('src.controller.actions.equip_item.equip_api', side_effect=Exception("API Error")):
-            context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
+            context = MockActionContext(character_name=self.character_name)
+            context.set_parameter(StateParameters.TARGET_ITEM, self.item_code)
+            context.set_parameter(StateParameters.TARGET_SLOT, self.slot)
             result = self.action.execute(client, context)
         
         self.assertFalse(result.success)
@@ -271,7 +278,9 @@ class TestEquipItemAction(unittest.TestCase):
         
         # Only provide basic data without optional fields
         with unittest.mock.patch('src.controller.actions.equip_item.equip_api', return_value=mock_response):
-            context = MockActionContext(character_name=self.character_name, item_code=self.item_code, slot=self.slot)
+            context = MockActionContext(character_name=self.character_name)
+            context.set_parameter(StateParameters.TARGET_ITEM, self.item_code)
+            context.set_parameter(StateParameters.TARGET_SLOT, self.slot)
             result = self.action.execute(client, context)
         
         self.assertTrue(result.success)

@@ -237,7 +237,7 @@ class TestRestAction(UnifiedContextTestBase):
         self.assertIsInstance(action, RestAction)
         
         # Test that it inherits from expected base classes
-        from src.controller.actions.character_base import CharacterActionBase
+        from src.controller.actions.base.character import CharacterActionBase
         self.assertIsInstance(action, CharacterActionBase)
 
 

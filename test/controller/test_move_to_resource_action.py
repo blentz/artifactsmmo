@@ -148,7 +148,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertEqual(context['resource_name'], 'Copper Ore')
         self.assertNotIn('resource_code', context)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_success_with_context_coordinates(self, mock_move_api):
         """Test successful execution with coordinates from context."""
         from test.fixtures import MockActionContext
@@ -184,7 +184,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertTrue(result.data['at_resource_location'])
         self.assertEqual(result.data['resource_code'], 'ash_wood')
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_success_with_detailed_context(self, mock_move_api):
         """Test successful execution with detailed context."""
         from test.fixtures import MockActionContext
@@ -215,7 +215,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertEqual(result.data['resource_code'], 'copper_ore')
         self.assertEqual(result.data['resource_name'], 'Copper Ore')
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_already_at_destination(self, mock_move_api):
         """Test execution when already at destination."""
         from test.fixtures import MockActionContext
@@ -274,7 +274,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn('No valid coordinates provided', result.error)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_api_error(self, mock_move_api):
         """Test execution with API error."""
         from test.fixtures import MockActionContext
@@ -304,9 +304,8 @@ class TestMoveToResourceAction(unittest.TestCase):
         self.assertTrue(hasattr(action, 'create_success_result'))
         self.assertTrue(hasattr(action, 'create_error_result'))
         
-        # Should have CharacterDataMixin methods
-        self.assertTrue(hasattr(action, 'get_character_data'))
-        self.assertTrue(hasattr(action, 'get_character_location'))
+        # Note: CharacterDataMixin methods removed for architecture compliance
+        # Actions now read character data from UnifiedStateContext instead of making direct API calls
     
     def test_calculate_distance(self):
         """Test distance calculation functionality."""

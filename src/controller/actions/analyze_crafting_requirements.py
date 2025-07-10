@@ -1,11 +1,11 @@
 """
-Simple Analyze Crafting Requirements Action
+Analyze Crafting Requirements Action
 
-This action follows the architecture principles:
-- Simple boolean/string conditions
-- Single responsibility 
-- Declarative configuration
-- Direct property access with StateParameters
+Simple action to analyze crafting requirements for a target item.
+Follows architecture principles:
+- Single responsibility
+- Simple boolean conditions
+- Uses subgoal system for complex workflows
 """
 
 import logging
@@ -19,16 +19,16 @@ from .base import ActionBase, ActionResult
 
 class AnalyzeCraftingRequirementsAction(ActionBase):
     """
-    Simple action to analyze crafting requirements using declarative configuration.
+    Simple action to analyze crafting requirements for a target item.
     
     Follows architecture principles:
+    - Single responsibility (analyze one item's requirements)
     - Simple boolean conditions
-    - Single responsibility
     - Uses StateParameters for all data
-    - No complex business logic
+    - Requests subgoals for complex workflows
     """
 
-    # GOAP parameters - simple boolean conditions
+    # Simple GOAP parameters
     conditions = {
         'character_status': {
             'alive': True,
@@ -41,12 +41,12 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
     weight = 12
 
     def __init__(self):
-        """Initialize the simple crafting requirements analysis action."""
+        """Initialize the crafting requirements analysis action."""
         super().__init__()
         self.logger = logging.getLogger(__name__)
 
     def execute(self, client, context: ActionContext) -> ActionResult:
-        """Simple crafting requirements analysis using declarative configuration."""
+        """Analyze crafting requirements for target item."""
         # Call superclass to set self._context
         super().execute(client, context)
         
@@ -66,12 +66,17 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
         self._context = context
         
         try:
-            # Simple approach: Get crafting requirements for target item
-            items = knowledge_base.data.get('items', {})
-            item_data = items.get(target_item)
+            # Get crafting data from knowledge base
+            items_data = knowledge_base.data.get('items', {})
+            item_data = items_data.get(target_item)
             
             if not item_data:
-                return self.create_error_result(f"No data found for item: {target_item}")
+                # Request subgoal to lookup item info
+                return self.create_result_with_subgoal(
+                    subgoal_name='lookup_item_info',
+                    subgoal_parameters={StateParameters.TARGET_ITEM: target_item},
+                    preserve_context=True
+                )
                 
             craft_data = item_data.get('craft_data')
             if not craft_data:
@@ -82,8 +87,12 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
             required_skill = craft_data.get('skill', 'unknown')
             required_skill_level = craft_data.get('level', 1)
             
-            # Simple success result
-            result = self.create_success_result(
+            # Set results in context for other actions
+            context.set_result(StateParameters.REQUIRED_CRAFT_SKILL, required_skill)
+            context.set_result(StateParameters.REQUIRED_CRAFT_LEVEL, required_skill_level)
+            
+            # Simple success result - required_materials available from knowledge base lookup
+            return self.create_success_result(
                 target_item=target_item,
                 required_materials=required_materials,
                 required_skill=required_skill,
@@ -91,12 +100,14 @@ class AnalyzeCraftingRequirementsAction(ActionBase):
                 crafting_requirements_known=True
             )
             
-            # Update context with requirements
-            context.set_result(StateParameters.MATERIALS_REQUIRED, required_materials)
-            context.set_result(StateParameters.REQUIRED_CRAFT_SKILL, required_skill)
-            context.set_result(StateParameters.REQUIRED_CRAFT_LEVEL, required_skill_level)
-            
-            return result
-            
         except Exception as e:
             return self.create_error_result(f"Crafting requirements analysis failed: {str(e)}")
+
+    def create_result_with_subgoal(self, subgoal_name: str, subgoal_parameters: Dict, preserve_context: bool = True) -> ActionResult:
+        """Create result that requests a subgoal."""
+        result = self.create_success_result(
+            subgoal_requested=True,
+            subgoal_name=subgoal_name
+        )
+        result.request_subgoal(subgoal_name, subgoal_parameters, preserve_context)
+        return result

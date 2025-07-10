@@ -5,8 +5,8 @@ from typing import Optional, Tuple
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 
-from .coordinate_mixin import CoordinateStandardizationMixin
-from .movement_base import MovementActionBase
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
+from .base.movement import MovementActionBase
 
 
 class MoveAction(MovementActionBase, CoordinateStandardizationMixin):

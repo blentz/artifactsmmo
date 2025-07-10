@@ -40,7 +40,7 @@ class TestSelectOptimalSlotAction(UnifiedContextTestBase):
         if hasattr(self, 'context'):
             self.context.set(StateParameters.TARGET_CRAFT_SKILL, None)
             self.context.set(StateParameters.EQUIPMENT_GAP_ANALYSIS, None)
-            self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, None)
+            self.context.set(StateParameters.TARGET_SLOT, None)
             self.context.set(StateParameters.SLOT_SELECTION_REASONING, None)
             
         super().tearDown()
@@ -67,7 +67,7 @@ class TestSelectOptimalSlotAction(UnifiedContextTestBase):
         self.assertTrue(result.success)
         
         # Should select helmet (priority 80) over boots (priority 70)
-        selected_slot = self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        selected_slot = self.context.get(StateParameters.TARGET_SLOT)
         self.assertEqual(selected_slot, 'helmet')
         
         # Verify reasoning is stored
@@ -95,7 +95,7 @@ class TestSelectOptimalSlotAction(UnifiedContextTestBase):
         self.assertTrue(result.success)
         
         # Should select weapon due to higher urgency despite helmet being available
-        selected_slot = self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        selected_slot = self.context.get(StateParameters.TARGET_SLOT)
         self.assertEqual(selected_slot, 'weapon')
             
     def test_slot_filtering_by_skill(self):
@@ -119,7 +119,7 @@ class TestSelectOptimalSlotAction(UnifiedContextTestBase):
         self.assertTrue(result.success)
         
         # Should only consider jewelry slots, select amulet
-        selected_slot = self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        selected_slot = self.context.get(StateParameters.TARGET_SLOT)
         self.assertEqual(selected_slot, 'amulet')
             
     def test_combined_scoring_priority_and_urgency(self):
@@ -144,7 +144,7 @@ class TestSelectOptimalSlotAction(UnifiedContextTestBase):
         # weapon: 60 * (100/100) = 60
         # shield: 80 * (90/100) = 72
         # Should select shield despite weapon having higher base priority
-        selected_slot = self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        selected_slot = self.context.get(StateParameters.TARGET_SLOT)
         self.assertEqual(selected_slot, 'shield')
             
     def test_error_handling_missing_gap_analysis(self):
@@ -261,7 +261,7 @@ class TestSelectOptimalSlotAction(UnifiedContextTestBase):
             
         # Should work with our fallback configuration
         self.assertTrue(result.success)
-        self.assertEqual(self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+        self.assertEqual(self.context.get(StateParameters.TARGET_SLOT), 'weapon')
             
     def test_determine_default_craft_skill_from_knowledge_base(self):
         """Test automatic craft skill determination from knowledge base"""

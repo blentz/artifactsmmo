@@ -3,82 +3,12 @@ Mixins for common action functionality
 
 This module provides mixins that encapsulate common patterns found across
 multiple action classes, reducing code duplication.
+
+Note: CharacterDataMixin was removed for architecture compliance.
+Actions should read character data from UnifiedStateContext instead of making direct API calls.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-
-from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
-
-
-class CharacterDataMixin:
-    """Mixin for actions that need to retrieve character data."""
-    
-    def get_character_data(self, client, character_name: str) -> Optional[Any]:
-        """
-        Retrieve character data from the API.
-        
-        Args:
-            client: API client
-            character_name: Name of the character
-            
-        Returns:
-            Character data object or None if retrieval fails
-        """
-        try:
-            character_response = get_character_api(name=character_name, client=client)
-            if not character_response or not character_response.data:
-                self.logger.warning(f"Could not get character data for {character_name}")
-                return None
-            return character_response.data
-        except Exception as e:
-            self.logger.error(f"Failed to get character data: {str(e)}")
-            return None
-    
-    def get_character_location(self, client, character_name: str) -> Tuple[Optional[int], Optional[int]]:
-        """
-        Get character's current location.
-        
-        Args:
-            client: API client
-            character_name: Name of the character
-            
-        Returns:
-            Tuple of (x, y) coordinates or (None, None) if retrieval fails
-        """
-        character_data = self.get_character_data(client, character_name)
-        if not character_data:
-            return None, None
-            
-        x = getattr(character_data, 'x', None)
-        y = getattr(character_data, 'y', None)
-        return x, y
-    
-    def get_character_inventory(self, client, character_name: str) -> Dict[str, int]:
-        """
-        Get character's inventory as a dictionary.
-        
-        Args:
-            client: API client
-            character_name: Name of the character
-            
-        Returns:
-            Dictionary of item_code -> quantity
-        """
-        character_data = self.get_character_data(client, character_name)
-        if not character_data:
-            return {}
-            
-        inventory = getattr(character_data, 'inventory', [])
-        inventory_dict = {}
-        
-        for item in inventory:
-            if hasattr(item, 'code') and hasattr(item, 'quantity'):
-                code = item.code
-                quantity = item.quantity
-                if code and quantity > 0:
-                    inventory_dict[code] = quantity
-                    
-        return inventory_dict
 
 
 class KnowledgeBaseSearchMixin:

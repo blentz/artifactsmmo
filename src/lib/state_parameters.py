@@ -25,32 +25,19 @@ class StateParameters:
     - Comprehensive coverage ensures no hardcoded strings elsewhere
     """
     
+    # Target Item Parameters
+    TARGET_ITEM = "target.item"
+    TARGET_SLOT = "target.slot"
+    TARGET_RECIPE = "target.recipe"
+    
     # Equipment Status Parameters
-    EQUIPMENT_SELECTED_ITEM = "equipment_status.selected_item"
-    EQUIPMENT_HAS_SELECTED_ITEM = "equipment_status.has_selected_item"
     EQUIPMENT_UPGRADE_STATUS = "equipment_status.upgrade_status"
-    EQUIPMENT_TARGET_SLOT = "equipment_status.target_slot"
-    EQUIPMENT_TARGET_RECIPE = "equipment_status.target_recipe"
     EQUIPMENT_GAPS_ANALYZED = "equipment_status.gaps_analyzed"
     EQUIPMENT_ITEM_CRAFTED = "equipment_status.item_crafted"
     EQUIPMENT_EQUIPPED = "equipment_status.equipped"
     EQUIPMENT_HAS_TARGET_SLOT = "equipment_status.has_target_slot"
     EQUIPMENT_HAS_WEAPON = "equipment_status.has_weapon"
-    EQUIPMENT_WEAPON_EQUIPPED = "equipment_status.weapon_equipped"
-    EQUIPMENT_WEAPON = "equipment_status.weapon"
-    EQUIPMENT_ARMOR = "equipment_status.armor"
-    EQUIPMENT_SHIELD = "equipment_status.shield"
-    EQUIPMENT_HELMET = "equipment_status.helmet"
-    EQUIPMENT_BOOTS = "equipment_status.boots"
-    EQUIPMENT_CURRENT_WEAPON = "equipment_status.current_weapon"
-    EQUIPMENT_PREVIOUS_WEAPON = "equipment_status.previous_weapon"
-    EQUIPMENT_PREVIOUS_TARGET_SLOT = "equipment_status.previous_target_slot"
-    EQUIPMENT_UPGRADED = "equipment_status.upgraded"
-    EQUIPMENT_NEW_WEAPON = "equipment_status.new_weapon"
-    EQUIPMENT_OLD_WEAPON = "equipment_status.old_weapon"
-    EQUIPMENT_AMULET = "equipment_status.amulet"
-    EQUIPMENT_RING1 = "equipment_status.ring1"
-    EQUIPMENT_RING2 = "equipment_status.ring2"
+    # API-duplicate equipment parameters removed - use character API for current equipment state
     
     # Character Status Parameters
     CHARACTER_ALIVE = "character_status.alive"
@@ -59,41 +46,23 @@ class StateParameters:
     CHARACTER_MAX_HP = "character_status.max_hp"
     CHARACTER_PREVIOUS_HP = "character_status.previous_hp"
     CHARACTER_COOLDOWN_ACTIVE = "character_status.cooldown_active"
+    CHARACTER_COOLDOWN_HANDLED = "character_status.cooldown_handled"
     CHARACTER_SAFE = "character_status.safe"
     CHARACTER_XP_PERCENTAGE = "character_status.xp_percentage"
     CHARACTER_NAME = "character_status.name"
     
     # Location Context Parameters - removed redundant, use CHARACTER_X/Y, TARGET_X/Y, API data
     
-    # Materials Parameters
+    # Materials Parameters - minimal set, use knowledge base for lookups
     MATERIALS_STATUS = "materials.status"
     MATERIALS_GATHERED = "materials.gathered"
-    MATERIALS_REQUIREMENTS_DETERMINED = "materials.requirements_determined"
-    MATERIALS_AVAILABILITY_CHECKED = "materials.availability_checked"
-    MATERIALS_QUANTITIES_CALCULATED = "materials.quantities_calculated"
-    MATERIALS_RAW_MATERIALS_NEEDED = "materials.raw_materials_needed"
-    MATERIALS_READY_TO_CRAFT = "materials.ready_to_craft"
-    MATERIALS_TRANSFORMATION_COMPLETE = "materials.transformation_complete"
-    MATERIALS_INVENTORY = "materials.inventory"
-    MATERIALS_REQUIRED = "materials.required"
-    MATERIALS_MISSING = "materials.missing_materials"
-    MATERIALS_REQUIRED_MATERIALS = "materials.required_materials"
-    MATERIALS_TARGET_ITEM = "materials.target_item"
-    MATERIALS_RAW_MATERIAL = "materials.raw_material"
-    MATERIALS_REFINED_MATERIAL = "materials.refined_material"
-    MATERIALS_QUANTITY = "materials.quantity"
-    MATERIALS_TRANSFORMATIONS_NEEDED = "materials.transformations_needed"
-    MATERIALS_TRANSFORMATIONS_COMPLETED = "materials.transformations_completed"
+    # Duplicate materials parameters removed - use TARGET_RECIPE + knowledge base for all material lookups
     
     # Equipment gap analysis and slot selection parameters
     EQUIPMENT_GAP_ANALYSIS = "equipment.gap_analysis"
     SLOT_SELECTION_REASONING = "slot.selection_reasoning"
     
-    # Combat context parameters
-    COMBAT_RECENT_WIN_RATE = "combat.recent_win_rate"
-    COMBAT_STATUS = "combat.status"
-    RECENT_LOSSES = "recent.losses"
-    RECENT_WINS = "recent.wins"
+    # Combat context parameters - moved to Combat Context Parameters section
     
     # Workflow and subgoal parameters
     WORKFLOW_STEP = "workflow.step"
@@ -115,15 +84,9 @@ class StateParameters:
     CHARACTER_X = "character.x"
     CHARACTER_Y = "character.y"
     ANALYSIS_RADIUS = "analysis.radius"
-    MATERIAL_REQUIREMENTS = "material.requirements"
-    MATERIAL_AVAILABILITY = "material.availability"
     MATERIAL_ANALYSIS = "material.analysis"
-    MISSING_MATERIALS = "missing.materials"
-    RAW_MATERIAL = "raw.material"
-    REQUIRED_MATERIALS = "required.materials"
     SEARCH_RADIUS = "search.radius"
     LEVEL_RANGE = "level.range"
-    TARGET_ITEM = "target.item"
     TARGET_MONSTER = "target.monster"
     TARGET_X = "target.x"
     TARGET_Y = "target.y"
@@ -131,21 +94,14 @@ class StateParameters:
     TRANSFORMATIONS_COMPLETED = "transformations.completed"
     EQUIPMENT_TYPES = "equipment.types"
     CONFIG_DATA = "config.data"
-    MATERIAL_AVAILABILITY = "material.availability"
-    REFINED_MATERIAL = "refined.material"
-    RAW_MATERIAL_NEEDS = "raw.material.needs"
     SUFFICIENT_MATERIALS = "sufficient.materials"
     TOTAL_REQUIREMENTS = "total.requirements"
     WORKSHOP_REQUIREMENTS = "workshop.requirements"
     CURRENT_GATHERING_GOAL = "current.gathering.goal"
     EQUIPMENT_STATUS = "equipment.status"
-    # ACTION_CONFIG removed - deprecated nested dict
-    SELECTED_ITEM = "selected.item"
     SELECTED_RECIPE = "selected.recipe"
-    TARGET_RECIPE = "target.recipe"
     UPGRADE_STATUS = "upgrade.status"
     REQUIRED_ITEMS = "required.items"
-    WORKFLOW_STEP = "workflow.step"
     QUANTITY = "item.quantity"
     REQUIRED_CRAFT_SKILL = "required.craft.skill"
     REQUIRED_CRAFT_LEVEL = "required.craft.level"
@@ -160,7 +116,7 @@ class StateParameters:
     # Combat Context Parameters
     COMBAT_STATUS = "combat_context.status"
     COMBAT_TARGET = "combat_context.target"
-    COMBAT_LOCATION = "combat_context.location"
+    # COMBAT_LOCATION removed - use knowledge_base.get_combat_location(context) helper
     COMBAT_RECENT_WIN_RATE = "combat_context.recent_win_rate"
     COMBAT_LOW_WIN_RATE = "combat_context.low_win_rate"
     COMBAT_RECENT_LOSSES = "combat_context.recent_losses"
@@ -178,7 +134,7 @@ class StateParameters:
     # Resource Availability Parameters
     RESOURCE_AVAILABILITY_MONSTERS = "resource_availability.monsters"
     RESOURCE_AVAILABILITY_RESOURCES = "resource_availability.resources"
-    RESOURCE_AT_RESOURCE_LOCATION = "resource_availability.at_resource_location"
+    # RESOURCE_AT_RESOURCE_LOCATION removed - use knowledge_base.is_at_resource_location(context) helper
     RESOURCE_CODE = "resource_availability.code"
     RESOURCE_NAME = "resource_availability.name"
     
@@ -198,11 +154,10 @@ class StateParameters:
     # Workshop Status Parameters
     WORKSHOP_DISCOVERED = "workshop_status.discovered"
     WORKSHOP_LOCATIONS = "workshop_status.locations"
-    WORKSHOP_AT_WORKSHOP = "workshop_status.at_workshop"
+    # WORKSHOP_AT_WORKSHOP removed - use knowledge_base.is_at_workshop(context) helper
     WORKSHOP_TYPE = "workshop_status.type"
     WORKSHOP_CODE = "workshop_status.code"
-    WORKSHOP_X = "workshop_status.x"
-    WORKSHOP_Y = "workshop_status.y"
+    # WORKSHOP_X/Y removed - use knowledge_base.get_workshop_locations() + TARGET_X/Y for movement
     WORKSHOP_REQUIREMENTS = "workshop_status.requirements"
     
     # Inventory Parameters

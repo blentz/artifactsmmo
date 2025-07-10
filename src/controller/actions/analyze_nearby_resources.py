@@ -11,7 +11,7 @@ from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 
 from .base import ActionResult
-from .resource_analysis_base import ResourceAnalysisBase
+from .base.resource_analysis import ResourceAnalysisBase
 
 
 class AnalyzeNearbyResourcesAction(ResourceAnalysisBase):

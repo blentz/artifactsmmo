@@ -22,8 +22,8 @@ class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
         # Set equipment_status parameters in context
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'iron_sword')
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        context.set(StateParameters.TARGET_ITEM, 'iron_sword')
+        context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -40,8 +40,8 @@ class TestCompleteEquipmentUpgradeAction(unittest.TestCase):
         context.set(StateParameters.CHARACTER_X, 5)
         context.set(StateParameters.CHARACTER_Y, 10)
         # Set equipment_status parameters in context
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'wooden_shield')
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'shield')
+        context.set(StateParameters.TARGET_ITEM, 'wooden_shield')
+        context.set(StateParameters.TARGET_SLOT, 'shield')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

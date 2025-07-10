@@ -9,7 +9,7 @@ from unittest.mock import Mock
 from src.controller.actions.find_monsters import FindMonstersAction
 from src.controller.actions.find_resources import FindResourcesAction
 from src.controller.actions.find_workshops import FindWorkshopsAction
-from src.controller.actions.search_base import SearchActionBase
+from src.controller.actions.base.search import SearchActionBase
 from src.game.map.state import MapState
 
 from test.fixtures import create_mock_client

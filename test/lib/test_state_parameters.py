@@ -51,7 +51,7 @@ class TestStateParametersRegistry:
     def test_parameter_validation_method(self):
         """Test parameter validation functionality."""
         # Valid parameters should pass
-        assert StateParameters.validate_parameter(StateParameters.EQUIPMENT_SELECTED_ITEM)
+        assert StateParameters.validate_parameter(StateParameters.TARGET_ITEM)
         assert StateParameters.validate_parameter(StateParameters.CHARACTER_ALIVE)
         
         # Invalid parameters should fail
@@ -78,8 +78,7 @@ class TestStateParametersRegistry:
     def test_required_parameters_exist(self):
         """Ensure critical parameters are defined."""
         required_params = [
-            StateParameters.EQUIPMENT_SELECTED_ITEM,
-            StateParameters.EQUIPMENT_HAS_SELECTED_ITEM,
+            StateParameters.TARGET_ITEM,
             StateParameters.CHARACTER_ALIVE,
             StateParameters.CHARACTER_LEVEL,
             StateParameters.CHARACTER_X,

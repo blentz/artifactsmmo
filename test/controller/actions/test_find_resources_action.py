@@ -97,7 +97,7 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertTrue(hasattr(FindResourcesAction, 'reactions'))
         self.assertTrue(hasattr(FindResourcesAction, 'weight'))
 
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
+    @patch('src.controller.actions.base.search.SearchActionBase.unified_search')
     def test_execute_no_resource_types(self, mock_unified_search):
         """Test finding resources fails without resource types."""
         # When no resource types are provided, the method will expand search and may use default types
@@ -120,7 +120,7 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIsNotNone(result.error)
 
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
+    @patch('src.controller.actions.base.search.SearchActionBase.unified_search')
     def test_execute_no_resources_found(self, mock_unified_search):
         """Test finding resources when none are found."""
         # Create a mock ActionResult object
@@ -145,7 +145,7 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIsNotNone(result.error)
 
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
+    @patch('src.controller.actions.base.search.SearchActionBase.unified_search')
     def test_execute_resources_found_specific_types(self, mock_unified_search):
         """Test finding resources with specific resource types."""
         # Create a mock ActionResult object
@@ -177,7 +177,7 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertEqual(result.data['resource_code'], 'copper')
         self.assertAlmostEqual(result.data['distance'], 2.828, places=2)
 
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
+    @patch('src.controller.actions.base.search.SearchActionBase.unified_search')
     def test_execute_resources_found_default_types(self, mock_unified_search):
         """Test finding resources with default resource types."""
         action = FindResourcesAction()
@@ -211,7 +211,7 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertEqual(result.data['resource_code'], 'ash_wood')
         self.assertEqual(result.data['distance'], 1.0)
 
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
+    @patch('src.controller.actions.base.search.SearchActionBase.unified_search')
     def test_execute_multiple_resources_closest_selected(self, mock_unified_search):
         """Test finding resources selects closest when multiple found."""
         # Create a mock ActionResult object
@@ -247,7 +247,7 @@ class TestFindResourcesAction(unittest.TestCase):
         self.assertEqual(result.data['resource_code'], 'iron_ore')
         self.assertAlmostEqual(result.data['distance'], 1.414, places=2)
 
-    @patch('src.controller.actions.search_base.SearchActionBase.unified_search')
+    @patch('src.controller.actions.base.search.SearchActionBase.unified_search')
     def test_execute_exception_handling(self, mock_unified_search):
         """Test exception handling during resource search."""
         mock_unified_search.side_effect = Exception("API Error")

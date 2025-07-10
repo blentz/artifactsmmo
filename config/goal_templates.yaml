@@ -82,7 +82,7 @@ goal_templates:
     objective_type: "resource_gathering"
     parameters:
       missing_materials: null  # Dict of materials to gather with quantities
-      selected_item: null      # Item being crafted
+      target_item: null        # Item being crafted
     target_state:
       materials:
         status: "sufficient"

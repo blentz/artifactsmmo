@@ -5,7 +5,7 @@ from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_p
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 
-from .character_base import CharacterActionBase
+from .base.character import CharacterActionBase
 from .base import ActionResult
 
 # Import to support testing with character state

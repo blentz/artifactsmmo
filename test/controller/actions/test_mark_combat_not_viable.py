@@ -38,8 +38,8 @@ class TestMarkCombatNotViableAction(unittest.TestCase):
         context.set(StateParameters.CHARACTER_NAME, "test_char")
         context.set(StateParameters.COMBAT_RECENT_WIN_RATE, 0.15)
         context.set(StateParameters.COMBAT_STATUS, 'active')
-        context.set(StateParameters.RECENT_LOSSES, 8)
-        context.set(StateParameters.RECENT_WINS, 2)
+        context.set(StateParameters.COMBAT_RECENT_LOSSES, 8)
+        context.set(StateParameters.COMBAT_RECENT_WINS, 2)
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

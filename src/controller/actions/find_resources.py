@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Tuple
 from src.lib.action_context import ActionContext
 
 from .base import ActionResult
-from .coordinate_mixin import CoordinateStandardizationMixin
-from .search_base import SearchActionBase
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
+from .base.search import SearchActionBase
 
 
 class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):

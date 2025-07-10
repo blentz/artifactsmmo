@@ -56,12 +56,23 @@ class EvaluateWeaponRecipesAction(ActionBase):
         if not character_name:
             return self.create_error_result("No character name provided")
         
-        current_weapon = context.get(StateParameters.EQUIPMENT_WEAPON)
         character_level = context.get(StateParameters.CHARACTER_LEVEL, 1)
         knowledge_base = context.knowledge_base
         
         if not knowledge_base:
             return self.create_error_result("No knowledge base available")
+        
+        # Get current weapon from knowledge base (knowledge base has character state)
+        current_weapon = None
+        character_data = knowledge_base.data.get('character', {})
+        if character_data:
+            current_weapon = character_data.get('weapon')
+        
+        # If not in knowledge base, get from character API and update knowledge base
+        if not current_weapon and client:
+            current_weapon = knowledge_base.get_character_data(character_name, client=client)
+            if current_weapon:
+                current_weapon = current_weapon.get('weapon')
         
         self._context = context
         

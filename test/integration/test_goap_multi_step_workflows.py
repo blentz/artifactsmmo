@@ -15,6 +15,7 @@ from src.controller.goap_execution_manager import GOAPExecutionManager
 from src.controller.action_executor import ActionExecutor
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
+from src.lib.unified_state_context import UnifiedStateContext
 from src.controller.actions.gather_missing_materials import GatherMissingMaterialsAction
 from src.controller.actions.move import MoveAction
 from src.controller.actions.base import ActionResult
@@ -120,10 +121,22 @@ resources:
             }
         }
         
-        # Test through actual GOAP API - ensure proper test setup instead of skipping
+        # Test through actual GOAP API - architecture compliant signature
         # Get actions config from action executor
         actions_config = self.action_executor.get_action_configurations()
-        plan = self.goap_manager.create_plan(initial_state, goal_state, actions_config)
+        
+        # Set initial state in UnifiedStateContext using registered StateParameters
+        context = UnifiedStateContext()
+        
+        # Use only registered StateParameters - architecture compliant
+        context.set(StateParameters.CHARACTER_ALIVE, True)
+        context.set(StateParameters.CHARACTER_COOLDOWN_ACTIVE, False)
+        context.set(StateParameters.MATERIALS_STATUS, "insufficient")
+        context.set(StateParameters.MATERIALS_GATHERED, False)
+        # Note: Complex data like missing_materials handled by knowledge base, not state parameters
+        
+        # Call with correct signature (goal_state, actions_config)
+        plan = self.goap_manager.create_plan(goal_state, actions_config)
         
         # Verify plan structure - both success and failure are valid outcomes
         if plan is not None:
@@ -141,7 +154,7 @@ resources:
         
         # Update state through proper ActionContext patterns using flat parameters
         context.set_result(StateParameters.RESOURCE_AVAILABILITY_RESOURCES, True)
-        context.set_result(StateParameters.RESOURCE_AT_RESOURCE_LOCATION, False)
+        # RESOURCE_AT_RESOURCE_LOCATION removed - use knowledge_base.is_at_resource_location(context) helper
         context.set_result(StateParameters.TARGET_X, 2)
         context.set_result(StateParameters.TARGET_Y, 0)
         
@@ -149,8 +162,8 @@ resources:
         resource_available = context.get(StateParameters.RESOURCE_AVAILABILITY_RESOURCES)
         assert resource_available is True, "State should persist through context"
         
-        at_resource = context.get(StateParameters.RESOURCE_AT_RESOURCE_LOCATION)
-        assert at_resource is False, "State should persist through context"
+        # RESOURCE_AT_RESOURCE_LOCATION removed - use knowledge_base.is_at_resource_location(context) helper
+        # Test that context works for other state parameters
         
         target_x = context.get(StateParameters.TARGET_X)
         assert target_x == 2, "Coordinates should persist"

@@ -36,7 +36,7 @@ class TestInitiateEquipmentAnalysisAction(unittest.TestCase):
         # Create context with equipment data
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
-        context.set(StateParameters.EQUIPMENT_CURRENT_WEAPON, 'wooden_stick')
+        # Equipment analysis will look up character gear directly from API - no state parameter needed
         context.set(StateParameters.CHARACTER_LEVEL, 2)
         
         # Execute action

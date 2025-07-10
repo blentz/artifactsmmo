@@ -1,4 +1,9 @@
-""" ActionBase module with Abstract Base Class enforcement """
+"""
+Base classes for action functionality.
+
+This module provides base classes that define the core interfaces and functionality
+for different types of actions.
+"""
 
 import logging
 from abc import ABC, abstractmethod
@@ -6,6 +11,7 @@ from typing import Any, Dict, Optional
 from dataclasses import dataclass
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
 
 @dataclass
@@ -105,25 +111,59 @@ class ActionBase(ABC):
         if not hasattr(self.__class__, 'weight') or not isinstance(self.weight, (int, float)):
             raise ValueError(f"{self.__class__.__name__} must define 'weight' as a number")
     
-    @abstractmethod
     def execute(self, client, context: ActionContext) -> ActionResult:
         """
-        Execute the action and return standardized result.
+        Execute the action with automatic cooldown handling.
         
-        ALL SUBCLASSES MUST:
-        1. Store context: self._context = context
-        2. Return an ActionResult instance
-        3. Handle all exceptions and return appropriate error results
+        This base implementation provides universal cooldown detection and handling.
+        Subclasses should call super().execute(client, context) first, then implement
+        their specific logic.
+        
+        COOLDOWN HANDLING:
+        - Automatically detects when action should retry after cooldown
+        - Requests wait_for_cooldown subgoal when needed
+        - Implements retry logic after cooldown expires
+        
+        SUBCLASS PATTERN:
+        ```python
+        def execute(self, client, context):
+            # Check for cooldown handling first
+            cooldown_result = super().execute(client, context)
+            if cooldown_result:
+                return cooldown_result
+            
+            # Implement action-specific logic here
+            try:
+                # Your action logic
+                response = api_call(client, ...)
+                return self.create_success_result(...)
+            except Exception as e:
+                # Check if it's a cooldown error
+                if self.is_cooldown_error(e):
+                    return self.handle_cooldown_error()
+                return self.create_error_result(str(e))
+        ```
         
         Args:
             client: API client for game interactions
             context: ActionContext with execution parameters
             
         Returns:
-            ActionResult with success status, data, and state changes
+            ActionResult if cooldown handling needed, None if action should proceed
         """
         self._context = context
         self.logger.debug(f"Executing {self.__class__.__name__}")
+        
+        # Check if this is a retry after cooldown completion
+        if context and context.get(StateParameters.CHARACTER_COOLDOWN_HANDLED, False):
+            self.logger.info(f"🔄 Retrying {self.__class__.__name__} after cooldown completion")
+            # Clear the cooldown flag to prevent infinite retry
+            context.set(StateParameters.CHARACTER_COOLDOWN_HANDLED, False)
+            # Return None to signal subclass should proceed with normal execution
+            return None
+        
+        # Return None to signal subclass should proceed with normal execution
+        return None
 
     def create_success_result(self, message: str = "", **data) -> ActionResult:
         """Create a standardized success result."""
@@ -157,9 +197,66 @@ class ActionBase(ABC):
             state_changes=state_changes,
             action_name=self.__class__.__name__
         )
+    
+    
+    def handle_cooldown_error(self) -> ActionResult:
+        """
+        Handle cooldown error by requesting wait_for_cooldown subgoal.
+        
+        This method should be called by subclasses when they detect a cooldown error.
+        It automatically requests the wait_for_cooldown subgoal using the recursive
+        subgoal pattern.
+        
+        Returns:
+            ActionResult with subgoal request for cooldown handling
+        """
+        self.logger.info(f"⏳ {self.__class__.__name__} detected cooldown - requesting wait_for_cooldown subgoal")
+        
+        # Create result that requests cooldown handling subgoal
+        result = self.create_success_result(
+            message=f"{self.__class__.__name__} cooldown detected - delegating to wait_for_cooldown subgoal"
+        )
+        
+        # Request wait_for_cooldown subgoal using recursive pattern
+        result.request_subgoal(
+            goal_name="wait_for_cooldown",
+            parameters={},
+            preserve_context=["retry_action", "action_context"]
+        )
+        
+        return result
+    
+    def is_cooldown_error(self, exception: Exception) -> bool:
+        """
+        Check if an exception indicates a cooldown error.
+        
+        Args:
+            exception: Exception to check
+            
+        Returns:
+            True if the exception indicates CHARACTER_IN_COOLDOWN (status 499)
+        """
+        error_str = str(exception).lower()
+        return "499" in str(exception) or "cooldown" in error_str
 
     # Legacy methods removed - all actions must use new ActionResult format
 
     def __repr__(self):
         """String representation with GOAP metadata."""
         return f"{self.__class__.__name__}(weight={self.weight})"
+
+
+# Import specialized base classes
+from .character import CharacterActionBase
+from .movement import MovementActionBase
+from .search import SearchActionBase
+from .resource_analysis import ResourceAnalysisBase
+
+__all__ = [
+    'ActionBase',
+    'ActionResult',
+    'CharacterActionBase',
+    'MovementActionBase', 
+    'SearchActionBase',
+    'ResourceAnalysisBase'
+]

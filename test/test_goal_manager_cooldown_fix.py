@@ -179,7 +179,7 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
                         "No cooldown should return False")
     
     def test_ai_player_controller_cooldown_check(self):
-        """Test the AI player controller's _is_character_on_cooldown method."""
+        """Test architecture-compliant cooldown handling in AI player controller."""
         from unittest.mock import Mock
 
         from src.controller.ai_player_controller import AIPlayerController
@@ -189,45 +189,22 @@ class TestGoalManagerCooldownFix(unittest.TestCase):
             with patch('src.controller.ai_player_controller.StateManagerMixin.create_managed_state'):
                 controller = AIPlayerController(client=Mock())
         
-        # Test case 1: Expired cooldown with legacy field
-        past_time = datetime.now(timezone.utc) - timedelta(seconds=10)
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 24,
-            'cooldown_expiration': past_time.isoformat()
-        }
-        controller.character_state = mock_character_state
+        # Architecture change: Cooldown detection moved to ActionBase exception handling
+        # Test that controller supports the new architecture
         
-        self.assertFalse(controller._is_character_on_cooldown(),
-                        "AI controller: Expired cooldown should return False")
+        # Test case 1: Controller has action executor for ActionBase cooldown patterns
+        self.assertIsNotNone(controller.action_executor, 
+                           "Controller should have action executor for ActionBase cooldown handling")
         
-        # Test case 2: Active cooldown
-        future_time = datetime.now(timezone.utc) + timedelta(seconds=10)
-        mock_character_state.data = {
-            'cooldown': 10,
-            'cooldown_expiration': future_time.isoformat()
-        }
+        # Test case 2: Controller supports cooldown-related actions
+        available_actions = controller.get_available_actions()
+        self.assertIn('wait', available_actions,
+                     "Controller should support wait action for cooldown subgoals")
         
-        self.assertTrue(controller._is_character_on_cooldown(),
-                       "AI controller: Active cooldown should return True")
-        
-        # Test case 3: No expiration time, legacy ignored
-        mock_character_state.data = {
-            'cooldown': 5,
-            'cooldown_expiration': None
-        }
-        
-        self.assertFalse(controller._is_character_on_cooldown(),
-                        "AI controller: Legacy cooldown should be ignored when no expiration available")
-        
-        # Test case 4: No cooldown
-        mock_character_state.data = {
-            'cooldown': 0,
-            'cooldown_expiration': None
-        }
-        
-        self.assertFalse(controller._is_character_on_cooldown(),
-                        "AI controller: No cooldown should return False")
+        # Test case 3: Architecture-compliant cooldown checking method
+        # New architecture: cooldown detection happens through exceptions, not proactive checking
+        result = controller.check_and_handle_cooldown()
+        self.assertTrue(result, "New architecture should return True (let actions handle cooldown detection)")
 
 
 if __name__ == '__main__':

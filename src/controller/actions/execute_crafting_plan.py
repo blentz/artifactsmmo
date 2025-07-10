@@ -17,7 +17,7 @@ from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
 from .craft_item import CraftItemAction
 from .unequip_item import UnequipItemAction
-from .subgoal_mixins import WorkflowSubgoalMixin
+from .mixins.subgoal_mixins import WorkflowSubgoalMixin
 
 
 class ExecuteCraftingPlanAction(ActionBase, WorkflowSubgoalMixin):
@@ -36,13 +36,11 @@ class ExecuteCraftingPlanAction(ActionBase, WorkflowSubgoalMixin):
                 'alive': True,
                 'safe': True,
             },
-            'craft_plan_available': True,
             'materials_sufficient': True,
         }
     reactions = {
         "has_equipment": True,
         "inventory_updated": True,
-        "craft_plan_available": False  # Consumed the plan
     }
     weight = 10
     
@@ -72,10 +70,16 @@ class ExecuteCraftingPlanAction(ActionBase, WorkflowSubgoalMixin):
             if not knowledge_base:
                 return self.create_error_result("No knowledge base available")
             
-            # Determine target item (store in context for all workflow steps)
-            target_item = context.get(StateParameters.MATERIALS_TARGET_ITEM)
-            if not target_item:
+            # Get target recipe/item for crafting
+            target_recipe = context.get(StateParameters.TARGET_RECIPE)
+            target_item = context.get(StateParameters.TARGET_ITEM)
+            
+            # Determine target item from recipe or direct item specification
+            if target_recipe:
+                target_item = target_recipe
+            elif not target_item:
                 target_item = self._determine_target_item(context)
+                
             if not target_item:
                 return self.create_error_result("No target item specified for crafting")
             
@@ -163,24 +167,7 @@ class ExecuteCraftingPlanAction(ActionBase, WorkflowSubgoalMixin):
     
     def _determine_target_item(self, action_context: ActionContext) -> Optional[str]:
         """Determine target item from context or parameters"""
-        # Check unified context properties using StateParameters
-        selected_weapon = action_context.get(StateParameters.EQUIPMENT_WEAPON)
-        if selected_weapon:
-            return selected_weapon
-        
-        item_code = action_context.get(StateParameters.ITEM_CODE)
-        if item_code:
-            return item_code
-        
-        target_item = action_context.get(StateParameters.MATERIALS_TARGET_ITEM)
-        if target_item:
-            return target_item
-        
-        selected_item = action_context.get(StateParameters.SELECTED_ITEM)
-        if selected_item:
-            return selected_item
-        
-        return None
+        return action_context.get(StateParameters.TARGET_ITEM)
     
     def _is_at_correct_workshop(self, client, character_name: str, workshop_type: str) -> bool:
         """Check if character is at the correct workshop type."""

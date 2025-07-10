@@ -4,7 +4,6 @@ import os
 import tempfile
 import unittest
 
-from src.controller.actions.analyze_crafting_chain import AnalyzeCraftingChainAction
 from src.controller.actions.analyze_resources import AnalyzeResourcesAction
 from src.controller.actions.check_inventory import CheckInventoryAction
 from src.controller.actions.check_location import CheckLocationAction
@@ -91,20 +90,6 @@ class TestSimpleActionCoverage(unittest.TestCase):
         result = action.execute(None, context)
         self.assertFalse(result.success)
 
-    def test_analyze_crafting_chain_basic(self):
-        """Test AnalyzeCraftingChainAction basic functionality."""
-        action = AnalyzeCraftingChainAction()
-        # Action no longer stores these as instance attributes
-        self.assertFalse(hasattr(action, 'character_name'))
-        self.assertFalse(hasattr(action, 'target_item'))
-        
-        # Test repr
-        self.assertEqual("AnalyzeCraftingChainAction()", repr(action))
-        
-        # Test no client
-        context = MockActionContext(character_name="player", target_item="sword")
-        result = action.execute(None, context)
-        self.assertFalse(result.success)
 
     def test_transform_raw_materials_basic(self):
         """Test TransformMaterialsCoordinatorAction basic functionality."""
@@ -203,7 +188,6 @@ class TestSimpleActionCoverage(unittest.TestCase):
             CheckSkillRequirementAction(),
             EvaluateWeaponRecipesAction(),
             FindCorrectWorkshopAction(),
-            AnalyzeCraftingChainAction(),
             TransformMaterialsCoordinatorAction(),
             AnalyzeResourcesAction(),
             CheckInventoryAction(),

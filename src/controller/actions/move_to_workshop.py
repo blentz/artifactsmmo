@@ -3,8 +3,9 @@
 from typing import Dict, Optional, Tuple
 
 from src.lib.action_context import ActionContext
+from src.lib.state_parameters import StateParameters
 
-from .movement_base import MovementActionBase
+from .base.movement import MovementActionBase
 
 
 class MoveToWorkshopAction(MovementActionBase):
@@ -42,9 +43,18 @@ class MoveToWorkshopAction(MovementActionBase):
         Returns:
             Tuple of (x, y) coordinates
         """
-        # Get from context (e.g., from find_workshops action)
-        target_x = context.get('target_x') or context.get('workshop_x')
-        target_y = context.get('target_y') or context.get('workshop_y')
+        # Use standardized TARGET_X/Y parameters - workshop locations should set these
+        target_x = context.get(StateParameters.TARGET_X)
+        target_y = context.get(StateParameters.TARGET_Y)
+        
+        # If no target coordinates, workshop discovery should have set them
+        if target_x is None or target_y is None:
+            workshop_code = context.get(StateParameters.WORKSHOP_CODE)
+            if workshop_code and context.knowledge_base:
+                workshop_locations = context.knowledge_base.get_workshop_locations()
+                workshop_info = workshop_locations.get(workshop_code, {})
+                target_x = workshop_info.get('x')
+                target_y = workshop_info.get('y')
         
         return target_x, target_y
 

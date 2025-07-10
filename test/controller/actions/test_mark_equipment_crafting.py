@@ -22,8 +22,8 @@ class TestMarkEquipmentCraftingAction(unittest.TestCase):
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
         # Set equipment status in context
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'iron_sword')
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        context.set(StateParameters.TARGET_ITEM, 'iron_sword')
+        context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -37,10 +37,22 @@ class TestMarkEquipmentCraftingAction(unittest.TestCase):
         # Create context with workshop data
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
-        context.set(StateParameters.WORKSHOP_AT_WORKSHOP, True)
+        # Set character position and workshop type for knowledge_base.is_at_workshop() helper
+        context.set(StateParameters.CHARACTER_X, 1)
+        context.set(StateParameters.CHARACTER_Y, 1)
         context.set(StateParameters.WORKSHOP_TYPE, 'weaponcrafting')
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'wooden_shield')
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'shield')
+        context.set(StateParameters.TARGET_ITEM, 'wooden_shield')
+        context.set(StateParameters.TARGET_SLOT, 'shield')
+        
+        # Mock knowledge_base to have workshop at character location
+        if hasattr(context, 'knowledge_base') and context.knowledge_base:
+            context.knowledge_base.data['workshops'] = {
+                'weaponcrafting_workshop': {
+                    'type': 'weaponcrafting',
+                    'x': 1,
+                    'y': 1
+                }
+            }
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

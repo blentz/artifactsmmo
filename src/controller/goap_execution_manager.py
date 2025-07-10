@@ -15,8 +15,10 @@ from src.lib.goap import World, Planner, Action_List
 from src.lib.hierarchical_goap import HierarchicalPlanner, HierarchicalWorld
 from src.lib.actions_data import ActionsData
 from src.lib.yaml_data import YamlData
+from src.lib.unified_state_context import UnifiedStateContext
 from src.game.globals import CONFIG_PREFIX
 from src.controller.knowledge.base import KnowledgeBase
+from src.controller.action_factory import ActionFactory
 
 
 class GOAPExecutionManager:
@@ -27,9 +29,10 @@ class GOAPExecutionManager:
     eliminating redundant GOAP logic from the AI controller.
     """
     
-    def __init__(self):
-        """Initialize GOAP execution manager with hierarchical planning for performance."""
+    def __init__(self, action_factory: ActionFactory = None):
+        """Initialize GOAP execution manager with ActionFactory for action validation."""
         self.logger = logging.getLogger(__name__)
+        self.action_factory = action_factory
         
         # Current GOAP state
         self.current_world = None
@@ -184,9 +187,9 @@ class GOAPExecutionManager:
             self.logger.debug(f"  current_state.materials: {current_state.get('materials', {})}")
             self.logger.debug(f"  subgoal_state: {subgoal_state}")
             
-            # Create a new world and planner for the subgoal but use current state
-            subgoal_world = self.create_world_with_planner(
-                current_state, subgoal_state, actions_config
+            # Create a new world and planner for the subgoal using UnifiedStateContext
+            subgoal_world = self.create_planner_from_context(
+                subgoal_state, actions_config
             )
             subgoal_planner = self.current_planner
             
@@ -291,9 +294,8 @@ class GOAPExecutionManager:
                 self.logger.error("No actions available for replanning")
                 return []
             
-            # Create a new planner with current state
-            temp_world = self.create_world_with_planner(
-                start_state=current_state,
+            # Create a new planner using UnifiedStateContext
+            temp_world = self.create_planner_from_context(
                 goal_state=goal_state,
                 actions_config=actions_config
             )
@@ -320,31 +322,6 @@ class GOAPExecutionManager:
             self.logger.error(f"Error creating plan from current state: {e}")
             return []
     
-    def _load_start_state_defaults(self) -> Dict[str, Any]:
-        """
-        Load default start state configuration from YAML file.
-        
-        Returns:
-            Dictionary of default state variables with their initial values
-        """
-        if self._start_state_config is not None:
-            return self._start_state_config
-            
-        try:
-            # Use consolidated state defaults instead of goap_start_state
-            start_state_data = YamlData(f"{CONFIG_PREFIX}/consolidated_state_defaults.yaml")
-            
-            # Get the state defaults section
-            defaults = start_state_data.data.get('state_defaults', {})
-            
-            self._start_state_config = defaults
-            self.logger.debug(f"Loaded {len(defaults)} default start state variables from configuration")
-            return defaults
-            
-        except Exception as e:
-            self.logger.warning(f"Could not load start state configuration: {e}")
-            # Return empty dict - no fallback
-            return {}
     
     
     
@@ -481,153 +458,57 @@ class GOAPExecutionManager:
         return True
     
     
-    def create_world_with_planner(self, start_state: Dict[str, Any], 
-                                goal_state: Dict[str, Any], 
-                                actions_config: Dict[str, Dict]) -> World:
+    def create_planner_from_context(self, goal_state: Dict[str, Any], 
+                                  actions_config: Dict[str, Dict]) -> World:
         """
-        Create a GOAP world with a planner for the given scenario.
+        Create GOAP planner using UnifiedStateContext singleton.
+        
+        Uses the singleton UnifiedStateContext as single source of truth,
+        eliminating complex world-building logic that violates singleton pattern.
         
         Args:
-            start_state: The starting state as a dictionary
             goal_state: The desired goal state as a dictionary
             actions_config: Configuration for available actions
             
         Returns:
             A World instance with the planner added
         """
-        world = HierarchicalWorld()
+        world = World()
         
-        # Load default start state configuration first to get all possible state keys
-        start_state_defaults = self._load_start_state_defaults()
+        # Use UnifiedStateContext singleton as single source of truth
+        context = UnifiedStateContext()
+        current_state = context.get_all_parameters()
         
-        # Get top-level keys only (not nested keys) for planner initialization
-        # GOAP library handles nested dictionaries properly when given top-level keys
-        top_level_keys = set(start_state.keys()) | set(goal_state.keys())
-        if start_state_defaults:
-            top_level_keys.update(start_state_defaults.keys())
+        # Get state keys from actions and goal state - only include parameters that are actually used
+        state_keys = set(goal_state.keys())
         
-        # Don't flatten nested keys - GOAP library handles nested dictionaries natively
-        # Only collect top-level state categories like 'equipment_status', 'combat_context', etc.
+        # Add parameters used in action conditions and reactions
+        for action_config in actions_config.values():
+            state_keys.update(action_config.get('conditions', {}).keys())
+            state_keys.update(action_config.get('reactions', {}).keys())
         
-        # Create hierarchical planner with only top-level state keys for optimization
-        self.logger.debug(f"Creating hierarchical planner with top-level keys: {sorted(top_level_keys)}")
-        planner = HierarchicalPlanner(*top_level_keys)
+        # Create planner with only relevant state parameters
+        self.logger.info(f"Creating planner with {len(state_keys)} relevant state parameters: {sorted(state_keys)}")
+        planner = Planner(*state_keys)
         
-        # Override the planner's default -1 values with proper defaults
-        # This is crucial for nested dictionary states
-        if start_state_defaults:
-            for key, value in start_state_defaults.items():
-                if key in planner.values:
-                    planner.values[key] = value
+        # Set start state from UnifiedStateContext - only include relevant parameters
+        relevant_state = {key: current_state.get(key) for key in state_keys if key in current_state}
+        planner.set_start_state(**relevant_state)
         
-        # Build complete start state with proper precedence:
-        # 1. Start with configuration defaults
-        # 2. Override with actual start_state values
-        complete_start_state = start_state_defaults.copy() if start_state_defaults else {}
+        # Set goal state directly - GOAP will only check specified goal values
+        planner.set_goal_state(**relevant_state)  # Initialize with current state
+        planner.goal_state = goal_state.copy()  # Override with goal values
         
-        # Add any missing top-level keys with appropriate defaults
-        for key in top_level_keys:
-            if key not in complete_start_state:
-                # Check if this is a nested state key from defaults
-                if start_state_defaults and key in start_state_defaults:
-                    complete_start_state[key] = start_state_defaults[key]
-                else:
-                    # Set empty dict for nested states, False for simple states
-                    complete_start_state[key] = {} if key.endswith('_status') or key.endswith('_context') else False
-        
-        # Override with actual runtime state values
-        # Need to do a deep merge for nested dictionaries
-        for key, value in start_state.items():
-            if isinstance(value, dict) and key in complete_start_state and isinstance(complete_start_state[key], dict):
-                # Deep merge nested dictionary
-                complete_start_state[key] = complete_start_state[key].copy()
-                complete_start_state[key].update(value)
-            else:
-                complete_start_state[key] = value
-        
-        # Calculate boolean flags for initial state (GOAP planning needs them)
-        # The post-execution pipeline will maintain consistency after each action
-        self._calculate_initial_boolean_flags(complete_start_state)
-        
-        # Set start and goal states on the planner
-        planner.set_start_state(**complete_start_state)
-        self.logger.debug(f"Planner start state after setting: {planner.start_state}")
-        self.logger.debug(f"Equipment status in planner: {planner.start_state.get('equipment_status', 'MISSING')}")
-        
-        # The planner might not handle nested dicts properly, so we need to restore them
-        for key, value in complete_start_state.items():
-            if isinstance(value, dict):
-                planner.values[key] = value
-        
-        # For goal state, we only want to set the specific values we're checking for
-        # We don't need a complete state - GOAP will only check the specified values
-        # First, create a minimal goal state with only the keys we care about
-        minimal_goal_state = {}
-        
-        # Add all keys from goal_state to ensure they exist in planner.values
-        for key in goal_state.keys():
-            if key not in minimal_goal_state:
-                if key in complete_start_state:
-                    minimal_goal_state[key] = complete_start_state[key]
-                else:
-                    minimal_goal_state[key] = False
-        
-        # Now set the goal state with all keys present
-        planner.set_goal_state(**minimal_goal_state)
-        
-        # Override with only the specific goal values we want to check
-        # This ensures GOAP only validates the fields we care about
-        planner.goal_state = {}
-        for key, value in goal_state.items():
-            planner.goal_state[key] = value
-        
-        # Filter actions based on goal state to reduce A* search complexity
-        try:
-            knowledge_base = KnowledgeBase()
-            relevant_action_names = knowledge_base.get_relevant_actions(goal_state, complete_start_state)
-            
-            # Filter actions_config to only include relevant actions
-            filtered_actions_config = {}
-            for action_name in relevant_action_names:
-                if action_name in actions_config:
-                    filtered_actions_config[action_name] = actions_config[action_name]
-            
-            original_count = len(actions_config)
-            filtered_count = len(filtered_actions_config)
-            self.logger.info(f"🎯 Pre-filtering action space: {original_count} → {filtered_count} actions")
-            
-            # Use filtered actions for planning
-            planning_actions_config = filtered_actions_config if filtered_actions_config else actions_config
-            
-        except Exception as e:
-            self.logger.warning(f"Action filtering failed, using full action set: {e}")
-            planning_actions_config = actions_config
-        
-        # Create actions from filtered configuration
+        # Use ActionFactory for action information instead of complex filtering
         action_list = Action_List()
-        eligible_actions = []
-        for action_name, action_config in planning_actions_config.items():
+        for action_name, action_config in actions_config.items():
             conditions = action_config.get('conditions', {})
+            reactions = action_config.get('reactions', {})
             weight = action_config.get('weight', 1.0)
             
-            # Check if action conditions are met by current start state
-            conditions_met = self._check_conditions_for_action(complete_start_state, conditions)
-            if conditions_met:
-                eligible_actions.append((action_name, weight))
-            
-            action_list.add_condition(
-                action_name,
-                **conditions
-            )
-            action_list.add_reaction(
-                action_name,
-                **action_config.get('reactions', {})
-            )
+            action_list.add_condition(action_name, **conditions)
+            action_list.add_reaction(action_name, **reactions)
             action_list.set_weight(action_name, weight)
-        
-        # Log eligible actions for debugging
-        eligible_actions.sort(key=lambda x: x[1], reverse=True)  # Sort by weight descending
-        self.logger.debug(f"ELIGIBLE ACTIONS for planning: {eligible_actions[:10]}")  # Top 10
         
         # Set action list on planner
         planner.set_action_list(action_list)
@@ -635,20 +516,19 @@ class GOAPExecutionManager:
         # Add planner to world
         world.add_planner(planner)
         
-        # Store for potential reuse
+        # Store for reuse
         self.current_world = world
         self.current_planner = planner
         
-        self.logger.debug(f"Created GOAP world with {len(actions_config)} actions and {len(top_level_keys)} state variables")
+        self.logger.debug(f"Created GOAP planner with {len(actions_config)} actions using UnifiedStateContext")
         return world
     
-    def create_plan(self, start_state: Dict[str, Any], goal_state: Dict[str, Any], 
+    def create_plan(self, goal_state: Dict[str, Any], 
                    actions_config: Dict[str, Dict]) -> Optional[List[Dict]]:
         """
-        Create a GOAP plan to achieve a goal.
+        Create a GOAP plan to achieve a goal using UnifiedStateContext.
         
         Args:
-            start_state: Current state in consolidated format
             goal_state: Desired state
             actions_config: Available actions
             
@@ -662,9 +542,9 @@ class GOAPExecutionManager:
         try:
             # World creation timing
             world_creation_start = time.time()
-            world = self.create_world_with_planner(start_state, goal_state, actions_config)
+            world = self.create_planner_from_context(goal_state, actions_config)
             world_creation_time = time.time() - world_creation_start
-            self.logger.info(f"🕐 World Creation Time: {world_creation_time:.3f}s")
+            self.logger.info(f"🕐 Planner Creation Time: {world_creation_time:.3f}s")
             
             planner = self.current_planner
             
@@ -703,7 +583,11 @@ class GOAPExecutionManager:
                 return plan_actions
             else:
                 self.logger.warning("No GOAP plan found for goal")
-                self.logger.debug(f"Start state: {start_state}")
+                # Get current state from UnifiedStateContext for debugging
+                context = UnifiedStateContext()
+                current_state = context.get_all_parameters()
+                
+                self.logger.debug(f"Start state: {current_state}")
                 self.logger.debug(f"Goal state: {goal_state}")
                 self.logger.debug(f"Available actions: {list(actions_config.keys())}")
                 # Check which actions have their conditions met
@@ -714,9 +598,9 @@ class GOAPExecutionManager:
                     unmet_conditions = []
                     for cond_key, cond_value in conditions.items():
                         # Check against state for nested conditions
-                        if not self._check_condition_matches(start_state, cond_key, cond_value):
+                        if not self._check_condition_matches(current_state, cond_key, cond_value):
                             all_met = False
-                            current_value = self._get_nested_value(start_state, cond_key) if '.' in str(cond_key) else start_state.get(cond_key)
+                            current_value = self._get_nested_value(current_state, cond_key) if '.' in str(cond_key) else current_state.get(cond_key)
                             unmet_conditions.append(f"{cond_key}: need {cond_value}, have {current_value}")
                     if all_met:
                         self.logger.debug(f"  ✓ {action_name}: all conditions met")
@@ -781,7 +665,7 @@ class GOAPExecutionManager:
         
         # Create complete GOAP plan
         self.logger.info("📋 Creating GOAP plan...")
-        plan = self.create_plan(current_state, goal_state, actions_config)
+        plan = self.create_plan(goal_state, actions_config)
         
         if not plan:
             self.logger.error("Could not create GOAP plan")
@@ -997,7 +881,7 @@ class GOAPExecutionManager:
         # 2. Only set as reactions by some actions
         # 3. Causing GOAP to initialize them as -1 which breaks nested state handling
         
-        return self.create_plan(discovery_focused_state, goal_state, actions_config)
+        return self.create_plan(goal_state, actions_config)
     
     def _handle_cooldown_with_plan_insertion(self, current_plan: List[Dict], 
                                            action_index: int, 
@@ -1078,7 +962,6 @@ class GOAPExecutionManager:
         Discovery actions should trigger replanning, execution actions should not.
         """
         discovery_actions = {
-            'analyze_crafting_chain',
             'evaluate_weapon_recipes', 
             'find_monsters',
             'find_resources',
@@ -1103,22 +986,10 @@ class GOAPExecutionManager:
         # Configuration-driven replan decisions with lazy evaluation
         if action_name == 'find_correct_workshop':
             return False  # Don't replan if workshop was already found
-        elif action_name == 'analyze_crafting_chain':
-            return self._should_replan_chain_analysis()
         elif action_name == 'evaluate_weapon_recipes':
             return True  # Replan after weapon evaluation
         else:
             return False
-    
-    def _should_replan_chain_analysis(self) -> bool:
-        """Determine if chain analysis should trigger replanning."""
-        # Only replan if this provided new crafting knowledge
-        # For now, allow one replan per chain analysis
-        chain_replans = getattr(self, '_chain_analysis_replans', 0)
-        if chain_replans >= 1:
-            return False
-        self._chain_analysis_replans = chain_replans + 1
-        return True
     
     def _replan_from_current_position(self, controller, goal_state: Dict[str, Any],
                                     config_file: str = None, 
@@ -1133,7 +1004,7 @@ class GOAPExecutionManager:
             return None
         
         # Create new plan using standard GOAP planning
-        new_plan = self.create_plan(current_state, goal_state, actions_config)
+        new_plan = self.create_plan(goal_state, actions_config)
         
         if new_plan:
             return new_plan
@@ -1276,39 +1147,44 @@ class GOAPExecutionManager:
     
     def _load_actions_from_config(self, config_file: str = None) -> Dict[str, Dict]:
         """
-        Load action configurations for GOAP planning.
+        Load action configurations for GOAP planning with ActionFactory validation.
         
         Args:
-            config_file: Path to action configuration file (optional, defaults to actions.yaml)
+            config_file: Path to action configuration file (optional, defaults to default_actions.yaml)
             
         Returns:
-            Dictionary of action configurations
+            Dictionary of action configurations for available actions
         """
-        # Try to load from specified config file first
-        if config_file:
-            try:
-                config_actions = ActionsData(config_file)
-                actions = config_actions.get_actions()
-                if actions:
-                    self.logger.debug(f"Loaded {len(actions)} actions from {config_file}")
-                    return actions
-                else:
-                    self.logger.warning(f"No actions found in {config_file}")
-            except Exception as e:
-                self.logger.warning(f"Could not load action config from {config_file}: {e}")
+        # Use single configuration source - default_actions.yaml for GOAP planning
+        config_path = config_file or f"{CONFIG_PREFIX}/default_actions.yaml"
         
-        # Fall back to default actions from default_actions.yaml
         try:
-            default_actions_data = ActionsData(f"{CONFIG_PREFIX}/default_actions.yaml")
-            default_actions = default_actions_data.get_actions()
-            if default_actions:
-                self.logger.debug(f"Loaded {len(default_actions)} default actions")
-                return default_actions
-            else:
-                self.logger.error("No actions found in default_actions.yaml")
+            actions_data = ActionsData(config_path)
+            all_actions = actions_data.get_actions()
+            
+            if not all_actions:
+                self.logger.error(f"No actions found in {config_path}")
                 return {}
+            
+            # Validate action availability using ActionFactory
+            if self.action_factory:
+                available_action_names = self.action_factory.get_available_actions()
+                validated_actions = {}
+                
+                for action_name, action_config in all_actions.items():
+                    if action_name in available_action_names:
+                        validated_actions[action_name] = action_config
+                    else:
+                        self.logger.warning(f"Action '{action_name}' configured for GOAP but not available in ActionFactory")
+                
+                self.logger.debug(f"Validated {len(validated_actions)}/{len(all_actions)} actions with ActionFactory")
+                return validated_actions
+            else:
+                self.logger.debug(f"Loaded {len(all_actions)} actions without ActionFactory validation")
+                return all_actions
+                
         except Exception as e:
-            self.logger.error(f"Could not load default actions: {e}")
+            self.logger.error(f"Could not load actions from {config_path}: {e}")
             return {}
     
     def get_current_world(self) -> Optional[World]:
@@ -1326,37 +1202,25 @@ class GOAPExecutionManager:
     
     def initialize_session_state(self, controller) -> None:
         """
-        Initialize clean session state for XP-seeking goal achievement.
+        Initialize clean session state using UnifiedStateContext.
         
-        This method ensures that GOAP planning starts with a clean state that
-        requires find_monsters action, preventing incomplete 2-action plans.
+        This method ensures that GOAP planning starts with a clean state
+        using the singleton UnifiedStateContext.
         
         Args:
             controller: AI controller for state access and data persistence
         """
         try:
-            # Reset action context to prevent stale coordinates
+            # Reset action context to prevent stale coordinates  
             if hasattr(controller, 'action_context'):
                 controller.action_context = {}
             
-            # Load start state defaults from configuration
-            start_state_defaults = self._load_start_state_defaults()
+            # Use UnifiedStateContext singleton - no need to load defaults
+            context = UnifiedStateContext()
+            # The context already has proper state initialization
             
-            # Use configured start state defaults for session initialization
-            session_state = start_state_defaults.copy()
-            
-            # Initialize world state for GOAP planning
-            if hasattr(controller, 'world_state') and controller.world_state:
-                # Preserve existing structure but update critical values
-                current_data = controller.world_state.data.copy()
-                current_data.update(session_state)
-                controller.world_state.data = current_data
-                controller.world_state.save()
-                
-                self.logger.info(f"🔧 Initialized session state with {len(session_state)} GOAP variables")
-                self.logger.info("🎯 Ensured find_monsters → move → attack cycle will be planned")
-            else:
-                self.logger.warning("No world state available for session state initialization")
+            self.logger.info("🔧 Session state initialized using UnifiedStateContext singleton")
+            self.logger.info("🎯 GOAP planning will use current UnifiedStateContext state")
                 
         except Exception as e:
             self.logger.error(f"Failed to initialize session state: {e}")
@@ -1522,7 +1386,7 @@ class GOAPExecutionManager:
                 return None
             
             # Create plan with forced find_monsters requirement
-            recovery_plan = self.create_plan(recovery_state, goal_state, actions_config)
+            recovery_plan = self.create_plan(goal_state, actions_config)
             if recovery_plan:
                 self.logger.info(f"🔄 Created recovery plan with {len(recovery_plan)} actions")
                 return recovery_plan
@@ -1609,46 +1473,3 @@ class GOAPExecutionManager:
         self.logger.debug(f"Remaining {len(remaining_actions)} actions are valid")
         return True
     
-    def _calculate_initial_boolean_flags(self, world_state: Dict[str, Any]) -> None:
-        """
-        Calculate boolean flags for initial state to maintain consistency with post-execution pipeline.
-        
-        This ensures boolean flags like has_target_slot, has_selected_item, etc.
-        are calculated correctly for the initial state passed to GOAP planning.
-        
-        Mirrors the logic in ActionExecutor._recalculate_boolean_flags to maintain consistency.
-        """
-        # Calculate equipment status boolean flags
-        if 'equipment_status' in world_state and isinstance(world_state['equipment_status'], dict):
-            equipment = world_state['equipment_status']
-            equipment['has_target_slot'] = equipment.get('target_slot') is not None
-            equipment['has_selected_item'] = equipment.get('selected_item') is not None
-            self.logger.debug(f"Calculated initial equipment flags: has_target_slot={equipment['has_target_slot']}, has_selected_item={equipment['has_selected_item']}")
-        
-        # Calculate combat context boolean flags
-        if 'combat_context' in world_state and isinstance(world_state['combat_context'], dict):
-            combat = world_state['combat_context']
-            win_rate = combat.get('recent_win_rate', 1.0)
-            combat['low_win_rate'] = win_rate < 0.2
-            self.logger.debug(f"Calculated initial combat flags: low_win_rate={combat['low_win_rate']} (win_rate={win_rate})")
-        
-        # Calculate materials boolean flags
-        if 'materials' in world_state and isinstance(world_state['materials'], dict):
-            materials = world_state['materials']
-            # Set default boolean flags if not present
-            if 'requirements_determined' not in materials:
-                materials['requirements_determined'] = False
-            if 'availability_checked' not in materials:
-                materials['availability_checked'] = False
-            self.logger.debug(f"Calculated initial materials flags: requirements_determined={materials['requirements_determined']}, availability_checked={materials['availability_checked']}")
-        
-        # Calculate skill requirements boolean flags
-        if 'skill_requirements' in world_state and isinstance(world_state['skill_requirements'], dict):
-            skill_req = world_state['skill_requirements']
-            if 'verified' not in skill_req:
-                skill_req['verified'] = False
-            if 'sufficient' not in skill_req:
-                skill_req['sufficient'] = False
-            self.logger.debug(f"Calculated initial skill requirement flags: verified={skill_req['verified']}, sufficient={skill_req['sufficient']}")
-        
-        # Add more boolean flag calculations here as needed

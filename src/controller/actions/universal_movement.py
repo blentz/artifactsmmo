@@ -9,8 +9,8 @@ but adds configuration-driven behavior to eliminate code duplication.
 from typing import Dict, Optional, Tuple
 from src.lib.action_context import ActionContext
 from .base import ActionResult
-from .coordinate_mixin import CoordinateStandardizationMixin
-from .movement_base import MovementActionBase
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
+from .base.movement import MovementActionBase
 
 
 class UniversalMovementAction(MovementActionBase, CoordinateStandardizationMixin):

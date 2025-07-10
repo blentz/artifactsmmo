@@ -9,8 +9,8 @@ adds configuration-driven behavior to eliminate code duplication.
 from typing import Dict, List, Optional, Any
 from src.lib.action_context import ActionContext
 from .base import ActionResult
-from .coordinate_mixin import CoordinateStandardizationMixin
-from .search_base import SearchActionBase
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
+from .base.search import SearchActionBase
 
 
 class UniversalSearchAction(SearchActionBase, CoordinateStandardizationMixin):

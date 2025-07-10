@@ -6,6 +6,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from src.diagnostic_tools import DiagnosticTools
+from src.lib.state_parameters import StateParameters
 
 
 class TestDiagnosticToolsAdditionalCoverage(TestCase):
@@ -16,9 +17,9 @@ class TestDiagnosticToolsAdditionalCoverage(TestCase):
         # Test with integer (invalid type)
         tools = DiagnosticTools(custom_state=12345)
         
-        # Should use clean state
-        self.assertIn('character_status', tools.current_state)
-        self.assertTrue(tools.current_state['character_status']['alive'])
+        # Should use clean state with flat parameters
+        self.assertIn(StateParameters.CHARACTER_ALIVE, tools.current_state)
+        self.assertTrue(tools.current_state[StateParameters.CHARACTER_ALIVE])
         
     def test_parse_goal_string_default_boolean(self):
         """Test parsing goal string defaults to boolean."""
@@ -58,7 +59,7 @@ class TestDiagnosticToolsAdditionalCoverage(TestCase):
         }
         
         state = {}
-        success, cost = tools._simulate_action('test', action_cfg, state)
+        success, cost = tools._simulate_action_with_goap_logic('test', action_cfg, state)
         
         self.assertTrue(success)
         self.assertEqual(cost, 1.5)

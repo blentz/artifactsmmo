@@ -28,7 +28,7 @@ def get_recipe_from_context(context: ActionContext) -> Optional[Dict[str, Any]]:
     Returns:
         Recipe dictionary or None if not found
     """
-    return context.get(StateParameters.EQUIPMENT_TARGET_RECIPE)
+    return context.get(StateParameters.TARGET_RECIPE)
 
 
 def get_recipe_materials(recipe: Dict[str, Any]) -> Dict[str, int]:
@@ -68,7 +68,7 @@ def get_selected_item_from_context(context: ActionContext) -> Optional[str]:
     Returns:
         Selected item code or None if not set
     """
-    return context.get(StateParameters.EQUIPMENT_SELECTED_ITEM)
+    return context.get(StateParameters.TARGET_ITEM)
 
 
 def get_target_slot_from_context(context: ActionContext) -> Optional[str]:
@@ -81,7 +81,7 @@ def get_target_slot_from_context(context: ActionContext) -> Optional[str]:
     Returns:
         Target slot name or None if not set
     """
-    return context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+    return context.get(StateParameters.TARGET_SLOT)
 
 
 def get_upgrade_status_from_context(context: ActionContext) -> Optional[str]:
@@ -105,8 +105,7 @@ def set_selected_item_in_context(context: ActionContext, item_code: str) -> None
         context: ActionContext with StateParameters access
         item_code: Item code to set as selected
     """
-    context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, item_code)
-    context.set(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM, bool(item_code))
+    context.set(StateParameters.TARGET_ITEM, item_code)
 
 
 def set_target_recipe_in_context(context: ActionContext, recipe: Dict[str, Any]) -> None:
@@ -117,7 +116,7 @@ def set_target_recipe_in_context(context: ActionContext, recipe: Dict[str, Any])
         context: ActionContext with StateParameters access
         recipe: Recipe dictionary to set
     """
-    context.set(StateParameters.EQUIPMENT_TARGET_RECIPE, recipe)
+    context.set(StateParameters.TARGET_RECIPE, recipe)
 
 
 def set_upgrade_status_in_context(context: ActionContext, status: str) -> None:

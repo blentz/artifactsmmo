@@ -8,8 +8,6 @@ sufficient materials are available for crafting.
 
 from typing import Any, Dict, Optional
 
-from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
-
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 
@@ -26,11 +24,9 @@ class CheckInventoryAction(ActionBase):
             },
         }
     reactions = {
-        "has_crafting_materials": True, 
-        "materials_sufficient": True,
-        "has_raw_materials": True,
-        "has_refined_materials": True,
-        "inventory_updated": True
+        StateParameters.INVENTORY_UPDATED: True
+        # Note: has_crafting_materials, materials_sufficient, etc. are calculated dynamically
+        # from knowledge_base.check_material_availability() - no state parameters needed
     }
     weight = 1.0
 
@@ -44,13 +40,11 @@ class CheckInventoryAction(ActionBase):
         """ Check inventory for required items and update world state """
         # Get parameters from context
         character_name = context.get(StateParameters.CHARACTER_NAME)
-        required_items = context.get('required_items', [])
-        
-        # Handle both single string and list formats for required_items
-        if isinstance(required_items, str):
-            required_items = [{'item_code': required_items, 'quantity': 1}]
-        elif isinstance(required_items, list) and len(required_items) > 0 and isinstance(required_items[0], str):
-            required_items = [{'item_code': item, 'quantity': 1} for item in required_items]
+        # Get required items from knowledge base based on target recipe
+        target_recipe = context.get(StateParameters.TARGET_RECIPE)
+        material_requirements = {}
+        if target_recipe and context.knowledge_base:
+            material_requirements = context.knowledge_base.get_material_requirements(target_recipe)
             
         self._context = context
         
@@ -58,12 +52,10 @@ class CheckInventoryAction(ActionBase):
             # Get current character inventory
             inventory_dict = self._get_character_inventory(client, character_name)
             
-            # Check for specific required items if provided
+            # Check for specific required items from target recipe
             item_checks = {}
-            if required_items:
-                for item_req in required_items:
-                    item_code = item_req.get('item_code')
-                    required_qty = item_req.get('quantity', 1)
+            if material_requirements:
+                for item_code, required_qty in material_requirements.items():
                     current_qty = inventory_dict.get(item_code, 0)
                     
                     has_sufficient = current_qty >= required_qty
@@ -77,7 +69,7 @@ class CheckInventoryAction(ActionBase):
             
             # Analyze inventory for common material categories using API/knowledge base data
             knowledge_base = context.knowledge_base
-            config_data = context.get('config_data')
+            config_data = context.get(StateParameters.CONFIG_DATA)
             inventory_analysis = self._analyze_inventory_categories(inventory_dict, knowledge_base, config_data)
             
             # Update world state based on findings
@@ -99,18 +91,24 @@ class CheckInventoryAction(ActionBase):
 
     def _get_character_inventory(self, client, character_name: str) -> Dict[str, int]:
         """
-        Get character inventory as a dictionary of item_code -> quantity.
+        Get character inventory from context (architecture compliant - no direct API calls).
+        
+        The controller manages character data refresh and updates UnifiedStateContext.
+        Actions read from context rather than making direct API calls.
         """
         try:
-            character_response = get_character_api(name=character_name, client=client)
+            # Get inventory from ActionContext - controller handles API calls and context updates
+            inventory_data = getattr(self._context, 'character_inventory', [])
             
-            if not character_response or not character_response.data:
-                return {}
+            # If no inventory in context, try to get from character data
+            if not inventory_data and hasattr(self._context, 'character_data'):
+                character_data = self._context.character_data
+                if character_data and hasattr(character_data, 'inventory'):
+                    inventory_data = character_data.inventory or []
             
-            inventory = character_response.data.inventory or []
+            # Convert to dictionary format
             inventory_dict = {}
-            
-            for item in inventory:
+            for item in inventory_data:
                 # Handle both dict and InventorySlot object formats
                 if hasattr(item, 'code') and hasattr(item, 'quantity'):
                     code = item.code
@@ -127,7 +125,7 @@ class CheckInventoryAction(ActionBase):
             return inventory_dict
             
         except Exception as e:
-            self.logger.warning(f"Could not get character inventory: {e}")
+            self.logger.warning(f"Could not get character inventory from context: {e}")
             return {}
 
     def _analyze_inventory_categories(self, inventory_dict: Dict[str, int], knowledge_base=None, config_data=None) -> Dict[str, Any]:

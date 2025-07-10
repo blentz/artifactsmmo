@@ -161,7 +161,7 @@ class SelectOptimalSlotAction(ActionBase):
         best_slot_data = slot_scores[0]
         
         # Store results in context for next action
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, best_slot_data['slot_name'])
+        context.set(StateParameters.TARGET_SLOT, best_slot_data['slot_name'])
         context.set(StateParameters.TARGET_CRAFT_SKILL, target_skill)  # Pass the skill forward
         context.set(StateParameters.SLOT_SELECTION_REASONING, {
             'selected_slot': best_slot_data['slot_name'],

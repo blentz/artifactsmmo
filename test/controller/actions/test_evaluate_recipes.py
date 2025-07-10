@@ -441,7 +441,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
         
     def test_execute_integration_no_character_state(self):
         """Test execute integration with no character state."""
-        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.mock_context.set(StateParameters.TARGET_SLOT, 'weapon')
         self.mock_context.character_state = None
         
         result = self.action.execute(self.mock_client, self.mock_context)
@@ -451,7 +451,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
         
     def test_execute_integration_unknown_slot(self):
         """Test execute integration with unknown equipment slot."""
-        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown_slot')
+        self.mock_context.set(StateParameters.TARGET_SLOT, 'unknown_slot')
         
         result = self.action.execute(self.mock_client, self.mock_context)
         
@@ -460,7 +460,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
         
     def test_execute_integration_incompatible_slot_skill(self):
         """Test execute integration with incompatible slot and skill."""
-        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.mock_context.set(StateParameters.TARGET_SLOT, 'weapon')
         self.mock_context.set(StateParameters.TARGET_CRAFT_SKILL, 'cooking')
         
         result = self.action.execute(self.mock_client, self.mock_context)
@@ -471,7 +471,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
     @patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync')
     def test_execute_integration_no_recipes(self, mock_get_items):
         """Test execute integration when no recipes available."""
-        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.mock_context.set(StateParameters.TARGET_SLOT, 'weapon')
         mock_get_items.return_value = None
         
         result = self.action.execute(self.mock_client, self.mock_context)
@@ -482,7 +482,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
     @patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync')
     def test_execute_integration_successful_selection(self, mock_get_items):
         """Test execute integration with successful recipe selection."""
-        self.mock_context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.mock_context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response with craftable recipe
         mock_response = Mock()

@@ -33,24 +33,28 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
         
     def test_execute_missing_parameters(self):
         """Test execution with missing parameters."""
-        # Missing all parameters
+        # Missing target_recipe parameter
         with patch.object(self.action, '_wait_for_cooldown'):
             result = self.action.execute(self.client, self.context)
             self.assertFalse(result.success)
-            self.assertIn("Missing transformation parameters", result.error)
-        
-        # Missing refined_material
-        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
-        with patch.object(self.action, '_wait_for_cooldown'):
-            result = self.action.execute(self.client, self.context)
-            self.assertFalse(result.success)
-            self.assertIn("Missing transformation parameters", result.error)
+            self.assertIn("Missing target recipe parameter", result.error)
         
     def test_execute_successful_transformation(self):
         """Test successful material transformation."""
-        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
-        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.TARGET_RECIPE, 'copper')
         self.context.set(StateParameters.QUANTITY, 5)
+        
+        # Mock knowledge base with recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'copper',
+            'craft': {
+                'skill': 'mining',
+                'level': 1,
+                'items': [{'code': 'copper_ore', 'quantity': 1}]
+            }
+        }
+        self.context.knowledge_base = mock_knowledge_base
         
         # Mock crafting response
         craft_response = Mock()
@@ -76,14 +80,25 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 last_transformation = self.context.get(StateParameters.LAST_TRANSFORMATION)
                 self.assertIsNotNone(last_transformation)
                 self.assertTrue(last_transformation['success'])
-                self.assertEqual(last_transformation['raw_material'], 'copper_ore')
-                self.assertEqual(last_transformation['refined_material'], 'copper')
+                self.assertEqual(last_transformation['target_recipe'], 'copper')
+                self.assertEqual(last_transformation['item_crafted'], 'copper')
                 
     def test_execute_with_default_quantity(self):
         """Test execution with default quantity."""
-        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
-        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.TARGET_RECIPE, 'copper')
         # No quantity specified, should default to 1
+        
+        # Mock knowledge base with recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'copper',
+            'craft': {
+                'skill': 'mining',
+                'level': 1,
+                'items': [{'code': 'copper_ore', 'quantity': 1}]
+            }
+        }
+        self.context.knowledge_base = mock_knowledge_base
         
         craft_response = Mock()
         craft_response.data = Mock()
@@ -108,9 +123,20 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 
     def test_execute_crafting_fails(self):
         """Test when crafting API fails."""
-        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
-        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.TARGET_RECIPE, 'copper')
         self.context.set(StateParameters.QUANTITY, 5)
+        
+        # Mock knowledge base with recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'copper',
+            'craft': {
+                'skill': 'mining',
+                'level': 1,
+                'items': [{'code': 'copper_ore', 'quantity': 1}]
+            }
+        }
+        self.context.knowledge_base = mock_knowledge_base
         
         with patch.object(self.action, '_wait_for_cooldown'):
             with patch('src.controller.actions.execute_material_transformation.crafting_api') as mock_craft:
@@ -119,13 +145,24 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 result = self.action.execute(self.client, self.context)
                 
                 self.assertFalse(result.success)
-                self.assertIn("Crafting failed for copper", result.error)
+                self.assertIn("Crafting failed for recipe copper", result.error)
                 
     def test_execute_exception_handling(self):
         """Test exception handling."""
-        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
-        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.TARGET_RECIPE, 'copper')
         self.context.set(StateParameters.QUANTITY, 5)
+        
+        # Mock knowledge base with recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'copper',
+            'craft': {
+                'skill': 'mining',
+                'level': 1,
+                'items': [{'code': 'copper_ore', 'quantity': 1}]
+            }
+        }
+        self.context.knowledge_base = mock_knowledge_base
         
         with patch.object(self.action, '_wait_for_cooldown'):
             with patch('src.controller.actions.execute_material_transformation.crafting_api') as mock_craft:
@@ -197,9 +234,20 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 
     def test_transformation_result_structure(self):
         """Test the structure of transformation result."""
-        self.context.set(StateParameters.RAW_MATERIAL, 'copper_ore')
-        self.context.set(StateParameters.REFINED_MATERIAL, 'copper')
+        self.context.set(StateParameters.TARGET_RECIPE, 'copper')
         self.context.set(StateParameters.QUANTITY, 5)
+        
+        # Mock knowledge base with recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'copper',
+            'craft': {
+                'skill': 'mining',
+                'level': 1,
+                'items': [{'code': 'copper_ore', 'quantity': 1}]
+            }
+        }
+        self.context.knowledge_base = mock_knowledge_base
         
         craft_response = Mock()
         craft_response.data = Mock()
@@ -218,8 +266,8 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 self.assertTrue(result.success)
                 
                 transformation = result.data['transformation']
-                self.assertEqual(transformation['raw_material'], 'copper_ore')
-                self.assertEqual(transformation['refined_material'], 'copper')
+                self.assertEqual(transformation['target_recipe'], 'copper')
+                self.assertEqual(transformation['item_crafted'], 'copper')
                 self.assertEqual(transformation['quantity_requested'], 5)
                 self.assertTrue(transformation['success'])
                 self.assertEqual(transformation['xp_gained'], 10)
@@ -229,9 +277,20 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 
     def test_crafting_with_no_items_produced(self):
         """Test crafting that produces no items (edge case)."""
-        self.context.set(StateParameters.RAW_MATERIAL, 'test')
-        self.context.set(StateParameters.REFINED_MATERIAL, 'test')
+        self.context.set(StateParameters.TARGET_RECIPE, 'test')
         self.context.set(StateParameters.QUANTITY, 1)
+        
+        # Mock knowledge base with recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'test',
+            'craft': {
+                'skill': 'mining',
+                'level': 1,
+                'items': [{'code': 'test_material', 'quantity': 1}]
+            }
+        }
+        self.context.knowledge_base = mock_knowledge_base
         
         craft_response = Mock()
         craft_response.data = Mock()
@@ -246,6 +305,40 @@ class TestExecuteMaterialTransformationAction(UnifiedContextTestBase):
                 
                 self.assertTrue(result.success)
                 self.assertEqual(result.data['items_produced'], [])
+
+    def test_execute_recipe_not_found(self):
+        """Test execution when recipe is not found in knowledge base."""
+        self.context.set(StateParameters.TARGET_RECIPE, 'nonexistent_recipe')
+        self.context.set(StateParameters.QUANTITY, 1)
+        
+        # Mock knowledge base that returns None for recipe data
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = None
+        self.context.knowledge_base = mock_knowledge_base
+        
+        result = self.action.execute(self.client, self.context)
+        
+        self.assertFalse(result.success)
+        self.assertIn("Recipe not found: nonexistent_recipe", result.error)
+
+    def test_execute_recipe_no_craft_info(self):
+        """Test execution when recipe has no craft information."""
+        self.context.set(StateParameters.TARGET_RECIPE, 'no_craft_recipe')
+        self.context.set(StateParameters.QUANTITY, 1)
+        
+        # Mock knowledge base that returns item data without craft info
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.get_item_data.return_value = {
+            'code': 'no_craft_recipe',
+            'name': 'Test Item'
+            # No 'craft' key
+        }
+        self.context.knowledge_base = mock_knowledge_base
+        
+        result = self.action.execute(self.client, self.context)
+        
+        self.assertFalse(result.success)
+        self.assertIn("No craft information for recipe: no_craft_recipe", result.error)
 
 
 if __name__ == '__main__':

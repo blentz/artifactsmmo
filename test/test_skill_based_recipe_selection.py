@@ -138,7 +138,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -160,7 +160,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute  
         result = self.action.execute(self.mock_client, self.context)
@@ -188,7 +188,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -209,7 +209,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'gearcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'armor')
+        self.context.set(StateParameters.TARGET_SLOT, 'armor')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -231,7 +231,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'jewelrycrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'ring')
+        self.context.set(StateParameters.TARGET_SLOT, 'ring')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -269,7 +269,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -290,7 +290,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -322,7 +322,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -383,7 +383,7 @@ class TestSkillBasedRecipeSelection(UnifiedContextTestBase):
         self.mock_knowledge_base.data = {'items': items_data}
         
         # Don't set target_craft_skill - let it be determined automatically
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute
         result = self.action.execute(self.mock_client, self.context)
@@ -485,7 +485,7 @@ class TestRecipeSelectionIntegration(UnifiedContextTestBase):
             self.context.knowledge_base = Mock()
             self.context.knowledge_base.data = {'items': items_data}
             self.context.set(StateParameters.TARGET_CRAFT_SKILL, 'weaponcrafting')
-            self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+            self.context.set(StateParameters.TARGET_SLOT, 'weapon')
             
             # Execute
             result = self.action.execute(Mock(), self.context)

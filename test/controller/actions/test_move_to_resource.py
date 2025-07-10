@@ -175,7 +175,7 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_inheritance(self):
         """Test that the action properly inherits from MovementActionBase."""
-        from src.controller.actions.movement_base import MovementActionBase
+        from src.controller.actions.base.movement import MovementActionBase
         self.assertIsInstance(self.action, MovementActionBase)
         
     def test_execute_method_exists(self):
@@ -192,12 +192,12 @@ class TestMoveToResourceAction(unittest.TestCase):
         
     def test_mixin_methods_exist(self):
         """Test that mixin methods are available."""
-        # Should inherit from CharacterDataMixin
-        self.assertTrue(hasattr(self.action, 'get_character_data'))
-        self.assertTrue(callable(getattr(self.action, 'get_character_data')))
+        # Note: CharacterDataMixin removed for architecture compliance
+        # Actions now read character data from UnifiedStateContext instead of making direct API calls
         
-        self.assertTrue(hasattr(self.action, 'get_character_location'))
-        self.assertTrue(callable(getattr(self.action, 'get_character_location')))
+        # Test that other expected mixin methods are still available
+        self.assertTrue(hasattr(self.action, 'execute_movement'))
+        self.assertTrue(callable(getattr(self.action, 'execute_movement')))
         
     def test_get_target_coordinates_integration(self):
         """Test get_target_coordinates with various context scenarios."""

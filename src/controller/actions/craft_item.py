@@ -14,7 +14,7 @@ from src.lib.state_parameters import StateParameters
 from src.game.globals import MaterialStatus
 
 from .base import ActionBase, ActionResult
-from .coordinate_mixin import CoordinateStandardizationMixin
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
 
 
 class CraftItemAction(ActionBase, CoordinateStandardizationMixin):

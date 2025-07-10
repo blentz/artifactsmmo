@@ -43,9 +43,13 @@ class TestUnifiedStateContext:
         """Test parameter validation during get operations."""
         context = UnifiedStateContext()
         
-        # Valid parameter should work
-        result = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM, "default")
-        assert result is not None  # Should return default or actual value
+        # Valid parameter should work - TARGET_ITEM is initialized as None
+        result = context.get(StateParameters.TARGET_ITEM, "default")
+        assert result is None  # TARGET_ITEM is explicitly set to None in defaults
+        
+        # Test with a parameter that's not in defaults
+        result = context.get(StateParameters.TARGET_ITEM)
+        assert result is None  # Should return None since TARGET_ITEM is None
         
         # Invalid parameter should raise ValueError
         with pytest.raises(ValueError, match="not registered in StateParameters"):
@@ -56,8 +60,8 @@ class TestUnifiedStateContext:
         context = UnifiedStateContext()
         
         # Valid parameter should work
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, "test_item")
-        assert context.get(StateParameters.EQUIPMENT_SELECTED_ITEM) == "test_item"
+        context.set(StateParameters.TARGET_ITEM, "test_item")
+        assert context.get(StateParameters.TARGET_ITEM) == "test_item"
         
         # Invalid parameter should raise ValueError
         with pytest.raises(ValueError, match="not registered in StateParameters"):
@@ -69,19 +73,19 @@ class TestUnifiedStateContext:
         
         # Valid parameters should work
         valid_updates = {
-            StateParameters.EQUIPMENT_SELECTED_ITEM: "copper_dagger",
+            StateParameters.TARGET_ITEM: "copper_dagger",
             StateParameters.CHARACTER_ALIVE: True,
             StateParameters.CHARACTER_LEVEL: 5
         }
         context.update(valid_updates)
         
-        assert context.get(StateParameters.EQUIPMENT_SELECTED_ITEM) == "copper_dagger"
+        assert context.get(StateParameters.TARGET_ITEM) == "copper_dagger"
         assert context.get(StateParameters.CHARACTER_ALIVE) is True
         assert context.get(StateParameters.CHARACTER_LEVEL) == 5
         
         # Invalid parameter should raise ValueError
         invalid_updates = {
-            StateParameters.EQUIPMENT_SELECTED_ITEM: "valid_item",
+            StateParameters.TARGET_ITEM: "valid_item",
             "invalid.parameter": "invalid_value"
         }
         
@@ -89,7 +93,7 @@ class TestUnifiedStateContext:
             context.update(invalid_updates)
         
         # Ensure no partial updates occurred
-        assert context.get(StateParameters.EQUIPMENT_SELECTED_ITEM) == "copper_dagger"  # Unchanged
+        assert context.get(StateParameters.TARGET_ITEM) == "copper_dagger"  # Unchanged
     
     def test_flat_data_loading_with_validation(self):
         """Test loading flat data with parameter validation."""
@@ -97,7 +101,7 @@ class TestUnifiedStateContext:
         
         # Mix of valid and invalid parameters
         flat_data = {
-            StateParameters.EQUIPMENT_SELECTED_ITEM: "test_sword",
+            StateParameters.TARGET_ITEM: "test_sword",
             StateParameters.CHARACTER_LEVEL: 10,
             "invalid.parameter": "should_be_ignored",
             "another.invalid": "also_ignored"
@@ -113,7 +117,7 @@ class TestUnifiedStateContext:
             assert "another.invalid" in warning_args
         
         # Valid parameters should be loaded
-        assert context.get(StateParameters.EQUIPMENT_SELECTED_ITEM) == "test_sword"
+        assert context.get(StateParameters.TARGET_ITEM) == "test_sword"
         assert context.get(StateParameters.CHARACTER_LEVEL) == 10
     
     def test_default_values_initialization(self):
@@ -123,7 +127,6 @@ class TestUnifiedStateContext:
         # Test some key default values
         assert context.get(StateParameters.CHARACTER_ALIVE) is True
         assert context.get(StateParameters.CHARACTER_LEVEL) == 1
-        assert context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM) is False
         assert context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE) is False
         assert context.get(StateParameters.MATERIALS_STATUS) == "unknown"
     
@@ -133,7 +136,7 @@ class TestUnifiedStateContext:
         
         # Set test values
         test_data = {
-            StateParameters.EQUIPMENT_SELECTED_ITEM: "iron_sword",
+            StateParameters.TARGET_ITEM: "iron_sword",
             StateParameters.CHARACTER_LEVEL: 15,
             StateParameters.CHARACTER_ALIVE: True,
             StateParameters.CHARACTER_X: 100,
@@ -161,18 +164,17 @@ class TestUnifiedStateContext:
         context = UnifiedStateContext()
         
         # Modify some values
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, "modified_item")
+        context.set(StateParameters.TARGET_ITEM, "modified_item")
         context.set(StateParameters.CHARACTER_LEVEL, 99)
         
         # Verify values changed
-        assert context.get(StateParameters.EQUIPMENT_SELECTED_ITEM) == "modified_item"
+        assert context.get(StateParameters.TARGET_ITEM) == "modified_item"
         assert context.get(StateParameters.CHARACTER_LEVEL) == 99
         
         # Reset state
         context.reset()
         
         # Verify values returned to defaults
-        assert context.get(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM) is False
         assert context.get(StateParameters.CHARACTER_LEVEL) == 1
     
     def test_category_filtering(self):
@@ -180,18 +182,16 @@ class TestUnifiedStateContext:
         context = UnifiedStateContext()
         
         # Set some equipment parameters
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, "test_weapon")
-        context.set(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM, True)
         context.set(StateParameters.EQUIPMENT_UPGRADE_STATUS, "ready")
+        context.set(StateParameters.EQUIPMENT_GAPS_ANALYZED, True)
         
         # Get equipment category parameters
         equipment_params = context.get_parameters_by_category("equipment_status")
         
         # Should contain our set parameters
-        assert StateParameters.EQUIPMENT_SELECTED_ITEM in equipment_params
-        assert equipment_params[StateParameters.EQUIPMENT_SELECTED_ITEM] == "test_weapon"
-        assert equipment_params[StateParameters.EQUIPMENT_HAS_SELECTED_ITEM] is True
+        assert StateParameters.EQUIPMENT_UPGRADE_STATUS in equipment_params
         assert equipment_params[StateParameters.EQUIPMENT_UPGRADE_STATUS] == "ready"
+        assert equipment_params[StateParameters.EQUIPMENT_GAPS_ANALYZED] is True
         
         # Should not contain parameters from other categories
         for param_name in equipment_params.keys():
@@ -202,11 +202,11 @@ class TestUnifiedStateContext:
         context = UnifiedStateContext()
         
         # Test __getitem__ and __setitem__
-        context[StateParameters.EQUIPMENT_SELECTED_ITEM] = "dict_access_item"
-        assert context[StateParameters.EQUIPMENT_SELECTED_ITEM] == "dict_access_item"
+        context[StateParameters.TARGET_ITEM] = "dict_access_item"
+        assert context[StateParameters.TARGET_ITEM] == "dict_access_item"
         
         # Test __contains__
-        assert StateParameters.EQUIPMENT_SELECTED_ITEM in context
+        assert StateParameters.TARGET_ITEM in context
         
         # Test keys(), values(), items()
         keys = list(context.keys())
@@ -226,10 +226,10 @@ class TestUnifiedStateContext:
         context = UnifiedStateContext()
         
         # Set a parameter
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, "test_value")
+        context.set(StateParameters.TARGET_ITEM, "test_value")
         
         # Should exist after setting
-        assert context.has_parameter(StateParameters.EQUIPMENT_SELECTED_ITEM)
+        assert context.has_parameter(StateParameters.TARGET_ITEM)
         
         # Parameter with default value should exist
         assert context.has_parameter(StateParameters.CHARACTER_ALIVE)

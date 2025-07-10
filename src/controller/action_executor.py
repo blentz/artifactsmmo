@@ -294,15 +294,15 @@ class ActionExecutor:
         are always consistent with their underlying state values using StateParameters.
         """
         # Calculate equipment status boolean flags
-        target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT)
+        target_slot = context.get(StateParameters.TARGET_SLOT)
         has_target_slot = target_slot is not None
         context.set(StateParameters.EQUIPMENT_HAS_TARGET_SLOT, has_target_slot)
         
-        selected_item = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM)
-        has_selected_item = selected_item is not None
-        context.set(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM, has_selected_item)
+        target_item = context.get(StateParameters.TARGET_ITEM)
+        has_target_item = target_item is not None
+        context.set(StateParameters.HAS_TARGET_ITEM, has_target_item)
         
-        self.logger.debug(f"Recalculated equipment flags: has_target_slot={has_target_slot}, has_selected_item={has_selected_item}")
+        self.logger.debug(f"Recalculated equipment flags: has_target_slot={has_target_slot}, has_target_item={has_target_item}")
         
         # Calculate combat context boolean flags
         win_rate = context.get(StateParameters.COMBAT_RECENT_WIN_RATE, 1.0)

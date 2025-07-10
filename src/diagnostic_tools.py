@@ -18,6 +18,7 @@ from src.game.map.state import MapState
 from src.lib.actions_data import ActionsData
 from src.lib.goap_data import GoapData
 from src.lib.yaml_data import YamlData
+from src.lib.state_parameters import StateParameters
 
 
 class DiagnosticTools:
@@ -62,17 +63,18 @@ class DiagnosticTools:
                 self.controller.set_map_state(MapState(client, name="test_map"))
     
     def _get_clean_state(self) -> Dict[str, Any]:
-        """Get a clean default state for testing using the existing GOAP planner facilities."""
-        # Use the GOAP execution manager to get the canonical clean state
+        """Get a clean default state for testing using the UnifiedStateContext."""
+        # Use the UnifiedStateContext to get the canonical clean state
         # This ensures we use exactly the same state initialization logic
-        return self.goap_executor._load_start_state_defaults()
+        from src.lib.unified_state_context import get_unified_context
+        context = get_unified_context()
+        context.reset()  # Reset to defaults
+        return context.to_flat_dict()
     
     def _parse_custom_state(self, custom_state) -> Dict[str, Any]:
         """Parse custom state from JSON string or dict and merge with clean state."""
-        import copy
-        
         # Start with clean state as base
-        merged_state = copy.deepcopy(self._get_clean_state())
+        merged_state = self._get_clean_state().copy()
         
         # Parse the custom state
         if isinstance(custom_state, str):
@@ -87,21 +89,10 @@ class DiagnosticTools:
             self.logger.warning("Invalid custom state format, using clean state")
             return merged_state
         
-        # Deep merge custom state into clean state
-        self._deep_merge_dict(merged_state, custom_dict)
-        
-        # Calculate boolean flags after merging, just like GOAP planner does
-        self.goap_executor._calculate_initial_boolean_flags(merged_state)
+        # Update flat state - no deep merging needed with UnifiedStateContext
+        merged_state.update(custom_dict)
         
         return merged_state
-    
-    def _deep_merge_dict(self, target: Dict, source: Dict):
-        """Deep merge source dict into target dict."""
-        for key, value in source.items():
-            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
-                self._deep_merge_dict(target[key], value)
-            else:
-                target[key] = value
     
     def show_goal_plan(self, goal_string: str):
         """
@@ -130,7 +121,7 @@ class DiagnosticTools:
         
         # Generate plan
         self.logger.info("\nGenerating GOAP plan...")
-        plan = self.goap_executor.create_plan(self.current_state, goal_state, actions_config)
+        plan = self.goap_executor.create_plan(goal_state, actions_config)
         
         if plan:
             self._display_plan(plan, actions_config)
@@ -291,18 +282,8 @@ class DiagnosticTools:
         # Handle nested state expressions (e.g., "character_status.alive=true")
         if '.' in goal_string and '=' in goal_string:
             path, value = goal_string.split('=', 1)
-            parts = path.strip().split('.')
-            
-            # Build nested dictionary
-            current = goal_state
-            for part in parts[:-1]:
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-            
-            # Set the value
-            key = parts[-1]
-            current[key] = self._parse_value(value.strip())
+            # Use the full dotted path as the key for flat structure
+            goal_state[path.strip()] = self._parse_value(value.strip())
             
         # Handle simple expressions
         elif '=' in goal_string:
@@ -315,9 +296,7 @@ class DiagnosticTools:
             if level_match:
                 target_level = int(level_match.group(1))
                 goal_state = {
-                    'character_status': {
-                        'level': target_level
-                    }
+                    StateParameters.CHARACTER_LEVEL: target_level
                 }
         else:
             # Default to boolean true
@@ -357,77 +336,6 @@ class DiagnosticTools:
             
         return plan_actions
     
-    def _check_conditions_nested(self, conditions: Dict[str, Any], state: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """
-        Check if conditions are met with proper nested state handling.
-        
-        Returns:
-            Tuple of (all_conditions_met, list_of_failure_messages)
-        """
-        failures = []
-        
-        for key, required_value in conditions.items():
-            current_value = state.get(key, None)
-            
-            # Handle nested dictionary conditions
-            if isinstance(required_value, dict) and isinstance(current_value, dict):
-                # Check each nested condition
-                for nested_key, nested_required in required_value.items():
-                    nested_current = current_value.get(nested_key, None)
-                    
-                    if nested_current != nested_required:
-                        failures.append(
-                            f"{key}.{nested_key}: required={nested_required}, "
-                            f"current={nested_current}"
-                        )
-            elif current_value != required_value:
-                failures.append(
-                    f"{key}: required={required_value}, "
-                    f"current={current_value}"
-                )
-        
-        return len(failures) == 0, failures
-    
-    def _simulate_action(self, action_name: str, action_cfg: Dict, state: Dict) -> Tuple[bool, float]:
-        """
-        Simulate an action in offline mode.
-        
-        Returns:
-            Tuple of (success, cost)
-        """
-        conditions = action_cfg.get('conditions', {})
-        reactions = action_cfg.get('reactions', {})
-        weight = action_cfg.get('weight', 1.0)
-        
-        # Check conditions
-        conditions_met, failures = self._check_conditions_nested(conditions, state)
-        
-        if conditions_met:
-            self.logger.info("   ✓ All conditions met")
-        else:
-            self.logger.error("   ❌ Conditions not met:")
-            for failure in failures:
-                self.logger.error(f"     - {failure}")
-            return False, 0
-        
-        # Apply reactions
-        self.logger.info("   Applying effects:")
-        for key, value in reactions.items():
-            old_value = state.get(key, None)
-            
-            # Handle nested reactions
-            if isinstance(value, dict) and key in state and isinstance(state[key], dict):
-                # Merge nested dictionaries
-                for nested_key, nested_value in value.items():
-                    old_nested = state[key].get(nested_key, None)
-                    state[key][nested_key] = nested_value
-                    self.logger.info(f"     - {key}.{nested_key}: {old_nested} → {nested_value}")
-            else:
-                state[key] = value
-                self.logger.info(f"     - {key}: {old_value} → {value}")
-        
-        self.logger.info(f"   ✓ Action executable (cost: {weight})")
-        return True, weight
     
     def _execute_action_live(self, action_name: str, action_cfg: Dict) -> bool:
         """Execute a single action with live API."""

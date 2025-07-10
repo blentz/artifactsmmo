@@ -14,7 +14,7 @@ from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as ge
 from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import sync as get_map_api
 from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
 
-from .base import ActionBase
+from . import ActionBase
 
 
 class ResourceDiscoveryMixin:

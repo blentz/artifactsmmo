@@ -102,8 +102,8 @@ class TestGOAPWeaponSelectionPreservation(unittest.TestCase):
     
     def test_weapon_selection_preserved_in_standard_goap_fallback(self):
         """Test that weapon selection is preserved when falling back to standard GOAP."""
-        # Mock analyze_crafting_chain to fail
-        with patch('src.controller.actions.analyze_crafting_chain.AnalyzeCraftingChainAction') as mock_action_class:
+        # Mock analyze_crafting_requirements to fail
+        with patch('src.controller.actions.analyze_crafting_requirements.AnalyzeCraftingRequirementsAction') as mock_action_class:
             mock_action = Mock()
             mock_action_class.return_value = mock_action
             mock_action.execute.side_effect = Exception("Test failure")
@@ -112,9 +112,8 @@ class TestGOAPWeaponSelectionPreservation(unittest.TestCase):
             with patch.object(self.goap_manager, 'create_plan') as mock_create_plan:
                 mock_create_plan.return_value = [
                     {'name': 'evaluate_weapon_recipes', 'params': {}},
-                    {'name': 'analyze_crafting_chain', 'params': {}},
-                    {'name': 'plan_crafting_materials', 'params': {}},
-                    {'name': 'craft_item', 'params': {}},
+                    {'name': 'analyze_crafting_requirements', 'params': {}},
+                    {'name': 'execute_crafting_plan', 'params': {}},
                     {'name': 'equip_item', 'params': {}}
                 ]
                 

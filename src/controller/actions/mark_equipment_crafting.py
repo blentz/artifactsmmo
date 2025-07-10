@@ -55,8 +55,8 @@ class MarkEquipmentCraftingAction(ActionBase):
         
         try:
             # Get selected item information
-            selected_item = context.get(StateParameters.EQUIPMENT_SELECTED_ITEM, 'unknown')
-            target_slot = context.get(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown')
+            selected_item = context.get(StateParameters.TARGET_ITEM, 'unknown')
+            target_slot = context.get(StateParameters.TARGET_SLOT, 'unknown')
             
             # Log the transition
             self.logger.info(

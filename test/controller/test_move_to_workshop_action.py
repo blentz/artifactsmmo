@@ -67,10 +67,10 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertEqual((x, y), (150, 250))
     
     def test_get_target_coordinates_from_context_workshop(self):
-        """Test coordinate extraction from context with workshop_x/workshop_y."""
+        """Test coordinate extraction from context with target_x/target_y (standardized)."""
         from test.fixtures import MockActionContext
         action = MoveToWorkshopAction()
-        context = MockActionContext(character_name=self.char_name, workshop_x=350, workshop_y=450)
+        context = MockActionContext(character_name=self.char_name, target_x=350, target_y=450)
         x, y = action.get_target_coordinates(context)
         self.assertEqual((x, y), (350, 450))
     
@@ -148,7 +148,7 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertEqual(context['workshop_code'], 'cooking_workshop')
         self.assertNotIn('workshop_type', context)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_success_with_init_coordinates(self, mock_move_api):
         """Test successful execution with coordinates from initialization."""
         # Mock API response
@@ -184,7 +184,7 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertTrue(result.data['at_workshop'])
         self.assertEqual(result.data['workshop_type'], 'jewelrycrafting')
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_success_with_context_coordinates(self, mock_move_api):
         """Test successful execution with coordinates from context."""
         # Mock API response
@@ -215,7 +215,7 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertEqual(result.data['workshop_type'], 'gearcrafting')
         self.assertEqual(result.data['workshop_code'], 'gearcrafting_workshop')
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_already_at_destination(self, mock_move_api):
         """Test execution when already at destination."""
         # Mock API to raise "already at destination" error
@@ -274,7 +274,7 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn('No valid coordinates provided', result.error)
     
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_api_error(self, mock_move_api):
         """Test execution with API error."""
         # Mock API to raise error
@@ -304,9 +304,8 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         self.assertTrue(hasattr(action, 'create_success_result'))
         self.assertTrue(hasattr(action, 'create_error_result'))
         
-        # Should have CharacterDataMixin methods
-        self.assertTrue(hasattr(action, 'get_character_data'))
-        self.assertTrue(hasattr(action, 'get_character_location'))
+        # Note: CharacterDataMixin methods removed for architecture compliance
+        # Actions now read character data from UnifiedStateContext instead of making direct API calls
     
     def test_calculate_distance(self):
         """Test distance calculation functionality."""
@@ -346,22 +345,29 @@ class TestMoveToWorkshopAction(unittest.TestCase):
         from test.fixtures import MockActionContext
         action = MoveToWorkshopAction()
         
-        # Test workshop_x/workshop_y extraction
-        context = MockActionContext(character_name=self.char_name, workshop_x=100, workshop_y=200)
+        # Test target_x/target_y extraction (standardized)
+        context = MockActionContext(character_name=self.char_name, target_x=100, target_y=200)
         x, y = action.get_target_coordinates(context)
         self.assertEqual((x, y), (100, 200))
         
-        # Test mixed context (should prefer target_x/target_y)
+        # Test with target_x/target_y (standardized parameters)
         context = MockActionContext(
             character_name=self.char_name,
-            target_x=300, target_y=400,
-            workshop_x=500, workshop_y=600
+            target_x=300, target_y=400
         )
         x, y = action.get_target_coordinates(context)
         self.assertEqual((x, y), (300, 400))
         
-        # Test with only workshop coordinates
-        context = MockActionContext(character_name=self.char_name, workshop_x=700, workshop_y=800)
+        # Test with knowledge base fallback for workshop coordinates - use StateParameters
+        from src.lib.state_parameters import StateParameters
+        context = MockActionContext(character_name=self.char_name)
+        context.set_parameter(StateParameters.WORKSHOP_CODE, 'weaponcrafting')
+        # Mock knowledge base to test fallback
+        context.knowledge_base = type('MockKnowledgeBase', (), {
+            'get_workshop_locations': lambda self: {
+                'weaponcrafting': {'x': 700, 'y': 800}
+            }
+        })()
         x, y = action.get_target_coordinates(context)
         self.assertEqual((x, y), (700, 800))
 

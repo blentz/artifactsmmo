@@ -6,11 +6,8 @@ but aren't necessarily movement-related.
 """
 
 
-from .base import ActionBase
-from .mixins import CharacterDataMixin
-
-
-class CharacterActionBase(ActionBase, CharacterDataMixin):
+from . import ActionBase
+class CharacterActionBase(ActionBase):
     """Base class for actions that operate on a specific character."""
     
     def __init__(self):

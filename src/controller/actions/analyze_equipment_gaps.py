@@ -71,24 +71,23 @@ class AnalyzeEquipmentGapsAction(ActionBase):
         self._context = context
         
         try:
-            # Simple approach: Analyze basic equipment slots using StateParameters
-            equipment_slots = {
-                'weapon': StateParameters.EQUIPMENT_WEAPON,
-                'helmet': StateParameters.EQUIPMENT_HELMET,
-                'body_armor': StateParameters.EQUIPMENT_ARMOR,
-                'shield': StateParameters.EQUIPMENT_SHIELD,
-                'boots': StateParameters.EQUIPMENT_BOOTS,
-                'amulet': StateParameters.EQUIPMENT_AMULET,
-                'ring1': StateParameters.EQUIPMENT_RING1,
-                'ring2': StateParameters.EQUIPMENT_RING2
-            }
+            # Equipment parameters removed - APIs are authoritative for current equipment state
+            # Use character API to get current equipment directly
+            from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
             
-            # Simple gap analysis - just check if equipment is available
-            gap_analysis = {}
-            for slot, param in equipment_slots.items():
-                current_item = context.get(param)
+            char_response = get_character_api(name=character_name, client=client)
+            if not char_response or not char_response.data:
+                return self.create_error_result("Could not retrieve character data")
                 
-                if current_item is None:
+            char_data = char_response.data
+            equipment_slots = ['weapon', 'helmet', 'body_armor', 'shield', 'boots', 'amulet', 'ring1', 'ring2']
+            
+            # Simple gap analysis - check if equipment slots are empty or low level
+            gap_analysis = {}
+            for slot in equipment_slots:
+                current_item = getattr(char_data, slot, None) or ""
+                
+                if not current_item:
                     gap_analysis[slot] = {
                         'missing': True,
                         'urgency_score': 100,
@@ -116,7 +115,7 @@ class AnalyzeEquipmentGapsAction(ActionBase):
             
             # Update context with results
             context.set_result(StateParameters.EQUIPMENT_GAP_ANALYSIS, gap_analysis)
-            context.set_result(StateParameters.EQUIPMENT_TARGET_SLOT, target_slot)
+            context.set_result(StateParameters.TARGET_SLOT, target_slot)
             
             return result
             

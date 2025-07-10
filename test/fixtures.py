@@ -208,6 +208,170 @@ class MockKnowledgeBase:
     def get_monster_data(self, monster_code: str, client=None) -> Optional[Dict]:
         """Get monster data with optional API fallback."""
         return self.data['monsters'].get(monster_code)
+    
+    def get_item_data(self, item_code: str, client=None) -> Optional[Dict]:
+        """Get item data with optional API fallback."""
+        return self.data['items'].get(item_code)
+    
+    def get_material_requirements(self, recipe_or_item: str) -> Dict[str, int]:
+        """Get material requirements for a recipe/item."""
+        item_data = self.data['items'].get(recipe_or_item, {})
+        craft_data = item_data.get('craft_data', {})
+        items = craft_data.get('items', [])
+        # Convert from list format to dict format
+        return {item['code']: item['quantity'] for item in items}
+    
+    def has_target_item(self, context, client=None) -> bool:
+        """
+        Check if character has the target item in inventory or equipped.
+        Uses knowledge_base + action_context heuristic instead of state parameter.
+        
+        Args:
+            context: ActionContext containing TARGET_ITEM and character info
+            client: API client for real-time character data (optional)
+            
+        Returns:
+            True if character has the target item, False otherwise
+        """
+        from src.lib.state_parameters import StateParameters
+        
+        target_item = context.get(StateParameters.TARGET_ITEM)
+        if not target_item:
+            return False
+            
+        # Check character inventory through API or context
+        character_name = context.get(StateParameters.CHARACTER_NAME)
+        if client and character_name:
+            # Use real API data if available
+            try:
+                from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
+                char_response = get_character_api(name=character_name, client=client)
+                if char_response and char_response.data:
+                    # Check inventory
+                    inventory = char_response.data.inventory or []
+                    for item in inventory:
+                        if getattr(item, 'code', None) == target_item:
+                            return True
+                    
+                    # Check equipped items
+                    equipment_slots = ['weapon_slot', 'helmet_slot', 'body_armor_slot', 
+                                     'leg_armor_slot', 'boots_slot', 'ring1_slot', 'ring2_slot',
+                                     'amulet_slot', 'artifact1_slot', 'artifact2_slot', 'artifact3_slot']
+                    for slot in equipment_slots:
+                        equipped_item = getattr(char_response.data, slot, None)
+                        if equipped_item == target_item:
+                            return True
+            except Exception:
+                # Fall back to context data if API fails
+                pass
+        
+        # Fallback: check context/mock data
+        if hasattr(context, 'character_state') and context.character_state:
+            # Check mock inventory if available
+            inventory = getattr(context.character_state, 'inventory', [])
+            for item in inventory:
+                if getattr(item, 'code', item.get('code') if isinstance(item, dict) else None) == target_item:
+                    return True
+        
+        return False
+    
+    def is_at_workshop(self, context, client=None) -> bool:
+        """
+        Check if character is at the correct workshop location.
+        Uses knowledge_base + action_context heuristic instead of state parameter.
+        
+        Args:
+            context: ActionContext containing character position and workshop requirements
+            client: API client for real-time character data (optional)
+            
+        Returns:
+            True if character is at correct workshop, False otherwise
+        """
+        from src.lib.state_parameters import StateParameters
+        
+        # Get character position
+        char_x = context.get(StateParameters.CHARACTER_X, 0)
+        char_y = context.get(StateParameters.CHARACTER_Y, 0)
+        
+        # Get required workshop type from context or target recipe
+        workshop_type = context.get(StateParameters.WORKSHOP_TYPE)
+        if not workshop_type:
+            target_recipe = context.get(StateParameters.TARGET_RECIPE)
+            if target_recipe and isinstance(target_recipe, dict):
+                craft_data = target_recipe.get('craft', {})
+                workshop_type = craft_data.get('skill', 'weaponcrafting')  # Default to weaponcrafting
+        
+        if not workshop_type:
+            return False
+            
+        # Check workshop locations from knowledge base
+        workshops = self.data.get('workshops', {})
+        for workshop_code, workshop_data in workshops.items():
+            if workshop_data.get('type') == workshop_type:
+                workshop_x = workshop_data.get('x', -1)
+                workshop_y = workshop_data.get('y', -1)
+                if char_x == workshop_x and char_y == workshop_y:
+                    return True
+        
+        return False
+    
+    def is_at_resource_location(self, context, client=None) -> bool:
+        """
+        Check if character is at a resource location for the target material.
+        Uses knowledge_base + action_context heuristic instead of state parameter.
+        
+        Args:
+            context: ActionContext containing character position and target material
+            client: API client for real-time character data (optional)
+            
+        Returns:
+            True if character is at resource location, False otherwise
+        """
+        from src.lib.state_parameters import StateParameters
+        
+        # Get character position
+        char_x = context.get(StateParameters.CHARACTER_X, 0)
+        char_y = context.get(StateParameters.CHARACTER_Y, 0)
+        
+        # Get target material from context
+        target_material = context.get(StateParameters.TARGET_MATERIAL)
+        if not target_material:
+            return False
+            
+        # Check resource locations from knowledge base
+        resources = self.data.get('resources', {})
+        for resource_code, resource_data in resources.items():
+            # Check if this resource provides the target material
+            drops = resource_data.get('drops', [])
+            for drop in drops:
+                if drop.get('code') == target_material:
+                    resource_x = resource_data.get('x', -1)
+                    resource_y = resource_data.get('y', -1)
+                    if char_x == resource_x and char_y == resource_y:
+                        return True
+        
+        return False
+    
+    def get_combat_location(self, context, client=None) -> Optional[str]:
+        """
+        Get the current combat location identifier.
+        Uses knowledge_base + action_context heuristic instead of state parameter.
+        
+        Args:
+            context: ActionContext containing character position and combat target
+            client: API client for real-time character data (optional)
+            
+        Returns:
+            Combat location identifier or None
+        """
+        from src.lib.state_parameters import StateParameters
+        
+        # Get character position
+        char_x = context.get(StateParameters.CHARACTER_X, 0)
+        char_y = context.get(StateParameters.CHARACTER_Y, 0)
+        
+        # Return location identifier for combat tracking
+        return f"combat_{char_x}_{char_y}"
 
 
 class MockMapState:
@@ -278,13 +442,13 @@ class MockActionContext:
             StateParameters.CHARACTER_MAX_HP: 'character_max_hp',
             StateParameters.CHARACTER_X: 'character_x',
             StateParameters.CHARACTER_Y: 'character_y',
-            StateParameters.MATERIALS_TARGET_ITEM: 'target_item',
-            StateParameters.EQUIPMENT_SELECTED_ITEM: 'selected_item',
-            StateParameters.EQUIPMENT_TARGET_SLOT: 'target_slot',
+            StateParameters.TARGET_ITEM: 'target_item',
+            StateParameters.TARGET_ITEM: 'selected_item',
+            StateParameters.TARGET_SLOT: 'target_slot',
             StateParameters.TARGET_X: 'target_x',
             StateParameters.TARGET_Y: 'target_y',
             StateParameters.ITEM_CODE: 'item_code',
-            StateParameters.SELECTED_ITEM: 'selected_item',
+            StateParameters.TARGET_ITEM: 'selected_item',
             StateParameters.SEARCH_RADIUS: 'search_radius',
         }
         
@@ -330,13 +494,13 @@ class MockActionContext:
             StateParameters.CHARACTER_MAX_HP: 'character_max_hp',
             StateParameters.CHARACTER_X: 'character_x',
             StateParameters.CHARACTER_Y: 'character_y',
-            StateParameters.MATERIALS_TARGET_ITEM: 'target_item',
-            StateParameters.EQUIPMENT_SELECTED_ITEM: 'selected_item',
-            StateParameters.EQUIPMENT_TARGET_SLOT: 'target_slot',
+            StateParameters.TARGET_ITEM: 'target_item',
+            StateParameters.TARGET_ITEM: 'selected_item',
+            StateParameters.TARGET_SLOT: 'target_slot',
             StateParameters.TARGET_X: 'target_x',
             StateParameters.TARGET_Y: 'target_y',
             StateParameters.ITEM_CODE: 'item_code',
-            StateParameters.SELECTED_ITEM: 'selected_item',
+            StateParameters.TARGET_ITEM: 'selected_item',
             StateParameters.SEARCH_RADIUS: 'search_radius',
         }
         

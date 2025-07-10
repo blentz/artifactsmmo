@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from src.controller.actions.movement_base import MovementActionBase
+from src.controller.actions.base.movement import MovementActionBase
 
 from test.fixtures import MockActionContext, create_mock_client
 
@@ -28,7 +28,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertFalse(hasattr(action, 'character_name'))
         self.assertIsNotNone(action.logger)
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_success(self, mock_move_api):
         # Mock successful API response
         mock_response = Mock()
@@ -55,7 +55,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertEqual(result.data['cooldown'], 10)
         self.assertTrue(result.data['movement_completed'])
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_already_at_destination(self, mock_move_api):
         # Mock "already at destination" error
         mock_move_api.side_effect = Exception('490 Character already at destination')
@@ -74,7 +74,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertEqual(result.data['target_y'], 10)
         self.assertTrue(result.data['movement_completed'])
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_movement_other_error(self, mock_move_api):
         # Mock other error
         mock_move_api.side_effect = Exception('Network error')
@@ -98,7 +98,7 @@ class TestMovementActionBase(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn('No valid coordinates provided', result.error)
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_execute_with_context(self, mock_move_api):
         # Mock successful API response
         mock_response = Mock()
@@ -127,7 +127,7 @@ class TestMovementActionBase(unittest.TestCase):
         distance = action.calculate_distance(5, 5, 2, 8)
         self.assertEqual(distance, 6)  # |2-5| + |8-5| = 6
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_movement_context_building(self, mock_move_api):
         """Test that movement context is properly included in response."""
         mock_response = Mock()

@@ -2,89 +2,11 @@ import logging
 import unittest
 from unittest.mock import Mock, patch
 
-from src.controller.actions.mixins import CharacterDataMixin, KnowledgeBaseSearchMixin, MapStateAccessMixin
+from src.controller.actions.mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
 
 
-class TestCharacterDataMixin(unittest.TestCase):
-    """Test CharacterDataMixin functionality."""
-    
-    def setUp(self):
-        # Create a test class that uses the mixin
-        class TestAction(CharacterDataMixin):
-            def __init__(self):
-                self.logger = logging.getLogger(__name__)
-        
-        self.action = TestAction()
-        self.client = Mock()
-
-    @patch('src.controller.actions.mixins.get_character_api')
-    def test_get_character_data_success(self, mock_get_char):
-        # Mock successful character data retrieval
-        mock_char_data = Mock()
-        mock_char_data.x = 10
-        mock_char_data.y = 20
-        mock_response = Mock()
-        mock_response.data = mock_char_data
-        mock_get_char.return_value = mock_response
-        
-        result = self.action.get_character_data(self.client, "test_char")
-        
-        self.assertEqual(result, mock_char_data)
-        mock_get_char.assert_called_once_with(name="test_char", client=self.client)
-
-    @patch('src.controller.actions.mixins.get_character_api')
-    def test_get_character_data_no_response(self, mock_get_char):
-        # Mock no response
-        mock_get_char.return_value = None
-        
-        result = self.action.get_character_data(self.client, "test_char")
-        
-        self.assertIsNone(result)
-
-    @patch('src.controller.actions.mixins.get_character_api')
-    def test_get_character_data_exception(self, mock_get_char):
-        # Mock exception
-        mock_get_char.side_effect = Exception("API Error")
-        
-        result = self.action.get_character_data(self.client, "test_char")
-        
-        self.assertIsNone(result)
-
-    @patch('src.controller.actions.mixins.get_character_api')
-    def test_get_character_location_success(self, mock_get_char):
-        # Mock character with location
-        mock_char_data = Mock()
-        mock_char_data.x = 15
-        mock_char_data.y = 25
-        mock_response = Mock()
-        mock_response.data = mock_char_data
-        mock_get_char.return_value = mock_response
-        
-        x, y = self.action.get_character_location(self.client, "test_char")
-        
-        self.assertEqual(x, 15)
-        self.assertEqual(y, 25)
-
-    @patch('src.controller.actions.mixins.get_character_api')
-    def test_get_character_inventory(self, mock_get_char):
-        # Mock character with inventory
-        item1 = Mock()
-        item1.code = "iron_ore"
-        item1.quantity = 10
-        
-        item2 = Mock()
-        item2.code = "copper_ore"
-        item2.quantity = 5
-        
-        mock_char_data = Mock()
-        mock_char_data.inventory = [item1, item2]
-        mock_response = Mock()
-        mock_response.data = mock_char_data
-        mock_get_char.return_value = mock_response
-        
-        inventory = self.action.get_character_inventory(self.client, "test_char")
-        
-        self.assertEqual(inventory, {"iron_ore": 10, "copper_ore": 5})
+# CharacterDataMixin tests removed - component removed for architecture compliance
+# Actions should read character data from UnifiedStateContext instead of making direct API calls
 
 
 class TestKnowledgeBaseSearchMixin(unittest.TestCase):

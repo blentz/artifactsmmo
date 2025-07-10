@@ -78,38 +78,26 @@ class GatherMissingMaterialsAction(ActionBase):
         
         character_name = context.get(StateParameters.CHARACTER_NAME)
         
-        # Check for missing materials in context first, then calculate from recipe if needed
-        missing_materials_raw = context.get(StateParameters.MISSING_MATERIALS, {})
+        # Get the target recipe we're working with
+        target_recipe = context.get(StateParameters.TARGET_RECIPE)
+        if not target_recipe:
+            return self.create_error_result("No target recipe to gather materials for")
+            
+        self.logger.info(f"🔍 Gathering missing materials for recipe: {target_recipe}")
         
-        # Handle both dict and list formats for missing_materials
-        if isinstance(missing_materials_raw, list):
-            # Convert list format ['item1', 'item2'] to dict format {'item1': 1, 'item2': 1}
-            missing_materials = {item: 1 for item in missing_materials_raw}
-        elif isinstance(missing_materials_raw, dict):
-            missing_materials = missing_materials_raw
-        else:
-            missing_materials = {}
+        # Get required materials from knowledge base
+        knowledge_base = context.knowledge_base
+        material_requirements = knowledge_base.get_material_requirements(target_recipe)
+        if not material_requirements:
+            return self.create_error_result(f"Could not determine requirements for recipe: {target_recipe}")
         
-        if not missing_materials:
-            # No missing materials in context, calculate from recipe
-            try:
-                target_recipe = get_recipe_from_context(context)
-                if target_recipe:
-                    recipe_materials = get_recipe_materials(target_recipe)
-                    if recipe_materials:
-                        # Check current inventory against recipe requirements
-                        current_inventory = context.get_character_inventory()
-                        
-                        for material_code, required_quantity in recipe_materials.items():
-                            current_quantity = current_inventory.get(material_code, 0)
-                            if current_quantity < required_quantity:
-                                missing_materials[material_code] = required_quantity - current_quantity
-            except ValueError:
-                # Recipe not available, check if missing_materials was provided directly
-                pass
-        
-        if not missing_materials:
-            return self.create_error_result("No materials required for recipe")
+        # Check current inventory to determine what's missing
+        current_inventory = self._get_current_inventory(context)
+        missing_materials = {}
+        for material, required_qty in material_requirements.items():
+            available_qty = current_inventory.get(material, 0)
+            if available_qty < required_qty:
+                missing_materials[material] = required_qty - available_qty
         
         if not missing_materials:
             # We have all materials needed
@@ -161,9 +149,10 @@ class GatherMissingMaterialsAction(ActionBase):
                     result.request_subgoal(
                         goal_name="gather_resource",
                         parameters={
-                            "target_resource": target_material,
-                            "quantity_needed": quantity_needed
-                        }
+                            "resource": target_material,
+                            "quantity": quantity_needed
+                        },
+                        preserve_context=["target_recipe"]
                     )
                     
                     self.logger.info(f"🎯 Requesting gather_resource subgoal for {target_material}")
@@ -172,9 +161,7 @@ class GatherMissingMaterialsAction(ActionBase):
             # Step 2: Need to find resource location first
             self.logger.info(f"🎯 Need to find location for {target_material}")
             
-            # Store the target material in context for the find_resources subgoal
-            context.set_result(StateParameters.TARGET_MATERIAL, target_material)
-            context.set_result(StateParameters.QUANTITY_NEEDED, quantity_needed)
+            # Context already has TARGET_RECIPE - no additional parameters needed
             
             # Request find_resources subgoal to locate the material
             result = self.create_success_result(f"Need to find location for {target_material}")
@@ -183,7 +170,8 @@ class GatherMissingMaterialsAction(ActionBase):
                 goal_name="find_resources", 
                 parameters={
                     "resource_types": [target_material]
-                }
+                },
+                preserve_context=["target_recipe"]
             )
             
             self.logger.info(f"🎯 Requesting find_resources subgoal for {target_material}")
@@ -191,6 +179,16 @@ class GatherMissingMaterialsAction(ActionBase):
             
         except Exception as e:
             return self.create_error_result(f"Material gathering failed: {str(e)}")
+    
+    def _get_current_inventory(self, context: ActionContext) -> Dict[str, int]:
+        """Get current inventory from context."""
+        inventory = getattr(context, 'inventory', [])
+        
+        inventory_dict = {}
+        for item in inventory:
+            inventory_dict[item.code] = item.quantity
+                    
+        return inventory_dict
             
     def __repr__(self):
         return "GatherMissingMaterialsAction()"

@@ -13,11 +13,8 @@ from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 
-from .base import ActionBase, ActionResult
-from .mixins import CharacterDataMixin
-
-
-class MovementActionBase(ActionBase, CharacterDataMixin):
+from . import ActionBase, ActionResult
+class MovementActionBase(ActionBase):
     """Base class for all movement-related actions."""
     
     # Default GOAP parameters for movement actions
@@ -133,6 +130,10 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
                 )
                 
         except Exception as e:
+            # Check for cooldown error first
+            if self.is_cooldown_error(e):
+                return self.handle_cooldown_error()
+            
             # Handle "already at destination" as success
             error_str = str(e).lower()
             if "490" in str(e) and ("already at" in error_str or "destination" in error_str):
@@ -158,7 +159,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
     
     def execute(self, client, context: 'ActionContext') -> ActionResult:
         """
-        Execute the movement action.
+        Execute the movement action with automatic cooldown handling.
         
         Args:
             client: API client
@@ -167,6 +168,11 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         Returns:
             Action result dictionary
         """
+        # Call base execute for automatic cooldown handling
+        cooldown_result = super().execute(client, context)
+        if cooldown_result:
+            return cooldown_result
+        
         # Get character name from context
         character_name = context.get(StateParameters.CHARACTER_NAME)
         
@@ -191,7 +197,7 @@ class MovementActionBase(ActionBase, CharacterDataMixin):
         movement_context = self.build_movement_context(context)
         movement_context['character_name'] = character_name
         
-        # Execute movement
+        # Execute movement with cooldown handling
         result = self.execute_movement(client, target_x, target_y, movement_context)
         
         return result

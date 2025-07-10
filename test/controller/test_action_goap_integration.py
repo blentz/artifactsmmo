@@ -63,11 +63,8 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.assertTrue(self.controller.action_executor.factory.is_action_registered('move'))
         
         # Verify the action class has GOAP attributes
-        config = self.controller.action_executor.factory._action_registry.get('move')
-        self.assertIsNotNone(config)
-        self.assertIsNotNone(config.action_class)
-        
-        action_class = config.action_class
+        action_class = self.controller.action_executor.factory.action_class_map.get('move')
+        self.assertIsNotNone(action_class)
         self.assertTrue(hasattr(action_class, 'conditions'))
         self.assertTrue(hasattr(action_class, 'reactions'))
         self.assertTrue(hasattr(action_class, 'weight'))
@@ -90,8 +87,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         # Test that the action exists and has the right class attributes
         self.assertTrue(self.controller.action_executor.factory.is_action_registered('attack'))
         
-        config = self.controller.action_executor.factory._action_registry.get('attack')
-        action_class = config.action_class
+        action_class = self.controller.action_executor.factory.action_class_map.get('attack')
         
         # Verify GOAP attributes exist
         self.assertTrue(hasattr(action_class, 'conditions'))
@@ -103,8 +99,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         # GOAP defaults are now handled internally by managers
         self.assertTrue(self.controller.action_executor.factory.is_action_registered('rest'))
         
-        config = self.controller.action_executor.factory._action_registry.get('rest')
-        action_class = config.action_class
+        action_class = self.controller.action_executor.factory.action_class_map.get('rest')
         
         # Verify GOAP attributes exist
         self.assertTrue(hasattr(action_class, 'conditions'))
@@ -116,8 +111,7 @@ class TestActionGoapIntegration(unittest.TestCase):
         # GOAP defaults are now handled internally by managers
         self.assertTrue(self.controller.action_executor.factory.is_action_registered('find_monsters'))
         
-        config = self.controller.action_executor.factory._action_registry.get('find_monsters')
-        action_class = config.action_class
+        action_class = self.controller.action_executor.factory.action_class_map.get('find_monsters')
         
         # Verify GOAP attributes exist
         self.assertTrue(hasattr(action_class, 'conditions'))
@@ -144,8 +138,8 @@ class TestActionGoapIntegration(unittest.TestCase):
         }
         
         # Test through GOAPExecutionManager instead of removed controller method
-        world = self.controller.goap_execution_manager.create_world_with_planner(
-            start_state, goal_state, actions_config
+        world = self.controller.goap_execution_manager.create_planner_from_context(
+            goal_state, actions_config
         )
         
         # Verify world was created successfully
@@ -167,8 +161,8 @@ class TestActionGoapIntegration(unittest.TestCase):
         }
         
         # Test through GOAPExecutionManager
-        world = self.controller.goap_execution_manager.create_world_with_planner(
-            start_state, goal_state, actions_config
+        world = self.controller.goap_execution_manager.create_planner_from_context(
+            goal_state, actions_config
         )
         
         # Verify world creation succeeds
@@ -203,8 +197,8 @@ class TestActionGoapIntegration(unittest.TestCase):
         }
         
         # Test through GOAPExecutionManager
-        world = self.controller.goap_execution_manager.create_world_with_planner(
-            start_state, goal_state, actions_config
+        world = self.controller.goap_execution_manager.create_planner_from_context(
+            goal_state, actions_config
         )
         
         # Verify world creation succeeds with multiple actions
@@ -217,12 +211,10 @@ class TestActionGoapIntegration(unittest.TestCase):
         # without relying on removed controller methods
         
         # Verify attack action has higher weight than move
-        attack_config = self.controller.action_executor.factory._action_registry.get('attack')
-        move_config = self.controller.action_executor.factory._action_registry.get('move')
+        attack_class = self.controller.action_executor.factory.action_class_map.get('attack')
+        move_class = self.controller.action_executor.factory.action_class_map.get('move')
         
-        if attack_config and move_config:
-            attack_class = attack_config.action_class
-            move_class = move_config.action_class
+        if attack_class and move_class:
             
             # Verify both have weights defined
             self.assertTrue(hasattr(attack_class, 'weight'))

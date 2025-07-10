@@ -86,10 +86,10 @@ class TestStatePersistence:
         """Test that StateParameters persist correctly in unified context."""
         context = ActionContext()
         
-        # Set initial state using StateParameters  
+        # Set initial state using registered StateParameters only
         context.set(StateParameters.CHARACTER_NAME, "TestChar")
-        context.set_result(StateParameters.MISSING_MATERIALS, {"copper_ore": 5})
-        context.set_result(StateParameters.SELECTED_ITEM, "copper_dagger")
+        context.set_result(StateParameters.TARGET_ITEM, "copper_dagger")
+        # Note: missing_materials is complex data handled by knowledge base, not state parameters
 
         # Simulate action setting coordinates using StateParameters
         context.set_result(StateParameters.TARGET_X, 2)
@@ -103,8 +103,8 @@ class TestStatePersistence:
 
         # Test that unified context preserves all data throughout workflow
         assert context.get(StateParameters.CHARACTER_NAME) == "TestChar", "character_name should persist"
-        assert context.get(StateParameters.MISSING_MATERIALS) == {"copper_ore": 5}, "missing_materials should persist"
-        assert context.get(StateParameters.SELECTED_ITEM) == "copper_dagger", "selected_item should persist"
+        # Note: missing_materials not tested - complex data handled by knowledge base
+        assert context.get(StateParameters.TARGET_ITEM) == "copper_dagger", "target_item should persist"
 
         # Test workflow step progression using StateParameters
         context.set_result(StateParameters.WORKFLOW_STEP, 'resource_discovery')

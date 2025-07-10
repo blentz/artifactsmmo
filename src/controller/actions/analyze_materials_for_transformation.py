@@ -48,8 +48,9 @@ class AnalyzeMaterialsForTransformationAction(ActionBase):
         self._context = context
         
         try:
-            inventory = context.get(StateParameters.MATERIALS_INVENTORY, [])
-            target_item = context.get(StateParameters.MATERIALS_TARGET_ITEM)
+            # Get inventory from API or context directly (not stored in parameters)
+            inventory = getattr(context, 'inventory', [])
+            target_item = context.get(StateParameters.TARGET_ITEM)
             knowledge_base = context.knowledge_base
             
             self.logger.debug(f"🔍 Analyzing materials for transformation, target: {target_item}")

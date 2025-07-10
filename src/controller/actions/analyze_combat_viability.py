@@ -317,7 +317,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
             
             # Calculate combat readiness factors
             hp_percentage = (hp / max_hp) if max_hp > 0 else 0
-            has_weapon = weapon and weapon != 'wooden_stick'
+            has_weapon = self._has_level_appropriate_weapon(weapon, level)
             is_healthy = hp_percentage >= 0.8
             is_experienced = level >= 2
             
@@ -344,7 +344,7 @@ class AnalyzeCombatViabilityAction(ActionBase):
                 readiness_factors.append("Low level")
             
             # Equipment bonus (basic check)
-            armor_slots = ['helmet', 'body_armor', 'leg_armor', 'boots']
+            armor_slots = self._get_armor_slots(character_data)
             equipped_armor = 0
             
             if hasattr(character_data, 'data'):
@@ -516,6 +516,31 @@ class AnalyzeCombatViabilityAction(ActionBase):
                     'status': CombatStatus.NOT_VIABLE
                 }
             }
+
+    def _has_level_appropriate_weapon(self, weapon: str, player_level: int) -> bool:
+        """Check if weapon is level-appropriate for the player."""
+        if not weapon:
+            return False
+        
+        # Get weapon data from knowledge base
+        if not hasattr(self, '_context') or not self._context or not self._context.knowledge_base:
+            return False
+        
+        weapon_data = self._context.knowledge_base.get_item_data(weapon)
+        if not weapon_data:
+            return False  # Unknown weapon, assume not appropriate
+        
+        weapon_level = weapon_data.get('level', 1)
+        return weapon_level <= player_level
+
+    def _get_armor_slots(self, character_data) -> list:
+        """Get armor slots from character data structure."""
+        if hasattr(character_data, 'data'):
+            char_data = character_data.data
+            return [key for key in char_data.keys() if key != 'weapon']
+        else:
+            return [attr for attr in dir(character_data) 
+                   if not attr.startswith('_') and attr != 'weapon']
 
     def __repr__(self):
         return "AnalyzeCombatViabilityAction()"

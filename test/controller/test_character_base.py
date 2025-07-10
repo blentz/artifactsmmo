@@ -5,7 +5,7 @@ from typing import Dict, Optional
 from unittest.mock import Mock
 
 from artifactsmmo_api_client.client import AuthenticatedClient
-from src.controller.actions.character_base import CharacterActionBase
+from src.controller.actions.base.character import CharacterActionBase
 from src.controller.actions.base import ActionResult
 
 from test.fixtures import MockActionContext

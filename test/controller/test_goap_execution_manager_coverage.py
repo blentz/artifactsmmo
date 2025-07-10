@@ -46,16 +46,16 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir)
     
-    def test_load_start_state_defaults_exception(self):
-        """Test _load_start_state_defaults with exception."""
-        self.goap_manager._start_state_config = None  # Clear cache
+    def test_session_state_initialization(self):
+        """Test initialize_session_state method."""
+        mock_controller = Mock()
+        mock_controller.action_context = {'old_data': True}
         
-        with patch('src.controller.goap_execution_manager.YamlData') as mock_yaml_data:
-            mock_yaml_data.side_effect = Exception("Config error")
-            
-            result = self.goap_manager._load_start_state_defaults()
-            
-            self.assertEqual(result, {})
+        # Test that it runs without error
+        self.goap_manager.initialize_session_state(mock_controller)
+        
+        # Should clear action context
+        self.assertEqual(mock_controller.action_context, {})
     
     def test_convert_goal_value_numeric_comparison(self):
         """Test _convert_goal_value_to_goap_format with numeric comparisons."""
@@ -137,8 +137,8 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         result = self.goap_manager._check_condition_matches(state, 'level', '>5')
         self.assertFalse(result)
     
-    def test_create_world_with_planner_basic(self):
-        """Test create_world_with_planner basic functionality."""
+    def test_create_planner_from_context_basic(self):
+        """Test create_planner_from_context basic functionality."""
         # Mock actions config
         actions_config = {
             'move': {
@@ -147,19 +147,18 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
             }
         }
         
-        start_state = {'at_location': False}
         goal_state = {'at_location': True}
         
-        world = self.goap_manager.create_world_with_planner(
-            start_state, goal_state, actions_config
+        world = self.goap_manager.create_planner_from_context(
+            goal_state, actions_config
         )
         
         self.assertIsInstance(world, World)
         self.assertEqual(self.goap_manager.current_world, world)
         self.assertIsNotNone(self.goap_manager.current_planner)
     
-    def test_create_world_with_planner_with_actions_dict(self):
-        """Test create_world_with_planner with actions dictionary."""
+    def test_create_planner_from_context_with_actions_dict(self):
+        """Test create_planner_from_context with actions dictionary."""
         actions_dict = {
             'custom_action': {
                 'conditions': {'has_item': False},
@@ -167,17 +166,16 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
             }
         }
         
-        start_state = {'has_item': False}
         goal_state = {'has_item': True}
         
-        world = self.goap_manager.create_world_with_planner(
-            start_state, goal_state, actions_dict
+        world = self.goap_manager.create_planner_from_context(
+            goal_state, actions_dict
         )
         
         self.assertIsInstance(world, World)
     
-    def test_create_world_with_planner_with_actions_list(self):
-        """Test create_world_with_planner with actions dict."""
+    def test_create_planner_from_context_with_actions_list(self):
+        """Test create_planner_from_context with actions dict."""
         # Provide actions dict
         actions_dict = {
             'action1': {
@@ -186,24 +184,22 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
             }
         }
         
-        start_state = {'at_location': False}
         goal_state = {'at_location': True}
         
-        world = self.goap_manager.create_world_with_planner(
-            start_state, goal_state, actions_dict
+        world = self.goap_manager.create_planner_from_context(
+            goal_state, actions_dict
         )
         
         self.assertIsInstance(world, World)
         self.assertIsNotNone(self.goap_manager.current_planner)
     
-    def test_create_world_with_planner_no_actions(self):
-        """Test create_world_with_planner with no actions."""
-        start_state = {'at_location': False}
+    def test_create_planner_from_context_no_actions(self):
+        """Test create_planner_from_context with no actions."""
         goal_state = {'at_location': True}
         
         # Empty actions config should not raise an error anymore
         # The world will simply have no actions available
-        world = self.goap_manager.create_world_with_planner(start_state, goal_state, {})
+        world = self.goap_manager.create_planner_from_context(goal_state, {})
         
         self.assertIsInstance(world, World)
         self.assertEqual(self.goap_manager.current_world, world)
@@ -219,14 +215,13 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
             }
         }
         
-        start_state = {'at_location': False}
         goal_state = {'at_location': True}
         
         # Mock planner calculate method
         with patch.object(Planner, 'calculate') as mock_calculate:
             mock_calculate.return_value = [{'name': 'move'}]
             
-            plan = self.goap_manager.create_plan(start_state, goal_state, actions_config)
+            plan = self.goap_manager.create_plan(goal_state, actions_config)
             
             self.assertEqual(plan, [{'name': 'move'}])
     
@@ -235,14 +230,13 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         # Empty actions config
         actions_config = {}
         
-        start_state = {'at_location': False}
         goal_state = {'impossible_goal': True}
         
         # Mock planner calculate method to return None
         with patch.object(Planner, 'calculate') as mock_calculate:
             mock_calculate.return_value = None
             
-            plan = self.goap_manager.create_plan(start_state, goal_state, actions_config)
+            plan = self.goap_manager.create_plan(goal_state, actions_config)
             
             self.assertIsNone(plan)
     
@@ -447,7 +441,6 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
     def test_is_discovery_action(self):
         """Test _is_discovery_action method."""
         # Test discovery actions from actual implementation
-        self.assertTrue(self.goap_manager._is_discovery_action('analyze_crafting_chain'))
         self.assertTrue(self.goap_manager._is_discovery_action('evaluate_weapon_recipes'))
         self.assertTrue(self.goap_manager._is_discovery_action('find_monsters'))
         self.assertTrue(self.goap_manager._is_discovery_action('find_resources'))

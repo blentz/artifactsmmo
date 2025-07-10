@@ -30,7 +30,7 @@ class TestMoveAction(BaseTest):
         self.assertFalse(hasattr(action, 'x'))
         self.assertFalse(hasattr(action, 'y'))
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_move_action_execute(self, mock_move_api):
         # Mock the API response to avoid making actual API calls
         mock_response = Mock()
@@ -63,7 +63,7 @@ class TestMoveAction(BaseTest):
         self.assertEqual(response.data.get('target_y'), self.y)
         self.assertEqual(response.data.get('cooldown'), 5)
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_move_action_already_at_destination(self, mock_move_api):
         # Mock API to raise exception for "already at destination"
         mock_move_api.side_effect = Exception('Move failed: Unexpected status code: 490\n\nResponse content:\n{"error":{"code":490,"message":"Character already at destination."}}')
@@ -84,7 +84,7 @@ class TestMoveAction(BaseTest):
         self.assertEqual(response.data.get('target_x'), self.x)
         self.assertEqual(response.data.get('target_y'), self.y)
 
-    @patch('src.controller.actions.movement_base.move_character_api')
+    @patch('src.controller.actions.base.movement.move_character_api')
     def test_move_action_other_error(self, mock_move_api):
         # Mock API to raise a different exception
         mock_move_api.side_effect = Exception('Network error')

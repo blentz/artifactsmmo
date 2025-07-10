@@ -22,8 +22,8 @@ class TestMarkEquipmentReadyAction(unittest.TestCase):
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
         # Set equipment status in context
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'steel_armor')
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'body_armor')
+        context.set(StateParameters.TARGET_ITEM, 'steel_armor')
+        context.set(StateParameters.TARGET_SLOT, 'body_armor')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)
@@ -37,8 +37,8 @@ class TestMarkEquipmentReadyAction(unittest.TestCase):
         # Create context with item data
         context = ActionContext()
         context.set(StateParameters.CHARACTER_NAME, "test_char")
-        context.set(StateParameters.EQUIPMENT_SELECTED_ITEM, 'copper_sword')
-        context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        context.set(StateParameters.TARGET_ITEM, 'copper_sword')
+        context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Execute action
         result = self.action.execute(self.mock_client, context)

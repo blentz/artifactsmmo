@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Tuple
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
-from .subgoal_mixins import MovementSubgoalMixin
+from .mixins.subgoal_mixins import MovementSubgoalMixin
 
 
 class NavigateToWorkshopAction(ActionBase, MovementSubgoalMixin):

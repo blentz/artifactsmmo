@@ -9,8 +9,8 @@ All search-related actions can inherit from this class to use consistent search 
 import math
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
-from .base import ActionBase, ActionResult
-from .mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
+from . import ActionBase, ActionResult
+from ..mixins import KnowledgeBaseSearchMixin, MapStateAccessMixin
 
 
 class SearchActionBase(ActionBase, KnowledgeBaseSearchMixin, MapStateAccessMixin):

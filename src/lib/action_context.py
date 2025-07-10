@@ -38,9 +38,7 @@ class ActionContext:
         """Set parameter using StateParameters registry."""
         self._state.set(param, value)
         
-        # Automatically set related flags
-        if param == StateParameters.EQUIPMENT_SELECTED_ITEM:
-            self._state.set(StateParameters.EQUIPMENT_HAS_SELECTED_ITEM, bool(value))
+        # Automatically set related flags - HAS_TARGET_ITEM removed, use knowledge_base.has_target_item() instead
     
     def update(self, updates: Dict[str, Any]) -> None:
         """Update multiple parameters using StateParameters registry."""
@@ -91,17 +89,8 @@ class ActionContext:
                 if char_data.get('hp', 0) > 0:
                     context.set(StateParameters.CHARACTER_ALIVE, True)
                 
-                # Equipment using StateParameters (only if not already set)
-                if not context.get(StateParameters.EQUIPMENT_WEAPON):
-                    context.set(StateParameters.EQUIPMENT_WEAPON, char_data.get('weapon', ''))
-                if not context.get(StateParameters.EQUIPMENT_ARMOR):
-                    context.set(StateParameters.EQUIPMENT_ARMOR, char_data.get('armor', ''))
-                if not context.get(StateParameters.EQUIPMENT_HELMET):
-                    context.set(StateParameters.EQUIPMENT_HELMET, char_data.get('helmet', ''))
-                if not context.get(StateParameters.EQUIPMENT_BOOTS):
-                    context.set(StateParameters.EQUIPMENT_BOOTS, char_data.get('boots', ''))
-                if not context.get(StateParameters.EQUIPMENT_SHIELD):
-                    context.set(StateParameters.EQUIPMENT_SHIELD, char_data.get('shield', ''))
+                # Equipment data removed - APIs are authoritative for current equipment state
+                # Use character API calls directly instead of duplicating in state parameters
         
         # Set dependencies from controller
         if hasattr(controller, 'knowledge_base'):
@@ -116,27 +105,5 @@ class ActionContext:
         # This method will be eliminated when inventory moves to StateParameters
         return {}
     
-    def get_equipped_item_in_slot(self, slot: str) -> Optional[str]:
-        """
-        Get equipped item using StateParameters only.
-        
-        Args:
-            slot: Equipment slot name
-            
-        Returns:
-            Item code or None
-        """
-        slot_mapping = {
-            'weapon': StateParameters.EQUIPMENT_WEAPON,
-            'armor': StateParameters.EQUIPMENT_ARMOR,
-            'helmet': StateParameters.EQUIPMENT_HELMET,
-            'boots': StateParameters.EQUIPMENT_BOOTS,
-            'shield': StateParameters.EQUIPMENT_SHIELD,
-        }
-        
-        state_param = slot_mapping.get(slot)
-        if state_param:
-            item_code = self.get(state_param, '')
-            return item_code if item_code else None
-        
-        return None
+    # get_equipped_item_in_slot removed - APIs are authoritative for current equipment state
+    # Use character API calls directly instead of state parameters

@@ -22,7 +22,7 @@ class TestSelectRecipeAction(UnifiedContextTestBase):
         self.action = SelectRecipeAction()
         self.client = Mock()
         self.context.set(StateParameters.CHARACTER_NAME, "test_character")
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, "weapon")
+        self.context.set(StateParameters.TARGET_SLOT, "weapon")
         
     def test_init(self):
         """Test action initialization."""
@@ -87,7 +87,7 @@ class TestSelectRecipeAction(UnifiedContextTestBase):
     
     def test_execute_success_armor(self):
         """Test recipe selection for armor without knowledge base."""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, "helmet")
+        self.context.set(StateParameters.TARGET_SLOT, "helmet")
         
         # Mock character response
         char_response = Mock()

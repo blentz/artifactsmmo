@@ -15,7 +15,7 @@ consolidated_states:
       boots: "string"   # Current equipped boots code or null
       target_slot: "string"  # Currently working on slot
       upgrade_status: "string"  # "none", "analyzing", "crafting", "ready", "completed"
-      selected_item: "string"  # Item selected for crafting
+      target_item: "string"  # Item selected for crafting
       gaps_analyzed: "bool"  # Whether equipment gaps have been analyzed
       item_crafted: "bool"  # Whether the selected item has been crafted
       equipped: "bool"  # Whether the new item has been equipped
@@ -28,7 +28,7 @@ consolidated_states:
       boots: null
       target_slot: null
       upgrade_status: "none"
-      selected_item: null
+      target_item: null
       gaps_analyzed: false
       item_crafted: false
       equipped: false

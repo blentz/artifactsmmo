@@ -64,7 +64,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
     def test_weapon_slot_evaluation(self):
         """Test evaluating recipes for weapon slot"""
         # Set target slot
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response
         mock_response = Mock()
@@ -81,15 +81,15 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             result = self.action.execute(self.mock_client, self.context)
             
             self.assertTrue(result.success)
-            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'wooden_staff')
-            self.assertEqual(self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT), 'weapon')
+            self.assertEqual(self.context.get(StateParameters.TARGET_ITEM), 'wooden_staff')
+            self.assertEqual(self.context.get(StateParameters.TARGET_SLOT), 'weapon')
             self.assertEqual(self.context.get(StateParameters.REQUIRED_CRAFT_SKILL), 'weaponcrafting')
             self.assertEqual(self.context.get(StateParameters.REQUIRED_WORKSHOP_TYPE), 'weaponcrafting_workshop')
             
     def test_armor_slot_evaluation(self):
         """Test evaluating recipes for armor slot"""
         # Set target slot
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'body_armor')
+        self.context.set(StateParameters.TARGET_SLOT, 'body_armor')
         
         # Mock API response
         mock_response = Mock()
@@ -107,14 +107,14 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             if not result.success:
                 print(f"Armor test failed with error: {result.error}")
             self.assertTrue(result.success)
-            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'copper_armor')
+            self.assertEqual(self.context.get(StateParameters.TARGET_ITEM), 'copper_armor')
             self.assertEqual(self.context.get(StateParameters.REQUIRED_CRAFT_SKILL), 'gearcrafting')
             self.assertEqual(self.context.get(StateParameters.REQUIRED_WORKSHOP_TYPE), 'gearcrafting_workshop')
             
     def test_jewelry_slot_evaluation(self):
         """Test evaluating recipes for jewelry slot"""
         # Set target slot
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'ring1')
+        self.context.set(StateParameters.TARGET_SLOT, 'ring1')
         
         # Mock character with jewelry materials  
         self.character_state.data['inventory'].append({'code': 'copper_ore', 'quantity': 3})
@@ -134,9 +134,9 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
             if not result.success:
                 print(f"Jewelry test failed with error: {result.error}")
-                print(f"Target slot: {self.context.get(StateParameters.EQUIPMENT_TARGET_SLOT)}")
+                print(f"Target slot: {self.context.get(StateParameters.TARGET_SLOT)}")
             self.assertTrue(result.success)
-            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'copper_ring')
+            self.assertEqual(self.context.get(StateParameters.TARGET_ITEM), 'copper_ring')
             self.assertEqual(self.context.get(StateParameters.REQUIRED_CRAFT_SKILL), 'jewelrycrafting')
             self.assertEqual(self.context.get(StateParameters.REQUIRED_WORKSHOP_TYPE), 'jewelrycrafting_workshop')
             
@@ -148,7 +148,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
         
     def test_unknown_slot_fails(self):
         """Test that unknown equipment slot causes failure"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'unknown_slot')
+        self.context.set(StateParameters.TARGET_SLOT, 'unknown_slot')
         
         result = self.action.execute(self.mock_client, self.context)
         
@@ -156,7 +156,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
         
     def test_no_craftable_recipes_fails(self):
         """Test that no craftable recipes causes failure"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response with no recipes
         mock_response = Mock()
@@ -171,7 +171,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
     def test_insufficient_skill_level_filters_out(self):
         """Test that recipes requiring too high skill level are filtered out"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response with high-level recipe
         mock_response = Mock()
@@ -190,7 +190,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
     def test_material_availability_scoring(self):
         """Test that recipes with available materials score higher"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response with two recipes
         mock_response = Mock()
@@ -212,11 +212,11 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
             self.assertTrue(result.success)
             # Should select the one with available materials
-            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'wooden_staff')
+            self.assertEqual(self.context.get(StateParameters.TARGET_ITEM), 'wooden_staff')
             
     def test_stat_improvement_scoring(self):
         """Test that recipes with better stats score higher"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response with recipes having different stats
         mock_response = Mock()
@@ -238,11 +238,11 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
             self.assertTrue(result.success)
             # Should select the one with better stats
-            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'ash_staff')
+            self.assertEqual(self.context.get(StateParameters.TARGET_ITEM), 'ash_staff')
             
     def test_level_appropriateness_filtering(self):
         """Test that recipes too high level or too low level are filtered out"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         # Mock API response with inappropriate level recipes
         mock_response = Mock()
@@ -266,7 +266,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
     def test_no_current_equipment_handles_gracefully(self):
         """Test that missing current equipment is handled gracefully"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'helmet')
+        self.context.set(StateParameters.TARGET_SLOT, 'helmet')
         
         # Remove current equipment
         self.character_state.data['equipment'] = {}
@@ -285,11 +285,11 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             result = self.action.execute(self.mock_client, self.context)
             
             self.assertTrue(result.success)
-            self.assertEqual(self.context.get(StateParameters.SELECTED_ITEM), 'copper_helmet')
+            self.assertEqual(self.context.get(StateParameters.TARGET_ITEM), 'copper_helmet')
             
     def test_api_error_handling(self):
         """Test that API errors are handled gracefully"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         with patch('artifactsmmo_api_client.api.items.get_all_items_items_get.sync') as mock_get_items:
             mock_get_items.side_effect = Exception("API Error")
@@ -300,7 +300,7 @@ class TestEvaluateRecipesAction(UnifiedContextTestBase):
             
     def test_no_api_client_fails(self):
         """Test that missing API client causes failure"""
-        self.context.set(StateParameters.EQUIPMENT_TARGET_SLOT, 'weapon')
+        self.context.set(StateParameters.TARGET_SLOT, 'weapon')
         
         result = self.action.execute(None, self.context)
         

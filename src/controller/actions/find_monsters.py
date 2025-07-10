@@ -7,8 +7,8 @@ from src.lib.state_parameters import StateParameters
 from src.game.globals import CombatStatus, CommonStatus
 
 from .base import ActionResult
-from .coordinate_mixin import CoordinateStandardizationMixin
-from .search_base import SearchActionBase
+from .mixins.coordinate_mixin import CoordinateStandardizationMixin
+from .base.search import SearchActionBase
 
 
 class FindMonstersAction(SearchActionBase, CoordinateStandardizationMixin):

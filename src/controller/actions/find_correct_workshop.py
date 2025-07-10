@@ -9,7 +9,7 @@ from src.lib.state_parameters import StateParameters
 
 from .base import ActionResult
 from .find_workshops import FindWorkshopsAction
-from .subgoal_mixins import MovementSubgoalMixin
+from .mixins.subgoal_mixins import MovementSubgoalMixin
 
 
 class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
@@ -51,7 +51,7 @@ class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
         character_x = context.get(StateParameters.CHARACTER_X)
         character_y = context.get(StateParameters.CHARACTER_Y)
         search_radius = context.get(StateParameters.SEARCH_RADIUS, 10)
-        item_code = context.get(StateParameters.ITEM_CODE) or context.get(StateParameters.SELECTED_ITEM)
+        item_code = context.get(StateParameters.ITEM_CODE) or context.get(StateParameters.TARGET_ITEM)
         character_name = context.get(StateParameters.CHARACTER_NAME)
         
         if not item_code:
@@ -134,11 +134,9 @@ class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
                     workshop_type=required_workshop,
                     required_skill=required_skill,
                     item_code=item_code,
-                    workshop_x=target_x,
-                    workshop_y=target_y,
                     location=(target_x, target_y),  # For test compatibility
-                    target_x=target_x,  # For consistency
-                    target_y=target_y,  # For consistency
+                    target_x=target_x,  # Standardized location parameter
+                    target_y=target_y,  # Standardized location parameter
                     distance=0,  # Already at workshop
                     already_at_workshop=True
                 )
@@ -158,11 +156,9 @@ class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
                 'workshop_type': required_workshop,
                 'required_skill': required_skill,
                 'item_code': item_code,
-                'workshop_x': target_x,
-                'workshop_y': target_y,
                 'location': (target_x, target_y),  # For test compatibility
-                'target_x': target_x,  # For subgoal compatibility
-                'target_y': target_y,  # For subgoal compatibility  
+                'target_x': target_x,  # Standardized location parameter
+                'target_y': target_y,  # Standardized location parameter
                 'distance': self._calculate_distance(character_x, character_y, target_x, target_y),
                 'already_at_workshop': False
             })
@@ -187,8 +183,8 @@ class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
             workshop_type=required_workshop,
             required_skill=required_skill,
             item_code=item_code,
-            workshop_x=target_x,
-            workshop_y=target_y,
+            target_x=target_x,  # Standardized location parameter
+            target_y=target_y,  # Standardized location parameter
             moved_to_workshop=True
         )
 

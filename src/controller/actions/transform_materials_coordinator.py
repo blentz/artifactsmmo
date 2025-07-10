@@ -12,7 +12,7 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
 from .base import ActionBase, ActionResult
-from .subgoal_mixins import WorkflowSubgoalMixin
+from .mixins.subgoal_mixins import WorkflowSubgoalMixin
 
 
 class TransformMaterialsCoordinatorAction(ActionBase, WorkflowSubgoalMixin):
