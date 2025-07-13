@@ -88,9 +88,10 @@ async def task(character_name=None, args=None):
         
         # Create and set map state for persistence
         map_state = MapState(client=client, name="map")
-        map_state.set_learning_callback(controller.learn_from_map_exploration)
+        # Learning callback removed - methods were replaced with KnowledgeBase helpers
+        # that actions can use directly when needed
         controller.set_map_state(map_state)
-        logging.info("Map state initialized for data persistence with learning callbacks")
+        logging.info("Map state initialized for data persistence")
         
         # Load all game world data using bulk API calls
         bulk_loader = BulkDataLoader()

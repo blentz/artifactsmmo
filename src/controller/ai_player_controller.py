@@ -18,7 +18,7 @@ from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
-from src.lib.unified_state_context import UnifiedStateContext
+from src.lib.unified_state_context import UnifiedStateContext, get_unified_context
 
 # GOAP functionality now handled by GOAPExecutionManager
 from src.lib.state_loader import StateManagerMixin
@@ -32,7 +32,7 @@ from .goal_manager import GOAPGoalManager
 from .goap_execution_manager import GOAPExecutionManager
 from .learning_manager import LearningManager
 from .mission_executor import MissionExecutor
-from .skill_goal_manager import SkillGoalManager, SkillType
+# SkillGoalManager removed - use existing goals instead
 
 # Specialized managers for business logic
 from .state_computation_manager import StateComputationManager
@@ -61,7 +61,7 @@ class AIPlayerController(StateManagerMixin):
         self.action_executor = ActionExecutor()
         # Cooldown handling moved to ActionBase for architecture compliance
         self.mission_executor = MissionExecutor(self.goal_manager, self)
-        self.skill_goal_manager = SkillGoalManager()
+        # SkillGoalManager removed - use existing goals instead
         self.goap_execution_manager = GOAPExecutionManager(self.action_executor.factory)
         
         # Initialize specialized managers for business logic
@@ -80,10 +80,9 @@ class AIPlayerController(StateManagerMixin):
         
         # Character and map states are created when needed
         self.character_state: Optional[CharacterState] = None
-        self.map_state: Optional[MapState] = None
         
         # Initialize learning manager after states are available
-        self.learning_manager = LearningManager(self.knowledge_base, self.map_state, self.client)
+        self.learning_manager = LearningManager(self.knowledge_base, self.knowledge_base.map_state, self.client)
         
         # Current plan and execution state
         self.current_plan: List[Dict] = []
@@ -109,13 +108,33 @@ class AIPlayerController(StateManagerMixin):
         
     def set_character_state(self, character_state: CharacterState) -> None:
         """
-        Set the current character state.
+        Set the current character state by updating the unified context singleton.
+        
+        Following docs/ARCHITECTURE.md: UnifiedStateContext is the single source of truth.
+        No separate character state storage - all data goes directly to the singleton.
         
         Args:
             character_state: The character state to use
         """
+        # Store reference for API compatibility but don't use for state data
         self.character_state = character_state
-        self.logger.info(f"Character state set: {character_state}")
+        
+        # Update the singleton directly - no separate state storage
+        unified_context = get_unified_context()
+        
+        if hasattr(character_state, 'data') and character_state.data:
+            char_data = character_state.data
+            unified_context.update({
+                StateParameters.CHARACTER_NAME: character_state.name,
+                StateParameters.CHARACTER_LEVEL: char_data.get('level', 1),
+                StateParameters.CHARACTER_HP: char_data.get('hp', 0),
+                StateParameters.CHARACTER_MAX_HP: char_data.get('max_hp', 0),
+                StateParameters.CHARACTER_X: char_data.get('x', 0),
+                StateParameters.CHARACTER_Y: char_data.get('y', 0),
+                StateParameters.CHARACTER_COOLDOWN_ACTIVE: char_data.get('cooldown_expiry', 0) > 0,
+            })
+        
+        self.logger.info(f"Updated unified context with character data: {character_state.name}")
         # Invalidate location-based states when character is set/changed
         self._invalidate_location_states()
         
@@ -145,18 +164,16 @@ class AIPlayerController(StateManagerMixin):
         
     def set_map_state(self, map_state: MapState) -> None:
         """
-        Set the current map state.
+        Set the map state in knowledge base (single source of truth).
         
         Args:
             map_state: The map state to use
         """
-        self.map_state = map_state
-        
-        # Update knowledge base with map state for location analysis
+        # Update knowledge base with map state - single source of truth
         if self.knowledge_base:
             self.knowledge_base.map_state = map_state
             
-        self.logger.info("Map state set and integrated with knowledge base")
+        self.logger.info("Map state set in knowledge base (single source of truth)")
         
     # GOAP planning is now handled by GOAPExecutionManager
             
@@ -358,9 +375,7 @@ class AIPlayerController(StateManagerMixin):
         # Reload learning manager configuration
         if hasattr(self, 'learning_manager'):
             self.learning_manager.reload_configuration()
-        # Reload skill goal manager configuration
-        if hasattr(self, 'skill_goal_manager'):
-            self.skill_goal_manager.reload_configuration()
+        # SkillGoalManager removed - use existing goals instead
         self.logger.info("Configurations reloaded including all managers")
             
     def execute_plan(self) -> bool:
@@ -380,7 +395,6 @@ class AIPlayerController(StateManagerMixin):
         self.plan_action_context.client = self.client
         self.plan_action_context.character_state = self.character_state
         self.plan_action_context.world_state = self.world_state
-        self.plan_action_context.map_state = self.map_state
         self.plan_action_context.knowledge_base = self.knowledge_base
         
         # Update character info if character_state is available
@@ -483,37 +497,6 @@ class AIPlayerController(StateManagerMixin):
         }
         
 
-    def _apply_computed_state_flags(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply computed state flags using StateComputationManager.
-        
-        Args:
-            state: Current state dictionary
-            
-        Returns:
-            State dictionary with computed boolean flags added
-        """
-        # Character status computed flags
-        if 'character_status' in state:
-            char_flags = self.state_computation_manager.compute_character_flags(self.character_state)
-            state['character_status'].update(char_flags)
-            
-        # Equipment status computed flags
-        if 'equipment_status' in state:
-            eq_flags = self.state_computation_manager.compute_equipment_flags(self.character_state)
-            state['equipment_status'].update(eq_flags)
-            
-        # Combat context computed flags
-        if 'combat_context' in state:
-            combat_flags = self.state_computation_manager.compute_combat_flags(self.knowledge_base, self.character_state)
-            state['combat_context'].update(combat_flags)
-            
-        # Resource availability computed flags
-        if 'resource_availability' in state:
-            resource_flags = self.state_computation_manager.compute_resource_flags(self.map_state)
-            state['resource_availability'].update(resource_flags)
-            
-        return state
 
     def get_current_world_state(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
@@ -531,11 +514,19 @@ class AIPlayerController(StateManagerMixin):
         # Refresh context from external sources if requested
         if force_refresh:
             self._refresh_character_state()
-            context.update_from_context(
-                character_state=self.character_state,
-                map_state=self.map_state,
-                knowledge_base=self.knowledge_base
-            )
+            
+            # Update unified context directly (singleton pattern - no external state objects)
+            if hasattr(self, 'character_state') and self.character_state and hasattr(self.character_state, 'data'):
+                char_data = self.character_state.data
+                context.update({
+                    StateParameters.CHARACTER_NAME: self.character_state.name,
+                    StateParameters.CHARACTER_LEVEL: char_data.get('level', 1),
+                    StateParameters.CHARACTER_HP: char_data.get('hp', 0),
+                    StateParameters.CHARACTER_MAX_HP: char_data.get('max_hp', 0),
+                    StateParameters.CHARACTER_X: char_data.get('x', 0),
+                    StateParameters.CHARACTER_Y: char_data.get('y', 0),
+                    StateParameters.CHARACTER_COOLDOWN_ACTIVE: char_data.get('cooldown_expiry', 0) > 0,
+                })
         
         # Return all parameters from unified state context
         state = context.get_all_parameters()
@@ -593,229 +584,18 @@ class AIPlayerController(StateManagerMixin):
         """
         return self.mission_executor.execute_level_progression(target_level)
     
-    def skill_up_goal(self, skill_type: SkillType, target_level: int) -> bool:
-        """
-        Execute skill progression using skill-specific goal templates.
-        
-        Supports all crafting, gathering, and combat skills with configurable progression.
-        
-        Args:
-            skill_type: The skill to level up (e.g., SkillType.WOODCUTTING)
-            target_level: The target skill level to reach
-            
-        Returns:
-            True if target skill level was reached, False otherwise
-        """
-        if not self.client or not self.character_state:
-            self.logger.error("Cannot execute skill progression without client and character state")
-            return False
-        
-        current_state = self.get_current_world_state()
-        return self.skill_goal_manager.achieve_skill_goal_with_goap(
-            skill_type, target_level, current_state, self
-        )
     
-    def get_skill_progression_strategy(self, skill_type: SkillType, current_level: int) -> Dict[str, Any]:
-        """
-        Get optimal progression strategy for a skill at a given level.
-        
-        Delegates to SkillGoalManager for skill-specific optimization.
-        
-        Args:
-            skill_type: The skill to get strategy for
-            current_level: Current skill level
-            
-        Returns:
-            Strategy dictionary with actions and priorities
-        """
-        return self.skill_goal_manager.get_skill_progression_strategy(skill_type, current_level)
-    
-    def get_available_skills(self) -> List[SkillType]:
-        """
-        Get list of skills that have goal templates defined.
-        
-        Returns:
-            List of SkillType enums for available skills
-        """
-        return self.skill_goal_manager.get_available_skills()
 
-    def find_and_move_to_level_appropriate_monster(self, search_radius: int = 10, level_range: int = 2) -> bool:
-        """
-        Find the nearest level-appropriate monster location and move the character there.
-        
-        Now uses GOAP action execution for configurable monster search and movement.
-
-        Args:
-            search_radius: The maximum radius to search for monsters (default: 10)
-            level_range: Acceptable level range (+/-) for monster selection (default: 2)
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.client or not self.character_state:
-            self.logger.error("Cannot find monsters without API client and character state")
-            return False
-
-        try:
-            # ActionFactory will auto-load parameters from default_actions.yaml
-            # Set search parameters in context for the action to use
-            context = self._build_execution_context('find_and_move_to_monster')
-            context.set(StateParameters.SEARCH_RADIUS, search_radius)
-            context.set(StateParameters.LEVEL_RANGE, level_range)
-            
-            result = self.action_executor.execute_action('find_and_move_to_monster', self.client, context)
-            
-            return result.success
-            
-        except Exception as e:
-            self.logger.error(f"Error finding and moving to level-appropriate monster: {e}")
-            return False
 
     # Learning and Knowledge Methods
 
-    def learn_from_map_exploration(self, x: int, y: int, map_response) -> None:
-        """
-        Learn from exploring a map location (integrates with MapState).
-        
-        Args:
-            x: X coordinate explored
-            y: Y coordinate explored  
-            map_response: Response from map API call
-        """
-        try:
-            if hasattr(map_response, 'data') and map_response.data:
-                map_data = map_response.data.to_dict() if hasattr(map_response.data, 'to_dict') else map_response.data
-                
-                # Ensure map_state exists and let it handle location storage
-                if not self.map_state:
-                    self.map_state = MapState(self.client)
-                
-                # MapState will handle the location caching automatically when scan() is called
-                # We just need to learn from the content if it exists
-                content = map_data.get('content')
-                if content:
-                    raw_content_type = content.get('type', content.get('type_', 'unknown'))
-                    content_code = content.get('code', 'unknown')
-                    
-                    # Use raw content type directly - knowledge base handles categorization
-                    content_type = raw_content_type if raw_content_type != 'unknown' else 'resource'
-                    
-                    # Learn from content discovery
-                    self.logger.debug(f"🔍 About to learn {content_type} '{content_code}' at ({x}, {y})")
-                    self.logger.debug(f"🔍 Raw content type: '{raw_content_type}', Categorized as: '{content_type}'")
-                    self.logger.debug(f"🔍 Content attributes: {list(content.keys())}")
-                    self.logger.debug(f"🔍 Knowledge base type: {type(self.knowledge_base)}")
-                    self.logger.debug(f"🔍 Knowledge base filename: {getattr(self.knowledge_base, 'filename', 'no filename')}")
-                    
-                    self.knowledge_base.learn_from_content_discovery(
-                        content_type, content_code, x, y, content
-                    )
-                    
-                    self.logger.debug(f"🔍 Knowledge base data after learning: {list(self.knowledge_base.data.keys())}")
-                    
-                    self.knowledge_base.save()
-                    self.logger.debug("🔍 Knowledge base saved")
-                    
-                    self.logger.info(f"🧠 Learned: {content_type} '{content_code}' at ({x}, {y})")
-                else:
-                    self.logger.debug(f"🧠 Explored empty location ({x}, {y})")
-                    
-        except Exception as e:
-            self.logger.warning(f"Failed to learn from map exploration at ({x}, {y}): {e}")
-            # If it's a serialization error, try to clean up the knowledge base
-            if 'cannot represent an object' in str(e) or 'DropSchema' in str(e):
-                self.logger.info("Detected DropSchema serialization error - cleaning knowledge base")
-                try:
-                    self.knowledge_base._sanitize_data()
-                    self.knowledge_base.save()
-                    self.logger.info("Knowledge base cleaned and saved successfully")
-                except Exception as cleanup_error:
-                    self.logger.error(f"Failed to clean knowledge base: {cleanup_error}")
-    
-
-    def learn_from_combat(self, monster_code: str, result: str, pre_combat_hp: int = None, fight_data: Dict = None, combat_context: Dict = None) -> None:
-        """
-        Learn from combat experience.
-        
-        Args:
-            monster_code: Code of the monster fought
-            result: Combat result ('win', 'loss', 'flee')
-            pre_combat_hp: Character HP before combat
-            fight_data: Additional fight information (XP, gold, drops, turns)
-            combat_context: Additional combat context (pre_combat_hp, post_combat_hp)
-        """
-        try:
-            if not self.character_state:
-                return
-                
-            character_data = self.character_state.data.copy()
-            
-            # Use post-combat HP from context if available (more accurate than character_state)
-            if combat_context and 'post_combat_hp' in combat_context and combat_context['post_combat_hp'] is not None:
-                character_data['hp'] = combat_context['post_combat_hp']
-                self.logger.debug(f"🔍 Using post-combat HP from context: {combat_context['post_combat_hp']}")
-            
-            # Handle pre-combat HP properly - try to calculate actual pre-combat HP
-            if pre_combat_hp is not None and pre_combat_hp > 0:
-                character_data['hp_before'] = pre_combat_hp
-            else:
-                # If no pre-combat HP provided, try to estimate from current state
-                current_hp = character_data.get('hp', 0)
-                max_hp = character_data.get('max_hp', 125)
-                
-                # If character is at full health now but we know there was a fight,
-                # they likely rested between combat and learning
-                if current_hp == max_hp and result == 'loss':
-                    # For loss, estimate pre-combat HP was full before taking damage
-                    # We can estimate damage from fight data or use a reasonable default
-                    estimated_damage = 50  # Default damage estimate for failed fights
-                    if fight_data and fight_data.get('turns', 0) > 0:
-                        # Estimate based on turns - more turns = more damage
-                        estimated_damage = min(max_hp - 10, fight_data.get('turns', 1) * 5)
-                    character_data['hp_before'] = max_hp
-                else:
-                    character_data['hp_before'] = current_hp
-                
-            # Record combat result with fight data
-            self.knowledge_base.record_combat_result(monster_code, result, character_data, fight_data)
-            self.knowledge_base.save()
-            
-            # Log learning insights
-            success_rate = self.knowledge_base.get_monster_combat_success_rate(
-                monster_code, character_data.get('level', 1)
-            )
-            
-            if success_rate >= 0:
-                self.logger.info(f"🧠 Combat learning: {monster_code} success rate at level {character_data.get('level', 1)}: {success_rate:.1%}")
-            else:
-                self.logger.info(f"🧠 First combat data recorded for {monster_code}")
-            
-            # Log additional fight details if available
-            if fight_data:
-                xp_gained = fight_data.get('xp', 0)
-                gold_gained = fight_data.get('gold', 0)
-                turns = fight_data.get('turns', 0)
-                if xp_gained > 0:
-                    self.logger.info(f"💰 Combat rewards: {xp_gained} XP, {gold_gained} gold ({turns} turns)")
-                
-        except Exception as e:
-            self.logger.warning(f"Failed to learn from combat with {monster_code}: {e}")
-            # If it's a serialization error, try to clean up the knowledge base
-            if 'cannot represent an object' in str(e) or 'DropSchema' in str(e):
-                self.logger.info("Detected DropSchema serialization error - cleaning knowledge base")
-                try:
-                    self.knowledge_base._sanitize_data()
-                    self.knowledge_base.save()
-                    self.logger.info("Knowledge base cleaned and saved successfully")
-                except Exception as cleanup_error:
-                    self.logger.error(f"Failed to clean knowledge base: {cleanup_error}")
 
     def find_known_monsters_nearby(self, max_distance: int = 15, character_level: int = None, 
                                  level_range: int = 2) -> Optional[List[Dict]]:
         """
         Find known monster locations near the character using learned knowledge and MapState.
         
-        Delegates to LearningManager for knowledge-based monster search.
+        Uses KnowledgeBase directly for data lookup (architecturally compliant).
         
         Args:
             max_distance: Maximum distance to search
@@ -825,82 +605,41 @@ class AIPlayerController(StateManagerMixin):
         Returns:
             List of monster location info dictionaries or None
         """
-        return self.learning_manager.find_known_monsters_nearby(
-            self.character_state, max_distance, character_level, level_range
-        )
-
-    def intelligent_monster_search(self, search_radius: int = 8) -> bool:
-        """
-        Intelligent monster search that combines learned knowledge with exploration.
-        
-        Now uses GOAP action execution for configurable intelligent search.
-        
-        Args:
-            search_radius: Maximum radius to search
-            
-        Returns:
-            True if monster was found and character moved to it, False otherwise
-        """
-        if not self.client or not self.character_state:
-            return False
+        if not self.character_state:
+            return None
             
         try:
-            # ActionFactory will auto-load parameters from default_actions.yaml
-            # Set search parameters in context for the action to use
-            context = self._build_execution_context('intelligent_monster_search')
-            context.set(StateParameters.SEARCH_RADIUS, search_radius)
+            current_x = self.character_state.data.get('x', 0)
+            current_y = self.character_state.data.get('y', 0)
+            char_level = character_level or self.character_state.data.get('level', 1)
             
-            result = self.action_executor.execute_action('intelligent_monster_search', self.client, context)
+            # Use knowledge base directly for monster search
+            suitable_monsters = self.knowledge_base.find_suitable_monsters(
+                character_level=char_level,
+                level_range=level_range,
+                max_distance=max_distance,
+                current_x=current_x,
+                current_y=current_y
+            )
             
-            return result.success
+            return suitable_monsters if suitable_monsters else None
             
         except Exception as e:
-            self.logger.error(f"Error in intelligent monster search: {e}")
-            return False
+            self.logger.warning(f"Error finding known monsters nearby: {e}")
+            return None
 
-    def get_learning_insights(self) -> Dict:
-        """
-        Get insights and statistics about what the AI has learned.
-        
-        Delegates to LearningManager for YAML-configurable insights generation.
-        
-        Returns:
-            Dictionary containing learning statistics and insights
-        """
-        return self.learning_manager.get_learning_insights()
 
-    def optimize_with_knowledge(self, goal_type: str = None) -> Dict[str, Any]:
-        """
-        Use learned knowledge to optimize planning and decision making.
-        
-        Delegates to LearningManager for YAML-configurable optimization suggestions.
-        
-        Args:
-            goal_type: Type of goal to optimize for ('combat', 'exploration', 'resources')
-            
-        Returns:
-            Dictionary with optimization suggestions
-        """
-        return self.learning_manager.optimize_with_knowledge(self.character_state, goal_type)
 
     def learn_all_game_data_efficiently(self) -> Dict:
         """
         Learn about all available game data using efficient get_all_* API calls.
         
-        This replaces inefficient map tile-by-tile scanning with direct API queries
-        for resources, monsters, items, NPCs, and map locations.
-        Should be called once during initialization or when comprehensive game knowledge is needed.
+        Uses KnowledgeBase directly for data loading (architecturally compliant).
+        This replaces inefficient map tile-by-tile scanning with direct API queries.
         
         Returns:
             Dictionary with comprehensive learning results and statistics
         """
-        if not hasattr(self, 'learning_manager') or not self.learning_manager:
-            return {
-                'success': False,
-                'error': 'Learning manager not available',
-                'stats': {'total': 0}
-            }
-        
         if not self.client:
             return {
                 'success': False,
@@ -909,17 +648,38 @@ class AIPlayerController(StateManagerMixin):
             }
         
         self.logger.info("🚀 Starting comprehensive game data learning...")
-        result = self.learning_manager.learn_all_game_data_bulk(self.client)
         
-        if result.get('success'):
-            stats = result.get('stats', {})
-            self.logger.info(f"✅ Game data learning complete: {stats.get('total', 0)} total items learned")
-        else:
-            errors = result.get('errors', [])
-            if errors:
-                self.logger.warning(f"⚠️ Game data learning had errors: {'; '.join(errors)}")
-            else:
-                self.logger.warning(f"⚠️ Game data learning failed: {result.get('error', 'Unknown error')}")
+        # Use KnowledgeBase bulk learning methods directly
+        total_stats = {'resources': 0, 'total': 0}
+        results = {'success': True, 'stats': total_stats, 'details': {}, 'errors': []}
         
-        return result
+        try:
+            # Learn all data types using KnowledgeBase methods directly
+            if hasattr(self.knowledge_base, 'learn_all_resources_bulk'):
+                resource_result = self.knowledge_base.learn_all_resources_bulk(self.client)
+                total_stats['resources'] = resource_result.get('total_resources_learned', 0)
+                results['details']['resources'] = resource_result
+                if not resource_result.get('success'):
+                    results['errors'].append(f"Resources: {resource_result.get('error', 'Unknown error')}")
+            
+            # Calculate total
+            total_stats['total'] = total_stats['resources']
+            
+            # Update overall success based on errors
+            if results['errors']:
+                results['success'] = False
+                
+            self.logger.info(f"✅ Game data learning complete: {total_stats['total']} total items learned")
+            return results
+            
+        except Exception as e:
+            error_msg = f"Failed bulk learning: {str(e)}"
+            self.logger.error(f"❌ {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg,
+                'stats': total_stats,
+                'details': results.get('details', {}),
+                'errors': results.get('errors', []) + [error_msg]
+            }
 

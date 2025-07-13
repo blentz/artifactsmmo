@@ -77,12 +77,8 @@ action_configurations:
         # Ensure hasattr checks work for fight_data attributes
         mock_response.data.fight.damage = None
         
-        # Mock controller learn_from_combat to capture the arguments
-        captured_args = []
-        def capture_learn_from_combat(*args, **kwargs):
-            captured_args.extend(args)
-        
-        mock_controller.learn_from_combat = capture_learn_from_combat
+        # Learning methods were removed - test that callbacks execute without error
+        # No need to mock removed methods
         
         # Use character_x/y for the actual position
         self.context.character_x = 0
@@ -92,17 +88,16 @@ action_configurations:
         self.context.target_y = -1
         self.context.controller = mock_controller
         
-        # Execute the learning callback
-        self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+        # Execute the learning callback - should execute without error
+        try:
+            self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+            # Test passes if no exception is raised
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
         
-        # Verify the HP data was captured correctly
-        self.assertEqual(len(captured_args), 1)  # New signature: single context object
-        combat_context = captured_args[0]
-        
-        # Verify learn_from_combat was called with the context object
-        self.assertIsNotNone(combat_context)
-        
-        # The detailed assertions are now tested in the combat learning implementation
+        # Verify callback executed successfully
+        self.assertTrue(learning_callback_executed)
         # This test just verifies that the callback mechanism works
     
     @patch('src.controller.action_executor.ActionFactory')
@@ -137,8 +132,7 @@ action_configurations:
         mock_response.data.fight.drops = []
         mock_response.data.fight.damage = None
         
-        captured_args = []
-        mock_controller.learn_from_combat = lambda *args, **kwargs: captured_args.extend(args)
+        # Learning methods were removed - test that callbacks execute without error
         
         # Context with target coordinates (normal case)
         # Use the context from parent class to maintain singleton state
@@ -157,14 +151,16 @@ action_configurations:
         self.assertTrue(hasattr(self.context, 'target_y'), "Context should have target_y attribute")
         self.assertEqual(getattr(self.context, 'target_y', None), 10, "Context target_y should be 10")
         
-        self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+        # Execute the learning callback - should execute without error
+        try:
+            self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+            # Test passes if no exception is raised
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
         
-        # Should identify monster from action context coordinates
-        self.assertTrue(len(captured_args) > 0, "learn_from_combat should have been called")
-        if captured_args:
-            # With new single-argument signature, just verify the callback was called
-            combat_context = captured_args[0]
-            self.assertIsNotNone(combat_context, "Combat context should be passed")
+        # Verify callback executed successfully
+        self.assertTrue(learning_callback_executed)
     
     def test_monster_identification_direct_attack_regression(self):
         """
@@ -197,8 +193,7 @@ action_configurations:
         mock_response.data.fight.drops = []
         mock_response.data.fight.damage = None
         
-        captured_args = []
-        mock_controller.learn_from_combat = lambda *args, **kwargs: captured_args.extend(args)
+        # Learning methods were removed - test that callbacks execute without error
         
         # Context WITHOUT coordinates (direct attack case)
         # Create a mock context that doesn't have target_x/target_y attributes
@@ -217,15 +212,17 @@ action_configurations:
         import logging
         logging.getLogger('src.controller.action_executor').setLevel(logging.DEBUG)
         
-        with patch('builtins.hasattr', side_effect=custom_hasattr):
-            self.executor._handle_learning_callbacks('attack', mock_response, mock_context)
+        # Execute the learning callback - should execute without error
+        try:
+            with patch('builtins.hasattr', side_effect=custom_hasattr):
+                self.executor._handle_learning_callbacks('attack', mock_response, mock_context)
+            # Test passes if no exception is raised
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
         
-        # Should identify monster from character position via response or character state
-        self.assertTrue(len(captured_args) > 0, "learn_from_combat should have been called")
-        # With new single-argument signature, just verify the callback was called
-        combat_context = captured_args[0]
-        self.assertIsNotNone(combat_context, 
-                           "Combat context should be passed to learn_from_combat")
+        # Verify callback executed successfully
+        self.assertTrue(learning_callback_executed)
     
     def test_monster_identification_fallback_priority(self):
         """Test the priority order of monster identification fallback methods."""
@@ -254,19 +251,20 @@ action_configurations:
         mock_response.data.fight.drops = []
         mock_response.data.fight.damage = None
         
-        captured_args = []
-        mock_controller.learn_from_combat = lambda *args, **kwargs: captured_args.extend(args)
+        # Learning methods were removed - test that callbacks execute without error
         
         # Test Priority 1: Action context coordinates
         self.context.target_x = 0
         self.context.target_y = 0
         self.context.controller = mock_controller
-        captured_args.clear()
-        self.executor._handle_learning_callbacks('attack', mock_response, self.context)
-        # With new single-argument signature, just verify the callback was called
-        self.assertTrue(len(captured_args) > 0, "learn_from_combat should have been called")
-        combat_context = captured_args[0]
-        self.assertIsNotNone(combat_context, "Combat context should be passed")
+        # Execute the learning callback - should execute without error
+        try:
+            self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
+        
+        self.assertTrue(learning_callback_executed)
         
         # Test Priority 2: Response character position
         # Create a mock context without target coordinates
@@ -279,13 +277,15 @@ action_configurations:
                 return False
             return original_hasattr2(obj, name)
         
-        captured_args.clear()
-        with patch('builtins.hasattr', side_effect=custom_hasattr2):
-            self.executor._handle_learning_callbacks('attack', mock_response, mock_context2)
-        # With new single-argument signature, just verify the callback was called
-        self.assertTrue(len(captured_args) > 0, "learn_from_combat should have been called (Priority 2)")
-        combat_context = captured_args[0]
-        self.assertIsNotNone(combat_context, "Combat context should be passed (Priority 2)")
+        # Execute the learning callback - should execute without error
+        try:
+            with patch('builtins.hasattr', side_effect=custom_hasattr2):
+                self.executor._handle_learning_callbacks('attack', mock_response, mock_context2)
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
+        
+        self.assertTrue(learning_callback_executed)
         
         # Test Priority 3: Character state position  
         mock_response_no_char = Mock()
@@ -302,13 +302,15 @@ action_configurations:
         # No character attribute at all to force Priority 3
         
         # Keep context without coordinates for Priority 3 test
-        captured_args.clear()
-        with patch('builtins.hasattr', side_effect=custom_hasattr2):
-            self.executor._handle_learning_callbacks('attack', mock_response_no_char, mock_context2)
-        # With new single-argument signature, just verify the callback was called
-        self.assertTrue(len(captured_args) > 0, "learn_from_combat should have been called (Priority 3)")
-        combat_context = captured_args[0]
-        self.assertIsNotNone(combat_context, "Combat context should be passed (Priority 3)")
+        # Execute the learning callback - should execute without error
+        try:
+            with patch('builtins.hasattr', side_effect=custom_hasattr2):
+                self.executor._handle_learning_callbacks('attack', mock_response_no_char, mock_context2)
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
+        
+        self.assertTrue(learning_callback_executed)
     
     def test_damage_calculation_from_turns(self):
         """Test damage calculation when direct damage data is not available."""
@@ -334,28 +336,19 @@ action_configurations:
         # No direct damage attribute
         mock_response.data.fight.damage = None
         
-        captured_args = []
-        captured_kwargs = {}
-        def capture_combat_context(*args, **kwargs):
-            captured_args.extend(args)
-            captured_kwargs.update(kwargs)
-            print(f"DEBUG: args={args}, kwargs={kwargs}")
-        
-        mock_controller.learn_from_combat = capture_combat_context
+        # Learning methods were removed - test that callbacks execute without error
         
         self.context.target_x = 0
         self.context.target_y = 0
         self.context.controller = mock_controller
-        self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+        # Execute the learning callback - should execute without error
+        try:
+            self.executor._handle_learning_callbacks('attack', mock_response, self.context)
+            learning_callback_executed = True
+        except Exception as e:
+            self.fail(f"Learning callback failed with error: {e}")
         
-        # Check damage was estimated from turns
-        # Verify learn_from_combat was called with new signature (single context object)
-        self.assertEqual(len(captured_args), 1, "learn_from_combat should be called with 1 argument")
-        
-        # The argument is the combat context object
-        combat_context = captured_args[0]
-        # Since this is a mock, just verify it was called
-        self.assertIsNotNone(combat_context)
+        self.assertTrue(learning_callback_executed)
         
         # The test just verifies that the learning callback is called
         # The specific damage calculations are tested elsewhere

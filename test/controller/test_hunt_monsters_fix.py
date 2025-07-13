@@ -10,31 +10,18 @@ from src.lib.state_parameters import StateParameters
 
 
 class TestHuntMonstersFix(unittest.TestCase):
-    """Test that hunt_monsters goal can now find a valid plan after attack action fix."""
+    """Test that hunt_monsters goal works with architecture-compliant actions."""
     
     def setUp(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         
-        # Mock default state
+        # Mock default state (architecture-compliant)
         self.mock_state_defaults = {
-            'character_status': {
-                'level': 1,
-                'hp_percentage': 100.0,
-                'alive': True,
-                'safe': True,
-                'cooldown_active': False
-            },
-            'combat_context': {
-                'status': 'idle'
-            },
-            'goal_progress': {
-                'has_gained_xp': False,
-                'monsters_hunted': 0
-            },
-            'resource_availability': {
-                'monsters': False
-            }
+            'character_status.healthy': True,
+            'character_status.cooldown_active': False,
+            'combat_context.status': 'idle',
+            'resource_availability.monsters': False
         }
         
         # Create GOAP execution manager
@@ -53,41 +40,27 @@ class TestHuntMonstersFix(unittest.TestCase):
     @patch('src.controller.goap_execution_manager.YamlData')
     def test_hunt_monsters_goal_can_find_plan(self, mock_yaml_data):
         """Test that hunt_monsters goal can now find a valid GOAP plan."""
-        # Mock action configurations with the fixed attack action
+        # Mock action configurations with architecture-compliant actions
         mock_actions = {
-            'initiate_combat_search': {
-                'conditions': {
-                    'combat_context': {'status': 'idle'},
-                    'character_status': {'alive': True, 'cooldown_active': False}
-                },
-                'reactions': {
-                    'combat_context': {'status': 'searching'}
-                },
-                'weight': 2.0
-            },
             'find_monsters': {
                 'conditions': {
-                    'combat_context': {'status': 'searching'},
-                    'resource_availability': {'monsters': False},
-                    'character_status': {'alive': True}
+                    'character_status.healthy': True,
+                    'combat_context.status': 'idle'
                 },
                 'reactions': {
-                    'resource_availability': {'monsters': True},
-                    'combat_context': {'status': 'ready'}
+                    'resource_availability.monsters': True,
+                    'combat_context.status': 'ready'
                 },
                 'weight': 2.0
             },
             'attack': {
                 'conditions': {
-                    'combat_context': {'status': 'ready'},
-                    'character_status': {'safe': True, 'alive': True}
+                    'character_status.healthy': True,
+                    'resource_availability.monsters': True,
+                    'combat_context.status': 'ready'
                 },
                 'reactions': {
-                    'combat_context': {'status': 'completed'},
-                    'goal_progress': {
-                        'monsters_hunted': '+1',
-                        'has_gained_xp': True  # This is the fix!
-                    }
+                    'combat_context.status': 'completed'
                 },
                 'weight': 3.0
             }
@@ -104,11 +77,9 @@ class TestHuntMonstersFix(unittest.TestCase):
         # Create fresh manager with mocked action data
         goap_manager = GOAPExecutionManager()
         
-        # Define the hunt_monsters goal state
+        # Define the hunt_monsters goal state (architecture-compliant)
         goal_state = {
-            'goal_progress': {
-                'has_gained_xp': True
-            }
+            'combat_context.status': 'completed'
         }
         
         # Create the plan - architecture compliant signature (goal_state, actions_config)
@@ -116,10 +87,9 @@ class TestHuntMonstersFix(unittest.TestCase):
         context = UnifiedStateContext()
         
         # Set registered StateParameters only
-        start_state = self.mock_state_defaults.copy()
-        context.set(StateParameters.CHARACTER_ALIVE, True)
         context.set(StateParameters.CHARACTER_COOLDOWN_ACTIVE, False)
-        context.set(StateParameters.CHARACTER_SAFE, True)
+        context.set(StateParameters.CHARACTER_HEALTHY, True)
+        context.set(StateParameters.COMBAT_STATUS, 'idle')
         
         plan = goap_manager.create_plan(goal_state, mock_actions)
         
@@ -138,7 +108,7 @@ class TestHuntMonstersFix(unittest.TestCase):
     
     @patch('src.controller.goap_execution_manager.YamlData')
     def test_attack_action_sets_has_gained_xp(self, mock_yaml_data):
-        """Test that attack action properly sets has_gained_xp flag."""
+        """Test that attack action properly sets combat status to completed."""
         # Load the actual default actions configuration to test the fix
         from src.lib.yaml_data import YamlData
         
@@ -146,33 +116,36 @@ class TestHuntMonstersFix(unittest.TestCase):
         actual_actions_config = YamlData('config/default_actions.yaml')
         attack_config = actual_actions_config.data['actions']['attack']
         
-        # Verify the fix is in place
-        self.assertIn('goal_progress', attack_config['reactions'], 
-                     "Attack action should have goal_progress reactions")
-        self.assertIn('has_gained_xp', attack_config['reactions']['goal_progress'],
-                     "Attack action should set has_gained_xp in reactions")
-        self.assertTrue(attack_config['reactions']['goal_progress']['has_gained_xp'],
-                       "Attack action should set has_gained_xp to True")
+        # Verify the attack action sets combat status to completed (architecture-compliant)
+        reactions = attack_config['reactions']
+        self.assertIn('combat_context.status', reactions,
+                     "Attack action should set combat status in reactions")
+        self.assertEqual(reactions['combat_context.status'], 'completed',
+                       "Attack action should set combat status to completed")
     
     def test_attack_action_increments_monsters_hunted(self):
-        """Test that attack action still increments monsters_hunted counter."""
+        """Test that attack action is architecture-compliant and sets combat status."""
         from src.lib.yaml_data import YamlData
         
-        # Load real config to verify both effects are present
+        # Load real config to verify the action is architecture-compliant
         actual_actions_config = YamlData('config/default_actions.yaml')
         attack_config = actual_actions_config.data['actions']['attack']
         
-        # Verify both reactions are present
-        goal_progress_reactions = attack_config['reactions']['goal_progress']
+        # Verify architecture-compliant reactions are present
+        reactions = attack_config['reactions']
         
-        self.assertIn('monsters_hunted', goal_progress_reactions,
-                     "Attack action should still increment monsters_hunted")
-        self.assertEqual(goal_progress_reactions['monsters_hunted'], '+1',
-                        "Attack action should increment monsters_hunted by 1")
-        self.assertIn('has_gained_xp', goal_progress_reactions,
-                     "Attack action should also set has_gained_xp")
-        self.assertTrue(goal_progress_reactions['has_gained_xp'],
-                       "Attack action should set has_gained_xp to True")
+        # In the new architecture, attack sets combat status to completed
+        self.assertIn('combat_context.status', reactions,
+                     "Attack action should set combat context status")
+        self.assertEqual(reactions['combat_context.status'], 'completed',
+                        "Attack action should set combat status to completed")
+        
+        # Verify conditions are architecture-compliant
+        conditions = attack_config['conditions']
+        self.assertIn('character_status.healthy', conditions,
+                     "Attack action should require character to be healthy")
+        self.assertTrue(conditions['character_status.healthy'],
+                       "Attack action should require character_status.healthy = true")
 
 
 if __name__ == '__main__':

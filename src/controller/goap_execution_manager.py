@@ -16,6 +16,7 @@ from src.lib.hierarchical_goap import HierarchicalPlanner, HierarchicalWorld
 from src.lib.actions_data import ActionsData
 from src.lib.yaml_data import YamlData
 from src.lib.unified_state_context import UnifiedStateContext
+from src.lib.state_parameters import StateParameters
 from src.game.globals import CONFIG_PREFIX
 from src.controller.knowledge.base import KnowledgeBase
 from src.controller.action_factory import ActionFactory
@@ -649,8 +650,9 @@ class GOAPExecutionManager:
             current_state = copy.deepcopy(self.current_world.values)
             self.logger.debug("Using in-memory world state for planning")
         else:
-            # Top-level goal - get fresh state
-            current_state = controller.get_current_world_state(force_refresh=False)
+            # Top-level goal - trust UnifiedStateContext singleton (architectural compliance)
+            context = UnifiedStateContext()
+            current_state = context.get_all_parameters()
         
         # Check if goal is already achieved
         if self._is_goal_achieved(goal_state, current_state):
@@ -703,11 +705,9 @@ class GOAPExecutionManager:
             iterations += 1
             
             # Check for cooldown and handle by inserting wait action and replanning
-            # Force refresh to ensure we have accurate cooldown status
-            current_state = controller.get_current_world_state(force_refresh=True)
-            # Check nested state structure for cooldown status
-            character_status = current_state.get('character_status', {})
-            if character_status.get('cooldown_active', False):
+            # Trust UnifiedStateContext singleton (architectural compliance)
+            context = UnifiedStateContext()
+            if context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE):
                 # Only insert wait action if current action isn't already a wait action
                 if action_index < len(current_plan):
                     current_action = current_plan[action_index]
@@ -721,6 +721,9 @@ class GOAPExecutionManager:
                         continue
             
             # Check if goal is achieved
+            # Trust UnifiedStateContext singleton (architectural compliance)
+            context = UnifiedStateContext()
+            current_state = context.get_all_parameters()
             if self._is_goal_achieved(goal_state, current_state):
                 self.logger.info("🎯 Goal achieved during plan execution!")
                 return True
@@ -735,21 +738,13 @@ class GOAPExecutionManager:
             
             self.logger.info(f"Executing action {action_index + 1}/{len(current_plan)}: {action_name}")
             
-            # Execute the action
-            success = controller._execute_single_action(action_name, current_action)
+            # Execute the action through proper plan-driven execution (architectural compliance)
+            # Actions must execute only through ActionExecutor as part of plans
+            action_plan = [current_action]
+            success = controller.action_executor.execute_plan(action_plan)
             
-            # Update GOAP world state with any changes from the action
-            if success and self.current_world and hasattr(self.current_world, 'values'):
-                # Get the latest world state which includes action updates
-                updated_state = controller.get_current_world_state(force_refresh=False)
-                # Update the GOAP world's values with the new state
-                for key, value in updated_state.items():
-                    if key in self.current_world.values:
-                        self.current_world.values[key] = copy.deepcopy(value)
-                    # Also update planner values if it exists
-                    if self.current_planner and hasattr(self.current_planner, 'values') and key in self.current_planner.values:
-                        self.current_planner.values[key] = copy.deepcopy(value)
-                self.logger.debug(f"Updated GOAP world state after {action_name} execution")
+            # Trust UnifiedStateContext singleton - no manual state updates needed (architectural compliance)
+            # ActionExecutor automatically maintains the singleton state
             
             # Check if action requested a subgoal
             if hasattr(controller, 'last_action_result') and controller.last_action_result:
@@ -770,14 +765,8 @@ class GOAPExecutionManager:
                         # Resume parent goal context instead of complete replanning
                         self.logger.info(f"✅ Subgoal completed successfully, resuming parent goal context")
                         
-                        # Get fresh world state that includes subgoal changes
-                        current_state = controller.get_current_world_state(force_refresh=True)
-                        
-                        # Update GOAP world with fresh state
-                        if self.current_world and hasattr(self.current_world, 'values'):
-                            for key, value in current_state.items():
-                                if key in self.current_world.values:
-                                    self.current_world.values[key] = copy.deepcopy(value)
+                        # Trust UnifiedStateContext singleton - no forced refresh needed (architectural compliance)
+                        # GOAP world is automatically synchronized with singleton
                         
                         # ActionContext is singleton - no context restoration needed
                         
@@ -835,8 +824,10 @@ class GOAPExecutionManager:
                 # Learn from the action
                 self._learn_from_action_response(action_name, controller)
                 
-                # Check if we need to replan based on new knowledge
-                updated_state = controller.get_current_world_state(force_refresh=True)
+                # Check if we need to replan based on new knowledge  
+                # Trust UnifiedStateContext singleton (architectural compliance)
+                context = UnifiedStateContext()
+                updated_state = context.get_all_parameters()
                 if self._should_replan_after_discovery(current_action, updated_state):
                     self.logger.info("📋 New knowledge acquired - replanning remaining actions")
                     remaining_plan = self._replan_from_current_position(
@@ -850,10 +841,9 @@ class GOAPExecutionManager:
             # Check for cooldown after action execution
             # Move and attack actions can put character on cooldown
             if action_name in ['move', 'attack', 'gather_resources', 'craft_item', 'rest']:
-                current_state = controller.get_current_world_state(force_refresh=True)
-                # Check nested state structure for cooldown status
-                character_status = current_state.get('character_status', {})
-                if character_status.get('cooldown_active', False):
+                # Trust UnifiedStateContext singleton (architectural compliance)
+                context = UnifiedStateContext()
+                if context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE):
                     # Insert wait action at next position if not already present
                     if action_index < len(current_plan) and current_plan[action_index].get('name') != 'wait':
                         self.logger.info("🕐 Cooldown detected after action - inserting wait action")
@@ -862,7 +852,9 @@ class GOAPExecutionManager:
                         )
         
         # Check final goal achievement after all actions complete
-        final_state = controller.get_current_world_state(force_refresh=True)
+        # Trust UnifiedStateContext singleton (architectural compliance)
+        context = UnifiedStateContext()
+        final_state = context.get_all_parameters()
         return self._is_goal_achieved(goal_state, final_state)
     
     
@@ -890,7 +882,8 @@ class GOAPExecutionManager:
         Handle cooldown by inserting wait action into current plan instead of replanning.
         """
         # Get cooldown duration
-        character_state = controller.get_current_world_state(force_refresh=True)
+        # Trust UnifiedStateContext singleton (architectural compliance)
+        context = UnifiedStateContext()
         cooldown_seconds = self._get_cooldown_duration(controller)
         
         # Check if we have a more accurate cooldown from the error response
@@ -960,36 +953,32 @@ class GOAPExecutionManager:
         Determine if an action is a discovery action that might provide new knowledge.
         
         Discovery actions should trigger replanning, execution actions should not.
+        Configuration-driven approach following docs/ARCHITECTURE.md.
         """
-        discovery_actions = {
-            'evaluate_weapon_recipes', 
-            'find_monsters',
-            'find_resources',
-            'find_workshops',
-            'find_correct_workshop',
-            'lookup_item_info',
-            'explore_map'
-        }
-        
-        return action_name in discovery_actions
+        actions_config = self._load_actions_from_config()
+        action_config = actions_config.get(action_name, {})
+        metadata = action_config.get('metadata', {})
+        return metadata.get('type') == 'discovery'
     
     def _should_replan_after_discovery(self, action: Dict[str, Any], 
                                      updated_state: Dict[str, Any]) -> bool:
         """
         Determine if replanning is needed after a discovery action.
         
-        This should check if the discovery action provided significant new knowledge
-        that would change the optimal plan.
+        Configuration-driven approach following docs/ARCHITECTURE.md.
+        Discovery actions with triggers_replan: true will cause replanning.
         """
         action_name = action.get('name', '')
         
-        # Configuration-driven replan decisions with lazy evaluation
-        if action_name == 'find_correct_workshop':
-            return False  # Don't replan if workshop was already found
-        elif action_name == 'evaluate_weapon_recipes':
-            return True  # Replan after weapon evaluation
-        else:
+        # Check if this is a discovery action that triggers replanning
+        if not self._is_discovery_action(action_name):
             return False
+            
+        # Check if action configuration specifies replanning should occur
+        actions_config = self._load_actions_from_config()
+        action_config = actions_config.get(action_name, {})
+        metadata = action_config.get('metadata', {})
+        return metadata.get('triggers_replan', False)
     
     def _replan_from_current_position(self, controller, goal_state: Dict[str, Any],
                                     config_file: str = None, 
@@ -997,7 +986,9 @@ class GOAPExecutionManager:
         """
         Replan from current position when action fails or new knowledge is acquired.
         """
-        current_state = controller.get_current_world_state(force_refresh=True)
+        # Trust UnifiedStateContext singleton (architectural compliance)
+        context = UnifiedStateContext()
+        current_state = context.get_all_parameters()
         actions_config = self._load_actions_from_config(config_file)
         
         if not actions_config:
@@ -1299,10 +1290,9 @@ class GOAPExecutionManager:
                         self.logger.info(f"⏱️ Action {action_name} failed with HTTP 499 (cooldown)")
                         return True
                         
-            # Also check current world state with fresh data
-            world_state = controller.get_current_world_state(force_refresh=True)
-            character_status = world_state.get('character_status', {})
-            if character_status.get('cooldown_active', False):
+            # Also check current state using UnifiedStateContext singleton (architectural compliance)
+            context = UnifiedStateContext()
+            if context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE):
                 self.logger.info(f"⏱️ Character is on cooldown after {action_name}")
                 return True
                 
@@ -1354,6 +1344,19 @@ class GOAPExecutionManager:
         """
         Create a recovery plan that starts with find_monsters to get fresh coordinates.
         
+        ⚠️  ARCHITECTURAL VIOLATION ⚠️
+        This method violates docs/ARCHITECTURE.md principle: "Business logic goes in actions, NOT in goal manager"
+        
+        Violations:
+        1. Contains hardcoded recovery logic (should be in actions)
+        2. Forcibly manipulates state parameters (business logic)
+        3. Makes decisions about what constitutes "recovery" (business logic)
+        4. Hardcodes action requirements (find_monsters) instead of letting GOAP plan naturally
+        5. Selectively manages action context (business logic)
+        
+        TODO: Remove this method entirely. Let GOAP plan naturally based on current state.
+        If recovery is needed, actions should request appropriate subgoals.
+        
         Args:
             controller: AI controller
             goal_state: Desired goal state  
@@ -1363,14 +1366,17 @@ class GOAPExecutionManager:
             List of action dictionaries for recovery plan
         """
         try:
-            # Get fresh state and then force it to require find_monsters
-            recovery_state = controller.get_current_world_state(force_refresh=True)
+            # Trust UnifiedStateContext singleton (architectural compliance)
+            context = UnifiedStateContext()
+            recovery_state = context.get_all_parameters().copy()
+            # ⚠️  ARCHITECTURAL VIOLATION: Forcible state manipulation is business logic
             recovery_state.update({
                 'monsters_available': False,
                 'monster_present': False,
                 'at_target_location': False
             })
             
+            # ⚠️  ARCHITECTURAL VIOLATION: Context manipulation is business logic
             # Clear action context to force fresh coordinate discovery
             if hasattr(controller, 'action_context'):
                 # Keep some context but remove location data

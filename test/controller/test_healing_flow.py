@@ -28,7 +28,7 @@ class TestHealingFlow(unittest.TestCase):
         # Set up character with low HP using StateParameters
         self.context.set(StateParameters.CHARACTER_HP, 50)
         self.context.set(StateParameters.CHARACTER_MAX_HP, 100)
-        self.context.set(StateParameters.CHARACTER_ALIVE, True)
+        self.context.set(StateParameters.CHARACTER_HEALTHY, True)
         
         action = AssessHealingNeedsAction()
         result = action.execute(self.mock_client, self.context)
@@ -43,7 +43,7 @@ class TestHealingFlow(unittest.TestCase):
         # Set up character with full HP using StateParameters
         self.context.set(StateParameters.CHARACTER_HP, 100)
         self.context.set(StateParameters.CHARACTER_MAX_HP, 100)
-        self.context.set(StateParameters.CHARACTER_ALIVE, True)
+        self.context.set(StateParameters.CHARACTER_HEALTHY, True)
         
         action = AssessHealingNeedsAction()
         result = action.execute(self.mock_client, self.context)
@@ -58,7 +58,7 @@ class TestHealingFlow(unittest.TestCase):
         # Set up character with healing needed using StateParameters
         self.context.set(StateParameters.CHARACTER_HP, 30)
         self.context.set(StateParameters.CHARACTER_MAX_HP, 100)
-        self.context.set(StateParameters.CHARACTER_ALIVE, True)
+        self.context.set(StateParameters.CHARACTER_HEALTHY, True)
         self.context.set(StateParameters.HEALING_NEEDED, True)
         
         action = InitiateHealingAction()
@@ -74,7 +74,7 @@ class TestHealingFlow(unittest.TestCase):
         # Set up character with full HP and healing in progress using StateParameters
         self.context.set(StateParameters.CHARACTER_HP, 100)
         self.context.set(StateParameters.CHARACTER_MAX_HP, 100)
-        self.context.set(StateParameters.CHARACTER_ALIVE, True)
+        self.context.set(StateParameters.CHARACTER_HEALTHY, True)
         self.context.set(StateParameters.HEALING_STATUS, 'healing_initiated')
         self.context.set(StateParameters.HEALING_METHOD, 'rest')
         

@@ -169,12 +169,15 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
             }
             mock_unified_search.return_value = mock_result
             
+            # Set up context with knowledge_base.map_state (single source of truth)
+            mock_kb = MockKnowledgeBase()
+            mock_kb.map_state = MockMapState()
+            
             context = MockActionContext(
                 character_name=self.character_name,
                 item_code=self.item_code,
                 search_radius=5,
-                knowledge_base=MockKnowledgeBase(),
-                map_state=MockMapState()
+                knowledge_base=mock_kb
             )
             result = self.action.execute(self.client, context)
         
@@ -200,12 +203,15 @@ class TestFindCorrectWorkshopAction(unittest.TestCase):
         with patch.object(self.action, 'unified_search') as mock_unified_search:
             mock_unified_search.return_value = None  # unified_search returns None when no workshop found
             
+            # Set up context with knowledge_base.map_state (single source of truth)
+            mock_kb = MockKnowledgeBase()
+            mock_kb.map_state = MockMapState()
+            
             context = MockActionContext(
                 character_name=self.character_name,
                 item_code=self.item_code,
                 search_radius=5,
-                knowledge_base=MockKnowledgeBase(),
-                map_state=MockMapState()
+                knowledge_base=mock_kb
             )
             result = self.action.execute(self.client, context)
         self.assertFalse(result.success)

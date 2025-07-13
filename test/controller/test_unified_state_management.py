@@ -16,10 +16,10 @@ class TestUnifiedStateManagement(unittest.TestCase):
     @patch('src.controller.ai_player_controller.GOAPGoalManager')
     @patch('src.controller.ai_player_controller.ActionExecutor')
     @patch('src.controller.ai_player_controller.MissionExecutor')
-    @patch('src.controller.ai_player_controller.SkillGoalManager')
+    # SkillGoalManager removed - use existing goals instead
     @patch('src.controller.ai_player_controller.GOAPExecutionManager')
     @patch('src.controller.ai_player_controller.LearningManager')
-    def setUp(self, mock_learning, mock_goap, mock_skill, mock_mission, 
+    def setUp(self, mock_learning, mock_goap, mock_mission, 
               mock_executor, mock_goal, mock_init):
         """Set up test fixtures."""
         self.mock_client = Mock()

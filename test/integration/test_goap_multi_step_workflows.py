@@ -129,7 +129,7 @@ resources:
         context = UnifiedStateContext()
         
         # Use only registered StateParameters - architecture compliant
-        context.set(StateParameters.CHARACTER_ALIVE, True)
+        context.set(StateParameters.CHARACTER_HEALTHY, True)
         context.set(StateParameters.CHARACTER_COOLDOWN_ACTIVE, False)
         context.set(StateParameters.MATERIALS_STATUS, "insufficient")
         context.set(StateParameters.MATERIALS_GATHERED, False)

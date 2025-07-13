@@ -40,21 +40,21 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.assertIn('reactions', actions['attack'])
         self.assertIn('weight', actions['attack'])
         
-        # Test RestAction (consolidated state format)
+        # Test RestAction (flat state format)
         self.assertIn('rest', actions)
         self.assertIn('conditions', actions['rest'])
         self.assertIn('reactions', actions['rest'])
         self.assertIn('weight', actions['rest'])
-        self.assertIn('character_status', actions['rest']['conditions'])
-        self.assertIn('character_status', actions['rest']['reactions'])
+        self.assertIn('character_status.healthy', actions['rest']['conditions'])
+        self.assertIn('character_status.healthy', actions['rest']['reactions'])
         
-        # Test FindMonstersAction
+        # Test FindMonstersAction (flat state format)
         self.assertIn('find_monsters', actions)
         self.assertIn('conditions', actions['find_monsters'])
         self.assertIn('reactions', actions['find_monsters'])
         self.assertIn('weight', actions['find_monsters'])
-        self.assertIn('combat_context', actions['find_monsters']['conditions'])
-        self.assertIn('resource_availability', actions['find_monsters']['reactions'])
+        self.assertIn('combat_context.status', actions['find_monsters']['conditions'])
+        self.assertIn('resource_availability.monsters', actions['find_monsters']['reactions'])
 
     def test_get_action_class_defaults_move(self) -> None:
         """Test getting default GOAP parameters for move action through ActionExecutor."""
@@ -73,8 +73,10 @@ class TestActionGoapIntegration(unittest.TestCase):
         self.assertIn('character_status', action_class.conditions)
         self.assertEqual(action_class.conditions['character_status']['cooldown_active'], False)
         self.assertEqual(action_class.conditions['character_status']['alive'], True)
-        self.assertIn('location_context', action_class.reactions)
-        self.assertEqual(action_class.reactions['location_context']['at_target'], True)
+        self.assertIn('character.x', action_class.reactions)
+        self.assertIn('character.y', action_class.reactions)
+        self.assertEqual(action_class.reactions['character.x'], 'target.x')
+        self.assertEqual(action_class.reactions['character.y'], 'target.y')
         # Weight might be a dict with action name as key
         if isinstance(action_class.weight, dict):
             self.assertEqual(action_class.weight['move'], 1.0)

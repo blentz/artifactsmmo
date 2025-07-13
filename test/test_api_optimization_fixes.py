@@ -262,8 +262,8 @@ class TestGOAPIterationOptimization(TestAPIOptimizationFixes):
             from src.lib.goap_execution_manager import GOAPExecutionManager
             self.controller.goap_execution_manager = GOAPExecutionManager()
     
-    def test_achieve_goal_with_goap_reduces_api_calls(self):
-        """Test that achieve_goal_with_goap reduces API calls through caching."""
+    def test_achieve_goal_with_goap_trusts_unified_context_singleton(self):
+        """Test that achieve_goal_with_goap trusts UnifiedStateContext singleton (architectural compliance)."""
         goal_state = {'test_goal': True}
         
         # Temporarily disable logging to avoid handler issues in tests
@@ -272,34 +272,29 @@ class TestGOAPIterationOptimization(TestAPIOptimizationFixes):
         logging.disable(logging.CRITICAL)
         
         try:
+            # Architecture compliance: GOAP system should NOT call get_current_world_state
+            # Instead it should trust the UnifiedStateContext singleton
             with patch.object(self.controller, 'get_current_world_state') as mock_get_state:
                 with patch.object(self.controller.goap_execution_manager, '_load_actions_from_config', return_value={}):
-                    # Mock state to show no cooldown so we don't get stuck in wait loop
-                    mock_get_state.return_value = {
-                        'is_on_cooldown': False,
-                        'character_alive': True,
-                        'test_goal': True  # Goal already achieved
-                    }
-                    
-                    # Run with max_iterations=3 to test caching behavior
-                    result = self.controller.goap_execution_manager.achieve_goal_with_goap(goal_state, self.controller, max_iterations=3)
-                    
-                    # Should have called get_current_world_state multiple times
-                    self.assertGreater(mock_get_state.call_count, 0)
-                    
-                    # Check that force_refresh was only True for first call
-                    call_args_list = mock_get_state.call_args_list
-                    if call_args_list:
-                        # First call should have force_refresh=True
-                        first_call_kwargs = call_args_list[0][1] if call_args_list[0][1] else {}
-                        force_refresh = first_call_kwargs.get('force_refresh', False)
-                        # Note: May be False if iterations stopped early due to goal achievement
+                    # Mock unified context with goal achieved
+                    from src.lib.unified_state_context import UnifiedStateContext
+                    with patch.object(UnifiedStateContext, 'get_all_parameters') as mock_unified_context:
+                        mock_unified_context.return_value = {
+                            'is_on_cooldown': False,
+                            'character_alive': True,
+                            'test_goal': True  # Goal already achieved
+                        }
                         
-                        # Subsequent calls should have force_refresh=False
-                        for call_args in call_args_list[1:]:
-                            call_kwargs = call_args[1] if call_args[1] else {}
-                            subsequent_force_refresh = call_kwargs.get('force_refresh', False)
-                            self.assertFalse(subsequent_force_refresh)
+                        # Run GOAP system
+                        result = self.controller.goap_execution_manager.achieve_goal_with_goap(goal_state, self.controller, max_iterations=3)
+                        
+                        # Architecture compliance: Should NOT call legacy get_current_world_state
+                        self.assertEqual(mock_get_state.call_count, 0, 
+                                       "GOAP should not call legacy get_current_world_state method")
+                        
+                        # Should trust UnifiedStateContext singleton instead
+                        self.assertGreater(mock_unified_context.call_count, 0,
+                                         "GOAP should use UnifiedStateContext singleton")
         finally:
             # Re-enable logging
             logging.disable(original_level)

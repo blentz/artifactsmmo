@@ -96,16 +96,16 @@ class TestActionContext(unittest.TestCase):
         self.assertFalse(result)  # Should return False for empty target
     
     def test_from_controller_character_data_mapping(self):
-        """Test from_controller maps character data to StateParameters."""
+        """Test from_controller creates context with controller reference."""
         context = ActionContext.from_controller(self.mock_controller)
         
-        # Verify character data mapped to StateParameters
-        self.assertEqual(context.get(StateParameters.CHARACTER_X), 10)
-        self.assertEqual(context.get(StateParameters.CHARACTER_Y), 20)
-        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 5)
-        self.assertEqual(context.get(StateParameters.CHARACTER_HP), 100)
-        self.assertEqual(context.get(StateParameters.CHARACTER_MAX_HP), 125)
-        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))  # hp > 0
+        # Architecture compliance: Character data should come from controller.character_state, not state parameters
+        # Test that context creation succeeded (behavioral test)
+        self.assertIsInstance(context, ActionContext)
+        
+        # Test that state parameters from config are accessible
+        self.assertTrue(context.get(StateParameters.CHARACTER_HEALTHY))
+        self.assertFalse(context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE))
         
         # Equipment data removed - APIs are authoritative for current equipment state
         # Test that knowledge_base and other dependencies are set
@@ -118,9 +118,12 @@ class TestActionContext(unittest.TestCase):
         
         context = ActionContext.from_controller(mock_controller)
         
-        # Should still work with defaults
-        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 1)  # Default
-        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))  # Default
+        # Architecture compliance: Character data comes from API, not state parameters
+        # Test that context creation succeeded even without character state
+        self.assertIsInstance(context, ActionContext)
+        
+        # Test that config-based state parameters work
+        self.assertTrue(context.get(StateParameters.CHARACTER_HEALTHY))  # From config defaults
     
     def test_update_multiple_parameters(self):
         """Test updating multiple parameters at once."""
@@ -177,12 +180,11 @@ class TestActionContext(unittest.TestCase):
         """Test that ActionContext gets default values from UnifiedStateContext."""
         context = ActionContext()
         
-        # Test some key default values
-        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))
-        self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 1)
+        # Test state defaults from configuration (not API-obtainable data)
         self.assertIsNone(context.get(StateParameters.TARGET_ITEM))  # TARGET_ITEM defaults to None
-        self.assertFalse(context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE))
-        self.assertEqual(context.get(StateParameters.MATERIALS_STATUS), "unknown")
+        self.assertTrue(context.get(StateParameters.CHARACTER_HEALTHY))  # From config defaults
+        self.assertFalse(context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE))  # From config defaults
+        self.assertEqual(context.get(StateParameters.MATERIALS_STATUS), "unknown")  # From config defaults
     
     def test_parameter_validation_on_invalid_updates(self):
         """Test parameter validation during bulk updates."""

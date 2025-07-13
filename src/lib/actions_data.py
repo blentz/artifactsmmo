@@ -26,6 +26,15 @@ class ActionsData(YamlData):
             Dictionary containing metadata
         """
         return self.data.get('metadata', {})
+    
+    def get_state_defaults(self):
+        """
+        Get state defaults required by GOAP actions.
+        
+        Returns:
+            Dictionary of state parameter defaults
+        """
+        return self.data.get('state_defaults', {})
 
     def get_goal_templates(self):
         """

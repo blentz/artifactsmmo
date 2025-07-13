@@ -318,10 +318,11 @@ class TestAIPlayerControllerMetaprogramming(UnifiedContextTestBase):
             
             controller = AIPlayerController(self.mock_client)
             
-            # Verify learning methods exist (even if they delegate to metaprogramming system)
-            self.assertTrue(hasattr(controller, 'learn_from_map_exploration'))
-            self.assertTrue(hasattr(controller, 'learn_from_combat'))
-            self.assertTrue(hasattr(controller, 'intelligent_monster_search'))
+            # Verify learning functionality is available through LearningManager
+            self.assertTrue(hasattr(controller, 'learning_manager'))
+            self.assertIsNotNone(controller.learning_manager)
+            # Verify find_known_monsters_nearby method still exists
+            self.assertTrue(hasattr(controller, 'find_known_monsters_nearby'))
 
 
 if __name__ == '__main__':

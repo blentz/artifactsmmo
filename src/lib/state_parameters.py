@@ -40,14 +40,13 @@ class StateParameters:
     # API-duplicate equipment parameters removed - use character API for current equipment state
     
     # Character Status Parameters
-    CHARACTER_ALIVE = "character_status.alive"
     CHARACTER_LEVEL = "character_status.level"
     CHARACTER_HP = "character_status.hp"
     CHARACTER_MAX_HP = "character_status.max_hp"
     CHARACTER_PREVIOUS_HP = "character_status.previous_hp"
     CHARACTER_COOLDOWN_ACTIVE = "character_status.cooldown_active"
     CHARACTER_COOLDOWN_HANDLED = "character_status.cooldown_handled"
-    CHARACTER_SAFE = "character_status.safe"
+    CHARACTER_HEALTHY = "character_status.healthy"
     CHARACTER_XP_PERCENTAGE = "character_status.xp_percentage"
     CHARACTER_NAME = "character_status.name"
     

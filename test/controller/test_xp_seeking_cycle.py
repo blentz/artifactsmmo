@@ -120,40 +120,6 @@ class TestXPSeekingCycle(UnifiedContextTestBase):
         self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_X), 0)
         self.assertEqual(self.controller.plan_action_context.get(StateParameters.TARGET_Y), -1)
 
-    @patch('src.controller.goap_execution_manager.GOAPExecutionManager.create_plan')
-    @patch('src.controller.goap_execution_manager.GOAPExecutionManager._load_actions_from_config')
-    def test_recovery_plan_creation(self, mock_load_actions, mock_create_plan):
-        """Test that recovery plans are created correctly for coordinate failures."""
-        goap_manager = GOAPExecutionManager()
-        
-        # Mock actions config
-        mock_load_actions.return_value = {'find_monsters': {}, 'move': {}, 'attack': {}}
-        
-        # Mock a recovery plan
-        mock_recovery_plan = [
-            {'name': 'find_monsters'},
-            {'name': 'move'},
-            {'name': 'attack'}
-        ]
-        mock_create_plan.return_value = mock_recovery_plan
-        
-        # Mock controller's get_current_world_state
-        with patch.object(self.controller, 'get_current_world_state') as mock_get_state:
-            mock_get_state.return_value = {
-                'character_status': {'alive': True},
-                'monsters_available': True
-            }
-            
-            # Create recovery plan
-            goal_state = {'goal_progress': {'monsters_hunted': 1}}
-            recovery_plan = goap_manager._create_recovery_plan_with_find_monsters(
-                self.controller, goal_state
-            )
-            
-            # Verify plan structure
-            self.assertIsNotNone(recovery_plan)
-            self.assertEqual(len(recovery_plan), 3)
-            self.assertEqual(recovery_plan[0]['name'], 'find_monsters')
 
     @patch('src.controller.action_executor.ActionExecutor.execute_action')
     def test_xp_seeking_action_sequence(self, mock_execute_action):

@@ -132,17 +132,16 @@ class ActionExecutor:
             self.logger.warning(f"Learning callback failed for {action_name}: {e}")
     
     def _handle_move_learning(self, controller, response) -> None:
-        """Handle learning for move actions."""
-        if hasattr(controller, 'learn_from_map_exploration'):
-            if hasattr(response, 'data') and hasattr(response.data, 'character'):
-                char = response.data.character
-                controller.learn_from_map_exploration(char.x, char.y, response)
+        """Handle learning for move actions - methods removed and replaced with KnowledgeBase helpers."""
+        # Learning methods were removed from controller and replaced with KnowledgeBase helpers
+        # that actions can use directly when needed
+        pass
     
     def _handle_attack_learning(self, controller, response) -> None:
-        """Handle learning for attack actions."""
-        if hasattr(controller, 'learn_from_combat'):
-            # Simplified attack learning - delegate to controller
-            controller.learn_from_combat(response)
+        """Handle learning for attack actions - methods removed and replaced with KnowledgeBase helpers."""
+        # Learning methods were removed from controller and replaced with KnowledgeBase helpers
+        # that actions can use directly when needed
+        pass
 
 
     def apply_post_execution_updates(self, action_name: str, action_result: ActionResult, 

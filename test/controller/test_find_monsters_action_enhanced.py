@@ -46,13 +46,13 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
 
     def test_find_monsters_action_repr(self):
         """Test FindMonstersAction string representation."""
-        expected = "FindMonstersAction()"
+        expected = "FindMonstersAction(architecture_compliant=True)"
         self.assertEqual(repr(self.action), expected)
 
     def test_find_monsters_action_repr_no_types(self):
         """Test FindMonstersAction string representation without monster types."""
         action = FindMonstersAction()
-        expected = "FindMonstersAction()"
+        expected = "FindMonstersAction(architecture_compliant=True)"
         self.assertEqual(repr(action), expected)
 
     def test_execute_no_client(self):
@@ -77,7 +77,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         context = MockActionContext(character_name="test_char", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
         self.assertFalse(result.success)
-        self.assertIn('No suitable monsters found in cached map data within radius', result.error)
+        self.assertIn('No suitable monsters found in knowledge base', result.error)
 
     def test_execute_monster_api_no_data(self):
         """Test execute when monster API returns no data."""
@@ -91,7 +91,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         context = MockActionContext(character_name="test_char", knowledge_base=mock_knowledge_base)
         result = self.action.execute(client, context)
         self.assertFalse(result.success)
-        self.assertIn('No suitable monsters found in cached map data within radius', result.error)
+        self.assertIn('No suitable monsters found in knowledge base', result.error)
 
     def test_execute_successful_monster_search(self):
         """Test successful monster search."""
@@ -215,34 +215,30 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         result = self.action.execute(client, context)
         self.assertFalse(result.success)
             # The error message should be about no suitable monsters found
-        self.assertIn('No suitable monsters found in cached map data within radius', result.error)
+        self.assertIn('No suitable monsters found in knowledge base', result.error)
 
-    def test_execute_has_goap_attributes(self):
-        """Test that FindMonstersAction has expected GOAP attributes."""
-        self.assertTrue(hasattr(FindMonstersAction, 'conditions'))
-        self.assertTrue(hasattr(FindMonstersAction, 'reactions'))
-        self.assertTrue(hasattr(FindMonstersAction, 'weight'))
+    def test_execute_has_required_methods(self):
+        """Test that FindMonstersAction has expected methods."""
+        action = FindMonstersAction()
+        self.assertTrue(hasattr(action, 'execute'))
+        self.assertTrue(hasattr(action, 'logger'))
 
-    def test_goap_conditions(self):
-        """Test GOAP conditions are properly defined."""
-        self.assertIn('character_status', FindMonstersAction.conditions)
-        self.assertIn('combat_context', FindMonstersAction.conditions)
-        self.assertIn('resource_availability', FindMonstersAction.conditions)
-        self.assertTrue(FindMonstersAction.conditions['character_status']['alive'])
-        self.assertEqual(FindMonstersAction.conditions['combat_context']['status'], 'searching')
-        self.assertFalse(FindMonstersAction.conditions['resource_availability']['monsters'])
+    def test_action_initialization(self):
+        """Test action can be properly initialized."""
+        action = FindMonstersAction()
+        self.assertIsInstance(action, FindMonstersAction)
+        self.assertTrue(hasattr(action, 'logger'))
 
-    def test_goap_reactions(self):
-        """Test GOAP reactions are properly defined."""
-        self.assertIn('combat_context', FindMonstersAction.reactions)
-        self.assertIn('resource_availability', FindMonstersAction.reactions)
-        self.assertEqual(FindMonstersAction.reactions['combat_context']['status'], 'ready')
-        self.assertTrue(FindMonstersAction.reactions['resource_availability']['monsters'])
+    def test_action_inheritance(self):
+        """Test action inherits from ActionBase."""
+        from src.controller.actions.base import ActionBase
+        self.assertTrue(issubclass(FindMonstersAction, ActionBase))
 
-    def test_goap_weights(self):
-        """Test GOAP weights are properly defined."""
-        expected_weight = 2.0
-        self.assertEqual(FindMonstersAction.weight, expected_weight)
+    def test_action_has_execute_method(self):
+        """Test action has execute method."""
+        action = FindMonstersAction()
+        self.assertTrue(hasattr(action, 'execute'))
+        self.assertTrue(callable(getattr(action, 'execute')))
 
     def test_different_monster_type_combinations(self):
         """Test action with different monster type combinations."""
@@ -262,7 +258,7 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
             # Test representation
             repr_str = repr(action)
             # Repr is now simplified
-            self.assertEqual(repr_str, "FindMonstersAction()")
+            self.assertEqual(repr_str, "FindMonstersAction(architecture_compliant=True)")
         """Test level filtering with edge cases."""
         # Test with various character levels through context
         action1 = FindMonstersAction()
@@ -312,10 +308,10 @@ class TestFindMonstersActionEnhanced(unittest.TestCase):
         # Should handle gracefully
         self.assertTrue(hasattr(result, 'success'))
 
-    def test_inheritance_from_search_base(self):
-        """Test that FindMonstersAction properly inherits from SearchActionBase."""
-        from src.controller.actions.base.search import SearchActionBase
-        self.assertIsInstance(self.action, SearchActionBase)
+    def test_inheritance_from_action_base(self):
+        """Test that FindMonstersAction properly inherits from ActionBase."""
+        from src.controller.actions.base import ActionBase
+        self.assertIsInstance(self.action, ActionBase)
 
     @patch('src.game.map.state.MapState')
     def test_execute_level_appropriate_filtering(self, mock_map_state_class):

@@ -235,7 +235,7 @@ class DiagnosticTools:
         failures = []
         
         for cond_key, cond_value in conditions.items():
-            if not self.goap_executor._check_condition_matches(state, cond_key, cond_value):
+            if not self._check_simple_condition(state, cond_key, cond_value):
                 conditions_met = False
                 current_value = state.get(cond_key, None)
                 failures.append(f"{cond_key}: required={cond_value}, current={current_value}")
@@ -266,6 +266,21 @@ class DiagnosticTools:
         
         self.logger.info(f"   ✓ Action executable (cost: {weight})")
         return True, weight
+    
+    def _check_simple_condition(self, state: Dict, key: str, expected_value: Any) -> bool:
+        """Simple condition checking for diagnostic tools."""
+        current_value = state.get(key)
+        
+        # Handle nested dictionary conditions
+        if isinstance(expected_value, dict) and isinstance(current_value, dict):
+            for nested_key, nested_expected in expected_value.items():
+                nested_current = current_value.get(nested_key)
+                if nested_current != nested_expected:
+                    return False
+            return True
+        
+        # Simple equality check
+        return current_value == expected_value
     
     def _parse_goal_string(self, goal_string: str) -> Dict[str, Any]:
         """Parse goal string into goal state dictionary."""

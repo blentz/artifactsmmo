@@ -43,17 +43,18 @@ class TestDiagnosticTools(TestCase):
         """Test initialization with clean state."""
         tools = DiagnosticTools(client=self.mock_client, clean_state=True)
         
-        # Verify clean state structure uses flat parameters
-        self.assertIn(StateParameters.CHARACTER_ALIVE, tools.current_state)
+        # Verify clean state structure uses flat parameters (config-based defaults only)
+        self.assertIn(StateParameters.CHARACTER_HEALTHY, tools.current_state)
         self.assertIn(StateParameters.COMBAT_STATUS, tools.current_state)
-        self.assertIn(StateParameters.EQUIPMENT_UPGRADE_STATUS, tools.current_state)
-        self.assertTrue(tools.current_state[StateParameters.CHARACTER_ALIVE])
-        self.assertEqual(tools.current_state[StateParameters.CHARACTER_LEVEL], 1)
+        self.assertIn(StateParameters.MATERIALS_STATUS, tools.current_state)
+        self.assertIn(StateParameters.TARGET_ITEM, tools.current_state)
+        self.assertTrue(tools.current_state[StateParameters.CHARACTER_HEALTHY])
+        # CHARACTER_LEVEL comes from API, not state defaults
         
     def test_init_custom_state_json(self):
         """Test initialization with custom JSON state."""
         custom_state = json.dumps({
-            StateParameters.CHARACTER_ALIVE: True,
+            StateParameters.CHARACTER_HEALTHY: True,
             StateParameters.CHARACTER_LEVEL: 5
         })
         
@@ -64,14 +65,14 @@ class TestDiagnosticTools(TestCase):
     def test_init_custom_state_dict(self):
         """Test initialization with custom dict state."""
         custom_state = {
-            StateParameters.CHARACTER_ALIVE: False,
+            StateParameters.CHARACTER_HEALTHY: False,
             StateParameters.CHARACTER_LEVEL: 10
         }
         
         tools = DiagnosticTools(client=self.mock_client, custom_state=custom_state)
         
         self.assertEqual(tools.current_state[StateParameters.CHARACTER_LEVEL], 10)
-        self.assertFalse(tools.current_state[StateParameters.CHARACTER_ALIVE])
+        self.assertFalse(tools.current_state[StateParameters.CHARACTER_HEALTHY])
         
     @patch('src.diagnostic_tools.AIPlayerController')
     @patch('src.diagnostic_tools.CharacterState')
@@ -272,7 +273,7 @@ class TestDiagnosticTools(TestCase):
         # Mock actions data
         mock_actions = {
             'move': {
-                'conditions': {StateParameters.CHARACTER_ALIVE: True},
+                'conditions': {StateParameters.CHARACTER_HEALTHY: True},
                 'reactions': {'location_context.at_target': True},
                 'weight': 1
             }
@@ -327,7 +328,7 @@ class TestDiagnosticTools(TestCase):
         """Test evaluating valid plan in offline mode."""
         mock_actions = {
             'rest': {
-                'conditions': {StateParameters.CHARACTER_ALIVE: True},
+                'conditions': {StateParameters.CHARACTER_HEALTHY: True},
                 'reactions': {StateParameters.CHARACTER_HP: 100},
                 'weight': 1
             }
@@ -366,7 +367,7 @@ class TestDiagnosticTools(TestCase):
         
         action_cfg = {
             'conditions': {
-                StateParameters.CHARACTER_ALIVE: True
+                StateParameters.CHARACTER_HEALTHY: True
             },
             'reactions': {
                 StateParameters.CHARACTER_LEVEL: 2,
@@ -507,7 +508,7 @@ class TestDiagnosticToolsIntegration(TestCase):
         mock_actions_data.return_value.get_actions.return_value = {
             'level_up': {
                 'conditions': {
-                    StateParameters.CHARACTER_ALIVE: True
+                    StateParameters.CHARACTER_HEALTHY: True
                 },
                 'reactions': {
                     StateParameters.CHARACTER_LEVEL: 2
@@ -534,14 +535,14 @@ class TestDiagnosticToolsIntegration(TestCase):
         """Test complete plan evaluation workflow."""
         mock_actions = {
             'move': {
-                'conditions': {StateParameters.CHARACTER_ALIVE: True},
+                'conditions': {StateParameters.CHARACTER_HEALTHY: True},
                 'reactions': {'location_context.at_target': True},
                 'weight': 1
             },
             'attack': {
                 'conditions': {
                     'location_context.at_target': True,
-                    StateParameters.CHARACTER_ALIVE: True
+                    StateParameters.CHARACTER_HEALTHY: True
                 },
                 'reactions': {'combat_context': {'status': 'completed'}},
                 'weight': 3

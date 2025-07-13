@@ -35,28 +35,26 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             current_gathering_goal={'material': 'copper_ore'}
         )
         
-        # Mock knowledge base
+        # Mock knowledge base with find_resources_in_map method that returns resources
         mock_kb = Mock()
         mock_kb.get_resource_for_material.return_value = 'copper_rocks'
+        mock_kb.find_resources_in_map.return_value = [(5, 5, 'copper_rocks')]  # (x, y, resource_code)
         context.knowledge_base = mock_kb
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
-        
-        # Mock unified_search to return a result
-        mock_result = self.action.create_success_result(
-            "Found resource",
-            x=5, y=5, 
-            resource_code='copper_rocks',
-            distance=7
-        )
-        
-        with patch.object(self.action, 'unified_search', return_value=mock_result):
-            result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
         self.assertTrue(result.success)
         self.assertEqual(context.resource_types, ['copper_rocks'])
+        
+        # Verify knowledge_base was called correctly
+        mock_kb.get_resource_for_material.assert_called_once_with('copper_ore')
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_rocks'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_execute_with_current_gathering_goal_no_mapping(self):
         """Test execute with current_gathering_goal but no resource mapping."""
@@ -71,28 +69,26 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             current_gathering_goal={'material': 'unknown_material'}
         )
         
-        # Mock knowledge base
+        # Mock knowledge base - no mapping for material, but find_resources_in_map returns data
         mock_kb = Mock()
         mock_kb.get_resource_for_material.return_value = None
+        mock_kb.find_resources_in_map.return_value = [(5, 5, 'unknown_material')]  # Fallback direct search
         context.knowledge_base = mock_kb
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
-        
-        # Mock unified_search to return a result
-        mock_result = self.action.create_success_result(
-            "Found resource",
-            x=5, y=5, 
-            resource_code='unknown_material',
-            distance=7
-        )
-        
-        with patch.object(self.action, 'unified_search', return_value=mock_result):
-            result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
         self.assertTrue(result.success)
         self.assertEqual(context.resource_types, ['unknown_material'])
+        
+        # Verify fallback to direct material name
+        mock_kb.get_resource_for_material.assert_called_once_with('unknown_material')
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['unknown_material'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_execute_with_missing_materials(self):
         """Test execute with missing_materials in context."""
@@ -173,7 +169,7 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
         self.assertEqual(result.error, "No target resource types specified for focused search")
         
     def test_execute_with_map_state_search(self):
-        """Test execute with successful map state search."""
+        """Test execute with successful learned map data search."""
         context = MockActionContext(
             character_x=0,
             character_y=0,
@@ -187,19 +183,27 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             raw_material_needs=None
         )
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
+        # Mock knowledge base with find_resources_in_map returning location
+        mock_kb = Mock()
+        mock_kb.find_resources_in_map.return_value = [(10, 15, 'copper_ore')]  # (x, y, resource_code)
+        context.knowledge_base = mock_kb
         
-        # Mock _search_map_state_for_resource to return a location
-        with patch.object(self.action, '_search_map_state_for_resource', return_value=(10, 15)):
-            result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
         self.assertTrue(result.success)
         self.assertEqual(result.data['target_x'], 10)
         self.assertEqual(result.data['target_y'], 15)
         self.assertEqual(result.data['resource_code'], 'copper_ore')
         self.assertEqual(result.data['source'], 'learned_map_data')
+        
+        # Verify knowledge_base was called correctly
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_ore'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_execute_with_knowledge_base_search(self):
         """Test execute with successful knowledge base search."""
@@ -216,33 +220,23 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             raw_material_needs=None
         )
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
-        
-        # Mock knowledge base
+        # Mock knowledge base with find_resources_in_map returning copper_ore location
         mock_kb = Mock()
-        mock_kb.data = {
-            'resources': {
-                'copper_ore': {
-                    'name': 'Copper Ore',
-                    'best_locations': [{'x': 20, 'y': 25}]
-                }
-            }
-        }
+        mock_kb.find_resources_in_map.return_value = [(20, 25, 'copper_ore')]  # (x, y, resource_code)
         context.knowledge_base = mock_kb
         
-        # Mock _search_map_state_for_resource to return None
-        with patch.object(self.action, '_search_map_state_for_resource', return_value=None):
-            # Mock _search_known_resource_locations_only_real
-            mock_kb_result = self.action.create_success_result("Found resource", 
-                                                             x=20, y=25,
-                                                             resource_code='copper_ore',
-                                                             location={'x': 20, 'y': 25})
-            with patch.object(self.action, '_search_known_resource_locations_only_real', return_value=mock_kb_result):
-                result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
         self.assertTrue(result.success)
+        
+        # Verify knowledge_base was called correctly
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_ore'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_execute_with_expanded_search(self):
         """Test execute with expanded search radius."""
@@ -524,9 +518,10 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
         context = MockActionContext(character_x=5, character_y=5)
         self.action._context = context
         
-        # Mock map state with correct structure
-        mock_map_state = Mock()
-        mock_map_state.data = {
+        # Mock knowledge_base with map state
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.map_state = Mock()
+        mock_knowledge_base.map_state.data = {
             '10,15': {
                 'x': 10,
                 'y': 15,
@@ -545,7 +540,7 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             }
         }
         
-        result = self.action._search_map_state_for_resource(mock_map_state, 'copper_ore')
+        result = self.action._search_map_state_for_resource(mock_knowledge_base, 'copper_ore')
         
         self.assertEqual(result, (10, 15))
         
@@ -553,9 +548,10 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
         """Test _search_map_state_for_resource without context."""
         # No context set
         
-        # Mock map state with correct structure
-        mock_map_state = Mock()
-        mock_map_state.data = {
+        # Mock knowledge_base with map state
+        mock_knowledge_base = Mock()
+        mock_knowledge_base.map_state = Mock()
+        mock_knowledge_base.map_state.data = {
             '10,15': {
                 'x': 10,
                 'y': 15,
@@ -566,7 +562,7 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             }
         }
         
-        result = self.action._search_map_state_for_resource(mock_map_state, 'copper_ore')
+        result = self.action._search_map_state_for_resource(mock_knowledge_base, 'copper_ore')
         
         self.assertEqual(result, (10, 15))
         
@@ -803,32 +799,26 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             action_config={'min_resource_knowledge_threshold': 20}
         )
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
-        
-        # Mock controller with learning capability
-        mock_controller = Mock()
-        mock_controller.learn_all_game_data_efficiently.return_value = Mock(success=True)
-        context.controller = mock_controller
-        
-        # Mock knowledge base with limited resources
+        # Mock knowledge base with find_resources_in_map returning location
         mock_kb = Mock()
+        mock_kb.find_resources_in_map.return_value = [(10, 15, 'copper_ore')]  # (x, y, resource_code)
         mock_kb.get_all_known_resource_codes.return_value = ['copper_ore']  # Only 1 resource
-        mock_kb.data = {'resources': {}}
         context.knowledge_base = mock_kb
         
-        # Mock searches to fail initially
-        with patch.object(self.action, '_search_map_state_for_resource', return_value=None):
-            with patch.object(self.action, '_search_known_resource_locations_only_real', return_value=None):
-                with patch.object(self.action, '_search_known_resource_locations', return_value=None):
-                    with patch.object(self.action, 'unified_search') as mock_search:
-                        mock_search.return_value = self.action.create_success_result("Found", target_x=10, target_y=10)
-                        result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
-        # Verify learning was triggered
-        mock_controller.learn_all_game_data_efficiently.assert_called_once()
         self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 10)
+        self.assertEqual(result.data['target_y'], 15)
+        
+        # Verify knowledge_base was called correctly
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_ore'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_execute_with_knowledge_predictions(self):
         """Test execute using knowledge-based predictions."""
@@ -845,28 +835,25 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             raw_material_needs=None
         )
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
-        
-        # Mock knowledge base
+        # Mock knowledge base with find_resources_in_map returning predicted location
         mock_kb = Mock()
+        mock_kb.find_resources_in_map.return_value = [(20, 25, 'copper_ore')]  # (x, y, resource_code)
         context.knowledge_base = mock_kb
         
-        # Mock successful prediction result
-        prediction_result = self.action.create_success_result("Predicted", 
-                                                            target_x=20, target_y=25,
-                                                            resource_code='copper_ore',
-                                                            location={'x': 20, 'y': 25})
-        
-        # Mock searches: map fails, KB real fails, but prediction succeeds
-        with patch.object(self.action, '_search_map_state_for_resource', return_value=None):
-            with patch.object(self.action, '_search_known_resource_locations_only_real', return_value=None):
-                with patch.object(self.action, '_search_known_resource_locations', return_value=prediction_result):
-                    result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
         self.assertTrue(result.success)
         self.assertEqual(result.data['target_x'], 20)
+        self.assertEqual(result.data['target_y'], 25)
+        
+        # Verify knowledge_base was called correctly
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_ore'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_get_resource_level(self):
         """Test _get_resource_level method."""
@@ -1046,31 +1033,26 @@ class TestFindResourcesActionComprehensive(unittest.TestCase):
             action_config={'min_resource_knowledge_threshold': 20}
         )
         
-        # Mock map state
-        mock_map_state = Mock()
-        context.map_state = mock_map_state
-        
-        # Mock controller with learning that fails
-        mock_controller = Mock()
-        mock_controller.learn_all_game_data_efficiently.return_value = Mock(success=False)
-        context.controller = mock_controller
-        
-        # Mock knowledge base with limited resources
+        # Mock knowledge base with find_resources_in_map returning fallback location
         mock_kb = Mock()
+        mock_kb.find_resources_in_map.return_value = [(30, 35, 'copper_ore')]  # (x, y, resource_code)
         mock_kb.get_all_known_resource_codes.return_value = ['copper_ore']  # Only 1 resource
         context.knowledge_base = mock_kb
         
-        # Mock searches to fail but unified_search succeeds
-        with patch.object(self.action, '_search_map_state_for_resource', return_value=None):
-            with patch.object(self.action, '_search_known_resource_locations_only_real', return_value=None):
-                with patch.object(self.action, '_search_known_resource_locations', return_value=None):
-                    with patch.object(self.action, 'unified_search') as mock_search:
-                        mock_search.return_value = self.action.create_success_result("Found", target_x=10, target_y=10)
-                        result = self.action.execute(self.mock_client, context)
+        # Execute action
+        result = self.action.execute(self.mock_client, context)
         
-        # Verify learning was triggered
-        mock_controller.learn_all_game_data_efficiently.assert_called_once()
         self.assertTrue(result.success)
+        self.assertEqual(result.data['target_x'], 30)
+        self.assertEqual(result.data['target_y'], 35)
+        
+        # Verify knowledge_base was called correctly
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_ore'],
+            character_x=0,
+            character_y=0,
+            max_radius=3
+        )
         
     def test_search_known_resource_locations_exception(self):
         """Test _search_known_resource_locations with exception."""

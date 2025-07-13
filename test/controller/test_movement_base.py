@@ -40,6 +40,8 @@ class TestMovementActionBase(unittest.TestCase):
         
         action = TestMovementAction()
         context = MockActionContext(character_name=self.char_name, x=5, y=10)
+        # Set up the action context properly (context is singleton)
+        action._context = context
         # execute_movement expects a dict, not MockActionContext
         movement_context = {'character_name': self.char_name}
         result = action.execute_movement(self.client, 5, 10, movement_context)
@@ -62,6 +64,8 @@ class TestMovementActionBase(unittest.TestCase):
         
         action = TestMovementAction()
         context = MockActionContext(character_name=self.char_name)
+        # Set up the action context properly (context is singleton)
+        action._context = context
         # execute_movement expects a dict, not MockActionContext
         movement_context = {'character_name': self.char_name}
         result = action.execute_movement(self.client, 5, 10, movement_context)

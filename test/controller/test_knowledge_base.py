@@ -18,12 +18,12 @@ class TestKnowledgeBase(unittest.TestCase):
         self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
         self.temp_file.close()
         
-        # Create KnowledgeBase instance with temporary file
-        self.knowledge_base = KnowledgeBase(filename=self.temp_file.name)
-        
         # Mock MapState
         self.mock_map_state = Mock(spec=MapState)
         self.mock_map_state.data = {}
+        
+        # Create KnowledgeBase instance with temporary file and mock map_state
+        self.knowledge_base = KnowledgeBase(filename=self.temp_file.name, map_state=self.mock_map_state)
 
     def tearDown(self) -> None:
         """Clean up after each test method."""
@@ -177,7 +177,7 @@ class TestKnowledgeBase(unittest.TestCase):
         """Test finding suitable monsters with empty map state."""
         # Empty map state
         result = self.knowledge_base.find_suitable_monsters(
-            self.mock_map_state, character_level=5, current_x=0, current_y=0
+            character_level=5, current_x=0, current_y=0
         )
         self.assertEqual(result, [])
 
@@ -215,7 +215,7 @@ class TestKnowledgeBase(unittest.TestCase):
         
         # Find suitable monsters
         result = self.knowledge_base.find_suitable_monsters(
-            self.mock_map_state, character_level=5, max_distance=20, current_x=0, current_y=0
+            character_level=5, max_distance=20, current_x=0, current_y=0
         )
         
         # Should find both monsters, sorted by success rate and distance
@@ -248,7 +248,7 @@ class TestKnowledgeBase(unittest.TestCase):
         
         # Search with small radius
         result = self.knowledge_base.find_suitable_monsters(
-            self.mock_map_state, max_distance=10, current_x=0, current_y=0
+            max_distance=10, current_x=0, current_y=0
         )
         
         # Should find no monsters within range
@@ -286,13 +286,14 @@ class TestKnowledgeBase(unittest.TestCase):
         self.mock_map_state.data = {'5,5': {}}
         
         # Test known location
-        self.assertTrue(self.knowledge_base.is_location_known(self.mock_map_state, 5, 5))
+        self.assertTrue(self.knowledge_base.is_location_known(5, 5))
         
         # Test unknown location
-        self.assertFalse(self.knowledge_base.is_location_known(self.mock_map_state, 10, 10))
+        self.assertFalse(self.knowledge_base.is_location_known(10, 10))
         
-        # Test with no map state
-        self.assertFalse(self.knowledge_base.is_location_known(None, 5, 5))
+        # Test with no map state (should return False when self.map_state is None)
+        self.knowledge_base.map_state = None
+        self.assertFalse(self.knowledge_base.is_location_known(5, 5))
 
     def test_get_location_info(self) -> None:
         """Test getting location information."""
@@ -300,15 +301,16 @@ class TestKnowledgeBase(unittest.TestCase):
         self.mock_map_state.data = {'5,5': location_data}
         
         # Test getting known location
-        result = self.knowledge_base.get_location_info(self.mock_map_state, 5, 5)
+        result = self.knowledge_base.get_location_info(5, 5)
         self.assertEqual(result, location_data)
         
         # Test getting unknown location
-        result = self.knowledge_base.get_location_info(self.mock_map_state, 10, 10)
+        result = self.knowledge_base.get_location_info(10, 10)
         self.assertIsNone(result)
         
-        # Test with no map state
-        result = self.knowledge_base.get_location_info(None, 5, 5)
+        # Test with no map state (should return None when self.map_state is None)
+        self.knowledge_base.map_state = None
+        result = self.knowledge_base.get_location_info(5, 5)
         self.assertIsNone(result)
 
     def test_find_nearest_known_content(self) -> None:

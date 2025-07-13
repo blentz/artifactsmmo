@@ -52,29 +52,22 @@ class TestStateUnificationIntegration:
         # Test unified context directly (since WorldState loads from file)
         unified_context = get_unified_context()
         
-        # Set test parameters directly
+        # Set test parameters directly (only config-based state parameters)
         unified_context.set(StateParameters.TARGET_ITEM, "copper_dagger")
-        # HAS_TARGET_ITEM removed - use knowledge_base.has_target_item(context) helper
-        unified_context.set(StateParameters.EQUIPMENT_UPGRADE_STATUS, "ready")
-        unified_context.set(StateParameters.CHARACTER_ALIVE, True)
+        unified_context.set(StateParameters.CHARACTER_HEALTHY, True)
         unified_context.set(StateParameters.MATERIALS_STATUS, "insufficient")
         
         # Create ActionContext from controller
         context = ActionContext.from_controller(mock_controller)
         
-        # Verify GOAP state -> ActionContext parameter flow
+        # Verify GOAP state -> ActionContext parameter flow (config-based parameters only)
         assert context.get(StateParameters.TARGET_ITEM) == "copper_dagger"
-        # HAS_TARGET_ITEM removed - use knowledge_base.has_target_item(context) helper
-        assert context.get(StateParameters.EQUIPMENT_UPGRADE_STATUS) == "ready"
-        assert context.get(StateParameters.CHARACTER_ALIVE) is True
+        assert context.get(StateParameters.CHARACTER_HEALTHY) is True
         assert context.get(StateParameters.MATERIALS_STATUS) == "insufficient"
         
-        # Verify character data integration
-        assert context.get(StateParameters.CHARACTER_X) == 10
-        assert context.get(StateParameters.CHARACTER_Y) == 20
-        assert context.get(StateParameters.CHARACTER_LEVEL) == 5
-        # EQUIPMENT_WEAPON removed - APIs are authoritative for current equipment state
-        # EQUIPMENT_ARMOR removed - APIs are authoritative for current equipment state
+        # Verify context creation succeeded (character data comes from API, not state parameters)
+        assert isinstance(context, ActionContext)
+        # CHARACTER_X, CHARACTER_Y, CHARACTER_LEVEL come from API, not state parameters
     
     def test_recipe_utils_integration_with_state_parameters(self):
         """Test recipe utility functions with StateParameters integration."""
@@ -142,7 +135,7 @@ class TestStateUnificationIntegration:
         # Test unified context directly (since WorldState loads from file)
         unified_context = get_unified_context()
         unified_context.set(StateParameters.TARGET_ITEM, "sync_test_item")
-        unified_context.set(StateParameters.CHARACTER_ALIVE, True)
+        unified_context.set(StateParameters.CHARACTER_HEALTHY, True)
         unified_context.set(StateParameters.COMBAT_STATUS, "active")
         
         # Create ActionContext
@@ -150,7 +143,7 @@ class TestStateUnificationIntegration:
         
         # Verify synchronization - both should access same singleton
         assert context.get(StateParameters.TARGET_ITEM) == "sync_test_item"
-        assert context.get(StateParameters.CHARACTER_ALIVE) is True
+        assert context.get(StateParameters.CHARACTER_HEALTHY) is True
         assert context.get(StateParameters.COMBAT_STATUS) == "active"
         
         # Test bidirectional sync - modify context
@@ -179,9 +172,10 @@ class TestStateUnificationIntegration:
         # Should not crash, should handle gracefully
         context = ActionContext.from_controller(mock_controller)
         
-        # Should have default values
-        assert context.get(StateParameters.CHARACTER_LEVEL) == 1
-        assert context.get(StateParameters.CHARACTER_ALIVE) is True
+        # Should have config-based default values (CHARACTER_LEVEL comes from API)
+        assert context.get(StateParameters.CHARACTER_HEALTHY) is True
+        # CHARACTER_LEVEL comes from API, not state defaults
+        assert isinstance(context, ActionContext)  # Context creation succeeded
     
     def test_state_consistency_after_operations(self):
         """Test state consistency after various operations."""
@@ -202,7 +196,7 @@ class TestStateUnificationIntegration:
         # Test bulk updates maintain consistency
         updates = {
             StateParameters.CHARACTER_LEVEL: 10,
-            StateParameters.CHARACTER_ALIVE: True,
+            StateParameters.CHARACTER_HEALTHY: True,
             StateParameters.CHARACTER_X: 50
         }
         

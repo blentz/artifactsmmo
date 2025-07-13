@@ -78,9 +78,9 @@ class TestLearningMetaprogramming(UnifiedContextTestBase):
                 self.assertTrue(success)
                 mock_executor_instance.execute_action.assert_called_once()
                 
-                # Verify learning methods are available (behavioral test)
-                self.assertTrue(hasattr(controller, 'learn_from_map_exploration'))
-                self.assertTrue(callable(controller.learn_from_map_exploration))
+                # Verify learning functionality is available through LearningManager
+                self.assertTrue(hasattr(controller, 'learning_manager'))
+                self.assertIsNotNone(controller.learning_manager)
     
     @patch('src.controller.ai_player_controller.get_character')
     @patch('src.controller.ai_player_controller.ActionExecutor')
@@ -119,9 +119,9 @@ class TestLearningMetaprogramming(UnifiedContextTestBase):
                 self.assertTrue(success)
                 mock_executor_instance.execute_action.assert_called_once()
                 
-                # Verify learning methods are available (behavioral test)
-                self.assertTrue(hasattr(controller, 'learn_from_combat'))
-                self.assertTrue(callable(controller.learn_from_combat))
+                # Verify learning functionality is available through LearningManager
+                self.assertTrue(hasattr(controller, 'learning_manager'))
+                self.assertIsNotNone(controller.learning_manager)
     
     @patch('src.controller.ai_player_controller.get_character')
     @patch('src.controller.ai_player_controller.ActionExecutor')
@@ -161,11 +161,9 @@ class TestLearningMetaprogramming(UnifiedContextTestBase):
                 self.assertTrue(success)
                 mock_executor_instance.execute_action.assert_called_once()
                 
-                # Verify both learning methods are available (behavioral test)
-                self.assertTrue(hasattr(controller, 'learn_from_map_exploration'))
-                self.assertTrue(hasattr(controller, 'learn_from_combat'))
-                self.assertTrue(callable(controller.learn_from_map_exploration))
-                self.assertTrue(callable(controller.learn_from_combat))
+                # Verify learning functionality is available through LearningManager
+                self.assertTrue(hasattr(controller, 'learning_manager'))
+                self.assertIsNotNone(controller.learning_manager)
     
     @patch('src.controller.ai_player_controller.get_character')
     @patch('src.controller.ai_player_controller.ActionExecutor')
@@ -187,13 +185,12 @@ class TestLearningMetaprogramming(UnifiedContextTestBase):
                 
                 controller = AIPlayerController(self.mock_client)
                 
-                # Verify learning methods exist and are callable
-                self.assertTrue(hasattr(controller, 'learn_from_map_exploration'))
-                self.assertTrue(hasattr(controller, 'learn_from_combat'))
-                self.assertTrue(hasattr(controller, 'intelligent_monster_search'))
-                self.assertTrue(callable(controller.learn_from_map_exploration))
-                self.assertTrue(callable(controller.learn_from_combat))
-                self.assertTrue(callable(controller.intelligent_monster_search))
+                # Verify learning functionality is available through LearningManager
+                self.assertTrue(hasattr(controller, 'learning_manager'))
+                self.assertIsNotNone(controller.learning_manager)
+                # Verify find_known_monsters_nearby method still exists
+                self.assertTrue(hasattr(controller, 'find_known_monsters_nearby'))
+                self.assertTrue(callable(controller.find_known_monsters_nearby))
 
 
 if __name__ == '__main__':

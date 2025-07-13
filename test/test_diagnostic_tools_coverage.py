@@ -18,8 +18,8 @@ class TestDiagnosticToolsAdditionalCoverage(TestCase):
         tools = DiagnosticTools(custom_state=12345)
         
         # Should use clean state with flat parameters
-        self.assertIn(StateParameters.CHARACTER_ALIVE, tools.current_state)
-        self.assertTrue(tools.current_state[StateParameters.CHARACTER_ALIVE])
+        self.assertIn(StateParameters.CHARACTER_HEALTHY, tools.current_state)
+        self.assertTrue(tools.current_state[StateParameters.CHARACTER_HEALTHY])
         
     def test_parse_goal_string_default_boolean(self):
         """Test parsing goal string defaults to boolean."""

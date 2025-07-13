@@ -1,642 +1,206 @@
-# Default GOAP Actions Configuration - Consolidated State Version
-# This file defines the default set of actions available to the AI player's Goal-Oriented Action Planning system
+# Architecture-Compliant GOAP Actions Configuration
+# This file defines core actions using valid StateParameters and subgoal request patterns
+# Bridge actions have been removed in favor of subgoal requests per docs/ARCHITECTURE.md
+
+# State defaults - SINGLE SOURCE OF TRUTH for state parameters that CANNOT be obtained from knowledge-base + API queries
+# Following heuristic: "can this information be obtained by querying the (knowledge-base + unified_context)? If yes, don't create a new parameter."
+state_defaults:
+  # Character health status - computed from API HP data but cached for GOAP planning
+  character_status.healthy: true
+  character_status.cooldown_active: false
+  
+  # Target context - tracks current target items for actions (not in API)
+  target.item: null
+  target.slot: null
+  target.recipe: null
+  
+  # Combat context - tracks current combat state (not available from API)
+  combat_context.status: "idle"
+  
+  # Materials workflow status - tracks gathering/crafting progression (not in API)
+  materials.status: "unknown"
+  materials.gathered: false
+  
+  # Equipment workflow status - tracks crafting/equipping progression (not in API)
+  equipment_status.item_crafted: false
+  equipment_status.equipped: false
+  
+  # Resource discovery cache - tracks what monsters/resources are available (not in API)
+  resource_availability.monsters: false
+  
+  # Skill requirements evaluation - tracks if character skills are sufficient for current task
+  skill_requirements.sufficient: false
 
 actions:
-  # Movement actions
+  # Core movement action - success determined by knowledge-base lookup
   move:
     conditions:
-      character_status:
-        alive: true
-        cooldown_active: false
+      character_status.healthy: true
+      character_status.cooldown_active: false
     reactions:
-      location_context:
-        at_target: true
+      character.x: target.x
+      character.y: target.y
     weight: 1.0
-    description: "Move character to a target location"
+    description: Move character to coordinates specified in ActionContext
+    metadata:
+      type: "execution"
+      failure_recovery: "coordinate_search"
     
-  # Combat actions - simplified flow
-  initiate_combat_search:
-    conditions:
-      combat_context:
-        status: 'idle'
-      character_status:
-        alive: true
-        cooldown_active: false
-    reactions:
-      combat_context:
-        status: 'searching'
-    weight: 2.0
-    description: "Initiate transition from idle to searching for monsters"
-    
+  # Core action to find monsters for combat
   find_monsters:
     conditions:
-      combat_context:
-        status: 'searching'
-      resource_availability:
-        monsters: false
-      character_status:
-        alive: true
+      character_status.healthy: true
+      combat_context.status: idle
     reactions:
-      resource_availability:
-        monsters: true
-      combat_context:
-        status: 'ready'
+      resource_availability.monsters: true
+      combat_context.status: ready
     weight: 2.0
-    description: "Find nearby monsters suitable for combat (legacy - use search_monsters)"
-    parameters:
-      minimum_win_rate: 0.0
+    description: Find monsters suitable for combat using knowledge-base lookup
+    metadata:
+      type: "discovery"
+      triggers_replan: true
     
+  # Core combat action - attack when monsters are available
   attack:
     conditions:
-      combat_context:
-        status: 'ready'
-      resource_availability:
-        monsters: true
-      character_status:
-        safe: true
-        alive: true
+      character_status.healthy: true
+      resource_availability.monsters: true
+      combat_context.status: ready
     reactions:
-      combat_context:
-        status: 'completed'
-      goal_progress:
-        monsters_hunted: '+1'
-        has_gained_xp: true
+      combat_context.status: completed
     weight: 3.0
-    description: "Attack a monster in combat"
+    description: Attack available monster
+    metadata:
+      type: "execution"
     
-  # Recovery actions
+  # Core resource gathering - requests movement subgoals if needed  
+  gather_resources:
+    conditions:
+      character_status.healthy: true
+      materials.status: insufficient
+    reactions:
+      materials.status: gathered
+      materials.gathered: true
+    weight: 2.0
+    description: Gather required resources, requesting movement subgoals if needed
+    metadata:
+      type: "execution"
+    
+  # Core crafting action - requests material gathering and movement subgoals
+  craft_item:
+    conditions:
+      character_status.healthy: true
+      materials.status: sufficient
+      skill_requirements.sufficient: true
+    reactions:
+      equipment_status.item_crafted: true
+    weight: 3.0
+    description: Craft item, requesting subgoals for materials and workshop movement
+    metadata:
+      type: "execution"
+    
+  # Core equipment action - requests crafting subgoals if needed
+  equip_item:
+    conditions:
+      character_status.healthy: true
+      equipment_status.item_crafted: true
+    reactions:
+      equipment_status.equipped: true
+    weight: 2.0
+    description: Equip crafted item
+    metadata:
+      type: "execution"
+    
+  # Simple utility actions using valid StateParameters
   rest:
     conditions:
-      character_status:
-        alive: true
+      character_status.healthy: false
     reactions:
-      character_status:
-        safe: true
+      character_status.healthy: true
     weight: 1.5
-    description: "Rest to recover HP when needed"
+    description: Rest to recover HP when needed
+    metadata:
+      type: "execution"
     
   wait:
     conditions:
-      character_status:
-        cooldown_active: true
+      character_status.cooldown_active: true
     reactions:
-      character_status:
-        cooldown_active: false
+      character_status.cooldown_active: false
     weight: 0.1
-    description: "Wait for cooldown to expire before taking other actions"
-    
-  # Healing actions
-  initiate_healing:
-    conditions:
-      character_status:
-        alive: true
-        safe: false
-      healing_context:
-        healing_status: 'idle'
-    reactions:
-      healing_context:
-        healing_status: 'in_progress'
-    weight: 1.0
-    description: "Initiate healing process when character is unsafe"
-    
-  complete_healing:
-    conditions:
-      healing_context:
-        healing_status: 'in_progress'
-      character_status:
-        safe: true
-    reactions:
-      healing_context:
-        healing_status: 'complete'
-    weight: 1.0
-    description: "Complete healing process after character is safe"
-    
-  # Equipment upgrade actions
-  initiate_equipment_analysis:
-    conditions:
-      equipment_status:
-        upgrade_status: 'needs_analysis'
-      character_status:
-        alive: true
-    reactions:
-      equipment_status:
-        upgrade_status: 'analyzing'
-    weight: 1.5
-    description: "Initiate equipment analysis to prepare for upgrades"
-    
-  analyze_equipment_gaps:
-    conditions:
-      equipment_status:
-        upgrade_status: 'analyzing'
-      character_status:
-        alive: true
-    reactions:
-      equipment_status:
-        upgrade_status: 'analyzing'
-        gaps_analyzed: true
-    weight: 1.0
-    description: "Analyze gaps in character equipment to identify upgrade needs"
-    
-  select_optimal_slot:
-    conditions:
-      equipment_status:
-        gaps_analyzed: true
-        has_target_slot: false
-      character_status:
-        alive: true
-    reactions:
-      equipment_status:
-        has_target_slot: true
-    weight: 1.5
-    description: "Select the optimal equipment slot for crafting based on gaps and skill"
-    
-  select_recipe:
-    conditions:
-      equipment_status:
-        upgrade_status: 'analyzing'
-        has_target_slot: true
-    reactions:
-      equipment_status:
-        upgrade_status: 'ready'
-        has_selected_item: true
-    weight: 2.0
-    description: "Select optimal recipe for equipment crafting"
-    
-  determine_material_requirements:
-    conditions:
-      equipment_status:
-        upgrade_status: 'ready'
-        has_selected_item: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        requirements_determined: true
-        status: 'checking'
-      inventory:
-        updated: true
-    weight: 1.0
-    description: "Determine what materials are needed for the selected recipe"
-    
-  check_material_availability:
-    conditions:
-      materials:
-        requirements_determined: true
-        status: 'checking'
-      inventory:
-        updated: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        availability_checked: true
-        status: 'sufficient'
-    weight: 1.0
-    description: "Check if required materials are available in inventory and mark as sufficient"
-    
-  determine_material_insufficiency:
-    conditions:
-      materials:
-        requirements_determined: true
-        status: 'checking'
-      inventory:
-        updated: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        availability_checked: true
-        status: 'insufficient'
-    weight: 1.0
-    description: "Determine that required materials are insufficient and need gathering"
-    
-  # Material gathering chain
+    description: Wait for cooldown to expire before taking other actions
+    metadata:
+      type: "execution"
+  
+  # Discovery actions that trigger replanning when they provide new knowledge
   find_resources:
     conditions:
-      materials:
-        status: 'insufficient'
-        availability_checked: true
-        quantities_calculated: true
-      resource_availability:
-        resources: false
-      character_status:
-        alive: true
+      character_status.healthy: true
     reactions:
-      resource_availability:
-        resources: true
-      location_context:
-        resource_known: true
+      resource_availability.resources: true
     weight: 2.0
-    description: "Find locations of required resources"
-    
-  move_to_resource:
-    conditions:
-      location_context:
-        resource_known: true
-        at_resource: false
-      materials:
-        status: 'insufficient'
-      character_status:
-        alive: true
-        cooldown_active: false
-    reactions:
-      location_context:
-        at_resource: true
-    weight: 1.5
-    description: "Move to resource location"
-    
-  gather_resources:
-    conditions:
-      location_context:
-        at_resource: true
-      materials:
-        status: 'insufficient'
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        status: 'gathered_raw'
-        gathered: true
-    weight: 2.0
-    description: "Gather raw materials from resource location"
-    
-  gather_resource_quantity:
-    conditions:
-      location_context:
-        at_resource: true
-      materials:
-        status: 'insufficient'
-        quantities_calculated: true
-        raw_materials_needed: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        status: 'gathered_raw'
-        gathered: true
-      inventory:
-        updated: true
-    weight: 2.5
-    description: "Gather specific quantity of resources to meet crafting needs"
-    
-  # Material transformation chain
+    description: Find resources suitable for gathering using knowledge-base lookup
+    metadata:
+      type: "discovery"
+      triggers_replan: true
+      
   find_workshops:
     conditions:
-      materials:
-        status: 'gathered_raw'
-      location_context:
-        workshop_known: false
-      character_status:
-        alive: true
+      character_status.healthy: true
     reactions:
-      location_context:
-        workshop_known: true
-      workshop_status:
-        discovered: true
-    weight: 1.5
-    description: "Find the appropriate workshop for material transformation"
-    
-  move_to_workshop:
-    conditions:
-      location_context:
-        workshop_known: true
-        at_workshop: false
-      character_status:
-        alive: true
-        cooldown_active: false
-    reactions:
-      location_context:
-        at_workshop: true
-    weight: 1.0
-    description: "Move to workshop location"
-    
-  transform_materials:
-    conditions:
-      location_context:
-        at_workshop: true
-      materials:
-        status: 'gathered_raw'
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        status: 'transformed'
-        transformation_complete: true
+      resource_availability.workshops: true
     weight: 2.0
-    description: "Transform raw materials (e.g., ore to bars) at workshop"
-    
-  verify_material_sufficiency:
+    description: Find workshops suitable for crafting using knowledge-base lookup
+    metadata:
+      type: "discovery"
+      triggers_replan: true
+      
+  find_correct_workshop:
     conditions:
-      materials:
-        transformation_complete: true
-        status: 'transformed'
-      character_status:
-        alive: true
+      character_status.healthy: true
     reactions:
-      materials:
-        status: 'sufficient'
-        ready_to_craft: true
-    weight: 1.0
-    description: "Verify all materials are now sufficient after transformation"
-    
-  verify_skill_requirements:
-    conditions:
-      equipment_status:
-        has_selected_item: true
-      materials:
-        status: 'sufficient'
-      character_status:
-        alive: true
-    reactions:
-      skill_requirements:
-        verified: true
-        sufficient: true
-    weight: 1.0
-    description: "Verify character has sufficient skill level for crafting"
-    
-  craft_item:
-    conditions:
-      skill_requirements:
-        verified: true
-        sufficient: true
-      materials:
-        status: 'sufficient'
-      location_context:
-        at_workshop: true
-      equipment_status:
-        has_selected_item: true
-      character_status:
-        alive: true
-    reactions:
-      equipment_status:
-        item_crafted: true
-      inventory:
-        updated: true
-    weight: 3.0
-    description: "Craft the selected item at the workshop"
-    
-  check_inventory:
-    conditions:
-      equipment_status:
-        item_crafted: true
-      character_status:
-        alive: true
-    reactions:
-      inventory:
-        checked: true
-      equipment_status:
-        ready_to_equip: true
-    weight: 1.0
-    description: "Check inventory for crafted items and resources"
-    
-  equip_item:
-    conditions:
-      equipment_status:
-        item_crafted: true
-        ready_to_equip: true
-        has_selected_item: true
-      inventory:
-        checked: true
-      character_status:
-        alive: true
-    reactions:
-      equipment_status:
-        equipped: true
-        upgrade_status: 'completed'
+      resource_availability.correct_workshop: true
     weight: 2.0
-    description: "Equip the crafted item"
-    
-  complete_equipment_upgrade:
+    description: Find correct workshop for specific crafting task
+    metadata:
+      type: "discovery"
+      triggers_replan: true
+      
+  evaluate_weapon_recipes:
     conditions:
-      equipment_status:
-        equipped: true
-      character_status:
-        alive: true
+      character_status.healthy: true
     reactions:
-      equipment_status:
-        upgrade_status: 'completed'
-    weight: 1.0
-    description: "Complete equipment upgrade process after equipping"
-    
-  # Universal search actions - consolidates find_monsters, find_resources, find_workshops
-  search_monsters:
-    conditions:
-      combat_context:
-        status: 'searching'
-      resource_availability:
-        monsters: false
-      character_status:
-        alive: true
-    reactions:
-      resource_availability:
-        monsters: true
-      combat_context:
-        status: 'ready'
+      equipment_status.recipe_evaluated: true
     weight: 2.0
-    description: "Universal search for monsters suitable for combat"
-    parameters:
-      search_content_type: "monster"
-      minimum_win_rate: 0.0
+    description: Evaluate weapon recipes to determine best crafting options
+    metadata:
+      type: "discovery"
+      triggers_replan: true
       
-  search_resources:
+  lookup_item_info:
     conditions:
-      materials:
-        status: 'insufficient'
-        availability_checked: true
-        quantities_calculated: true
-      resource_availability:
-        resources: false
-      character_status:
-        alive: true
+      character_status.healthy: true
     reactions:
-      resource_availability:
-        resources: true
-      location_context:
-        resource_known: true
+      target.item_info_known: true
     weight: 2.0
-    description: "Universal search for resource locations"
-    parameters:
-      search_content_type: "resource"
+    description: Look up item information from knowledge base or API
+    metadata:
+      type: "discovery"
+      triggers_replan: true
       
-  search_workshops:
+  explore_map:
     conditions:
-      materials:
-        status: 'gathered_raw'
-      location_context:
-        workshop_known: false
-      character_status:
-        alive: true
+      character_status.healthy: true
     reactions:
-      location_context:
-        workshop_known: true
-      workshop_status:
-        discovered: true
-    weight: 1.5
-    description: "Universal search for workshops"
-    parameters:
-      search_content_type: "workshop"
-      
-  # Universal movement actions - consolidates move, move_to_resource, move_to_workshop
-  move_coordinates:
-    conditions:
-      character_status:
-        alive: true
-        cooldown_active: false
-    reactions:
-      location_context:
-        at_target: true
-    weight: 1.0
-    description: "Universal movement to specific coordinates"
-    parameters:
-      movement_type: "coordinate"
-      
-  move_to_target_resource:
-    conditions:
-      location_context:
-        resource_known: true
-        at_resource: false
-      character_status:
-        alive: true
-        cooldown_active: false
-    reactions:
-      location_context:
-        at_resource: true
-    weight: 1.5
-    description: "Universal movement to target resource location"
-    parameters:
-      movement_type: "resource"
-      target_resource_key: "target_resource"
-      
-  move_to_target_workshop:
-    conditions:
-      location_context:
-        workshop_known: true
-        at_workshop: false
-      character_status:
-        alive: true
-        cooldown_active: false
-    reactions:
-      location_context:
-        at_workshop: true
-    weight: 1.0
-    description: "Universal movement to target workshop location"
-    parameters:
-      movement_type: "workshop"
-      target_workshop_key: "target_workshop"
-      
-  # Universal material actions - consolidates material workflow actions  
-  determine_requirements:
-    conditions:
-      equipment_status:
-        upgrade_status: 'ready'
-        has_selected_item: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        requirements_determined: true
-        status: 'checking'
-      inventory:
-        updated: true
-    weight: 1.0
-    description: "Universal action to determine material requirements"
-    parameters:
-      material_workflow: "determine_requirements"
-      
-  check_availability:
-    conditions:
-      materials:
-        requirements_determined: true
-        status: 'checking'
-      inventory:
-        updated: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        availability_checked: true
-        status: 'sufficient'
-    weight: 1.0
-    description: "Universal action to check material availability"
-    parameters:
-      material_workflow: "check_availability"
-      
-  determine_insufficiency:
-    conditions:
-      materials:
-        requirements_determined: true
-        status: 'checking'
-      inventory:
-        updated: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        availability_checked: true
-        status: 'insufficient'
-    weight: 1.0
-    description: "Universal action to determine material insufficiency"
-    parameters:
-      material_workflow: "determine_insufficiency"
-      
-  calculate_quantities:
-    conditions:
-      materials:
-        requirements_determined: true
-        status: 'insufficient'
-        availability_checked: true
-      equipment_status:
-        has_selected_item: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        quantities_calculated: true
-        raw_materials_needed: true
-    weight: 1.0
-    description: "Universal action to calculate material quantities"
-    parameters:
-      material_workflow: "calculate_quantities"
-      
-  gather_materials:
-    conditions:
-      materials:
-        status: 'insufficient'
-        availability_checked: true
-        quantities_calculated: true
-        raw_materials_needed: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        status: 'gathered_raw'
-        gathered: true
-      inventory:
-        updated: true
-    weight: 2.5
-    description: "Universal action to gather missing materials"
-    parameters:
-      material_workflow: "gather_materials"
-      
-  check_gathering:
-    conditions:
-      materials:
-        status: 'gathered_raw'
-        gathered: true
-      character_status:
-        alive: true
-    reactions:
-      materials:
-        status: 'sufficient'
-        ready_to_craft: true
-    weight: 1.0
-    description: "Universal action to check if gathering is complete"
-    parameters:
-      material_workflow: "check_gathering_complete"
+      map.explored: true
+    weight: 2.0
+    description: Explore map to discover new locations and resources
+    metadata:
+      type: "discovery"
+      triggers_replan: true
 
-# Default configuration metadata
 metadata:
-  version: "2.0"
-  description: "Default action set for GOAP-based AI player using consolidated state system"
-  created_by: "Claude Code"
-  last_updated: "2025-07-01"
+  version: '3.0'
+  description: Architecture-compliant action set using subgoal request patterns
+  created_by: Claude Code Architecture Refactor
+  last_updated: '2025-07-12'

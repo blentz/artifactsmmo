@@ -12,6 +12,7 @@ from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
+from src.lib.unified_state_context import get_unified_context
 
 from . import ActionBase, ActionResult
 class MovementActionBase(ActionBase):
@@ -23,7 +24,7 @@ class MovementActionBase(ActionBase):
                 'alive': True,
             },
         }
-    reactions = {"at_location": True}
+    reactions = {}
     weight = 10
     
     def __init__(self):
@@ -109,6 +110,9 @@ class MovementActionBase(ActionBase):
                         **movement_context
                     )
                     
+                    # Request knowledge-base to refresh character data from API (business logic in action)
+                    self._context.knowledge_base.refresh_character_data(client, api_character_name)
+                    
                     self.logger.info(f"🚶 Moved to ({target_x}, {target_y})")
                     return result
                 else:
@@ -138,6 +142,10 @@ class MovementActionBase(ActionBase):
             error_str = str(e).lower()
             if "490" in str(e) and ("already at" in error_str or "destination" in error_str):
                 self.logger.info(f"✓ Already at destination ({target_x}, {target_y})")
+                
+                # Request knowledge-base to refresh character data from API (business logic in action)
+                self._context.knowledge_base.refresh_character_data(client, api_character_name)
+                
                 return self.create_success_result(
                     message=f"Already at destination ({target_x}, {target_y})",
                     moved=False,

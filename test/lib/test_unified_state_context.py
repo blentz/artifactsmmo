@@ -43,9 +43,9 @@ class TestUnifiedStateContext:
         """Test parameter validation during get operations."""
         context = UnifiedStateContext()
         
-        # Valid parameter should work - TARGET_ITEM is initialized as None
+        # Valid parameter should work - TARGET_ITEM is in config as null
         result = context.get(StateParameters.TARGET_ITEM, "default")
-        assert result is None  # TARGET_ITEM is explicitly set to None in defaults
+        assert result is None  # Returns config value (null) instead of default
         
         # Test with a parameter that's not in defaults
         result = context.get(StateParameters.TARGET_ITEM)
@@ -74,13 +74,11 @@ class TestUnifiedStateContext:
         # Valid parameters should work
         valid_updates = {
             StateParameters.TARGET_ITEM: "copper_dagger",
-            StateParameters.CHARACTER_ALIVE: True,
             StateParameters.CHARACTER_LEVEL: 5
         }
         context.update(valid_updates)
         
         assert context.get(StateParameters.TARGET_ITEM) == "copper_dagger"
-        assert context.get(StateParameters.CHARACTER_ALIVE) is True
         assert context.get(StateParameters.CHARACTER_LEVEL) == 5
         
         # Invalid parameter should raise ValueError
@@ -124,9 +122,8 @@ class TestUnifiedStateContext:
         """Validate default values are properly set."""
         context = UnifiedStateContext()
         
-        # Test some key default values
-        assert context.get(StateParameters.CHARACTER_ALIVE) is True
-        assert context.get(StateParameters.CHARACTER_LEVEL) == 1
+        # Test config-based default values (only those that can't be obtained from API)
+        assert context.get(StateParameters.CHARACTER_HEALTHY) is True
         assert context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE) is False
         assert context.get(StateParameters.MATERIALS_STATUS) == "unknown"
     
@@ -138,7 +135,6 @@ class TestUnifiedStateContext:
         test_data = {
             StateParameters.TARGET_ITEM: "iron_sword",
             StateParameters.CHARACTER_LEVEL: 15,
-            StateParameters.CHARACTER_ALIVE: True,
             StateParameters.CHARACTER_X: 100,
             StateParameters.CHARACTER_Y: 200
         }
@@ -165,17 +161,18 @@ class TestUnifiedStateContext:
         
         # Modify some values
         context.set(StateParameters.TARGET_ITEM, "modified_item")
-        context.set(StateParameters.CHARACTER_LEVEL, 99)
+        context.set(StateParameters.CHARACTER_HEALTHY, False)
         
         # Verify values changed
         assert context.get(StateParameters.TARGET_ITEM) == "modified_item"
-        assert context.get(StateParameters.CHARACTER_LEVEL) == 99
+        assert context.get(StateParameters.CHARACTER_HEALTHY) is False
         
         # Reset state
         context.reset()
         
-        # Verify values returned to defaults
-        assert context.get(StateParameters.CHARACTER_LEVEL) == 1
+        # Verify values returned to config defaults
+        assert context.get(StateParameters.CHARACTER_HEALTHY) is True
+        assert context.get(StateParameters.TARGET_ITEM) is None  # Not in config defaults
     
     def test_category_filtering(self):
         """Test category-based parameter retrieval."""
@@ -231,9 +228,9 @@ class TestUnifiedStateContext:
         # Should exist after setting
         assert context.has_parameter(StateParameters.TARGET_ITEM)
         
-        # Parameter with default value should exist
-        assert context.has_parameter(StateParameters.CHARACTER_ALIVE)
+        # Parameter with config default value should exist
+        assert context.has_parameter(StateParameters.CHARACTER_HEALTHY)
         
-        # Unset parameter should exist if it has a default
-        param_with_default = StateParameters.CHARACTER_LEVEL
-        assert context.has_parameter(param_with_default)
+        # Unset parameter should not exist if it doesn't have a config default
+        param_without_default = StateParameters.CHARACTER_LEVEL  # Not in config defaults
+        assert not context.has_parameter(param_without_default)

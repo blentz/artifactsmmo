@@ -73,7 +73,7 @@ class SkillGoalManager:
             self.resource_requirements = {}
             self.crafting_chains = {}
     
-    def create_skill_up_goal(self, skill_type: SkillType, target_level: int, 
+    def create_skill_up_goal(self, skill_type: SkillType, target_level: int,   # ARCHITECTURAL VIOLATION: Business logic for skill requirement calculation - should be in actions
                            current_level: int = None) -> Dict[str, Any]:
         """
         Create a skill progression goal for a specific skill.
@@ -131,7 +131,7 @@ class SkillGoalManager:
         }
         return skill_type in crafting_skills
     
-    def _calculate_resource_needs(self, skill_type: SkillType, current_level: int, 
+    def _calculate_resource_needs(self, skill_type: SkillType, current_level: int,   # ARCHITECTURAL VIOLATION: Complex business logic for resource calculation - should be in actions
                                 target_level: int) -> Dict[str, Any]:
         """Calculate resource requirements for skill progression."""
         skill_name = skill_type.value
@@ -154,7 +154,7 @@ class SkillGoalManager:
         
         return resource_needs
     
-    def get_skill_progression_strategy(self, skill_type: SkillType, 
+    def get_skill_progression_strategy(self, skill_type: SkillType,   # ARCHITECTURAL VIOLATION: Business logic for determining optimal progression strategies - should be in actions
                                      current_level: int) -> Dict[str, Any]:
         """
         Get the optimal progression strategy for a skill at a given level.
@@ -260,7 +260,7 @@ class SkillGoalManager:
         
         return world
     
-    def _is_skill_relevant_action(self, action_name: str, goal_state: Dict[str, Any]) -> bool:
+    def _is_skill_relevant_action(self, action_name: str, goal_state: Dict[str, Any]) -> bool:  # ARCHITECTURAL VIOLATION: Business logic for action filtering - should be in actions
         """Check if an action is relevant for the current skill goals."""
         # All basic actions are relevant
         basic_actions = ['move', 'rest', 'wait']
@@ -279,7 +279,7 @@ class SkillGoalManager:
         
         return True  # Include by default for now
     
-    def _action_relevant_for_skill(self, action_name: str, skill_name: str) -> bool:
+    def _action_relevant_for_skill(self, action_name: str, skill_name: str) -> bool:  # ARCHITECTURAL VIOLATION: Business logic mapping actions to skills - should be in YAML config or actions
         """Check if an action is relevant for a specific skill."""
         skill_action_map = {
             "combat": ["attack", "find_monsters", "hunt"],
@@ -296,7 +296,7 @@ class SkillGoalManager:
         relevant_actions = skill_action_map.get(skill_name, [])
         return action_name in relevant_actions
     
-    def achieve_skill_goal_with_goap(self, skill_type: SkillType, target_level: int,
+    def achieve_skill_goal_with_goap(self, skill_type: SkillType, target_level: int,  # ARCHITECTURAL VIOLATION: Complete business logic for GOAP execution planning - should be in actions
                                    current_state: Dict[str, Any], 
                                    controller) -> bool:
         """

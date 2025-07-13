@@ -105,7 +105,7 @@ class TestEquipmentUpgradeChain(unittest.TestCase):
         
         # Set initial state in UnifiedStateContext using registered StateParameters
         context = UnifiedStateContext()
-        context.set(StateParameters.CHARACTER_ALIVE, True)
+        context.set(StateParameters.CHARACTER_HEALTHY, True)
         
         # Try to create a plan using the execution manager with correct signature
         plan = self.controller.goap_execution_manager.create_plan(goal_state, actions_config)

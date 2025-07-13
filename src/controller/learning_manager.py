@@ -24,10 +24,15 @@ from src.lib.yaml_data import YamlData
 
 class LearningManager:
     """
-    YAML-configurable learning and knowledge management system.
+    Architecture-compliant learning orchestrator for API interactions.
     
-    Handles learning from gameplay, optimization suggestions, and insights generation
-    using configuration-driven behavior patterns.
+    Role: Simple orchestrator focused on learning from API interactions and data storage.
+    - Manages learning from API interactions (map exploration, combat results, bulk data)
+    - Stores knowledge in knowledge base without making strategic decisions
+    - Triggered by learning callbacks after action execution  
+    - NO business logic, NO optimization decisions, NO strategic planning
+    
+    Architectural Principle: "Business logic goes in actions, NOT in managers"
     """
     
     def __init__(self, knowledge_base, map_state, client=None, config_file: str = None):
@@ -104,155 +109,9 @@ class LearningManager:
             self.logger.warning(f"Error getting learning insights: {e}")
             return {'error': str(e)}
     
-    def optimize_with_knowledge(self, character_state, goal_type: str = None) -> Dict[str, Any]:
-        """
-        Use learned knowledge to optimize planning and decision making.
-        
-        Args:
-            character_state: Current character state
-            goal_type: Type of goal to optimize for ('combat', 'exploration', 'resources')
-            
-        Returns:
-            Dictionary with optimization suggestions
-        """
-        try:
-            if not character_state:
-                return {'error': 'No character state available'}
-                
-            char_level = character_state.data.get('level', 1)
-            current_x = character_state.data.get('x', 0)
-            current_y = character_state.data.get('y', 0)
-            
-            optimizations = {
-                'goal_type': goal_type,
-                'character_level': char_level,
-                'current_position': (current_x, current_y),
-                'suggestions': []
-            }
-            
-            if goal_type == 'combat' or goal_type is None:
-                # Combat optimization using configuration-driven thresholds
-                combat_suggestions = self._generate_combat_optimizations(
-                    char_level, current_x, current_y
-                )
-                optimizations['suggestions'].extend(combat_suggestions)
-            
-            if goal_type == 'exploration' or goal_type is None:
-                # Exploration optimization using MapState
-                exploration_suggestions = self._generate_exploration_optimizations()
-                optimizations['suggestions'].extend(exploration_suggestions)
-                
-            return optimizations
-            
-        except Exception as e:
-            self.logger.warning(f"Error optimizing with knowledge: {e}")
-            return {'error': str(e)}
     
-    def _generate_combat_optimizations(self, char_level: int, current_x: int, current_y: int) -> List[Dict]:
-        """Generate combat-related optimization suggestions."""
-        suggestions = []
-        
-        try:
-            # Use configurable distance radius for monster search
-            known_monsters = self.knowledge_base.find_suitable_monsters(
-                map_state=self.map_state,
-                character_level=char_level,
-                level_range=2,
-                max_distance=self.optimization_distance_radius,
-                current_x=current_x,
-                current_y=current_y
-            )
-            
-            if known_monsters:
-                # Find monsters with good success rates using configurable threshold
-                good_targets = [m for m in known_monsters 
-                              if m.get('success_rate', 0) > self.good_success_rate_threshold]
-                
-                if good_targets:
-                    best_target = good_targets[0]
-                    suggestions.append({
-                        'type': 'combat_target',
-                        'description': f"High success rate target: {best_target['monster_code']} at {best_target['location']}",
-                        'success_rate': best_target['success_rate'],
-                        'location': best_target['location']
-                    })
-                
-                # Warn about dangerous monsters using configurable threshold
-                dangerous = [m for m in known_monsters 
-                           if m.get('success_rate', 1) < self.dangerous_success_rate_threshold]
-                
-                if dangerous:
-                    suggestions.append({
-                        'type': 'combat_warning',
-                        'description': f"Avoid dangerous monsters: {[m['monster_code'] for m in dangerous[:3]]}",
-                        'dangerous_monsters': dangerous[:3]
-                    })
-                    
-        except Exception as e:
-            self.logger.warning(f"Error generating combat optimizations: {e}")
-            
-        return suggestions
     
-    def _generate_exploration_optimizations(self) -> List[Dict]:
-        """Generate exploration-related optimization suggestions."""
-        suggestions = []
-        
-        try:
-            # Exploration optimization using MapState
-            total_locations = 0
-            if self.map_state and hasattr(self.map_state, 'data'):
-                total_locations = len(self.map_state.data)
-                
-            # Use configurable threshold for exploration recommendations
-            if total_locations < self.min_locations_for_exploration:
-                suggestions.append({
-                    'type': 'exploration',
-                    'description': f"Explore more areas (visited {total_locations} locations so far)",
-                    'recommended_action': 'systematic_exploration'
-                })
-                
-        except Exception as e:
-            self.logger.warning(f"Error generating exploration optimizations: {e}")
-            
-        return suggestions
     
-    def find_known_monsters_nearby(self, character_state, max_distance: int = 15, 
-                                 character_level: int = None, level_range: int = 2) -> Optional[List[Dict]]:
-        """
-        Find known monster locations near the character using learned knowledge and MapState.
-        
-        Args:
-            character_state: Current character state
-            max_distance: Maximum distance to search
-            character_level: Character level for level filtering
-            level_range: Acceptable level range for monsters
-            
-        Returns:
-            List of monster location info dictionaries or None
-        """
-        if not character_state:
-            return None
-            
-        try:
-            current_x = character_state.data.get('x', 0)
-            current_y = character_state.data.get('y', 0)
-            char_level = character_level or character_state.data.get('level', 1)
-            
-            # Use integrated knowledge base with MapState
-            suitable_monsters = self.knowledge_base.find_suitable_monsters(
-                map_state=self.map_state,
-                character_level=char_level,
-                level_range=level_range,
-                max_distance=max_distance,
-                current_x=current_x,
-                current_y=current_y
-            )
-            
-            return suitable_monsters if suitable_monsters else None
-            
-        except Exception as e:
-            self.logger.warning(f"Error finding known monsters nearby: {e}")
-            return None
     
     def learn_from_capability_analysis(self, resource_code: str = None, item_code: str = None) -> Dict:
         """
@@ -301,64 +160,7 @@ class LearningManager:
             self.logger.error(f"❌ Failed capability learning: {e}")
             return {"error": str(e)}
     
-    def analyze_upgrade_chain(self, resource_code: str, target_item_code: str) -> Dict:
-        """
-        Analyze complete upgrade chain for planning multi-step goals.
-        
-        Args:
-            resource_code: Starting resource (e.g., "ash_tree")
-            target_item_code: Target item (e.g., "wooden_staff")
-            
-        Returns:
-            Dictionary with upgrade chain analysis and viability
-        """
-        if not self.capability_analyzer:
-            return {"error": "Capability analyzer not initialized"}
-        
-        try:
-            self.logger.info(f"🔗 Analyzing upgrade chain: {resource_code} → {target_item_code}")
-            chain_analysis = self.capability_analyzer.analyze_upgrade_chain(resource_code, target_item_code)
-            
-            # Store learning results for future planning
-            if chain_analysis.get("viable"):
-                self.knowledge_base.learn_upgrade_chain(resource_code, target_item_code, chain_analysis)
-                
-                # Generate specific goal recommendations
-                for path in chain_analysis.get("paths", []):
-                    self.logger.info(f"  ✅ Learned viable path: {path['resource']} → {path['intermediate']} → {path['target']}")
-            
-            return chain_analysis
-            
-        except Exception as e:
-            self.logger.error(f"❌ Failed upgrade chain analysis: {e}")
-            return {"error": str(e)}
     
-    def evaluate_weapon_upgrade(self, current_weapon: str, potential_upgrade: str) -> Dict:
-        """
-        Evaluate if a weapon upgrade is worthwhile based on stats.
-        
-        Args:
-            current_weapon: Current weapon code
-            potential_upgrade: Potential upgrade weapon code
-            
-        Returns:
-            Dictionary with upgrade evaluation and recommendation
-        """
-        if not self.capability_analyzer:
-            return {"error": "Capability analyzer not initialized"}
-        
-        try:
-            self.logger.info(f"⚔️ Evaluating weapon upgrade: {current_weapon} → {potential_upgrade}")
-            comparison = self.capability_analyzer.compare_weapon_upgrades(current_weapon, potential_upgrade)
-            
-            # Store upgrade evaluation for future reference
-            self.knowledge_base.learn_weapon_comparison(current_weapon, potential_upgrade, comparison)
-            
-            return comparison
-            
-        except Exception as e:
-            self.logger.error(f"❌ Failed weapon upgrade evaluation: {e}")
-            return {"error": str(e)}
     
     def learn_all_resources_bulk(self, client) -> Dict:
         """

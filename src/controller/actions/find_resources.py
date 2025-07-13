@@ -110,42 +110,46 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                     **coordinate_data
                 )
             
-            # Get map_state from context for cached access
-            map_state = context.map_state
+            # Get knowledge_base from context for cached access
+            knowledge_base = context.knowledge_base
             
             # PRIORITY 1: Search learned map data first (most accurate)
-            for resource_code in target_codes:
-                map_location = self._search_map_state_for_resource(map_state, resource_code)
-                if map_location:
-                    x, y = map_location
-                    distance = self._calculate_distance(character_x, character_y, x, y)
-                    self.logger.info(f"🗺️ Found {resource_code} in learned map data at ({x}, {y})")
-                    
-                    # Set coordinates directly on ActionContext for unified access
-                    if hasattr(self, '_context') and self._context:
-                        self._context.target_x = x
-                        self._context.target_y = y
-                        self._context.resource_code = resource_code
-                        self._context.resource_name = resource_code
-                    
-                    coordinate_data = {
-                        'target_x': x,
-                        'target_y': y,
-                        'distance': distance,
-                        'resource_code': resource_code,
-                        'resource_name': resource_code,  # Use code as name fallback
-                        'resource_skill': 'unknown',
-                        'resource_level': 1,
-                        'target_codes': target_codes,
-                        'source': 'learned_map_data'
-                    }
-                    
-                    # Set coordinates using ActionContext methods for subsequent actions
-                    if hasattr(self, '_context') and self._context:
-                        self._context.set_result('target_x', x)
-                        self._context.set_result('target_y', y)
-                        self._context.set_result('resource_code', resource_code)
-                        self._context.set_result('resource_name', resource_code)
+            resources_found = knowledge_base.find_resources_in_map(
+                resource_codes=target_codes,
+                character_x=character_x,
+                character_y=character_y,
+                max_radius=search_radius
+            )
+            if resources_found:
+                x, y, resource_code = resources_found[0]  # Get closest resource
+                distance = self._calculate_distance(character_x, character_y, x, y)
+                self.logger.info(f"🗺️ Found {resource_code} in learned map data at ({x}, {y})")
+                
+                # Set coordinates directly on ActionContext for unified access
+                if hasattr(self, '_context') and self._context:
+                    self._context.target_x = x
+                    self._context.target_y = y
+                    self._context.resource_code = resource_code
+                    self._context.resource_name = resource_code
+                
+                coordinate_data = {
+                    'target_x': x,
+                    'target_y': y,
+                    'distance': distance,
+                    'resource_code': resource_code,
+                    'resource_name': resource_code,  # Use code as name fallback
+                    'resource_skill': 'unknown',
+                    'resource_level': 1,
+                    'target_codes': target_codes,
+                    'source': 'learned_map_data'
+                }
+                
+                # Set coordinates using ActionContext methods for subsequent actions
+                if hasattr(self, '_context') and self._context:
+                    self._context.set_result('target_x', x)
+                    self._context.set_result('target_y', y)
+                    self._context.set_result('resource_code', resource_code)
+                    self._context.set_result('resource_name', resource_code)
                     
                     # Nested state changes for GOAP compatibility
                     state_changes = {
@@ -200,8 +204,8 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
             # Fallback to map scanning if no known locations found
             self.logger.info(f"🔍 No known locations for {target_codes}, scanning map...")
             
-            # Use unified search algorithm with map cache
-            result = self.unified_search(client, character_x, character_y, search_radius, resource_filter, resource_result_processor, map_state)
+            # Use unified search algorithm - no direct map_state access
+            result = self.unified_search(client, character_x, character_y, search_radius, resource_filter, resource_result_processor, None)
             
             # If no resources found within current radius, try expansion based on configuration
             action_config = context.get('action_config', {})
@@ -215,8 +219,8 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
                 expanded_action = FindResourcesAction()
                 # Pass context to the expanded action
                 expanded_action._context = context
-                # Try the expanded search
-                expanded_result = expanded_action.unified_search(client, character_x, character_y, expanded_radius, resource_filter, resource_result_processor, map_state)
+                # Try the expanded search - no direct map_state access
+                expanded_result = expanded_action.unified_search(client, character_x, character_y, expanded_radius, resource_filter, resource_result_processor, None)
                 if expanded_result and expanded_result.success:
                     self.logger.info(f"✅ Found resources with expanded search radius {expanded_radius}")
                     result = expanded_result
@@ -450,21 +454,21 @@ class FindResourcesAction(SearchActionBase, CoordinateStandardizationMixin):
         # Fallback to manual data
         return resource_info.get('level', 1)
     
-    def _search_map_state_for_resource(self, map_state, resource_code: str) -> Optional[Tuple[int, int]]:
+    def _search_map_state_for_resource(self, knowledge_base, resource_code: str) -> Optional[Tuple[int, int]]:
         """
         Search the learned map data for a specific resource location.
         
         Args:
-            map_state: MapState instance with learned location data
+            knowledge_base: KnowledgeBase instance with map state access
             resource_code: Code of the resource to find
             
         Returns:
             (x, y) coordinates if found, None otherwise
         """
         try:
-            # Look through all learned map locations
-            if hasattr(map_state, 'data') and map_state.data:
-                for location_key, location_data in map_state.data.items():
+            # Look through all learned map locations via knowledge base
+            if knowledge_base and hasattr(knowledge_base, 'map_state') and knowledge_base.map_state and hasattr(knowledge_base.map_state, 'data') and knowledge_base.map_state.data:
+                for location_key, location_data in knowledge_base.map_state.data.items():
                     if isinstance(location_data, dict):
                         content = location_data.get('content')
                         if (content and 

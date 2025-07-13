@@ -191,6 +191,7 @@ class MockKnowledgeBase:
         }
         # Add mock methods that tests expect
         self.find_monsters_in_map = Mock(return_value=[])
+        self.find_resources_in_map = Mock(return_value=[])
         
     def get_monster_win_rate(self, monster_code: str) -> Optional[float]:
         """Get win rate for a monster."""
@@ -212,6 +213,10 @@ class MockKnowledgeBase:
     def get_item_data(self, item_code: str, client=None) -> Optional[Dict]:
         """Get item data with optional API fallback."""
         return self.data['items'].get(item_code)
+    
+    def refresh_character_data(self, client, character_name: str) -> bool:
+        """Mock refresh character data from API."""
+        return True
     
     def get_material_requirements(self, recipe_or_item: str) -> Dict[str, int]:
         """Get material requirements for a recipe/item."""

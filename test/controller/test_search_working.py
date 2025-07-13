@@ -48,31 +48,12 @@ class TestSearchWorking(unittest.TestCase):
             raw_material_needs={}
         )
         
-        # Create MapState for caching
-        map_state = MapState(self.mock_client, initial_scan=False)
+        # Architecture change: Use knowledge_base instead of direct map_state
+        from unittest.mock import Mock
         
-        # Clear any existing data to prevent interference
-        map_state.data = {}
-        
-        # Create mock content that matches the SearchActionBase expectations
-        mock_content = Mock()
-        mock_content.code = 'copper_rocks'
-        mock_content.type_ = 'resource'
-        mock_content.to_dict.return_value = {'code': 'copper_rocks', 'type_': 'resource'}
-        
-        # Pre-populate cache with content at radius 1 (coordinates that would be searched)
-        map_state.data['6,3'] = {  # East of character (5,3)
-            'x': 6, 'y': 3, 
-            'content': mock_content,
-            'last_scanned': 1000
-        }
-        
-        # Mock cache to return fresh for our test coordinate
-        map_state.is_cache_fresh = Mock(return_value=True)
-        map_state.scan = Mock()  # Won't be called since cache is fresh
-        
-        # Add map_state to context
-        context.map_state = map_state
+        mock_kb = Mock()
+        mock_kb.find_resources_in_map.return_value = [(6, 3, 'copper_rocks')]  # (x, y, resource_code)
+        context.knowledge_base = mock_kb
         
         # Execute the action
         result = action.execute(self.mock_client, context)
@@ -83,8 +64,13 @@ class TestSearchWorking(unittest.TestCase):
         self.assertEqual(result.data['target_x'], 6)
         self.assertEqual(result.data['target_y'], 3)
         
-        # Verify cache was used, not API calls
-        map_state.scan.assert_not_called()
+        # Verify knowledge_base was used correctly
+        mock_kb.find_resources_in_map.assert_called_once_with(
+            resource_codes=['copper_rocks'],
+            character_x=self.character_x,
+            character_y=self.character_y,
+            max_radius=2
+        )
 
     def test_search_base_content_filters_work(self):
         """Test that SearchActionBase content filters work correctly."""

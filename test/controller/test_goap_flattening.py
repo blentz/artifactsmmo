@@ -79,7 +79,7 @@ class TestGOAPConsolidatedStates(unittest.TestCase):
         
         # Architecture compliant - set initial state in UnifiedStateContext
         context = UnifiedStateContext()
-        context.set(StateParameters.CHARACTER_ALIVE, True)
+        context.set(StateParameters.CHARACTER_HEALTHY, True)
         
         # Create plan with correct signature (goal_state, actions_config)
         plan = self.goap_manager.create_plan(goal_state, mock_actions)

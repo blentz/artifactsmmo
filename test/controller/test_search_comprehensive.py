@@ -185,36 +185,21 @@ class TestSearchComprehensive(unittest.TestCase):
         """Test FindResourcesAction execute method basic functionality."""
         action = FindResourcesAction()
         
-        # Create MapState with mock content
-        map_state = MapState(self.mock_client, initial_scan=False)
+        # Architecture change: Use knowledge_base instead of direct map_state
         
-        # Clear any existing data to prevent interference
-        map_state.data = {}
-        
-        # Create properly structured mock content
-        mock_content = Mock()
-        mock_content.code = 'iron_rocks'
-        mock_content.type_ = 'resource'
-        mock_content.to_dict.return_value = {'code': 'iron_rocks', 'type_': 'resource'}
-        
-        # Place content at radius 1
-        map_state.data['6,3'] = {
-            'x': 6, 'y': 3,
-            'content': mock_content,
-            'last_scanned': time.time()
-        }
-        
-        map_state.is_cache_fresh = Mock(return_value=True)
-        map_state.scan = Mock()
-        
-        # Execute with resource_types parameter
+        # Setup knowledge_base with find_resources_in_map (new architecture)
         from test.fixtures import MockActionContext
+        from unittest.mock import Mock
+        
+        mock_kb = Mock()
+        mock_kb.find_resources_in_map.return_value = [(6, 3, 'iron_rocks')]  # (x, y, resource_code)
+        
         context = MockActionContext(
             character_x=5,
             character_y=3,
             search_radius=2,
             resource_types=['iron_rocks'],
-            map_state=map_state,
+            knowledge_base=mock_kb,
             character_level=10,
             skill_type=None,
             level_range=5,

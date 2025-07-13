@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from src.controller.actions.base.movement import MovementActionBase
 from src.lib.action_context import ActionContext
-from test.fixtures import MockActionContext, create_mock_client
+from test.fixtures import MockActionContext, create_mock_client, MockKnowledgeBase
 
 
 class TestMovementActionBase(unittest.TestCase):
@@ -25,7 +25,7 @@ class TestMovementActionBase(unittest.TestCase):
                 'alive': True,
             },
         })
-        self.assertEqual(action.reactions, {"at_location": True})
+        self.assertEqual(action.reactions, {})
         self.assertEqual(action.weight, 10)
     
     def test_get_target_coordinates_default(self):
@@ -75,6 +75,11 @@ class TestMovementActionBase(unittest.TestCase):
         mock_response.data.character.y = 20
         mock_move_api.return_value = mock_response
         
+        # Set up context for the knowledge base refresh
+        context = ActionContext()
+        context.knowledge_base = MockKnowledgeBase()
+        self.action._context = context
+        
         # Execute movement
         result = self.action.execute_movement(
             self.mock_client, 
@@ -107,6 +112,11 @@ class TestMovementActionBase(unittest.TestCase):
         mock_response.data.character.y = 15
         mock_move_api.return_value = mock_response
         
+        # Set up context for the knowledge base refresh
+        context = ActionContext()
+        context.knowledge_base = MockKnowledgeBase()
+        self.action._context = context
+        
         # Execute movement with None context
         result = self.action.execute_movement(self.mock_client, 5, 15, None)
         
@@ -134,6 +144,11 @@ class TestMovementActionBase(unittest.TestCase):
         """Test movement execution when already at destination."""
         # Mock 490 error
         mock_move_api.side_effect = Exception("490: Already at destination")
+        
+        # Set up context for the knowledge base refresh
+        context = ActionContext()
+        context.knowledge_base = MockKnowledgeBase()
+        self.action._context = context
         
         result = self.action.execute_movement(
             self.mock_client, 

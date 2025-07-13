@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock, call
 
 from src.controller.ai_player_controller import AIPlayerController
 from src.controller.actions.base import ActionResult
-from src.controller.skill_goal_manager import SkillType
+# SkillType import removed since SkillGoalManager was removed
 from src.game.character.state import CharacterState
 from src.game.map.state import MapState
 from src.lib.action_context import ActionContext
@@ -50,9 +50,9 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
                 
                 self.controller = AIPlayerController(self.mock_client, self.mock_goal_manager)
                 
-        # Set character and map states
+        # Set character state and knowledge base map_state
         self.controller.character_state = self.mock_character_state
-        self.controller.map_state = self.mock_map_state
+        self.mock_knowledge_base.map_state = self.mock_map_state
     
     def test_set_client(self):
         """Test setting the client."""
@@ -113,10 +113,7 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
         
         self.controller.set_map_state(new_map_state)
         
-        # Verify map state is set
-        self.assertEqual(self.controller.map_state, new_map_state)
-        
-        # Verify knowledge base was updated with map state
+        # Verify knowledge base was updated with map state (single source of truth)
         self.assertEqual(mock_knowledge_base.map_state, new_map_state)
     
     def test_check_and_handle_cooldown_active(self):
@@ -301,9 +298,9 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
         
         # Verify context has access to basic StateParameters
         # Architecture compliance: Focus on functional behavior rather than internal state
-        context.set(StateParameters.CHARACTER_ALIVE, True)
+        context.set(StateParameters.CHARACTER_HEALTHY, True)
         context.set(StateParameters.CHARACTER_LEVEL, 5)
-        self.assertTrue(context.get(StateParameters.CHARACTER_ALIVE))
+        self.assertTrue(context.get(StateParameters.CHARACTER_HEALTHY))
         self.assertEqual(context.get(StateParameters.CHARACTER_LEVEL), 5)
         
         # Behavioral test: Context creation succeeded - controller integration functional
@@ -519,159 +516,22 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
         self.assertTrue(result)
         self.controller.mission_executor.execute_level_progression.assert_called_once_with(15)
     
-    def test_skill_up_goal(self):
-        """Test skill_up_goal method."""
-        # Mock skill goal manager
-        self.controller.skill_goal_manager = Mock()
-        self.controller.skill_goal_manager.achieve_skill_goal_with_goap.return_value = True
-        
-        # Mock get_current_world_state
-        with patch.object(self.controller, 'get_current_world_state') as mock_get_state:
-            mock_get_state.return_value = {'weaponcrafting_level': 5}
-            
-            result = self.controller.skill_up_goal(SkillType.WEAPONCRAFTING, 10)
-            
-            self.assertTrue(result)
-            self.controller.skill_goal_manager.achieve_skill_goal_with_goap.assert_called_once_with(
-                SkillType.WEAPONCRAFTING,
-                10,
-                {'weaponcrafting_level': 5},
-                self.controller
-            )
+    # test_skill_up_goal removed - method was removed, use existing goals instead
     
-    def test_get_skill_progression_strategy(self):
-        """Test get_skill_progression_strategy method."""
-        # Mock skill goal manager
-        self.controller.skill_goal_manager = Mock()
-        expected_strategy = {'action': 'craft_items', 'priority': 1}
-        self.controller.skill_goal_manager.get_skill_progression_strategy.return_value = expected_strategy
-        
-        strategy = self.controller.get_skill_progression_strategy(SkillType.WEAPONCRAFTING, 5)
-        
-        self.assertEqual(strategy, expected_strategy)
-        self.controller.skill_goal_manager.get_skill_progression_strategy.assert_called_once_with(
-            SkillType.WEAPONCRAFTING, 5
-        )
+    # test_get_skill_progression_strategy removed - method was removed, use existing goals instead
     
-    def test_get_available_skills(self):
-        """Test get_available_skills method."""
-        # Mock skill goal manager
-        self.controller.skill_goal_manager = Mock()
-        expected_skills = [SkillType.WEAPONCRAFTING, SkillType.COMBAT]
-        self.controller.skill_goal_manager.get_available_skills.return_value = expected_skills
-        
-        skills = self.controller.get_available_skills()
-        
-        self.assertEqual(skills, expected_skills)
+    # test_get_available_skills removed - method was removed, use existing goals instead
     
-    def test_find_and_move_to_level_appropriate_monster(self):
-        """Test find_and_move_to_level_appropriate_monster method."""
-        # Mock action executor
-        self.controller.action_executor = Mock()
-        mock_result = Mock()
-        mock_result.success = True
-        self.controller.action_executor.execute_action.return_value = mock_result
-        
-        # Mock context building
-        with patch.object(self.controller, '_build_execution_context') as mock_build_context:
-            mock_context = Mock()
-            mock_build_context.return_value = mock_context
-            
-            result = self.controller.find_and_move_to_level_appropriate_monster(search_radius=5, level_range=2)
-            
-            self.assertTrue(result)
-            self.controller.action_executor.execute_action.assert_called_once_with(
-                'find_and_move_to_monster',
-                self.mock_client, 
-                mock_context
-            )
-            # Verify parameters were set on context using StateParameters
-            mock_context.set.assert_any_call('search.radius', 5)
-            mock_context.set.assert_any_call('level.range', 2)
-    
-    def test_learn_from_map_exploration(self):
-        """Test learn_from_map_exploration method."""
-        # Mock knowledge base with proper data attribute
-        self.controller.knowledge_base = Mock()
-        self.controller.knowledge_base.data = {}  # Initialize as empty dict to avoid iteration issues
-        
-        # Mock map state - ensure it exists
-        if not self.controller.map_state:
-            self.controller.map_state = Mock()
-        
-        # Mock map response with proper data structure
-        map_response = Mock()
-        # Create data as a plain dict (not Mock with to_dict)
-        map_response.data = {
-            'x': 10,
-            'y': 15,
-            'content': {
-                'type': 'monster',
-                'code': 'goblin'
-            }
-        }
-        
-        self.controller.learn_from_map_exploration(10, 15, map_response)
-        
-        # Verify knowledge base learning was called with correct parameters
-        self.controller.knowledge_base.learn_from_content_discovery.assert_called_once_with(
-            'monster', 'goblin', 10, 15, {'type': 'monster', 'code': 'goblin'}
-        )
-        
-        # Verify save was called
-        self.controller.knowledge_base.save.assert_called_once()
-    
-    def test_learn_from_combat(self):
-        """Test learn_from_combat method."""
-        # Mock knowledge base with proper methods
-        self.controller.knowledge_base = Mock()
-        self.controller.knowledge_base.get_monster_combat_success_rate.return_value = 0.75  # 75% success rate
-        
-        # Ensure character_state has proper numeric hp and max_hp values
-        self.mock_character_state.data['hp'] = 80
-        self.mock_character_state.data['max_hp'] = 100
-        self.mock_character_state.data['level'] = 10
-        
-        fight_data = {
-            'turns': 3,
-            'damage_dealt': 50,
-            'damage_taken': 20,
-            'xp': 100,
-            'gold': 50
-        }
-        
-        combat_context = {
-            'post_combat_hp': 60
-        }
-        
-        self.controller.learn_from_combat('goblin', 'win', 80, fight_data, combat_context)
-        
-        # Verify knowledge base recording was called
-        self.controller.knowledge_base.record_combat_result.assert_called_once()
-        
-        # Get the actual call arguments
-        call_args = self.controller.knowledge_base.record_combat_result.call_args[0]
-        self.assertEqual(call_args[0], 'goblin')  # monster_code
-        self.assertEqual(call_args[1], 'win')     # result
-        # Character data should have post-combat HP from context
-        self.assertEqual(call_args[2]['hp'], 60)  # Updated HP from combat_context
-        self.assertEqual(call_args[2]['hp_before'], 80)  # pre_combat_hp
-        self.assertEqual(call_args[3], fight_data)  # fight_data
-        
-        # Verify save was called
-        self.controller.knowledge_base.save.assert_called_once()
-        
-        # Verify success rate was queried
-        self.controller.knowledge_base.get_monster_combat_success_rate.assert_called_once_with('goblin', 10)
-    
+    # test_find_and_move_to_level_appropriate_monster removed - method was removed, replaced by KnowledgeBase helpers
+    # test_learn_from_map_exploration removed - method was removed, replaced by KnowledgeBase helpers  
+    # test_learn_from_combat removed - method was removed, replaced by KnowledgeBase helpers
     def test_find_known_monsters_nearby(self):
         """Test find_known_monsters_nearby method."""
-        # Mock learning manager
-        self.controller.learning_manager = Mock()
+        # Mock knowledge base method
         expected_monsters = [
             {'code': 'goblin', 'x': 8, 'y': 12, 'level': 8}
         ]
-        self.controller.learning_manager.find_known_monsters_nearby.return_value = expected_monsters
+        self.mock_knowledge_base.find_suitable_monsters.return_value = expected_monsters
         
         # Character at position (5, 10) level 10
         monsters = self.controller.find_known_monsters_nearby(
@@ -680,97 +540,40 @@ class TestAIPlayerControllerComprehensive(unittest.TestCase):
             level_range=3
         )
         
-        # Verify delegation to learning manager
-        self.controller.learning_manager.find_known_monsters_nearby.assert_called_once_with(
-            self.mock_character_state, 15, 10, 3
+        # Verify delegation to knowledge base (using self.map_state internally)
+        self.mock_knowledge_base.find_suitable_monsters.assert_called_once_with(
+            character_level=10,
+            level_range=3,
+            max_distance=15,
+            current_x=5,
+            current_y=10
         )
         
         # Verify result
         self.assertEqual(monsters, expected_monsters)
     
-    def test_intelligent_monster_search(self):
-        """Test intelligent_monster_search method."""
-        # Mock action executor
-        self.controller.action_executor = Mock()
-        mock_result = Mock()
-        mock_result.success = True
-        self.controller.action_executor.execute_action.return_value = mock_result
-        
-        # Mock context building
-        with patch.object(self.controller, '_build_execution_context') as mock_build_context:
-            mock_context = Mock()
-            mock_build_context.return_value = mock_context
-            
-            result = self.controller.intelligent_monster_search(search_radius=5)
-            
-            self.assertTrue(result)
-            self.controller.action_executor.execute_action.assert_called_once_with(
-                'intelligent_monster_search',
-                self.mock_client,
-                mock_context
-            )
-            # Verify parameter was set on context using StateParameters
-            mock_context.set.assert_called_with('search.radius', 5)
+    # test_intelligent_monster_search removed - method was removed, replaced by KnowledgeBase helpers
+    # test_get_learning_insights removed - method was removed, replaced by KnowledgeBase helpers
     
-    def test_get_learning_insights(self):
-        """Test get_learning_insights method."""
-        # Mock learning manager
-        self.controller.learning_manager = Mock()
-        expected_insights = {
-            'monsters_known': 10,
-            'locations_explored': 50,
-            'combat_wins': 25
-        }
-        self.controller.learning_manager.get_learning_insights.return_value = expected_insights
-        
-        insights = self.controller.get_learning_insights()
-        
-        self.assertEqual(insights, expected_insights)
-        self.controller.learning_manager.get_learning_insights.assert_called_once()
-    
-    def test_optimize_with_knowledge(self):
-        """Test optimize_with_knowledge method."""
-        # Mock learning manager
-        self.controller.learning_manager = Mock()
-        expected_optimization = {
-            'recommended_action': 'hunt',
-            'target': 'goblin',
-            'reason': 'optimal_xp'
-        }
-        self.controller.learning_manager.optimize_with_knowledge.return_value = expected_optimization
-        
-        optimization = self.controller.optimize_with_knowledge('combat')
-        
-        self.assertEqual(optimization, expected_optimization)
-        self.controller.learning_manager.optimize_with_knowledge.assert_called_once_with(
-            self.mock_character_state, 'combat'
-        )
+    # test_optimize_with_knowledge removed - method was legacy code and removed
     
     def test_learn_all_game_data_efficiently(self):
         """Test learn_all_game_data_efficiently method."""
-        # Mock learning manager
-        self.controller.learning_manager = Mock()
+        # Mock knowledge base bulk learning method
         mock_result = {
             'success': True,
-            'stats': {
-                'resources': 10,
-                'monsters': 15,
-                'items': 20,
-                'total': 45
-            },
-            'details': {},
-            'errors': []
+            'total_resources_learned': 10
         }
-        self.controller.learning_manager.learn_all_game_data_bulk.return_value = mock_result
+        self.mock_knowledge_base.learn_all_resources_bulk.return_value = mock_result
         
         result = self.controller.learn_all_game_data_efficiently()
         
         self.assertIsInstance(result, dict)
         self.assertEqual(result['success'], True)
-        self.assertEqual(result['stats']['total'], 45)
+        self.assertEqual(result['stats']['total'], 10)
         
-        # Verify delegation to learning manager
-        self.controller.learning_manager.learn_all_game_data_bulk.assert_called_once_with(self.mock_client)
+        # Verify delegation to knowledge base
+        self.mock_knowledge_base.learn_all_resources_bulk.assert_called_once_with(self.mock_client)
 
 
 if __name__ == '__main__':

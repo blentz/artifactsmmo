@@ -189,10 +189,6 @@ action_configurations:
     type: "builtin"
     description: "Execute a single material transformation at current workshop"
     
-  verify_transformation_results:
-    type: "builtin"
-    description: "Verify transformation results in inventory"
-    
   # Equipment upgrade actions
   initiate_equipment_analysis:
     type: "builtin"

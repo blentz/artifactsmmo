@@ -35,8 +35,9 @@ class TestCoordinatePassingFix(UnifiedContextTestBase):
         }
         self.controller.set_character_state(self.mock_character_state)
         
-        # Set up context
+        # Set up context with knowledge_base
         self.context.character_name = 'test_character'
+        self.context.knowledge_base = Mock()  # Add knowledge_base mock for movement actions
     
     def test_move_action_uses_target_coordinates_from_context(self):
         """Test that move action can access target coordinates from context."""

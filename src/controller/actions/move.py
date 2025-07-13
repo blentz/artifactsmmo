@@ -20,10 +20,9 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
             },
         }
     reactions = {
-            'location_context': {
-                'at_target': True,
-            },
-        }
+        'character.x': 'target.x',
+        'character.y': 'target.y'
+    }
     weight = 1.0
 
     def __init__(self):

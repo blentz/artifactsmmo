@@ -15,6 +15,7 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 5. **Behavior-based solutions** over hard-coded logic
 6. **API responses are authoritative** - the only source for data
 7. **Test-driven development** - all changes must have tests and all tests must pass
+8. **Business logic goes in actions** - controllers and managers only orchestrate
 
 ## Architecture
 
@@ -61,8 +62,7 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 
 **Configuration** (`config/`)
 - `action_configurations.yaml` - Action definitions
-- `goal_templates.yaml` - Goal definitions
-- `state_engine.yaml` - State calculations
+- `goal_templates.yaml` - Goal definitions and selection rules
 
 **Data Persistence** (`data/`)
 - `world.yaml` - GOAP world state
@@ -85,11 +85,18 @@ yq                           # Query YAML files
 
 ### Critical Testing Requirements
 
+**MANDATORY STANDARDS** (Zero Tolerance):
+- **100% code coverage** - no exceptions
+- **0 test failures** - all tests must pass
+- **0 warnings** - clean test output required  
+- **0 skipped tests** - all tests must run
+
 **ALWAYS verify changes with:**
 1. Unit tests: `python -m pytest` (must pass 100%)
 2. Runtime test: `./run.sh` (minimum 15-30 seconds)
 3. Check data persistence in YAML files
 4. Verify no test data contaminates production files
+5. **Architectural compliance review** - ensure business logic stays in actions
 
 ### Adding New Functionality
 
@@ -163,6 +170,89 @@ monster_data = knowledge_base.get_monster_data('chicken', client=api_client)
 # Checks local cache first, then API if needed
 ```
 
+## Recent Architectural Improvements
+
+### Goal Manager Refactor (Major Success)
+
+Successfully transformed goal manager from complex business logic container to simple YAML template provider:
+
+**Problem Solved**: "No suitable goal found for current state" error caused by over-complex goal selection logic.
+
+**Solution**: Complete architectural refactor following principle "business logic goes in actions."
+
+**Before vs After**:
+- **Code Reduction**: 761 → 127 lines (83% reduction)
+- **Business Logic**: Removed ALL character analysis, viability checks, state computation
+- **Categories**: Removed hardcoded categories, moved to YAML
+- **Selection**: Simplified to priority-based boolean condition checking
+
+**Key Architectural Insights**:
+1. **Simplicity wins**: Complex logic was causing failures, simple logic works reliably
+2. **Separation of concerns**: Goal manager should only load templates and check boolean flags
+3. **Declarative configuration**: All selection logic moved to YAML configuration
+4. **Actions handle business logic**: Character viability, crafting requirements, etc.
+
+### Current Goal Manager Architecture
+
+**Role**: Simple YAML-driven goal template provider
+- Load goal templates from `config/goal_templates.yaml`
+- Load goal selection rules with priorities
+- Check simple boolean conditions against state flags
+- Return goal templates for GOAP planning
+- **NO business logic whatsoever**
+
+**Example Goal Selection**:
+```yaml
+# In goal_templates.yaml
+goal_selection_rules:
+  emergency:
+    - condition: {'character_status.healthy': false}
+      goal: 'get_healthy'
+      priority: 100
+  progression:
+    - condition: {'character_status.healthy': true}
+      goal: 'hunt_monsters'
+      priority: 70
+```
+
+**Simple Goal Selection Pattern**:
+```python
+def select_goal(self, current_state):
+    # Collect all rules with priorities from YAML
+    all_rules = []
+    for category, rules in self.goal_selection_rules.items():
+        for rule in rules:
+            all_rules.append({
+                'priority': rule.get('priority', 0),
+                'goal_name': rule.get('goal'),
+                'condition': rule.get('condition', {})
+            })
+    
+    # Sort by priority and check simple boolean conditions
+    all_rules.sort(key=lambda x: x['priority'], reverse=True)
+    for rule_data in all_rules:
+        if self._check_simple_condition(rule_data['condition'], current_state):
+            return (rule_data['goal_name'], self.goal_templates[rule_data['goal_name']])
+    
+    return None
+```
+
+### Architectural Compliance Checklist
+
+**✅ DO** (Compliant Patterns):
+- Simple boolean condition checking in goal manager
+- All business logic in actions
+- Declarative YAML configuration
+- Priority-based rule iteration
+- State flags computed by UnifiedStateContext
+
+**❌ DON'T** (Violation Patterns):
+- Character state analysis in goal manager
+- Hardcoded categories or selection algorithms
+- Complex state computation outside actions
+- If-elif blocks for goal selection
+- Business logic in controllers or managers
+
 ## Common Issues & Solutions
 
 1. **"Missing required parameter"** → Check ActionContext preservation
@@ -172,6 +262,7 @@ monster_data = knowledge_base.get_monster_data('chicken', client=api_client)
 5. **Cooldown issues** → Verify character state refresh before detection
 6. **Goal parsing errors** → Check compound operators handled first
 7. **Action context lost** → Ensure actions use `set_result()`
+8. **"No suitable goal found"** → Check boolean flags in state, ensure goal_selection_rules in YAML match state format
 
 ## Debug Commands
 
@@ -203,5 +294,8 @@ controller.action_context  # Should persist between actions
 - Configuration hot-reloadable without code changes
 - System uses discovery over hard-coding
 - All new features via YAML configuration
-- Maintain near 100% test coverage
+- **Maintain exactly 100% test coverage** - no exceptions
 - Production data files must stay clean of test data
+- **Business logic MUST go in actions** - never in controllers or managers
+- Goal manager is architecturally compliant (simple YAML template provider)
+- Use boolean flags for state conditions, not complex computations

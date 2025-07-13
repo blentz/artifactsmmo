@@ -72,11 +72,11 @@ class FindWorkshopsAction(SearchActionBase, CoordinateStandardizationMixin):
                 
                 return self.create_success_result(**coordinate_data)
             
-            # Get map_state from context for cached access
-            map_state = context.map_state
+            # Get knowledge_base from context for cached access
+            knowledge_base = context.knowledge_base
             
-            # Use unified search algorithm
-            result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
+            # Use unified search algorithm - no direct map_state access
+            result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, None)
             
             return result
             

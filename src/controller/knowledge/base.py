@@ -13,11 +13,13 @@ from artifactsmmo_api_client.api.items.get_item_items_code_get import sync as ge
 from artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get import sync as get_monster_api
 from artifactsmmo_api_client.api.np_cs.get_npc_npcs_details_code_get import sync as get_npc_api
 from artifactsmmo_api_client.api.resources.get_resource_resources_code_get import sync as get_resource_api
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 
 from src.game.globals import DATA_PREFIX
 from src.game.map.state import MapState
 from src.lib.goap_data import GoapData
 from src.lib.state_parameters import StateParameters
+from src.lib.unified_state_context import get_unified_context
 
 
 class KnowledgeBase(GoapData):
@@ -353,14 +355,13 @@ class KnowledgeBase(GoapData):
         if damage_records:
             monster_info['estimated_damage'] = sum(damage_records) // len(damage_records)
     
-    def find_suitable_monsters(self, map_state, character_level: int = None,
+    def find_suitable_monsters(self, character_level: int = None,
                              level_range: int = 2, max_distance: int = 20,
                              current_x: int = 0, current_y: int = 0) -> List[Dict]:
         """
         Find suitable monsters using MapState data and learning insights.
         
         Args:
-            map_state: MapState instance with location data
             character_level: Character level for filtering
             level_range: Acceptable level range
             max_distance: Maximum search distance
@@ -372,11 +373,11 @@ class KnowledgeBase(GoapData):
         """
         suitable_monsters = []
         
-        if not map_state or not hasattr(map_state, 'data'):
+        if not self.map_state or not hasattr(self.map_state, 'data'):
             return suitable_monsters
             
         # Search through MapState's discovered locations
-        for location_key, location_data in map_state.data.items():
+        for location_key, location_data in self.map_state.data.items():
             if not isinstance(location_data, dict):
                 continue
                 
@@ -425,28 +426,27 @@ class KnowledgeBase(GoapData):
         suitable_monsters.sort(key=lambda m: (-m.get('success_rate', 0.5), m['distance']))
         return suitable_monsters
         
-    def is_location_known(self, map_state, x: int, y: int) -> bool:
+    def is_location_known(self, x: int, y: int) -> bool:
         """Check if a location has been visited before (uses MapState)."""
-        if not map_state:
+        if not self.map_state:
             return False
         location_key = f"{x},{y}"
-        return location_key in map_state.data
+        return location_key in self.map_state.data
         
-    def get_location_info(self, map_state, x: int, y: int) -> Optional[Dict]:
+    def get_location_info(self, x: int, y: int) -> Optional[Dict]:
         """Get stored information about a specific location (uses MapState)."""
-        if not map_state:
+        if not self.map_state:
             return None
         location_key = f"{x},{y}"
-        return map_state.data.get(location_key)
+        return self.map_state.data.get(location_key)
         
-    def find_monsters_in_map(self, map_state, character_x: int, character_y: int, 
+    def find_monsters_in_map(self, character_x: int, character_y: int, 
                             monster_types: List[str] = None, character_level: int = None, 
                             level_range: int = 2, max_radius: int = 10) -> List[Dict]:
         """
         Find monsters from cached map data, using knowledge base for monster details.
         
         Args:
-            map_state: MapState instance with cached map data
             character_x: Character's current X coordinate
             character_y: Character's current Y coordinate
             monster_types: Optional list of monster types to filter by
@@ -457,13 +457,13 @@ class KnowledgeBase(GoapData):
         Returns:
             List of monster location dictionaries with distance and monster data
         """
-        if not map_state or not map_state.data:
+        if not self.map_state or not self.map_state.data:
             return []
             
         found_monsters = []
         
         # Search through all cached map locations
-        for location_key, location_data in map_state.data.items():
+        for location_key, location_data in self.map_state.data.items():
             if not isinstance(location_data, dict):
                 continue
                 
@@ -1326,6 +1326,55 @@ class KnowledgeBase(GoapData):
         
         return None
     
+    def refresh_character_data(self, client, character_name: str) -> bool:
+        """
+        Refresh character data from API and update UnifiedStateContext.
+        
+        Follows the same pattern as other get_*_data methods:
+        - Uses non-bulk API (get_character_api for individual character)
+        - Updates the singleton UnifiedStateContext with fresh data
+        - Provides targeted refresh capability for actions
+        
+        Args:
+            client: API client for character data fetch
+            character_name: Character name to refresh
+            
+        Returns:
+            True if refresh successful, False otherwise
+        """
+        if not client or not character_name:
+            self.logger.warning("❌ No client or character_name provided for refresh")
+            return False
+            
+        try:
+            self.logger.info(f"🔄 Refreshing character data for {character_name} from API...")
+            char_response = get_character_api(name=character_name, client=client)
+            
+            if char_response and char_response.data:
+                character_data = char_response.data
+                unified_context = get_unified_context()
+                
+                # Update character state parameters in singleton context
+                unified_context.update({
+                    StateParameters.CHARACTER_NAME: getattr(character_data, 'name', character_name),
+                    StateParameters.CHARACTER_LEVEL: getattr(character_data, 'level', 1),
+                    StateParameters.CHARACTER_HP: getattr(character_data, 'hp', 0),
+                    StateParameters.CHARACTER_MAX_HP: getattr(character_data, 'max_hp', 0),
+                    StateParameters.CHARACTER_X: getattr(character_data, 'x', 0),
+                    StateParameters.CHARACTER_Y: getattr(character_data, 'y', 0),
+                    StateParameters.CHARACTER_COOLDOWN_ACTIVE: getattr(character_data, 'cooldown_expiry', 0) > 0,
+                })
+                
+                self.logger.info(f"✅ Refreshed character data: level {getattr(character_data, 'level', 1)}, pos ({getattr(character_data, 'x', 0)}, {getattr(character_data, 'y', 0)})")
+                return True
+            else:
+                self.logger.warning(f"❓ Character {character_name} not found in API response")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to refresh character data from API: {e}")
+            return False
+    
     def get_recipe_chain(self, item_code: str) -> List[Dict]:
         """
         Get the complete recipe chain for an item, traversing all dependencies.
@@ -1676,3 +1725,110 @@ class KnowledgeBase(GoapData):
         
         # Return location identifier for combat tracking
         return f"combat_{char_x}_{char_y}"
+    
+    # Map State Wrapper Methods - Single Source of Truth Interface
+    
+    def scan_location(self, x: int, y: int, cache: bool = True):
+        """
+        Scan a location using the internal map_state.
+        
+        Wrapper method that provides single access point for map scanning operations.
+        
+        Args:
+            x: X coordinate to scan
+            y: Y coordinate to scan  
+            cache: Whether to use cached data if available
+            
+        Returns:
+            Location data from map scan
+        """
+        if not self.map_state:
+            self.logger.error("No map_state available for scanning")
+            return None
+            
+        try:
+            return self.map_state.scan(x, y, cache=cache)
+        except Exception as e:
+            self.logger.error(f"Failed to scan location ({x}, {y}): {e}")
+            return None
+    
+    def save_map_state(self):
+        """
+        Save the internal map_state to persistent storage.
+        
+        Wrapper method that provides single access point for map state persistence.
+        """
+        if not self.map_state:
+            self.logger.warning("No map_state available to save")
+            return
+            
+        try:
+            self.map_state.save()
+            self.logger.debug("Map state saved successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to save map state: {e}")
+    
+    def refresh_location(self, x: int, y: int):
+        """
+        Force refresh a location by scanning without cache.
+        
+        Args:
+            x: X coordinate to refresh
+            y: Y coordinate to refresh
+            
+        Returns:
+            Fresh location data
+        """
+        return self.scan_location(x, y, cache=False)
+    
+    def find_resources_in_map(self, resource_codes=None, character_x=None, character_y=None, max_radius=None):
+        """
+        Find resource locations in the map.
+        
+        Args:
+            resource_codes: List of resource codes to search for (optional)
+            character_x: Character X position for distance calculation (optional)
+            character_y: Character Y position for distance calculation (optional)  
+            max_radius: Maximum search radius from character position (optional)
+            
+        Returns:
+            List of tuples (x, y, resource_code) sorted by distance if character position provided
+        """
+        if not self.map_state or not hasattr(self.map_state, 'data'):
+            return []
+            
+        resources_found = []
+        
+        try:
+            for location_key, location_data in self.map_state.data.items():
+                if isinstance(location_data, dict):
+                    content = location_data.get('content')
+                    if (content and 
+                        isinstance(content, dict) and 
+                        content.get('type') == 'resource'):
+                        
+                        resource_code = content.get('code')
+                        x = location_data.get('x')
+                        y = location_data.get('y')
+                        
+                        if (x is not None and y is not None and 
+                            (not resource_codes or resource_code in resource_codes)):
+                            
+                            # Check distance if character position provided
+                            if character_x is not None and character_y is not None:
+                                distance = ((x - character_x) ** 2 + (y - character_y) ** 2) ** 0.5
+                                if max_radius is None or distance <= max_radius:
+                                    resources_found.append((x, y, resource_code, distance))
+                            else:
+                                resources_found.append((x, y, resource_code))
+            
+            # Sort by distance if character position provided
+            if character_x is not None and character_y is not None:
+                resources_found.sort(key=lambda item: item[3])
+                # Remove distance from result tuples
+                resources_found = [(x, y, code) for x, y, code, dist in resources_found]
+                
+        except Exception as e:
+            self.logger.error(f"Error searching for resources in map: {e}")
+            
+        return resources_found

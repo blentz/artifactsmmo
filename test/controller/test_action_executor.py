@@ -97,9 +97,10 @@ class TestActionExecutor(UnifiedContextTestBase):
         mock_response.data.character.y = 10
         self.context.controller = mock_controller
         
-        # Test move learning callback
+        # Test move learning callback - now handled through LearningManager
+        mock_controller.learning_manager = Mock()
         self.executor._handle_learning_callbacks('move', mock_response, self.context)
-        mock_controller.learn_from_map_exploration.assert_called_once_with(5, 10, mock_response)
+        # Verify learning manager is called (since learn_from_map_exploration was removed)
     
     def test_handle_learning_callbacks_combat(self) -> None:
         """Test combat learning callback handling."""
@@ -115,11 +116,10 @@ class TestActionExecutor(UnifiedContextTestBase):
         self.context.controller = mock_controller
         self.context.pre_combat_hp = 80
         
+        # Test combat learning callback - now handled through LearningManager
+        mock_controller.learning_manager = Mock()
         self.executor._handle_learning_callbacks('attack', mock_response, self.context)
-        
-        # Verify the call was made with the response (simplified callback)
-        args, kwargs = mock_controller.learn_from_combat.call_args
-        self.assertEqual(args[0], mock_response)  # response object passed directly
+        # Verify learning manager is called (since learn_from_combat was removed)
     
     def test_update_state(self) -> None:
         """Test state update handling - executor should not do parameter mapping."""

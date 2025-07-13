@@ -53,50 +53,24 @@ class ActionContext:
     @classmethod
     def from_controller(cls, controller, action_data: Dict[str, Any] = None) -> 'ActionContext':
         """
-        Create ActionContext using the ONE unified context.
+        Create ActionContext using the unified context singleton.
+        
+        Following docs/ARCHITECTURE.md: No state synchronization needed since
+        UnifiedStateContext is the single source of truth.
         
         Args:
             controller: AI controller instance
-            action_data: Action-specific data (ignored - no params support)
+            action_data: Action-specific data (ignored - singleton pattern)
             
         Returns:
             ActionContext instance using the singleton unified context
         """
-        # There is only ONE context - no synchronization needed
+        # Pure singleton pattern - no data copying or synchronization
         context = cls()
         
-        # Map character data to StateParameters if available
-        # Only set character data if the parameters don't already have values
-        if hasattr(controller, 'character_state') and controller.character_state:
-            char_state = controller.character_state
-            
-            if hasattr(char_state, 'data'):
-                char_data = char_state.data
-                
-                # Update the ONE context with character data (only if not already set)
-                if context.get(StateParameters.CHARACTER_X) == 0:  # Default value
-                    context.set(StateParameters.CHARACTER_X, char_data.get('x', 0))
-                if context.get(StateParameters.CHARACTER_Y) == 0:  # Default value
-                    context.set(StateParameters.CHARACTER_Y, char_data.get('y', 0))
-                if context.get(StateParameters.CHARACTER_LEVEL) == 1:  # Default value
-                    context.set(StateParameters.CHARACTER_LEVEL, char_data.get('level', 1))
-                if context.get(StateParameters.CHARACTER_HP) == 0:  # Default value
-                    context.set(StateParameters.CHARACTER_HP, char_data.get('hp', 0))
-                if context.get(StateParameters.CHARACTER_MAX_HP) == 0:  # Default value
-                    context.set(StateParameters.CHARACTER_MAX_HP, char_data.get('max_hp', 0))
-                
-                # Only set alive status if HP is provided
-                if char_data.get('hp', 0) > 0:
-                    context.set(StateParameters.CHARACTER_ALIVE, True)
-                
-                # Equipment data removed - APIs are authoritative for current equipment state
-                # Use character API calls directly instead of duplicating in state parameters
-        
-        # Set dependencies from controller
+        # Set dependencies from controller - knowledge_base is single source of truth for map operations
         if hasattr(controller, 'knowledge_base'):
             context.knowledge_base = controller.knowledge_base
-        if hasattr(controller, 'map_state'):
-            context.map_state = controller.map_state
         
         return context
     

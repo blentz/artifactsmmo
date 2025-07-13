@@ -44,7 +44,7 @@ class TestMaterialGatheringGOAP:
             StateParameters.TARGET_ITEM: 'copper_dagger',
             StateParameters.TARGET_RECIPE: 'copper_dagger',
             StateParameters.MATERIALS_STATUS: 'insufficient',
-            StateParameters.CHARACTER_ALIVE: True
+            StateParameters.CHARACTER_HEALTHY: True
         }
         
         context.update(flat_updates)

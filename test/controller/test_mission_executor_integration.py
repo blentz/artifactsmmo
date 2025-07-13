@@ -31,11 +31,7 @@ class TestMissionExecutorIntegration(unittest.TestCase):
         self.mock_goal_manager = Mock()
         self.mock_goal_manager.select_goal.return_value = ('level_up', {'description': 'Level up goal'})
         self.mock_goal_manager.generate_goal_state.return_value = {'character_level': 2}
-        self.mock_goal_manager.calculate_world_state.return_value = {
-            'character_level': 1,
-            'character_alive': True,
-            'character_safe': True
-        }
+        # Note: calculate_world_state removed - using UnifiedStateContext instead
         
         # Patch data directory to use temp directory
         with patch('src.game.globals.DATA_PREFIX', self.temp_dir):
@@ -237,12 +233,12 @@ state_calculation_rules:
         # Test that the methods exist and have the expected signatures
         self.assertTrue(hasattr(self.controller, 'execute_autonomous_mission'))
         self.assertTrue(hasattr(self.controller, 'level_up_goal'))
-        self.assertTrue(hasattr(self.controller, 'find_and_move_to_level_appropriate_monster'))
+        # find_and_move_to_level_appropriate_monster method was removed - replaced by KnowledgeBase helpers
         
         # Test that methods can still be called (even if they delegate)
         self.assertTrue(callable(self.controller.execute_autonomous_mission))
         self.assertTrue(callable(self.controller.level_up_goal))
-        self.assertTrue(callable(self.controller.find_and_move_to_level_appropriate_monster))
+        # find_and_move_to_level_appropriate_monster method was removed - replaced by KnowledgeBase helpers
 
 
 if __name__ == '__main__':

@@ -96,18 +96,22 @@ class TestGOAPInfiniteLoopFix(unittest.TestCase):
     
     def test_no_infinite_loop_after_weapon_evaluation(self):
         """Test that weapon evaluation doesn't trigger infinite replanning."""
-        # Track how many times evaluate_weapon_recipes is called
+        # Track how many times evaluate_weapon_recipes is called through plan execution
         evaluation_count = 0
         
-        def mock_execute_action(action_name, action_data):
+        def mock_execute_plan(plan):
             nonlocal evaluation_count
-            if action_name == 'evaluate_weapon_recipes':
-                evaluation_count += 1
-                # Simulate successful evaluation that sets item_code
-                self.controller.action_context['item_code'] = 'wooden_staff'
+            # Count evaluate_weapon_recipes actions in the plan
+            for action in plan:
+                if action.get('name') == 'evaluate_weapon_recipes':
+                    evaluation_count += 1
+                    # Simulate successful evaluation that sets item_code
+                    self.controller.action_context['item_code'] = 'wooden_staff'
             return True
         
-        self.controller._execute_single_action = mock_execute_action
+        # Mock plan-driven execution through ActionExecutor (architectural compliance)
+        self.controller.action_executor = Mock()
+        self.controller.action_executor.execute_plan = mock_execute_plan
         
         # Mock the should_replan method to track calls
         original_should_replan = self.manager._should_replan_after_discovery
@@ -188,7 +192,7 @@ class TestGOAPInfiniteLoopFix(unittest.TestCase):
         context = UnifiedStateContext()
         
         # Behavioral test: Set weapon-related state parameters
-        context.set(StateParameters.CHARACTER_ALIVE, True)
+        context.set(StateParameters.CHARACTER_HEALTHY, True)
         
         # Architecture compliance: GOAP system functional for weapon selection without infinite loops
         self.assertTrue(True, "GOAP system should handle weapon selection scenarios without infinite loops")

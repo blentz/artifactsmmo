@@ -52,7 +52,7 @@ class TestStateParametersRegistry:
         """Test parameter validation functionality."""
         # Valid parameters should pass
         assert StateParameters.validate_parameter(StateParameters.TARGET_ITEM)
-        assert StateParameters.validate_parameter(StateParameters.CHARACTER_ALIVE)
+        assert StateParameters.validate_parameter(StateParameters.CHARACTER_LEVEL)
         
         # Invalid parameters should fail
         assert not StateParameters.validate_parameter("invalid.parameter")
@@ -79,7 +79,6 @@ class TestStateParametersRegistry:
         """Ensure critical parameters are defined."""
         required_params = [
             StateParameters.TARGET_ITEM,
-            StateParameters.CHARACTER_ALIVE,
             StateParameters.CHARACTER_LEVEL,
             StateParameters.CHARACTER_X,
             StateParameters.CHARACTER_Y,

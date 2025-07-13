@@ -100,12 +100,22 @@ The ArtifactsMMO AI Player is an autonomous agent that operates a character in a
 
 #### Goal Manager (src/controller/goal_manager.py)
 
-**Role**: Simple goal definition and state calculation.
+**Role**: Simple YAML-driven goal template provider.
+
+**Architectural Principle**: **Business logic goes in actions, NOT in goal manager.**
 
 **Features**:
 - Loads goal templates from `config/goal_templates.yaml`
-- Calculates world state from character/map data
-- Simple boolean flag calculations
+- Loads goal selection rules from YAML configuration
+- Checks simple boolean conditions against pre-computed state flags
+- Returns goal templates for GOAP planning
+- **NO business logic, NO state computation, NO character analysis**
+
+**Key Design**:
+- 127 lines of code (83% reduction from previous complex version)
+- Simple priority-based rule iteration
+- Boolean condition checking only
+- Declarative configuration driven
 
 ### 3. Action System
 
@@ -533,5 +543,99 @@ goal_templates:
 - Access state directly: `context.selected_item`, `context.character_alive`
 - Update state through direct property assignment
 - No complex state calculations in configuration
+
+## Architectural Compliance & Best Practices
+
+### Goal Manager Refactor: A Success Story
+
+The goal manager underwent a major architectural refactor that demonstrates proper separation of concerns:
+
+**Before (Non-Compliant)**:
+- 761 lines of complex business logic
+- Character state analysis and viability checks
+- Hardcoded categories and selection algorithms
+- Complex state computation and mapping logic
+- Violated "business logic goes in actions" principle
+
+**After (Architecturally Compliant)**:
+- 127 lines of simple YAML-driven code (83% reduction)
+- Zero business logic - all moved to actions
+- Pure declarative configuration
+- Simple boolean condition checking only
+- Strict adherence to architectural principles
+
+**Key Lessons**:
+1. **Simple is better than complex** - Reduced complexity while maintaining functionality
+2. **Declarative configuration works** - All selection logic now in YAML
+3. **Separation of concerns pays off** - Clear responsibilities for each component
+4. **Business logic belongs in actions** - Goal manager is just a template provider
+
+### Goal Selection Pattern
+
+**Correct Pattern** (Current Implementation):
+```python
+def select_goal(self, current_state: Dict[str, Any]) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Simple YAML-driven goal selection."""
+    # Collect all rules with priorities from YAML
+    all_rules = []
+    for category_name, rules in self.goal_selection_rules.items():
+        for rule in rules:
+            all_rules.append({
+                'priority': rule.get('priority', 0),
+                'goal_name': rule.get('goal'),
+                'condition': rule.get('condition', {})
+            })
+    
+    # Sort by priority and check simple boolean conditions
+    all_rules.sort(key=lambda x: x['priority'], reverse=True)
+    for rule_data in all_rules:
+        if self._check_simple_condition(rule_data['condition'], current_state):
+            return (rule_data['goal_name'], self.goal_templates[rule_data['goal_name']])
+    
+    return None
+```
+
+**YAML Configuration Example**:
+```yaml
+goal_selection_rules:
+  emergency:
+    - condition: {'character_status.healthy': false}
+      goal: 'get_healthy'
+      priority: 100
+  progression:
+    - condition: {'character_status.healthy': true}
+      goal: 'hunt_monsters' 
+      priority: 70
+```
+
+### Architectural Violation Detection
+
+**Red Flags** (Avoid These Patterns):
+- Business logic in goal manager or controllers
+- Hardcoded categories or selection algorithms  
+- Complex state computation outside of actions
+- Character viability checks in non-action classes
+- If-elif blocks for goal selection
+
+**Green Flags** (Follow These Patterns):
+- Simple boolean condition checking
+- All logic in YAML configuration
+- Business logic contained in actions
+- Declarative rule-based selection
+- Clear separation of concerns
+
+### Testing Requirements
+
+**Mandatory Standards**:
+- 100% code coverage
+- 0 test failures
+- 0 warnings
+- 0 skipped tests
+
+**Testing Strategy**:
+- Test architectural compliance during reviews
+- Verify business logic stays in actions
+- Ensure YAML-driven behavior works correctly
+- Test simple condition checking patterns
 
 This architecture provides a clean, maintainable foundation for AI behavior through simple declarative configuration and proven GOAP planning algorithms.

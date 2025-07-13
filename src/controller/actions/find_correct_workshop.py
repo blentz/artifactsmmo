@@ -86,10 +86,9 @@ class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
             # Create workshop filter for the specific type
             workshop_filter = self.create_workshop_filter(workshop_type=required_workshop)
             
-            # 4. Get map_state and knowledge_base from context for cached access
-            map_state = context.map_state
+            # 4. Get knowledge_base from context for cached access
             knowledge_base = context.knowledge_base
-            self._map_state_context = map_state
+            self._map_state_context = knowledge_base.map_state if knowledge_base else None
             
             # 5. First try to find workshop in knowledge base
             known_workshop = self._search_knowledge_base_for_workshop(knowledge_base, required_workshop, character_x, character_y)
@@ -109,7 +108,7 @@ class FindCorrectWorkshopAction(FindWorkshopsAction, MovementSubgoalMixin):
                         target_y=y
                     )
                 
-                search_result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, map_state)
+                search_result = self.unified_search(client, character_x, character_y, search_radius, workshop_filter, workshop_result_processor, knowledge_base.map_state if knowledge_base else None)
                 
                 if not search_result or not search_result.success:
                     return self.create_error_result(

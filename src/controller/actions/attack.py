@@ -42,22 +42,12 @@ class AttackAction(ActionBase):
             
         self._context = context
         
-        # Get fresh character state to ensure coordinates are current
-        character_state = context.character_state
-        if character_state and hasattr(character_state, 'refresh'):
-            try:
-                character_state.refresh(client)
-                # Update context coordinates from fresh character state
-                if hasattr(character_state, 'data') and character_state.data:
-                    context.set(StateParameters.CHARACTER_X, character_state.data.get('x', context.get(StateParameters.CHARACTER_X)))
-                    context.set(StateParameters.CHARACTER_Y, character_state.data.get('y', context.get(StateParameters.CHARACTER_Y)))
-                    self.logger.debug(f"🔄 Refreshed character position: ({context.get(StateParameters.CHARACTER_X)}, {context.get(StateParameters.CHARACTER_Y)})")
-            except Exception as e:
-                self.logger.warning(f"⚠️ Failed to refresh character state: {e}")
+        # Get current character coordinates from context using StateParameters
+        character_x = context.get(StateParameters.CHARACTER_X)
+        character_y = context.get(StateParameters.CHARACTER_Y)
         
-        # Get current character coordinates
-        character_x = context.character_x
-        character_y = context.character_y
+        if character_x is None or character_y is None:
+            return self.create_error_result("Character coordinates not available in context")
         
         # Use knowledge base to get fresh monster data at current location
         knowledge_base = context.knowledge_base
@@ -92,16 +82,15 @@ class AttackAction(ActionBase):
                 # Fall back to map state scan
                 pass
         
-        # Fallback: Validate monster presence using map_state scan
-        map_state = context.map_state
-        if map_state:
+        # Fallback: Validate monster presence using knowledge_base scan
+        knowledge_base = context.knowledge_base
+        if knowledge_base:
             try:
-                # Use map_state to scan current location with fresh data
-                map_state.scan(character_x, character_y, cache=False)  # Force refresh
-                coord_key = f"{character_x},{character_y}"
+                # Use knowledge_base to scan current location with fresh data
+                knowledge_base.refresh_location(character_x, character_y)  # Force refresh
                 
-                location_data = map_state.data.get(coord_key, {})
-                content = location_data.get('content')
+                location_data = knowledge_base.get_location_info(character_x, character_y)
+                content = location_data.get('content') if location_data else None
                 
                 if not content or content.get('type') != 'monster':
                     # No monster at current location
