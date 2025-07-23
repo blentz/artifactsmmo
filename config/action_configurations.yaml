@@ -54,9 +54,6 @@ action_configurations:
     type: "builtin"
     description: "Fight monsters using consolidated state format"
     
-  initiate_combat_search:
-    type: "builtin"
-    description: "Bridge action to transition combat context from idle to searching"
     
   scan:
     type: "builtin"
@@ -190,21 +187,11 @@ action_configurations:
     description: "Execute a single material transformation at current workshop"
     
   # Equipment upgrade actions
-  initiate_equipment_analysis:
-    type: "builtin"
-    description: "Initiate equipment analysis to prepare for upgrades"
     
   select_optimal_slot:
     type: "builtin"
     description: "Select the optimal equipment slot for crafting based on gaps and skill"
     
-  mark_equipment_crafting:
-    type: "builtin"
-    description: "Mark equipment status as crafting to track upgrade progress"
-    
-  complete_equipment_upgrade:
-    type: "builtin"
-    description: "Complete the equipment upgrade process after crafting"
 
   # Equipment progression action configurations
   find_workshops:
@@ -372,50 +359,3 @@ evaluate_weapon_recipes:
     max_level_difference: 1
     skill_penalty_multiplier: 10
 
-# Bridge action configurations
-# These actions handle state transitions without API calls
-action_configurations:
-  # Combat Flow Bridge Actions
-  reset_combat_context:
-    type: "builtin"
-    description: "Reset combat context from completed to idle"
-  
-  abort_combat_search:
-    type: "builtin"
-    description: "Abort combat search when no monsters found"
-  
-  mark_combat_not_viable:
-    type: "builtin"
-    description: "Mark combat as not viable when win rate too low"
-  
-  recover_combat_viability:
-    type: "builtin"
-    description: "Recover combat viability after equipment upgrade"
-  
-  # Equipment Flow Bridge Actions
-  
-  mark_equipment_ready:
-    type: "builtin"
-    description: "Mark equipment as ready for equipping"
-  
-  
-  reset_equipment_upgrade:
-    type: "builtin"
-    description: "Reset equipment upgrade for new cycle"
-  
-  # Healing Flow Bridge Actions
-  assess_healing_needs:
-    type: "builtin"
-    description: "Assess if character needs healing"
-  
-  initiate_healing:
-    type: "builtin"
-    description: "Initiate healing process"
-  
-  complete_healing:
-    type: "builtin"
-    description: "Complete healing process and set healing_status to complete"
-  
-  reset_healing_state:
-    type: "builtin"
-    description: "Reset healing state for new cycle"

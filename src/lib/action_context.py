@@ -72,6 +72,9 @@ class ActionContext:
         if hasattr(controller, 'knowledge_base'):
             context.knowledge_base = controller.knowledge_base
         
+        # Store controller reference for post-execution updates
+        context.controller = controller
+        
         return context
     
     def get_character_inventory(self) -> Dict[str, int]:

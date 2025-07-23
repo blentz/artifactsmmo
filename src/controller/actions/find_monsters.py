@@ -60,19 +60,42 @@ class FindMonstersAction(ActionBase):
             if target_x is not None and target_y is not None:
                 # This is continuation - check if we reached the target
                 if current_x == target_x and current_y == target_y:
-                    self.logger.info(f"✅ Reached target location ({target_x}, {target_y}) - character can now find monsters")
+                    self.logger.info(f"✅ Reached target location ({target_x}, {target_y}) - refreshing location data and validating monster presence")
+                    # Character reached target - refresh location data to ensure accuracy
+                    context.knowledge_base.refresh_location(current_x, current_y)
+                    
                     # Character is now at monster location - proceed with "finding"
-                    return self._character_finds_monsters_at_location(
+                    result = self._character_finds_monsters_at_location(
                         current_x, current_y, character_level, context
                     )
+                    
+                    # If no monster found at expected location after refresh, clear stale data and restart search
+                    if not result.success:
+                        self.logger.info("🔄 No monster found at expected location after refresh - adding to failed locations and restarting search")
+                        # Track failed location to prevent retrying
+                        if not hasattr(context, 'failed_monster_locations'):
+                            context.failed_monster_locations = set()
+                        context.failed_monster_locations.add((target_x, target_y))
+                        # Clear stale target data
+                        context.target_x = None
+                        context.target_y = None
+                        context.target_monster_code = None
+                        # Fall through to restart monster search with fresh data
+                    else:
+                        return result
                 else:
                     # Still moving to target, shouldn't happen but handle gracefully
                     self.logger.warning(f"⚠️ Expected to be at ({target_x}, {target_y}) but at ({current_x}, {current_y})")
                     # Fall through to normal logic
             
             # Use player knowledge to find optimal monster location from knowledge base
+            # Get list of failed locations to exclude from search
+            if not hasattr(context, 'failed_monster_locations'):
+                context.failed_monster_locations = set()
+            failed_locations = context.failed_monster_locations
+            
             optimal_location = self._player_finds_optimal_monster_location(
-                current_x, current_y, character_level, context
+                current_x, current_y, character_level, context, exclude_locations=failed_locations
             )
             
             if not optimal_location:
@@ -85,10 +108,25 @@ class FindMonstersAction(ActionBase):
             
             # Check if character is already at monster location (character perception)
             if current_x == monster_x and current_y == monster_y:
-                self.logger.info(f"🎯 Character already at monster location ({monster_x}, {monster_y})")
-                return self._character_finds_monsters_at_location(
+                self.logger.info(f"🎯 Character already at monster location ({monster_x}, {monster_y}) - refreshing location data to validate")
+                # Refresh location data to ensure it's current before claiming success
+                context.knowledge_base.refresh_location(current_x, current_y)
+                
+                result = self._character_finds_monsters_at_location(
                     current_x, current_y, character_level, context
                 )
+                
+                # If no monster found at expected location after refresh, continue searching for alternatives
+                if not result.success:
+                    self.logger.info("🔄 No monster found at expected location after refresh - adding to failed locations and continuing search")
+                    # Track failed location to prevent retrying
+                    if not hasattr(context, 'failed_monster_locations'):
+                        context.failed_monster_locations = set()
+                    context.failed_monster_locations.add((monster_x, monster_y))
+                    # Continue to search for other monster locations
+                    # Fall through to normal search logic
+                else:
+                    return result
             
             # Character needs to move to monster location - request movement subgoal
             self.logger.info(f"🚶 Character needs to move from ({current_x}, {current_y}) to ({monster_x}, {monster_y}) to find {monster_code}")
@@ -118,7 +156,7 @@ class FindMonstersAction(ActionBase):
             return self.create_error_result(f"Failed to find monsters: {str(e)}")
 
     def _player_finds_optimal_monster_location(
-        self, current_x: int, current_y: int, character_level: int, context: ActionContext
+        self, current_x: int, current_y: int, character_level: int, context: ActionContext, exclude_locations: set = None
     ) -> Optional[Tuple[int, int, str]]:
         """
         Use player knowledge (knowledge base) to find optimal monster location.
@@ -144,6 +182,17 @@ class FindMonstersAction(ActionBase):
             
             if not monsters_found:
                 self.logger.info("No suitable monsters found using knowledge base")
+                return None
+                
+            # Filter out excluded locations if provided
+            if exclude_locations:
+                original_count = len(monsters_found)
+                monsters_found = [m for m in monsters_found if (m['x'], m['y']) not in exclude_locations]
+                if len(monsters_found) < original_count:
+                    self.logger.info(f"🚫 Filtered out {original_count - len(monsters_found)} failed locations")
+                
+            if not monsters_found:
+                self.logger.info("No suitable monsters found after filtering failed locations")
                 return None
                 
             # Knowledge base returns sorted list - take the best option

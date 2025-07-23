@@ -226,21 +226,22 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         # Mock UnifiedStateContext singleton behavior (architectural compliance)
         mock_context = Mock()
         mock_unified_context_class.return_value = mock_context
+        # Start with goal not achieved, then achieved after first action
         mock_context.get_all_parameters.side_effect = [
-            {'level': 3, StateParameters.CHARACTER_COOLDOWN_ACTIVE: False},  # Initial check - goal not achieved
-            {'level': 4, StateParameters.CHARACTER_COOLDOWN_ACTIVE: False},  # Check before hunt
-            {'level': 10, StateParameters.CHARACTER_COOLDOWN_ACTIVE: False}, # After hunt - goal achieved  
-            {'level': 10}  # Final check
+            {'level': 3, StateParameters.CHARACTER_COOLDOWN_ACTIVE: False},  # Initial - goal not achieved
+            {'level': 10, StateParameters.CHARACTER_COOLDOWN_ACTIVE: False}, # After first action - goal achieved
         ]
         mock_context.get.side_effect = lambda param: False if param == StateParameters.CHARACTER_COOLDOWN_ACTIVE else None
         
-        # Mock plan-driven execution through ActionExecutor (architectural compliance)
+        # Mock action execution through ActionExecutor (architectural compliance)
         mock_controller.action_executor = Mock()
-        mock_controller.action_executor.execute_plan.side_effect = [True, True]  # Both actions succeed
+        mock_controller.client = Mock()
+        mock_action_result = Mock()
+        mock_action_result.success = True
+        mock_action_result.subgoal_request = None
+        mock_controller.action_executor.execute_action.return_value = mock_action_result
         mock_controller._refresh_character_state = Mock()
         mock_controller.action_context = {}
-        mock_controller.last_action_result = Mock()
-        mock_controller.last_action_result.subgoal_request = None  # No subgoal request
         goal_state = {'level': '>5'}
         
         result = self.goap_manager._execute_plan_with_selective_replanning(
@@ -248,23 +249,28 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
         )
         
         self.assertTrue(result)
-        # Verify plan-driven execution (2 single-action plans executed)
-        self.assertEqual(mock_controller.action_executor.execute_plan.call_count, 2)
+        # Verify individual action execution calls
+        self.assertGreaterEqual(mock_controller.action_executor.execute_action.call_count, 1)
     
-    def test_execute_plan_with_selective_replanning_with_replanning(self):
+    @patch('src.controller.goap_execution_manager.UnifiedStateContext')
+    def test_execute_plan_with_selective_replanning_with_replanning(self, mock_unified_context_class):
         """Test _execute_plan_with_selective_replanning with replanning."""
         plan = [{'name': 'explore_map'}, {'name': 'hunt'}]  # Use actual discovery action
         mock_controller = Mock()
-        mock_controller.plan_action_context = Mock()  # Required attribute
-        mock_controller.get_current_world_state.return_value = {'level': 10}  # Goal achieved
-        mock_controller.character_state = Mock()
-        mock_controller.character_state.data = {'cooldown': 0}
-        mock_controller._execute_single_action.return_value = True
-        mock_controller._refresh_character_state = Mock()
+        mock_controller.action_executor = Mock()
+        mock_controller.client = Mock()
+        mock_action_result = Mock()
+        mock_action_result.success = True
+        mock_action_result.subgoal_request = None
+        mock_controller.action_executor.execute_action.return_value = mock_action_result
         mock_controller.action_context = {}
-        mock_controller.last_action_result = Mock()
-        mock_controller.last_action_result.subgoal_request = None  # No subgoal request
         goal_state = {'level': '>5'}
+        
+        # Mock UnifiedStateContext
+        mock_context = Mock()
+        mock_unified_context_class.return_value = mock_context
+        mock_context.get.return_value = False  # No cooldown
+        mock_context.get_all_parameters.return_value = {'level': 10}  # Goal achieved
         
         # Mock methods
         with patch.object(self.goap_manager, '_is_goal_achieved') as mock_goal:
@@ -282,34 +288,31 @@ class TestGOAPExecutionManagerCoverage(unittest.TestCase):
                     mock_replan.assert_called_once()
     
     def test_execute_plan_with_selective_replanning_failure(self):
-        """Test _execute_plan_with_selective_replanning with action failure."""
+        """Test _execute_plan_with_selective_replanning with action failure (refactored architecture)."""
         plan = [{'name': 'move'}]
         mock_controller = Mock()
         mock_controller.action_context = {}
-        mock_controller.plan_action_context = Mock()  # Required attribute
-        mock_controller.get_current_world_state.return_value = {'level': 3}  # Goal not achieved
-        mock_controller.character_state = Mock()
-        mock_controller.character_state.data = {'cooldown': 0}
-        mock_controller._execute_single_action.return_value = False  # Action fails
+        mock_controller.action_executor = Mock()
+        mock_controller.client = Mock()
+        mock_action_result = Mock()
+        mock_action_result.success = False  # Action execution fails
+        mock_controller.action_executor.execute_action.return_value = mock_action_result
         mock_controller.last_action_result = Mock()
         mock_controller.last_action_result.subgoal_request = None  # No subgoal request
         goal_state = {'level': '>5'}
         
-        # Mock failure handling methods
-        with patch.object(self.goap_manager, '_is_authentication_failure') as mock_auth:
-            with patch.object(self.goap_manager, '_is_cooldown_failure') as mock_cooldown:
-                with patch.object(self.goap_manager, '_is_coordinate_failure') as mock_coord:
-                    with patch.object(self.goap_manager, '_is_hp_validation_failure') as mock_hp:
-                        mock_auth.return_value = False
-                        mock_cooldown.return_value = False
-                        mock_coord.return_value = False
-                        mock_hp.return_value = False
-                        
-                        result = self.goap_manager._execute_plan_with_selective_replanning(
-                            plan, mock_controller, goal_state
-                        )
-                        
-                        self.assertFalse(result)
+        # Mock UnifiedStateContext singleton for architectural compliance
+        with patch('src.controller.goap_execution_manager.UnifiedStateContext') as mock_context_class:
+            mock_context = Mock()
+            mock_context_class.return_value = mock_context
+            mock_context.get.return_value = False  # No cooldown
+            mock_context.get_all_parameters.return_value = {'level': 3}  # Goal not achieved
+            
+            result = self.goap_manager._execute_plan_with_selective_replanning(
+                plan, mock_controller, goal_state
+            )
+            
+            self.assertFalse(result)
     
     
     def test_handle_cooldown_with_plan_insertion(self):

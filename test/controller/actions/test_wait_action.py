@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.controller.actions.wait import WaitAction
+from src.lib.state_parameters import StateParameters
 from test.test_base import UnifiedContextTestBase
 
 
@@ -15,6 +16,9 @@ class TestWaitAction(UnifiedContextTestBase):
         super().setUp()
         self.wait_action = WaitAction()
         self.mock_client = Mock()
+        
+        # Set up character name in context for API calls
+        self.context.set(StateParameters.CHARACTER_NAME, "test_character")
     
     def tearDown(self):
         """Clean up test fixtures."""
@@ -31,9 +35,9 @@ class TestWaitAction(UnifiedContextTestBase):
     def test_init(self):
         """ Test WaitAction initialization """
         action = WaitAction()
-        self.assertEqual(action.conditions['character_status']['cooldown_active'], True)
-        self.assertEqual(action.reactions['character_status']['cooldown_active'], False)
-        self.assertEqual(action.weight, 1)
+        self.assertEqual(action.conditions['character_status.cooldown_active'], True)
+        self.assertEqual(action.reactions['character_status.cooldown_active'], False)
+        self.assertEqual(action.weight, 0.1)
 
     def test_init_no_params(self):
         """ Test WaitAction initialization with no parameters """
@@ -41,163 +45,191 @@ class TestWaitAction(UnifiedContextTestBase):
         # No wait_duration attribute since it uses ActionContext now
         self.assertIsInstance(action, WaitAction)
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_default_wait(self, mock_sleep):
-        """ Test execute with default wait duration """
-        self.context.wait_duration = 1.0
+    def test_execute_default_wait(self, mock_sleep, mock_get_character):
+        """ Test execute gets cooldown from API """
+        # Mock API response with cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 3
+        mock_get_character.return_value = mock_response
+        
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
-        self.assertIn('Waited 1.0 seconds', result.message)
-        mock_sleep.assert_called_once_with(1.0)  # Uses provided wait_duration
+        self.assertIn('Waited 3.0 seconds', result.message)
+        mock_sleep.assert_called_once_with(3.0)
+        mock_get_character.assert_called_once_with(name="test_character", client=self.mock_client)
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_character_state_no_cooldown(self, mock_sleep):
-        """ Test execute with character state but no active cooldown """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 0,
-            'cooldown_expiration': None
-        }
+    def test_execute_with_zero_cooldown_clamped_to_minimum(self, mock_sleep, mock_get_character):
+        """ Test execute with zero cooldown gets clamped to minimum """
+        # Mock API response with zero cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 0
+        mock_get_character.return_value = mock_response
         
-        # With default wait_duration (not setting wait_duration to test default)
-        self.context.character_state = mock_character_state
-        # Don't set wait_duration to test the default behavior
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
-        mock_sleep.assert_called_once_with(1.0)  # Uses default wait_duration
+        self.assertIn('Waited 0.1 seconds', result.message)  # Clamped to minimum
+        mock_sleep.assert_called_once_with(0.1)  # Clamped to minimum 0.1
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_active_cooldown(self, mock_sleep):
-        """ Test execute with GOAP-provided wait duration """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 6,
-            'cooldown_expiration': '2023-01-01T12:00:06+00:00'
-        }
+    def test_execute_with_active_cooldown(self, mock_sleep, mock_get_character):
+        """ Test execute with specific cooldown from API """
+        # Mock API response with specific cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 6
+        mock_get_character.return_value = mock_response
         
-        # GOAP provides the calculated wait duration
-        self.context.character_state = mock_character_state
-        self.context.wait_duration = 5.5
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
-        self.assertIn('Waited 5.5 seconds', result.message)
-        mock_sleep.assert_called_once_with(5.5)
+        self.assertIn('Waited 6.0 seconds', result.message)
+        mock_sleep.assert_called_once_with(6.0)
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_expired_cooldown(self, mock_sleep):
-        """ Test execute with zero wait duration (cooldown already expired) """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 0,
-            'cooldown_expiration': None
-        }
+    def test_execute_with_expired_cooldown(self, mock_sleep, mock_get_character):
+        """ Test execute with zero cooldown gets clamped to minimum """
+        # Mock API response with zero cooldown (expired)
+        mock_response = Mock()
+        mock_response.data.cooldown = 0
+        mock_get_character.return_value = mock_response
         
-        # GOAP would provide 0.1 for expired/no cooldown (minimum wait)
-        self.context.character_state = mock_character_state
-        self.context.wait_duration = 0.1
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
+        self.assertIn('Waited 0.1 seconds', result.message)  # Clamped to minimum
         mock_sleep.assert_called_once_with(0.1)  # Minimum wait
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_cooldown_seconds_only(self, mock_sleep):
-        """ Test execute with GOAP-provided wait duration """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 3,
-            'cooldown_expiration': None
-        }
+    def test_execute_with_cooldown_seconds_only(self, mock_sleep, mock_get_character):
+        """ Test execute with standard API cooldown """
+        # Mock API response with standard cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 3
+        mock_get_character.return_value = mock_response
         
-        # GOAP provides wait duration
-        self.context.character_state = mock_character_state
-        self.context.wait_duration = 3.0
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
+        self.assertIn('Waited 3.0 seconds', result.message)
         mock_sleep.assert_called_once_with(3.0)
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_large_cooldown_clamped(self, mock_sleep):
+    def test_execute_with_large_cooldown_clamped(self, mock_sleep, mock_get_character):
         """ Test execute with large cooldown gets clamped to maximum """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 120,  # 2 minutes
-            'cooldown_expiration': None
-        }
+        # Mock API response with large cooldown that should be clamped
+        mock_response = Mock()
+        mock_response.data.cooldown = 120
+        mock_get_character.return_value = mock_response
         
-        # GOAP would already clamp this, but wait action also clamps for safety
-        self.context.character_state = mock_character_state
-        self.context.wait_duration = 120.0
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
+        self.assertIn('Waited 60.0 seconds', result.message)  # Clamped to 60 max
         mock_sleep.assert_called_once_with(60.0)  # Clamped to 60 seconds max
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_string_cooldown_expiration(self, mock_sleep):
-        """ Test execute with GOAP-calculated wait duration from string expiration """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 3,
-            'cooldown_expiration': '2023-01-01T12:00:02.500000+00:00'
-        }
+    def test_execute_with_moderate_cooldown(self, mock_sleep, mock_get_character):
+        """ Test execute with moderate cooldown from API """
+        # Mock API response with moderate cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 15
+        mock_get_character.return_value = mock_response
         
-        # GOAP calculates and provides the wait duration
-        self.context.character_state = mock_character_state
-        self.context.wait_duration = 2.5
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
-        mock_sleep.assert_called_once_with(2.5)
+        self.assertIn('Waited 15.0 seconds', result.message)
+        mock_sleep.assert_called_once_with(15.0)
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_with_parse_error_fallback(self, mock_sleep):
-        """ Test execute with GOAP fallback duration when parsing fails """
-        mock_character_state = Mock()
-        mock_character_state.data = {
-            'cooldown': 4,
-            'cooldown_expiration': 'invalid-date-format'
-        }
+    def test_execute_with_api_fallback(self, mock_sleep, mock_get_character):
+        """ Test execute with API providing fallback cooldown """
+        # Mock API response with fallback cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 4
+        mock_get_character.return_value = mock_response
         
-        # GOAP would handle parse errors and provide a fallback duration
-        self.context.character_state = mock_character_state
-        self.context.wait_duration = 4.0
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertTrue(result.success)
+        self.assertIn('Waited 4.0 seconds', result.message)
         mock_sleep.assert_called_once_with(4.0)
 
+    @patch('src.controller.actions.wait.get_character_api')
     @patch('time.sleep')
-    def test_execute_exception_handling(self, mock_sleep):
+    def test_execute_exception_handling(self, mock_sleep, mock_get_character):
         """ Test execute handles exceptions gracefully """
+        # Mock API response with valid cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 1
+        mock_get_character.return_value = mock_response
+        
+        # Make sleep fail
         mock_sleep.side_effect = Exception("Sleep interrupted")
         
-        self.context.wait_duration = 1.0
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
         self.assertFalse(result.success)
         self.assertIn('Wait failed', result.error)
 
-    def test_execute_without_context(self):
-        """ Test execute without context (uses default) """
-        self.context.wait_duration = 1.0
+    @patch('src.controller.actions.wait.get_character_api')
+    def test_execute_with_context_uses_api(self, mock_get_character):
+        """ Test execute with context uses API for cooldown """
+        # Mock API response with default cooldown
+        mock_response = Mock()
+        mock_response.data.cooldown = 3
+        mock_get_character.return_value = mock_response
+        
+        with patch('time.sleep') as mock_sleep:
+            result = self.wait_action.execute(self.mock_client, self.context)
+            
+            self.assertIsNotNone(result)
+            self.assertTrue(result.success)
+            self.assertIn('Waited 3.0 seconds', result.message)
+            mock_sleep.assert_called_once_with(3.0)
+
+    def test_execute_without_character_name(self):
+        """ Test execute fails gracefully when no character name provided """
+        # Clear character name from context
+        self.context.set(StateParameters.CHARACTER_NAME, None)
+        
         result = self.wait_action.execute(self.mock_client, self.context)
         
         self.assertIsNotNone(result)
-        self.assertTrue(result.success)
+        self.assertFalse(result.success)
+        self.assertIn('No character name available', result.error)
+
+    @patch('src.controller.actions.wait.get_character_api')
+    def test_execute_api_failure(self, mock_get_character):
+        """ Test execute handles API failures gracefully """
+        # Mock API to return None
+        mock_get_character.return_value = None
+        
+        result = self.wait_action.execute(self.mock_client, self.context)
+        
+        self.assertIsNotNone(result)
+        self.assertFalse(result.success)
+        self.assertIn('Could not get character data from API', result.error)
 
     def test_repr(self):
         """ Test string representation """

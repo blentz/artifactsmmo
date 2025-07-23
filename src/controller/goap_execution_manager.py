@@ -17,6 +17,7 @@ from src.lib.actions_data import ActionsData
 from src.lib.yaml_data import YamlData
 from src.lib.unified_state_context import UnifiedStateContext
 from src.lib.state_parameters import StateParameters
+from src.lib.action_context import ActionContext
 from src.game.globals import CONFIG_PREFIX
 from src.controller.knowledge.base import KnowledgeBase
 from src.controller.action_factory import ActionFactory
@@ -367,97 +368,6 @@ class GOAPExecutionManager:
                 return False
         return True
     
-    def _convert_goal_value_to_goap_format(self, goal_value: Any) -> Any:
-        """
-        Convert special goal values to GOAP-compatible format.
-        
-        Args:
-            goal_value: Goal value like '!null', 'completed', '>0', etc.
-            
-        Returns:
-            GOAP-compatible value (boolean, numeric)
-        """
-        if isinstance(goal_value, str):
-            # Handle special string values
-            if goal_value == '!null':
-                return True  # Non-null means True
-            elif goal_value == 'null':
-                return False  # Null means False
-            elif goal_value == 'completed':
-                return True  # Completed state means True
-            elif goal_value == 'idle':
-                return False  # Idle state means False  
-            elif goal_value.startswith('>'):
-                # Convert ">0" to a positive number that GOAP can target
-                try:
-                    threshold = float(goal_value[1:])
-                    return int(threshold) + 1  # Target slightly above threshold
-                except ValueError:
-                    return True
-            elif goal_value.startswith('>='):
-                # Convert ">=0" to a number that GOAP can target
-                try:
-                    threshold = float(goal_value[2:])
-                    return int(threshold)  # Target at least the threshold
-                except ValueError:
-                    return True
-            else:
-                # For other string values, return as-is for now
-                return goal_value
-        else:
-            # Return non-string values as-is
-            return goal_value
-    
-    def _check_condition_matches(self, state: Dict[str, Any], cond_key: str, cond_value: Any) -> bool:
-        """
-        Check if a condition matches the current state, supporting nested state structures.
-        
-        Args:
-            state: Current state dictionary
-            cond_key: The state key to check
-            cond_value: Expected value (can be nested dict or simple value)
-            
-        Returns:
-            True if condition matches, False otherwise
-        """
-        current_value = state.get(cond_key)
-        
-        # Handle simple value comparison
-        if not isinstance(cond_value, dict):
-            # Handle special comparison operators
-            if isinstance(cond_value, str):
-                if cond_value == '!null':
-                    return current_value is not None
-                elif cond_value.startswith('<'):
-                    try:
-                        threshold = float(cond_value[1:])
-                        return isinstance(current_value, (int, float)) and current_value < threshold
-                    except (ValueError, TypeError):
-                        return False
-                elif cond_value.startswith('>'):
-                    try:
-                        threshold = float(cond_value[1:])
-                        return isinstance(current_value, (int, float)) and current_value > threshold
-                    except (ValueError, TypeError):
-                        return False
-            
-            return current_value == cond_value
-        
-        # Handle nested dict comparison
-        if not isinstance(current_value, dict):
-            return False
-        
-        # Check that all required nested conditions are satisfied
-        for nested_key, nested_value in cond_value.items():
-            if nested_key not in current_value:
-                return False
-            
-            # Recursive check for deeper nesting
-            if not self._check_condition_matches(current_value, nested_key, nested_value):
-                return False
-        
-        return True
-    
     
     def create_planner_from_context(self, goal_state: Dict[str, Any], 
                                   actions_config: Dict[str, Dict]) -> World:
@@ -597,12 +507,13 @@ class GOAPExecutionManager:
                     conditions = action_config.get('conditions', {})
                     all_met = True
                     unmet_conditions = []
-                    for cond_key, cond_value in conditions.items():
-                        # Check against state for nested conditions
-                        if not self._check_condition_matches(current_state, cond_key, cond_value):
-                            all_met = False
+                    # Check if action conditions are met using existing validation method
+                    if not self._check_conditions_for_action(current_state, conditions):
+                        all_met = False
+                        for cond_key, cond_value in conditions.items():
                             current_value = self._get_nested_value(current_state, cond_key) if '.' in str(cond_key) else current_state.get(cond_key)
-                            unmet_conditions.append(f"{cond_key}: need {cond_value}, have {current_value}")
+                            if current_value != cond_value:
+                                unmet_conditions.append(f"{cond_key}: need {cond_value}, have {current_value}")
                     if all_met:
                         self.logger.debug(f"  ✓ {action_name}: all conditions met")
                     else:
@@ -694,12 +605,8 @@ class GOAPExecutionManager:
         action_index = 0
         iterations = 0
         
-        # The controller should always have a plan_action_context - it's a singleton
-        if not hasattr(controller, 'plan_action_context') or controller.plan_action_context is None:
-            self.logger.error("Controller missing plan_action_context - this should be initialized by AIPlayerController")
-            return False
-        
-        self.logger.debug("Using existing ActionContext singleton for GOAP plan execution")
+        # ActionContext is singleton - access directly without controller dependency
+        self.logger.debug("Using ActionContext singleton for GOAP plan execution")
         
         while action_index < len(current_plan) and iterations < max_iterations:
             iterations += 1
@@ -738,10 +645,17 @@ class GOAPExecutionManager:
             
             self.logger.info(f"Executing action {action_index + 1}/{len(current_plan)}: {action_name}")
             
-            # Execute the action through proper plan-driven execution (architectural compliance)
-            # Actions must execute only through ActionExecutor as part of plans
-            action_plan = [current_action]
-            success = controller.action_executor.execute_plan(action_plan)
+            # Execute the action through proper ActionExecutor (architectural compliance)
+            # Actions must execute only through ActionExecutor, not directly
+            context = ActionContext.from_controller(controller)  # Include knowledge_base and other dependencies
+            
+            result = controller.action_executor.execute_action(
+                action_name, controller.client, context
+            )
+            success = result.success if result else False
+            
+            # Store result for consistency with controller pattern
+            controller.last_action_result = result
             
             # Trust UnifiedStateContext singleton - no manual state updates needed (architectural compliance)
             # ActionExecutor automatically maintains the singleton state
@@ -793,29 +707,10 @@ class GOAPExecutionManager:
             if not success:
                 self.logger.warning(f"Action {action_name} failed")
                 
-                # Handle specific failure types with targeted recovery
-                if self._is_authentication_failure(action_name, controller):
-                    self.logger.error("🚨 Authentication failure detected - aborting execution")
-                    return False
-                elif self._is_cooldown_failure(action_name, controller):
-                    self.logger.warning("⏱️ Cooldown failure detected - inserting wait action")
-                    # Insert wait action at current position to handle cooldown
-                    current_plan = self._handle_cooldown_with_plan_insertion(
-                        current_plan, action_index, controller
-                    )
-                    # Don't increment action_index - retry the same action after wait
-                    continue
-                elif self._is_coordinate_failure(action_name, controller):
-                    self.logger.error("📍 Coordinate failure detected - goal execution failed")
-                    return False
-                elif self._is_hp_validation_failure(action_name, controller):
-                    self.logger.error("💚 HP validation failure detected - goal execution failed")
-                    return False
-                else:
-                    # Action failed and no specific recovery strategy applies
-                    # Propagate failure up the recursion stack - no replanning at this level
-                    self.logger.error(f"❌ Action {action_name} failed - propagating failure up recursion stack")
-                    return False
+                # Actions handle their own failure validation through plan execution
+                # Manager only orchestrates - let actions determine recovery through structured results
+                self.logger.error(f"❌ Action {action_name} failed - propagating failure up recursion stack")
+                return False
             
             # Check if this action requires replanning
             if self._is_discovery_action(action_name):
@@ -1216,193 +1111,6 @@ class GOAPExecutionManager:
         except Exception as e:
             self.logger.error(f"Failed to initialize session state: {e}")
             # Continue execution with default behavior
-    
-    def _is_authentication_failure(self, action_name: str, controller) -> bool:
-        """
-        Detect authentication failures to prevent infinite retry loops.
-        
-        Args:
-            action_name: Name of the failed action
-            controller: AI controller for error context
-            
-        Returns:
-            True if authentication failure detected, False otherwise
-        """
-        try:
-            # Check for authentication-related errors in recent log messages
-            # This is a simple heuristic - could be enhanced with actual error inspection
-            return False  # For now, let authentication failures be handled by the application
-        except Exception:
-            return False
-    
-    def _is_coordinate_failure(self, action_name: str, controller) -> bool:
-        """
-        Detect coordinate/movement failures that require find_monsters replan.
-        
-        Args:
-            action_name: Name of the failed action
-            controller: AI controller for error context
-            
-        Returns:
-            True if coordinate failure detected, False otherwise
-        """
-        try:
-            # Check if this is a move action failing due to missing coordinates
-            if action_name == 'move':
-                # Check if action context lacks target coordinates
-                if hasattr(controller, 'action_context'):
-                    context = controller.action_context
-                    if context.get('target_x') is None or context.get('target_y') is None:
-                        self.logger.info("🔍 Move action failed due to missing target coordinates")
-                        return True
-            return False
-        except Exception as e:
-            self.logger.warning(f"Error checking coordinate failure: {e}")
-            return False
-    
-    def _is_cooldown_failure(self, action_name: str, controller) -> bool:
-        """
-        Detect if action failed due to character being on cooldown.
-        
-        This typically happens with HTTP 499 status code errors.
-        
-        Args:
-            action_name: Name of the failed action
-            controller: AI controller for error context
-            
-        Returns:
-            True if cooldown failure detected, False otherwise
-        """
-        try:
-            # Check if the last action result indicates cooldown
-            if hasattr(controller, 'last_action_result'):
-                result = controller.last_action_result
-                if isinstance(result, dict):
-                    # Check for error messages indicating cooldown
-                    error_msg = result.get('error', '').lower()
-                    if 'cooldown' in error_msg or '499' in error_msg:
-                        self.logger.info(f"⏱️ Action {action_name} failed due to cooldown")
-                        return True
-                    
-                    # Check response data for cooldown indicators
-                    response = result.get('response')
-                    if response and hasattr(response, 'status_code') and response.status_code == 499:
-                        self.logger.info(f"⏱️ Action {action_name} failed with HTTP 499 (cooldown)")
-                        return True
-                        
-            # Also check current state using UnifiedStateContext singleton (architectural compliance)
-            context = UnifiedStateContext()
-            if context.get(StateParameters.CHARACTER_COOLDOWN_ACTIVE):
-                self.logger.info(f"⏱️ Character is on cooldown after {action_name}")
-                return True
-                
-            return False
-        except Exception as e:
-            self.logger.warning(f"Error checking cooldown failure: {e}")
-            return False
-    
-    def _is_hp_validation_failure(self, action_name: str, controller) -> bool:
-        """
-        Detect if action failed due to character HP validation (HP too low).
-        
-        This happens when the action validator detects that character HP is below
-        the required threshold for the action. When this occurs, we need to force
-        a fresh world state calculation and replan to include healing actions.
-        
-        Args:
-            action_name: Name of the failed action
-            controller: AI controller instance
-            
-        Returns:
-            True if HP validation failure detected, False otherwise
-        """
-        try:
-            # Check if the last action result indicates HP validation failure
-            if hasattr(controller, 'last_action_result'):
-                result = controller.last_action_result
-                if isinstance(result, dict):
-                    # Check for validation errors indicating HP issues
-                    validation_errors = result.get('data', {}).get('validation_errors', [])
-                    for error in validation_errors:
-                        if isinstance(error, dict) and error.get('validator') == 'character_hp_above':
-                            self.logger.info(f"💚 Action {action_name} failed due to low HP validation")
-                            return True
-                    
-                    # Check error message for HP-related issues
-                    error_msg = result.get('error', '').lower()
-                    if 'character hp' in error_msg and 'below' in error_msg:
-                        self.logger.info(f"💚 Action {action_name} failed due to HP requirement")
-                        return True
-                        
-            return False
-        except Exception as e:
-            self.logger.warning(f"Error checking HP validation failure: {e}")
-            return False
-    
-    def _create_recovery_plan_with_find_monsters(self, controller, goal_state: Dict[str, Any],
-                                               config_file: str = None) -> Optional[List[Dict]]:
-        """
-        Create a recovery plan that starts with find_monsters to get fresh coordinates.
-        
-        ⚠️  ARCHITECTURAL VIOLATION ⚠️
-        This method violates docs/ARCHITECTURE.md principle: "Business logic goes in actions, NOT in goal manager"
-        
-        Violations:
-        1. Contains hardcoded recovery logic (should be in actions)
-        2. Forcibly manipulates state parameters (business logic)
-        3. Makes decisions about what constitutes "recovery" (business logic)
-        4. Hardcodes action requirements (find_monsters) instead of letting GOAP plan naturally
-        5. Selectively manages action context (business logic)
-        
-        TODO: Remove this method entirely. Let GOAP plan naturally based on current state.
-        If recovery is needed, actions should request appropriate subgoals.
-        
-        Args:
-            controller: AI controller
-            goal_state: Desired goal state  
-            config_file: Optional action configuration file
-            
-        Returns:
-            List of action dictionaries for recovery plan
-        """
-        try:
-            # Trust UnifiedStateContext singleton (architectural compliance)
-            context = UnifiedStateContext()
-            recovery_state = context.get_all_parameters().copy()
-            # ⚠️  ARCHITECTURAL VIOLATION: Forcible state manipulation is business logic
-            recovery_state.update({
-                'monsters_available': False,
-                'monster_present': False,
-                'at_target_location': False
-            })
-            
-            # ⚠️  ARCHITECTURAL VIOLATION: Context manipulation is business logic
-            # Clear action context to force fresh coordinate discovery
-            if hasattr(controller, 'action_context'):
-                # Keep some context but remove location data
-                preserved_context = {}
-                for key in ['item_code', 'recipe_item_code', 'craft_skill']:
-                    if key in controller.action_context:
-                        preserved_context[key] = controller.action_context[key]
-                controller.action_context = preserved_context
-            
-            # Load actions configuration
-            actions_config = self._load_actions_from_config(config_file)
-            if not actions_config:
-                return None
-            
-            # Create plan with forced find_monsters requirement
-            recovery_plan = self.create_plan(goal_state, actions_config)
-            if recovery_plan:
-                self.logger.info(f"🔄 Created recovery plan with {len(recovery_plan)} actions")
-                return recovery_plan
-            else:
-                self.logger.warning("Failed to create recovery plan")
-                return None
-                
-        except Exception as e:
-            self.logger.error(f"Error creating recovery plan: {e}")
-            return None
     
     
     def _resume_parent_plan_after_subgoal(self, current_plan: List[Dict], action_index: int, 

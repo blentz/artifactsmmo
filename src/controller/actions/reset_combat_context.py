@@ -15,16 +15,16 @@ from .base import ActionBase, ActionResult
 
 class ResetCombatContextAction(ActionBase):
     """
-    Bridge action to reset combat context after combat completion.
+    Bridge action to reset combat context after combat completion or defeat.
     
-    This action transitions the combat_context.status from 'completed' to 'idle',
+    This action transitions the combat_context.status from 'completed' or 'defeated' to 'idle',
     enabling the character to start searching for new combat targets.
     """
 
     # GOAP parameters
     conditions = {
         'combat_context': {
-            'status': 'completed',
+            'status': ['completed', 'defeated'],
         },
     }
     reactions = {
@@ -42,7 +42,7 @@ class ResetCombatContextAction(ActionBase):
 
     def execute(self, client, context: ActionContext) -> ActionResult:
         """
-        Execute the combat context reset.
+        Execute the combat context reset after completion or defeat.
         
         This is a state-only action that updates the combat context
         without making any API calls.
@@ -55,11 +55,14 @@ class ResetCombatContextAction(ActionBase):
         
         try:
             # This is a bridge action - it only updates state, no API calls needed
+            # Get current status for logging
+            current_status = context.get(StateParameters.COMBAT_STATUS, 'unknown')
+            
             result = self.create_success_result(
                 combat_context_reset=True,
-                previous_status='completed',
+                previous_status=current_status,
                 new_status='idle',
-                message="Combat context reset to idle state"
+                message=f"Combat context reset from {current_status} to idle state"
             )
             
             return result

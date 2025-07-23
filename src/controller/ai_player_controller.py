@@ -124,15 +124,28 @@ class AIPlayerController(StateManagerMixin):
         
         if hasattr(character_state, 'data') and character_state.data:
             char_data = character_state.data
+            current_hp = char_data.get('hp', 0)
+            max_hp = char_data.get('max_hp', 100)
+            cooldown_active = char_data.get('cooldown_expiry', 0) > 0
+            
+            # Compute character_status.healthy from HP and cooldown data automatically
+            hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
+            is_alive = current_hp > 0
+            is_safe = hp_percentage >= 30.0  # Safe threshold
+            is_healthy = is_alive and is_safe and not cooldown_active
+            
             unified_context.update({
                 StateParameters.CHARACTER_NAME: character_state.name,
                 StateParameters.CHARACTER_LEVEL: char_data.get('level', 1),
-                StateParameters.CHARACTER_HP: char_data.get('hp', 0),
-                StateParameters.CHARACTER_MAX_HP: char_data.get('max_hp', 0),
+                StateParameters.CHARACTER_HP: current_hp,
+                StateParameters.CHARACTER_MAX_HP: max_hp,
                 StateParameters.CHARACTER_X: char_data.get('x', 0),
                 StateParameters.CHARACTER_Y: char_data.get('y', 0),
-                StateParameters.CHARACTER_COOLDOWN_ACTIVE: char_data.get('cooldown_expiry', 0) > 0,
+                StateParameters.CHARACTER_COOLDOWN_ACTIVE: cooldown_active,
+                StateParameters.CHARACTER_HEALTHY: is_healthy,  # Computed automatically from HP and cooldown
             })
+            
+            self.logger.debug(f"Character health automatically computed: HP={current_hp}/{max_hp} ({hp_percentage:.1f}%), healthy={is_healthy}")
         
         self.logger.info(f"Updated unified context with character data: {character_state.name}")
         # Invalidate location-based states when character is set/changed
@@ -518,15 +531,30 @@ class AIPlayerController(StateManagerMixin):
             # Update unified context directly (singleton pattern - no external state objects)
             if hasattr(self, 'character_state') and self.character_state and hasattr(self.character_state, 'data'):
                 char_data = self.character_state.data
+                current_hp = char_data.get('hp', 0)
+                max_hp = char_data.get('max_hp', 100)
+                # Check cooldown using numeric cooldown field (always present)
+                cooldown_seconds = char_data.get('cooldown', 0)
+                cooldown_active = cooldown_seconds > 0
+                
+                # Compute character_status.healthy from HP and cooldown data
+                hp_percentage = (current_hp / max_hp * 100) if max_hp > 0 else 0
+                is_alive = current_hp > 0
+                is_safe = hp_percentage >= 30.0  # Safe threshold
+                is_healthy = is_alive and is_safe and not cooldown_active
+                
                 context.update({
                     StateParameters.CHARACTER_NAME: self.character_state.name,
                     StateParameters.CHARACTER_LEVEL: char_data.get('level', 1),
-                    StateParameters.CHARACTER_HP: char_data.get('hp', 0),
-                    StateParameters.CHARACTER_MAX_HP: char_data.get('max_hp', 0),
+                    StateParameters.CHARACTER_HP: current_hp,
+                    StateParameters.CHARACTER_MAX_HP: max_hp,
                     StateParameters.CHARACTER_X: char_data.get('x', 0),
                     StateParameters.CHARACTER_Y: char_data.get('y', 0),
-                    StateParameters.CHARACTER_COOLDOWN_ACTIVE: char_data.get('cooldown_expiry', 0) > 0,
+                    StateParameters.CHARACTER_COOLDOWN_ACTIVE: cooldown_active,
+                    StateParameters.CHARACTER_HEALTHY: is_healthy,  # Computed from HP and cooldown
                 })
+                
+                self.logger.debug(f"Character health computed: HP={current_hp}/{max_hp} ({hp_percentage:.1f}%), healthy={is_healthy}")
         
         # Return all parameters from unified state context
         state = context.get_all_parameters()

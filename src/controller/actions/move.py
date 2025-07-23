@@ -19,10 +19,7 @@ class MoveAction(MovementActionBase, CoordinateStandardizationMixin):
                 'alive': True,
             },
         }
-    reactions = {
-        'character.x': 'target.x',
-        'character.y': 'target.y'
-    }
+    reactions = {}
     weight = 1.0
 
     def __init__(self):

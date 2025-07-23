@@ -57,13 +57,34 @@ class StateComputationManager:
                 'is_low_level': level <= 5,
                 'safe': is_character_safe(current_hp, max_hp, 30.0),
                 'alive': current_hp > 0,
-                'cooldown_active': char_data.get('cooldown_expiry', 0) > 0,
+                'cooldown_active': self._is_cooldown_active(char_data),
                 'hp_percentage': calculate_hp_percentage(current_hp, max_hp),
             }
             
         except Exception as e:
             self.logger.error(f"Failed to compute character flags: {e}")
             return {}
+    
+    def _is_cooldown_active(self, char_data: Dict[str, Any]) -> bool:
+        """
+        Determine if character is currently on cooldown.
+        
+        Args:
+            char_data: Character data dictionary
+            
+        Returns:
+            True if character is on cooldown, False otherwise
+        """
+        from datetime import datetime, timezone
+        
+        cooldown_expiration = char_data.get('cooldown_expiration')
+        if cooldown_expiration is None:
+            return False
+            
+        # Parse the datetime string and compare with current time
+        expiry_time = datetime.fromisoformat(cooldown_expiration.replace('Z', '+00:00'))
+        current_time = datetime.now(timezone.utc)
+        return expiry_time > current_time
     
     def compute_equipment_flags(self, character_state) -> Dict[str, Any]:
         """

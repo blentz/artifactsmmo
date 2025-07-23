@@ -632,6 +632,8 @@ def astar(start_state, goal_state, actions, reactions, weight_table):
     return walk_path(_path)
 
 
+
+
 def walk_path(path):
     """
     Execute the main A* search loop to find the optimal path.
@@ -740,13 +742,7 @@ def walk_path(path):
                 if _value == -1:
                     continue
 
-                # Handle nested dictionary reactions properly
-                if isinstance(_value, dict) and key in _c_node["state"] and isinstance(_c_node["state"][key], dict):
-                    # Deep merge nested dictionaries instead of replacing
-                    for nested_key, nested_value in _value.items():
-                        _c_node["state"][key][nested_key] = nested_value
-                else:
-                    _c_node["state"][key] = _value
+                _c_node["state"][key] = _value
 
             path["nodes"][_c_node["id"]] = _c_node
             _neighbors.append(_c_node)

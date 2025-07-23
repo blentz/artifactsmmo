@@ -155,6 +155,12 @@ class ActionExecutor:
             self.logger.debug(f"Skipping state updates for failed action {action_name}")
             return
             
+        # Skip post-execution updates if action requested a subgoal
+        # The GOAP manager will handle the recursive execution and state management
+        if hasattr(action_result, 'subgoal_request') and action_result.subgoal_request:
+            self.logger.debug(f"⏸️ Skipping post-execution updates for {action_name} - subgoal requested")
+            return
+            
         try:
             # 1. Apply unified state changes (GOAP reactions + action context + explicit)
             self._apply_unified_state_changes(action_name, action_result, controller, context)
@@ -214,26 +220,34 @@ class ActionExecutor:
         
         self.logger.debug(f"🔧 GOAP REACTIONS: Looking for reactions on {action_name}")
         
-        # Get action class to access reactions
-        action_class = self._get_action_class(action_name)
-        if not action_class:
-            self.logger.warning(f"🔧 No action class found for {action_name}")
-            return
-            
-        self.logger.debug(f"🔧 Found action class: {action_class}")
-        
-        # Check if context has an action instance with modified reactions
+        # Get reactions with priority: instance-level > YAML > class-level
         reactions = None
-        if hasattr(context, 'action_instance') and context.action_instance:
-            # Use instance reactions if available (for dynamic reactions)
-            reactions = getattr(context.action_instance, 'reactions', None)
-            if reactions:
-                self.logger.debug(f"🔧 Using instance reactions for {action_name}: {reactions}")
         
-        # Fall back to class reactions if no instance reactions
+        # Check for instance-level reactions first (for dynamic modifications like combat defeats)
+        if hasattr(context, 'action_instance') and context.action_instance:
+            reactions = getattr(context.action_instance, 'reactions', {})
+            if reactions:
+                self.logger.debug(f"🔧 Instance reactions for {action_name}: {reactions}")
+        
         if not reactions:
-            reactions = getattr(action_class, 'reactions', {})
-            self.logger.debug(f"🔧 Class reactions for {action_name}: {reactions}")
+            # Load reactions from default_actions.yaml which contains the GOAP definitions
+            from src.lib.yaml_data import YamlData
+            from src.game.globals import CONFIG_PREFIX
+            default_actions_data = YamlData(f"{CONFIG_PREFIX}/default_actions.yaml")
+            actions_config = default_actions_data.data.get('actions', {})
+            action_config = actions_config.get(action_name, {})
+            reactions = action_config.get('reactions', {})
+            
+            if reactions:
+                self.logger.debug(f"🔧 YAML reactions for {action_name}: {reactions}")
+        
+        if not reactions:
+            # Fall back to action class reactions if no instance or YAML reactions
+            action_class = self._get_action_class(action_name)
+            if action_class:
+                reactions = getattr(action_class, 'reactions', {})
+                if reactions:
+                    self.logger.debug(f"🔧 Class reactions for {action_name}: {reactions}")
             
         if not reactions:
             self.logger.warning(f"🔧 No reactions found for {action_name}")
@@ -299,7 +313,7 @@ class ActionExecutor:
         
         target_item = context.get(StateParameters.TARGET_ITEM)
         has_target_item = target_item is not None
-        context.set(StateParameters.HAS_TARGET_ITEM, has_target_item)
+        # HAS_TARGET_ITEM removed - use knowledge_base.has_target_item() instead
         
         self.logger.debug(f"Recalculated equipment flags: has_target_slot={has_target_slot}, has_target_item={has_target_item}")
         

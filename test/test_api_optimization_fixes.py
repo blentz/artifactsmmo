@@ -198,57 +198,60 @@ class TestWaitActionOptimization(TestAPIOptimizationFixes):
     """Test wait action optimization to avoid short waits."""
     
     def test_wait_action_calculates_proper_duration(self):
-        """Test that WaitAction calculates proper wait duration."""
+        """Test that WaitAction uses direct API call for cooldown data."""
         from src.controller.actions.wait import WaitAction
-        
-        # Set up character with cooldown that expires in 10 seconds
-        future_time = datetime.now(timezone.utc) + timedelta(seconds=10)
-        self.mock_character_state.data['cooldown_expiration'] = future_time.isoformat()
-        self.mock_character_state.data['cooldown'] = 10
+        from src.lib.state_parameters import StateParameters
         
         wait_action = WaitAction()
         
         # Mock time.sleep to avoid actually waiting
         with patch('time.sleep') as mock_sleep:
-            # Set up context with character state and wait duration
-            self.context.character_state = self.mock_character_state
-            self.context.wait_duration = 10.0
-            result = wait_action.execute(self.mock_client, self.context)
-            
-            # Should have called sleep with the provided duration
-            mock_sleep.assert_called_once()
-            sleep_duration = mock_sleep.call_args[0][0]
-            self.assertGreater(sleep_duration, 8.0)  # At least 8 seconds
-            self.assertLessEqual(sleep_duration, 12.0)  # At most 12 seconds (with bounds)
-            
-            # Should return success
-            self.assertTrue(result.success)
+            with patch('src.controller.actions.wait.get_character_api') as mock_get_character:
+                # Set up context with character name
+                self.context.set(StateParameters.CHARACTER_NAME, "test_character")
+                
+                # Mock API response with 10 second cooldown
+                mock_response = Mock()
+                mock_response.data.cooldown = 10
+                mock_get_character.return_value = mock_response
+                
+                result = wait_action.execute(self.mock_client, self.context)
+                
+                # Should have called sleep with the API cooldown duration
+                mock_sleep.assert_called_once()
+                sleep_duration = mock_sleep.call_args[0][0]
+                self.assertEqual(sleep_duration, 10.0)  # Should use API cooldown exactly
+                
+                # Should return success
+                self.assertTrue(result.success)
     
     def test_wait_action_handles_expired_cooldown(self):
-        """Test that WaitAction handles expired cooldowns correctly."""
+        """Test that WaitAction handles zero cooldowns correctly."""
         from src.controller.actions.wait import WaitAction
-        
-        # Set up character with expired cooldown
-        past_time = datetime.now(timezone.utc) - timedelta(seconds=10)
-        self.mock_character_state.data['cooldown_expiration'] = past_time.isoformat()
-        self.mock_character_state.data['cooldown'] = 0
+        from src.lib.state_parameters import StateParameters
         
         wait_action = WaitAction()
         
         # Mock time.sleep to verify it's called with minimal duration
         with patch('time.sleep') as mock_sleep:
-            # Set up context with character state
-            self.context.character_state = self.mock_character_state
-            # Don't set wait_duration - it should default to 1.0
-            result = wait_action.execute(self.mock_client, self.context)
-            
-            # Should have called sleep with minimal duration for expired cooldown
-            mock_sleep.assert_called_once()
-            sleep_duration = mock_sleep.call_args[0][0]
-            self.assertLessEqual(sleep_duration, 1.0)  # Should be minimal wait
-            
-            # Should return success
-            self.assertTrue(result.success)
+            with patch('src.controller.actions.wait.get_character_api') as mock_get_character:
+                # Set up context with character name
+                self.context.set(StateParameters.CHARACTER_NAME, "test_character")
+                
+                # Mock API response with zero cooldown (expired)
+                mock_response = Mock()
+                mock_response.data.cooldown = 0
+                mock_get_character.return_value = mock_response
+                
+                result = wait_action.execute(self.mock_client, self.context)
+                
+                # Should have called sleep with minimal duration for zero cooldown (clamped to 0.1)
+                mock_sleep.assert_called_once()
+                sleep_duration = mock_sleep.call_args[0][0]
+                self.assertEqual(sleep_duration, 0.1)  # Should be clamped to minimum 0.1
+                
+                # Should return success
+                self.assertTrue(result.success)
 
 
 class TestGOAPIterationOptimization(TestAPIOptimizationFixes):

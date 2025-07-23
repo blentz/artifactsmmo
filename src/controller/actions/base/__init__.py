@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from src.lib.action_context import ActionContext
 from src.lib.state_parameters import StateParameters
+from src.lib.unified_state_context import UnifiedStateContext
 
 
 @dataclass
@@ -204,13 +205,21 @@ class ActionBase(ABC):
         Handle cooldown error by requesting wait_for_cooldown subgoal.
         
         This method should be called by subclasses when they detect a cooldown error.
-        It automatically requests the wait_for_cooldown subgoal using the recursive
-        subgoal pattern.
+        It immediately updates the UnifiedStateContext with cooldown status, then
+        requests the wait_for_cooldown subgoal using the recursive subgoal pattern.
         
         Returns:
             ActionResult with subgoal request for cooldown handling
         """
         self.logger.info(f"⏳ {self.__class__.__name__} detected cooldown - requesting wait_for_cooldown subgoal")
+        
+        # Immediately update UnifiedStateContext with cooldown status
+        # This ensures GOAP world state is synchronized before subgoal planning begins
+        context = UnifiedStateContext()
+        context.update({
+            StateParameters.CHARACTER_COOLDOWN_ACTIVE: True
+        })
+        self.logger.debug("Updated UnifiedStateContext: cooldown_active = True")
         
         # Create result that requests cooldown handling subgoal
         result = self.create_success_result(

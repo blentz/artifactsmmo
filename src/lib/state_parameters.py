@@ -50,7 +50,8 @@ class StateParameters:
     CHARACTER_XP_PERCENTAGE = "character_status.xp_percentage"
     CHARACTER_NAME = "character_status.name"
     
-    # Location Context Parameters - removed redundant, use CHARACTER_X/Y, TARGET_X/Y, API data
+    # Location Context Parameters
+    LOCATION_CONTEXT_AT_TARGET = "location_context.at_target"
     
     # Materials Parameters - minimal set, use knowledge base for lookups
     MATERIALS_STATUS = "materials.status"

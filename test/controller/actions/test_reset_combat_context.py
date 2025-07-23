@@ -29,13 +29,29 @@ class TestResetCombatContextAction(unittest.TestCase):
         
     def test_execute_success(self):
         """Test successful execution of reset combat context."""
+        # Set up combat context status
+        self.context.set(StateParameters.COMBAT_STATUS, 'completed')
+        
         result = self.action.execute(self.mock_client, self.context)
         
         self.assertTrue(result.success)
         self.assertTrue(result.data['combat_context_reset'])
         self.assertEqual(result.data['previous_status'], 'completed')
         self.assertEqual(result.data['new_status'], 'idle')
-        self.assertIn("Combat context reset to idle state", result.message)
+        self.assertIn("Combat context reset from completed to idle state", result.message)
+        
+    def test_execute_success_defeated(self):
+        """Test successful execution of reset combat context from defeated status."""
+        # Set up combat context status
+        self.context.set(StateParameters.COMBAT_STATUS, 'defeated')
+        
+        result = self.action.execute(self.mock_client, self.context)
+        
+        self.assertTrue(result.success)
+        self.assertTrue(result.data['combat_context_reset'])
+        self.assertEqual(result.data['previous_status'], 'defeated')
+        self.assertEqual(result.data['new_status'], 'idle')
+        self.assertIn("Combat context reset from defeated to idle state", result.message)
         
     def test_execute_no_character_name(self):
         """Test execution when no character name is provided."""
@@ -48,6 +64,9 @@ class TestResetCombatContextAction(unittest.TestCase):
         
     def test_execute_with_exception(self):
         """Test execution when an exception occurs."""
+        # Set up combat context to avoid StateParameters error
+        self.context.set(StateParameters.COMBAT_STATUS, 'completed')
+        
         # Mock create_success_result to raise an exception
         with patch.object(self.action, 'create_success_result') as mock_response:
             mock_response.side_effect = Exception("Test exception")
@@ -62,7 +81,7 @@ class TestResetCombatContextAction(unittest.TestCase):
         """Test GOAP parameters are properly defined."""
         self.assertEqual(self.action.conditions, {
             'combat_context': {
-                'status': 'completed',
+                'status': ['completed', 'defeated'],
             },
         })
         

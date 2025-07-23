@@ -11,6 +11,14 @@ class TestAttackAction(unittest.TestCase):
     def setUp(self):
         self.client = AuthenticatedClient(base_url="https://api.artifactsmmo.com", token="test_token")
         self.char_name = "test_character"
+    
+    def _mock_character_position(self, mock_get_char_api, x=0, y=1):
+        """Helper method to mock character position API call."""
+        mock_char_response = Mock()
+        mock_char_response.data = Mock()
+        mock_char_response.data.x = x
+        mock_char_response.data.y = y
+        mock_get_char_api.return_value = mock_char_response
 
     def test_attack_action_initialization(self):
         action = AttackAction()
@@ -23,27 +31,40 @@ class TestAttackAction(unittest.TestCase):
         expected = "AttackAction()"
         self.assertEqual(repr(action), expected)
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_win(self, mock_fight_api):
+    def test_attack_action_execute_win(self, mock_fight_api, mock_get_char_api):
         # Mock the API response for a win
         mock_response = Mock()
         mock_fight_data = {
             'result': 'win',
             'xp': 100,
             'gold': 50,
-            'drops': [{'code': 'sword', 'quantity': 1}]
+            'drops': [{'code': 'sword', 'quantity': 1}],
+            'turns': 3,
+            'logs': ['You dealt 15 damage to Chicken', 'Chicken dealt 5 damage to you']
         }
         mock_response.data = Mock()
         mock_response.data.fight = Mock()
         mock_response.data.fight.to_dict.return_value = mock_fight_data
+        
+        # Mock the character data structure
+        mock_response.data.character = Mock()
+        mock_response.data.character.hp = 95
+        mock_response.data.character.max_hp = 100
+        mock_response.data.character.x = 0
+        mock_response.data.character.y = 1
+        mock_response.data.character.cooldown_expiration = None
+        
         mock_fight_api.return_value = mock_response
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -65,8 +86,9 @@ class TestAttackAction(unittest.TestCase):
         self.assertEqual(result.data['drops'], mock_fight_data['drops'])
         self.assertTrue(result.data['monster_defeated'])
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_loss(self, mock_fight_api):
+    def test_attack_action_execute_loss(self, mock_fight_api, mock_get_char_api):
         # Mock the API response for a loss
         mock_response = Mock()
         mock_fight_data = {
@@ -78,14 +100,24 @@ class TestAttackAction(unittest.TestCase):
         mock_response.data = Mock()
         mock_response.data.fight = Mock()
         mock_response.data.fight.to_dict.return_value = mock_fight_data
+        
+        # Mock the character data structure
+        mock_response.data.character = Mock()
+        mock_response.data.character.hp = 95
+        mock_response.data.character.max_hp = 100
+        mock_response.data.character.x = 0
+        mock_response.data.character.y = 1
+        mock_response.data.character.cooldown_expiration = None
+        
         mock_fight_api.return_value = mock_response
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -100,19 +132,21 @@ class TestAttackAction(unittest.TestCase):
         self.assertEqual(result.data['gold_gained'], 0)
         self.assertFalse(result.data['monster_defeated'])
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_no_fight_data(self, mock_fight_api):
+    def test_attack_action_execute_no_fight_data(self, mock_fight_api, mock_get_char_api):
         # Mock the API response without fight data
         mock_response = Mock()
         mock_response.data = None
         mock_fight_api.return_value = mock_response
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -128,20 +162,22 @@ class TestAttackAction(unittest.TestCase):
         self.assertEqual(result.data['drops'], [])
         self.assertFalse(result.data['monster_defeated'])
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_no_fight_object(self, mock_fight_api):
+    def test_attack_action_execute_no_fight_object(self, mock_fight_api, mock_get_char_api):
         # Mock the API response without fight object
         mock_response = Mock()
         mock_response.data = Mock()
         mock_response.data.fight = None
         mock_fight_api.return_value = mock_response
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -160,7 +196,7 @@ class TestAttackAction(unittest.TestCase):
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -173,8 +209,16 @@ class TestAttackAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIsNotNone(result.error)
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_cooldown_error(self, mock_fight_api):
+    def test_attack_action_execute_cooldown_error(self, mock_fight_api, mock_get_char_api):
+        # Mock get_character_api to return character data
+        mock_char_response = Mock()
+        mock_char_response.data = Mock()
+        mock_char_response.data.x = 0
+        mock_char_response.data.y = 1
+        mock_get_char_api.return_value = mock_char_response
+        
         # Mock API to raise cooldown error
         mock_fight_api.side_effect = Exception("Character is in cooldown")
         
@@ -183,7 +227,7 @@ class TestAttackAction(unittest.TestCase):
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -192,22 +236,25 @@ class TestAttackAction(unittest.TestCase):
         
         result = action.execute(self.client, context)
         
-        # Should return error with cooldown flag
-        self.assertFalse(result.success)
-        self.assertIn('Character is in cooldown', result.error)
-        self.assertTrue(result.data.get('is_cooldown', False))
+        # Should return success with wait_for_cooldown subgoal request
+        self.assertTrue(result.success)
+        self.assertIsNotNone(result.subgoal_request)
+        self.assertEqual(result.subgoal_request['goal_name'], 'wait_for_cooldown')
+        self.assertIn('cooldown detected', result.message)
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_no_monster_error(self, mock_fight_api):
+    def test_attack_action_execute_no_monster_error(self, mock_fight_api, mock_get_char_api):
         # Mock API to raise no monster error
         mock_fight_api.side_effect = Exception("Monster not found at this location")
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -221,17 +268,19 @@ class TestAttackAction(unittest.TestCase):
         self.assertIn('No monster at location', result.error)
         self.assertTrue(result.data.get('no_monster', False))
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_wrong_location_error(self, mock_fight_api):
+    def test_attack_action_execute_wrong_location_error(self, mock_fight_api, mock_get_char_api):
         # Mock API to raise wrong location error
         mock_fight_api.side_effect = Exception("497 Character already at this location")
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -245,17 +294,19 @@ class TestAttackAction(unittest.TestCase):
         self.assertIn('must be at monster location', result.error)
         self.assertTrue(result.data.get('wrong_location', False))
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_action_not_allowed_error(self, mock_fight_api):
+    def test_attack_action_execute_action_not_allowed_error(self, mock_fight_api, mock_get_char_api):
         # Mock API to raise action not allowed error
         mock_fight_api.side_effect = Exception("486 This action is not allowed")
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -269,17 +320,19 @@ class TestAttackAction(unittest.TestCase):
         self.assertIn('Action not allowed', result.error)
         self.assertTrue(result.data.get('action_not_allowed', False))
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_character_not_found_error(self, mock_fight_api):
+    def test_attack_action_execute_character_not_found_error(self, mock_fight_api, mock_get_char_api):
         # Mock API to raise character not found error
         mock_fight_api.side_effect = Exception("Character not found")
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -292,17 +345,19 @@ class TestAttackAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn('Character not found', result.error)
 
+    @patch('src.controller.actions.attack.get_character_api')
     @patch('src.controller.actions.attack.fight_character_api')
-    def test_attack_action_execute_generic_error(self, mock_fight_api):
+    def test_attack_action_execute_generic_error(self, mock_fight_api, mock_get_char_api):
         # Mock API to raise generic error
         mock_fight_api.side_effect = Exception("Network error")
+        self._mock_character_position(mock_get_char_api)
         
         action = AttackAction()
         from test.fixtures import MockActionContext
         context = MockActionContext(character_name=self.char_name)
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -315,6 +370,58 @@ class TestAttackAction(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn('Network error', result.error)
 
+    @patch('src.controller.actions.attack.get_character_api')
+    @patch('src.controller.actions.attack.fight_character_api')
+    def test_attack_action_reactions_on_defeat(self, mock_fight_api, mock_get_char_api):
+        """Test that defeats set combat_context.status to 'defeated' instead of 'completed'."""
+        # Mock the API response for a loss
+        mock_response = Mock()
+        mock_fight_data = {
+            'result': 'loss',
+            'xp': 0,
+            'gold': 0,
+            'drops': []
+        }
+        mock_response.data = Mock()
+        mock_response.data.fight = Mock()
+        mock_response.data.fight.to_dict.return_value = mock_fight_data
+        
+        # Mock the character data structure
+        mock_response.data.character = Mock()
+        mock_response.data.character.hp = 95
+        mock_response.data.character.max_hp = 100
+        mock_response.data.character.x = 0
+        mock_response.data.character.y = 1
+        mock_response.data.character.cooldown_expiration = None
+        
+        mock_fight_api.return_value = mock_response
+        self._mock_character_position(mock_get_char_api)
+        
+        action = AttackAction()
+        from test.fixtures import MockActionContext
+        context = MockActionContext(character_name=self.char_name)
+        
+        # Add monster to map state so attack action can find it
+        context.map_state.data["0,1"] = {
+            'content': {
+                'type': 'monster',
+                'code': 'chicken'
+            }
+        }
+        
+        result = action.execute(self.client, context)
+        
+        # Verify the action sets reactions for defeat
+        self.assertTrue(result.success)
+        self.assertFalse(result.data['monster_defeated'])
+        
+        # Check that the action's reactions are set for defeat (status: 'defeated')
+        # This verifies that defeats don't satisfy the hunt_monsters goal which looks for 'completed'
+        self.assertIn('combat_context.status', action.reactions)
+        self.assertEqual(action.reactions['combat_context.status'], 'defeated')
+        self.assertIn('equipment_status.upgrade_status', action.reactions)
+        self.assertEqual(action.reactions['equipment_status.upgrade_status'], 'needs_analysis')
+
     def test_attack_action_validate_no_character_name(self):
         """Test validation with empty character name returns error."""
         from test.fixtures import MockActionContext
@@ -322,7 +429,7 @@ class TestAttackAction(unittest.TestCase):
         context = MockActionContext(character_name="")
         
         # Add monster to map state so attack action can find it
-        context.map_state.data["0,0"] = {
+        context.map_state.data["0,1"] = {
             'content': {
                 'type': 'monster',
                 'code': 'chicken'
@@ -387,16 +494,15 @@ class TestAttackAction(unittest.TestCase):
         self.assertIsInstance(AttackAction.reactions, dict)
         self.assertIsInstance(AttackAction.weight, (int, float))
         
-        # Check specific GOAP conditions (consolidated state format)
-        self.assertIn('combat_context', AttackAction.conditions)
-        self.assertIn('character_status', AttackAction.conditions)
-        self.assertEqual(AttackAction.conditions['combat_context']['status'], 'ready')
-        self.assertTrue(AttackAction.conditions['character_status']['safe'])
-        self.assertTrue(AttackAction.conditions['character_status']['alive'])
+        # Check specific GOAP conditions (flat StateParameters format)
+        self.assertIn('combat_context.status', AttackAction.conditions)
+        self.assertIn('character_status.healthy', AttackAction.conditions)
+        self.assertEqual(AttackAction.conditions['combat_context.status'], 'ready')
+        self.assertTrue(AttackAction.conditions['character_status.healthy'])
         
         # Check specific GOAP reactions
-        self.assertIn('combat_context', AttackAction.reactions)
-        self.assertEqual(AttackAction.reactions['combat_context']['status'], 'completed')
+        self.assertIn('combat_context.status', AttackAction.reactions)
+        self.assertEqual(AttackAction.reactions['combat_context.status'], 'completed')
         
         # Check weight is a float value
         self.assertEqual(AttackAction.weight, 3.0)

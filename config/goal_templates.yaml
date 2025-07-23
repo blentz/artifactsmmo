@@ -88,10 +88,21 @@ goal_templates:
       target_x: null  # Target X coordinate
       target_y: null  # Target Y coordinate
     target_state:
-      character.x: "target.x"
-      character.y: "target.y"
+      location_context.at_target: true
     strategy:
       max_move_attempts: 3
+      
+  find_monsters:
+    description: "Find suitable monsters for combat"
+    objective_type: "discovery"
+    target_state:
+      resource_availability.monsters: true
+      combat_context.status: "ready"
+    strategy:
+      search_radius: 4
+      max_search_attempts: 5
+      level_range: 2
+      prioritize_known_monsters: true
       
 # Goal selection rules - uses simple boolean conditions
 goal_selection_rules:

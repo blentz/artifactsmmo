@@ -182,7 +182,7 @@ class MockResourceDrop:
 class MockKnowledgeBase:
     """Mock knowledge base for testing."""
     
-    def __init__(self):
+    def __init__(self, map_state=None):
         self.data = {
             'monsters': {},
             'resources': {},
@@ -192,6 +192,7 @@ class MockKnowledgeBase:
         # Add mock methods that tests expect
         self.find_monsters_in_map = Mock(return_value=[])
         self.find_resources_in_map = Mock(return_value=[])
+        self.map_state = map_state
         
     def get_monster_win_rate(self, monster_code: str) -> Optional[float]:
         """Get win rate for a monster."""
@@ -357,6 +358,32 @@ class MockKnowledgeBase:
         
         return False
     
+    def get_character_data(self, character_name: str = None, client=None) -> Dict:
+        """Get character data for testing."""
+        return {
+            'cooldown': 3,
+            'hp': 100,
+            'max_hp': 100,
+            'level': 1
+        }
+    
+    def get_location_info(self, x: int, y: int) -> Optional[Dict]:
+        """
+        Get stored information about a specific location.
+        
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            
+        Returns:
+            Location data dictionary or None if location not found
+        """
+        if not hasattr(self, 'map_state') or not self.map_state:
+            return None
+            
+        location_key = f"{x},{y}"
+        return getattr(self.map_state, 'data', {}).get(location_key)
+    
     def get_combat_location(self, context, client=None) -> Optional[str]:
         """
         Get the current combat location identifier.
@@ -413,8 +440,8 @@ class MockActionContext:
         self.character_max_hp = character_max_hp
         
         # Dependencies
-        self.knowledge_base = MockKnowledgeBase() if knowledge_base == "default" else knowledge_base
         self.map_state = MockMapState() if map_state == "default" else map_state
+        self.knowledge_base = MockKnowledgeBase(self.map_state) if knowledge_base == "default" else knowledge_base
         self.world_state = world_state or {}
         if character_state == "no_state":
             self.character_state = None

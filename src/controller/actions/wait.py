@@ -3,7 +3,10 @@
 import time
 from typing import Dict, Optional
 
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character_api
 from src.lib.action_context import ActionContext
+from src.lib.unified_state_context import UnifiedStateContext
+from src.lib.state_parameters import StateParameters
 
 from .base import ActionBase, ActionResult
 
@@ -11,18 +14,14 @@ from .base import ActionBase, ActionResult
 class WaitAction(ActionBase):
     """ Wait action for handling cooldown periods """
     
-    # GOAP parameters - consolidated state format
+    # GOAP parameters - flat StateParameters format
     conditions = {
-        "character_status": {
-            "cooldown_active": True
-        }
+        "character_status.cooldown_active": True
     }
     reactions = {
-        "character_status": {
-            "cooldown_active": False
-        }
+        "character_status.cooldown_active": False
     }
-    weight = 1
+    weight = 0.1  # Low weight as specified in default_actions.yaml
 
     def __init__(self):
         """
@@ -32,19 +31,26 @@ class WaitAction(ActionBase):
 
     def execute(self, client, context: 'ActionContext') -> ActionResult:
         """ Execute the wait action - wait for cooldown to expire """
-        # Get wait duration from context - this is calculated by GOAP planning
-        # GOAP's _handle_cooldown_with_plan_insertion already calculates the exact remaining time
-        wait_duration = getattr(context, 'wait_duration', 1.0)
-        
         self._context = context
         
-        # Trust the wait_duration provided by GOAP planning
-        remaining_cooldown = float(wait_duration)
-        
-        # Clamp to reasonable bounds for safety
-        remaining_cooldown = max(0.1, min(remaining_cooldown, 60.0))
-        
+        # Get character name for API call
+        character_name = context.get(StateParameters.CHARACTER_NAME)
+        if not character_name:
+            return self.create_error_result("No character name available")
+            
         try:
+            # Get current character data from API to get actual cooldown
+            character_response = get_character_api(name=character_name, client=client)
+            if not character_response or not character_response.data:
+                return self.create_error_result("Could not get character data from API")
+            
+            # Get cooldown from API response
+            cooldown_seconds = getattr(character_response.data, 'cooldown', 1.0)
+            remaining_cooldown = float(cooldown_seconds)
+            
+            # Clamp to reasonable bounds for safety
+            remaining_cooldown = max(0.1, min(remaining_cooldown, 60.0))
+            
             if remaining_cooldown > 0.0:
                 self.logger.info(f"Waiting {remaining_cooldown:.1f} seconds for cooldown to expire")
                 time.sleep(remaining_cooldown)

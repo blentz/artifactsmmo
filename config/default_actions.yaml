@@ -30,6 +30,9 @@ state_defaults:
   
   # Skill requirements evaluation - tracks if character skills are sufficient for current task
   skill_requirements.sufficient: false
+  
+  # Location context - tracks movement completion
+  location_context.at_target: false
 
 actions:
   # Core movement action - success determined by knowledge-base lookup
@@ -38,8 +41,7 @@ actions:
       character_status.healthy: true
       character_status.cooldown_active: false
     reactions:
-      character.x: target.x
-      character.y: target.y
+      location_context.at_target: true
     weight: 1.0
     description: Move character to coordinates specified in ActionContext
     metadata:
@@ -70,6 +72,17 @@ actions:
       combat_context.status: completed
     weight: 3.0
     description: Attack available monster
+    metadata:
+      type: "execution"
+  
+  reset_combat_context:
+    conditions:
+      combat_context.status: [completed, defeated]
+    reactions:
+      combat_context.status: idle
+      resource_availability.monsters: false
+    weight: 1.0
+    description: Reset combat context from completed or defeated to idle
     metadata:
       type: "execution"
     

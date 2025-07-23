@@ -309,18 +309,13 @@ class TestGOAPExecutionManagerComprehensive(unittest.TestCase):
         self.assertFalse(self.goap_manager._is_discovery_action('scan'))
     
     def test_failure_detection_methods_callable(self):
-        """Test that failure detection methods are callable."""
-        mock_controller = Mock()
+        """Test that discovery action detection is callable (failure methods removed per refactor)."""
+        # Test discovery action detection - the only remaining classification method
+        result = self.goap_manager._is_discovery_action('find_monsters')
+        self.assertIsInstance(result, bool)
         
-        # Test that methods can be called without errors
-        result1 = self.goap_manager._is_authentication_failure('test_action', mock_controller)
-        self.assertIsInstance(result1, bool)
-        
-        result2 = self.goap_manager._is_coordinate_failure('move', mock_controller)
+        result2 = self.goap_manager._is_discovery_action('move')
         self.assertIsInstance(result2, bool)
-        
-        result3 = self.goap_manager._is_cooldown_failure('test_action', mock_controller)
-        self.assertIsInstance(result3, bool)
     
     def test_get_cooldown_duration(self):
         """Test _get_cooldown_duration method."""

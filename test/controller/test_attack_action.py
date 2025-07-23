@@ -69,16 +69,15 @@ class TestAttackAction(UnifiedContextTestBase):
         self.assertIsInstance(AttackAction.reactions, dict)
         self.assertIsInstance(AttackAction.weight, (int, float))
         
-        # Check specific GOAP conditions
-        self.assertIn('combat_context', AttackAction.conditions)
-        self.assertEqual(AttackAction.conditions['combat_context']['status'], 'ready')
-        self.assertIn('character_status', AttackAction.conditions)
-        self.assertTrue(AttackAction.conditions['character_status']['safe'])
-        self.assertTrue(AttackAction.conditions['character_status']['alive'])
+        # Check specific GOAP conditions (flat StateParameters format)
+        self.assertIn('combat_context.status', AttackAction.conditions)
+        self.assertEqual(AttackAction.conditions['combat_context.status'], 'ready')
+        self.assertIn('character_status.healthy', AttackAction.conditions)
+        self.assertTrue(AttackAction.conditions['character_status.healthy'])
         
         # Check specific GOAP reactions
-        self.assertIn('combat_context', AttackAction.reactions)
-        self.assertEqual(AttackAction.reactions['combat_context']['status'], 'completed')
+        self.assertIn('combat_context.status', AttackAction.reactions)
+        self.assertEqual(AttackAction.reactions['combat_context.status'], 'completed')
         # monsters_hunted is now tracked internally, not in GOAP reactions
         self.assertNotIn('goal_progress', AttackAction.reactions)
         

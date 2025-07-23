@@ -375,6 +375,14 @@ class KnowledgeBase(GoapData):
         
         if not self.map_state or not hasattr(self.map_state, 'data'):
             return suitable_monsters
+        
+        # Ensure current coordinates are integers to prevent type errors
+        try:
+            current_x = int(current_x)
+            current_y = int(current_y)
+        except (ValueError, TypeError):
+            self.logger.error(f"Invalid current coordinates: ({current_x}, {current_y})")
+            return suitable_monsters
             
         # Search through MapState's discovered locations
         for location_key, location_data in self.map_state.data.items():
@@ -461,6 +469,14 @@ class KnowledgeBase(GoapData):
             return []
             
         found_monsters = []
+        
+        # Ensure character coordinates are integers to prevent type errors
+        try:
+            character_x = int(character_x)
+            character_y = int(character_y)
+        except (ValueError, TypeError):
+            self.logger.error(f"Invalid character coordinates: ({character_x}, {character_y})")
+            return []
         
         # Search through all cached map locations
         for location_key, location_data in self.map_state.data.items():
@@ -656,6 +672,14 @@ class KnowledgeBase(GoapData):
             Tuple of (x, y, distance) or None if not found
         """
         if not map_state or not hasattr(map_state, 'data'):
+            return None
+        
+        # Ensure current coordinates are integers to prevent type errors
+        try:
+            current_x = int(current_x)
+            current_y = int(current_y)
+        except (ValueError, TypeError):
+            self.logger.error(f"Invalid current coordinates: ({current_x}, {current_y})")
             return None
             
         nearest_location = None
@@ -1796,6 +1820,17 @@ class KnowledgeBase(GoapData):
         """
         if not self.map_state or not hasattr(self.map_state, 'data'):
             return []
+        
+        # Ensure character coordinates are integers if provided
+        if character_x is not None or character_y is not None:
+            try:
+                if character_x is not None:
+                    character_x = int(character_x)
+                if character_y is not None:
+                    character_y = int(character_y)
+            except (ValueError, TypeError):
+                self.logger.error(f"Invalid character coordinates: ({character_x}, {character_y})")
+                return []
             
         resources_found = []
         
