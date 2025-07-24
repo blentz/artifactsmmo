@@ -1,14 +1,9 @@
 from http import HTTPStatus
-
-from aenum import extend_enum
-
+from aenum import Enum, extend_enum
 
 def extend_http_status():
-    """Extend HTTPStatus with ArtifactsMMO custom codes. Safe to call multiple times."""
     for name, value in ArtifactsHTTPStatus.items():
-        # Only add if not already present
-        if not hasattr(HTTPStatus, name):
-            extend_enum(HTTPStatus, name, value, name)
+        extend_enum(HTTPStatus, name, value, name)
 
 ArtifactsHTTPStatus = {
     # ACCOUNT ERROR CODES,

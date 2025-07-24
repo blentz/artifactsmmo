@@ -1,9 +1,2 @@
 #!/bin/bash
-
-export TOKEN=$(cat TOKEN)
-
-# Activate the virtual environment
-source $(which virtualenvwrapper.sh)
-workon artifactsmmo
-
-/usr/bin/env python3 -m src.main -l DEBUG $@ 2>&1 | tee session.log
+/usr/bin/env python3 -m src.cli.main --token $(cat TOKEN) $@ 2>&1 | tee session.log
