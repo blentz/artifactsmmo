@@ -10,26 +10,28 @@ state keys, enabling IDE support, type checking, and validation throughout
 the entire architecture.
 """
 
+from datetime import datetime
 from enum import StrEnum
-from typing import Dict, Any, Union, Optional
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class GameState(StrEnum):
     """Global enum defining all possible game state keys.
-    
+
     Using StrEnum ensures compatibility with GOAP library while providing
     type safety and IDE support for state names. All state references
     throughout the system must use this enum.
     """
-    
+
     # Character progression states
     CHARACTER_LEVEL = "character_level"
     CHARACTER_XP = "character_xp"
     CHARACTER_GOLD = "character_gold"
     HP_CURRENT = "hp_current"
     HP_MAX = "hp_max"
-    
+
     # Position and movement states
     CURRENT_X = "current_x"
     CURRENT_Y = "current_y"
@@ -41,7 +43,7 @@ class GameState(StrEnum):
     AT_GRAND_EXCHANGE = "at_grand_exchange"
     AT_SAFE_LOCATION = "at_safe_location"
     PATH_CLEAR = "path_clear"
-    
+
     # Skill progression states
     MINING_LEVEL = "mining_level"
     MINING_XP = "mining_xp"
@@ -59,7 +61,7 @@ class GameState(StrEnum):
     COOKING_XP = "cooking_xp"
     ALCHEMY_LEVEL = "alchemy_level"
     ALCHEMY_XP = "alchemy_xp"
-    
+
     # Equipment and inventory states
     WEAPON_EQUIPPED = "weapon_equipped"
     TOOL_EQUIPPED = "tool_equipped"
@@ -75,21 +77,21 @@ class GameState(StrEnum):
     INVENTORY_FULL = "inventory_full"
     BANK_SPACE_AVAILABLE = "bank_space_available"
     BANK_GOLD = "bank_gold"
-    
+
     # Task and quest states
     ACTIVE_TASK = "active_task"
     TASK_PROGRESS = "task_progress"
     TASK_COMPLETED = "task_completed"
     CAN_ACCEPT_TASK = "can_accept_task"
     TASK_REQUIREMENTS_MET = "task_requirements_met"
-    
+
     # Economic and trading states
     MARKET_ACCESS = "market_access"
     PROFITABLE_TRADE_AVAILABLE = "profitable_trade_available"
     ARBITRAGE_OPPORTUNITY = "arbitrage_opportunity"
     ITEM_PRICE_TREND = "item_price_trend"
     PORTFOLIO_VALUE = "portfolio_value"
-    
+
     # Resource and item states
     HAS_REQUIRED_ITEMS = "has_required_items"
     HAS_CRAFTING_MATERIALS = "has_crafting_materials"
@@ -97,7 +99,7 @@ class GameState(StrEnum):
     ITEM_QUANTITY = "item_quantity"
     RESOURCE_AVAILABLE = "resource_available"
     RESOURCE_DEPLETED = "resource_depleted"
-    
+
     # Combat and safety states
     IN_COMBAT = "in_combat"
     HP_LOW = "hp_low"
@@ -105,7 +107,7 @@ class GameState(StrEnum):
     SAFE_TO_FIGHT = "safe_to_fight"
     ENEMY_NEARBY = "enemy_nearby"
     COMBAT_ADVANTAGE = "combat_advantage"
-    
+
     # Action availability states
     COOLDOWN_READY = "cooldown_ready"
     CAN_FIGHT = "can_fight"
@@ -116,95 +118,202 @@ class GameState(StrEnum):
     CAN_REST = "can_rest"
     CAN_USE_ITEM = "can_use_item"
     CAN_BANK = "can_bank"
-    
+
     # Efficiency and optimization states
     OPTIMAL_LOCATION = "optimal_location"
     EFFICIENT_ACTION_AVAILABLE = "efficient_action_available"
     READY_FOR_UPGRADE = "ready_for_upgrade"
     PROGRESSION_BLOCKED = "progression_blocked"
     INVENTORY_OPTIMIZED = "inventory_optimized"
-    
+
     # Event and time-based states
     EVENT_ACTIVE = "event_active"
     TIME_OF_DAY = "time_of_day"
     RUSH_HOUR = "rush_hour"
     MAINTENANCE_WINDOW = "maintenance_window"
-    
+
     @classmethod
-    def validate_state_dict(cls, state_dict: Dict[str, Any]) -> Dict['GameState', Any]:
+    def validate_state_dict(cls, state_dict: dict[str, Any]) -> dict['GameState', Any]:
         """Validate and convert string keys to GameState enum values.
-        
+
         Parameters:
             state_dict: Dictionary with string keys representing game state
-            
+
         Return values:
             Dictionary with validated GameState enum keys and original values
-            
+
         This method validates that all string keys in the input dictionary correspond
         to valid GameState enum values, converting them to proper enum keys for
         type-safe state management throughout the GOAP system.
         """
-        pass
-    
+        validated_dict = {}
+        valid_enum_values = {state.value for state in cls}
+
+        for key, value in state_dict.items():
+            if key not in valid_enum_values:
+                raise ValueError(f"Invalid GameState key: {key}")
+            # Convert string key to GameState enum
+            validated_dict[cls(key)] = value
+
+        return validated_dict
+
     @classmethod
-    def to_goap_dict(cls, state_dict: Dict['GameState', Any]) -> Dict[str, Any]:
+    def to_goap_dict(cls, state_dict: dict['GameState', Any]) -> dict[str, Any]:
         """Convert enum-keyed state dict to string-keyed dict for GOAP.
-        
+
         Parameters:
             state_dict: Dictionary with GameState enum keys and state values
-            
+
         Return values:
             Dictionary with string keys (enum values) and original state values
-            
+
         This method converts the type-safe GameState enum-keyed dictionary to a
         string-keyed dictionary compatible with the existing GOAP library while
         preserving all state values for planning operations.
         """
-        pass
+        return {key.value: value for key, value in state_dict.items()}
 
 
 class ActionResult(BaseModel):
     """Result of executing a GOAP action"""
     success: bool
     message: str
-    state_changes: Dict[GameState, Any]
+    state_changes: dict[GameState, Any]
     cooldown_seconds: int = 0
 
 
 class CharacterGameState(BaseModel):
     """Pydantic model for character state using GameState enum keys"""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
-    
-    def to_goap_state(self) -> Dict[str, Any]:
+
+    # Character progression
+    level: int = Field(ge=1, le=45)
+    xp: int = Field(ge=0)
+    gold: int = Field(ge=0)
+    hp: int = Field(ge=0)
+    max_hp: int = Field(ge=1)
+
+    # Position
+    x: int
+    y: int
+
+    # Skills
+    mining_level: int = Field(ge=1, le=45)
+    mining_xp: int = Field(ge=0)
+    woodcutting_level: int = Field(ge=1, le=45)
+    woodcutting_xp: int = Field(ge=0)
+    fishing_level: int = Field(ge=1, le=45)
+    fishing_xp: int = Field(ge=0)
+    weaponcrafting_level: int = Field(ge=1, le=45)
+    weaponcrafting_xp: int = Field(ge=0)
+    gearcrafting_level: int = Field(ge=1, le=45)
+    gearcrafting_xp: int = Field(ge=0)
+    jewelrycrafting_level: int = Field(ge=1, le=45)
+    jewelrycrafting_xp: int = Field(ge=0)
+    cooking_level: int = Field(ge=1, le=45)
+    cooking_xp: int = Field(ge=0)
+    alchemy_level: int = Field(ge=1, le=45)
+    alchemy_xp: int = Field(ge=0)
+
+    # Action state
+    cooldown: int = Field(ge=0)
+    cooldown_ready: bool = True
+
+    def to_goap_state(self) -> dict[str, Any]:
         """Convert to GOAP state dictionary using enum values.
-        
+
         Parameters:
             None (operates on self)
-            
+
         Return values:
             Dictionary with string keys (GameState enum values) and state data
-            
+
         This method converts the character's Pydantic model data to a GOAP-compatible
         state dictionary using GameState enum values as keys, enabling seamless
         integration with the GOAP planning library.
         """
-        pass
-    
+        # Get the raw data dict from the Pydantic model
+        raw_dict = self.model_dump()
+
+        # Map the model fields to GameState enum values
+        goap_dict = {}
+
+        # Map each model field to corresponding GameState enum
+        field_mapping = {
+            'level': GameState.CHARACTER_LEVEL,
+            'xp': GameState.CHARACTER_XP,
+            'gold': GameState.CHARACTER_GOLD,
+            'hp': GameState.HP_CURRENT,
+            'max_hp': GameState.HP_MAX,
+            'x': GameState.CURRENT_X,
+            'y': GameState.CURRENT_Y,
+            'mining_level': GameState.MINING_LEVEL,
+            'mining_xp': GameState.MINING_XP,
+            'woodcutting_level': GameState.WOODCUTTING_LEVEL,
+            'woodcutting_xp': GameState.WOODCUTTING_XP,
+            'fishing_level': GameState.FISHING_LEVEL,
+            'fishing_xp': GameState.FISHING_XP,
+            'weaponcrafting_level': GameState.WEAPONCRAFTING_LEVEL,
+            'weaponcrafting_xp': GameState.WEAPONCRAFTING_XP,
+            'gearcrafting_level': GameState.GEARCRAFTING_LEVEL,
+            'gearcrafting_xp': GameState.GEARCRAFTING_XP,
+            'jewelrycrafting_level': GameState.JEWELRYCRAFTING_LEVEL,
+            'jewelrycrafting_xp': GameState.JEWELRYCRAFTING_XP,
+            'cooking_level': GameState.COOKING_LEVEL,
+            'cooking_xp': GameState.COOKING_XP,
+            'alchemy_level': GameState.ALCHEMY_LEVEL,
+            'alchemy_xp': GameState.ALCHEMY_XP,
+            'cooldown_ready': GameState.COOLDOWN_READY,
+        }
+
+        # Map available fields to enum values
+        for field_name, enum_key in field_mapping.items():
+            if field_name in raw_dict:
+                goap_dict[enum_key.value] = raw_dict[field_name]
+
+        return goap_dict
+
     @classmethod
-    def from_api_character(cls, character) -> 'CharacterGameState':
+    def from_api_character(cls, character: Any) -> 'CharacterGameState':
         """Create from API character response with validated state mapping.
-        
+
         Parameters:
             character: CharacterSchema object from ArtifactsMMO API response
-            
+
         Return values:
             CharacterGameState instance with validated data mapped to GameState enum keys
-            
+
         This method creates a type-safe CharacterGameState instance from API response data,
         mapping all relevant character properties to the appropriate GameState enum keys
         while performing Pydantic validation on the data.
         """
-        pass
+        return cls(
+            level=character.level,
+            xp=character.xp,
+            gold=character.gold,
+            hp=character.hp,
+            max_hp=character.max_hp,
+            x=character.x,
+            y=character.y,
+            mining_level=character.mining_level,
+            mining_xp=character.mining_xp,
+            woodcutting_level=character.woodcutting_level,
+            woodcutting_xp=character.woodcutting_xp,
+            fishing_level=character.fishing_level,
+            fishing_xp=character.fishing_xp,
+            weaponcrafting_level=character.weaponcrafting_level,
+            weaponcrafting_xp=character.weaponcrafting_xp,
+            gearcrafting_level=character.gearcrafting_level,
+            gearcrafting_xp=character.gearcrafting_xp,
+            jewelrycrafting_level=character.jewelrycrafting_level,
+            jewelrycrafting_xp=character.jewelrycrafting_xp,
+            cooking_level=character.cooking_level,
+            cooking_xp=character.cooking_xp,
+            alchemy_level=character.alchemy_level,
+            alchemy_xp=character.alchemy_xp,
+            cooldown=character.cooldown,
+            cooldown_ready=character.cooldown == 0,
+        )
 
 
 class CooldownInfo(BaseModel):
@@ -214,35 +323,46 @@ class CooldownInfo(BaseModel):
     total_seconds: int = Field(ge=0)
     remaining_seconds: int = Field(ge=0)
     reason: str
-    
+
     @property
     def is_ready(self) -> bool:
         """Check if cooldown has expired.
-        
+
         Parameters:
             None (property operates on self)
-            
+
         Return values:
             Boolean indicating whether the character cooldown has expired
-            
+
         This property compares the current time with the cooldown expiration time
         to determine if the character is ready to perform actions, enabling
         cooldown-aware planning and execution.
         """
-        pass
-    
+        try:
+            expiration_time = datetime.fromisoformat(self.expiration.replace('Z', '+00:00'))
+            return datetime.now(expiration_time.tzinfo) >= expiration_time
+        except Exception:
+            # If parsing fails, use remaining_seconds
+            return self.remaining_seconds <= 0
+
     @property
     def time_remaining(self) -> float:
         """Get remaining cooldown time in seconds.
-        
+
         Parameters:
             None (property operates on self)
-            
+
         Return values:
             Float representing seconds remaining until cooldown expires (0.0 if ready)
-            
+
         This property calculates the exact remaining cooldown time in seconds,
         providing precise timing information for action scheduling and wait
         operations in the AI player main loop.
         """
-        pass
+        try:
+            expiration_time = datetime.fromisoformat(self.expiration.replace('Z', '+00:00'))
+            remaining = (expiration_time - datetime.now(expiration_time.tzinfo)).total_seconds()
+            return max(0.0, remaining)
+        except Exception:
+            # If parsing fails, use remaining_seconds
+            return max(0.0, float(self.remaining_seconds))

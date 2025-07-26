@@ -1,9 +1,18 @@
 from http import HTTPStatus
-from aenum import Enum, extend_enum
 
-def extend_http_status():
+from aenum import extend_enum
+
+
+def extend_http_status() -> None:
+    """Extend HTTPStatus enum with ArtifactsMMO-specific status codes.
+
+    This function safely adds all ArtifactsHTTPStatus codes to the standard
+    HTTPStatus enum. It can be called multiple times without error.
+    """
     for name, value in ArtifactsHTTPStatus.items():
-        extend_enum(HTTPStatus, name, value, name)
+        # Only extend if the name doesn't already exist
+        if not hasattr(HTTPStatus, name):
+            extend_enum(HTTPStatus, name, value, name)
 
 ArtifactsHTTPStatus = {
     # ACCOUNT ERROR CODES,
@@ -34,8 +43,10 @@ ArtifactsHTTPStatus = {
     "MAX_CHARACTERS_REACHED": 495,
     "CHARACTER_NOT_LEVEL_REQUIRED": 496,
     "CHARACTER_INVENTORY_FULL": 497,
+    "INVENTORY_FULL": 497,  # Alias for CHARACTER_INVENTORY_FULL
     "CHARACTER_NOT_FOUND": 498,
     "CHARACTER_IN_COOLDOWN": 499,
+    "CHARACTER_COOLDOWN": 499,  # Alias for CHARACTER_IN_COOLDOWN
 
     # ITEM ERROR CODES,
     "ITEM_INSUFFICIENT_QUANTITY": 471,

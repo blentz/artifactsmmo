@@ -9,9 +9,11 @@ The RestAction demonstrates proper handling of character survival mechanics
 and emergency recovery within the modular action system.
 """
 
-from typing import Dict, Any
+from typing import Any, Optional
+
+from ...game_data.api_client import APIClientWrapper
+from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
-from ..state.game_state import GameState, ActionResult
 
 
 class RestAction(BaseAction):
@@ -20,12 +22,12 @@ class RestAction(BaseAction):
     Handles character resting with HP threshold and safety requirements,
     integrating with the API for actual rest execution.
     """
-    
-    def __init__(self):
+
+    def __init__(self, api_client: Optional['APIClientWrapper'] = None):
         """Initialize RestAction for HP recovery operations.
         
         Parameters:
-            None
+            api_client: API client wrapper for rest execution
             
         Return values:
             None (constructor)
@@ -34,8 +36,10 @@ class RestAction(BaseAction):
         and safety requirements for character survival and recovery operations
         within the AI player system.
         """
-        pass
-    
+        self.api_client = api_client
+        self.hp_threshold = 0.3  # Rest when HP drops below 30%
+        self.safe_hp_threshold = 0.5  # Consider safe when above 50%
+
     @property
     def name(self) -> str:
         """Unique rest action identifier.
@@ -50,8 +54,8 @@ class RestAction(BaseAction):
         to identify and reference the rest action in planning sequences and
         action execution workflows.
         """
-        pass
-    
+        return "rest"
+
     @property
     def cost(self) -> int:
         """GOAP cost for rest action.
@@ -66,9 +70,9 @@ class RestAction(BaseAction):
         the GOAP planner to optimize action sequences by considering the
         relative cost of resting versus other available actions.
         """
-        pass
-    
-    def get_preconditions(self) -> Dict[GameState, Any]:
+        return 5
+
+    def get_preconditions(self) -> dict[GameState, Any]:
         """Rest preconditions including HP threshold using GameState enum.
         
         Parameters:
@@ -81,9 +85,14 @@ class RestAction(BaseAction):
         threshold, safe location requirements, and cooldown readiness using
         GameState enum keys for type-safe condition checking.
         """
-        pass
-    
-    def get_effects(self) -> Dict[GameState, Any]:
+        return {
+            GameState.COOLDOWN_READY: True,
+            GameState.CAN_REST: True,
+            GameState.HP_LOW: True,
+            GameState.AT_SAFE_LOCATION: True,
+        }
+
+    def get_effects(self) -> dict[GameState, Any]:
         """Rest effects including HP recovery using GameState enum.
         
         Parameters:
@@ -96,9 +105,23 @@ class RestAction(BaseAction):
         recovery, cooldown activation, and safety state changes using
         GameState enum keys for type-safe effect specification.
         """
-        pass
-    
-    async def execute(self, character_name: str, current_state: Dict[GameState, Any]) -> ActionResult:
+        return {
+            GameState.HP_CURRENT: "+hp_recovery",
+            GameState.HP_LOW: False,
+            GameState.HP_CRITICAL: False,
+            GameState.SAFE_TO_FIGHT: True,
+            GameState.COOLDOWN_READY: False,
+            GameState.CAN_FIGHT: False,
+            GameState.CAN_GATHER: False,
+            GameState.CAN_CRAFT: False,
+            GameState.CAN_TRADE: False,
+            GameState.CAN_MOVE: False,
+            GameState.CAN_REST: False,
+            GameState.CAN_USE_ITEM: False,
+            GameState.CAN_BANK: False,
+        }
+
+    async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
         """Execute rest via API client.
         
         Parameters:
@@ -112,9 +135,71 @@ class RestAction(BaseAction):
         HP recovery timing, cooldown management, and result processing for
         character survival in the AI player system.
         """
-        pass
-    
-    def needs_rest(self, current_state: Dict[GameState, Any]) -> bool:
+        if self.api_client is None:
+            return ActionResult(
+                success=False,
+                message="API client not available for rest execution",
+                state_changes={},
+                cooldown_seconds=0
+            )
+
+        # Safety check before resting
+        if not self.needs_rest(current_state):
+            return ActionResult(
+                success=False,
+                message="Character does not need rest - HP above threshold",
+                state_changes={},
+                cooldown_seconds=0
+            )
+
+        if not self.is_safe_location(current_state):
+            return ActionResult(
+                success=False,
+                message="Location not safe for resting - find safe area first",
+                state_changes={},
+                cooldown_seconds=0
+            )
+
+        try:
+            # Execute rest via API
+            rest_result = await self.api_client.rest_character(character_name)
+
+            # Extract state changes from rest result
+            state_changes = {
+                GameState.HP_CURRENT: rest_result.data.character.hp,
+                GameState.COOLDOWN_READY: False,
+                GameState.CAN_FIGHT: False,
+                GameState.CAN_GATHER: False,
+                GameState.CAN_CRAFT: False,
+                GameState.CAN_TRADE: False,
+                GameState.CAN_MOVE: False,
+                GameState.CAN_REST: False,
+                GameState.CAN_USE_ITEM: False,
+                GameState.CAN_BANK: False,
+            }
+
+            # Update HP-based states
+            hp_percentage = rest_result.data.character.hp / rest_result.data.character.max_hp
+            state_changes[GameState.HP_LOW] = hp_percentage < self.hp_threshold
+            state_changes[GameState.HP_CRITICAL] = hp_percentage < 0.1
+            state_changes[GameState.SAFE_TO_FIGHT] = hp_percentage >= self.safe_hp_threshold
+
+            return ActionResult(
+                success=True,
+                message=f"Rest successful: Recovered to {rest_result.data.character.hp} HP",
+                state_changes=state_changes,
+                cooldown_seconds=rest_result.data.cooldown.total_seconds
+            )
+
+        except Exception as error:
+            return ActionResult(
+                success=False,
+                message=f"Rest failed: {str(error)}",
+                state_changes={},
+                cooldown_seconds=0
+            )
+
+    def needs_rest(self, current_state: dict[GameState, Any]) -> bool:
         """Check if character HP is below threshold.
         
         Parameters:
@@ -127,9 +212,22 @@ class RestAction(BaseAction):
         thresholds to determine if immediate rest is required for survival
         and continued operation in the AI player system.
         """
-        pass
-    
-    def is_safe_location(self, current_state: Dict[GameState, Any]) -> bool:
+        # Check if already marked as needing rest
+        if GameState.HP_LOW in current_state:
+            return bool(current_state[GameState.HP_LOW])
+
+        # Calculate from current HP values
+        current_hp = current_state.get(GameState.HP_CURRENT, 0)
+        max_hp = current_state.get(GameState.HP_MAX, 1)
+
+        if current_hp <= 0 or max_hp <= 0:
+            return True  # Need rest if no HP or invalid data
+
+        # Check if HP is below threshold
+        hp_percentage = current_hp / max_hp
+        return hp_percentage < self.hp_threshold
+
+    def is_safe_location(self, current_state: dict[GameState, Any]) -> bool:
         """Check if current location is safe for resting.
         
         Parameters:
@@ -142,9 +240,22 @@ class RestAction(BaseAction):
         factors such as absence of monsters and proximity to safe zones,
         ensuring rest can be performed without interruption or danger.
         """
-        pass
-    
-    def calculate_rest_time(self, current_state: Dict[GameState, Any]) -> int:
+        # Check if location is explicitly marked as safe
+        if GameState.AT_SAFE_LOCATION in current_state:
+            return bool(current_state[GameState.AT_SAFE_LOCATION])
+
+        # Check for danger indicators
+        if current_state.get(GameState.IN_COMBAT, False):
+            return False  # Not safe if in combat
+
+        if current_state.get(GameState.ENEMY_NEARBY, False):
+            return False  # Not safe if enemies nearby
+
+        # If no danger indicators and no explicit safe location marker,
+        # assume safe (conservative approach for rest action)
+        return True
+
+    def calculate_rest_time(self, current_state: dict[GameState, Any]) -> int:
         """Calculate estimated rest time for full recovery.
         
         Parameters:
@@ -157,9 +268,28 @@ class RestAction(BaseAction):
         to fully recover HP through resting, enabling accurate planning
         and scheduling within the AI player action sequences.
         """
-        pass
-    
-    def get_hp_percentage(self, current_state: Dict[GameState, Any]) -> float:
+        current_hp = current_state.get(GameState.HP_CURRENT, 0)
+        max_hp = current_state.get(GameState.HP_MAX, 1)
+
+        if current_hp <= 0 or max_hp <= 0:
+            return 60  # Default rest time if invalid data
+
+        if current_hp >= max_hp:
+            return 0  # No rest needed if already at full HP
+
+        # Calculate HP to recover
+        hp_to_recover = max_hp - current_hp
+
+        # Estimate based on game mechanics (approximate 1 HP per 6 seconds)
+        # This is a reasonable estimate - actual time may vary based on game balance
+        base_recovery_rate = 6  # seconds per HP point
+
+        estimated_time = hp_to_recover * base_recovery_rate
+
+        # Cap the maximum rest time to something reasonable (10 minutes)
+        return min(estimated_time, 600)
+
+    def get_hp_percentage(self, current_state: dict[GameState, Any]) -> float:
         """Calculate current HP as percentage of max HP.
         
         Parameters:
@@ -172,4 +302,56 @@ class RestAction(BaseAction):
         evaluation and emergency assessment, enabling precise survival
         monitoring and priority-based rest scheduling in the AI player.
         """
-        pass
+        current_hp = current_state.get(GameState.HP_CURRENT, 0)
+        max_hp = current_state.get(GameState.HP_MAX, 1)
+
+        if max_hp <= 0:
+            return 0.0  # Return 0% if invalid max HP
+
+        # Calculate percentage and clamp between 0.0 and 1.0
+        percentage = current_hp / max_hp
+        return max(0.0, min(1.0, percentage))
+
+    def can_execute(self, current_state: dict[GameState, Any]) -> bool:
+        """Check if action preconditions are met in current state.
+        
+        Parameters:
+            current_state: Dictionary with GameState enum keys and current values
+            
+        Return values:
+            Boolean indicating whether all preconditions are satisfied
+        """
+        preconditions = self.get_preconditions()
+        return all(
+            current_state.get(key) == value for key, value in preconditions.items()
+        )
+
+    def validate_preconditions(self) -> bool:
+        """Validate that all preconditions use valid GameState enum keys.
+        
+        Parameters:
+            None (operates on self)
+            
+        Return values:
+            Boolean indicating whether all precondition keys are valid GameState enums
+        """
+        try:
+            preconditions = self.get_preconditions()
+            return all(isinstance(key, GameState) for key in preconditions.keys())
+        except Exception:
+            return False
+
+    def validate_effects(self) -> bool:
+        """Validate that all effects use valid GameState enum keys.
+        
+        Parameters:
+            None (operates on self)
+            
+        Return values:
+            Boolean indicating whether all effect keys are valid GameState enums
+        """
+        try:
+            effects = self.get_effects()
+            return all(isinstance(key, GameState) for key in effects.keys())
+        except Exception:
+            return False

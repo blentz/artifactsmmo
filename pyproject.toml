@@ -4,8 +4,12 @@ version = "0.0.1"
 description = "An AI player for operating a character in ArtifactsMMO through the API"
 requires-python = ">=3.13"
 dependencies = [
+    "aenum>=3.1.16",
     "artifactsmmo-api-client",
+    "httpx>=0.28.1",
     "openapi-python-client",
+    "pyyaml>=6.0.2",
+    "types-pyyaml>=6.0.12.20250516",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +44,9 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "--tb=short"
+markers = [
+    "integration: marks tests as integration tests"
+]
 
 [tool.uv.sources]
 artifactsmmo-api-client = { path = "artifactsmmo-api-client", editable = true }

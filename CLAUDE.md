@@ -9,14 +9,14 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 ## Reasoning Guidelines
 
 - Always use @sentient-agi-reasoning when thinking about complex problems.
-- For large or complex tasks, use an iterative approach across multiple sessions. Break tasks up into smaller tasks. Write your plans to `docs/plans/PLAN_{feature_name}.md` for future sessions to iterate on.
+- For large or complex tasks, use an iterative approach across multiple sessions. Break complex tasks up into smaller tasks. Write your plans to `docs/plans/PLAN_{feature_name}.md` for future sessions to iterate on.
 
 ## Programming Guidelines
 
 - DO use `uv` to manage virtualenvs and dependencies.
 - ALWAYS prefix Python commands with `uv run` to ensure virtualenv is active (e.g., `uv run python`, `uv run pytest`, `uv run mypy`).
 
-- DO NOT use inline imports for any reason.
+- DO NOT use inline imports. Always put imports at the top of the file.
 - DO NOT create "simple" tests; use the test suite.
 
 ## Testing Guidelines
@@ -26,5 +26,4 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 
 ## Antipatterns to avoid
 - DO NOT use print statements to report fake success. Fix the errors you see.
-- DO NOT simplify problems. Ask the user for clarification or directions instead.
-- DO NOT prioritize speed or time over correctness. 
+- DO NOT simplify problems. Stop working and ask the user for clarification or directions instead.

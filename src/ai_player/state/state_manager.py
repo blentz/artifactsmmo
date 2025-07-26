@@ -10,21 +10,24 @@ converting it to the internal GameState format, and maintaining state consistenc
 throughout the AI player operation.
 """
 
-from typing import Dict, Any, Optional
-from ..state.game_state import GameState, CharacterGameState
+from typing import Any, Optional
+
 from ...game_data.api_client import APIClientWrapper
+from ...game_data.cache_manager import CacheManager
 from ...lib.yaml_data import YamlData
+from .game_state import ActionResult, CharacterGameState, GameState
 
 
 class StateManager:
     """Manages character state synchronization with API using GameState enum"""
-    
-    def __init__(self, character_name: str, api_client: APIClientWrapper):
+
+    def __init__(self, character_name: str, api_client: 'APIClientWrapper', cache_manager: Optional['CacheManager'] = None):
         """Initialize StateManager for character state synchronization.
         
         Parameters:
             character_name: Name of the character to manage state for
             api_client: API client wrapper for game data operations
+            cache_manager: Optional cache manager for character state persistence
             
         Return values:
             None (constructor)
@@ -33,10 +36,14 @@ class StateManager:
         and API client, setting up state caching and synchronization mechanisms
         for reliable state management throughout AI player operation.
         """
-        pass
-    
-    async def get_current_state(self) -> Dict[GameState, Any]:
-        """Fetch current character state from API using GameState enum.
+        self.character_name = character_name
+        self.api_client = api_client
+        self._cached_state: dict[GameState, Any] | None = None
+        self._yaml_cache = YamlData(f"data/characters/{character_name}_state.yaml")
+        self._cache_manager = cache_manager
+
+    async def get_current_state(self) -> dict[GameState, Any]:
+        """Fetch current character state from cache or API using GameState enum.
         
         Parameters:
             None
@@ -44,12 +51,22 @@ class StateManager:
         Return values:
             Dictionary with GameState enum keys and current character state values
             
-        This method retrieves the most current character state from the API,
-        converts it to the internal GameState enum format, and returns a
-        type-safe state dictionary for GOAP planning operations.
+        This method retrieves character state from cache if available, otherwise
+        fetches from the API, converts it to the internal GameState enum format,
+        and returns a type-safe state dictionary for GOAP planning operations.
         """
-        pass
-    
+        # Try to get state from cache first
+        cached_state = self.load_state_from_cache()
+        if cached_state is not None:
+            self._cached_state = cached_state
+            return cached_state
+
+        # Fall back to API if no cache available
+        character_state = await self.update_state_from_api()
+        state_dict = character_state.to_goap_state()
+        self._cached_state = GameState.validate_state_dict(state_dict)
+        return self._cached_state
+
     async def update_state_from_api(self) -> CharacterGameState:
         """Sync character state from API with Pydantic validation.
         
@@ -63,9 +80,11 @@ class StateManager:
         a validated CharacterGameState instance using Pydantic models, ensuring
         data integrity and type safety for state operations.
         """
-        pass
-    
-    def update_state_from_result(self, action_result: 'ActionResult') -> None:
+        character = await self.api_client.get_character(self.character_name)
+        character_state = CharacterGameState.from_api_character(character)
+        return character_state
+
+    def update_state_from_result(self, action_result: ActionResult) -> None:
         """Update local state from action execution result.
         
         Parameters:
@@ -78,9 +97,27 @@ class StateManager:
         local state cache, keeping the state synchronized without requiring
         additional API calls after each action execution.
         """
-        pass
-    
-    def get_cached_state(self) -> Dict[GameState, Any]:
+        if self._cached_state is None:
+            self._cached_state = {}
+
+        # Apply all state changes from the action result
+        for state_key, new_value in action_result.state_changes.items():
+            self._cached_state[state_key] = new_value
+
+        # Update cooldown state if action result indicates a cooldown
+        if action_result.cooldown_seconds > 0:
+            self._cached_state[GameState.COOLDOWN_READY] = False
+            # Update dependent action availability states
+            self._cached_state[GameState.CAN_FIGHT] = False
+            self._cached_state[GameState.CAN_GATHER] = False
+            self._cached_state[GameState.CAN_CRAFT] = False
+            self._cached_state[GameState.CAN_TRADE] = False
+            self._cached_state[GameState.CAN_MOVE] = False
+            self._cached_state[GameState.CAN_REST] = False
+            self._cached_state[GameState.CAN_USE_ITEM] = False
+            self._cached_state[GameState.CAN_BANK] = False
+
+    def get_cached_state(self) -> dict[GameState, Any]:
         """Get locally cached state using GameState enum.
         
         Parameters:
@@ -93,24 +130,125 @@ class StateManager:
         making API calls, providing fast access to the most recently known
         state for GOAP planning and decision making.
         """
-        pass
-    
-    def validate_state_consistency(self) -> bool:
-        """Verify local state matches API state.
+        if self._cached_state is None:
+            # Try to load from file cache
+            cached = self.load_state_from_cache()
+            if cached is not None:
+                self._cached_state = cached
+            else:
+                return {}
+        return self._cached_state.copy()
+
+    async def validate_state_consistency(self, state: dict[GameState, Any] | None = None) -> bool:
+        """Verify state consistency - either validates provided state against rules, or compares cached vs API state.
         
         Parameters:
-            None
+            state: Optional state dictionary to validate against rules; if None, compares cached vs API state
             
         Return values:
-            Boolean indicating whether local cache matches API state
+            Boolean indicating whether state is consistent and valid
             
-        This method compares the locally cached state with fresh API data
-        to detect inconsistencies that might require cache refresh or
-        error recovery in the AI player system.
+        When state is provided: validates that state against game rules and constraints.
+        When state is None: compares cached state with fresh API data for consistency.
         """
-        pass
-    
-    async def force_refresh(self) -> Dict[GameState, Any]:
+        if state is not None:
+            # Validate provided state against game rules
+            return self._validate_state_rules(state)
+        else:
+            # Compare cached state with fresh API state
+            return await self._validate_cache_vs_api()
+
+    def _validate_state_rules(self, target_state: dict[GameState, Any]) -> bool:
+        """Validate state against game rules and constraints."""
+        if target_state is None:
+            return False
+
+        try:
+            # Validate HP consistency
+            hp_current = target_state.get(GameState.HP_CURRENT)
+            hp_max = target_state.get(GameState.HP_MAX)
+            if hp_current is not None and hp_max is not None:
+                if hp_current < 0 or hp_current > hp_max:
+                    return False
+
+            # Validate levels are non-negative
+            level_keys = [
+                GameState.CHARACTER_LEVEL,
+                GameState.MINING_LEVEL,
+                GameState.WOODCUTTING_LEVEL,
+                GameState.FISHING_LEVEL,
+                GameState.WEAPONCRAFTING_LEVEL,
+                GameState.GEARCRAFTING_LEVEL,
+                GameState.JEWELRYCRAFTING_LEVEL,
+                GameState.COOKING_LEVEL,
+                GameState.ALCHEMY_LEVEL,
+            ]
+
+            for level_key in level_keys:
+                level_value = target_state.get(level_key)
+                if level_value is not None and level_value < 0:
+                    return False
+
+            # Validate inventory consistency
+            inv_available = target_state.get(GameState.INVENTORY_SPACE_AVAILABLE)
+            inv_used = target_state.get(GameState.INVENTORY_SPACE_USED)
+            if inv_available is not None and inv_used is not None:
+                if inv_available < 0 or inv_used < 0:
+                    return False
+
+            # Validate skill levels aren't unreasonably high compared to character level
+            char_level = target_state.get(GameState.CHARACTER_LEVEL)
+            if char_level is not None:
+                max_skill_level = char_level + 10  # Allow some buffer
+                for level_key in level_keys[1:]:  # Skip CHARACTER_LEVEL
+                    skill_level = target_state.get(level_key)
+                    if skill_level is not None and skill_level > max_skill_level:
+                        return False
+
+            return True
+
+        except Exception:
+            # If validation fails, assume inconsistency
+            return False
+
+    async def _validate_cache_vs_api(self) -> bool:
+        """Compare cached state with fresh API state for consistency."""
+        if self._cached_state is None:
+            return False
+
+        try:
+            # Save the current cached state
+            saved_cache = self._cached_state.copy()
+
+            # Clear cache temporarily to force API fetch
+            self._cached_state = None
+
+            # Get fresh state from API
+            fresh_state = await self.get_current_state()
+
+            # Restore the original cached state
+            self._cached_state = saved_cache
+
+            # Compare critical state values (not all, to avoid minor fluctuations)
+            critical_keys = [
+                GameState.CHARACTER_LEVEL,
+                GameState.HP_CURRENT,
+                GameState.CURRENT_X,
+                GameState.CURRENT_Y,
+                GameState.CHARACTER_GOLD,
+                GameState.COOLDOWN_READY,
+            ]
+
+            for key in critical_keys:
+                if self._cached_state.get(key) != fresh_state.get(key):
+                    return False
+
+            return True
+        except Exception:
+            # If API call fails, assume inconsistency
+            return False
+
+    async def force_refresh(self) -> dict[GameState, Any]:
         """Force refresh state from API.
         
         Parameters:
@@ -123,9 +261,22 @@ class StateManager:
         from the API, useful for error recovery or when state consistency
         issues are detected.
         """
-        pass
-    
-    def save_state_to_cache(self, state: Dict[GameState, Any]) -> None:
+        # Clear cached state to force fresh fetch
+        self._cached_state = None
+
+        # Fetch fresh data directly from API (bypass cache)
+        character_state = await self.update_state_from_api()
+        state_dict = character_state.to_goap_state()
+        fresh_state = GameState.validate_state_dict(state_dict)
+
+        # Update cached state with fresh data
+        self._cached_state = fresh_state
+
+        # Save the fresh state to cache
+        self.save_state_to_cache(fresh_state)
+        return fresh_state
+
+    def save_state_to_cache(self, state: dict[GameState, Any]) -> None:
         """Save state to YAML cache using enum serialization.
         
         Parameters:
@@ -138,9 +289,16 @@ class StateManager:
         enum serialization, enabling state recovery and reducing API calls
         during AI player operation.
         """
-        pass
-    
-    def load_state_from_cache(self) -> Optional[Dict[GameState, Any]]:
+        # Convert GameState enum keys to strings for YAML serialization
+        serializable_state = {key.value: value for key, value in state.items()}
+
+        # Use CacheManager if available, otherwise fall back to YamlData
+        if self._cache_manager is not None:
+            self._cache_manager.save_character_state(self.character_name, serializable_state)
+        else:
+            self._yaml_cache.save(character_state=serializable_state)
+
+    def load_state_from_cache(self) -> dict[GameState, Any] | None:
         """Load state from YAML cache with enum deserialization.
         
         Parameters:
@@ -153,9 +311,27 @@ class StateManager:
         with proper GameState enum deserialization, enabling state recovery
         and reducing initialization time for the AI player.
         """
-        pass
-    
-    def convert_api_to_goap_state(self, character: 'CharacterSchema') -> Dict[GameState, Any]:
+        cached_data = None
+
+        # Use CacheManager if available, otherwise fall back to YamlData
+        if self._cache_manager is not None:
+            cached_data = self._cache_manager.load_character_state(self.character_name)
+        else:
+            if not self._yaml_cache.data or 'character_state' not in self._yaml_cache.data:
+                return None
+            cached_data = self._yaml_cache.data['character_state']
+
+        if not cached_data:
+            return None
+
+        # Convert string keys back to GameState enum keys
+        try:
+            return GameState.validate_state_dict(cached_data)
+        except ValueError:
+            # Invalid cache data, return None
+            return None
+
+    def convert_api_to_goap_state(self, character: Any) -> dict[GameState, Any]:
         """Convert API character data to GOAP state dict using GameState enum.
         
         Parameters:
@@ -168,9 +344,78 @@ class StateManager:
         GOAP-compatible state format using GameState enum keys, enabling
         seamless integration with the planning system.
         """
-        pass
-    
-    def get_state_value(self, state_key: GameState) -> Any:
+        # Create state dict using GameState enum keys
+        state_dict = {
+            # Character progression
+            GameState.CHARACTER_LEVEL: character.level,
+            GameState.CHARACTER_XP: character.xp,
+            GameState.CHARACTER_GOLD: character.gold,
+            GameState.HP_CURRENT: character.hp,
+            GameState.HP_MAX: character.max_hp,
+
+            # Position
+            GameState.CURRENT_X: character.x,
+            GameState.CURRENT_Y: character.y,
+
+            # Skills
+            GameState.MINING_LEVEL: character.mining_level,
+            GameState.MINING_XP: character.mining_xp,
+            GameState.WOODCUTTING_LEVEL: character.woodcutting_level,
+            GameState.WOODCUTTING_XP: character.woodcutting_xp,
+            GameState.FISHING_LEVEL: character.fishing_level,
+            GameState.FISHING_XP: character.fishing_xp,
+            GameState.WEAPONCRAFTING_LEVEL: character.weaponcrafting_level,
+            GameState.WEAPONCRAFTING_XP: character.weaponcrafting_xp,
+            GameState.GEARCRAFTING_LEVEL: character.gearcrafting_level,
+            GameState.GEARCRAFTING_XP: character.gearcrafting_xp,
+            GameState.JEWELRYCRAFTING_LEVEL: character.jewelrycrafting_level,
+            GameState.JEWELRYCRAFTING_XP: character.jewelrycrafting_xp,
+            GameState.COOKING_LEVEL: character.cooking_level,
+            GameState.COOKING_XP: character.cooking_xp,
+            GameState.ALCHEMY_LEVEL: character.alchemy_level,
+            GameState.ALCHEMY_XP: character.alchemy_xp,
+
+            # Equipment
+            GameState.WEAPON_EQUIPPED: character.weapon_slot,
+            GameState.HELMET_EQUIPPED: character.helmet_slot,
+            GameState.BODY_ARMOR_EQUIPPED: character.body_armor_slot,
+            GameState.LEG_ARMOR_EQUIPPED: character.leg_armor_slot,
+            GameState.BOOTS_EQUIPPED: character.boots_slot,
+            GameState.RING1_EQUIPPED: character.ring1_slot,
+            GameState.RING2_EQUIPPED: character.ring2_slot,
+            GameState.AMULET_EQUIPPED: character.amulet_slot,
+
+            # Inventory and capacity
+            GameState.INVENTORY_SPACE_AVAILABLE: character.inventory_max_items - len(getattr(character, 'inventory', [])),
+            GameState.INVENTORY_SPACE_USED: len(getattr(character, 'inventory', [])),
+            GameState.INVENTORY_FULL: len(getattr(character, 'inventory', [])) >= character.inventory_max_items,
+
+            # Tasks
+            GameState.ACTIVE_TASK: character.task if character.task else "",
+            GameState.TASK_PROGRESS: character.task_progress,
+            GameState.TASK_COMPLETED: character.task_progress >= character.task_total if character.task_total > 0 else False,
+
+            # Action availability
+            GameState.COOLDOWN_READY: character.cooldown == 0,
+            GameState.CAN_FIGHT: character.cooldown == 0 and character.hp > 0,
+            GameState.CAN_GATHER: character.cooldown == 0,
+            GameState.CAN_CRAFT: character.cooldown == 0,
+            GameState.CAN_TRADE: character.cooldown == 0,
+            GameState.CAN_MOVE: character.cooldown == 0,
+            GameState.CAN_REST: character.cooldown == 0,
+            GameState.CAN_USE_ITEM: character.cooldown == 0,
+            GameState.CAN_BANK: character.cooldown == 0,
+
+            # Combat and safety
+            GameState.HP_LOW: character.hp < (character.max_hp * 0.3),
+            GameState.HP_CRITICAL: character.hp < (character.max_hp * 0.1),
+            GameState.SAFE_TO_FIGHT: character.hp > (character.max_hp * 0.5),
+            GameState.IN_COMBAT: False,  # This would be updated from action results
+        }
+
+        return state_dict
+
+    async def get_state_value(self, state_key: GameState) -> Any:
         """Get specific state value by GameState enum key.
         
         Parameters:
@@ -183,9 +428,11 @@ class StateManager:
         using GameState enum keys, enabling precise state queries for
         action precondition checking and decision making.
         """
-        pass
-    
-    def set_state_value(self, state_key: GameState, value: Any) -> None:
+        # Ensure we have current state
+        current_state = await self.get_current_state()
+        return current_state.get(state_key)
+
+    async def set_state_value(self, state_key: GameState, value: Any) -> None:
         """Set specific state value using GameState enum key.
         
         Parameters:
@@ -193,15 +440,109 @@ class StateManager:
             value: New value to assign to the specified state key
             
         Return values:
-            None (modifies internal state)
+            None (modifies internal state and saves to cache)
             
         This method provides type-safe modification of individual state values
         using GameState enum keys, enabling precise state updates from
         action results and API responses.
         """
-        pass
-    
-    def get_state_diff(self, old_state: Dict[GameState, Any], new_state: Dict[GameState, Any]) -> Dict[GameState, Any]:
+        if self._cached_state is None:
+            self._cached_state = {}
+        self._cached_state[state_key] = value
+
+        # Save updated state to cache
+        self.save_state_to_cache(self._cached_state)
+
+    async def update_state(self, state_changes: dict[GameState, Any]) -> None:
+        """Update local state with specific changes and save to cache.
+        
+        Parameters:
+            state_changes: Dictionary with GameState enum keys and new values
+            
+        Return values:
+            None (modifies internal state and saves to cache)
+            
+        This method applies the provided state changes to the local cache,
+        validates that all keys are valid GameState enum values, and persists
+        the updated state to the YAML cache for future sessions.
+        """
+        # Validate that all keys are GameState enum values
+        for key in state_changes.keys():
+            if not isinstance(key, GameState):
+                raise ValueError(f"Invalid state key: {key}. Must be GameState enum value.")
+
+        # Initialize cached state if not present
+        if self._cached_state is None:
+            self._cached_state = {}
+
+        # Apply state changes
+        self._cached_state.update(state_changes)
+
+        # Save updated state to cache
+        self.save_state_to_cache(self._cached_state)
+
+    async def sync_with_api(self) -> dict[GameState, Any]:
+        """Synchronize local state with API data and save to cache.
+        
+        Parameters:
+            None
+            
+        Return values:
+            Dictionary with GameState enum keys and synchronized state values
+            
+        This method fetches fresh character data from the API, updates the
+        local cache with the new data, and persists the synchronized state
+        to the YAML cache for consistent state management.
+        """
+        # Get fresh state from API (bypass cache)
+        character_state = await self.update_state_from_api()
+        state_dict = character_state.to_goap_state()
+        fresh_state = GameState.validate_state_dict(state_dict)
+
+        # Update cached state
+        self._cached_state = fresh_state
+
+        # Save synchronized state to cache
+        self.save_state_to_cache(fresh_state)
+
+        return fresh_state
+
+    async def apply_action_result(self, action_result: ActionResult) -> None:
+        """Apply action execution result to local state and save to cache.
+        
+        Parameters:
+            action_result: ActionResult containing state changes and cooldown info
+            
+        Return values:
+            None (modifies internal state and saves to cache)
+            
+        This method processes the results from an executed action, applying
+        any state changes and cooldown effects to the local cache, then
+        persists the updated state for continued AI player operation.
+        """
+        # Apply state changes from action result
+        self.update_state_from_result(action_result)
+
+        # Save updated state to cache
+        if self._cached_state is not None:
+            self.save_state_to_cache(self._cached_state)
+
+    async def refresh_state_from_api(self) -> dict[GameState, Any]:
+        """Force refresh state from API, bypassing cache.
+        
+        Parameters:
+            None
+            
+        Return values:
+            Dictionary with GameState enum keys and refreshed state values
+            
+        This method bypasses all caching mechanisms to fetch the most current
+        character state directly from the API, useful for error recovery or
+        when cache consistency issues are detected.
+        """
+        return await self.force_refresh()
+
+    def get_state_diff(self, old_state: dict[GameState, Any], new_state: dict[GameState, Any]) -> dict[GameState, Any]:
         """Calculate differences between state snapshots.
         
         Parameters:
@@ -215,4 +556,53 @@ class StateManager:
         have changed, enabling efficient state change detection for logging,
         debugging, and incremental state updates in the AI player.
         """
-        pass
+        diff = {}
+
+        # Check for changed values in new_state
+        for key, new_value in new_state.items():
+            old_value = old_state.get(key)
+            if old_value != new_value:
+                diff[key] = new_value
+
+        # Check for removed keys (present in old but not in new)
+        for key in old_state:
+            if key not in new_state:
+                diff[key] = None
+
+        return diff
+
+    # Synchronous wrapper methods for backwards compatibility
+    def get_state_value_sync(self, state_key: GameState) -> Any:
+        """Synchronous wrapper for get_state_value - gets from cached state only.
+        
+        Parameters:
+            state_key: GameState enum key for the desired state value
+            
+        Return values:
+            The current value associated with the specified state key from cache
+            
+        This method provides synchronous access to cached state values only,
+        without triggering API calls. For the most current state, use the async
+        version which can fetch from API if needed.
+        """
+        if self._cached_state is None:
+            return None
+        return self._cached_state.get(state_key)
+
+    def set_state_value_sync(self, state_key: GameState, value: Any) -> None:
+        """Synchronous wrapper for set_state_value - modifies cache only.
+        
+        Parameters:
+            state_key: GameState enum key for the state to modify
+            value: New value to assign to the specified state key
+            
+        Return values:
+            None (modifies internal state only)
+            
+        This method provides synchronous modification of cached state values
+        without triggering cache save operations. For persistent updates,
+        use the async version which saves to cache.
+        """
+        if self._cached_state is None:
+            self._cached_state = {}
+        self._cached_state[state_key] = value
