@@ -479,10 +479,18 @@ class TestGoalManager:
                  get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}))
         ]
 
-        with patch('src.ai_player.goal_manager.get_all_actions') as mock_get_actions, \
+        with patch.object(goal_manager.action_registry, 'get_all_action_types') as mock_get_actions, \
              patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
 
-            mock_get_actions.return_value = mock_actions
+            # Create mock action classes that can be instantiated
+            mock_action_classes = []
+            for action_mock in mock_actions:
+                mock_class = Mock()
+                mock_class.return_value = action_mock  # When instantiated, return the action mock
+                mock_class.__name__ = action_mock.name
+                mock_action_classes.append(mock_class)
+            
+            mock_get_actions.return_value = mock_action_classes
 
             mock_planner = Mock()
             mock_planner.calculate.return_value = [

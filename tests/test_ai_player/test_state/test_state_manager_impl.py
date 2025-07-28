@@ -80,7 +80,7 @@ class TestStateManagerImplementation:
         assert state_manager.character_name == "test_character"
         assert state_manager.api_client == mock_api_client
         assert state_manager._cached_state is None
-        assert hasattr(state_manager, '_yaml_cache')
+        assert hasattr(state_manager, '_characters_cache')
 
     @pytest.mark.asyncio
     async def test_update_state_from_api(self, state_manager, mock_api_client, mock_character_data):
@@ -442,20 +442,33 @@ class TestStateManagerImplementation:
 
     def test_save_state_to_cache(self, state_manager):
         """Test saving state to cache"""
+        # Set up the centralized cache data structure
+        state_manager._characters_cache.data = {
+            "data": [
+                {
+                    "name": "test_character",
+                    "character_level": 3,
+                    "hp_current": 75
+                }
+            ]
+        }
+        
         state = {
             GameState.CHARACTER_LEVEL: 5,
             GameState.HP_CURRENT: 80
         }
 
-        with patch.object(state_manager._yaml_cache, 'save') as mock_save:
+        with patch.object(state_manager._characters_cache, 'save') as mock_save:
             state_manager.save_state_to_cache(state)
 
-            # Should convert enum keys to strings
-            expected_data = {
-                "character_level": 5,
-                "hp_current": 80
-            }
-            mock_save.assert_called_once_with(character_state=expected_data)
+            # Verify the character data was updated
+            characters = state_manager._characters_cache.data["data"]
+            updated_char = next(c for c in characters if c["name"] == "test_character")
+            assert updated_char["character_level"] == 5
+            assert updated_char["hp_current"] == 80
+            
+            # Verify save was called
+            mock_save.assert_called_once()
 
     def test_load_state_from_cache_success(self, state_manager):
         """Test loading state from cache successfully"""
@@ -464,7 +477,15 @@ class TestStateManagerImplementation:
             "hp_current": 80
         }
 
-        state_manager._yaml_cache.data = {"character_state": cache_data}
+        state_manager._characters_cache.data = {
+            "data": [
+                {
+                    "name": "test_character",
+                    "character_level": 5,
+                    "hp_current": 80
+                }
+            ]
+        }
 
         with patch.object(GameState, 'validate_state_dict') as mock_validate:
             mock_validate.return_value = {
@@ -475,18 +496,20 @@ class TestStateManagerImplementation:
             result = state_manager.load_state_from_cache()
 
             assert result == {GameState.CHARACTER_LEVEL: 5, GameState.HP_CURRENT: 80}
-            mock_validate.assert_called_once_with(cache_data)
+            # validate_state_dict should be called with the character object
+            expected_character = {"name": "test_character", "character_level": 5, "hp_current": 80}
+            mock_validate.assert_called_once_with(expected_character)
 
     def test_load_state_from_cache_no_data(self, state_manager):
         """Test loading state from cache when no data exists"""
-        state_manager._yaml_cache.data = None
+        state_manager._characters_cache.data = None
 
         result = state_manager.load_state_from_cache()
         assert result is None
 
     def test_load_state_from_cache_no_character_state(self, state_manager):
-        """Test loading state from cache when character_state key missing"""
-        state_manager._yaml_cache.data = {"other_data": "value"}
+        """Test loading state from cache when data key missing"""
+        state_manager._characters_cache.data = {"other_data": "value"}
 
         result = state_manager.load_state_from_cache()
         assert result is None
@@ -494,16 +517,31 @@ class TestStateManagerImplementation:
     def test_load_state_from_cache_invalid_data(self, state_manager):
         """Test loading state from cache with invalid data"""
         cache_data = {"invalid_key": "invalid_value"}
-        state_manager._yaml_cache.data = {"character_state": cache_data}
+        state_manager._characters_cache.data = {
+            "data": [
+                {
+                    "name": "test_character",
+                    **cache_data
+                }
+            ]
+        }
 
         with patch.object(GameState, 'validate_state_dict', side_effect=ValueError("Invalid key")):
             result = state_manager.load_state_from_cache()
             assert result is None
 
-    def test_save_state_to_cache_with_cache_manager(self, state_manager):
-        """Test saving state to cache with cache manager"""
-        mock_cache_manager = Mock()
-        state_manager._cache_manager = mock_cache_manager
+    def test_save_state_to_cache_with_centralized_yaml(self, state_manager):
+        """Test saving state to centralized YAML cache"""
+        # Set up the centralized cache data structure
+        state_manager._characters_cache.data = {
+            "data": [
+                {
+                    "name": "test_character",
+                    "character_level": 3,
+                    "hp_current": 75
+                }
+            ]
+        }
         
         state = {
             GameState.CHARACTER_LEVEL: 5,
@@ -512,22 +550,27 @@ class TestStateManagerImplementation:
         
         state_manager.save_state_to_cache(state)
         
-        expected_data = {
-            "character_level": 5,
-            "hp_current": 80
-        }
-        mock_cache_manager.save_character_state.assert_called_once_with("test_character", expected_data)
-
-    def test_load_state_from_cache_with_cache_manager(self, state_manager):
-        """Test loading state from cache with cache manager"""
-        mock_cache_manager = Mock()
-        state_manager._cache_manager = mock_cache_manager
+        # Verify the character data was updated in place
+        characters = state_manager._characters_cache.data["data"]
+        updated_char = next(c for c in characters if c["name"] == "test_character")
+        assert updated_char["character_level"] == 5
+        assert updated_char["hp_current"] == 80
         
-        cache_data = {
-            "character_level": 5,
-            "hp_current": 80
+        # Verify save was called
+        state_manager._characters_cache.save.assert_called_once()
+
+    def test_load_state_from_cache_with_centralized_yaml(self, state_manager):
+        """Test loading state from centralized YAML cache"""
+        # Set up the centralized cache data structure
+        state_manager._characters_cache.data = {
+            "data": [
+                {
+                    "name": "test_character",
+                    "character_level": 5,
+                    "hp_current": 80
+                }
+            ]
         }
-        mock_cache_manager.load_character_state.return_value = cache_data
         
         with patch.object(GameState, 'validate_state_dict') as mock_validate:
             mock_validate.return_value = {
@@ -538,13 +581,22 @@ class TestStateManagerImplementation:
             result = state_manager.load_state_from_cache()
             
             assert result == {GameState.CHARACTER_LEVEL: 5, GameState.HP_CURRENT: 80}
-            mock_cache_manager.load_character_state.assert_called_once_with("test_character")
+            # Verify validation was called with the character object
+            expected_character = {"name": "test_character", "character_level": 5, "hp_current": 80}
+            mock_validate.assert_called_once_with(expected_character)
 
-    def test_load_state_from_cache_with_cache_manager_no_data(self, state_manager):
-        """Test loading state from cache with cache manager when no data"""
-        mock_cache_manager = Mock()
-        state_manager._cache_manager = mock_cache_manager
-        mock_cache_manager.load_character_state.return_value = None
+    def test_load_state_from_cache_no_character_found(self, state_manager):
+        """Test loading state from cache when character not found"""
+        # Set up cache with other characters but not test_character
+        state_manager._characters_cache.data = {
+            "data": [
+                {
+                    "name": "other_character",
+                    "character_level": 5,
+                    "hp_current": 80
+                }
+            ]
+        }
         
         result = state_manager.load_state_from_cache()
         assert result is None

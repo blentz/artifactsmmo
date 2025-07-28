@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from ..lib.yaml_data import YamlData
 from .api_client import APIClientWrapper
+from .models import GameItem, GameMonster, GameMap, GameResource, GameNPC
 
 
 class CacheMetadata(BaseModel):
@@ -99,14 +100,14 @@ class CacheManager:
         except Exception:
             return False
 
-    async def get_all_items(self, force_refresh: bool = False) -> list['ItemSchema']:
+    async def get_all_items(self, force_refresh: bool = False) -> list['GameItem']:
         """Get all game items with caching.
         
         Parameters:
             force_refresh: Whether to bypass cache and fetch fresh data from API
             
         Return values:
-            List of ItemSchema objects representing all available game items
+            List of GameItem objects representing all available game items
             
         This method retrieves all game items either from cache or fresh from
         the API, providing the complete item database needed for crafting,
@@ -124,14 +125,14 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_monsters(self, force_refresh: bool = False) -> list['MonsterSchema']:
+    async def get_all_monsters(self, force_refresh: bool = False) -> list['GameMonster']:
         """Get all monsters with caching.
         
         Parameters:
             force_refresh: Whether to bypass cache and fetch fresh data from API
             
         Return values:
-            List of MonsterSchema objects representing all available monsters
+            List of GameMonster objects representing all available monsters
             
         This method retrieves all monster data either from cache or fresh from
         the API, providing combat target information including levels, locations,
@@ -149,14 +150,14 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_maps(self, force_refresh: bool = False) -> list['MapSchema']:
+    async def get_all_maps(self, force_refresh: bool = False) -> list['GameMap']:
         """Get all maps with caching.
         
         Parameters:
             force_refresh: Whether to bypass cache and fetch fresh data from API
             
         Return values:
-            List of MapSchema objects representing all game map information
+            List of GameMap objects representing all game map information
             
         This method retrieves all map data either from cache or fresh from
         the API, providing location information, boundaries, and content
@@ -174,14 +175,14 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_resources(self, force_refresh: bool = False) -> list['ResourceSchema']:
+    async def get_all_resources(self, force_refresh: bool = False) -> list['GameResource']:
         """Get all resources with caching.
         
         Parameters:
             force_refresh: Whether to bypass cache and fetch fresh data from API
             
         Return values:
-            List of ResourceSchema objects representing all gatherable resources
+            List of GameResource objects representing all gatherable resources
             
         This method retrieves all resource data either from cache or fresh from
         the API, providing gathering location, skill requirements, and resource
@@ -199,14 +200,14 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_npcs(self, force_refresh: bool = False) -> list['NPCSchema']:
+    async def get_all_npcs(self, force_refresh: bool = False) -> list['GameNPC']:
         """Get all NPCs with caching.
         
         Parameters:
             force_refresh: Whether to bypass cache and fetch fresh data from API
             
         Return values:
-            List of NPCSchema objects representing all non-player characters
+            List of GameNPC objects representing all non-player characters
             
         This method retrieves all NPC data either from cache or fresh from
         the API, providing trader locations, available items, and services
@@ -229,29 +230,25 @@ class CacheManager:
         
         Parameters:
             data_type: String identifier for the type of data being cached
-            data: List of data objects to serialize and save to cache
+            data: List of internal Pydantic model objects to serialize and save to cache
             
         Return values:
             None (writes to cache file)
             
-        This method serializes game data using Pydantic models and saves it
-        to YAML cache files using the yaml_data.py pattern, ensuring data
-        integrity and enabling fast subsequent access.
+        This method serializes internal Pydantic models and saves them to YAML 
+        cache files using the yaml_data.py pattern. All data must be internal 
+        Pydantic models that support model_dump() method.
         """
         cache_file = f"{self.cache_dir}/{data_type}.yaml"
 
         serialized_data = []
         for item in data:
-            if hasattr(item, 'to_dict'):
-                # Use to_dict for generated API client models
-                serialized_data.append(item.to_dict())
-            elif hasattr(item, 'model_dump'):
+            # All items must be internal Pydantic models with model_dump()
+            if hasattr(item, 'model_dump'):
                 # Use mode='json' to ensure datetime and enum serialization
                 serialized_data.append(item.model_dump(mode='json'))
-            elif hasattr(item, 'dict'):
-                serialized_data.append(item.dict())
             else:
-                serialized_data.append(item)
+                raise ValueError(f"Cache data must be internal Pydantic models. Got {type(item)} for {data_type}")
 
         self._save_yaml_data(cache_file, serialized_data)
 
@@ -526,6 +523,41 @@ class CacheManager:
                     return False
 
         return True
+
+    def save_character_state(self, character_name: str, character_state: dict[str, Any]) -> None:
+        """Save character state data to cache.
+        
+        Parameters:
+            character_name: Name of the character
+            character_state: Dictionary containing character state data
+            
+        Return values:
+            None (saves to cache file)
+            
+        This method saves character state data to a character-specific cache file
+        for fast access during AI planning and decision making.
+        """
+        if not self.validate_character_state_data(character_state):
+            raise ValueError(f"Invalid character state data for {character_name}")
+            
+        cache_file = f"{self.cache_dir}/characters/{character_name}/state.yaml"
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        self._save_yaml_data(cache_file, character_state)
+
+    def load_character_state(self, character_name: str) -> dict[str, Any] | None:
+        """Load character state data from cache.
+        
+        Parameters:
+            character_name: Name of the character
+            
+        Return values:
+            Dictionary containing character state data, or None if not found
+            
+        This method loads character state data from the character-specific cache file
+        for AI planning and decision making.
+        """
+        cache_file = f"{self.cache_dir}/characters/{character_name}/state.yaml"
+        return self._load_yaml_data(cache_file)
 
     def validate_character_state_data(self, data: dict[str, Any]) -> bool:
         """Validate character state data structure."""

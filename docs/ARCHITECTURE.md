@@ -357,6 +357,80 @@ The system wraps the generated API client to provide:
 3. **Rate Limiting**: Respect API rate limits and cooldowns
 4. **Response Processing**: Extract game state from API responses
 
+## Model Boundary Enforcement
+
+### Critical Architectural Rule: API Model Containment
+
+The architecture enforces a strict boundary between external API client models and internal Pydantic models to maintain clean separation of concerns and prevent coupling.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     APPLICATION LAYERS                         │
+│                  (Internal Pydantic Models ONLY)               │
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │ AI Player  │  │ CLI Layer   │  │    State Management     │  │
+│  │    Core     │  │             │  │     Goal Planning       │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                    TRANSFORMATION BOUNDARY                     │
+│              ⚠️  NO API CLIENT MODELS BEYOND THIS POINT ⚠️      │
+├─────────────────────────────────────────────────────────────────┤
+│                 API INTEGRATION LAYER                          │
+│                                                                 │
+│  ┌─────────────────────┐    ┌─────────────────────────────────┐ │
+│  │   API Client        │    │       Cache Manager            │ │
+│  │   Wrapper           │───▶│   (Receives Pydantic Only)     │ │
+│  │ (Transforms Models) │    │                                │ │
+│  └─────────────────────┘    └─────────────────────────────────┘ │
+│              │                                                  │
+│              ▼                                                  │
+│  ┌─────────────────────┐                                       │
+│  │ Generated API Client│                                       │
+│  │ (External Models)   │                                       │
+│  └─────────────────────┘                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Model Transformation Rules
+
+#### API Client Layer (`src/game_data/api_client.py`)
+- **Input**: Raw API responses using generated client models (`ItemSchema`, `CharacterSchema`, etc.)
+- **Output**: Internal Pydantic models exclusively (`GameItem`, `CharacterGameState`, etc.)
+- **Responsibility**: Immediate transformation of all API responses to internal models
+- **Enforcement**: NO API client models may escape this layer
+
+#### All Other Layers
+- **Models**: Internal Pydantic models exclusively
+- **Serialization**: Use `model_dump()` method only
+- **Data Flow**: Only receive pre-transformed Pydantic models
+- **Enforcement**: API client models are FORBIDDEN beyond `api_client.py`
+
+#### Benefits of Boundary Enforcement
+1. **Decoupling**: Application logic independent of API client changes
+2. **Type Safety**: Consistent Pydantic validation throughout application
+3. **Maintainability**: Single transformation point for API model changes
+4. **Testing**: Simplified mocking with uniform model types
+5. **Serialization**: Unified `model_dump()` usage eliminates polymorphic patterns
+
+#### Implementation Pattern
+```python
+# ✅ CORRECT: API Client Wrapper transforms immediately
+class APIClientWrapper:
+    async def get_character(self, name: str) -> CharacterGameState:
+        api_response = await self._client.get_character(name)  # Returns CharacterSchema
+        return CharacterGameState.from_api_character(api_response)  # Transform to Pydantic
+    
+    async def get_all_items(self) -> list[GameItem]:
+        api_response = await self._client.get_all_items()  # Returns list[ItemSchema]
+        return [GameItem.from_api_item(item) for item in api_response]  # Transform to Pydantic
+
+# ❌ INCORRECT: Passing API models to other layers
+class CacheManager:
+    def save_data(self, items: list[ItemSchema]):  # API model leaked!
+        # This violates boundary enforcement
+```
+
 ### Cooldown Management
 
 Critical for game compliance and efficiency using Pydantic for data validation:

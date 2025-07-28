@@ -40,7 +40,7 @@ from artifactsmmo_api_client.api.characters import get_character_characters_name
 from artifactsmmo_api_client.api.my_characters import action_move_my_name_action_move_post
 from artifactsmmo_api_client.api.my_characters import action_fight_my_name_action_fight_post
 from src.lib.httpstatus import ArtifactsHTTPStatus
-from .models import CooldownInfo
+from .models import CooldownInfo, GameItem, GameMonster, GameMap, GameResource, GameNPC
 
 
 class TokenConfig(BaseModel):
@@ -182,7 +182,7 @@ class APIClientWrapper:
         else:
             return []
 
-    async def get_character(self, name: str) -> 'CharacterSchema':
+    async def get_character(self, name: str) -> 'CharacterGameState':
         """Get specific character by name.
         
         Parameters:
@@ -202,14 +202,18 @@ class APIClientWrapper:
         # Extract character data from response
         try:
             # Try to access character data from response
-            return processed_response.data
+            api_character = processed_response.data
         except AttributeError:
             try:
                 # Try direct character access
-                return processed_response.character
+                api_character = processed_response.character
             except AttributeError:
                 # Fallback to direct response
-                return processed_response
+                api_character = processed_response
+        
+        # Transform API model to internal model (local import to avoid circular dependency)
+        from ..ai_player.state.game_state import CharacterGameState
+        return CharacterGameState.from_api_character(api_character)
 
     async def move_character(self, character_name: str, x: int, y: int) -> 'ActionMoveSchema':
         """Move character to coordinates.
@@ -416,14 +420,14 @@ class APIClientWrapper:
         else:
             raise ValueError(f"Failed to unequip item from slot {slot} for character {character_name}")
 
-    async def get_all_items(self) -> list['ItemSchema']:
+    async def get_all_items(self) -> list[GameItem]:
         """Get all game items for caching.
         
         Parameters:
             None (retrieves complete item database)
             
         Return values:
-            List of ItemSchema instances for all game items
+            List of GameItem instances for all game items
             
         This method retrieves all available items in the game for local
         caching purposes, enabling offline access to item data for GOAP
@@ -434,18 +438,19 @@ class APIClientWrapper:
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
-            return processed_response.data
+            # Transform API models to internal models
+            return [GameItem.from_api_item(item) for item in processed_response.data]
         else:
             return []
 
-    async def get_all_monsters(self) -> list['MonsterSchema']:
+    async def get_all_monsters(self) -> list[GameMonster]:
         """Get all monsters for caching.
         
         Parameters:
             None (retrieves complete monster database)
             
         Return values:
-            List of MonsterSchema instances for all game monsters
+            List of GameMonster instances for all game monsters
             
         This method retrieves all available monsters in the game for local
         caching purposes, enabling offline access to monster data for combat
@@ -456,11 +461,12 @@ class APIClientWrapper:
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
-            return processed_response.data
+            # Transform API models to internal models
+            return [GameMonster.from_api_monster(monster) for monster in processed_response.data]
         else:
             return []
 
-    async def get_all_maps(self) -> list['MapSchema']:
+    async def get_all_maps(self) -> list[GameMap]:
         """Get all maps for caching.
         
         Parameters:
@@ -478,11 +484,12 @@ class APIClientWrapper:
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
-            return processed_response.data
+            # Transform API models to internal models
+            return [GameMap.from_api_map(game_map) for game_map in processed_response.data]
         else:
             return []
 
-    async def get_all_resources(self) -> list['ResourceSchema']:
+    async def get_all_resources(self) -> list[GameResource]:
         """Get all resources for caching.
         
         Parameters:
@@ -500,11 +507,12 @@ class APIClientWrapper:
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
-            return processed_response.data
+            # Transform API models to internal models
+            return [GameResource.from_api_resource(resource) for resource in processed_response.data]
         else:
             return []
 
-    async def get_all_npcs(self) -> list['NPCSchema']:
+    async def get_all_npcs(self) -> list[GameNPC]:
         """Get all NPCs for caching.
         
         Parameters:
@@ -522,7 +530,8 @@ class APIClientWrapper:
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
-            return processed_response.data
+            # Transform API models to internal models
+            return [GameNPC.from_api_npc(npc) for npc in processed_response.data]
         else:
             return []
 

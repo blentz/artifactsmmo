@@ -11,7 +11,103 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.game_data.cache_manager import CacheManager, CacheMetadata
+from src.game_data.models import GameItem, GameMonster, GameMap, GameResource, GameNPC
 from tests.fixtures.api_responses import GameDataFixtures
+
+
+def create_test_game_items(count: int = 3) -> list[GameItem]:
+    """Helper to create test GameItem instances"""
+    return [
+        GameItem(
+            code=f"test_item_{i}",
+            name=f"Test Item {i}",
+            level=i + 1,
+            type="weapon",
+            subtype="sword",
+            description=f"A test item {i}",
+            effects=[],
+            craft=None,
+            tradeable=True
+        )
+        for i in range(count)
+    ]
+
+
+def create_test_game_monsters(count: int = 3) -> list[GameMonster]:
+    """Helper to create test GameMonster instances"""
+    return [
+        GameMonster(
+            code=f"test_monster_{i}",
+            name=f"Test Monster {i}",
+            level=i + 1,
+            hp=100 + i * 10,
+            attack_fire=10 + i,
+            attack_earth=10 + i,
+            attack_water=10 + i,
+            attack_air=10 + i,
+            res_fire=5 + i,
+            res_earth=5 + i,
+            res_water=5 + i,
+            res_air=5 + i,
+            min_gold=i + 1,
+            max_gold=(i + 1) * 10,
+            drops=[]
+        )
+        for i in range(count)
+    ]
+
+
+def create_test_game_maps(count: int = 3) -> list[GameMap]:
+    """Helper to create test GameMap instances"""
+    return [
+        GameMap(
+            name=f"test_map_{i}",
+            skin=f"map_skin_{i}",
+            x=i * 10,
+            y=i * 10,
+            content={"type": f"content_type_{i}"}
+        )
+        for i in range(count)
+    ]
+
+
+def create_test_game_resources(count: int = 3) -> list[GameResource]:
+    """Helper to create test GameResource instances"""
+    return [
+        GameResource(
+            code=f"test_resource_{i}",
+            name=f"Test Resource {i}",
+            skill=["mining", "woodcutting", "fishing"][i % 3],
+            level=i + 1,
+            drops=[]
+        )
+        for i in range(count)
+    ]
+
+
+def create_test_game_npcs(count: int = 3) -> list[GameNPC]:
+    """Helper to create test GameNPC instances"""
+    return [
+        GameNPC(
+            code=f"test_npc_{i}",
+            name=f"Test NPC {i}",
+            skin=f"npc_skin_{i}",
+            level=i + 1,
+            hp=100 + i * 10,
+            attack_fire=5 + i,
+            attack_earth=5 + i,
+            attack_water=5 + i,
+            attack_air=5 + i,
+            res_fire=2 + i,
+            res_earth=2 + i,
+            res_water=2 + i,
+            res_air=2 + i,
+            min_gold=i + 1,
+            max_gold=(i + 1) * 5,
+            drops=[]
+        )
+        for i in range(count)
+    ]
 
 
 class TestCacheMetadata:
@@ -75,55 +171,59 @@ class TestCacheManager:
         return client
 
     def _create_mock_items(self):
-        """Create mock items with model_dump method"""
+        """Create mock items with model_dump and to_dict methods"""
         items_data = GameDataFixtures.get_items_data()
         mock_items = []
         for item_data in items_data:
             mock_item = Mock()
             mock_item.model_dump = Mock(return_value=item_data)
+            mock_item.to_dict = Mock(return_value=item_data)
             for key, value in item_data.items():
                 setattr(mock_item, key, value)
             mock_items.append(mock_item)
         return mock_items
 
     def _create_mock_monsters(self):
-        """Create mock monsters with model_dump method"""
+        """Create mock monsters with model_dump and to_dict methods"""
         monsters_data = GameDataFixtures.get_monsters_data()
         mock_monsters = []
         for monster_data in monsters_data:
             mock_monster = Mock()
             mock_monster.model_dump = Mock(return_value=monster_data)
+            mock_monster.to_dict = Mock(return_value=monster_data)
             for key, value in monster_data.items():
                 setattr(mock_monster, key, value)
             mock_monsters.append(mock_monster)
         return mock_monsters
 
     def _create_mock_maps(self):
-        """Create mock maps with model_dump method"""
+        """Create mock maps with model_dump and to_dict methods"""
         maps_data = GameDataFixtures.get_maps_data()
         mock_maps = []
         for map_data in maps_data:
             mock_map = Mock()
             mock_map.model_dump = Mock(return_value=map_data)
+            mock_map.to_dict = Mock(return_value=map_data)
             for key, value in map_data.items():
                 setattr(mock_map, key, value)
             mock_maps.append(mock_map)
         return mock_maps
 
     def _create_mock_resources(self):
-        """Create mock resources with model_dump method"""
+        """Create mock resources with model_dump and to_dict methods"""
         resources_data = GameDataFixtures.get_resources_data()
         mock_resources = []
         for resource_data in resources_data:
             mock_resource = Mock()
             mock_resource.model_dump = Mock(return_value=resource_data)
+            mock_resource.to_dict = Mock(return_value=resource_data)
             for key, value in resource_data.items():
                 setattr(mock_resource, key, value)
             mock_resources.append(mock_resource)
         return mock_resources
 
     def _create_mock_npcs(self):
-        """Create mock NPCs with model_dump method"""
+        """Create mock NPCs with model_dump and to_dict methods"""
         # Simple NPC data since GameDataFixtures doesn't have NPCs
         npcs_data = [
             {"code": "merchant", "name": "Town Merchant", "x": 0, "y": 0},
@@ -133,13 +233,14 @@ class TestCacheManager:
         for npc_data in npcs_data:
             mock_npc = Mock()
             mock_npc.model_dump = Mock(return_value=npc_data)
+            mock_npc.to_dict = Mock(return_value=npc_data)
             for key, value in npc_data.items():
                 setattr(mock_npc, key, value)
             mock_npcs.append(mock_npc)
         return mock_npcs
 
     def _create_mock_character(self):
-        """Create mock character with model_dump method"""
+        """Create mock character with model_dump and to_dict methods"""
         character_data = {
             "name": "test_character",
             "level": 10,
@@ -149,6 +250,7 @@ class TestCacheManager:
         }
         mock_character = Mock()
         mock_character.model_dump = Mock(return_value=character_data)
+        mock_character.to_dict = Mock(return_value=character_data)
         for key, value in character_data.items():
             setattr(mock_character, key, value)
         return mock_character
@@ -172,25 +274,23 @@ class TestCacheManager:
         assert len(metadata.data_sources) == 0
 
     def test_save_and_load_cache_data(self, mock_api_client, temp_cache_dir):
-        """Test saving and loading cache data"""
+        """Test saving and loading cache data with internal Pydantic models"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        # Create test data
-        test_data = [
-            {"code": "test_item", "name": "Test Item"},
-            {"code": "test_item2", "name": "Test Item 2"}
-        ]
+        # Create test data using internal Pydantic models
+        test_items = create_test_game_items(2)
 
         # Save data
-        cache_manager.save_cache_data("test_type", test_data)
+        cache_manager.save_cache_data("items", test_items)
 
         # Verify cache file exists
-        cache_file = f"{temp_cache_dir}/test_type.yaml"
+        cache_file = f"{temp_cache_dir}/items.yaml"
         assert os.path.exists(cache_file)
 
-        # Load and verify data
-        loaded_data = cache_manager.load_cache_data("test_type")
-        assert loaded_data == test_data
+        # Load and verify data - should get the serialized dict representation
+        loaded_data = cache_manager.load_cache_data("items")
+        expected_data = [item.model_dump(mode='json') for item in test_items]
+        assert loaded_data == expected_data
 
     def test_save_cache_data_with_pydantic_objects(self, mock_api_client, temp_cache_dir):
         """Test saving cache data with Pydantic-like objects"""
@@ -201,6 +301,7 @@ class TestCacheManager:
         for i in range(3):
             mock_obj = Mock()
             mock_obj.model_dump = Mock(return_value={"id": i, "name": f"Item {i}"})
+            mock_obj.to_dict = Mock(return_value={"id": i, "name": f"Item {i}"})
             mock_objects.append(mock_obj)
 
         # Save data
@@ -223,8 +324,8 @@ class TestCacheManager:
         """Test getting items with valid cache"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        # Pre-populate cache
-        cached_items = [{"code": "cached_item", "name": "Cached Item"}]
+        # Pre-populate cache with internal Pydantic models
+        cached_items = create_test_game_items(1)
         cache_manager.save_cache_data("items", cached_items)
         cache_manager._update_metadata("items")
 
@@ -232,7 +333,10 @@ class TestCacheManager:
         items = await cache_manager.get_all_items()
 
         # Should return cached data, not call API
-        assert items == cached_items
+        # Note: cache returns the data that was cached, which is the internal models
+        assert len(items) == 1
+        assert items[0]['code'] == 'test_item_0'
+        assert items[0]['name'] == 'Test Item 0'
         mock_api_client.get_all_items.assert_not_called()
 
     @pytest.mark.asyncio
@@ -240,20 +344,26 @@ class TestCacheManager:
         """Test getting items with forced refresh"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        # Pre-populate cache
-        cached_items = [{"code": "cached_item", "name": "Cached Item"}]
+        # Pre-populate cache with internal models
+        cached_items = create_test_game_items(1)
         cache_manager.save_cache_data("items", cached_items)
         cache_manager._update_metadata("items")
 
+        # Mock API client to return internal models (since API wrapper now transforms)
+        fresh_items = create_test_game_items(2)
+        mock_api_client.get_all_items.return_value = fresh_items
+
         # Get items with force refresh
-        await cache_manager.get_all_items(force_refresh=True)
+        items = await cache_manager.get_all_items(force_refresh=True)
 
         # Should call API and return fresh data
         mock_api_client.get_all_items.assert_called_once()
+        assert items == fresh_items
+
         # Verify data was updated in cache
         cached_data = cache_manager.load_cache_data("items")
-        # Should be the mocked items data
-        assert len(cached_data) == len(GameDataFixtures.get_items_data())
+        expected_data = [item.model_dump(mode='json') for item in fresh_items]
+        assert cached_data == expected_data
 
     @pytest.mark.asyncio
     async def test_get_all_items_no_cache(self, mock_api_client, temp_cache_dir):
@@ -457,7 +567,13 @@ class TestCacheManager:
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
         character_name = "test_character"
-        character_state = {"level": 10}
+        character_state = {
+            "character_level": 10,
+            "hp_current": 80,
+            "current_x": 15,
+            "current_y": 20,
+            "cooldown_ready": True
+        }
 
         # Create character cache
         cache_manager.save_character_state(character_name, character_state)
@@ -471,9 +587,11 @@ class TestCacheManager:
         """Test getting cache statistics"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        # Create some cache files
-        cache_manager.save_cache_data("items", [{"test": "data"}])
-        cache_manager.save_cache_data("monsters", [{"test": "data"}])
+        # Create some cache files with internal models
+        test_items = create_test_game_items(1)
+        test_monsters = create_test_game_monsters(1)
+        cache_manager.save_cache_data("items", test_items)
+        cache_manager.save_cache_data("monsters", test_monsters)
 
         stats = cache_manager.get_cache_statistics()
 
@@ -505,13 +623,16 @@ class TestCacheManager:
         """Test getting monsters with valid cache"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        cached_monsters = [{"code": "cached_monster", "name": "Cached Monster"}]
+        cached_monsters = create_test_game_monsters(1)
         cache_manager.save_cache_data("monsters", cached_monsters)
         cache_manager._update_metadata("monsters")
 
         monsters = await cache_manager.get_all_monsters()
 
-        assert monsters == cached_monsters
+        # Should return cached data - check key fields
+        assert len(monsters) == 1
+        assert monsters[0]['code'] == 'test_monster_0'
+        assert monsters[0]['name'] == 'Test Monster 0'
         mock_api_client.get_all_monsters.assert_not_called()
 
     @pytest.mark.asyncio
@@ -531,13 +652,16 @@ class TestCacheManager:
         """Test getting maps with valid cache"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        cached_maps = [{"name": "Cached Map"}]
+        cached_maps = create_test_game_maps(1)
         cache_manager.save_cache_data("maps", cached_maps)
         cache_manager._update_metadata("maps")
 
         maps = await cache_manager.get_all_maps()
 
-        assert maps == cached_maps
+        # Should return cached data - check key fields
+        assert len(maps) == 1
+        assert maps[0]['name'] == 'test_map_0'
+        assert maps[0]['x'] == 0
         mock_api_client.get_all_maps.assert_not_called()
 
     @pytest.mark.asyncio
@@ -557,13 +681,16 @@ class TestCacheManager:
         """Test getting resources with valid cache"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        cached_resources = [{"code": "cached_resource", "name": "Cached Resource"}]
+        cached_resources = create_test_game_resources(1)
         cache_manager.save_cache_data("resources", cached_resources)
         cache_manager._update_metadata("resources")
 
         resources = await cache_manager.get_all_resources()
 
-        assert resources == cached_resources
+        # Should return cached data - check key fields
+        assert len(resources) == 1
+        assert resources[0]['code'] == 'test_resource_0'
+        assert resources[0]['name'] == 'Test Resource 0'
         mock_api_client.get_all_resources.assert_not_called()
 
     @pytest.mark.asyncio
@@ -583,13 +710,16 @@ class TestCacheManager:
         """Test getting NPCs with valid cache"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        cached_npcs = [{"code": "cached_npc", "name": "Cached NPC"}]
+        cached_npcs = create_test_game_npcs(1)
         cache_manager.save_cache_data("npcs", cached_npcs)
         cache_manager._update_metadata("npcs")
 
         npcs = await cache_manager.get_all_npcs()
 
-        assert npcs == cached_npcs
+        # Should return cached data - check key fields
+        assert len(npcs) == 1
+        assert npcs[0]['code'] == 'test_npc_0'
+        assert npcs[0]['name'] == 'Test NPC 0'
         mock_api_client.get_all_npcs.assert_not_called()
 
     @pytest.mark.asyncio
@@ -659,11 +789,12 @@ class TestCacheManager:
         """Test get_cached_game_data when data exists"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        test_data = [{"code": "test", "name": "Test"}]
+        test_data = create_test_game_items(1)
         cache_manager.save_cache_data("items", test_data)
 
         result = cache_manager.get_cached_game_data("items")
-        assert result == test_data
+        expected_data = [item.model_dump(mode='json') for item in test_data]
+        assert result == expected_data
 
     def test_get_cached_game_data_not_exists(self, mock_api_client, temp_cache_dir):
         """Test get_cached_game_data when data doesn't exist"""
@@ -757,7 +888,7 @@ class TestCacheManager:
         assert not cache_manager.validate_character_state_data(invalid_state)
 
     def test_save_cache_data_with_dict_method(self, mock_api_client, temp_cache_dir):
-        """Test saving cache data with objects that have dict() method"""
+        """Test that objects with dict() method but no model_dump() are rejected"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
         # Create custom class with dict method but no model_dump
@@ -775,16 +906,12 @@ class TestCacheManager:
             DictObject(3, "Item 3")
         ]
 
-        # Save data
-        cache_manager.save_cache_data("dict_items", objects_with_dict)
-
-        # Load and verify data
-        loaded_data = cache_manager.load_cache_data("dict_items")
-        expected_data = [{"id": i, "name": f"Item {i}"} for i in range(1, 4)]
-        assert loaded_data == expected_data
+        # Should raise ValueError due to boundary enforcement
+        with pytest.raises(ValueError, match="Cache data must be internal Pydantic models"):
+            cache_manager.save_cache_data("dict_items", objects_with_dict)
 
     def test_save_cache_data_with_plain_objects(self, mock_api_client, temp_cache_dir):
-        """Test saving cache data with plain objects (no model_dump or dict)"""
+        """Test that plain dictionaries are rejected by boundary enforcement"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
         # Plain dictionaries (no special methods)
@@ -793,12 +920,9 @@ class TestCacheManager:
             {"id": 2, "name": "Plain Item 2"}
         ]
 
-        # Save data
-        cache_manager.save_cache_data("plain_items", plain_objects)
-
-        # Load and verify data
-        loaded_data = cache_manager.load_cache_data("plain_items")
-        assert loaded_data == plain_objects
+        # Should raise ValueError due to boundary enforcement
+        with pytest.raises(ValueError, match="Cache data must be internal Pydantic models"):
+            cache_manager.save_cache_data("plain_items", plain_objects)
 
     def test_load_cache_data_malformed_yaml(self, mock_api_client, temp_cache_dir):
         """Test loading cache data handles YAML errors gracefully"""
@@ -1074,11 +1198,12 @@ class TestCacheManager:
         """Test _load_yaml_data successful loading"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
-        # Create valid YAML file with data
-        test_data = [{"id": 1, "name": "Test"}]
+        # Create valid YAML file with data using internal models
+        test_data = create_test_game_items(1)
         cache_manager.save_cache_data("test_yaml", test_data)
 
         # Load using _load_yaml_data directly
         yaml_file = f"{temp_cache_dir}/test_yaml.yaml"
         result = cache_manager._load_yaml_data(yaml_file)
-        assert result == test_data
+        expected_data = [item.model_dump(mode='json') for item in test_data]
+        assert result == expected_data

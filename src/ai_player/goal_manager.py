@@ -397,6 +397,10 @@ class GoalManager:
 
         except Exception as e:
             print(f"Error creating GOAP actions: {e}")
+            # Add fallback action when action creation fails
+            action_list.add_condition("rest", hp_low=True)
+            action_list.add_reaction("rest", hp_current=100)
+            action_list.set_weight("rest", 1)
 
         return action_list
 

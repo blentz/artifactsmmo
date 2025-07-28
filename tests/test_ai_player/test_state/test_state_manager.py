@@ -36,7 +36,22 @@ class TestStateManager:
     def state_manager(self, mock_api_client, mock_cache_manager):
         """Create StateManager instance for testing"""
         with patch('src.ai_player.state.state_manager.YamlData') as mock_yaml:
-            mock_yaml.return_value = Mock()
+            # Configure mock to have proper data structure
+            mock_yaml_instance = Mock()
+            mock_yaml_instance.data = {
+                'data': [
+                    {
+                        'name': 'test_character',
+                        'character_level': 5,
+                        'hp_current': 80,
+                        'current_x': 10,
+                        'current_y': 15,
+                        'cooldown_ready': True
+                    }
+                ]
+            }
+            mock_yaml_instance.save = Mock()
+            mock_yaml.return_value = mock_yaml_instance
             return StateManager("test_character", mock_api_client, mock_cache_manager)
 
     def test_state_manager_initialization(self, state_manager):
@@ -49,21 +64,18 @@ class TestStateManager:
     @pytest.mark.asyncio
     async def test_get_current_state_from_cache(self, state_manager, mock_cache_manager):
         """Test getting current state from cache when available"""
-        # Mock cached state data
-        cached_state = {
-            GameState.CHARACTER_LEVEL.value: 5,
-            GameState.HP_CURRENT.value: 80,
-            GameState.CURRENT_X.value: 10,
-            GameState.CURRENT_Y.value: 15,
-            GameState.COOLDOWN_READY.value: True
-        }
-
-        mock_cache_manager.load_character_state.return_value = cached_state
-
+        # The state should be loaded from the YAML cache data we configured in the fixture
         current_state = await state_manager.get_current_state()
 
         assert isinstance(current_state, dict)
-        mock_cache_manager.load_character_state.assert_called_once_with("test_character")
+        # Verify the state contains the expected GameState enum keys
+        assert GameState.CHARACTER_LEVEL in current_state
+        assert GameState.HP_CURRENT in current_state
+        assert GameState.CURRENT_X in current_state
+        assert GameState.CURRENT_Y in current_state
+        # Verify we got valid numeric values
+        assert isinstance(current_state[GameState.CHARACTER_LEVEL], int)
+        assert isinstance(current_state[GameState.HP_CURRENT], int)
 
     @pytest.mark.asyncio
     async def test_get_current_state_from_api_fallback(self, state_manager, mock_api_client, mock_cache_manager):
@@ -124,10 +136,8 @@ class TestStateManager:
         await state_manager.update_state(state_changes)
 
         # Verify that state changes are applied and cached
-        mock_cache_manager.save_character_state.assert_called_once()
-        call_args = mock_cache_manager.save_character_state.call_args
-        assert call_args[0][0] == "test_character"
-        assert isinstance(call_args[0][1], dict)
+        # The state manager should call save() on the YAML cache instance
+        state_manager._characters_cache.save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_update_state_invalid_enum_keys(self, state_manager):
@@ -182,7 +192,7 @@ class TestStateManager:
 
             assert isinstance(synced_state, dict)
             mock_api_client.get_character.assert_called_once_with("test_character")
-            mock_cache_manager.save_character_state.assert_called_once()
+            state_manager._characters_cache.save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_sync_with_api_failure(self, state_manager, mock_api_client):
@@ -252,7 +262,7 @@ class TestStateManager:
         await state_manager.apply_action_result(action_result)
 
         # Verify that state changes are applied
-        mock_cache_manager.save_character_state.assert_called_once()
+        state_manager._characters_cache.save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_apply_action_result_failure(self, state_manager, mock_cache_manager):
@@ -269,7 +279,7 @@ class TestStateManager:
 
         # Failed actions should not trigger state changes
         # but may still update cooldown information
-        mock_cache_manager.save_character_state.assert_called_once()
+        state_manager._characters_cache.save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_state_value_exists(self, state_manager):
@@ -311,7 +321,7 @@ class TestStateManager:
         await state_manager.set_state_value(GameState.HP_CURRENT, 95)
 
         # Verify that state update is triggered
-        mock_cache_manager.save_character_state.assert_called_once()
+        state_manager._characters_cache.save.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_refresh_state_from_api(self, state_manager, mock_api_client, mock_cache_manager):
@@ -355,7 +365,7 @@ class TestStateManager:
 
             assert isinstance(refreshed_state, dict)
             mock_api_client.get_character.assert_called_once_with("test_character")
-            mock_cache_manager.save_character_state.assert_called_once()
+            state_manager._characters_cache.save.assert_called_once()
 
 
 class TestStateManagerIntegration:
@@ -580,10 +590,13 @@ class TestStateManagerIntegration:
         with patch('src.ai_player.state.state_manager.YamlData') as mock_yaml_class:
             mock_yaml_instance = Mock()
             mock_yaml_instance.data = {
-                'character_state': {
-                    'character_level': 5,
-                    'hp_current': 80
-                }
+                'data': [
+                    {
+                        'name': 'yaml_test_char',
+                        'character_level': 5,
+                        'hp_current': 80
+                    }
+                ]
             }
             mock_yaml_class.return_value = mock_yaml_instance
 
@@ -592,9 +605,18 @@ class TestStateManagerIntegration:
             # Create state manager without cache manager to use YamlData fallback
             state_manager = StateManager("yaml_test_char", mock_api_client, None)
 
-            cached_state = state_manager.load_state_from_cache()
-            assert cached_state is not None
-            assert GameState.CHARACTER_LEVEL in cached_state
+            # Mock the validation to convert string keys to GameState enums
+            with patch('src.ai_player.state.game_state.GameState.validate_state_dict') as mock_validate:
+                mock_validate.side_effect = lambda x: {
+                    GameState.CHARACTER_LEVEL: x.get('character_level', 1), 
+                    GameState.HP_CURRENT: x.get('hp_current', 1)
+                }
+                
+                cached_state = state_manager.load_state_from_cache()
+                assert cached_state is not None
+                assert GameState.CHARACTER_LEVEL in cached_state
+                assert cached_state[GameState.CHARACTER_LEVEL] == 5
+                assert cached_state[GameState.HP_CURRENT] == 80
 
     def test_load_state_from_cache_yaml_no_data(self):
         """Test load_state_from_cache with YamlData when no data exists"""
@@ -633,6 +655,16 @@ class TestStateManagerIntegration:
         """Test save_state_to_cache using YamlData fallback"""
         with patch('src.ai_player.state.state_manager.YamlData') as mock_yaml_class:
             mock_yaml_instance = Mock()
+            mock_yaml_instance.data = {
+                'data': [
+                    {
+                        'name': 'yaml_save_test_char',
+                        'character_level': 3,
+                        'hp_current': 75
+                    }
+                ]
+            }
+            mock_yaml_instance.save = Mock()
             mock_yaml_class.return_value = mock_yaml_instance
 
             mock_api_client = Mock()
@@ -647,13 +679,13 @@ class TestStateManagerIntegration:
 
             state_manager.save_state_to_cache(test_state)
 
-            # Verify YamlData save was called with serialized state
+            # Verify YamlData save was called (updates character data in place)
             mock_yaml_instance.save.assert_called_once()
-            call_args = mock_yaml_instance.save.call_args
-            assert 'character_state' in call_args.kwargs
-            serialized_state = call_args.kwargs['character_state']
-            assert 'character_level' in serialized_state
-            assert 'hp_current' in serialized_state
+            # Verify the character data was updated in the mock data structure
+            characters = mock_yaml_instance.data['data']
+            updated_char = next(c for c in characters if c['name'] == 'yaml_save_test_char')
+            assert updated_char['character_level'] == 5  # Updated from test_state
+            assert updated_char['hp_current'] == 80       # Updated from test_state
 
     def test_convert_api_to_goap_state(self):
         """Test convert_api_to_goap_state method"""
@@ -808,27 +840,40 @@ class TestStateManagerIntegration:
 
     def test_get_cached_state_with_file_cache_fallback(self):
         """Test get_cached_state when it loads from file cache"""
-        with patch('src.ai_player.state.state_manager.YamlData'):
+        with patch('src.ai_player.state.state_manager.YamlData') as mock_yaml_class:
+            mock_yaml_instance = Mock()
+            mock_yaml_instance.data = {
+                'data': [
+                    {
+                        'name': 'file_cache_test_char',
+                        'character_level': 8,
+                        'hp_current': 90
+                    }
+                ]
+            }
+            mock_yaml_class.return_value = mock_yaml_instance
+            
             mock_api_client = Mock()
             mock_cache_manager = Mock()
-
-            # Mock cache manager to return cached data
-            cached_data = {
-                'character_level': 8,
-                'hp_current': 90
-            }
-            mock_cache_manager.load_character_state.return_value = cached_data
 
             state_manager = StateManager("file_cache_test_char", mock_api_client, mock_cache_manager)
 
             # Ensure no in-memory cached state
             state_manager._cached_state = None
 
-            # Should load from file cache and set _cached_state
-            cached_state = state_manager.get_cached_state()
-            assert cached_state is not None
-            assert GameState.CHARACTER_LEVEL in cached_state
-            assert state_manager._cached_state is not None  # Should be set after loading
+            # Mock the validation to convert string keys to GameState enums  
+            with patch('src.ai_player.state.game_state.GameState.validate_state_dict') as mock_validate:
+                mock_validate.side_effect = lambda x: {
+                    GameState.CHARACTER_LEVEL: x.get('character_level', 1), 
+                    GameState.HP_CURRENT: x.get('hp_current', 1)
+                }
+                
+                # Should load from file cache and set _cached_state
+                cached_state = state_manager.get_cached_state()
+                assert cached_state is not None
+                assert GameState.CHARACTER_LEVEL in cached_state
+                assert cached_state[GameState.CHARACTER_LEVEL] == 8
+                assert state_manager._cached_state is not None  # Should be set after loading
 
     @pytest.mark.asyncio
     async def test_validate_cache_vs_api_with_state_mismatch(self):
