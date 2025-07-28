@@ -19,7 +19,7 @@ from ...ai_player.diagnostics.action_diagnostics import ActionDiagnostics
 from ...ai_player.diagnostics.planning_diagnostics import PlanningDiagnostics
 from ...ai_player.diagnostics.state_diagnostics import StateDiagnostics
 from ...ai_player.goal_manager import GoalManager
-from ...ai_player.state.game_state import GameState
+from ...ai_player.state.game_state import GameState, CharacterGameState
 from ...game_data.api_client import APIClientWrapper, CooldownManager
 
 
@@ -106,7 +106,7 @@ class DiagnosticCommands:
             character_data = await self.api_client.get_character(character_name)
 
             # Extract character game state
-            character_game_state = self.api_client.extract_character_state(character_data)
+            character_game_state = CharacterGameState.from_api_character(character_data)
 
             # Convert to GOAP state format and run diagnosis
             goap_state = character_game_state.to_goap_state()
@@ -1048,131 +1048,284 @@ class DiagnosticCommands:
 
         return diagnosis
 
-    def format_state_output(self, state_data: dict[GameState, Any]) -> str:
-        """Format state data for CLI display.
+    def format_state_output(self, diagnostic_result: dict[str, Any]) -> str:
+        """Format state diagnostic results for CLI display.
         
         Parameters:
-            state_data: Dictionary with GameState enum keys and current values
+            diagnostic_result: Full diagnostic result dictionary from diagnose_state()
             
         Return values:
             Formatted string representation suitable for CLI output
             
-        This method formats character state data into a human-readable format
-        for CLI display, organizing state values by category and highlighting
-        important information for debugging and monitoring.
+        This method formats complete state diagnostic results into a human-readable 
+        format for CLI display, including validation, statistics, and recommendations.
         """
-        return self.state_diagnostics.format_state_for_display(state_data)
-
-    def format_action_output(self, action_data: list[dict[str, Any]]) -> str:
-        """Format action analysis for CLI display.
-        
-        Parameters:
-            action_data: List of dictionaries containing action analysis information
-            
-        Return values:
-            Formatted string representation suitable for CLI output
-            
-        This method formats action analysis data into a readable table format
-        for CLI display, showing action names, costs, preconditions, and
-        availability status for debugging and planning analysis.
-        """
-        if not action_data:
-            return "No action data to display"
-
         lines = []
-        lines.append("=== ACTION ANALYSIS ===")
-        lines.append(f"Total actions: {len(action_data)}")
-        lines.append("")
-
-        for i, action_info in enumerate(action_data):
-            lines.append(f"[{i+1}] Action: {action_info.get('name', 'Unknown')}")
-            lines.append(f"    Cost: {action_info.get('cost', 'N/A')}")
-            lines.append(f"    Executable: {action_info.get('executable', 'Unknown')}")
-
-            if 'preconditions' in action_info:
-                lines.append("    Preconditions:")
-                for key, value in action_info['preconditions'].items():
-                    lines.append(f"      {key}: {value}")
-
-            if 'effects' in action_info:
-                lines.append("    Effects:")
-                for key, value in action_info['effects'].items():
-                    lines.append(f"      {key}: {value}")
-
-            if 'issues' in action_info and action_info['issues']:
-                lines.append("    Issues:")
-                for issue in action_info['issues']:
-                    lines.append(f"      • {issue}")
-
-            lines.append("")
-
+        
+        # Header
+        character_name = diagnostic_result.get("character_name", "Unknown")
+        lines.append(f"=== STATE DIAGNOSTICS: {character_name} ===")
+        
+        # API character data if available
+        if "api_character_data" in diagnostic_result:
+            lines.append("\n=== API CHARACTER DATA ===")
+            char_data = diagnostic_result["api_character_data"]
+            lines.append(f"Level: {char_data.get('level', 'N/A')}")
+            lines.append(f"XP: {char_data.get('xp', 'N/A')}")
+            lines.append(f"Gold: {char_data.get('gold', 'N/A')}")
+            lines.append(f"HP: {char_data.get('hp', 'N/A')}/{char_data.get('max_hp', 'N/A')}")
+            position = char_data.get('position', {})
+            lines.append(f"Position: ({position.get('x', 'N/A')}, {position.get('y', 'N/A')})")
+            lines.append(f"Skin: {char_data.get('skin', 'N/A')}")
+        
+        # State validation
+        validation = diagnostic_result.get("state_validation", {})
+        lines.append("\n=== STATE VALIDATION ===")
+        lines.append(f"Valid: {validation.get('valid', 'Unknown')}")
+        
+        issues = validation.get("issues", [])
+        if issues:
+            lines.append(f"Issues ({len(issues)}):")
+            for issue in issues:
+                lines.append(f"  • {issue}")
+        
+        missing_keys = validation.get("missing_required_keys", [])
+        if missing_keys:
+            lines.append(f"Missing required keys: {missing_keys}")
+        
+        invalid_values = validation.get("invalid_values", [])
+        if invalid_values:
+            lines.append(f"Invalid values: {invalid_values}")
+        
+        # State statistics
+        stats = diagnostic_result.get("state_statistics", {})
+        if stats:
+            lines.append("\n=== STATE STATISTICS ===")
+            lines.append(f"Character level: {stats.get('character_level', 'N/A')}")
+            lines.append(f"Total XP: {stats.get('total_xp', 'N/A')}")
+            lines.append(f"Gold: {stats.get('gold', 'N/A')}")
+            lines.append(f"HP percentage: {stats.get('hp_percentage', 0):.1f}%")
+            lines.append(f"Total skill levels: {stats.get('total_skill_levels', 0)}")
+            lines.append(f"Average skill level: {stats.get('average_skill_level', 0):.1f}")
+            lines.append(f"Progress to max: {stats.get('progress_to_max', 0):.1f}%")
+        
+        # Cooldown status
+        if "cooldown_status" in diagnostic_result:
+            cooldown = diagnostic_result["cooldown_status"]
+            lines.append("\n=== COOLDOWN STATUS ===")
+            lines.append(f"On cooldown: {cooldown.get('on_cooldown', 'Unknown')}")
+            lines.append(f"Remaining seconds: {cooldown.get('remaining_seconds', 'N/A')}")
+            if cooldown.get('reason'):
+                lines.append(f"Reason: {cooldown['reason']}")
+        
+        # Recommendations
+        recommendations = diagnostic_result.get("recommendations", [])
+        if recommendations:
+            lines.append(f"\n=== RECOMMENDATIONS ({len(recommendations)}) ===")
+            for rec in recommendations:
+                lines.append(f"  • {rec}")
+        
         return "\n".join(lines)
 
-    def format_planning_output(self, planning_data: dict[str, Any]) -> str:
-        """Format planning visualization for CLI display.
+    def format_action_output(self, diagnostic_result: dict[str, Any]) -> str:
+        """Format action diagnostic results for CLI display.
         
         Parameters:
-            planning_data: Dictionary containing GOAP planning analysis and visualization data
+            diagnostic_result: Full diagnostic result dictionary from diagnose_actions()
+            
+        Return values:
+            Formatted string representation suitable for CLI output
+            
+        This method formats complete action diagnostic results into a readable format
+        for CLI display, including action analysis, summary, and recommendations.
+        """
+        lines = []
+        
+        # Header
+        character_name = diagnostic_result.get("character_name", "All Actions")
+        lines.append(f"=== ACTION DIAGNOSTICS: {character_name} ===")
+        
+        # Registry status
+        registry_available = diagnostic_result.get("registry_available", False)
+        lines.append(f"Action registry available: {registry_available}")
+        
+        # Summary
+        summary = diagnostic_result.get("summary", {})
+        total_actions = summary.get("total_actions", 0)
+        lines.append(f"Total actions analyzed: {total_actions}")
+        
+        if total_actions > 0:
+            executable_actions = summary.get("executable_actions", 0)
+            cost_range = summary.get("cost_range", {})
+            lines.append(f"Executable actions: {executable_actions}")
+            lines.append(f"Cost range: {cost_range.get('min', 0)} - {cost_range.get('max', 0)}")
+            
+            action_types = summary.get("action_types", {})
+            if action_types:
+                lines.append(f"Action types: {', '.join(f'{k}({v})' for k, v in action_types.items())}")
+        
+        # Registry validation
+        registry_validation = diagnostic_result.get("registry_validation", {})
+        valid = registry_validation.get("valid", True)
+        lines.append(f"Registry validation: {'✓ Valid' if valid else '✗ Invalid'}")
+        
+        errors = registry_validation.get("errors", [])
+        if errors:
+            lines.append(f"\nRegistry errors ({len(errors)}):")
+            for error in errors:
+                lines.append(f"  • {error}")
+        
+        warnings = registry_validation.get("warnings", [])
+        if warnings:
+            lines.append(f"\nRegistry warnings ({len(warnings)}):")
+            for warning in warnings:
+                lines.append(f"  • {warning}")
+        
+        # Individual action analysis
+        actions_analyzed = diagnostic_result.get("actions_analyzed", [])
+        if actions_analyzed:
+            lines.append(f"\n=== INDIVIDUAL ACTIONS ({len(actions_analyzed)}) ===")
+            for i, action_info in enumerate(actions_analyzed):
+                lines.append(f"\n[{i+1}] Action: {action_info.get('name', 'Unknown')}")
+                lines.append(f"    Class: {action_info.get('class', 'Unknown')}")
+                lines.append(f"    Cost: {action_info.get('cost', 'N/A')}")
+                lines.append(f"    Executable: {action_info.get('executable', 'Unknown')}")
+
+                if 'preconditions' in action_info and action_info['preconditions']:
+                    lines.append("    Preconditions:")
+                    for key, value in action_info['preconditions'].items():
+                        lines.append(f"      {key}: {value}")
+
+                if 'effects' in action_info and action_info['effects']:
+                    lines.append("    Effects:")
+                    for key, value in action_info['effects'].items():
+                        lines.append(f"      {key}: {value}")
+
+                validation_info = action_info.get('validation', {})
+                if validation_info:
+                    precond_valid = validation_info.get('preconditions_valid', 'Unknown')
+                    effects_valid = validation_info.get('effects_valid', 'Unknown')
+                    lines.append(f"    Validation: preconditions={precond_valid}, effects={effects_valid}")
+
+                if 'issues' in action_info and action_info['issues']:
+                    lines.append("    Issues:")
+                    for issue in action_info['issues']:
+                        lines.append(f"      • {issue}")
+        
+        # Recommendations
+        recommendations = diagnostic_result.get("recommendations", [])
+        if recommendations:
+            lines.append(f"\n=== RECOMMENDATIONS ({len(recommendations)}) ===")
+            for rec in recommendations:
+                lines.append(f"  • {rec}")
+        
+        return "\n".join(lines)
+
+    def format_planning_output(self, diagnostic_result: dict[str, Any]) -> str:
+        """Format planning diagnostic results for CLI display.
+        
+        Parameters:
+            diagnostic_result: Full diagnostic result dictionary from diagnose_plan()
             
         Return values:
             Formatted string representation suitable for CLI planning visualization
             
-        This method formats GOAP planning analysis into a visual representation
-        for CLI display, showing planning steps, action sequences, state transitions,
-        and optimization details for debugging planning algorithms.
+        This method formats complete planning diagnostic results into a visual representation
+        for CLI display, showing planning analysis, performance metrics, and recommendations.
         """
-        if not planning_data:
-            return "No planning data to display"
-
         lines = []
-        lines.append("=== PLANNING ANALYSIS ===")
+        
+        # Header
+        character_name = diagnostic_result.get("character_name", "Unknown")
+        goal = diagnostic_result.get("goal", "Unknown")
+        lines.append(f"=== PLANNING DIAGNOSTICS: {character_name} ===")
+        lines.append(f"Goal: {goal}")
+        
+        # Planning availability
+        planning_available = diagnostic_result.get("planning_available", False)
+        lines.append(f"Planning system available: {planning_available}")
+        
+        # Planning analysis
+        analysis = diagnostic_result.get("planning_analysis", {})
+        if analysis:
+            lines.append("\n=== PLANNING ANALYSIS ===")
+            success = analysis.get('planning_successful', False)
+            lines.append(f"Planning successful: {success}")
+            
+            goal_reachable = analysis.get('goal_reachable', 'Unknown')
+            lines.append(f"Goal reachable: {goal_reachable}")
 
-        # Planning success status
-        success = planning_data.get('planning_successful', False)
-        lines.append(f"Planning successful: {success}")
+            # Basic metrics
+            total_cost = analysis.get('total_cost', 0)
+            planning_time = analysis.get('planning_time', 0.0)
+            lines.append(f"Total cost: {total_cost}")
+            lines.append(f"Planning time: {planning_time:.3f} seconds")
 
-        # Basic metrics
-        total_cost = planning_data.get('total_cost', 0)
-        planning_time = planning_data.get('planning_time', 0.0)
-        lines.append(f"Total cost: {total_cost}")
-        lines.append(f"Planning time: {planning_time:.3f} seconds")
+            # Issues
+            issues = analysis.get('issues', [])
+            if issues:
+                lines.append(f"\nIssues ({len(issues)}):")
+                for issue in issues:
+                    lines.append(f"  • {issue}")
 
-        # Issues
-        issues = planning_data.get('issues', [])
-        if issues:
-            lines.append("\nIssues:")
-            for issue in issues:
-                lines.append(f"  • {issue}")
+            # Plan steps
+            steps = analysis.get('steps', [])
+            if steps:
+                lines.append(f"\nPlan steps ({len(steps)} actions):")
+                for i, step in enumerate(steps):
+                    step_name = step.get('name', f'Step {i+1}')
+                    step_cost = step.get('cost', 1)
+                    lines.append(f"  [{i+1}] {step_name} (cost: {step_cost})")
 
-        # Plan steps
-        steps = planning_data.get('steps', [])
-        if steps:
-            lines.append(f"\nPlan steps ({len(steps)} actions):")
-            for i, step in enumerate(steps):
-                step_name = step.get('name', f'Step {i+1}')
-                step_cost = step.get('cost', 1)
-                lines.append(f"  [{i+1}] {step_name} (cost: {step_cost})")
-
-        # State transitions
-        transitions = planning_data.get('state_transitions', [])
-        if transitions:
-            lines.append("\nState Transitions:")
-            for transition in transitions:
-                step_num = transition.get('step', '?')
-                action_name = transition.get('action', 'Unknown')
-                lines.append(f"  Step {step_num}: {action_name}")
-
-        # Performance data
-        if 'efficiency_score' in planning_data:
-            efficiency = planning_data['efficiency_score']
-            lines.append(f"\nEfficiency score: {efficiency:.2f}")
-
-        # Suggestions
-        suggestions = planning_data.get('optimization_suggestions', [])
-        if suggestions:
-            lines.append("\nOptimization suggestions:")
-            for suggestion in suggestions:
-                lines.append(f"  • {suggestion}")
+            # State transitions
+            transitions = analysis.get('state_transitions', [])
+            if transitions:
+                lines.append(f"\nState Transitions ({len(transitions)}):")
+                for transition in transitions:
+                    step_num = transition.get('step', '?')
+                    action_name = transition.get('action', 'Unknown')
+                    lines.append(f"  Step {step_num}: {action_name}")
+        
+        # Plan efficiency
+        efficiency = diagnostic_result.get("plan_efficiency", {})
+        if efficiency:
+            lines.append(f"\n=== PLAN EFFICIENCY ===")
+            efficiency_score = efficiency.get('efficiency_score', 0)
+            lines.append(f"Efficiency score: {efficiency_score:.2f}")
+            
+            suggestions = efficiency.get('optimization_suggestions', [])
+            if suggestions:
+                lines.append("Optimization suggestions:")
+                for suggestion in suggestions:
+                    lines.append(f"  • {suggestion}")
+        
+        # Bottlenecks
+        bottlenecks = diagnostic_result.get("bottlenecks", [])
+        if bottlenecks:
+            lines.append(f"\n=== BOTTLENECKS ({len(bottlenecks)}) ===")
+            for bottleneck in bottlenecks:
+                lines.append(f"  • {bottleneck}")
+        
+        # Performance metrics
+        performance = diagnostic_result.get("performance_metrics", {})
+        if performance:
+            lines.append(f"\n=== PERFORMANCE METRICS ===")
+            planning_time = performance.get('planning_time_seconds', 0)
+            success = performance.get('success', False)
+            performance_class = performance.get('performance_class', 'unknown')
+            lines.append(f"Planning time: {planning_time:.3f}s")
+            lines.append(f"Success: {success}")
+            lines.append(f"Performance class: {performance_class}")
+            
+            if 'error' in performance:
+                lines.append(f"Error: {performance['error']}")
+        
+        # Recommendations
+        recommendations = diagnostic_result.get("recommendations", [])
+        if recommendations:
+            lines.append(f"\n=== RECOMMENDATIONS ({len(recommendations)}) ===")
+            for rec in recommendations:
+                lines.append(f"  • {rec}")
 
         return "\n".join(lines)
 

@@ -403,23 +403,50 @@ class CacheManager:
         # Convert to dictionaries for consistent interface
         return [char.to_dict() for char in fresh_data]
 
-    def load_character_state(self, character_name: str) -> dict[str, Any] | None:
-        """Load character state from cache."""
-        cache_file = f"{self.cache_dir}/characters/{character_name}/state.yaml"
-        try:
-            yaml_data = YamlData(cache_file)
-            if yaml_data.data and "data" in yaml_data.data:
-                return yaml_data.data["data"]
+    def get_character_from_cache(self, character_name: str) -> dict[str, Any] | None:
+        """Get specific character data from centralized characters cache.
+        
+        Parameters:
+            character_name: Name of character to retrieve
+            
+        Return values:
+            Dictionary containing character data, or None if not found
+            
+        This method retrieves a specific character's data from the centralized
+        characters.yaml file, maintaining consistency with the unified caching approach.
+        """
+        characters_data = self.load_cache_data("characters")
+        if not characters_data:
             return None
-        except Exception:
-            return None
+            
+        for character in characters_data:
+            if character.get('name') == character_name:
+                return character
+        return None
 
-    def save_character_state(self, character_name: str, character_state: dict[str, Any]) -> None:
-        """Save character state to cache."""
-        cache_file = f"{self.cache_dir}/characters/{character_name}/state.yaml"
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        yaml_data = YamlData(cache_file)
-        yaml_data.save(data=character_state)
+    def update_character_in_cache(self, character_name: str, character_data: dict[str, Any]) -> bool:
+        """Update specific character data in centralized characters cache.
+        
+        Parameters:
+            character_name: Name of character to update
+            character_data: Updated character data dictionary
+            
+        Return values:
+            Boolean indicating whether update was successful
+            
+        This method updates a character's data in the centralized characters.yaml file,
+        maintaining data consistency across the entire system.
+        """
+        characters_data = self.load_cache_data("characters")
+        if not characters_data:
+            return False
+            
+        for i, character in enumerate(characters_data):
+            if character.get('name') == character_name:
+                characters_data[i].update(character_data)
+                self.save_cache_data("characters", characters_data)
+                return True
+        return False
 
     def get_cached_game_data(self, data_type: str) -> list[Any] | None:
         """Get cached game data of specific type."""

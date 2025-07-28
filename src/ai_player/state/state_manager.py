@@ -27,20 +27,21 @@ class StateManager:
         Parameters:
             character_name: Name of the character to manage state for
             api_client: API client wrapper for game data operations
-            cache_manager: Optional cache manager for character state persistence
+            cache_manager: Cache manager for centralized character data access
             
         Return values:
             None (constructor)
             
         This constructor initializes the StateManager with the specified character
-        and API client, setting up state caching and synchronization mechanisms
-        for reliable state management throughout AI player operation.
+        and API client, using the centralized characters.yaml file for state
+        management instead of individual character files.
         """
         self.character_name = character_name
         self.api_client = api_client
         self._cached_state: dict[GameState, Any] | None = None
-        self._yaml_cache = YamlData(f"data/characters/{character_name}_state.yaml")
         self._cache_manager = cache_manager
+        # Use centralized characters.yaml file for state data
+        self._characters_cache = YamlData("data/characters.yaml")
 
     async def get_current_state(self) -> dict[GameState, Any]:
         """Fetch current character state from cache or API using GameState enum.
@@ -277,7 +278,7 @@ class StateManager:
         return fresh_state
 
     def save_state_to_cache(self, state: dict[GameState, Any]) -> None:
-        """Save state to YAML cache using enum serialization.
+        """Save state to centralized characters.yaml cache.
         
         Parameters:
             state: Dictionary with GameState enum keys and state values to cache
@@ -285,21 +286,28 @@ class StateManager:
         Return values:
             None (writes to cache file)
             
-        This method persists the character state to YAML cache using GameState
-        enum serialization, enabling state recovery and reducing API calls
-        during AI player operation.
+        This method updates the character's data in the centralized characters.yaml
+        file, maintaining consistency with the existing data structure used by
+        the CLI and cache manager.
         """
         # Convert GameState enum keys to strings for YAML serialization
         serializable_state = {key.value: value for key, value in state.items()}
 
-        # Use CacheManager if available, otherwise fall back to YamlData
-        if self._cache_manager is not None:
-            self._cache_manager.save_character_state(self.character_name, serializable_state)
-        else:
-            self._yaml_cache.save(character_state=serializable_state)
+        # Find and update character in centralized data
+        if self._characters_cache.data and 'data' in self._characters_cache.data:
+            characters = self._characters_cache.data['data']
+            for i, character in enumerate(characters):
+                if character.get('name') == self.character_name:
+                    # Update character data with new state
+                    characters[i].update(serializable_state)
+                    self._characters_cache.save()
+                    return
+        
+        # If character not found, this is an error condition
+        # The character should already exist in the centralized file
 
     def load_state_from_cache(self) -> dict[GameState, Any] | None:
-        """Load state from YAML cache with enum deserialization.
+        """Load state from centralized characters.yaml cache.
         
         Parameters:
             None
@@ -307,28 +315,31 @@ class StateManager:
         Return values:
             Dictionary with GameState enum keys and cached values, or None if no cache
             
-        This method loads previously cached character state from YAML storage
-        with proper GameState enum deserialization, enabling state recovery
-        and reducing initialization time for the AI player.
+        This method loads character state from the centralized characters.yaml file,
+        finding the specific character's data and converting it to GameState enum
+        format for use by the GOAP planning system.
         """
-        cached_data = None
-
-        # Use CacheManager if available, otherwise fall back to YamlData
-        if self._cache_manager is not None:
-            cached_data = self._cache_manager.load_character_state(self.character_name)
-        else:
-            if not self._yaml_cache.data or 'character_state' not in self._yaml_cache.data:
-                return None
-            cached_data = self._yaml_cache.data['character_state']
-
-        if not cached_data:
+        # Load character data from centralized characters.yaml file
+        if not self._characters_cache.data or 'data' not in self._characters_cache.data:
+            return None
+            
+        characters = self._characters_cache.data['data']
+        
+        # Find the character by name
+        character_data = None
+        for character in characters:
+            if character.get('name') == self.character_name:
+                character_data = character
+                break
+                
+        if not character_data:
             return None
 
-        # Convert string keys back to GameState enum keys
+        # Convert character data to GameState enum format
         try:
-            return GameState.validate_state_dict(cached_data)
+            return GameState.validate_state_dict(character_data)
         except ValueError:
-            # Invalid cache data, return None
+            # Invalid character data, return None
             return None
 
     def convert_api_to_goap_state(self, character: Any) -> dict[GameState, Any]:

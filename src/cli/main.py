@@ -15,6 +15,7 @@ import logging
 import random
 import string
 import sys
+from typing import Any
 
 import src.lib.log as log_module
 
@@ -75,6 +76,34 @@ class CLIManager:
         self.diagnostic_commands = DiagnosticCommands()
         self.running_players: dict[str, AIPlayer] = {}
         self.logger = logging.getLogger("cli.manager")
+
+    def _initialize_diagnostic_components(self, token_file: str) -> DiagnosticCommands:
+        """Initialize all components required for diagnostics.
+        
+        Parameters:
+            token_file: Path to API token file
+            
+        Return values:
+            Fully initialized DiagnosticCommands instance
+            
+        This method ensures all required components (APIClientWrapper, ActionRegistry,
+        GoalManager) are properly initialized and available for diagnostic operations.
+        These components are essential - if any fail to initialize, it's a system bug
+        that should crash immediately.
+        """
+        if not self.api_client:
+            self.api_client = APIClientWrapper(token_file)
+
+        # Initialize required components - these MUST work or it's a system bug
+        cache_manager = CacheManager(self.api_client)
+        action_registry = ActionRegistry()
+        goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager)
+        
+        return DiagnosticCommands(
+            action_registry=action_registry,
+            goal_manager=goal_manager,
+            api_client=self.api_client
+        )
 
     def create_parser(self) -> argparse.ArgumentParser:
         """Create argument parser with all command groups.
@@ -373,6 +402,34 @@ class CLIManager:
             help="Simulate without API calls"
         )
         test_parser.set_defaults(func=self.handle_test_planning)
+
+        # Diagnose weights command
+        weights_parser = subparsers.add_parser(
+            "diagnose-weights",
+            help="Diagnose action weights and GOAP configuration"
+        )
+        weights_parser.add_argument(
+            "--show-action-costs",
+            action="store_true",
+            help="Display detailed action cost breakdowns"
+        )
+        weights_parser.set_defaults(func=self.handle_diagnose_weights)
+
+        # Diagnose cooldowns command
+        cooldowns_parser = subparsers.add_parser(
+            "diagnose-cooldowns",
+            help="Diagnose cooldown management and timing"
+        )
+        cooldowns_parser.add_argument(
+            "name",
+            help="Character name to monitor cooldown status"
+        )
+        cooldowns_parser.add_argument(
+            "--monitor",
+            action="store_true",
+            help="Provide continuous cooldown monitoring"
+        )
+        cooldowns_parser.set_defaults(func=self.handle_diagnose_cooldowns)
 
     async def handle_create_character(self, args) -> None:
         """Handle character creation command.
@@ -795,15 +852,18 @@ class CLIManager:
         analysis for troubleshooting state management issues.
         """
         try:
+            # Initialize all diagnostic components - these MUST work or it's a bug
+            diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
             print(f"Running state diagnostics for character '{args.name}'...")
 
-            result = await self.diagnostic_commands.diagnose_state(
+            result = await diagnostic_commands.diagnose_state(
                 args.name,
                 validate_enum=args.validate_enum
             )
 
             # Format and display the diagnostic results
-            output = self.diagnostic_commands.format_state_output(result)
+            output = diagnostic_commands.format_state_output(result)
             print(output)
 
         except Exception as e:
@@ -824,9 +884,12 @@ class CLIManager:
         availability issues in the AI player system.
         """
         try:
+            # Initialize all diagnostic components - these MUST work or it's a bug
+            diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
             print("Running action diagnostics...")
 
-            result = await self.diagnostic_commands.diagnose_actions(
+            result = await diagnostic_commands.diagnose_actions(
                 character_name=args.character,
                 show_costs=args.show_costs,
                 list_all=args.list_all,
@@ -834,7 +897,7 @@ class CLIManager:
             )
 
             # Format and display the diagnostic results
-            output = self.diagnostic_commands.format_action_output(result)
+            output = diagnostic_commands.format_action_output(result)
             print(output)
 
         except Exception as e:
@@ -855,9 +918,12 @@ class CLIManager:
         guidance for planning algorithm performance.
         """
         try:
+            # Initialize all diagnostic components - these MUST work or it's a bug
+            diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
             print(f"Running planning diagnostics for character '{args.name}' with goal '{args.goal}'...")
 
-            result = await self.diagnostic_commands.diagnose_plan(
+            result = await diagnostic_commands.diagnose_plan(
                 args.name,
                 args.goal,
                 verbose=args.verbose,
@@ -865,7 +931,7 @@ class CLIManager:
             )
 
             # Format and display the diagnostic results
-            output = self.diagnostic_commands.format_planning_output(result)
+            output = diagnostic_commands.format_planning_output(result)
             print(output)
 
         except Exception as e:
@@ -886,9 +952,12 @@ class CLIManager:
         character data or API interactions.
         """
         try:
+            # Initialize all diagnostic components - these MUST work or it's a bug
+            diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
             print("Running planning simulation tests...")
 
-            result = await self.diagnostic_commands.test_planning(
+            result = await diagnostic_commands.test_planning(
                 mock_state_file=args.mock_state_file,
                 start_level=args.start_level,
                 goal_level=args.goal_level,
@@ -903,6 +972,218 @@ class CLIManager:
         except Exception as e:
             self.logger.error(f"Failed to test planning: {e}")
             print(f"Error running planning tests: {e}")
+
+    async def handle_diagnose_weights(self, args) -> None:
+        """Handle weight diagnostics command.
+        
+        Parameters:
+            args: Parsed command arguments containing diagnostic options
+            
+        Return values:
+            None (async operation)
+            
+        This method executes GOAP weight and configuration diagnostics to identify
+        optimization opportunities, validate weight balance, and ensure effective
+        planning performance for the AI player system.
+        """
+        try:
+            # Initialize all diagnostic components - these MUST work or it's a bug
+            diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
+            print("Running weight and configuration diagnostics...")
+
+            result = await diagnostic_commands.diagnose_weights(
+                show_action_costs=args.show_action_costs
+            )
+
+            # Format and display the diagnostic results
+            output = self.format_weights_output(result)
+            print(output)
+
+        except Exception as e:
+            self.logger.error(f"Failed to diagnose weights: {e}")
+            print(f"Error running weight diagnostics: {e}")
+
+    async def handle_diagnose_cooldowns(self, args) -> None:
+        """Handle cooldown diagnostics command.
+        
+        Parameters:
+            args: Parsed command arguments containing character name and monitoring options
+            
+        Return values:
+            None (async operation)
+            
+        This method executes cooldown management diagnostics to analyze timing
+        accuracy, API compliance, and cooldown prediction for troubleshooting
+        timing issues and ensuring proper action execution scheduling.
+        """
+        try:
+            # Initialize all diagnostic components - these MUST work or it's a bug
+            diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
+            print(f"Running cooldown diagnostics for character '{args.name}'...")
+
+            result = await diagnostic_commands.diagnose_cooldowns(
+                args.name,
+                monitor=args.monitor
+            )
+
+            # Format and display the diagnostic results
+            output = self.format_cooldowns_output(result)
+            print(output)
+
+        except Exception as e:
+            self.logger.error(f"Failed to diagnose cooldowns: {e}")
+            print(f"Error running cooldown diagnostics: {e}")
+
+    def format_weights_output(self, weights_data: dict[str, Any]) -> str:
+        """Format weight analysis for CLI display.
+        
+        Parameters:
+            weights_data: Dictionary containing weight analysis and configuration data
+            
+        Return values:
+            Formatted string representation suitable for CLI output
+            
+        This method formats GOAP weight analysis into a readable format for CLI
+        display, showing cost distributions, optimization opportunities, and
+        configuration validation results for debugging planning performance.
+        """
+        lines = []
+        lines.append("=== WEIGHT & CONFIGURATION ANALYSIS ===")
+        
+        # Configuration validation
+        config_valid = weights_data.get("configuration_validation", {}).get("valid", True)
+        lines.append(f"Configuration valid: {config_valid}")
+        
+        warnings = weights_data.get("configuration_validation", {}).get("warnings", [])
+        errors = weights_data.get("configuration_validation", {}).get("errors", [])
+        
+        if warnings:
+            lines.append(f"\nWarnings ({len(warnings)}):")
+            for warning in warnings:
+                lines.append(f"  • {warning}")
+                
+        if errors:
+            lines.append(f"\nErrors ({len(errors)}):")
+            for error in errors:
+                lines.append(f"  • {error}")
+        
+        # Cost analysis
+        cost_analysis = weights_data.get("cost_analysis", {})
+        total_actions = cost_analysis.get("total_actions_analyzed", 0)
+        lines.append(f"\nActions analyzed: {total_actions}")
+        
+        stats = cost_analysis.get("cost_statistics", {})
+        if stats:
+            lines.append(f"Cost range: {stats.get('min_cost', 0)} - {stats.get('max_cost', 0)}")
+            lines.append(f"Average cost: {stats.get('average_cost', 0):.2f}")
+        
+        # Outliers
+        outliers = cost_analysis.get("outliers", [])
+        if outliers:
+            lines.append(f"\nHigh-cost outliers ({len(outliers)}):")
+            for outlier in outliers:
+                lines.append(f"  • {outlier.get('name', 'Unknown')}: {outlier.get('cost', 0)} (x{outlier.get('multiplier', 0):.1f})")
+        
+        # Optimization opportunities
+        opportunities = weights_data.get("optimization_opportunities", [])
+        if opportunities:
+            lines.append(f"\nOptimization opportunities ({len(opportunities)}):")
+            for opportunity in opportunities:
+                lines.append(f"  • {opportunity}")
+        
+        # Recommendations
+        recommendations = weights_data.get("recommendations", [])
+        if recommendations:
+            lines.append(f"\nRecommendations ({len(recommendations)}):")
+            for rec in recommendations:
+                lines.append(f"  • {rec}")
+        
+        return "\n".join(lines)
+
+    def format_cooldowns_output(self, cooldowns_data: dict[str, Any]) -> str:
+        """Format cooldown analysis for CLI display.
+        
+        Parameters:
+            cooldowns_data: Dictionary containing cooldown status and timing analysis
+            
+        Return values:
+            Formatted string representation suitable for CLI output
+            
+        This method formats cooldown analysis into a readable format for CLI
+        display, showing timing status, compliance metrics, and monitoring
+        data for debugging action execution timing issues.
+        """
+        lines = []
+        character_name = cooldowns_data.get("character_name", "Unknown")
+        lines.append(f"=== COOLDOWN ANALYSIS: {character_name} ===")
+        
+        # API availability
+        api_available = cooldowns_data.get("api_available", False)
+        cooldown_manager_available = cooldowns_data.get("cooldown_manager_available", False)
+        lines.append(f"API available: {api_available}")
+        lines.append(f"Cooldown manager available: {cooldown_manager_available}")
+        
+        # Cooldown status
+        cooldown_status = cooldowns_data.get("cooldown_status", {})
+        ready = cooldown_status.get("ready")
+        if ready is not None:
+            lines.append(f"Character ready: {ready}")
+            
+        remaining = cooldown_status.get("remaining_seconds")
+        if remaining is not None:
+            lines.append(f"Remaining time: {remaining:.1f}s")
+            
+        compliance = cooldown_status.get("compliance_status", "unknown")
+        lines.append(f"Compliance status: {compliance}")
+        
+        reason = cooldown_status.get("reason")
+        if reason:
+            lines.append(f"Last action: {reason}")
+        
+        # Timing analysis
+        timing_analysis = cooldowns_data.get("timing_analysis", {})
+        api_cooldown = timing_analysis.get("api_cooldown_seconds", 30)
+        lines.append(f"\nAPI cooldown standard: {api_cooldown}s")
+        
+        timing_warnings = timing_analysis.get("timing_warnings", [])
+        if timing_warnings:
+            lines.append(f"\nTiming warnings ({len(timing_warnings)}):")
+            for warning in timing_warnings:
+                lines.append(f"  • {warning}")
+        
+        precision_issues = timing_analysis.get("precision_issues", [])
+        if precision_issues:
+            lines.append(f"\nPrecision issues ({len(precision_issues)}):")
+            for issue in precision_issues:
+                lines.append(f"  • {issue}")
+        
+        # Monitoring data
+        monitoring_data = cooldowns_data.get("monitoring_data", [])
+        if monitoring_data:
+            lines.append(f"\nMonitoring data ({len(monitoring_data)} entries):")
+            for entry in monitoring_data:
+                timestamp = entry.get("timestamp", "Unknown")
+                status = entry.get("status", "Unknown")
+                lines.append(f"  [{timestamp}] {status}")
+                
+                cooldown_ready = entry.get("cooldown_ready")
+                if cooldown_ready is not None:
+                    lines.append(f"    Ready: {cooldown_ready}")
+                    
+                remaining_secs = entry.get("remaining_seconds")
+                if remaining_secs is not None:
+                    lines.append(f"    Remaining: {remaining_secs:.1f}s")
+        
+        # Recommendations
+        recommendations = cooldowns_data.get("recommendations", [])
+        if recommendations:
+            lines.append(f"\nRecommendations ({len(recommendations)}):")
+            for rec in recommendations:
+                lines.append(f"  • {rec}")
+        
+        return "\n".join(lines)
 
     def setup_logging(self, log_level: str) -> None:
         """Configure logging based on CLI arguments.
