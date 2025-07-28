@@ -108,6 +108,94 @@ class TestCLIManager:
         # Should handle invalid level gracefully
         cli_manager.setup_logging("INVALID")
 
+    @patch('src.cli.main.DiagnosticCommands')
+    @patch('src.cli.main.GoalManager')
+    @patch('src.cli.main.ActionRegistry')
+    @patch('src.cli.main.CacheManager')
+    @patch('src.cli.main.APIClientWrapper')
+    def test_initialize_diagnostic_components(self, mock_api_wrapper, mock_cache_manager, 
+                                            mock_action_registry, mock_goal_manager, mock_diagnostic_commands):
+        """Test diagnostic components initialization"""
+        cli_manager = CLIManager()
+        token_file = "test_token.txt"
+        
+        # Mock the instances that will be created
+        mock_api_instance = Mock()
+        mock_api_wrapper.return_value = mock_api_instance
+        mock_api_instance.cooldown_manager = Mock()
+        
+        mock_cache_instance = Mock()
+        mock_cache_manager.return_value = mock_cache_instance
+        
+        mock_registry_instance = Mock()
+        mock_action_registry.return_value = mock_registry_instance
+        
+        mock_goal_instance = Mock()
+        mock_goal_manager.return_value = mock_goal_instance
+        
+        mock_diagnostic_instance = Mock()
+        mock_diagnostic_commands.return_value = mock_diagnostic_instance
+        
+        result = cli_manager._initialize_diagnostic_components(token_file)
+        
+        # Verify API client was created and stored
+        mock_api_wrapper.assert_called_once_with(token_file)
+        assert cli_manager.api_client == mock_api_instance
+        
+        # Verify all components were initialized
+        mock_cache_manager.assert_called_once_with(mock_api_instance)
+        mock_action_registry.assert_called_once()
+        mock_goal_manager.assert_called_once_with(mock_registry_instance, mock_api_instance.cooldown_manager)
+        # Verify DiagnosticCommands was called twice: once in constructor, once in the method
+        assert mock_diagnostic_commands.call_count == 2
+        mock_diagnostic_commands.assert_called_with(
+            action_registry=mock_registry_instance,
+            goal_manager=mock_goal_instance,
+            api_client=mock_api_instance
+        )
+        
+        assert result == mock_diagnostic_instance
+
+    @patch('src.cli.main.DiagnosticCommands')
+    @patch('src.cli.main.GoalManager')
+    @patch('src.cli.main.ActionRegistry')
+    @patch('src.cli.main.CacheManager')
+    def test_initialize_diagnostic_components_existing_api_client(self, mock_cache_manager, 
+                                                                mock_action_registry, mock_goal_manager, mock_diagnostic_commands):
+        """Test diagnostic components initialization when API client already exists"""
+        cli_manager = CLIManager()
+        token_file = "test_token.txt"
+        
+        # Set up existing API client
+        existing_api_client = Mock()
+        existing_api_client.cooldown_manager = Mock()
+        cli_manager.api_client = existing_api_client
+        
+        # Mock the instances that will be created
+        mock_cache_instance = Mock()
+        mock_cache_manager.return_value = mock_cache_instance
+        
+        mock_registry_instance = Mock()
+        mock_action_registry.return_value = mock_registry_instance
+        
+        mock_goal_instance = Mock()
+        mock_goal_manager.return_value = mock_goal_instance
+        
+        mock_diagnostic_instance = Mock()
+        mock_diagnostic_commands.return_value = mock_diagnostic_instance
+        
+        result = cli_manager._initialize_diagnostic_components(token_file)
+        
+        # Verify existing API client was used (not created)
+        assert cli_manager.api_client == existing_api_client
+        
+        # Verify all components were initialized with existing client
+        mock_cache_manager.assert_called_once_with(existing_api_client)
+        mock_action_registry.assert_called_once()
+        mock_goal_manager.assert_called_once_with(mock_registry_instance, existing_api_client.cooldown_manager)
+        
+        assert result == mock_diagnostic_instance
+
 
 class TestArgumentParsing:
     """Test CLI argument parsing"""
@@ -518,8 +606,9 @@ class TestAIPlayerCommandHandlers:
         cli_manager.api_client = mock_client
 
         with patch('src.cli.main.AIPlayer') as mock_ai_player_class:
-            mock_ai_player = AsyncMock()
-            mock_ai_player.start.return_value = None
+            mock_ai_player = Mock()
+            mock_ai_player.start = AsyncMock(return_value=None)
+            mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
 
             with patch('builtins.print'):
@@ -632,19 +721,23 @@ class TestDiagnosticCommandHandlers:
         mock_args = Mock()
         mock_args.name = 'diagnostic_character'
         mock_args.validate_enum = False
+        mock_args.token_file = 'TOKEN'  # Add missing token_file attribute
 
-        with patch.object(cli_manager.diagnostic_commands, 'diagnose_state') as mock_diagnose, \
-             patch.object(cli_manager.diagnostic_commands, 'format_state_output') as mock_format:
-
+        # Mock diagnostic commands object
+        mock_diagnostic_commands = Mock()
+        mock_diagnostic_commands.diagnose_state = AsyncMock()
+        mock_diagnostic_commands.format_state_output = Mock()
+        
+        with patch.object(cli_manager, '_initialize_diagnostic_components', return_value=mock_diagnostic_commands):
             mock_result = {'state': 'valid'}
-            mock_diagnose.return_value = mock_result
-            mock_format.return_value = "Formatted state output"
+            mock_diagnostic_commands.diagnose_state.return_value = mock_result
+            mock_diagnostic_commands.format_state_output.return_value = "Formatted state output"
 
             with patch('builtins.print'):
                 await cli_manager.handle_diagnose_state(mock_args)
 
-            mock_diagnose.assert_called_once_with('diagnostic_character', validate_enum=False)
-            mock_format.assert_called_once_with(mock_result)
+            mock_diagnostic_commands.diagnose_state.assert_called_once_with('diagnostic_character', validate_enum=False)
+            mock_diagnostic_commands.format_state_output.assert_called_once_with(mock_result)
 
     @pytest.mark.asyncio
     async def test_handle_diagnose_actions(self):
@@ -656,24 +749,28 @@ class TestDiagnosticCommandHandlers:
         mock_args.show_costs = True
         mock_args.list_all = False
         mock_args.show_preconditions = True
+        mock_args.token_file = 'TOKEN'  # Add missing token_file attribute
 
-        with patch.object(cli_manager.diagnostic_commands, 'diagnose_actions') as mock_diagnose, \
-             patch.object(cli_manager.diagnostic_commands, 'format_action_output') as mock_format:
+        # Mock diagnostic commands object
+        mock_diagnostic_commands = Mock()
+        mock_diagnostic_commands.diagnose_actions = AsyncMock()
+        mock_diagnostic_commands.format_action_output = Mock()
 
+        with patch.object(cli_manager, '_initialize_diagnostic_components', return_value=mock_diagnostic_commands):
             mock_result = [{'action': 'move'}]
-            mock_diagnose.return_value = mock_result
-            mock_format.return_value = "Formatted action output"
+            mock_diagnostic_commands.diagnose_actions.return_value = mock_result
+            mock_diagnostic_commands.format_action_output.return_value = "Formatted action output"
 
             with patch('builtins.print'):
                 await cli_manager.handle_diagnose_actions(mock_args)
 
-            mock_diagnose.assert_called_once_with(
+            mock_diagnostic_commands.diagnose_actions.assert_called_once_with(
                 character_name='action_character',
                 show_costs=True,
                 list_all=False,
                 show_preconditions=True
             )
-            mock_format.assert_called_once_with(mock_result)
+            mock_diagnostic_commands.format_action_output.assert_called_once_with(mock_result)
 
     @pytest.mark.asyncio
     async def test_handle_diagnose_plan(self):
@@ -685,24 +782,28 @@ class TestDiagnosticCommandHandlers:
         mock_args.goal = 'level_up'
         mock_args.verbose = True
         mock_args.show_steps = False
+        mock_args.token_file = 'TOKEN'  # Add missing token_file attribute
 
-        with patch.object(cli_manager.diagnostic_commands, 'diagnose_plan') as mock_diagnose, \
-             patch.object(cli_manager.diagnostic_commands, 'format_planning_output') as mock_format:
+        # Mock diagnostic commands object
+        mock_diagnostic_commands = Mock()
+        mock_diagnostic_commands.diagnose_plan = AsyncMock()
+        mock_diagnostic_commands.format_planning_output = Mock()
 
+        with patch.object(cli_manager, '_initialize_diagnostic_components', return_value=mock_diagnostic_commands):
             mock_result = {'plan': 'found'}
-            mock_diagnose.return_value = mock_result
-            mock_format.return_value = "Formatted planning output"
+            mock_diagnostic_commands.diagnose_plan.return_value = mock_result
+            mock_diagnostic_commands.format_planning_output.return_value = "Formatted planning output"
 
             with patch('builtins.print'):
                 await cli_manager.handle_diagnose_plan(mock_args)
 
-            mock_diagnose.assert_called_once_with(
+            mock_diagnostic_commands.diagnose_plan.assert_called_once_with(
                 'planning_character',
                 'level_up',
                 verbose=True,
                 show_steps=False
             )
-            mock_format.assert_called_once_with(mock_result)
+            mock_diagnostic_commands.format_planning_output.assert_called_once_with(mock_result)
 
     @pytest.mark.asyncio
     async def test_handle_test_planning(self):
@@ -714,15 +815,20 @@ class TestDiagnosticCommandHandlers:
         mock_args.start_level = 1
         mock_args.goal_level = 5
         mock_args.dry_run = True
+        mock_args.token_file = 'TOKEN'  # Add missing token_file attribute
 
-        with patch.object(cli_manager.diagnostic_commands, 'test_planning') as mock_test:
+        # Mock diagnostic commands object
+        mock_diagnostic_commands = Mock()
+        mock_diagnostic_commands.test_planning = AsyncMock()
+
+        with patch.object(cli_manager, '_initialize_diagnostic_components', return_value=mock_diagnostic_commands):
             mock_result = {'tests': 'passed'}
-            mock_test.return_value = mock_result
+            mock_diagnostic_commands.test_planning.return_value = mock_result
 
             with patch('builtins.print'):
                 await cli_manager.handle_test_planning(mock_args)
 
-            mock_test.assert_called_once_with(
+            mock_diagnostic_commands.test_planning.assert_called_once_with(
                 mock_state_file=None,
                 start_level=1,
                 goal_level=5,
@@ -795,17 +901,17 @@ class TestMainFunctions:
                 mock_exit.assert_called_with(1)
 
     def test_main_exception(self):
-        """Test main function handling general exceptions"""
-        with patch('src.cli.main.asyncio.run') as mock_run:
-            mock_run.side_effect = Exception("Test error")
-
-            with patch('builtins.print') as mock_print, \
-                 patch('sys.exit') as mock_exit:
-
+        """Test main function allows general exceptions to bubble up"""
+        def mock_asyncio_run(coro):
+            # Close the coroutine to prevent warning
+            coro.close()
+            # Then raise the exception
+            raise Exception("Test error")
+        
+        with patch('src.cli.main.asyncio.run', side_effect=mock_asyncio_run):
+            # Main function should let general exceptions bubble up
+            with pytest.raises(Exception, match="Test error"):
                 main()
-
-                mock_print.assert_called_with("Fatal error: Test error")
-                mock_exit.assert_called_with(1)
 
 
 class TestErrorHandling:
@@ -993,8 +1099,9 @@ class TestCLIIntegration:
         cli_manager.api_client = mock_client
 
         with patch('src.cli.main.AIPlayer') as mock_ai_player_class:
-            mock_ai_player = AsyncMock()
-            mock_ai_player.start.return_value = None
+            mock_ai_player = Mock()
+            mock_ai_player.start = AsyncMock(return_value=None)
+            mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
 
             with patch('builtins.print') as mock_print:
@@ -1022,9 +1129,10 @@ class TestCLIIntegration:
         cli_manager.api_client = mock_client
 
         with patch('src.cli.main.AIPlayer') as mock_ai_player_class:
-            mock_ai_player = AsyncMock()
-            mock_ai_player.start.side_effect = KeyboardInterrupt()
-            mock_ai_player.stop.return_value = None
+            mock_ai_player = Mock()
+            mock_ai_player.start = AsyncMock(side_effect=KeyboardInterrupt())
+            mock_ai_player.stop = AsyncMock(return_value=None)
+            mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
 
             with patch('builtins.print'):
@@ -1053,7 +1161,9 @@ class TestCLIIntegration:
             mock_ai_player_class.side_effect = Exception("AI Player creation failed")
 
             with patch('builtins.print'):
-                await cli_manager.handle_run_character(mock_args)
+                # Exception should bubble up but cleanup should still happen
+                with pytest.raises(Exception, match="AI Player creation failed"):
+                    await cli_manager.handle_run_character(mock_args)
 
             # Verify cleanup happened
             assert 'ai_char' not in cli_manager.running_players
@@ -1189,12 +1299,10 @@ class TestCLIIntegration:
 
             mock_cli_manager_class.return_value = mock_cli_manager
 
-            with patch('builtins.print') as mock_print, \
-                 patch('sys.exit') as mock_exit:
-                await async_main()
-
-                mock_print.assert_called_with("Error: Command failed")
-                mock_exit.assert_called_with(1)
+            with patch('builtins.print'):
+                # async_main should let exceptions bubble up
+                with pytest.raises(Exception, match="Command failed"):
+                    await async_main()
 
     @pytest.mark.asyncio
     async def test_all_error_handling_paths(self):
@@ -1296,8 +1404,9 @@ class TestCLIIntegration:
             mock_client = AsyncMock()
             mock_api_wrapper.return_value = mock_client
 
-            mock_ai_player = AsyncMock()
-            mock_ai_player.start.return_value = None
+            mock_ai_player = Mock()
+            mock_ai_player.start = AsyncMock(return_value=None)
+            mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
 
             with patch('builtins.print'):
@@ -1354,14 +1463,15 @@ class TestCLIIntegration:
 
         # Make AI player start raise an exception
         with patch('src.cli.main.AIPlayer') as mock_ai_player_class:
-            mock_ai_player = AsyncMock()
+            mock_ai_player = Mock()
+            mock_ai_player.start = AsyncMock(side_effect=Exception("AI Player start failed"))
+            mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
 
-            # The start method will raise an exception
-            mock_ai_player.start.side_effect = Exception("AI Player start failed")
-
             with patch('builtins.print'):
-                await cli_manager.handle_run_character(mock_args)
+                # Exception should bubble up but cleanup should still happen
+                with pytest.raises(Exception, match="AI Player start failed"):
+                    await cli_manager.handle_run_character(mock_args)
 
         # Verify cleanup happened - should be removed from running_players
         # The player gets added at line 483, but the exception happens during start()
@@ -1473,7 +1583,9 @@ class TestCLIIntegration:
             mock_ai_player_class.side_effect = Exception("AI Player constructor failed")
 
             with patch('builtins.print'):
-                await cli_manager.handle_run_character(mock_args)
+                # Exception should bubble up during construction
+                with pytest.raises(Exception, match="AI Player constructor failed"):
+                    await cli_manager.handle_run_character(mock_args)
 
         # Should not have any running players since construction failed
         assert 'ai_char' not in cli_manager.running_players
@@ -1495,7 +1607,9 @@ class TestCLIIntegration:
         cli_manager.api_client = mock_client
 
         with patch('src.cli.main.AIPlayer') as mock_ai_player_class:
-            mock_ai_player = AsyncMock()
+            mock_ai_player = Mock()
+            mock_ai_player.start = AsyncMock()
+            mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
             
             # Mock print to raise an exception after the player is added to running_players
@@ -1506,7 +1620,9 @@ class TestCLIIntegration:
                 return None
 
             with patch('builtins.print', side_effect=side_effect_print):
-                await cli_manager.handle_run_character(mock_args)
+                # Exception should bubble up but cleanup should still happen
+                with pytest.raises(Exception, match="Print failure after player added to dict"):
+                    await cli_manager.handle_run_character(mock_args)
 
         # Should be cleaned up from running_players - this hits line 508
         assert 'ai_char' not in cli_manager.running_players

@@ -1,5 +1,5 @@
 """
-Goal Manager with Cooldown-Aware Planning
+Goal Manager
 
 This module manages dynamic goal selection and GOAP planning for the AI player.
 It integrates with the existing GOAP library to provide intelligent goal prioritization
@@ -7,154 +7,15 @@ based on character progression and current game state.
 
 The GoalManager uses the modular action system and GameState enum to generate
 action plans that efficiently progress the character toward maximum level achievement.
-Includes cooldown awareness to prevent invalid planning when character is on cooldown.
 """
 
-from datetime import datetime, timedelta
 from typing import Any
 
 from ..lib.goap import Action_List, Planner
 from .actions import ActionRegistry, BaseAction, get_all_actions
+from .actions.movement_action_factory import MovementActionFactory
+from .cooldown_aware_planner import CooldownAwarePlanner
 from .state.game_state import GameState
-
-
-class CooldownAwarePlanner(Planner):
-    """Extended GOAP planner with cooldown timing awareness"""
-
-    def __init__(self, cooldown_manager, *args, **kwargs):
-        """Initialize CooldownAwarePlanner with cooldown management.
-        
-        Parameters:
-            cooldown_manager: CooldownManager instance for timing constraint validation
-            *args: Additional arguments passed to parent Planner constructor
-            **kwargs: Additional keyword arguments passed to parent Planner constructor
-            
-        Return values:
-            None (constructor)
-            
-        This constructor initializes the extended GOAP planner with cooldown
-        awareness capabilities, enabling planning that considers character
-        cooldown timing constraints for realistic action sequencing.
-        """
-        super().__init__(*args, **kwargs)
-        self.cooldown_manager = cooldown_manager
-
-    def calculate_with_timing_constraints(self, character_name: str) -> list[dict[str, Any]]:
-        """Generate plan considering current cooldown state.
-        
-        Parameters:
-            character_name: Name of the character for cooldown-aware planning
-            
-        Return values:
-            List of action dictionaries with optimal timing considering cooldowns
-            
-        This method generates GOAP plans that account for character cooldown
-        status, optimizing action timing and preventing invalid plans that
-        would fail due to cooldown constraints in the AI player system.
-        """
-        try:
-            # If character is on cooldown, return empty plan
-            if not self.cooldown_manager.is_ready(character_name):
-                return []
-
-            # Use standard calculation if character is ready
-            return self.calculate()
-        except Exception:
-            return []
-
-    def filter_actions_by_cooldown(self, actions: Action_List, character_name: str) -> Action_List:
-        """Filter out actions that require character to be off cooldown when character is on cooldown.
-        
-        Parameters:
-            actions: Action_List containing all possible actions
-            character_name: Name of the character to check cooldown status
-            
-        Return values:
-            Action_List with cooldown-incompatible actions removed
-            
-        This method filters the available action list to remove actions that
-        require cooldown readiness when the character is currently on cooldown,
-        preventing invalid planning attempts in the GOAP system.
-        """
-        # If character is ready, return all actions
-        if self.cooldown_manager.is_ready(character_name):
-            return actions
-
-        # Filter out actions that require cooldown readiness
-        filtered_actions = Action_List()
-
-        for action_name in actions.conditions.keys():
-            conditions = actions.conditions[action_name]
-
-            # If action requires cooldown readiness, skip it
-            if conditions.get("cooldown_ready", False):
-                continue
-
-            # Add action to filtered list
-            filtered_actions.add_condition(action_name, **conditions)
-            filtered_actions.add_reaction(action_name, **actions.reactions[action_name])
-            filtered_actions.set_weight(action_name, actions.weights[action_name])
-
-        return filtered_actions
-
-    def estimate_plan_duration(self, plan: list[dict[str, Any]]) -> timedelta:
-        """Estimate total time to execute plan including cooldowns.
-        
-        Parameters:
-            plan: List of action dictionaries representing the planned sequence
-            
-        Return values:
-            Timedelta representing estimated total execution time
-            
-        This method calculates the expected time required to execute a complete
-        action plan including individual action cooldowns and sequencing timing,
-        enabling accurate planning and scheduling in the AI player system.
-        """
-        try:
-            total_seconds = 0
-
-            for action in plan:
-                # Basic action execution time (varies by action type)
-                action_name = action.get('name', '')
-                if 'move' in action_name.lower():
-                    total_seconds += 5  # Movement actions
-                elif 'fight' in action_name.lower():
-                    total_seconds += 10  # Combat actions
-                elif 'gather' in action_name.lower():
-                    total_seconds += 8  # Gathering actions
-                else:
-                    total_seconds += 3  # Default action time
-
-                # Add cooldown time
-                total_seconds += 1  # Standard cooldown
-
-            return timedelta(seconds=total_seconds)
-        except Exception:
-            return timedelta(seconds=60)  # Default estimate
-
-    def defer_planning_until_ready(self, character_name: str) -> datetime | None:
-        """Return when planning should be deferred until character is off cooldown.
-        
-        Parameters:
-            character_name: Name of the character to check cooldown deferral timing
-            
-        Return values:
-            Datetime when planning can resume, or None if character is ready now
-            
-        This method determines if GOAP planning should be deferred due to character
-        cooldown status, returning the specific time when planning can safely resume
-        to avoid generating invalid action plans.
-        """
-        if self.cooldown_manager.is_ready(character_name):
-            return None
-
-        # Get remaining cooldown time in seconds
-        remaining_seconds = self.cooldown_manager.get_remaining_time(character_name)
-
-        # Calculate when the character will be ready
-        ready_time = datetime.now() + timedelta(seconds=remaining_seconds)
-
-        return ready_time
 
 
 class GoalManager:
@@ -177,110 +38,75 @@ class GoalManager:
         self.action_registry = action_registry
         self.cooldown_manager = cooldown_manager
         self.planner = None
+        
+        # Register MovementActionFactory for parameterized movement actions
+        movement_factory = MovementActionFactory()
+        self.action_registry.register_factory(movement_factory)
 
     def select_next_goal(self, current_state: dict[GameState, Any]) -> dict[GameState, Any]:
         """Select appropriate goal based on character state and progression."""
-        try:
-            print(f"DEBUG: Goal selection with state keys: {list(current_state.keys())}")
-            
-            # Check for max level achievement first
-            if self.max_level_achieved(current_state):
-                print("DEBUG: Max level achieved, no goals needed")
-                return {}
+        # Check for max level achievement first
+        if self.max_level_achieved(current_state):
+            return {}
 
-            # Check for emergency survival needs (highest priority)
-            survival_goals = self.get_survival_goals(current_state)
-            if survival_goals:
-                highest_priority_survival = max(survival_goals, key=lambda g: g.get('priority', 0))
-                print(f"DEBUG: Selected survival goal: {highest_priority_survival}")
-                return highest_priority_survival
+        # Check for emergency survival needs (highest priority)
+        survival_goals = self.get_survival_goals(current_state)
+        if survival_goals:
+            highest_priority_survival = max(survival_goals, key=lambda g: g.get('priority', 0))
+            return highest_priority_survival
 
-            # Get all available goals and filter by requirements
-            all_available_goals = self.get_available_goals(current_state)
-            print(f"DEBUG: Found {len(all_available_goals)} available goals")
+        # Get all available goals and filter by requirements
+        all_available_goals = self.get_available_goals(current_state)
 
-            # Filter goals by requirements met
-            achievable_goals = [goal for goal in all_available_goals if goal.get('requirements_met', True)]
-            print(f"DEBUG: {len(achievable_goals)} achievable goals after filtering")
+        # Filter goals by requirements met
+        achievable_goals = [goal for goal in all_available_goals if goal.get('requirements_met', True)]
 
-            if not achievable_goals:
-                # If no achievable goals, return a basic progression goal
-                character_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
-                basic_goal = {
-                    'type': 'level_up',
-                    'priority': 5,
-                    'target_state': {
-                        GameState.CHARACTER_LEVEL: character_level + 1,
-                        GameState.CHARACTER_XP: current_state.get(GameState.CHARACTER_XP, 0) + 500
-                    },
-                    'requirements_met': True
-                }
-                print(f"DEBUG: No achievable goals, using basic goal: {basic_goal}")
-                return basic_goal
-
-            # Use intelligent prioritization to select the best goal
-            selected_goal = self.prioritize_goals(achievable_goals, current_state)
-
-            # Ensure the selected goal has all required fields
-            if not selected_goal.get('target_state'):
-                # Add a default target state if missing
-                character_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
-                selected_goal['target_state'] = {
-                    GameState.CHARACTER_LEVEL: character_level + 1
-                }
-
-            print(f"DEBUG: Selected goal: {selected_goal}")
-            return selected_goal
-
-        except Exception as e:
-            print(f"DEBUG: Goal selection failed: {e}")
-            import traceback
-            traceback.print_exc()
-            # Fallback: basic progression goal on any error
+        if not achievable_goals:
+            # If no achievable goals, return a basic progression goal
             character_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
-            fallback_goal = {
+            basic_goal = {
                 'type': 'level_up',
-                'priority': 1,
+                'priority': 5,
                 'target_state': {
                     GameState.CHARACTER_LEVEL: character_level + 1,
                     GameState.CHARACTER_XP: current_state.get(GameState.CHARACTER_XP, 0) + 500
                 },
                 'requirements_met': True
             }
-            print(f"DEBUG: Using fallback goal: {fallback_goal}")
-            return fallback_goal
+            return basic_goal
+
+        # Use intelligent prioritization to select the best goal
+        selected_goal = self.prioritize_goals(achievable_goals, current_state)
+
+        # Ensure the selected goal has all required fields
+        if not selected_goal.get('target_state'):
+            # Add a default target state if missing
+            character_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
+            selected_goal['target_state'] = {
+                GameState.CHARACTER_LEVEL: character_level + 1
+            }
+
+        return selected_goal
 
     async def plan_actions(self, current_state: dict[GameState, Any], goal: dict[GameState, Any] | dict[str, Any]) -> list[dict[str, Any]]:
         """Generate action sequence using cooldown-aware GOAP planner."""
-        try:
-            # Extract target state from goal
-            goal_state = goal.get('target_state', {})
-            if not goal_state:
-                print("DEBUG: No target_state in goal")
-                return []
-
-            print(f"DEBUG: Planning from state keys: {list(current_state.keys())}")
-            print(f"DEBUG: Planning to goal state: {goal_state}")
-
-            # Create GOAP planner with current actions
-            planner = self._create_goap_planner(current_state, goal_state)
-            
-            # Check if planner has actions
-            action_list = self.create_goap_actions()
-            print(f"DEBUG: Created {len(action_list.conditions)} actions for planner")
-            if action_list.conditions:
-                print(f"DEBUG: Action names: {list(action_list.conditions.keys())}")
-
-            # Generate plan
-            plan = planner.calculate()
-            print(f"DEBUG: GOAP planner returned: {plan}")
-
-            return plan if plan else []
-        except Exception as e:
-            print(f"DEBUG: Planning failed with error: {e}")
-            import traceback
-            traceback.print_exc()
+        # Extract target state from goal
+        goal_state = goal.get('target_state', {})
+        if not goal_state:
             return []
+
+        # Create GOAP planner with current actions
+        planner = self._create_goap_planner(current_state, goal_state)
+        
+        # Check if planner has actions
+        action_list = self.create_goap_actions()
+        if not action_list.conditions:
+            return []
+
+        # Generate plan
+        plan = planner.calculate()
+
+        return plan if plan else []
 
     def plan_with_cooldown_awareness(self, character_name: str, current_state: dict[GameState, Any], goal_state: dict[GameState, Any]) -> list[dict[str, Any]]:
         """Generate plan considering current cooldown state and timing.
@@ -297,16 +123,13 @@ class GoalManager:
         status, either deferring planning until ready or filtering actions
         that require cooldown readiness for optimal execution timing.
         """
-        try:
-            # Create planner with cooldown awareness
-            planner = self._create_goap_planner(current_state, goal_state, character_name)
+        # Create planner with cooldown awareness
+        planner = self._create_goap_planner(current_state, goal_state, character_name)
 
-            # Generate plan
-            plan = planner.calculate()
+        # Generate plan
+        plan = planner.calculate()
 
-            return plan if plan else []
-        except Exception:
-            return []
+        return plan if plan else []
 
     def should_defer_planning(self, character_name: str) -> bool:
         """Check if planning should be deferred due to cooldown.
@@ -362,45 +185,26 @@ class GoalManager:
         return action_list
 
     def create_goap_actions(self) -> Action_List:
-        """Convert modular actions to GOAP Action_List format."""
+        """Convert modular actions to GOAP Action_List format using ActionRegistry."""
         action_list = Action_List()
 
-        try:
-            # Get all actions from the registry
-            basic_actions = self.action_registry.get_all_action_types()
+        # Use ActionRegistry to get all available actions properly
+        # Pass minimal state and None for game_data for basic action generation
+        minimal_state = {
+            GameState.CURRENT_X: 0,
+            GameState.CURRENT_Y: 0,
+            GameState.CHARACTER_LEVEL: 1,
+            GameState.COOLDOWN_READY: True
+        }
+        
+        all_actions = self.action_registry.generate_actions_for_state(minimal_state, None)
 
-            # Convert each action type to GOAP format
-            for action_class in basic_actions:
-                try:
-                    # Try to create a basic instance (some actions may require parameters)
-                    action_instance = action_class()
-                    name, conditions, effects, weight = self.convert_action_to_goap(action_instance)
-
-                    # Add to GOAP action list
-                    action_list.add_condition(name, **conditions)
-                    action_list.add_reaction(name, **effects)
-                    action_list.set_weight(name, weight)
-
-                except TypeError:
-                    # Action requires parameters, try with None api_client
-                    try:
-                        action_instance = action_class(api_client=None)
-                        name, conditions, effects, weight = self.convert_action_to_goap(action_instance)
-                        action_list.add_condition(name, **conditions)
-                        action_list.add_reaction(name, **effects)
-                        action_list.set_weight(name, weight)
-                    except:
-                        continue
-                except Exception as e:
-                    print(f"Warning: Failed to create action {action_class.__name__}: {e}")
-                    continue
-
-        except Exception as e:
-            print(f"Error creating GOAP actions: {e}")
-            # Add fallback action when action creation fails
-            action_list.add_condition("rest", hp_low=True)
-            action_list.add_reaction("rest", hp_current=100)
-            action_list.set_weight("rest", 1)
+        # Convert each action instance to GOAP format
+        for action_instance in all_actions:
+            name, conditions, effects, weight = self.convert_action_to_goap(action_instance)
+            action_list.add_condition(name, **conditions)
+            action_list.add_reaction(name, **effects)  
+            action_list.set_weight(name, weight)
 
         return action_list
 
@@ -618,22 +422,19 @@ class GoalManager:
         the current state using the available action set, enabling intelligent
         goal selection and preventing impossible planning attempts.
         """
-        try:
-            # Extract target state from goal
-            target_state = goal.get('target_state', goal)
+        # Extract target state from goal
+        target_state = goal.get('target_state', goal)
 
-            # Basic feasibility checks
-            for state_key, target_value in target_state.items():
-                current_value = current_state.get(state_key, 0)
+        # Basic feasibility checks
+        for state_key, target_value in target_state.items():
+            current_value = current_state.get(state_key, 0)
 
-                # Check if goal is reasonable (not too far from current state)
-                if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
-                    if target_value > current_value * 10:  # Arbitrary threshold
-                        return False
+            # Check if goal is reasonable (not too far from current state)
+            if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
+                if target_value > current_value * 10:  # Arbitrary threshold
+                    return False
 
-            return True
-        except Exception:
-            return False
+        return True
 
     def estimate_goal_cost(self, goal: dict[GameState, Any], current_state: dict[GameState, Any]) -> int:
         """Estimate planning cost for achieving goal.
@@ -649,22 +450,19 @@ class GoalManager:
         goal from the current state, enabling efficient goal prioritization
         and resource planning for optimal AI player decision making.
         """
-        try:
-            # Basic cost estimation based on state differences
-            total_cost = 0
-            target_state = goal.get('target_state', goal)
+        # Basic cost estimation based on state differences
+        total_cost = 0
+        target_state = goal.get('target_state', goal)
 
-            for state_key, target_value in target_state.items():
-                current_value = current_state.get(state_key, 0)
-                if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
-                    diff = abs(target_value - current_value)
-                    total_cost += diff
-                else:
-                    total_cost += 1  # Basic cost for non-numeric changes
+        for state_key, target_value in target_state.items():
+            current_value = current_state.get(state_key, 0)
+            if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
+                diff = abs(target_value - current_value)
+                total_cost += diff
+            else:
+                total_cost += 1  # Basic cost for non-numeric changes
 
-            return total_cost
-        except Exception:
-            return 100  # Default high cost on error
+        return total_cost
 
     def max_level_achieved(self, current_state: dict[GameState, Any]) -> bool:
         """Check if character has reached maximum level (45).
@@ -906,8 +704,6 @@ class GoalManager:
         goap_current_state = self._convert_state_for_goap(current_state)
         goap_goal_state = self._convert_state_for_goap(goal_state)
 
-        print(f"DEBUG: Converted current state: {goap_current_state}")
-        print(f"DEBUG: Converted goal state: {goap_goal_state}")
 
         # Create action list
         if character_name:
@@ -915,11 +711,9 @@ class GoalManager:
         else:
             action_list = self.create_goap_actions()
 
-        print(f"DEBUG: Action list has {len(action_list.conditions)} actions")
 
         # Extract state keys for planner initialization
         all_keys = set(goap_current_state.keys()) | set(goap_goal_state.keys())
-        print(f"DEBUG: All state keys for planner: {all_keys}")
 
         # Create planner
         if character_name:
@@ -931,7 +725,6 @@ class GoalManager:
         planner.set_goal_state(**goap_goal_state)
         planner.set_action_list(action_list)
 
-        print(f"DEBUG: Planner configured with start: {goap_current_state}, goal: {goap_goal_state}")
 
         return planner
 

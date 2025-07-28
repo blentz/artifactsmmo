@@ -663,8 +663,9 @@ class CLIManager:
                 print(f"All cached data is stored in the 'data/' directory")
 
         except Exception as e:
-            self.logger.error(f"Failed to load game data: {e}")
-            print(f"Error loading game data: {e}")
+            # Let specific exceptions bubble up - don't mask errors with generic handling
+            print(f"Failed to load game data: {e}")
+            raise
 
     async def handle_run_character(self, args) -> None:
         """Handle AI player run command.
@@ -728,11 +729,10 @@ class CLIManager:
                 print(f"AI player for '{args.name}' stopped.")
 
         except Exception as e:
-            self.logger.error(f"Failed to run AI player: {e}")
-            print(f"Error running AI player: {e}")
-            # Clean up on error
+            # Clean up on error then let exception bubble up
             if args.name in self.running_players:
                 del self.running_players[args.name]
+            raise
 
     async def handle_stop_character(self, args) -> None:
         """Handle AI player stop command.
@@ -1239,9 +1239,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nOperation cancelled by user.")
         sys.exit(1)
-    except Exception as e:
-        print(f"Fatal error: {e}")
-        sys.exit(1)
+    # Let other exceptions bubble up with full stack traces
 
 
 async def async_main() -> None:
@@ -1273,13 +1271,8 @@ async def async_main() -> None:
     # Store token file in args for handlers
     args.token_file = args.token_file
 
-    try:
-        # Execute the command handler
-        await args.func(args)
-    except Exception as e:
-        cli_manager.logger.error(f"Command execution failed: {e}")
-        print(f"Error: {e}")
-        sys.exit(1)
+    # Execute the command handler - let exceptions bubble up with full stack traces
+    await args.func(args)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,9 @@ Test module for src/lib/__init__.py
 Validates that all expected exports are available and can be imported correctly.
 """
 
+import os
+import tempfile
+
 
 
 def test_goap_imports():
@@ -163,10 +166,16 @@ def test_yaml_data_instantiation():
     """Test that YamlData classes can be instantiated."""
     from src.lib import YamlData
 
-    # Test with in-memory filename to avoid file system operations
-    yaml_data = YamlData("test_data.yaml")
-    assert yaml_data is not None
-    assert yaml_data.filename == "test_data.yaml"
+    # Test in temporary directory to avoid creating files in project root
+    with tempfile.TemporaryDirectory() as temp_dir:
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            yaml_data = YamlData("test_data.yaml")
+            assert yaml_data is not None
+            assert yaml_data.filename == "test_data.yaml"
+        finally:
+            os.chdir(original_cwd)
 
 
 def test_artifacts_http_status_content():

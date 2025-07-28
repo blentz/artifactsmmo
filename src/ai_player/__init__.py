@@ -6,6 +6,7 @@ Implements Goal-Oriented Action Planning (GOAP) with a modular action system
 for autonomous character gameplay.
 """
 
+import logging
 from typing import Any
 
 from .action_executor import ActionExecutor
@@ -18,6 +19,7 @@ from .actions.gathering_action import GatheringAction
 
 # Action Implementations
 from .actions.movement_action import MovementAction
+from .actions.movement_action_factory import MovementActionFactory
 from .actions.rest_action import RestAction
 
 # Core AI Player Components
@@ -148,10 +150,6 @@ def initialize_ai_player_module() -> None:
     such as setting up logging, registering action factories, and
     validating system dependencies for the AI player functionality.
     """
-    import logging
-
-    from .actions.movement_action import MovementActionFactory
-
     # Set up logging for the AI player module
     logger = logging.getLogger("ai_player")
     if not logger.handlers:

@@ -109,7 +109,7 @@ class TestAPIClientWrapper:
     def test_api_client_wrapper_initialization_success(self, mock_token_config):
         """Test successful APIClientWrapper initialization"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -138,8 +138,8 @@ class TestAPIClientWrapper:
     async def test_create_character_success(self, mock_token_config):
         """Test successful character creation"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.create_character_asyncio_detailed') as mock_create:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.create_character_asyncio_detailed') as mock_create:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -152,7 +152,7 @@ class TestAPIClientWrapper:
             
             class MockData:
                 def __init__(self):
-                    self.character = MockCharacter()
+                    self.data = MockCharacter()
             
             mock_response = Mock()
             mock_response.status_code = 200
@@ -164,7 +164,7 @@ class TestAPIClientWrapper:
             wrapper = APIClientWrapper()
             result = await wrapper.create_character("test_character", "men1")
 
-            assert result == mock_response.data.character
+            assert result == mock_response.data.data
             assert result.name == "test_character"
             assert result.level == 1
 
@@ -172,8 +172,8 @@ class TestAPIClientWrapper:
     async def test_create_character_rate_limited(self, mock_token_config):
         """Test character creation with rate limiting"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.create_character_asyncio_detailed') as mock_create, \
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.create_character_asyncio_detailed') as mock_create, \
              patch('asyncio.sleep') as mock_sleep:
 
             mock_client = Mock()
@@ -198,38 +198,67 @@ class TestAPIClientWrapper:
     async def test_get_character_success(self, mock_token_config):
         """Test successful character retrieval"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.get_character_characters_name_get') as mock_get:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.get_character_characters_name_get') as mock_get, \
+             patch.object(APIClientWrapper, '_process_response', new=AsyncMock()) as mock_process:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
 
-            # Mock successful API response
+            # Mock successful API response with all required fields for CharacterGameState
+            mock_character = Mock()
+            mock_character.name = "existing_character"
+            mock_character.level = 10
+            mock_character.xp = 2500
+            mock_character.gold = 1000
+            mock_character.hp = 80
+            mock_character.max_hp = 100
+            mock_character.x = 15
+            mock_character.y = 20
+            mock_character.mining_level = 5
+            mock_character.mining_xp = 500
+            mock_character.woodcutting_level = 3
+            mock_character.woodcutting_xp = 300
+            mock_character.fishing_level = 2
+            mock_character.fishing_xp = 200
+            mock_character.weaponcrafting_level = 1
+            mock_character.weaponcrafting_xp = 100
+            mock_character.gearcrafting_level = 1
+            mock_character.gearcrafting_xp = 100
+            mock_character.jewelrycrafting_level = 1
+            mock_character.jewelrycrafting_xp = 100
+            mock_character.cooking_level = 1
+            mock_character.cooking_xp = 100
+            mock_character.alchemy_level = 1
+            mock_character.alchemy_xp = 100
+            mock_character.cooldown = 0
+            
             mock_response = Mock()
             mock_response.status_code = 200
-            mock_response.data = Mock()
-            mock_response.data.name = "existing_character"
-            mock_response.data.level = 10
-            mock_response.data.hp = 80
-            mock_response.data.x = 15
-            mock_response.data.y = 20
-            mock_response.parsed = mock_response.data
+            mock_response.data = mock_character
 
-            mock_get.asyncio = AsyncMock(return_value=mock_response)
+            mock_get.asyncio_detailed = AsyncMock(return_value=mock_response)
+            
+            # Mock _process_response to return the character data directly
+            mock_processed = Mock()
+            mock_processed.data = mock_character
+            mock_process.return_value = mock_processed
 
             wrapper = APIClientWrapper()
             result = await wrapper.get_character("existing_character")
 
-            assert result == mock_response.data
-            assert result.name == "existing_character"
+            # Result should now be a CharacterGameState instance
             assert result.level == 10
+            assert result.hp == 80
+            assert result.x == 15
+            assert result.y == 20
 
     @pytest.mark.asyncio
     async def test_get_character_not_found(self, mock_token_config):
         """Test character retrieval with character not found"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.get_character_characters_name_get') as mock_get:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.get_character_characters_name_get') as mock_get:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -238,7 +267,7 @@ class TestAPIClientWrapper:
             mock_response = Mock()
             mock_response.status_code = 404
 
-            mock_get.asyncio = AsyncMock(return_value=mock_response)
+            mock_get.asyncio_detailed = AsyncMock(return_value=mock_response)
 
             wrapper = APIClientWrapper()
 
@@ -249,8 +278,8 @@ class TestAPIClientWrapper:
     async def test_move_character_success(self, mock_token_config):
         """Test successful character movement"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.action_move_my_name_action_move_post') as mock_move:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.action_move_my_name_action_move_post') as mock_move:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -267,11 +296,15 @@ class TestAPIClientWrapper:
                     self.remaining_seconds = 5
                     self.reason = MockReason()
             
-            class MockData:
+            class MockCharacterData:
                 def __init__(self):
                     self.x = 25
                     self.y = 30
                     self.cooldown = MockCooldown()
+            
+            class MockData:
+                def __init__(self):
+                    self.data = MockCharacterData()
             
             mock_response = Mock()
             mock_response.status_code = 200
@@ -283,7 +316,7 @@ class TestAPIClientWrapper:
             wrapper = APIClientWrapper()
             result = await wrapper.move_character("test_character", 25, 30)
 
-            assert result == mock_response.parsed
+            assert result == mock_response.parsed.data
             assert result.x == 25
             assert result.y == 30
 
@@ -291,8 +324,8 @@ class TestAPIClientWrapper:
     async def test_move_character_cooldown_error(self, mock_token_config):
         """Test character movement with cooldown error"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.action_move_my_name_action_move_post') as mock_move:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.action_move_my_name_action_move_post') as mock_move:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -313,8 +346,8 @@ class TestAPIClientWrapper:
     async def test_fight_monster_success(self, mock_token_config):
         """Test successful monster fighting"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.action_fight_my_name_action_fight_post') as mock_fight:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.action_fight_my_name_action_fight_post') as mock_fight:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -335,13 +368,17 @@ class TestAPIClientWrapper:
                 def __init__(self):
                     self.result = "win"
             
-            class MockData:
+            class MockFightData:
                 def __init__(self):
                     self.xp = 150
                     self.gold = 25
                     self.hp = 75
                     self.cooldown = MockCooldown()
                     self.fight = MockFight()
+            
+            class MockData:
+                def __init__(self):
+                    self.data = MockFightData()
             
             mock_response = Mock()
             mock_response.status_code = 200
@@ -353,7 +390,7 @@ class TestAPIClientWrapper:
             wrapper = APIClientWrapper()
             result = await wrapper.fight_monster("test_character")
 
-            assert result == mock_response.parsed
+            assert result == mock_response.parsed.data
             assert result.fight.result == "win"
             assert result.xp == 150
 
@@ -361,7 +398,7 @@ class TestAPIClientWrapper:
     async def test_handle_rate_limit(self, mock_token_config):
         """Test rate limiting handling with exponential backoff"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient'):
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
 
             wrapper = APIClientWrapper()
 
@@ -379,7 +416,7 @@ class TestAPIClientWrapper:
     async def test_handle_rate_limit_no_retry_after(self, mock_token_config):
         """Test rate limiting handling without Retry-After header"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient'):
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
 
             wrapper = APIClientWrapper()
 
@@ -587,7 +624,7 @@ class TestAPIClientIntegration:
         mock_token_config = TokenConfig(token="e" * 32)
 
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
-             patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class:
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -657,3 +694,86 @@ class TestAPIClientIntegration:
         for token in invalid_tokens:
             with pytest.raises(Exception):
                 TokenConfig(token=token)
+
+
+class TestAPIClientErrorHandling:
+    """Test API client error handling for uncovered defensive code paths"""
+
+    @pytest.mark.asyncio
+    async def test_create_character_invalid_skin(self):
+        """Test create_character with invalid skin value"""
+        mock_token_config = Mock()
+        mock_token_config.token = "a" * 64
+
+        with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
+
+            client = APIClientWrapper("test_token")
+            
+            # Test with invalid skin that will trigger ValueError
+            with pytest.raises(ValueError, match="Invalid skin"):
+                await client.create_character("test_char", "invalid_skin_code")
+
+
+    @pytest.mark.asyncio
+    async def test_get_all_resources_empty_fallback(self):
+        """Test get_all_resources empty list fallback for missing data"""
+        mock_token_config = Mock()
+        mock_token_config.token = "a" * 64
+
+        with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
+             patch('src.game_data.api_client_wrapper.get_all_resources_asyncio_detailed') as mock_get, \
+             patch.object(APIClientWrapper, '_process_response', new=AsyncMock()) as mock_process:
+
+            mock_client = Mock()
+            mock_client_class.return_value = mock_client
+            
+            # Create response without data attribute  
+            mock_response = Mock()
+            del mock_response.data
+            mock_process.return_value = mock_response
+            
+            client = APIClientWrapper("test_token")
+            result = await client.get_all_resources()
+            
+            # Should return empty list as fallback
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_process_response_client_error_handling(self):
+        """Test _process_response 4xx client error handling"""
+        mock_token_config = Mock()
+        mock_token_config.token = "a" * 64
+
+        with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
+
+            client = APIClientWrapper("test_token")
+            
+            # Mock 400 bad request response
+            mock_response = Mock()
+            mock_response.status_code = 400
+            mock_response.content = b"Bad request error"
+            
+            with pytest.raises(ValueError, match="API error 400: Bad request error"):
+                await client._process_response(mock_response)
+
+    @pytest.mark.asyncio
+    async def test_process_response_server_error_handling(self):
+        """Test _process_response 5xx server error handling"""
+        mock_token_config = Mock()
+        mock_token_config.token = "a" * 64
+
+        with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
+             patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
+
+            client = APIClientWrapper("test_token")
+            
+            # Mock 500 server error response
+            mock_response = Mock()
+            mock_response.status_code = 500
+            mock_response.content = b"Internal server error"
+            
+            with pytest.raises(ValueError, match="API error 500: Internal server error"):
+                await client._process_response(mock_response)

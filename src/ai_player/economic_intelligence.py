@@ -575,12 +575,6 @@ class TradingStrategy:
                     else:
                         decisions.append(decision)
 
-                    if max_investment < 100:
-                        break
-
-            if max_investment < 100:
-                break
-
         # Sort by expected ROI and confidence
         decisions.sort(key=lambda d: d.calculate_roi(d.target_price * d.target_quantity) * d.confidence, reverse=True)
 

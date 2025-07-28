@@ -579,8 +579,8 @@ def test_action_discovery_import_error():
     from unittest.mock import patch, MagicMock
     
     # Test the import error handling in lines 128-132
-    with patch('src.ai_player.actions.pkgutil.iter_modules') as mock_iter:
-        with patch('src.ai_player.actions.importlib.import_module') as mock_import:
+    with patch('src.ai_player.actions.action_registry.pkgutil.iter_modules') as mock_iter:
+        with patch('src.ai_player.actions.action_registry.importlib.import_module') as mock_import:
             # Create a mock module info that will cause an import error
             mock_module_info = MagicMock()
             mock_module_info.name = 'test_failing_module'
@@ -620,8 +620,8 @@ def test_validation_failure_path():
             return ActionResult(success=True, state_changes={})
     
     # Mock inspect.getmembers to return our failing action
-    with patch('src.ai_player.actions.inspect.getmembers') as mock_getmembers:
-        with patch('src.ai_player.actions.pkgutil.iter_modules') as mock_iter:
+    with patch('src.ai_player.actions.action_registry.inspect.getmembers') as mock_getmembers:
+        with patch('src.ai_player.actions.action_registry.pkgutil.iter_modules') as mock_iter:
             # Set up the mock to find our action class
             mock_module_info = type('MockModuleInfo', (), {'name': 'test_module'})()
             mock_iter.return_value = [mock_module_info]
@@ -630,7 +630,7 @@ def test_validation_failure_path():
             mock_getmembers.return_value = [('FailingValidationAction', FailingValidationAction)]
             
             # Mock the module import
-            with patch('src.ai_player.actions.importlib.import_module') as mock_import:
+            with patch('src.ai_player.actions.action_registry.importlib.import_module') as mock_import:
                 mock_module = type('MockModule', (), {})()
                 mock_module.__dict__['FailingValidationAction'] = FailingValidationAction
                 mock_import.return_value = mock_module

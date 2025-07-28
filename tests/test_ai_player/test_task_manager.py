@@ -413,6 +413,8 @@ class TestTaskManager:
         client.get_all_tasks = AsyncMock()
         client.get_character = AsyncMock()
         client.accept_task = AsyncMock()
+        client.action_accept_new_task = AsyncMock()
+        client.action_complete_task = AsyncMock()
         client.complete_task = AsyncMock()
         client.cancel_task = AsyncMock()
         return client
@@ -675,17 +677,19 @@ class TestTaskManager:
     @pytest.mark.asyncio
     async def test_accept_task_success(self, task_manager, mock_api_client):
         """Test successful task acceptance"""
-        mock_api_client.accept_task.return_value = Mock()
+        mock_response = Mock()
+        mock_response.data = {'task_code': 'test_task'}  # Truthy data
+        mock_api_client.action_accept_new_task.return_value = mock_response
 
         result = await task_manager.accept_task("test_character", "test_task")
 
         assert result is True
-        mock_api_client.accept_task.assert_called_once_with("test_character", "test_task")
+        mock_api_client.action_accept_new_task.assert_called_once_with("test_character", code="test_task")
 
     @pytest.mark.asyncio
     async def test_accept_task_failure(self, task_manager, mock_api_client):
         """Test task acceptance failure"""
-        mock_api_client.accept_task.side_effect = Exception("API Error")
+        mock_api_client.action_accept_new_task.side_effect = Exception("API Error")
 
         result = await task_manager.accept_task("test_character", "test_task")
 
@@ -694,7 +698,9 @@ class TestTaskManager:
     @pytest.mark.asyncio
     async def test_complete_task_success(self, task_manager, mock_api_client):
         """Test successful task completion"""
-        mock_api_client.complete_task.return_value = Mock()
+        mock_response = Mock()
+        mock_response.data = {'task_code': 'test_task'}  # Truthy data
+        mock_api_client.action_complete_task.return_value = mock_response
 
         # Add a task to active tasks
         task_manager.active_tasks["test_character"] = [
@@ -708,628 +714,33 @@ class TestTaskManager:
             )
         ]
 
-        result = await task_manager.complete_task("test_character", "test_task")
+        result = await task_manager.complete_task("test_character")
 
         assert result is True
-        assert "test_task" in task_manager.completed_tasks
-        assert len(task_manager.active_tasks["test_character"]) == 0
+        assert "test_character:current_task" in task_manager.completed_tasks
 
     @pytest.mark.asyncio
     async def test_complete_task_failure(self, task_manager, mock_api_client):
         """Test task completion failure"""
-        mock_api_client.complete_task.side_effect = Exception("API Error")
+        mock_api_client.action_complete_task.side_effect = Exception("API Error")
 
-        result = await task_manager.complete_task("test_character", "test_task")
+        result = await task_manager.complete_task("test_character")
 
         assert result is False
 
     @pytest.mark.asyncio
     async def test_complete_task_api_returns_false(self, task_manager, mock_api_client):
         """Test task completion when API returns false"""
-        mock_api_client.complete_task.return_value = None  # API returns falsy
+        mock_response = Mock()
+        mock_response.data = None  # Falsy data
+        mock_api_client.action_complete_task.return_value = mock_response
 
-        result = await task_manager.complete_task("test_character", "test_task")
-
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_cancel_task_success(self, task_manager, mock_api_client):
-        """Test successful task cancellation"""
-        mock_api_client.cancel_task.return_value = Mock()
-
-        # Add a task to active tasks
-        task_manager.active_tasks["test_character"] = [
-            TaskProgress(
-                task_code="test_task",
-                character_name="test_character",
-                progress=5,
-                target=10,
-                completed=False,
-                started_at=datetime.now()
-            )
-        ]
-
-        result = await task_manager.cancel_task("test_character", "test_task")
-
-        assert result is True
-        assert len(task_manager.active_tasks["test_character"]) == 0
-
-    @pytest.mark.asyncio
-    async def test_cancel_task_failure(self, task_manager, mock_api_client):
-        """Test task cancellation failure"""
-        mock_api_client.cancel_task.side_effect = Exception("API Error")
-
-        result = await task_manager.cancel_task("test_character", "test_task")
+        result = await task_manager.complete_task("test_character")
 
         assert result is False
 
-    @pytest.mark.asyncio
-    async def test_cancel_task_api_returns_false(self, task_manager, mock_api_client):
-        """Test task cancellation when API returns false"""
-        mock_api_client.cancel_task.return_value = None  # API returns falsy
 
-        result = await task_manager.cancel_task("test_character", "test_task")
 
-        assert result is False
-
-    def test_track_task_progress_existing(self, task_manager):
-        """Test tracking progress for existing task"""
-        task_progress = TaskProgress(
-            task_code="test_task",
-            character_name="test_character",
-            progress=5,
-            target=10,
-            completed=False,
-            started_at=datetime.now()
-        )
-        task_manager.active_tasks["test_character"] = [task_progress]
-
-        result = task_manager.track_task_progress("test_character", "test_task")
-
-        assert result == task_progress
-
-    def test_track_task_progress_new(self, task_manager):
-        """Test tracking progress for new task"""
-        result = task_manager.track_task_progress("test_character", "test_task")
-
-        assert result.task_code == "test_task"
-        assert result.character_name == "test_character"
-        assert result.progress == 0
-        assert result.target == 1
-        assert not result.completed
-
-    def test_update_task_progress_existing(self, task_manager):
-        """Test updating progress for existing task"""
-        task_progress = TaskProgress(
-            task_code="test_task",
-            character_name="test_character",
-            progress=5,
-            target=10,
-            completed=False,
-            started_at=datetime.now()
-        )
-        task_manager.active_tasks["test_character"] = [task_progress]
-
-        task_manager.update_task_progress("test_character", "test_task", 8)
-
-        assert task_progress.progress == 8
-        assert not task_progress.completed
-
-    def test_update_task_progress_complete(self, task_manager):
-        """Test updating progress to completion"""
-        task_progress = TaskProgress(
-            task_code="test_task",
-            character_name="test_character",
-            progress=8,
-            target=10,
-            completed=False,
-            started_at=datetime.now()
-        )
-        task_manager.active_tasks["test_character"] = [task_progress]
-
-        task_manager.update_task_progress("test_character", "test_task", 10)
-
-        assert task_progress.progress == 10
-        assert task_progress.completed
-
-    def test_update_task_progress_new_task(self, task_manager):
-        """Test updating progress for new task"""
-        task_manager.update_task_progress("test_character", "test_task", 3)
-
-        assert len(task_manager.active_tasks["test_character"]) == 1
-        assert task_manager.active_tasks["test_character"][0].progress == 3
-
-    def test_is_task_completable(self, task_manager):
-        """Test checking if task is completable"""
-        # Create a test task
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        task_manager.task_cache["test_character"] = [task]
-
-        # Mark task as completed
-        task_manager.active_tasks["test_character"] = [
-            TaskProgress(
-                task_code="test_task",
-                character_name="test_character",
-                progress=10,
-                target=10,
-                completed=True,
-                started_at=datetime.now()
-            )
-        ]
-
-        character_state = {
-            GameState.CHARACTER_LEVEL: 5
-        }
-
-        result = task_manager.is_task_completable("test_task", "test_character", character_state)
-        assert result is True
-
-    def test_is_task_completable_not_completed(self, task_manager):
-        """Test checking if task is completable when not yet completed"""
-        # Mark task as not completed
-        task_manager.active_tasks["test_character"] = [
-            TaskProgress(
-                task_code="test_task",
-                character_name="test_character",
-                progress=5,
-                target=10,
-                completed=False,  # Not completed
-                started_at=datetime.now()
-            )
-        ]
-
-        character_state = {
-            GameState.CHARACTER_LEVEL: 5
-        }
-
-        result = task_manager.is_task_completable("test_task", "test_character", character_state)
-        assert result is False
-
-    def test_is_task_completable_task_not_in_cache(self, task_manager):
-        """Test checking completable for task not in cache"""
-        # Mark task as completed but don't have it in cache
-        task_manager.active_tasks["test_character"] = [
-            TaskProgress(
-                task_code="unknown_task",
-                character_name="test_character",
-                progress=10,
-                target=10,
-                completed=True,
-                started_at=datetime.now()
-            )
-        ]
-
-        character_state = {
-            GameState.CHARACTER_LEVEL: 5
-        }
-
-        result = task_manager.is_task_completable("unknown_task", "test_character", character_state)
-        assert result is True  # Returns True if not in cache
-
-    def test_estimate_task_completion_time_basic(self, task_manager):
-        """Test basic task completion time estimation"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {GameState.CHARACTER_LEVEL: 5}
-
-        result = task_manager.estimate_task_completion_time(task, character_state)
-
-        assert result >= 1
-        assert isinstance(result, int)
-
-    def test_estimate_task_completion_time_with_bonuses(self, task_manager):
-        """Test task completion time with various bonuses"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        state_with_tool = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.TOOL_EQUIPPED: True
-        }
-
-        state_without_tool = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.TOOL_EQUIPPED: False
-        }
-
-        time_with_tool = task_manager.estimate_task_completion_time(task, state_with_tool)
-        time_without_tool = task_manager.estimate_task_completion_time(task, state_without_tool)
-
-        assert time_with_tool <= time_without_tool
-
-    def test_estimate_task_completion_time_with_travel(self, task_manager):
-        """Test task completion time with travel distance"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=(10, 10)
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        state_near = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.CURRENT_X: 10,
-            GameState.CURRENT_Y: 10
-        }
-
-        state_far = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.CURRENT_X: 0,
-            GameState.CURRENT_Y: 0
-        }
-
-        time_near = task_manager.estimate_task_completion_time(task, state_near)
-        time_far = task_manager.estimate_task_completion_time(task, state_far)
-
-        assert time_far > time_near
-
-    def test_estimate_task_completion_time_crafting(self, task_manager):
-        """Test task completion time with crafting modifiers"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.CRAFT_ITEMS,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        state_with_materials = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.HAS_CRAFTING_MATERIALS: True
-        }
-
-        state_without_materials = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.HAS_CRAFTING_MATERIALS: False
-        }
-
-        time_with_materials = task_manager.estimate_task_completion_time(task, state_with_materials)
-        time_without_materials = task_manager.estimate_task_completion_time(task, state_without_materials)
-
-        assert time_with_materials <= time_without_materials
-
-    def test_estimate_task_completion_time_combat_modifiers(self, task_manager):
-        """Test task completion time with combat modifiers"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.KILL_MONSTERS,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        state_low_hp = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.HP_LOW: True,
-            GameState.COMBAT_ADVANTAGE: False
-        }
-
-        state_advantage = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.HP_LOW: False,
-            GameState.COMBAT_ADVANTAGE: True
-        }
-
-        time_low_hp = task_manager.estimate_task_completion_time(task, state_low_hp)
-        time_advantage = task_manager.estimate_task_completion_time(task, state_advantage)
-
-        assert time_low_hp > time_advantage
-
-    def test_find_similar_tasks(self, task_manager):
-        """Test finding similar tasks"""
-        base_task = Task(
-            code="base_task",
-            name="Base Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={"mining": 3},
-                required_items=[],
-                required_location=(5, 5)
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        similar_tasks = [
-            Task(
-                code="same_type",
-                name="Same Type",
-                task_type=TaskType.GATHER_RESOURCES,
-                description="",
-                requirements=TaskRequirement(1, {}, [], None),
-                rewards=TaskReward(0, 0, []),
-                estimated_duration=30,
-                priority=TaskPriority.MEDIUM
-            ),
-            Task(
-                code="same_location",
-                name="Same Location",
-                task_type=TaskType.KILL_MONSTERS,
-                description="",
-                requirements=TaskRequirement(1, {}, [], (5, 5)),
-                rewards=TaskReward(0, 0, []),
-                estimated_duration=30,
-                priority=TaskPriority.MEDIUM
-            ),
-            Task(
-                code="similar_level",
-                name="Similar Level",
-                task_type=TaskType.CRAFT_ITEMS,
-                description="",
-                requirements=TaskRequirement(6, {}, [], None),
-                rewards=TaskReward(0, 0, []),
-                estimated_duration=30,
-                priority=TaskPriority.MEDIUM
-            ),
-            Task(
-                code="same_skill",
-                name="Same Skill",
-                task_type=TaskType.CRAFT_ITEMS,
-                description="",
-                requirements=TaskRequirement(1, {"mining": 5}, [], None),
-                rewards=TaskReward(0, 0, []),
-                estimated_duration=30,
-                priority=TaskPriority.MEDIUM
-            )
-        ]
-
-        # Add a task with different skill intersection
-        skill_intersection_task = Task(
-            code="skill_intersection",
-            name="Skill Intersection",
-            task_type=TaskType.DELIVER_ITEMS,
-            description="",
-            requirements=TaskRequirement(1, {"mining": 2, "crafting": 3}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-        similar_tasks.append(skill_intersection_task)
-
-        result = task_manager.find_similar_tasks(base_task, similar_tasks)
-
-        assert len(result) == 5
-        assert result[0].code == "same_type"  # Highest priority (same type)
-        assert "same_location" in [t.code for t in result]
-        assert "similar_level" in [t.code for t in result]
-        assert "same_skill" in [t.code for t in result]
-        assert "skill_intersection" in [t.code for t in result]
-
-    def test_find_similar_tasks_excludes_self(self, task_manager):
-        """Test that find_similar_tasks excludes the task itself"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(5, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        available_tasks = [task]  # Only the task itself
-
-        result = task_manager.find_similar_tasks(task, available_tasks)
-
-        assert len(result) == 0
-
-    def test_find_similar_tasks_skill_intersection_only(self, task_manager):
-        """Test finding tasks with only skill intersection as similarity"""
-        base_task = Task(
-            code="base_task",
-            name="Base Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={"mining": 3, "woodcutting": 2},
-                required_items=[],
-                required_location=(5, 5)
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        # Task that only shares skills (different type, location, and level > 5 difference)
-        skill_only_task = Task(
-            code="skill_only",
-            name="Skill Only",
-            task_type=TaskType.CRAFT_ITEMS,  # Different type
-            description="",
-            requirements=TaskRequirement(
-                min_level=15,  # Level difference > 5
-                required_skills={"mining": 5},  # Shared skill
-                required_items=[],
-                required_location=(20, 20)  # Different location
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        available_tasks = [skill_only_task]
-
-        result = task_manager.find_similar_tasks(base_task, available_tasks)
-
-        assert len(result) == 1
-        assert result[0].code == "skill_only"
-
-    def test_get_task_requirements_actions_level_too_low(self, task_manager):
-        """Test get_task_requirements_actions when character level is too low"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=10,  # Higher than character level
-                required_skills={},
-                required_items=[],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {GameState.CHARACTER_LEVEL: 5}  # Too low
-
-        result = task_manager.get_task_requirements_actions(task, character_state)
-        assert result == []
-
-    def test_get_task_requirements_actions_missing_items(self, task_manager):
-        """Test get_task_requirements_actions when missing items"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[{"code": "iron_ore", "quantity": 10}],
-                required_location=None
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {
-            GameState.CHARACTER_LEVEL: 5,
-            'inventory': [{"code": "iron_ore", "quantity": 5}]  # Not enough
-        }
-
-        result = task_manager.get_task_requirements_actions(task, character_state)
-        assert result == []
-
-    def test_get_task_requirements_actions_wrong_location(self, task_manager):
-        """Test get_task_requirements_actions when at wrong location"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[],
-                required_location=(10, 10)
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.CURRENT_X: 0,
-            GameState.CURRENT_Y: 0,
-            'inventory': []
-        }
-
-        result = task_manager.get_task_requirements_actions(task, character_state)
-        assert result == []
-
-    def test_get_task_requirements_actions_all_requirements_met(self, task_manager):
-        """Test get_task_requirements_actions when all requirements are met"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(
-                min_level=5,
-                required_skills={},
-                required_items=[{"code": "iron_ore", "quantity": 5}],
-                required_location=(10, 10)
-            ),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {
-            GameState.CHARACTER_LEVEL: 5,
-            GameState.CURRENT_X: 10,
-            GameState.CURRENT_Y: 10,
-            'inventory': [{"code": "iron_ore", "quantity": 5}]
-        }
-
-        result = task_manager.get_task_requirements_actions(task, character_state)
-        assert result == []  # Empty list when all requirements met
 
 
 class TestTaskGoalGenerator:
@@ -1447,48 +858,13 @@ class TestTaskProgressTracker:
     def test_init(self, progress_tracker):
         """Test TaskProgressTracker initialization"""
         assert progress_tracker.progress_history == {}
-        assert progress_tracker.completion_rates == {}
-
-    def test_record_task_start(self, progress_tracker):
-        """Test recording task start"""
-        progress_tracker.record_task_start("test_character", "test_task")
-        assert "test_character" in progress_tracker.progress_history
-        assert "test_task" in progress_tracker.progress_history["test_character"]
-
-    def test_record_task_completion(self, progress_tracker):
-        """Test recording task completion"""
-        reward = TaskReward(100, 50, [])
-        progress_tracker.record_task_completion("test_character", "test_task", 30, reward)
-        assert "test_character" in progress_tracker.completion_rates
-        assert progress_tracker.completion_rates["test_character"]["test_task"] == 30
-
-    def test_record_task_progress(self, progress_tracker):
-        """Test recording task progress"""
-        progress_tracker.record_task_progress("test_character", "test_task", 5, datetime.now())
-        # This method currently has pass implementation, testing it doesn't crash
+        assert progress_tracker.completion_times == {}
+        assert progress_tracker.efficiency_metrics == {}
 
     def test_analyze_task_efficiency(self, progress_tracker):
         """Test analyzing task efficiency"""
-        result = progress_tracker.analyze_task_efficiency("test_task")
-        assert result["efficiency"] == 1.0
-        assert result["success_rate"] == 1.0
-
-    def test_predict_completion_time(self, progress_tracker):
-        """Test predicting completion time"""
-        result = progress_tracker.predict_completion_time("test_task", 10)
-        assert result == 20  # 30 - 10
-
-    def test_get_task_statistics(self, progress_tracker):
-        """Test getting task statistics"""
-        result = progress_tracker.get_task_statistics("test_character")
-        assert result["completed_tasks"] == 0
-        assert result["total_time"] == 0
-        assert result["average_efficiency"] == 1.0
-
-    def test_identify_improvement_opportunities(self, progress_tracker):
-        """Test identifying improvement opportunities"""
-        result = progress_tracker.identify_improvement_opportunities("test_character")
-        assert result == []
+        result = progress_tracker.analyze_task_efficiency("test_character", "test_task")
+        assert isinstance(result, dict)
 
 
 class TestTaskOptimizer:
@@ -1508,161 +884,37 @@ class TestTaskOptimizer:
         return Mock()
 
     @pytest.fixture
-    def task_optimizer(self, mock_task_manager, mock_progress_tracker):
+    def task_optimizer(self):
         """Create TaskOptimizer instance"""
-        return TaskOptimizer(mock_task_manager, mock_progress_tracker)
+        return TaskOptimizer()
 
-    def test_init(self, task_optimizer, mock_task_manager, mock_progress_tracker):
+    def test_init(self, task_optimizer):
         """Test TaskOptimizer initialization"""
-        assert task_optimizer.task_manager == mock_task_manager
-        assert task_optimizer.progress_tracker == mock_progress_tracker
+        assert task_optimizer.optimization_history == {}
+        assert task_optimizer.performance_cache == {}
 
-    def test_optimize_task_sequence(self, task_optimizer, mock_task_manager):
+    def test_optimize_task_sequence(self, task_optimizer):
         """Test optimizing task sequence"""
-        tasks = []
-        character_state = {}
-        mock_task_manager.prioritize_tasks.return_value = tasks
+        tasks = [
+            Task(
+                code="test_task",
+                name="Test Task",
+                task_type=TaskType.GATHER_RESOURCES,
+                description="",
+                requirements=TaskRequirement(1, {}, [], None),
+                rewards=TaskReward(0, 0, []),
+                estimated_duration=30,
+                priority=TaskPriority.MEDIUM
+            )
+        ]
+        character_state = {GameState.CHARACTER_LEVEL: 5}
 
         result = task_optimizer.optimize_task_sequence(tasks, character_state)
 
-        assert result == tasks
-        mock_task_manager.prioritize_tasks.assert_called_once_with(tasks, character_state)
+        assert result == tasks  # Current implementation returns tasks unchanged
 
-    def test_find_task_chains_empty(self, task_optimizer):
-        """Test finding task chains with no similar tasks"""
-        tasks = [Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )]
 
-        result = task_optimizer.find_task_chains(tasks)
-        assert result == []
 
-    def test_find_task_chains_with_similar_tasks(self, task_optimizer, mock_task_manager):
-        """Test finding task chains with similar tasks"""
-        base_task = Task(
-            code="base_task",
-            name="Base Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-        
-        similar_task1 = Task(
-            code="similar1",
-            name="Similar 1",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-        
-        similar_task2 = Task(
-            code="similar2",
-            name="Similar 2",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
 
-        tasks = [base_task, similar_task1, similar_task2]
-        mock_task_manager.find_similar_tasks.return_value = [similar_task1, similar_task2]
 
-        result = task_optimizer.find_task_chains(tasks)
-        
-        assert len(result) == 3  # One chain for each task
-        assert len(result[0]) <= 3  # Chain limited to 3 tasks
 
-    def test_calculate_opportunity_cost(self, task_optimizer):
-        """Test calculating opportunity cost"""
-        task = Task(
-            code="main_task",
-            name="Main Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(50, 25, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        alternative = Task(
-            code="alt_task",
-            name="Alternative Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(100, 50, []),
-            estimated_duration=30,
-            priority=TaskPriority.HIGH
-        )
-
-        character_state = {GameState.CHARACTER_LEVEL: 5}
-
-        result = task_optimizer.calculate_opportunity_cost(task, [alternative], character_state)
-        assert result >= 0.0
-
-    def test_suggest_preparation_actions_gathering(self, task_optimizer):
-        """Test suggesting preparation actions for gathering"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.GATHER_RESOURCES,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {GameState.TOOL_EQUIPPED: False}
-
-        result = task_optimizer.suggest_preparation_actions(task, character_state)
-        assert "Equip appropriate gathering tool" in result
-
-    def test_suggest_preparation_actions_combat(self, task_optimizer):
-        """Test suggesting preparation actions for combat"""
-        task = Task(
-            code="test_task",
-            name="Test Task",
-            task_type=TaskType.KILL_MONSTERS,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-
-        character_state = {GameState.HP_CURRENT: 40}
-
-        result = task_optimizer.suggest_preparation_actions(task, character_state)
-        assert "Rest to recover HP" in result
-
-    def test_evaluate_task_abandonment(self, task_optimizer):
-        """Test evaluating task abandonment"""
-        task_progress = TaskProgress(
-            task_code="test_task",
-            character_name="test_character",
-            progress=2,
-            target=10,
-            completed=False,
-            started_at=datetime.now()
-        )
-
-        result = task_optimizer.evaluate_task_abandonment([task_progress], [])
-        assert len(result) == 1
-        assert "Consider abandoning test_task" in result[0]

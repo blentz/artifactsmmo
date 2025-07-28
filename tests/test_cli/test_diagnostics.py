@@ -160,7 +160,7 @@ class TestFormatMethods:
         """Test action output formatting with empty data"""
         diagnostics = DiagnosticCommands()
 
-        formatted = diagnostics.format_action_output([])
+        formatted = diagnostics.format_action_output({})
         assert isinstance(formatted, str)
         assert "No action data to display" in formatted
 
@@ -168,23 +168,40 @@ class TestFormatMethods:
         """Test action output formatting with action data"""
         diagnostics = DiagnosticCommands()
 
-        action_data = [
-            {
-                "name": "move_to_forest",
-                "cost": 3,
-                "executable": True,
-                "preconditions": {"cooldown_ready": True},
-                "effects": {"current_x": 10, "current_y": 15}
+        # Create a proper diagnostic result dict structure
+        diagnostic_result = {
+            "character_name": "test_character",
+            "registry_available": True,
+            "summary": {
+                "total_actions": 2,
+                "executable_actions": 1,
+                "cost_range": {"min": 3, "max": 5},
+                "action_types": {"movement": 1, "combat": 1}
             },
-            {
-                "name": "fight_goblin",
-                "cost": 5,
-                "executable": False,
-                "issues": ["Not enough HP"]
-            }
-        ]
+            "registry_validation": {
+                "valid": True,
+                "errors": [],
+                "warnings": []
+            },
+            "actions_analyzed": [
+                {
+                    "name": "move_to_forest",
+                    "cost": 3,
+                    "executable": True,
+                    "preconditions": {"cooldown_ready": True},
+                    "effects": {"current_x": 10, "current_y": 15}
+                },
+                {
+                    "name": "fight_goblin",
+                    "cost": 5,
+                    "executable": False,
+                    "issues": ["Not enough HP"]
+                }
+            ],
+            "recommendations": []
+        }
 
-        formatted = diagnostics.format_action_output(action_data)
+        formatted = diagnostics.format_action_output(diagnostic_result)
         assert isinstance(formatted, str)
         assert "move_to_forest" in formatted
         assert "fight_goblin" in formatted
@@ -203,23 +220,35 @@ class TestFormatMethods:
         """Test planning output formatting with planning data"""
         diagnostics = DiagnosticCommands()
 
-        planning_data = {
-            "planning_successful": True,
-            "total_cost": 15,
-            "planning_time": 0.123,
-            "steps": [
+        # Create proper diagnostic result structure
+        diagnostic_result = {
+            "character_name": "test_character",
+            "goal": "level_up",
+            "planning_available": True,
+            "planning_analysis": {
+                "planning_successful": True,
+                "total_cost": 15,
+                "planning_time": 0.123,
+                "steps": [
+                    {"name": "move_action", "cost": 3},
+                    {"name": "fight_action", "cost": 7},
+                    {"name": "rest_action", "cost": 5}
+                ],
+                "efficiency_score": 85.5
+            },
+            "plan_steps": [
                 {"name": "move_action", "cost": 3},
                 {"name": "fight_action", "cost": 7},
                 {"name": "rest_action", "cost": 5}
             ],
-            "efficiency_score": 85.5,
-            "optimization_suggestions": ["Consider combining movement actions"]
+            "recommendations": ["Consider combining movement actions"],
+            "diagnostic_time": "2024-01-01T12:00:00"
         }
 
-        formatted = diagnostics.format_planning_output(planning_data)
+        formatted = diagnostics.format_planning_output(diagnostic_result)
         assert isinstance(formatted, str)
-        assert "Planning successful: True" in formatted
-        assert "Total cost: 15" in formatted
+        assert "test_character" in formatted
+        assert "level_up" in formatted
         assert "move_action" in formatted
         assert "Consider combining movement actions" in formatted
 
@@ -244,7 +273,8 @@ class TestDiagnoseStateMethods:
     @pytest.mark.asyncio
     async def test_diagnose_state_with_api_client(self):
         """Test state diagnosis with API client"""
-        from src.ai_player.state.game_state import GameState
+        from src.ai_player.state.game_state import GameState, CharacterGameState
+        from unittest.mock import patch
 
         # Mock character data
         mock_character_data = Mock()
@@ -271,11 +301,11 @@ class TestDiagnoseStateMethods:
         # Mock API client
         mock_api_client = Mock(spec=APIClientWrapper)
         mock_api_client.get_character = AsyncMock(return_value=mock_character_data)
-        mock_api_client.extract_character_state = Mock(return_value=mock_character_game_state)
 
-        diagnostics = DiagnosticCommands(api_client=mock_api_client)
-
-        result = await diagnostics.diagnose_state("test_character")
+        # Mock CharacterGameState.from_api_character
+        with patch.object(CharacterGameState, 'from_api_character', return_value=mock_character_game_state):
+            diagnostics = DiagnosticCommands(api_client=mock_api_client)
+            result = await diagnostics.diagnose_state("test_character")
 
         assert isinstance(result, dict)
         assert result["api_available"] is True
@@ -1164,7 +1194,7 @@ class TestDiagnosticIntegration:
         # Format methods should handle empty inputs gracefully
         try:
             state_format = diagnostics.format_state_output({})
-            action_format = diagnostics.format_action_output([])
+            action_format = diagnostics.format_action_output({})
             planning_format = diagnostics.format_planning_output({})
 
             assert isinstance(state_format, str)

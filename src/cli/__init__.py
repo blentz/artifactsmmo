@@ -8,8 +8,12 @@ for troubleshooting GOAP planning and system state.
 
 import argparse
 import asyncio
+import logging
 import sys
 from typing import Any
+
+from ..lib.log import configure_logging
+from ..lib import log
 
 
 class CLIManager:
@@ -310,10 +314,6 @@ class CLIManager:
         logger from src/lib/log.py with the specified level, enabling appropriate
         verbosity for debugging and monitoring AI player operations.
         """
-        import logging
-
-        from ..lib.log import configure_logging
-
         # Convert string level to logging constant
         numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
@@ -323,7 +323,6 @@ class CLIManager:
         config["root"]["level"] = log_level.upper()
 
         # Update global LOG_LEVEL for new loggers
-        from ..lib import log
         log.LOG_LEVEL = numeric_level
 
         # Configure root logger

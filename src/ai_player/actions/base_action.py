@@ -63,21 +63,18 @@ class BaseAction(ABC):
         preconditions required for this action to be executed, enabling the
         GOAP planner to determine action feasibility.
         """
-        try:
-            preconditions = self.get_preconditions()
-            for state_key, required_value in preconditions.items():
-                current_value = current_state.get(state_key)
+        preconditions = self.get_preconditions()
+        for state_key, required_value in preconditions.items():
+            current_value = current_state.get(state_key)
 
-                # Handle missing state keys
-                if current_value is None:
-                    return False
+            # Handle missing state keys
+            if current_value is None:
+                return False
 
-                # Use appropriate comparison based on state type
-                if not self._satisfies_precondition(state_key, current_value, required_value):
-                    return False
-            return True
-        except Exception:
-            return False
+            # Use appropriate comparison based on state type
+            if not self._satisfies_precondition(state_key, current_value, required_value):
+                return False
+        return True
 
     def _satisfies_precondition(self, state_key: GameState, current_value: Any, required_value: Any) -> bool:
         """Check if a current value satisfies the required value for a specific state key.
@@ -135,13 +132,10 @@ class BaseAction(ABC):
         valid GameState enum keys, ensuring type safety and preventing runtime
         errors in the GOAP planning system.
         """
-        try:
-            preconditions = self.get_preconditions()
-            if not isinstance(preconditions, dict):
-                return False
-            return all(isinstance(key, GameState) for key in preconditions.keys())
-        except Exception:
+        preconditions = self.get_preconditions()
+        if not isinstance(preconditions, dict):
             return False
+        return all(isinstance(key, GameState) for key in preconditions.keys())
 
     def validate_effects(self) -> bool:
         """Validate that all effects use valid GameState enum keys.
@@ -156,10 +150,7 @@ class BaseAction(ABC):
         valid GameState enum keys, ensuring type safety and enabling proper
         state updates after action execution in the GOAP system.
         """
-        try:
-            effects = self.get_effects()
-            if not isinstance(effects, dict):
-                return False
-            return all(isinstance(key, GameState) for key in effects.keys())
-        except Exception:
+        effects = self.get_effects()
+        if not isinstance(effects, dict):
             return False
+        return all(isinstance(key, GameState) for key in effects.keys())

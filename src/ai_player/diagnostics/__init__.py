@@ -13,7 +13,7 @@ system and CLI diagnostic commands:
 - PlanningDiagnostics: GOAP planning process analysis and visualization
 
 Example usage:
-    from ai_player.diagnostics import StateDiagnostics, ActionDiagnostics, PlanningDiagnostics
+    from .diagnostics import StateDiagnostics, ActionDiagnostics, PlanningDiagnostics
     
     # Create diagnostic instances
     state_diag = StateDiagnostics()

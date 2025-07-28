@@ -18,6 +18,7 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 
 - DO NOT use inline imports. Always put imports at the top of the file.
 - DO NOT create "simple" tests; use the test suite.
+- **ONE CLASS PER FILE**: Each Python file should contain only one class definition. This improves code organization, makes imports cleaner, and follows standard Python conventions.
 
 ## Testing Guidelines
 

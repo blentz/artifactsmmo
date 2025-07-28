@@ -124,12 +124,10 @@ class DiagnosticCommands:
             diagnosis["api_character_data"] = {
                 "level": character_data.level,
                 "xp": character_data.xp,
-                "max_xp": character_data.max_xp,
                 "gold": character_data.gold,
                 "hp": character_data.hp,
                 "max_hp": character_data.max_hp,
-                "position": {"x": character_data.x, "y": character_data.y},
-                "skin": character_data.skin
+                "position": {"x": character_data.x, "y": character_data.y}
             }
 
             # Add cooldown information if available
@@ -1139,6 +1137,10 @@ class DiagnosticCommands:
         This method formats complete action diagnostic results into a readable format
         for CLI display, including action analysis, summary, and recommendations.
         """
+        # Handle empty or None input
+        if not diagnostic_result:
+            return "No action data to display"
+        
         lines = []
         
         # Header
@@ -1233,6 +1235,10 @@ class DiagnosticCommands:
         This method formats complete planning diagnostic results into a visual representation
         for CLI display, showing planning analysis, performance metrics, and recommendations.
         """
+        # Handle empty or None input
+        if not diagnostic_result:
+            return "No planning data to display"
+        
         lines = []
         
         # Header

@@ -138,6 +138,28 @@ class TestMarketDataCollector:
         assert len(collector.price_history["copper_ore"]) == 1
         assert collector.price_history["copper_ore"][0] == recent_data
 
+    def test_cleanup_old_data_removes_empty_entries(self):
+        """Test that cleanup removes empty price history entries"""
+        api_client = Mock()
+        collector = MarketDataCollector(api_client)
+
+        # Add only old data that will be completely removed
+        now = datetime.now()
+        old_data1 = PriceData("copper_ore", now - timedelta(days=35), 100, 120, 50)
+        old_data2 = PriceData("copper_ore", now - timedelta(days=40), 90, 110, 60)
+
+        collector.store_price_data(old_data1)
+        collector.store_price_data(old_data2)
+
+        # Verify the item exists before cleanup
+        assert "copper_ore" in collector.price_history
+        assert len(collector.price_history["copper_ore"]) == 2
+
+        collector.cleanup_old_data(max_age_days=30)
+
+        # The entire item should be removed since all data was old
+        assert "copper_ore" not in collector.price_history
+
     def test_add_remove_tracking(self):
         """Test adding and removing items from tracking"""
         api_client = Mock()
@@ -148,6 +170,26 @@ class TestMarketDataCollector:
 
         collector.remove_item_from_tracking("copper_ore")
         assert "copper_ore" not in collector.price_history
+
+    def test_remove_tracking_with_last_update(self):
+        """Test removing item that has last_update entry"""
+        api_client = Mock()
+        collector = MarketDataCollector(api_client)
+
+        # Add item and simulate that it was updated
+        collector.add_item_to_tracking("copper_ore")
+        from datetime import datetime
+        collector.last_update["copper_ore"] = datetime.now()
+
+        # Verify both entries exist
+        assert "copper_ore" in collector.price_history
+        assert "copper_ore" in collector.last_update
+
+        collector.remove_item_from_tracking("copper_ore")
+
+        # Both should be removed
+        assert "copper_ore" not in collector.price_history
+        assert "copper_ore" not in collector.last_update
 
 
 class TestMarketAnalyzer:
@@ -207,6 +249,25 @@ class TestMarketAnalyzer:
         trend = self.analyzer.detect_trend(rising_data)
         # Accept any trend since algorithm is complex - just verify it returns a valid trend
         assert trend in [MarketTrend.RISING, MarketTrend.FALLING, MarketTrend.STABLE, MarketTrend.VOLATILE]
+
+    def test_detect_trend_volatile(self):
+        """Test trend detection for highly volatile prices"""
+        now = datetime.now()
+        volatile_data = []
+        # Create highly volatile price data with big swings
+        volatile_prices = [100, 200, 50, 300, 25, 400, 10, 500, 5, 600]
+        for i, price in enumerate(volatile_prices):
+            price_data = PriceData(
+                item_code="test_item",
+                timestamp=now - timedelta(hours=9-i),
+                buy_price=price,
+                sell_price=price + 20,
+                quantity_available=50
+            )
+            volatile_data.append(price_data)
+
+        trend = self.analyzer.detect_trend(volatile_data)
+        assert trend == MarketTrend.VOLATILE
 
     def test_calculate_volatility(self):
         """Test volatility calculation"""

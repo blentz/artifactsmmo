@@ -355,16 +355,14 @@ class TestModuleInitialization:
 class TestMockArgsClasses:
     """Test internal MockArgs classes work correctly"""
 
-    def test_character_mock_args_creation(self):
+    @pytest.mark.asyncio
+    async def test_character_mock_args_creation(self):
         """Test MockArgs creation for character commands"""
         mock_cli_manager = Mock()
         mock_cli_manager.handle_create_character = AsyncMock()
 
-        async def capture_args():
-            with patch('src.cli.create_cli_manager', return_value=mock_cli_manager):
-                await run_character_cli("test_char", "create", {"skin": "knight", "verbose": True})
-
-        asyncio.run(capture_args())
+        with patch('src.cli.create_cli_manager', return_value=mock_cli_manager):
+            await run_character_cli("test_char", "create", {"skin": "knight", "verbose": True})
 
         # Verify the args object was created correctly
         args = mock_cli_manager.handle_create_character.call_args[0][0]
@@ -373,16 +371,14 @@ class TestMockArgsClasses:
         assert args.skin == "knight"
         assert args.verbose is True
 
-    def test_diagnostic_mock_args_creation(self):
+    @pytest.mark.asyncio
+    async def test_diagnostic_mock_args_creation(self):
         """Test MockArgs creation for diagnostic commands"""
         mock_cli_manager = Mock()
         mock_cli_manager.handle_diagnose_state = AsyncMock()
 
-        async def capture_args():
-            with patch('src.cli.create_cli_manager', return_value=mock_cli_manager):
-                await run_diagnostic_cli("state", "test_char", {"depth": 5, "format": "json"})
-
-        asyncio.run(capture_args())
+        with patch('src.cli.create_cli_manager', return_value=mock_cli_manager):
+            await run_diagnostic_cli("state", "test_char", {"depth": 5, "format": "json"})
 
         # Verify the args object was created correctly
         args = mock_cli_manager.handle_diagnose_state.call_args[0][0]
@@ -628,8 +624,7 @@ class TestMainFunctions:
     async def test_async_main_no_command(self, capsys):
         """Test async_main with no command specified"""
         cli_manager = CLIManager()
-        args = Mock()
-        delattr(args, 'command') if hasattr(args, 'command') else None
+        args = Mock(spec=[])
 
         await async_main(cli_manager, args)
 
@@ -640,7 +635,7 @@ class TestMainFunctions:
     async def test_async_main_character_commands(self):
         """Test async_main routing for character commands"""
         cli_manager = CLIManager()
-        args = Mock()
+        args = Mock(spec=['command'])
 
         # Mock all the handler methods
         cli_manager.handle_create_character = AsyncMock()
@@ -667,7 +662,7 @@ class TestMainFunctions:
     async def test_async_main_ai_player_commands(self):
         """Test async_main routing for AI player commands"""
         cli_manager = CLIManager()
-        args = Mock()
+        args = Mock(spec=['command'])
 
         # Mock all the handler methods
         cli_manager.handle_run_character = AsyncMock()
@@ -693,7 +688,7 @@ class TestMainFunctions:
     async def test_async_main_diagnostic_commands(self):
         """Test async_main routing for diagnostic commands"""
         cli_manager = CLIManager()
-        args = Mock()
+        args = Mock(spec=['command'])
 
         # Mock all the handler methods
         cli_manager.handle_diagnose_state = AsyncMock()
@@ -725,7 +720,7 @@ class TestMainFunctions:
     async def test_async_main_unknown_command(self, capsys):
         """Test async_main with unknown command"""
         cli_manager = CLIManager()
-        args = Mock()
+        args = Mock(spec=['command'])
         args.command = "unknown-command"
 
         await async_main(cli_manager, args)

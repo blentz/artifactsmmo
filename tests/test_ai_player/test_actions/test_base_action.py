@@ -458,7 +458,7 @@ class TestActionExceptionHandling:
     """Test exception handling in BaseAction methods"""
 
     def test_can_execute_exception_handling(self):
-        """Test can_execute handles exceptions gracefully"""
+        """Test can_execute raises exceptions from broken implementations"""
         class BrokenPreconditionsAction(BaseAction):
             @property
             def name(self) -> str:
@@ -481,9 +481,9 @@ class TestActionExceptionHandling:
         action = BrokenPreconditionsAction()
         current_state = {GameState.COOLDOWN_READY: True}
 
-        # Should return False instead of raising an exception
-        result = action.can_execute(current_state)
-        assert result is False
+        # Should raise the exception from the broken implementation
+        with pytest.raises(RuntimeError, match="Simulated preconditions error"):
+            action.can_execute(current_state)
 
     def test_satisfies_precondition_type_error_handling(self):
         """Test _satisfies_precondition handles type conversion errors"""
@@ -499,7 +499,7 @@ class TestActionExceptionHandling:
         assert result is False
 
     def test_validate_preconditions_exception_handling(self):
-        """Test validate_preconditions handles exceptions gracefully"""
+        """Test validate_preconditions raises exceptions from broken implementations"""
         class BrokenValidationAction(BaseAction):
             @property
             def name(self) -> str:
@@ -521,12 +521,12 @@ class TestActionExceptionHandling:
 
         action = BrokenValidationAction()
 
-        # Should return False instead of raising an exception
-        result = action.validate_preconditions()
-        assert result is False
+        # Should raise the exception from the broken implementation
+        with pytest.raises(RuntimeError, match="Simulated validation error"):
+            action.validate_preconditions()
 
     def test_validate_effects_exception_handling(self):
-        """Test validate_effects handles exceptions gracefully"""
+        """Test validate_effects raises exceptions from broken implementations"""
         class BrokenEffectsValidationAction(BaseAction):
             @property
             def name(self) -> str:
@@ -548,9 +548,9 @@ class TestActionExceptionHandling:
 
         action = BrokenEffectsValidationAction()
 
-        # Should return False instead of raising an exception
-        result = action.validate_effects()
-        assert result is False
+        # Should raise the exception from the broken implementation
+        with pytest.raises(RuntimeError, match="Simulated effects validation error"):
+            action.validate_effects()
 
     def test_validate_preconditions_non_dict_return(self):
         """Test validate_preconditions with non-dict return"""

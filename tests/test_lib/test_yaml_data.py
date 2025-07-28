@@ -15,69 +15,97 @@ class TestYamlData:
     def test_init_with_default_filename(self) -> None:
         """Test initialization with default filename"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData()
                 assert yaml_data.filename == "data.yaml"
                 assert yaml_data.data == {}
                 assert yaml_data._log is not None
+            finally:
+                os.chdir(original_cwd)
 
     def test_init_with_custom_filename(self) -> None:
         """Test initialization with custom filename"""
         custom_filename = "custom.yaml"
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData(custom_filename)
                 assert yaml_data.filename == custom_filename
                 assert yaml_data.data == {}
+            finally:
+                os.chdir(original_cwd)
 
     def test_repr(self) -> None:
         """Test string representation"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData("test.yaml")
                 expected = "YamlData(test.yaml): {}"
                 assert repr(yaml_data) == expected
+            finally:
+                os.chdir(original_cwd)
 
     def test_iter(self) -> None:
         """Test iteration over YamlData"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData("test.yaml")
                 yaml_data.data = {"key": "value"}
 
                 for key, value in yaml_data:
                     assert key == "data"
                     assert value == {"key": "value"}
+            finally:
+                os.chdir(original_cwd)
 
     def test_getitem(self) -> None:
         """Test dictionary-style access"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData("test.yaml")
                 yaml_data.data = {"key": "value", "number": 42}
 
                 assert yaml_data["key"] == "value"
                 assert yaml_data["number"] == 42
+            finally:
+                os.chdir(original_cwd)
 
     def test_getitem_key_error(self) -> None:
         """Test KeyError when accessing non-existent key"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData("test.yaml")
                 yaml_data.data = {"key": "value"}
 
                 with pytest.raises(KeyError):
                     _ = yaml_data["nonexistent"]
+            finally:
+                os.chdir(original_cwd)
 
     def test_getitem_data_none(self) -> None:
         """Test TypeError when data is None"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData("test.yaml")
                 yaml_data.data = None
 
                 with pytest.raises(TypeError):
                     _ = yaml_data["any_key"]
+            finally:
+                os.chdir(original_cwd)
 
     def test_load_yaml_file_not_exists(self) -> None:
         """Test loading when file doesn't exist - should create empty file"""
@@ -169,7 +197,9 @@ class TestYamlData:
     def test_load_public_interface(self) -> None:
         """Test public load method"""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('os.getcwd', return_value=temp_dir):
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
                 yaml_data = YamlData("test.yaml")
 
                 # Should call _load_yaml internally
@@ -179,6 +209,8 @@ class TestYamlData:
                     result = yaml_data.load()
                     mock_load.assert_called_once_with("test.yaml")
                     assert result == {"loaded": "data"}
+            finally:
+                os.chdir(original_cwd)
 
     def test_save_public_interface_with_empty_data(self) -> None:
         """Test public save method when data is empty"""

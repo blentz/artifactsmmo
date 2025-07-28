@@ -29,7 +29,8 @@ from src.ai_player.actions import (
 from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.actions.combat_action import CombatAction
 from src.ai_player.actions.gathering_action import GatheringAction
-from src.ai_player.actions.movement_action import MovementAction, MovementActionFactory
+from src.ai_player.actions.movement_action import MovementAction
+from src.ai_player.actions.movement_action_factory import MovementActionFactory
 from src.ai_player.actions.rest_action import RestAction
 from src.ai_player.state.game_state import ActionResult, GameState
 

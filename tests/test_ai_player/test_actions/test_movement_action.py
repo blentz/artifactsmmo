@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from src.ai_player.actions.base_action import BaseAction
-from src.ai_player.actions.movement_action import MovementAction, MovementActionFactory
+from src.ai_player.actions.movement_action import MovementAction
+from src.ai_player.actions.movement_action_factory import MovementActionFactory
 from src.ai_player.state.game_state import ActionResult, GameState
 from src.lib.httpstatus import ArtifactsHTTPStatus
 

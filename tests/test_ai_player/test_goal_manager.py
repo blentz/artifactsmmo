@@ -11,7 +11,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.ai_player.actions.base_action import BaseAction
-from src.ai_player.goal_manager import CooldownAwarePlanner, GoalManager
+from src.ai_player.cooldown_aware_planner import CooldownAwarePlanner
+from src.ai_player.goal_manager import GoalManager
 from src.ai_player.state.game_state import GameState
 from src.lib.goap import Action_List
 
@@ -24,6 +25,10 @@ class TestGoalManager:
         """Create GoalManager instance for testing"""
         mock_action_registry = Mock()
         mock_cooldown_manager = Mock()
+        
+        # Configure default mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
         return GoalManager(mock_action_registry, mock_cooldown_manager)
 
     @pytest.fixture
@@ -148,8 +153,10 @@ class TestGoalManager:
             def get_effects(self): return {GameState.CHARACTER_LEVEL: 1}
             async def execute(self, character_name, current_state): pass
 
-        # Mock action registry
-        goal_manager.action_registry.get_all_action_types.return_value = [MockAction1, MockAction2]
+        # Mock action registry to return action instances
+        mock_action1 = MockAction1()
+        mock_action2 = MockAction2()
+        goal_manager.action_registry.generate_actions_for_state.return_value = [mock_action1, mock_action2]
 
         result = goal_manager.create_goap_actions()
 
@@ -425,7 +432,15 @@ class TestGoalManager:
             {'name': 'rest', 'cost': 1}
         ]
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner, \
+             patch.object(goal_manager, 'create_goap_actions') as mock_create_actions:
+            
+            # Mock action list with conditions
+            mock_action_list = Mock()
+            mock_action_list.conditions = {'move_to_forest': {}, 'fight_goblin': {}, 'rest': {}}
+            mock_create_actions.return_value = mock_action_list
+            
+            # Mock planner
             mock_planner = Mock()
             mock_planner.calculate.return_value = mock_plan
             mock_create_planner.return_value = mock_planner
@@ -479,18 +494,9 @@ class TestGoalManager:
                  get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}))
         ]
 
-        with patch.object(goal_manager.action_registry, 'get_all_action_types') as mock_get_actions, \
-             patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
-
-            # Create mock action classes that can be instantiated
-            mock_action_classes = []
-            for action_mock in mock_actions:
-                mock_class = Mock()
-                mock_class.return_value = action_mock  # When instantiated, return the action mock
-                mock_class.__name__ = action_mock.name
-                mock_action_classes.append(mock_class)
-            
-            mock_get_actions.return_value = mock_action_classes
+        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+            # Configure action registry to return mock actions
+            goal_manager.action_registry.generate_actions_for_state.return_value = mock_actions
 
             mock_planner = Mock()
             mock_planner.calculate.return_value = [
@@ -502,7 +508,7 @@ class TestGoalManager:
             plan = await goal_manager.plan_actions(mock_current_state, goal)
 
             assert len(plan) == 2
-            mock_get_actions.assert_called_once()
+            goal_manager.action_registry.generate_actions_for_state.assert_called_once()
 
     def test_update_goal_priorities_based_on_state(self, goal_manager, mock_current_state):
         """Test updating goal priorities based on current state"""
@@ -637,12 +643,9 @@ class TestGoalManager:
                 GameState.HP_CURRENT: 50,
             }
 
-            goal = goal_manager.select_next_goal(problematic_state)
-            
-            # Should return fallback goal on exception
-            assert isinstance(goal, dict)
-            assert 'type' in goal
-            assert goal['type'] == 'level_up'
+            # Should raise the exception from max_level_achieved
+            with pytest.raises(Exception, match="Level check failed"):
+                goal_manager.select_next_goal(problematic_state)
 
     @pytest.mark.asyncio
     async def test_plan_actions_exception_handling(self, goal_manager, mock_current_state):
@@ -675,14 +678,12 @@ class TestGoalManager:
 
     def test_create_goap_actions_exception_handling(self, goal_manager):
         """Test exception handling in create_goap_actions"""
-        # Mock action registry to raise exception
-        goal_manager.action_registry.get_all_action_types.side_effect = Exception("Registry error")
+        # Mock action registry to raise exception when generating actions
+        goal_manager.action_registry.generate_actions_for_state.side_effect = Exception("Registry error")
 
-        action_list = goal_manager.create_goap_actions()
-        
-        # Should return basic action list on exception
-        assert hasattr(action_list, 'conditions')
-        assert "rest" in action_list.conditions
+        # Should raise the exception from the registry
+        with pytest.raises(Exception, match="Registry error"):
+            goal_manager.create_goap_actions()
 
     def test_create_goap_actions_action_instantiation_error(self, goal_manager):
         """Test create_goap_actions with action instantiation errors"""
@@ -731,13 +732,12 @@ class TestGoalManager:
     def test_estimate_goal_cost_exception_handling(self, goal_manager, mock_current_state):
         """Test exception handling in estimate_goal_cost"""
         invalid_goal = {
-            'target_state': None  # This could cause an exception
+            'target_state': None  # This should cause an exception
         }
 
-        cost = goal_manager.estimate_goal_cost(invalid_goal, mock_current_state)
-        
-        # Should return default cost on exception
-        assert cost == 100
+        # Should raise AttributeError when trying to call .items() on None
+        with pytest.raises(AttributeError, match="'NoneType' object has no attribute 'items'"):
+            goal_manager.estimate_goal_cost(invalid_goal, mock_current_state)
 
     def test_prioritize_goals_empty_list(self, goal_manager, mock_current_state):
         """Test prioritize_goals with empty goal list"""
@@ -782,6 +782,10 @@ class TestGoalManagerGOAPIntegration:
         """Create GoalManager with mocked GOAP components"""
         mock_action_registry = Mock()
         mock_cooldown_manager = Mock()
+        
+        # Configure default mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
         return GoalManager(mock_action_registry, mock_cooldown_manager)
 
     def test_create_goap_actions(self, goal_manager):
@@ -878,6 +882,20 @@ class TestGoalManagerGOAPIntegration:
             {'name': 'smelt_ingot', 'cost': 6}
         ]
 
+        # Mock some actions for the GOAP action list creation
+        mock_actions = [
+            Mock(name='move_to_mine', cost=3,
+                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                 get_effects=Mock(return_value={GameState.AT_RESOURCE_LOCATION: True})),
+            Mock(name='gather_ore', cost=4,
+                 get_preconditions=Mock(return_value={GameState.CAN_GATHER: True}),
+                 get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1})),
+            Mock(name='smelt_ingot', cost=6,
+                 get_preconditions=Mock(return_value={GameState.CAN_CRAFT: True}),
+                 get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}))
+        ]
+        goal_manager.action_registry.generate_actions_for_state.return_value = mock_actions
+
         with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
             mock_planner = Mock()
             mock_planner.calculate.return_value = complex_plan
@@ -938,6 +956,10 @@ class TestGoalManagerDynamicPriorities:
         from unittest.mock import Mock
         mock_action_registry = Mock()
         mock_cooldown_manager = Mock()
+        
+        # Configure default mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
         return GoalManager(mock_action_registry, mock_cooldown_manager)
 
     def test_calculate_survival_priority(self, goal_manager):
@@ -1070,6 +1092,10 @@ class TestGoalManagerConfiguration:
         """Create GoalManager instance for testing"""
         mock_action_registry = Mock()
         mock_cooldown_manager = Mock()
+        
+        # Configure default mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
         return GoalManager(mock_action_registry, mock_cooldown_manager)
 
     def test_load_goal_configuration(self):
@@ -1176,6 +1202,10 @@ class TestGoalManagerIntegration:
 
             mock_action_registry = Mock()
             mock_cooldown_manager = Mock()
+            
+            # Configure mock behavior for action registry
+            mock_action_registry.generate_actions_for_state.return_value = []
+            
             goal_manager = GoalManager(mock_action_registry, mock_cooldown_manager)
 
             # Simulate complete workflow
@@ -1191,6 +1221,17 @@ class TestGoalManagerIntegration:
             assert isinstance(goal, dict)
 
             # 2. Plan actions
+            # Mock some actions for the GOAP action list creation
+            mock_actions = [
+                Mock(name='move_to_target', cost=2,
+                     get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                     get_effects=Mock(return_value={GameState.AT_TARGET_LOCATION: True})),
+                Mock(name='execute_goal_action', cost=5,
+                     get_preconditions=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
+                     get_effects=Mock(return_value={GameState.CHARACTER_XP: 100}))
+            ]
+            mock_action_registry.generate_actions_for_state.return_value = mock_actions
+            
             with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
                 mock_planner = Mock()
                 mock_planner.calculate.return_value = [
@@ -1209,6 +1250,10 @@ class TestGoalManagerIntegration:
         """Test goal manager error handling and recovery"""
         mock_action_registry = Mock()
         mock_cooldown_manager = Mock()
+        
+        # Configure mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
         goal_manager = GoalManager(mock_action_registry, mock_cooldown_manager)
 
         # Test handling of various error conditions
@@ -1342,6 +1387,16 @@ class TestCooldownAwarePlanner:
 
         assert result == []
 
+    def test_calculate_with_timing_constraints_on_cooldown(self, cooldown_aware_planner):
+        """Test calculate_with_timing_constraints when character is on cooldown"""
+        character_name = "test_character"
+        cooldown_aware_planner.cooldown_manager.is_ready.return_value = False
+
+        result = cooldown_aware_planner.calculate_with_timing_constraints(character_name)
+
+        assert result == []
+        cooldown_aware_planner.cooldown_manager.is_ready.assert_called_once_with(character_name)
+
     def test_estimate_plan_duration_with_different_actions(self, cooldown_aware_planner):
         """Test plan duration estimation with various action types"""
         plan_with_mixed_actions = [
@@ -1360,13 +1415,12 @@ class TestCooldownAwarePlanner:
 
     def test_estimate_plan_duration_exception_handling(self, cooldown_aware_planner):
         """Test exception handling in estimate_plan_duration"""
-        # Plan that causes exception due to non-iterable
-        invalid_plan = "not a list"
+        # Plan with string elements that will cause AttributeError when calling .get()
+        invalid_plan = "abc"  # String is iterable, but chars don't have .get() method
 
-        duration = cooldown_aware_planner.estimate_plan_duration(invalid_plan)
-
-        # Should return default 60 seconds on exception
-        assert duration == timedelta(seconds=60)
+        # Should raise AttributeError when trying to call .get() on string characters
+        with pytest.raises(AttributeError, match="'str' object has no attribute 'get'"):
+            cooldown_aware_planner.estimate_plan_duration(invalid_plan)
 
     def test_filter_actions_by_cooldown_detailed(self, cooldown_aware_planner):
         """Test detailed filtering of actions by cooldown status"""
