@@ -242,8 +242,12 @@ class CacheManager:
 
         serialized_data = []
         for item in data:
-            if hasattr(item, 'model_dump'):
-                serialized_data.append(item.model_dump())
+            if hasattr(item, 'to_dict'):
+                # Use to_dict for generated API client models
+                serialized_data.append(item.to_dict())
+            elif hasattr(item, 'model_dump'):
+                # Use mode='json' to ensure datetime and enum serialization
+                serialized_data.append(item.model_dump(mode='json'))
             elif hasattr(item, 'dict'):
                 serialized_data.append(item.dict())
             else:
@@ -371,6 +375,33 @@ class CacheManager:
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         yaml_data = YamlData(cache_file)
         yaml_data.save(data=character_dict)
+
+    async def cache_all_characters(self, force_refresh: bool = False) -> list[dict]:
+        """Cache all characters data from API.
+        
+        Parameters:
+            force_refresh: Whether to bypass cache and fetch fresh data from API
+            
+        Return values:
+            List of dictionaries representing all user characters
+            
+        This method retrieves all characters associated with the authenticated
+        user account and caches the data to the 'characters' subdirectory for
+        fast subsequent access by the list-characters command.
+        """
+        data_type = "characters"
+        
+        if not force_refresh and self.is_cache_valid(data_type):
+            cached_data = self.load_cache_data(data_type)
+            if cached_data is not None:
+                return cached_data
+
+        fresh_data = await self._api_client.get_characters()
+        self.save_cache_data(data_type, fresh_data)
+        self._update_metadata(data_type)
+        
+        # Convert to dictionaries for consistent interface
+        return [char.to_dict() for char in fresh_data]
 
     def load_character_state(self, character_name: str) -> dict[str, Any] | None:
         """Load character state from cache."""

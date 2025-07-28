@@ -12,6 +12,8 @@ and comprehensive diagnostic tools for troubleshooting GOAP planning and state m
 import argparse
 import asyncio
 import logging
+import random
+import string
 import sys
 
 import src.lib.log as log_module
@@ -25,6 +27,31 @@ from ..game_data.api_client import APIClientWrapper
 from ..game_data.cache_manager import CacheManager
 from ..lib.log import LogManager
 from .commands.diagnostics import DiagnosticCommands
+
+
+def generate_random_character_name() -> str:
+    """Generate random character name with format ([a-zA-Z0-9_-]{6,10}).
+    
+    Parameters:
+        None
+        
+    Return values:
+        String containing randomized character name matching API requirements
+        
+    This function generates a random character name using alphanumeric characters,
+    underscores, and hyphens with a length between 6-10 characters
+    as required by the ArtifactsMMO API validation rules.
+    """
+    # Characters allowed by API: alphanumeric, underscore, hyphen (no periods)
+    allowed_chars = string.ascii_letters + string.digits + '_-'
+    
+    # Random length between 6 and 10 characters
+    name_length = random.randint(6, 10)
+    
+    # Generate random name
+    random_name = ''.join(random.choice(allowed_chars) for _ in range(name_length))
+    
+    return random_name
 
 
 class CLIManager:
@@ -109,13 +136,13 @@ class CLIManager:
             help="Create a new character"
         )
         create_parser.add_argument(
-            "name",
-            help="Character name (3-12 characters, alphanumeric and underscore only)"
-        )
-        create_parser.add_argument(
             "skin",
             choices=["men1", "men2", "men3", "women1", "women2", "women3"],
             help="Character skin/appearance"
+        )
+        create_parser.add_argument(
+            "--name",
+            help="Character name (3-12 characters, alphanumeric and underscore only). If not provided, a random name will be generated."
         )
         create_parser.set_defaults(func=self.handle_create_character)
 
@@ -146,6 +173,29 @@ class CLIManager:
             help="Show detailed character information"
         )
         list_parser.set_defaults(func=self.handle_list_characters)
+
+        # Load game data command
+        load_data_parser = subparsers.add_parser(
+            "load-data",
+            help="Load and cache all game data from API"
+        )
+        load_data_parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Force refresh all cached data"
+        )
+        load_data_parser.add_argument(
+            "--data-type",
+            choices=["all", "items", "monsters", "maps", "resources", "npcs", "characters"],
+            default="all",
+            help="Specific data type to load (default: all)"
+        )
+        load_data_parser.add_argument(
+            "--init",
+            action="store_true",
+            help="Initialize all game data for first-time setup"
+        )
+        load_data_parser.set_defaults(func=self.handle_load_data)
 
     def setup_ai_player_commands(self, subparsers) -> None:
         """Setup AI player control commands.
@@ -335,24 +385,33 @@ class CLIManager:
             
         This method processes the create-character command by validating input
         parameters, calling the API client to create the character, and providing
-        user feedback on success or failure.
+        user feedback on success or failure. If no name is provided, generates
+        a random name matching the format ([a-zA-Z0-9_-.]{6,10}).
         """
         try:
             if not self.api_client:
                 self.api_client = APIClientWrapper(args.token_file)
 
+            # Generate random name if not provided
+            character_name = args.name
+            if not character_name:
+                character_name = generate_random_character_name()
+                print(f"Generated random character name: {character_name}")
+
             # Validate character name
-            if not (3 <= len(args.name) <= 12):
+            if not (3 <= len(character_name) <= 12):
                 print("Error: Character name must be 3-12 characters long")
                 return
 
-            if not args.name.replace('_', 'a').isalnum():
-                print("Error: Character name can only contain alphanumeric characters and underscores")
+            # Updated validation to match API requirements: alphanumeric, underscore, hyphen only
+            allowed_chars = set(string.ascii_letters + string.digits + '_-')
+            if not all(c in allowed_chars for c in character_name):
+                print("Error: Character name can only contain alphanumeric characters, underscores, and hyphens")
                 return
 
-            print(f"Creating character '{args.name}' with skin '{args.skin}'...")
+            print(f"Creating character '{character_name}' with skin '{args.skin}'...")
 
-            character = await self.api_client.create_character(args.name, args.skin)
+            character = await self.api_client.create_character(character_name, args.skin)
 
             print(f"✓ Character '{character.name}' created successfully!")
             print(f"  Level: {character.level}")
@@ -394,6 +453,10 @@ class CLIManager:
             if success:
                 print(f"✓ Character '{args.name}' deleted successfully!")
 
+                # Initialize cache manager to clear character cache
+                cache_manager = CacheManager(self.api_client)
+                cache_manager.clear_cache("characters")
+
                 # Clean up any local character data if running
                 if args.name in self.running_players:
                     print("Stopping AI player for deleted character...")
@@ -416,43 +479,135 @@ class CLIManager:
             None (async operation)
             
         This method processes the list-characters command by retrieving all
-        user characters from the API and displaying their information in
-        a formatted table with levels, locations, and status.
+        user characters from the cache manager and displaying their information
+        in a formatted table with levels, locations, and status.
         """
         try:
             if not self.api_client:
                 self.api_client = APIClientWrapper(args.token_file)
 
+            # Initialize cache manager
+            cache_manager = CacheManager(self.api_client)
+
             print("Retrieving characters...")
 
-            characters = await self.api_client.get_characters()
+            # Use cache manager to get characters (will cache for future use)
+            characters = await cache_manager.cache_all_characters()
 
             if not characters:
                 print("No characters found on this account.")
+                print(f"Character data cached in: data/characters.yaml")
                 return
 
             print(f"\nFound {len(characters)} character(s):")
             print("-" * 60)
 
             for char in characters:
-                ai_status = "Running" if char.name in self.running_players else "Stopped"
+                ai_status = "Running" if char['name'] in self.running_players else "Stopped"
 
                 if args.detailed:
-                    print(f"Name: {char.name}")
-                    print(f"  Level: {char.level}")
-                    print(f"  Location: ({char.x}, {char.y})")
-                    print(f"  Skin: {char.skin}")
-                    print(f"  HP: {char.hp}/{char.max_hp}")
-                    if hasattr(char, 'gold'):
-                        print(f"  Gold: {char.gold}")
+                    print(f"Name: {char['name']}")
+                    print(f"  Level: {char['level']}")
+                    print(f"  Location: ({char['x']}, {char['y']})")
+                    print(f"  Skin: {char['skin']}")
+                    print(f"  HP: {char['hp']}/{char['max_hp']}")
+                    print(f"  Gold: {char['gold']}")
                     print(f"  AI Status: {ai_status}")
                     print("-" * 60)
                 else:
-                    print(f"{char.name:<15} Lv.{char.level:<3} ({char.x:>3},{char.y:>3}) {ai_status}")
+                    print(f"{char['name']:<15} Lv.{char['level']:<3} ({char['x']:>3},{char['y']:>3}) {ai_status}")
+
+            print(f"\nCharacter data cached in: data/characters.yaml")
 
         except Exception as e:
             self.logger.error(f"Failed to list characters: {e}")
             print(f"Error listing characters: {e}")
+
+    async def handle_load_data(self, args) -> None:
+        """Handle game data loading command.
+        
+        Parameters:
+            args: Parsed command arguments for data loading options
+            
+        Return values:
+            None (async operation)
+            
+        This method loads and caches all game data from the API including
+        items, monsters, maps, resources, NPCs, and characters for offline
+        access by the AI player system.
+        """
+        try:
+            if not self.api_client:
+                self.api_client = APIClientWrapper(args.token_file)
+
+            # Initialize cache manager
+            cache_manager = CacheManager(self.api_client)
+
+            if args.init:
+                print("Initializing all game data for first-time setup...")
+                print("This will load all game data types and may take a moment...")
+                # Force refresh when initializing
+                force_refresh = True
+                data_types_to_load = ["items", "monsters", "maps", "resources", "npcs", "characters"]
+            else:
+                print("Loading game data from API...")
+                force_refresh = args.force
+                if args.data_type == "all":
+                    data_types_to_load = ["items", "monsters", "maps", "resources", "npcs", "characters"]
+                else:
+                    data_types_to_load = [args.data_type]
+
+            for data_type in data_types_to_load:
+                print(f"Loading {data_type}...")
+                
+                try:
+                    if data_type == "items":
+                        items = await cache_manager.get_all_items(force_refresh=force_refresh)
+                        print(f"✓ Cached {len(items)} items in data/items.yaml")
+                    
+                    elif data_type == "monsters":
+                        monsters = await cache_manager.get_all_monsters(force_refresh=force_refresh)
+                        print(f"✓ Cached {len(monsters)} monsters in data/monsters.yaml")
+                    
+                    elif data_type == "maps":
+                        maps = await cache_manager.get_all_maps(force_refresh=force_refresh)
+                        print(f"✓ Cached {len(maps)} maps in data/maps.yaml")
+                    
+                    elif data_type == "resources":
+                        resources = await cache_manager.get_all_resources(force_refresh=force_refresh)
+                        print(f"✓ Cached {len(resources)} resources in data/resources.yaml")
+                    
+                    elif data_type == "npcs":
+                        npcs = await cache_manager.get_all_npcs(force_refresh=force_refresh)
+                        print(f"✓ Cached {len(npcs)} NPCs in data/npcs.yaml")
+                    
+                    elif data_type == "characters":
+                        characters = await cache_manager.cache_all_characters(force_refresh=force_refresh)
+                        print(f"✓ Cached {len(characters)} characters in data/characters.yaml")
+                        
+                except Exception as e:
+                    self.logger.error(f"Failed to load {data_type}: {e}")
+                    print(f"✗ Error loading {data_type}: {e}")
+
+            if args.init:
+                print(f"\n🎉 Game data initialization complete!")
+                print(f"All game data has been cached and is ready for use.")
+                print(f"Cache files location: data/ directory")
+                print(f"\nAvailable data files:")
+                print(f"  - data/characters.yaml (your characters)")
+                print(f"  - data/items.yaml (all game items)")
+                print(f"  - data/monsters.yaml (all monsters)")
+                print(f"  - data/maps.yaml (all map locations)")
+                print(f"  - data/resources.yaml (all gatherable resources)")
+                print(f"  - data/npcs.yaml (all NPCs and traders)")
+                print(f"  - data/metadata.yaml (cache management)")
+            else:
+                print(f"\nGame data loading complete!")
+                print(f"All cached data is stored in the 'data/' directory")
+
+        except Exception as e:
+            self.logger.error(f"Failed to load game data: {e}")
+            print(f"Error loading game data: {e}")
 
     async def handle_run_character(self, args) -> None:
         """Handle AI player run command.

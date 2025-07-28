@@ -9,27 +9,38 @@ The wrapper abstracts the raw API client and provides a clean interface
 for the AI player while ensuring proper cooldown management and error recovery.
 """
 
+import asyncio
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 from artifactsmmo_api_client.client import AuthenticatedClient
-
-# Import API modules for testability
-try:
-    from artifactsmmo_api_client.api.characters import create_character_characters_create_post
-    from artifactsmmo_api_client.api.characters import get_character_characters_name_get
-    from artifactsmmo_api_client.api.my_characters import action_move_my_name_action_move_post
-    from artifactsmmo_api_client.api.my_characters import action_fight_my_name_action_fight_post
-except ImportError:
-    # Fallback for testing - these will be mocked anyway
-    create_character_characters_create_post = None
-    get_character_characters_name_get = None
-    action_move_my_name_action_move_post = None
-    action_fight_my_name_action_fight_post = None
-
-if TYPE_CHECKING:
-    from ..ai_player.state.game_state import CharacterGameState, CooldownInfo
+from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
+from artifactsmmo_api_client.models.character_skin import CharacterSkin
+from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
+from artifactsmmo_api_client.models.destination_schema import DestinationSchema
+from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
+from artifactsmmo_api_client.models.equip_schema import EquipSchema
+from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
+from artifactsmmo_api_client.api.characters.delete_character_characters_delete_post import asyncio_detailed as delete_character_asyncio_detailed
+from artifactsmmo_api_client.api.my_characters import get_my_characters_my_characters_get
+from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import asyncio_detailed as action_gathering_asyncio_detailed
+from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import asyncio_detailed as action_crafting_asyncio_detailed
+from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import asyncio_detailed as action_rest_asyncio_detailed
+from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import asyncio_detailed as action_equip_item_asyncio_detailed
+from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import asyncio_detailed as action_unequip_item_asyncio_detailed
+from artifactsmmo_api_client.api.items.get_all_items_items_get import asyncio_detailed as get_all_items_asyncio_detailed
+from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import asyncio_detailed as get_all_monsters_asyncio_detailed
+from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import asyncio_detailed as get_all_maps_asyncio_detailed
+from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import asyncio_detailed as get_all_resources_asyncio_detailed
+from artifactsmmo_api_client.api.np_cs.get_all_npcs_npcs_details_get import asyncio_detailed as get_all_npcs_asyncio_detailed
+from artifactsmmo_api_client.api.characters.create_character_characters_create_post import asyncio_detailed as create_character_asyncio_detailed
+from artifactsmmo_api_client.api.characters import get_character_characters_name_get
+from artifactsmmo_api_client.api.my_characters import action_move_my_name_action_move_post
+from artifactsmmo_api_client.api.my_characters import action_fight_my_name_action_fight_post
+from src.lib.httpstatus import ArtifactsHTTPStatus
+from .models import CooldownInfo
 
 
 class TokenConfig(BaseModel):
@@ -87,7 +98,6 @@ class APIClientWrapper:
         )
         
         # Initialize status codes for testing
-        from src.lib.httpstatus import ArtifactsHTTPStatus
         self.status_codes = ArtifactsHTTPStatus
 
     async def create_character(self, name: str, skin: str) -> 'CharacterSchema':
@@ -104,9 +114,6 @@ class APIClientWrapper:
         handling validation, rate limiting, and error responses while
         returning the character data for further operations.
         """
-        from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
-        from artifactsmmo_api_client.models.character_skin import CharacterSkin
-
         # Validate skin parameter
         try:
             character_skin = CharacterSkin(skin)
@@ -117,19 +124,19 @@ class APIClientWrapper:
         body = AddCharacterSchema(name=name, skin=character_skin)
 
         # Make API call
-        response = await create_character_characters_create_post.asyncio(client=self.client, body=body)
+        response = await create_character_asyncio_detailed(client=self.client, body=body)
         processed_response = await self._process_response(response)
 
         try:
-            # Try to access character directly from parsed response
-            return processed_response.character
+            # Try to access data from response
+            if hasattr(processed_response, 'data'):
+                return processed_response.data
+            else:
+                # Try direct character access
+                return processed_response.character
         except AttributeError:
-            try:
-                # Try nested data structure
-                return processed_response.data.character
-            except AttributeError:
-                # Fallback to direct response
-                return processed_response
+            # Fallback to direct response
+            return processed_response
 
     async def delete_character(self, name: str) -> bool:
         """Delete character by name.
@@ -144,13 +151,10 @@ class APIClientWrapper:
         API, handling confirmation requirements and error responses while
         ensuring proper cleanup of character-related data.
         """
-        from artifactsmmo_api_client.api.characters.delete_character_characters_delete_post import asyncio_detailed
-        from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
-
         body = DeleteCharacterSchema(name=name)
 
         # Make API call
-        response = await asyncio_detailed(client=self.client, body=body)
+        response = await delete_character_asyncio_detailed(client=self.client, body=body)
         processed_response = await self._process_response(response)
 
         # For delete operations, success is indicated by 200 status
@@ -169,8 +173,6 @@ class APIClientWrapper:
         user account, providing character selection and management capabilities
         for the AI player system.
         """
-        from artifactsmmo_api_client.api.my_characters import get_my_characters_my_characters_get
-
         # Make API call
         response = await get_my_characters_my_characters_get.asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
@@ -224,8 +226,6 @@ class APIClientWrapper:
         pathfinding validation, cooldown timing, and movement result
         processing for AI player navigation operations.
         """
-        from artifactsmmo_api_client.models.destination_schema import DestinationSchema
-
         # Create movement request body
         body = DestinationSchema(x=x, y=y)
 
@@ -285,10 +285,8 @@ class APIClientWrapper:
         location, handling skill requirements, tool validation, and resource
         collection while managing gathering cooldowns and XP gains.
         """
-        from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import asyncio_detailed
-
         # Make API call (no body needed for gathering action)
-        response = await asyncio_detailed(client=self.client, name=character_name)
+        response = await action_gathering_asyncio_detailed(client=self.client, name=character_name)
         processed_response = await self._process_response(response)
 
         # Update cooldown if present
@@ -315,14 +313,11 @@ class APIClientWrapper:
         requirements, material consumption, and result processing while
         managing crafting cooldowns and XP rewards.
         """
-        from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import asyncio_detailed
-        from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
-
         # Create crafting request body
         body = CraftingSchema(code=code, quantity=quantity)
 
         # Make API call
-        response = await asyncio_detailed(client=self.client, name=character_name, body=body)
+        response = await action_crafting_asyncio_detailed(client=self.client, name=character_name, body=body)
         processed_response = await self._process_response(response)
 
         # Update cooldown if present
@@ -347,10 +342,8 @@ class APIClientWrapper:
         handling recovery timing, cooldown management, and ensuring the
         character is in a safe location for effective rest.
         """
-        from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import asyncio_detailed
-
         # Make API call (no body needed for rest action)
-        response = await asyncio_detailed(client=self.client, name=character_name)
+        response = await action_rest_asyncio_detailed(client=self.client, name=character_name)
         processed_response = await self._process_response(response)
 
         # Update cooldown if present
@@ -377,14 +370,11 @@ class APIClientWrapper:
         slot validation, item requirements, and character stat updates
         while ensuring proper inventory management.
         """
-        from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import asyncio_detailed
-        from artifactsmmo_api_client.models.equip_schema import EquipSchema
-
         # Create equip request body
         body = EquipSchema(code=code, slot=slot)
 
         # Make API call
-        response = await asyncio_detailed(client=self.client, name=character_name, body=body)
+        response = await action_equip_item_asyncio_detailed(client=self.client, name=character_name, body=body)
         processed_response = await self._process_response(response)
 
         # Update cooldown if present
@@ -410,14 +400,11 @@ class APIClientWrapper:
         API, handling slot validation, inventory space requirements, and character
         stat updates while ensuring proper equipment management.
         """
-        from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import asyncio_detailed
-        from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
-
         # Create unequip request body
         body = UnequipSchema(slot=slot)
 
         # Make API call
-        response = await asyncio_detailed(client=self.client, name=character_name, body=body)
+        response = await action_unequip_item_asyncio_detailed(client=self.client, name=character_name, body=body)
         processed_response = await self._process_response(response)
 
         # Update cooldown if present
@@ -442,10 +429,8 @@ class APIClientWrapper:
         caching purposes, enabling offline access to item data for GOAP
         planning, crafting recipes, and inventory management operations.
         """
-        from artifactsmmo_api_client.api.items.get_all_items_items_get import asyncio_detailed
-
         # Make API call
-        response = await asyncio_detailed(client=self.client)
+        response = await get_all_items_asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
@@ -466,10 +451,8 @@ class APIClientWrapper:
         caching purposes, enabling offline access to monster data for combat
         planning, level progression, and strategic target selection.
         """
-        from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import asyncio_detailed
-
         # Make API call
-        response = await asyncio_detailed(client=self.client)
+        response = await get_all_monsters_asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
@@ -490,10 +473,8 @@ class APIClientWrapper:
         caching purposes, enabling offline access to map data for pathfinding,
         location planning, and strategic navigation operations.
         """
-        from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import asyncio_detailed
-
         # Make API call
-        response = await asyncio_detailed(client=self.client)
+        response = await get_all_maps_asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
@@ -514,10 +495,30 @@ class APIClientWrapper:
         caching purposes, enabling offline access to resource data for gathering
         planning, skill progression, and economic strategy operations.
         """
-        from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import asyncio_detailed
-
         # Make API call
-        response = await asyncio_detailed(client=self.client)
+        response = await get_all_resources_asyncio_detailed(client=self.client)
+        processed_response = await self._process_response(response)
+
+        if hasattr(processed_response, 'data'):
+            return processed_response.data
+        else:
+            return []
+
+    async def get_all_npcs(self) -> list['NPCSchema']:
+        """Get all NPCs for caching.
+        
+        Parameters:
+            None (retrieves complete NPC database)
+            
+        Return values:
+            List of NPCSchema instances for all game NPCs
+            
+        This method retrieves all available NPCs in the game for local
+        caching purposes, enabling offline access to NPC data for trading,
+        quest planning, and economic strategy operations.
+        """
+        # Make API call
+        response = await get_all_npcs_asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
 
         if hasattr(processed_response, 'data'):
@@ -538,8 +539,6 @@ class APIClientWrapper:
         implementing exponential backoff and retry logic to ensure compliance
         with API rate limits while maintaining reliable operation.
         """
-        import asyncio
-
         # Extract rate limit information from headers if available
         retry_after = response.headers.get('Retry-After')
         if retry_after:
@@ -601,7 +600,6 @@ class APIClientWrapper:
         if not cooldown_data:
             return None
 
-        from ..ai_player.state.game_state import CooldownInfo
         return CooldownInfo(
             character_name="unknown",
             expiration=cooldown_data.expiration,
@@ -610,58 +608,6 @@ class APIClientWrapper:
             reason=cooldown_data.reason.value if hasattr(cooldown_data.reason, 'value') else str(cooldown_data.reason)
         )
 
-    def extract_character_state(self, character: 'CharacterSchema') -> 'CharacterGameState':
-        """Convert API character to GameState model.
-        
-        Parameters:
-            character: CharacterSchema object from API response
-            
-        Return values:
-            CharacterGameState instance with validated data using GameState enum keys
-            
-        This method converts raw API character data to the internal GameState
-        model format, ensuring type safety and proper enum usage for GOAP
-        integration and state management operations.
-        """
-        from ..ai_player.state.game_state import CharacterGameState, GameState
-
-        # Create basic character state mapping
-        state_data = {
-            GameState.CHARACTER_NAME: character.name,
-            GameState.CHARACTER_LEVEL: character.level,
-            GameState.CHARACTER_XP: character.xp,
-            GameState.CHARACTER_MAX_XP: character.max_xp,
-            GameState.CHARACTER_GOLD: character.gold,
-            GameState.CHARACTER_SPEED: character.speed,
-            GameState.HP_CURRENT: character.hp,
-            GameState.HP_MAX: character.max_hp,
-            GameState.CHARACTER_X: character.x,
-            GameState.CHARACTER_Y: character.y,
-            GameState.CHARACTER_SKIN: character.skin,
-            GameState.MINING_LEVEL: character.mining_level,
-            GameState.MINING_XP: character.mining_xp,
-            GameState.MINING_MAX_XP: character.mining_max_xp,
-            GameState.WOODCUTTING_LEVEL: character.woodcutting_level,
-            GameState.WOODCUTTING_XP: character.woodcutting_xp,
-            GameState.WOODCUTTING_MAX_XP: character.woodcutting_max_xp,
-            GameState.FISHING_LEVEL: character.fishing_level,
-            GameState.FISHING_XP: character.fishing_xp,
-            GameState.FISHING_MAX_XP: character.fishing_max_xp,
-            GameState.WEAPONCRAFTING_LEVEL: character.weaponcrafting_level,
-            GameState.WEAPONCRAFTING_XP: character.weaponcrafting_xp,
-            GameState.WEAPONCRAFTING_MAX_XP: character.weaponcrafting_max_xp,
-            GameState.GEARCRAFTING_LEVEL: character.gearcrafting_level,
-            GameState.GEARCRAFTING_XP: character.gearcrafting_xp,
-            GameState.GEARCRAFTING_MAX_XP: character.gearcrafting_max_xp,
-            GameState.JEWELRYCRAFTING_LEVEL: character.jewelrycrafting_level,
-            GameState.JEWELRYCRAFTING_XP: character.jewelrycrafting_xp,
-            GameState.JEWELRYCRAFTING_MAX_XP: character.jewelrycrafting_max_xp,
-            GameState.COOKING_LEVEL: character.cooking_level,
-            GameState.COOKING_XP: character.cooking_xp,
-            GameState.COOKING_MAX_XP: character.cooking_max_xp
-        }
-
-        return CharacterGameState(character_name=character.name, state=state_data)
 
 
 class CooldownManager:
@@ -696,8 +642,6 @@ class CooldownManager:
         the internal tracking for the specified character, enabling accurate
         cooldown management and action timing validation.
         """
-        from ..ai_player.state.game_state import CooldownInfo
-
         cooldown_info = CooldownInfo(
             character_name=character_name,
             expiration=cooldown_data.expiration,
@@ -769,8 +713,6 @@ class CooldownManager:
         character, providing precise timing information for action scheduling
         and wait optimization in the AI player system.
         """
-        from datetime import datetime
-
         if character_name not in self.character_cooldowns:
             return 0.0
 

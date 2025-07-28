@@ -139,7 +139,7 @@ class TestAPIClientWrapper:
         """Test successful character creation"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
              patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.create_character_characters_create_post') as mock_create:
+             patch('src.game_data.api_client.create_character_asyncio_detailed') as mock_create:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -159,7 +159,7 @@ class TestAPIClientWrapper:
             mock_response.data = MockData()
             mock_response.parsed = mock_response.data
 
-            mock_create.asyncio = AsyncMock(return_value=mock_response)
+            mock_create.return_value = mock_response
 
             wrapper = APIClientWrapper()
             result = await wrapper.create_character("test_character", "men1")
@@ -173,7 +173,7 @@ class TestAPIClientWrapper:
         """Test character creation with rate limiting"""
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
              patch('src.game_data.api_client.AuthenticatedClient') as mock_client_class, \
-             patch('src.game_data.api_client.create_character_characters_create_post') as mock_create, \
+             patch('src.game_data.api_client.create_character_asyncio_detailed') as mock_create, \
              patch('asyncio.sleep') as mock_sleep:
 
             mock_client = Mock()
@@ -184,7 +184,7 @@ class TestAPIClientWrapper:
             mock_response.status_code = 429
             mock_response.headers = {"Retry-After": "60"}
 
-            mock_create.asyncio = AsyncMock(return_value=mock_response)
+            mock_create.return_value = mock_response
 
             wrapper = APIClientWrapper()
 

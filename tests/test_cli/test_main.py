@@ -10,7 +10,53 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.cli.main import CLIManager, async_main, main
+from src.cli.main import CLIManager, async_main, main, generate_random_character_name
+
+
+class TestRandomNameGeneration:
+    """Test random character name generation"""
+
+    def test_generate_random_character_name_length(self):
+        """Test that generated names are within required length bounds"""
+        for _ in range(100):  # Test multiple generations
+            name = generate_random_character_name()
+            assert 6 <= len(name) <= 10, f"Name '{name}' length {len(name)} not in range 6-10"
+
+    def test_generate_random_character_name_characters(self):
+        """Test that generated names contain only allowed characters"""
+        import string
+        allowed_chars = set(string.ascii_letters + string.digits + '_-')
+        
+        for _ in range(100):  # Test multiple generations
+            name = generate_random_character_name()
+            name_chars = set(name)
+            assert name_chars.issubset(allowed_chars), f"Name '{name}' contains invalid characters: {name_chars - allowed_chars}"
+
+    def test_generate_random_character_name_no_periods(self):
+        """Test that generated names do not contain periods (API validation)"""
+        for _ in range(100):  # Test multiple generations
+            name = generate_random_character_name()
+            assert '.' not in name, f"Name '{name}' contains period which is not allowed by API"
+
+    def test_generate_random_character_name_randomness(self):
+        """Test that function generates different names"""
+        names = set()
+        for _ in range(50):
+            name = generate_random_character_name()
+            names.add(name)
+        
+        # Should generate at least 40 unique names out of 50 attempts
+        # (allowing for some small chance of duplicates)
+        assert len(names) >= 40, f"Only {len(names)} unique names generated out of 50 attempts"
+
+    def test_generate_random_character_name_api_compliance(self):
+        """Test that generated names comply with API pattern ^[a-zA-Z0-9_-]+$"""
+        import re
+        api_pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
+        
+        for _ in range(100):
+            name = generate_random_character_name()
+            assert api_pattern.match(name), f"Name '{name}' does not match API pattern ^[a-zA-Z0-9_-]+$"
 
 
 class TestCLIManager:
@@ -71,11 +117,17 @@ class TestArgumentParsing:
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
 
-        # Test create-character command
-        args = parser.parse_args(['create-character', 'test_char', 'men1'])
+        # Test create-character command with name
+        args = parser.parse_args(['create-character', 'men1', '--name', 'test_char'])
         assert args.command == 'create-character'
         assert args.name == 'test_char'
         assert args.skin == 'men1'
+        
+        # Test create-character command without name (should allow random generation)
+        args = parser.parse_args(['create-character', 'men2'])
+        assert args.command == 'create-character'
+        assert args.name is None
+        assert args.skin == 'men2'
 
         # Test delete-character command
         args = parser.parse_args(['delete-character', 'test_char'])
@@ -165,7 +217,7 @@ class TestArgumentParsing:
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
 
-        # Missing character name for create-character
+        # Missing skin for create-character
         with pytest.raises(SystemExit):
             parser.parse_args(['create-character'])
 
@@ -206,6 +258,125 @@ class TestCharacterCommandHandlers:
         mock_client.create_character.assert_called_once_with('new_char', 'men1')
 
     @pytest.mark.asyncio
+    async def test_handle_create_character_with_random_name(self):
+        """Test handling create-character command with random name generation"""
+        cli_manager = CLIManager()
+
+        mock_args = Mock()
+        mock_args.name = None  # No name provided
+        mock_args.skin = 'women1'
+        mock_args.token_file = 'TOKEN'
+
+        # Pre-set a mock API client
+        mock_client = AsyncMock()
+        mock_character = Mock()
+        mock_character.name = 'RandName12'  # Valid 10-character name
+        mock_character.level = 1
+        mock_character.x = 0
+        mock_character.y = 0
+        mock_character.skin = 'women1'
+        mock_client.create_character.return_value = mock_character
+
+        # Set the API client directly to avoid initialization
+        cli_manager.api_client = mock_client
+
+        with patch('builtins.print') as mock_print, \
+             patch('src.cli.main.generate_random_character_name', return_value='RandName12') as mock_gen:
+            await cli_manager.handle_create_character(mock_args)
+
+        # Verify that random name generation was called
+        mock_gen.assert_called_once()
+        
+        # Verify that a random name was generated and used
+        mock_client.create_character.assert_called_once_with('RandName12', 'women1')
+        
+        # Check that random name generation was logged
+        print_calls = [str(call) for call in mock_print.call_args_list]
+        assert any('Generated random character name: RandName12' in call for call in print_calls)
+
+    @pytest.mark.asyncio
+    async def test_handle_create_character_edge_cases(self):
+        """Test edge cases for character creation"""
+        cli_manager = CLIManager()
+
+        # Test with minimum length valid name
+        mock_args = Mock()
+        mock_args.name = 'abc'
+        mock_args.skin = 'men3'
+        mock_args.token_file = 'TOKEN'
+
+        mock_client = AsyncMock()
+        mock_character = Mock()
+        mock_character.name = 'abc'
+        mock_character.level = 1
+        mock_character.x = 0
+        mock_character.y = 0
+        mock_character.skin = 'men3'
+        mock_client.create_character.return_value = mock_character
+        cli_manager.api_client = mock_client
+
+        with patch('builtins.print'):
+            await cli_manager.handle_create_character(mock_args)
+
+        mock_client.create_character.assert_called_once_with('abc', 'men3')
+
+    @pytest.mark.asyncio
+    async def test_handle_create_character_max_length_name(self):
+        """Test character creation with maximum length name"""
+        cli_manager = CLIManager()
+
+        # Test with maximum length valid name (12 characters)
+        mock_args = Mock()
+        mock_args.name = 'abcdefghijkl'  # 12 characters
+        mock_args.skin = 'women3'
+        mock_args.token_file = 'TOKEN'
+
+        mock_client = AsyncMock()
+        mock_character = Mock()
+        mock_character.name = 'abcdefghijkl'
+        mock_character.level = 1
+        mock_character.x = 0
+        mock_character.y = 0
+        mock_character.skin = 'women3'
+        mock_client.create_character.return_value = mock_character
+        cli_manager.api_client = mock_client
+
+        with patch('builtins.print'):
+            await cli_manager.handle_create_character(mock_args)
+
+        mock_client.create_character.assert_called_once_with('abcdefghijkl', 'women3')
+
+    @pytest.mark.asyncio
+    async def test_handle_create_character_random_name_validation(self):
+        """Test that generated random names pass validation"""
+        cli_manager = CLIManager()
+
+        mock_args = Mock()
+        mock_args.name = None
+        mock_args.skin = 'men2'
+        mock_args.token_file = 'TOKEN'
+
+        # Pre-set a mock API client
+        mock_client = AsyncMock()
+        mock_character = Mock()
+        mock_character.name = 'Valid_Name8'
+        mock_character.level = 1
+        mock_character.x = 0
+        mock_character.y = 0
+        mock_character.skin = 'men2'
+        mock_client.create_character.return_value = mock_character
+
+        cli_manager.api_client = mock_client
+
+        # Test with a valid name that should pass validation
+        with patch('builtins.print'), \
+             patch('src.cli.main.generate_random_character_name', return_value='Valid_Name8'):
+            await cli_manager.handle_create_character(mock_args)
+
+        # Should have been called once without validation errors
+        mock_client.create_character.assert_called_once_with('Valid_Name8', 'men2')
+
+    @pytest.mark.asyncio
     async def test_handle_create_character_invalid_name(self):
         """Test create character with invalid name"""
         cli_manager = CLIManager()
@@ -230,7 +401,7 @@ class TestCharacterCommandHandlers:
         mock_args.name = 'char@name'
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_create_character(mock_args)
-            mock_print.assert_called_with("Error: Character name can only contain alphanumeric characters and underscores")
+            mock_print.assert_called_with("Error: Character name can only contain alphanumeric characters, underscores, and hyphens")
 
     @pytest.mark.asyncio
     async def test_handle_delete_character(self):
@@ -278,17 +449,24 @@ class TestCharacterCommandHandlers:
 
         # Pre-set a mock API client
         mock_client = AsyncMock()
-        mock_characters = [
-            Mock(name='char1', level=5, x=0, y=0),
-            Mock(name='char2', level=10, x=5, y=5),
-        ]
-        mock_client.get_characters.return_value = mock_characters
         cli_manager.api_client = mock_client
 
-        with patch('builtins.print'):
+        # Mock character data as dictionaries (from cache)
+        mock_characters = [
+            {'name': 'char1', 'level': 5, 'x': 0, 'y': 0},
+            {'name': 'char2', 'level': 10, 'x': 5, 'y': 5},
+        ]
+
+        with patch('builtins.print'), \
+             patch('src.cli.main.CacheManager') as mock_cache_manager_class:
+            
+            mock_cache_manager = AsyncMock()
+            mock_cache_manager.cache_all_characters.return_value = mock_characters
+            mock_cache_manager_class.return_value = mock_cache_manager
+            
             await cli_manager.handle_list_characters(mock_args)
 
-        mock_client.get_characters.assert_called_once()
+        mock_cache_manager.cache_all_characters.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handle_list_characters_detailed(self):
@@ -301,16 +479,23 @@ class TestCharacterCommandHandlers:
 
         # Pre-set a mock API client
         mock_client = AsyncMock()
-        mock_characters = [
-            Mock(name='char1', level=5, x=0, y=0, skin='men1', hp=100, max_hp=100, gold=50),
-        ]
-        mock_client.get_characters.return_value = mock_characters
         cli_manager.api_client = mock_client
 
-        with patch('builtins.print'):
+        # Mock character data as dictionaries (from cache)
+        mock_characters = [
+            {'name': 'char1', 'level': 5, 'x': 0, 'y': 0, 'skin': 'men1', 'hp': 100, 'max_hp': 100, 'gold': 50},
+        ]
+
+        with patch('builtins.print'), \
+             patch('src.cli.main.CacheManager') as mock_cache_manager_class:
+            
+            mock_cache_manager = AsyncMock()
+            mock_cache_manager.cache_all_characters.return_value = mock_characters
+            mock_cache_manager_class.return_value = mock_cache_manager
+            
             await cli_manager.handle_list_characters(mock_args)
 
-        mock_client.get_characters.assert_called_once()
+        mock_cache_manager.cache_all_characters.assert_called_once()
 
 
 class TestAIPlayerCommandHandlers:
