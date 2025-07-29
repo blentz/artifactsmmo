@@ -29,6 +29,7 @@ class TestStateManagerImplementation:
     def mock_character_data(self):
         """Mock character data from API"""
         character = Mock()
+        character.name = "test_character"
         character.level = 5
         character.xp = 1000
         character.gold = 500
@@ -730,6 +731,7 @@ class TestCharacterGameState:
     def mock_character_data(self):
         """Mock character data for testing"""
         character = Mock()
+        character.name = "test_character"
         character.level = 5
         character.xp = 1000
         character.gold = 500
@@ -786,6 +788,7 @@ class TestCharacterGameState:
         """Test Pydantic validation constraints"""
         # Valid data should work
         valid_data = {
+            "name": "test_character",
             "level": 5,
             "xp": 1000,
             "gold": 500,

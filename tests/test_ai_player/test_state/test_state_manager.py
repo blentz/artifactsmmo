@@ -20,7 +20,36 @@ class TestStateManager:
     def mock_api_client(self):
         """Mock API client for testing"""
         client = Mock()
-        client.get_character = AsyncMock()
+        
+        # Create a mock character with all required fields
+        mock_character = Mock()
+        mock_character.name = "test_character"
+        mock_character.level = 5
+        mock_character.xp = 1000
+        mock_character.gold = 500
+        mock_character.hp = 80
+        mock_character.max_hp = 100
+        mock_character.x = 10
+        mock_character.y = 15
+        mock_character.cooldown = 0
+        mock_character.mining_level = 1
+        mock_character.mining_xp = 0
+        mock_character.woodcutting_level = 1
+        mock_character.woodcutting_xp = 0
+        mock_character.fishing_level = 1
+        mock_character.fishing_xp = 0
+        mock_character.weaponcrafting_level = 1
+        mock_character.weaponcrafting_xp = 0
+        mock_character.gearcrafting_level = 1
+        mock_character.gearcrafting_xp = 0
+        mock_character.jewelrycrafting_level = 1
+        mock_character.jewelrycrafting_xp = 0
+        mock_character.cooking_level = 1
+        mock_character.cooking_xp = 0
+        mock_character.alchemy_level = 1
+        mock_character.alchemy_xp = 0
+        
+        client.get_character = AsyncMock(return_value=mock_character)
         client.get_character_logs = AsyncMock()
         return client
 

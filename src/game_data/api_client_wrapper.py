@@ -120,37 +120,41 @@ class APIClientWrapper:
         # For delete operations, success is indicated by 200 status
         return response.status_code == 200
 
-    async def get_characters(self) -> list['CharacterSchema']:
+    async def get_characters(self) -> list[dict]:
         """Get list of user's characters.
         
         Parameters:
             None (uses authenticated token for user identification)
             
         Return values:
-            List of CharacterSchema instances for the authenticated user
+            List of character dictionaries for the authenticated user
             
         This method retrieves all characters associated with the authenticated
-        user account, providing character selection and management capabilities
-        for the AI player system.
+        user account, transforming API schemas to dictionaries at the boundary.
         """
+        # Import Character locally to avoid circular imports
+        from ..ai_player.models.character import Character
+        
         # Make API call
         response = await get_my_characters_my_characters_get.asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
 
-        return processed_response.data
+        # Transform API schemas to internal Pydantic models, then to dictionaries at the boundary
+        characters = [Character.from_api_character(char) for char in processed_response.data]
+        return [char.model_dump() for char in characters]
 
-    async def get_character(self, name: str) -> 'CharacterGameState':
+    async def get_character(self, name: str) -> Any:
         """Get specific character by name.
         
         Parameters:
             name: Character name to retrieve
             
         Return values:
-            CharacterSchema instance with current character state
+            Raw API character schema object with current character state
             
         This method retrieves detailed information for a specific character,
-        including current state, equipment, and progression data essential
-        for AI player state management and decision making.
+        including current state, equipment, and progression data, returning
+        the raw API schema for transformation by the caller.
         """
         # Make API call
         response = await get_character_characters_name_get.asyncio_detailed(client=self.client, name=name)
@@ -168,9 +172,8 @@ class APIClientWrapper:
                 # Fallback to direct response
                 api_character = processed_response
         
-        # Transform API model to internal model
-        from ..ai_player.state.game_state import CharacterGameState
-        return CharacterGameState.from_api_character(api_character)
+        # Return raw API character schema
+        return api_character
 
     async def move_character(self, character_name: str, x: int, y: int) -> 'ActionMoveSchema':
         """Move character to coordinates.

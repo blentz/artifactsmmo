@@ -21,7 +21,7 @@ from .game_state import ActionResult, CharacterGameState, GameState
 class StateManager:
     """Manages character state synchronization with API using GameState enum"""
 
-    def __init__(self, character_name: str, api_client: 'APIClientWrapper', cache_manager: Optional['CacheManager'] = None):
+    def __init__(self, character_name: str, api_client: APIClientWrapper, cache_manager: Optional[CacheManager] = None):
         """Initialize StateManager for character state synchronization.
         
         Parameters:
@@ -81,8 +81,10 @@ class StateManager:
         a validated CharacterGameState instance using Pydantic models, ensuring
         data integrity and type safety for state operations.
         """
-        character = await self.api_client.get_character(self.character_name)
-        character_state = CharacterGameState.from_api_character(character)
+        # Get raw API character schema
+        api_character = await self.api_client.get_character(self.character_name)
+        # Transform to internal model at the boundary
+        character_state = CharacterGameState.from_api_character(api_character)
         return character_state
 
     def update_state_from_result(self, action_result: ActionResult) -> None:

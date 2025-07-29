@@ -17,7 +17,7 @@ class InventorySlot(BaseModel):
     
     slot: int = Field(ge=1)
     code: str
-    quantity: int = Field(ge=1)
+    quantity: int = Field(ge=0)  # Empty slots have quantity 0
 
 
 class Character(BaseModel):

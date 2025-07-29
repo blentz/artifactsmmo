@@ -365,8 +365,17 @@ class CacheManager:
 
     async def cache_character_data(self, character_name: str) -> None:
         """Cache character data from API."""
-        character = await self._api_client.get_character(character_name)
-        character_dict = character.model_dump() if hasattr(character, 'model_dump') else character.dict()
+        # Get raw API character schema
+        raw_api_character = await self._api_client.get_character(character_name)
+        
+        # Convert to dictionary for caching
+        if hasattr(raw_api_character, 'model_dump'):
+            character_dict = raw_api_character.model_dump()
+        elif hasattr(raw_api_character, 'dict'):
+            character_dict = raw_api_character.dict()
+        else:
+            # Fallback for plain objects
+            character_dict = raw_api_character.__dict__ if hasattr(raw_api_character, '__dict__') else dict(raw_api_character)
 
         cache_file = f"{self.cache_dir}/characters/{character_name}/data.yaml"
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -383,8 +392,8 @@ class CacheManager:
             List of dictionaries representing all user characters
             
         This method retrieves all characters associated with the authenticated
-        user account and caches the data to the 'characters' subdirectory for
-        fast subsequent access by the list-characters command.
+        user account and caches the data using internal Pydantic models following
+        the model boundary enforcement architecture.
         """
         data_type = "characters"
         
@@ -393,12 +402,15 @@ class CacheManager:
             if cached_data is not None:
                 return cached_data
 
-        fresh_data = await self._api_client.get_characters()
-        self.save_cache_data(data_type, fresh_data)
+        # Get character dictionaries from API client (already transformed at boundary)
+        character_dicts = await self._api_client.get_characters()
+        
+        # Save character data using YAML data method
+        cache_file = f"{self.cache_dir}/{data_type}.yaml"
+        self._save_yaml_data(cache_file, character_dicts)
         self._update_metadata(data_type)
         
-        # Convert to dictionaries for consistent interface
-        return [char.to_dict() for char in fresh_data]
+        return character_dicts
 
     def get_character_from_cache(self, character_name: str) -> dict[str, Any] | None:
         """Get specific character data from centralized characters cache.

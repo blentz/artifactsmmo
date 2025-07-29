@@ -206,6 +206,7 @@ class TestCharacterGameState:
     def test_character_game_state_creation(self):
         """Test creating CharacterGameState with basic attributes"""
         character_state = CharacterGameState(
+            name="test_character",
             level=5,
             xp=1000,
             gold=500,
@@ -239,6 +240,7 @@ class TestCharacterGameState:
     def test_to_goap_state_conversion(self):
         """Test conversion from CharacterGameState to GOAP state dict"""
         character_state = CharacterGameState(
+            name="test_character",
             level=5,
             xp=1000,
             gold=500,
@@ -275,6 +277,7 @@ class TestCharacterGameState:
     def test_to_goap_state_boolean_conversion(self):
         """Test that boolean values are converted to integers for GOAP"""
         character_state = CharacterGameState(
+            name="test_character",
             level=5,
             xp=1000,
             gold=500,
@@ -314,6 +317,7 @@ class TestCharacterGameState:
         """Test creating CharacterGameState from API character response"""
         # Mock API character response
         mock_character = Mock()
+        mock_character.name = "test_character"
         mock_character.level = 5
         mock_character.xp = 1000
         mock_character.gold = 500
@@ -352,6 +356,7 @@ class TestCharacterGameState:
         # This should raise a validation error due to extra='forbid'
         with pytest.raises(Exception):  # Pydantic validation error
             CharacterGameState(
+                name="test_character",
                 level=5,
                 xp=1000,
                 gold=500,

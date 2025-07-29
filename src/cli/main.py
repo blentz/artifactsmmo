@@ -798,19 +798,18 @@ class CLIManager:
 
             # Get character data from API
             characters = await self.api_client.get_characters()
-            character = next((c for c in characters if c.name == args.name), None)
+            character = next((c for c in characters if c.get('name') == args.name), None)
 
             if not character:
                 print(f"Character '{args.name}' not found.")
                 return
 
             print(f"\n=== Character Status: {args.name} ===")
-            print(f"Level: {character.level}")
-            print(f"Location: ({character.x}, {character.y})")
-            print(f"HP: {character.hp}/{character.max_hp}")
-            if hasattr(character, 'gold'):
-                print(f"Gold: {character.gold}")
-            print(f"Skin: {character.skin}")
+            print(f"Level: {character['level']}")
+            print(f"Location: ({character['x']}, {character['y']})")
+            print(f"HP: {character['hp']}/{character['max_hp']}")
+            print(f"Gold: {character['gold']}")
+            print(f"Skin: {character['skin']}")
 
             # AI Player status
             if args.name in self.running_players:

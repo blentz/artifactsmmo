@@ -121,6 +121,7 @@ class TestCompleteAIPlayerWorkflow:
         # Setup realistic character state extraction
         from src.ai_player.state.game_state import CharacterGameState
         character_state = CharacterGameState(
+            name="test_character",
             level=10,
             xp=2500,
             hp=100,
@@ -238,6 +239,7 @@ class TestCompleteAIPlayerWorkflow:
         # Setup realistic character state progression
         from src.ai_player.state.game_state import CharacterGameState
         initial_state = CharacterGameState(
+            name="test_character",
             level=10,
             xp=2500,
             hp=100,
@@ -266,6 +268,7 @@ class TestCompleteAIPlayerWorkflow:
         )
         
         progressed_state = CharacterGameState(
+            name="test_character",
             level=10,
             xp=2600,  # XP progression
             hp=100,
@@ -415,6 +418,7 @@ class TestCompleteAIPlayerWorkflow:
         # Setup character state
         from src.ai_player.state.game_state import CharacterGameState
         character_state = CharacterGameState(
+            name="test_character",
             level=10,
             xp=2500,
             hp=100,
@@ -539,6 +543,7 @@ class TestCompleteAIPlayerWorkflow:
         # Setup emergency character state
         from src.ai_player.state.game_state import CharacterGameState
         emergency_state = CharacterGameState(
+            name="test_character",
             level=10,
             xp=2500,
             hp=8,  # Critical HP
@@ -568,6 +573,7 @@ class TestCompleteAIPlayerWorkflow:
         
         # Character state after emergency recovery
         recovered_state = CharacterGameState(
+            name="test_character",
             level=10,
             xp=2500,
             hp=140,  # Recovered HP
@@ -739,6 +745,7 @@ class TestCharacterManagementWorkflow:
         # Setup character states for the workflow
         from src.ai_player.state.game_state import CharacterGameState
         initial_state = CharacterGameState(
+            name="test_character",
             level=1,
             xp=0,
             hp=50,
@@ -767,6 +774,7 @@ class TestCharacterManagementWorkflow:
         )
         
         progressed_state = CharacterGameState(
+            name="test_character",
             level=2,
             xp=300,  # Gained some XP
             hp=60,

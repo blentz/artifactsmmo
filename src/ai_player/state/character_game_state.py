@@ -16,6 +16,9 @@ class CharacterGameState(BaseModel):
     """Pydantic model for character state using GameState enum keys"""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
 
+    # Character identity
+    name: str
+
     # Character progression
     level: int = Field(ge=1, le=45)
     xp: int = Field(ge=0)
@@ -118,6 +121,7 @@ class CharacterGameState(BaseModel):
         while performing Pydantic validation on the data.
         """
         return cls(
+            name=character.name,
             level=character.level,
             xp=character.xp,
             gold=character.gold,
