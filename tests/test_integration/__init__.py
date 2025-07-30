@@ -34,17 +34,55 @@ class MockFactory:
     def create_api_client_mock() -> Mock:
         """Create a standardized mock APIClientWrapper for integration tests"""
         client = Mock(spec=APIClientWrapper)
+        
+        # Core async methods
         client.get_character = AsyncMock()
+        client.get_characters = AsyncMock()
+        client.create_character = AsyncMock()
+        client.delete_character = AsyncMock()
         client.move_character = AsyncMock()
         client.fight_monster = AsyncMock()
         client.gather_resource = AsyncMock()
-        client.rest_character = AsyncMock()
         client.craft_item = AsyncMock()
+        client.rest_character = AsyncMock()
+        client.equip_item = AsyncMock()
+        client.unequip_item = AsyncMock()
+        
+        # Required attributes from APIClientWrapper.__init__
+        client.cooldown_manager = MockFactory.create_cooldown_manager_mock()
+        
+        # Data retrieval methods
+        client.get_all_items = AsyncMock()
+        client.get_all_monsters = AsyncMock()
+        client.get_all_maps = AsyncMock()
+        client.get_map = AsyncMock()
+        client.get_all_resources = AsyncMock()
+        client.get_all_npcs = AsyncMock()
+        
+        # Internal methods
+        client._handle_rate_limit = AsyncMock()
+        client._process_response = AsyncMock()
+        client.extract_cooldown = Mock()
         client.get_cooldown_info = AsyncMock()
         client.get_my_characters = AsyncMock()
-        client.create_character = AsyncMock()
-        client.delete_character = AsyncMock()
         client.extract_character_state = Mock()
+        
+        # Required attributes
+        client.cooldown_manager = Mock()
+        client.cooldown_manager.update_from_character = Mock()
+        client.cooldown_manager.is_ready = Mock(return_value=True)
+        client.cooldown_manager.get_remaining_time = Mock(return_value=0.0)
+        client.cooldown_manager.update_cooldown = Mock()
+        client.cooldown_manager.wait_for_cooldown = AsyncMock()
+        client.cooldown_manager.clear_cooldown = Mock()
+        client.cooldown_manager.clear_all_cooldowns = Mock()
+        client.cooldown_manager.get_cooldown_info = Mock(return_value=None)
+        client.cooldown_manager.clear_expired_cooldowns = Mock()
+        
+        client.client = Mock()  # Underlying authenticated client
+        client.token_config = Mock()
+        client.status_codes = Mock()
+        
         return client
     
     @staticmethod

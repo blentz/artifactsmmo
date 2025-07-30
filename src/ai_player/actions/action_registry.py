@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..state.game_state import GameState
+from ..state.character_game_state import CharacterGameState
 from .action_factory import ActionFactory
 from .base_action import BaseAction
 
@@ -107,11 +108,11 @@ class ActionRegistry:
         action_type = factory.get_action_type()
         self._action_factories[action_type] = factory
 
-    def generate_actions_for_state(self, current_state: dict[GameState, Any], game_data: Any) -> list[BaseAction]:
+    def generate_actions_for_state(self, current_state: CharacterGameState, game_data: Any) -> list[BaseAction]:
         """Generate all possible action instances for current game state.
 
         Parameters:
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
             game_data: Complete game data for parameterized action generation
 
         Return values:
@@ -123,33 +124,11 @@ class ActionRegistry:
         """
         all_actions = []
 
-        # Generate parameterized actions using registered factories
+        # Generate actions using registered factories only
+        # All actions must have factories registered - no direct instantiation
         for action_type, factory in self._action_factories.items():
-            try:
-                factory_actions = factory.create_instances(game_data, current_state)
-                all_actions.extend(factory_actions)
-            except Exception as e:
-                print(f"Error generating actions for {action_type.__name__}: {e}")
-                continue
-
-        # Add simple non-parameterized actions (those without factories)
-        for action_name, action_class in self._discovered_actions.items():
-            if action_class not in self._action_factories:
-                try:
-                    # Try to create a simple instance (no parameters)
-                    action_instance = action_class()
-                    all_actions.append(action_instance)
-                except TypeError:
-                    # Action requires parameters, try with None
-                    try:
-                        action_instance = action_class(api_client=None)
-                        all_actions.append(action_instance)
-                    except:
-                        # Skip if still can't create
-                        continue
-                except Exception as e:
-                    print(f"Error creating instance of {action_name}: {e}")
-                    continue
+            factory_actions = factory.create_instances(game_data, current_state)
+            all_actions.extend(factory_actions)
 
         return all_actions
 
@@ -226,12 +205,12 @@ class ActionRegistry:
         except Exception:
             return False
 
-    def get_action_by_name(self, name: str, current_state: dict[GameState, Any], game_data: Any) -> BaseAction | None:
+    def get_action_by_name(self, name: str, current_state: CharacterGameState, game_data: Any) -> BaseAction | None:
         """Get specific action instance by name, generating if needed.
 
         Parameters:
             name: Unique action name identifier
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
             game_data: Complete game data for parameterized action generation
 
         Return values:
@@ -241,25 +220,11 @@ class ActionRegistry:
         factories to generate parameterized instances as needed for GOAP
         execution and action debugging workflows.
         """
-        # First check if it's a simple non-parameterized action
-        for action_name, action_class in self._discovered_actions.items():
-            try:
-                # Try to create simple instance
-                action_instance = action_class()
-                if action_instance.name == name:
-                    return action_instance
-            except TypeError:
-                # Action requires parameters, check factories
-                if action_class in self._action_factories:
-                    factory = self._action_factories[action_class]
-                    try:
-                        factory_actions = factory.create_instances(game_data, current_state)
-                        for action in factory_actions:
-                            if action.name == name:
-                                return action
-                    except Exception:
-                        continue
-            except Exception:
-                continue
+        # Search through all registered factories
+        for action_class, factory in self._action_factories.items():
+            factory_actions = factory.create_instances(game_data, current_state)
+            for action in factory_actions:
+                if action.name == name:
+                    return action
 
         return None

@@ -9,6 +9,7 @@ from abc import abstractmethod
 from typing import Any
 
 from ..state.game_state import GameState
+from ..state.character_game_state import CharacterGameState
 from .action_factory import ActionFactory
 from .base_action import BaseAction
 
@@ -23,12 +24,12 @@ class ParameterizedActionFactory(ActionFactory):
         return self.action_class
 
     @abstractmethod
-    def generate_parameters(self, game_data: Any, current_state: dict[GameState, Any]) -> list[dict[str, Any]]:
+    def generate_parameters(self, game_data: Any, current_state: CharacterGameState) -> list[dict[str, Any]]:
         """Generate all valid parameter combinations for this action type.
 
         Parameters:
             game_data: Complete game data including maps, items, monsters, resources
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
 
         Return values:
             List of parameter dictionaries for action instance creation
@@ -39,9 +40,19 @@ class ParameterizedActionFactory(ActionFactory):
         """
         pass
 
-    def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
+    def create_instances(self, game_data: Any, current_state: CharacterGameState) -> list[BaseAction]:
         """Create action instances for all valid parameter combinations"""
         instances = []
         for params in self.generate_parameters(game_data, current_state):
-            instances.append(self.action_class(**params))
+            # Extract location_type for special handling
+            location_type = params.pop("location_type", None)
+            
+            # Create the action instance
+            instance = self.action_class(**params)
+            
+            # Set location type as a private attribute if provided
+            if location_type:
+                instance._location_type = location_type
+            
+            instances.append(instance)
         return instances

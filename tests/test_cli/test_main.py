@@ -110,11 +110,11 @@ class TestCLIManager:
 
     @patch('src.cli.main.DiagnosticCommands')
     @patch('src.cli.main.GoalManager')
-    @patch('src.cli.main.ActionRegistry')
+    @patch('src.cli.main.get_global_registry')
     @patch('src.cli.main.CacheManager')
     @patch('src.cli.main.APIClientWrapper')
     def test_initialize_diagnostic_components(self, mock_api_wrapper, mock_cache_manager, 
-                                            mock_action_registry, mock_goal_manager, mock_diagnostic_commands):
+                                            mock_get_global_registry, mock_goal_manager, mock_diagnostic_commands):
         """Test diagnostic components initialization"""
         cli_manager = CLIManager()
         token_file = "test_token.txt"
@@ -128,7 +128,7 @@ class TestCLIManager:
         mock_cache_manager.return_value = mock_cache_instance
         
         mock_registry_instance = Mock()
-        mock_action_registry.return_value = mock_registry_instance
+        mock_get_global_registry.return_value = mock_registry_instance
         
         mock_goal_instance = Mock()
         mock_goal_manager.return_value = mock_goal_instance
@@ -144,8 +144,8 @@ class TestCLIManager:
         
         # Verify all components were initialized
         mock_cache_manager.assert_called_once_with(mock_api_instance)
-        mock_action_registry.assert_called_once()
-        mock_goal_manager.assert_called_once_with(mock_registry_instance, mock_api_instance.cooldown_manager)
+        mock_get_global_registry.assert_called_once()
+        mock_goal_manager.assert_called_once_with(mock_registry_instance, mock_api_instance.cooldown_manager, mock_cache_instance)
         # Verify DiagnosticCommands was called twice: once in constructor, once in the method
         assert mock_diagnostic_commands.call_count == 2
         mock_diagnostic_commands.assert_called_with(
@@ -158,10 +158,10 @@ class TestCLIManager:
 
     @patch('src.cli.main.DiagnosticCommands')
     @patch('src.cli.main.GoalManager')
-    @patch('src.cli.main.ActionRegistry')
+    @patch('src.cli.main.get_global_registry')
     @patch('src.cli.main.CacheManager')
     def test_initialize_diagnostic_components_existing_api_client(self, mock_cache_manager, 
-                                                                mock_action_registry, mock_goal_manager, mock_diagnostic_commands):
+                                                                mock_get_global_registry, mock_goal_manager, mock_diagnostic_commands):
         """Test diagnostic components initialization when API client already exists"""
         cli_manager = CLIManager()
         token_file = "test_token.txt"
@@ -176,7 +176,7 @@ class TestCLIManager:
         mock_cache_manager.return_value = mock_cache_instance
         
         mock_registry_instance = Mock()
-        mock_action_registry.return_value = mock_registry_instance
+        mock_get_global_registry.return_value = mock_registry_instance
         
         mock_goal_instance = Mock()
         mock_goal_manager.return_value = mock_goal_instance
@@ -191,8 +191,8 @@ class TestCLIManager:
         
         # Verify all components were initialized with existing client
         mock_cache_manager.assert_called_once_with(existing_api_client)
-        mock_action_registry.assert_called_once()
-        mock_goal_manager.assert_called_once_with(mock_registry_instance, existing_api_client.cooldown_manager)
+        mock_get_global_registry.assert_called_once()
+        mock_goal_manager.assert_called_once_with(mock_registry_instance, existing_api_client.cooldown_manager, mock_cache_instance)
         
         assert result == mock_diagnostic_instance
 
@@ -1223,15 +1223,16 @@ class TestCLIIntegration:
 
         # Pre-set a mock API client
         mock_client = AsyncMock()
-        mock_character = Mock()
-        mock_character.name = 'test_char'  # Make sure this matches the args.name
-        mock_character.level = 5
-        mock_character.x = 10
-        mock_character.y = 20
-        mock_character.hp = 80
-        mock_character.max_hp = 100
-        mock_character.skin = 'men1'
-        mock_character.gold = 100
+        mock_character = {
+            'name': 'test_char',  # Make sure this matches the args.name
+            'level': 5,
+            'x': 10,
+            'y': 20,
+            'hp': 80,
+            'max_hp': 100,
+            'skin': 'men1',
+            'gold': 100
+        }
         mock_client.get_characters.return_value = [mock_character]
         cli_manager.api_client = mock_client
 
@@ -1239,7 +1240,7 @@ class TestCLIIntegration:
             await cli_manager.handle_character_status(mock_args)
 
         print_calls = [str(call) for call in mock_print.call_args_list]
-        assert any('Running' in call for call in print_calls)
+        assert any('Status: Running' in call for call in print_calls)
 
     @pytest.mark.asyncio
     async def test_character_status_monitoring_mode(self):
@@ -1492,15 +1493,16 @@ class TestCLIIntegration:
 
         # Pre-set a mock API client
         mock_client = AsyncMock()
-        mock_character = Mock()
-        mock_character.name = 'test_char'
-        mock_character.level = 5
-        mock_character.x = 10
-        mock_character.y = 20
-        mock_character.hp = 80
-        mock_character.max_hp = 100
-        mock_character.skin = 'men1'
-        mock_character.gold = 100
+        mock_character = {
+            'name': 'test_char',
+            'level': 5,
+            'x': 10,
+            'y': 20,
+            'hp': 80,
+            'max_hp': 100,
+            'skin': 'men1',
+            'gold': 100
+        }
         mock_client.get_characters.return_value = [mock_character]
         cli_manager.api_client = mock_client
 

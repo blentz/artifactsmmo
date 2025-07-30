@@ -21,7 +21,7 @@ import src.lib.log as log_module
 
 from ..ai_player.ai_player import AIPlayer
 from ..ai_player.action_executor import ActionExecutor
-from ..ai_player.actions import ActionRegistry
+from ..ai_player.actions import ActionRegistry, get_global_registry
 from ..ai_player.goal_manager import GoalManager
 from ..ai_player.state.state_manager import StateManager
 from ..game_data.api_client import APIClientWrapper
@@ -96,8 +96,11 @@ class CLIManager:
 
         # Initialize required components - these MUST work or it's a system bug
         cache_manager = CacheManager(self.api_client)
-        action_registry = ActionRegistry()
-        goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager)
+        
+        # Use the global action registry to ensure consistent factory registration
+        action_registry = get_global_registry()
+        
+        goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager, cache_manager)
         
         return DiagnosticCommands(
             action_registry=action_registry,
@@ -696,8 +699,8 @@ class CLIManager:
             # Create component dependencies
             cache_manager = CacheManager(self.api_client)
             state_manager = StateManager(args.name, self.api_client, cache_manager)
-            action_registry = ActionRegistry()
-            goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager)
+            action_registry = get_global_registry()
+            goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager, cache_manager)
             action_executor = ActionExecutor(self.api_client, self.api_client.cooldown_manager)
 
             # Initialize AI player dependencies
@@ -885,6 +888,13 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
+            
+            # If character name provided, set up proper state management
+            if args.character:
+                cache_manager = CacheManager(self.api_client)
+                state_manager = StateManager(args.character, self.api_client, cache_manager)
+                # Update the diagnostic commands with the state manager
+                diagnostic_commands.goal_manager.state_manager = state_manager
             
             print("Running action diagnostics...")
 

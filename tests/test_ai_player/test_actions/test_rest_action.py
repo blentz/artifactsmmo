@@ -71,8 +71,6 @@ class TestRestAction:
         expected_preconditions = {
             GameState.COOLDOWN_READY: True,
             GameState.CAN_REST: True,
-            GameState.HP_LOW: True,
-            GameState.AT_SAFE_LOCATION: True,
         }
 
         assert preconditions == expected_preconditions
@@ -84,7 +82,6 @@ class TestRestAction:
         effects = action.get_effects()
 
         expected_effects = {
-            GameState.HP_CURRENT: "+hp_recovery",
             GameState.HP_LOW: False,
             GameState.HP_CRITICAL: False,
             GameState.SAFE_TO_FIGHT: True,

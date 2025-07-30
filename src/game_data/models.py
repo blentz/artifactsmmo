@@ -13,6 +13,7 @@ from .game_monster import GameMonster
 from .game_map import GameMap
 from .game_resource import GameResource
 from .game_npc import GameNPC
+from .map_content import MapContent
 
 # Re-export all models for backwards compatibility
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "GameMonster", 
     "GameMap",
     "GameResource",
-    "GameNPC"
+    "GameNPC",
+    "MapContent"
 ]

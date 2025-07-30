@@ -26,6 +26,8 @@ class GameState(StrEnum):
     CHARACTER_LEVEL = "character_level"
     CHARACTER_XP = "character_xp"
     CHARACTER_GOLD = "character_gold"
+    GAINED_XP = "gained_xp"
+    GAINED_GOLD = "gained_gold"
     HP_CURRENT = "hp_current"
     HP_MAX = "hp_max"
 
@@ -39,6 +41,7 @@ class GameState(StrEnum):
     AT_BANK_LOCATION = "at_bank_location"
     AT_GRAND_EXCHANGE = "at_grand_exchange"
     AT_SAFE_LOCATION = "at_safe_location"
+    AT_WORKSHOP_LOCATION = "at_workshop_location"
     PATH_CLEAR = "path_clear"
 
     # Skill progression states
@@ -115,6 +118,8 @@ class GameState(StrEnum):
     CAN_REST = "can_rest"
     CAN_USE_ITEM = "can_use_item"
     CAN_BANK = "can_bank"
+    CAN_GAIN_XP = "can_gain_xp"
+    XP_SOURCE_AVAILABLE = "xp_source_available"
 
     # Efficiency and optimization states
     OPTIMAL_LOCATION = "optimal_location"

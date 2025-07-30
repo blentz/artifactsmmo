@@ -8,6 +8,7 @@ to all valid locations in the game world.
 from typing import Any
 
 from ..state.game_state import GameState
+from ..state.character_game_state import CharacterGameState
 from .movement_action import MovementAction
 from .parameterized_action_factory import ParameterizedActionFactory
 
@@ -18,36 +19,38 @@ class MovementActionFactory(ParameterizedActionFactory):
     def __init__(self) -> None:
         super().__init__(MovementAction)
 
-    def generate_parameters(self, game_data: Any, current_state: dict[GameState, Any]) -> list[dict[str, Any]]:
-        """Generate movement actions for all accessible map locations.
+    def generate_parameters(self, game_data: Any, current_state: CharacterGameState) -> list[dict[str, Any]]:
+        """Generate simple nearby movement actions.
 
         Parameters:
             game_data: Complete game data including map information and locations
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
 
         Return values:
             List of parameter dictionaries for creating movement action instances
 
-        This method analyzes available map data to generate parameters for
-        movement actions to all strategic locations including NPCs, resources,
-        monsters, and key game areas.
+        This method generates simple movement actions for nearby locations within
+        a small radius, keeping the action space manageable while ensuring the
+        character can move to adjacent positions for exploration.
         """
-        parameters = []
+        current_x = getattr(current_state, 'current_x', 0)
+        current_y = getattr(current_state, 'current_y', 0)
 
-        current_x = current_state.get(GameState.CURRENT_X, 0)
-        current_y = current_state.get(GameState.CURRENT_Y, 0)
-
-        nearby_locations = self.get_nearby_locations(current_x, current_y, radius=10)
-        strategic_locations = self.get_strategic_locations(game_data)
-
-        all_locations = nearby_locations + strategic_locations
-        valid_locations = self.filter_valid_positions(all_locations, game_data)
-
-        for location in valid_locations:
+        # Generate only nearby locations in a 3-tile radius
+        nearby_locations = self.get_nearby_locations(current_x, current_y, radius=3)
+        
+        # Filter out current location
+        filtered_locations = []
+        for location in nearby_locations:
             if location["target_x"] != current_x or location["target_y"] != current_y:
-                parameters.append(location)
+                filtered_locations.append(location)
 
-        return parameters
+        # Enhance locations with content information to enable proper GOAP planning
+        # This allows the planner to understand that moving to monster/resource locations
+        # will enable combat/gathering actions, without making MovementAction map-aware
+        enhanced_locations = self.enhance_locations_with_content(filtered_locations, game_data)
+
+        return enhanced_locations
 
     def get_nearby_locations(self, current_x: int, current_y: int, radius: int = 5) -> list[dict[str, Any]]:
         """Get locations within movement radius for efficiency.
@@ -92,20 +95,19 @@ class MovementActionFactory(ParameterizedActionFactory):
         if game_data is None:
             return strategic_locations
 
+        # Extract locations with content from map data
         if hasattr(game_data, "maps") and game_data.maps:
             for map_data in game_data.maps:
-                if hasattr(map_data, "x") and hasattr(map_data, "y"):
-                    strategic_locations.append({"target_x": map_data.x, "target_y": map_data.y})
-
-        if hasattr(game_data, "resources") and game_data.resources:
-            for resource in game_data.resources:
-                if hasattr(resource, "x") and hasattr(resource, "y"):
-                    strategic_locations.append({"target_x": resource.x, "target_y": resource.y})
-
-        if hasattr(game_data, "monsters") and game_data.monsters:
-            for monster in game_data.monsters:
-                if hasattr(monster, "x") and hasattr(monster, "y"):
-                    strategic_locations.append({"target_x": monster.x, "target_y": monster.y})
+                x = map_data.x
+                y = map_data.y
+                content = map_data.content
+                
+                location_params = {"target_x": x, "target_y": y}
+                
+                # Add location type information for specialized movement actions
+                if content:
+                    location_params["location_type"] = content.type
+                    strategic_locations.append(location_params)
 
         return strategic_locations
 
@@ -135,3 +137,41 @@ class MovementActionFactory(ParameterizedActionFactory):
                     valid_positions.append(position)
 
         return valid_positions
+
+    def enhance_locations_with_content(self, locations: list[dict[str, Any]], game_data: Any) -> list[dict[str, Any]]:
+        """Enhance location parameters with content type information from game data.
+
+        Parameters:
+            locations: List of location dictionaries to enhance
+            game_data: Complete game data including map information
+
+        Return values:
+            List of enhanced location dictionaries with location_type information
+
+        This method looks up each location in the game data to determine if it
+        contains monsters, resources, workshops, etc. and adds location_type
+        information for proper movement action effect calculation.
+        """
+        enhanced_locations = []
+        
+        if not game_data or not hasattr(game_data, 'maps'):
+            return locations
+        
+        # Create a lookup map for efficient content checking
+        content_map = {}
+        for map_data in game_data.maps:
+            if map_data.content:
+                content_map[(map_data.x, map_data.y)] = map_data.content.type
+        
+        # Enhance each location with content type if available
+        for location in locations:
+            x = location["target_x"]
+            y = location["target_y"]
+            enhanced_location = location.copy()
+            
+            if (x, y) in content_map:
+                enhanced_location["location_type"] = content_map[(x, y)]
+            
+            enhanced_locations.append(enhanced_location)
+        
+        return enhanced_locations

@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..state.game_state import ActionResult, GameState
+from ..state.character_game_state import CharacterGameState
 
 
 class BaseAction(ABC):
@@ -50,11 +51,11 @@ class BaseAction(ABC):
         """Execute action via API and return result with state changes"""
         pass
 
-    def can_execute(self, current_state: dict[GameState, Any]) -> bool:
+    def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.
 
         Parameters:
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
 
         Return values:
             Boolean indicating whether all preconditions are satisfied

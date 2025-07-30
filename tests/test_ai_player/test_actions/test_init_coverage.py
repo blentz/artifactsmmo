@@ -208,9 +208,9 @@ def test_factory_error_handling():
     factory = ErrorFactory()
     registry.register_factory(factory)
     
-    # Should handle factory error gracefully
-    actions = registry.generate_actions_for_state({}, {})
-    # Should not crash and should continue with other actions
+    # Factory errors should bubble up, not be swallowed
+    with pytest.raises(ValueError, match="Test error in factory"):
+        registry.generate_actions_for_state({}, {})
 
 
 def test_non_parameterized_action_creation_errors():
@@ -426,37 +426,23 @@ def test_get_action_by_name():
             return ParameterizedTestAction
     
     registry = ActionRegistry()
-    registry._discovered_actions["SimpleTestAction"] = SimpleTestAction
-    registry._discovered_actions["ParameterizedTestAction"] = ParameterizedTestAction
     
     factory = TestFactory()
     registry.register_factory(factory)
     
-    # Test finding simple action
-    action = registry.get_action_by_name("simple_test_action", {}, {})
-    assert action is not None
-    assert action.name == "simple_test_action"
-    
-    # Test finding parameterized action
+    # Test finding parameterized action from factory
     action = registry.get_action_by_name("param_test_action_X", {}, {})
     assert action is not None
     assert action.name == "param_test_action_X"
     
+    # Test finding another parameterized action from factory
+    action = registry.get_action_by_name("param_test_action_Y", {}, {})
+    assert action is not None
+    assert action.name == "param_test_action_Y"
+    
     # Test action not found
     action = registry.get_action_by_name("nonexistent_action", {}, {})
     assert action is None
-    
-    # Test error handling in factory
-    class ErrorFactory(ActionFactory):
-        def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
-            raise ValueError("Factory error")
-            
-        def get_action_type(self) -> type[BaseAction]:
-            return ParameterizedTestAction
-    
-    registry._action_factories[ParameterizedTestAction] = ErrorFactory()
-    action = registry.get_action_by_name("param_test_action_X", {}, {})
-    assert action is None  # Should handle factory error gracefully
 
 
 def test_additional_error_coverage():

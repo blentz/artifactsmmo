@@ -10,6 +10,7 @@ handling all the timing and error recovery required for robust gameplay automati
 """
 
 import asyncio
+import logging
 import random
 import time
 from typing import Any
@@ -17,6 +18,7 @@ from typing import Any
 from ..game_data.api_client import APIClientWrapper, CooldownManager
 from .actions import get_global_registry
 from .actions.base_action import BaseAction
+from .state.character_game_state import CharacterGameState
 from .state.game_state import ActionResult, GameState
 
 
@@ -156,29 +158,94 @@ class ActionExecutor:
             return True
 
         try:
+            self.logger = logging.getLogger(f"action_executor.{character_name}")
+            self.logger.debug(f"Starting plan execution for {len(plan)} actions")
             # Get initial character state
             character = await self.api_client.get_character(character_name)
-            current_state = self.api_client.extract_character_state(character).to_goap_state()
+            
+            # Get map content for location context
+            game_map = await self.api_client.get_map(character.x, character.y)
+            
+            # Convert to internal state format
+            character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
+            current_state = character_state.to_goap_state()
 
             # Convert string keys back to GameState enum for type safety
             typed_state = GameState.validate_state_dict(current_state)
+            self.logger.debug(f"Initial state loaded successfully")
 
             for i, action_info in enumerate(plan):
                 try:
+                    self.logger.debug(f"Processing plan step {i+1}: {action_info}")
                     # Extract action name and parameters
                     action_name = action_info.get('action', action_info.get('name'))
                     if not action_name:
+                        self.logger.debug(f"No action name found in action_info: {action_info}")
                         return False
+                    
+                    self.logger.debug(f"Extracted action name: '{action_name}'")
 
-                    # Get action instance from registry
-                    action = self.get_action_by_name(action_name)
+                    # Get action instance from registry using actual current state
+                    action = self.get_action_by_name(action_name, typed_state)
                     if not action:
+                        self.logger.debug(f"Could not find action '{action_name}' in registry")
                         return False
+                    
+                    self.logger.debug(f"Found action '{action_name}', executing...")
 
-                    # Execute the action
-                    result = await self.execute_action(action, character_name, typed_state)
+                    # Translate action to API call based on action type
+                    if action.name == "combat":
+                        try:
+                            fight_result = await self.api_client.fight_monster(character_name)
+                            result = ActionResult(
+                                success=True,
+                                message=f"Combat successful: {fight_result.data.fight.result}",
+                                state_changes={
+                                    GameState.CHARACTER_XP: fight_result.data.character.xp,
+                                    GameState.CHARACTER_GOLD: fight_result.data.character.gold,
+                                    GameState.HP_CURRENT: fight_result.data.character.hp,
+                                    GameState.COOLDOWN_READY: False,
+                                },
+                                cooldown_seconds=fight_result.data.cooldown.total_seconds
+                            )
+                        except Exception as e:
+                            result = ActionResult(
+                                success=False,
+                                message=f"Combat failed: {str(e)}",
+                                state_changes={},
+                                cooldown_seconds=0
+                            )
+                    elif action.name.startswith("move_to_"):
+                        # Handle movement actions via API
+                        try:
+                            # Extract target coordinates from action
+                            target_x = action.target_x
+                            target_y = action.target_y
+                            
+                            move_result = await self.api_client.move_character(character_name, target_x, target_y)
+                            result = ActionResult(
+                                success=True,
+                                message=f"Moved character {character_name} to ({move_result.x}, {move_result.y})",
+                                state_changes={
+                                    GameState.CURRENT_X: move_result.x,
+                                    GameState.CURRENT_Y: move_result.y,
+                                    GameState.COOLDOWN_READY: False,
+                                },
+                                cooldown_seconds=getattr(move_result.cooldown, "total_seconds", 5) if hasattr(move_result, "cooldown") else 5
+                            )
+                        except Exception as e:
+                            result = ActionResult(
+                                success=False,
+                                message=f"Movement failed for {character_name}: {str(e)}",
+                                state_changes={},
+                                cooldown_seconds=0
+                            )
+                    else:
+                        # Execute other actions normally
+                        result = await self.execute_action(action, character_name, typed_state)
 
                     if not result.success:
+                        self.logger.debug(f"Action '{action_name}' failed: {result.message}")
                         # Try emergency recovery for critical failures
                         if "critical" in result.message.lower() or "hp" in result.message.lower():
                             recovery_success = await self.emergency_recovery(character_name, f"Plan step {i+1} failed: {result.message}")
@@ -186,6 +253,8 @@ class ActionExecutor:
                                 return False
                         else:
                             return False
+                    
+                    self.logger.debug(f"Action '{action_name}' succeeded: {result.message}")
 
                     # Update state with action results
                     for state_key, new_value in result.state_changes.items():
@@ -204,6 +273,7 @@ class ActionExecutor:
             return True
 
         except Exception as e:
+            self.logger.debug(f"Exception in plan execution: {type(e).__name__}: {str(e)}")
             # Final emergency recovery attempt
             await self.emergency_recovery(character_name, f"Plan execution critical error: {str(e)}")
             return False
@@ -337,7 +407,7 @@ class ActionExecutor:
         # For unhandled errors, return None to indicate no recovery possible
         return None
 
-    def process_action_result(self, api_response: Any, action: BaseAction) -> ActionResult:
+    async def process_action_result(self, api_response: Any, action: BaseAction) -> ActionResult:
         """Convert API response to ActionResult with state changes.
         
         Parameters:
@@ -372,8 +442,13 @@ class ActionExecutor:
                 state_changes[state_key] = effect_value
 
             # Extract state changes from API response if character data is present
-            if hasattr(api_response, 'character'):
-                character_state = self.api_client.extract_character_state(api_response.character)
+            if hasattr(api_response, 'character') and api_response.character is not None:
+                # Get map content for location context
+                character = api_response.character
+                game_map = await self.api_client.get_map(character.x, character.y)
+                
+                # Convert to internal state format
+                character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
                 goap_state = character_state.to_goap_state()
                 typed_state = GameState.validate_state_dict(goap_state)
 
@@ -479,30 +554,22 @@ class ActionExecutor:
             # If we can't even get character state, recovery failed
             return False
 
-    def get_action_by_name(self, action_name: str) -> BaseAction | None:
-        """Get action instance by name from registry.
+    def get_action_by_name(self, action_name: str, current_state: dict[GameState, Any]) -> BaseAction | None:
+        """Get action instance by name from registry using actual game state.
         
         Parameters:
             action_name: String identifier for the desired action
+            current_state: Actual current game state to use for parameterized actions
             
         Return values:
             BaseAction instance matching the name, or None if not found
             
         This method retrieves a specific action instance from the action
-        registry by name, enabling dynamic action lookup for plan execution
-        and diagnostic operations in the AI player system.
+        registry by name, using the actual game state for parameterized actions
+        to ensure consistency between planning and execution phases.
         """
         try:
-            # Use the action registry to find the action
-            # We need current_state and game_data for parameterized actions
-            # For now, use empty/minimal state for lookup
-            minimal_state = {
-                GameState.CURRENT_X: 0,
-                GameState.CURRENT_Y: 0,
-                GameState.COOLDOWN_READY: True
-            }
-
-            return self.action_registry.get_action_by_name(action_name, minimal_state, None)
+            return self.action_registry.get_action_by_name(action_name, current_state, None)
         except Exception:
             return None
 

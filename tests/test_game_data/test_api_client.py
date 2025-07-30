@@ -311,7 +311,7 @@ class TestAPIClientWrapper:
             mock_response.data = MockData()
             mock_response.parsed = mock_response.data
 
-            mock_move.asyncio = AsyncMock(return_value=mock_response)
+            mock_move.asyncio_detailed = AsyncMock(return_value=mock_response)
 
             wrapper = APIClientWrapper()
             result = await wrapper.move_character("test_character", 25, 30)
@@ -385,7 +385,7 @@ class TestAPIClientWrapper:
             mock_response.data = MockData()
             mock_response.parsed = mock_response.data
 
-            mock_fight.asyncio = AsyncMock(return_value=mock_response)
+            mock_fight.asyncio_detailed = AsyncMock(return_value=mock_response)
 
             wrapper = APIClientWrapper()
             result = await wrapper.fight_monster("test_character")

@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from ...game_data.api_client import APIClientWrapper
 from ..state.game_state import ActionResult, GameState
+from ..state.character_game_state import CharacterGameState
 from .base_action import BaseAction
 
 
@@ -88,8 +89,6 @@ class RestAction(BaseAction):
         return {
             GameState.COOLDOWN_READY: True,
             GameState.CAN_REST: True,
-            GameState.HP_LOW: True,
-            GameState.AT_SAFE_LOCATION: True,
         }
 
     def get_effects(self) -> dict[GameState, Any]:
@@ -106,7 +105,7 @@ class RestAction(BaseAction):
         GameState enum keys for type-safe effect specification.
         """
         return {
-            GameState.HP_CURRENT: "+hp_recovery",
+            # Only declare effects we can guarantee - HP amount is determined by API
             GameState.HP_LOW: False,
             GameState.HP_CRITICAL: False,
             GameState.SAFE_TO_FIGHT: True,
@@ -312,7 +311,7 @@ class RestAction(BaseAction):
         percentage = current_hp / max_hp
         return max(0.0, min(1.0, percentage))
 
-    def can_execute(self, current_state: dict[GameState, Any]) -> bool:
+    def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.
         
         Parameters:

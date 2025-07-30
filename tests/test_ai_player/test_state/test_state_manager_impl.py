@@ -22,7 +22,49 @@ class TestStateManagerImplementation:
     def mock_api_client(self):
         """Mock API client for testing"""
         client = Mock(spec=APIClientWrapper)
+        
+        # Core async methods
         client.get_character = AsyncMock()
+        client.get_characters = AsyncMock()
+        client.create_character = AsyncMock()
+        client.delete_character = AsyncMock()
+        client.move_character = AsyncMock()
+        client.fight_monster = AsyncMock()
+        client.gather_resource = AsyncMock()
+        client.craft_item = AsyncMock()
+        client.rest_character = AsyncMock()
+        client.equip_item = AsyncMock()
+        client.unequip_item = AsyncMock()
+        
+        # Data retrieval methods
+        client.get_all_items = AsyncMock()
+        client.get_all_monsters = AsyncMock()
+        client.get_all_maps = AsyncMock()
+        client.get_map = AsyncMock()
+        client.get_all_resources = AsyncMock()
+        client.get_all_npcs = AsyncMock()
+        
+        # Internal methods
+        client._handle_rate_limit = AsyncMock()
+        client._process_response = AsyncMock()
+        client.extract_cooldown = Mock()
+        
+        # Required attributes
+        client.cooldown_manager = Mock()
+        client.cooldown_manager.update_from_character = Mock()
+        client.cooldown_manager.is_ready = Mock(return_value=True)
+        client.cooldown_manager.get_remaining_time = Mock(return_value=0.0)
+        client.cooldown_manager.update_cooldown = Mock()
+        client.cooldown_manager.wait_for_cooldown = AsyncMock()
+        client.cooldown_manager.clear_cooldown = Mock()
+        client.cooldown_manager.clear_all_cooldowns = Mock()
+        client.cooldown_manager.get_cooldown_info = Mock(return_value=None)
+        client.cooldown_manager.clear_expired_cooldowns = Mock()
+        
+        client.client = Mock()  # Underlying authenticated client
+        client.token_config = Mock()
+        client.status_codes = Mock()
+        
         return client
 
     @pytest.fixture
@@ -102,36 +144,25 @@ class TestStateManagerImplementation:
         """Test getting current state"""
         mock_api_client.get_character.return_value = mock_character_data
 
-        with patch.object(GameState, 'validate_state_dict') as mock_validate:
-            mock_validate.return_value = {
-                GameState.CHARACTER_LEVEL: 5,
-                GameState.HP_CURRENT: 80,
-                GameState.CURRENT_X: 10,
-                GameState.CURRENT_Y: 15,
-                GameState.COOLDOWN_READY: True
-            }
+        result = await state_manager.get_current_state()
 
-            result = await state_manager.get_current_state()
-
-            assert isinstance(result, dict)
-            assert result[GameState.CHARACTER_LEVEL] == 5
-            assert result[GameState.HP_CURRENT] == 80
-            assert result[GameState.COOLDOWN_READY] is True
-            mock_validate.assert_called_once()
+        assert isinstance(result, CharacterGameState)
+        assert result.level == 5
+        assert result.hp == 80
+        assert result.cooldown_ready is True
+        mock_api_client.get_character.assert_called_once_with("test_character")
 
     @pytest.mark.asyncio
-    async def test_get_current_state_with_cache(self, state_manager):
-        """Test getting current state when cache is available"""
-        cached_state = {
-            GameState.CHARACTER_LEVEL: 6,
-            GameState.HP_CURRENT: 90
-        }
+    async def test_get_current_state_with_cache(self, state_manager, mock_api_client, mock_character_data):
+        """Test getting current state (always fetches fresh from API)"""
+        mock_api_client.get_character.return_value = mock_character_data
 
-        with patch.object(state_manager, 'load_state_from_cache', return_value=cached_state):
-            result = await state_manager.get_current_state()
+        result = await state_manager.get_current_state()
 
-            assert result == cached_state
-            assert state_manager._cached_state == cached_state
+        assert isinstance(result, CharacterGameState)
+        assert result.level == 5
+        assert result.hp == 80
+        mock_api_client.get_character.assert_called_once_with("test_character")
 
     def test_convert_api_to_goap_state(self, state_manager, mock_character_data):
         """Test converting API character to GOAP state"""

@@ -126,7 +126,7 @@ class TestGatheringAction:
             assert effects[action_state] is False
 
         # Check inventory usage
-        assert effects[GameState.INVENTORY_SPACE_USED] == "+1"
+        assert effects[GameState.INVENTORY_SPACE_USED] == 1
 
     def test_has_required_tool_with_tool(self):
         """Test tool validation when tool is equipped"""
@@ -483,7 +483,8 @@ class TestGatheringAction:
     async def test_execute_successful_gathering_missing_character_attributes(self):
         """Test successful gathering when character has missing skill attributes"""
         # Create a mock character with only basic attributes and mining
-        mock_character = Mock(spec=['xp', 'gold', 'x', 'y', 'hp', 'mining_xp', 'mining_level'])
+        mock_character = Mock(spec=['level', 'xp', 'gold', 'x', 'y', 'hp', 'mining_xp', 'mining_level'])
+        mock_character.level = 5
         mock_character.xp = 1000
         mock_character.gold = 75
         mock_character.x = 2
@@ -518,6 +519,7 @@ class TestGatheringAction:
         assert result.success is True
 
         # Should still include basic character updates
+        assert result.state_changes[GameState.CHARACTER_LEVEL] == 5
         assert result.state_changes[GameState.CHARACTER_XP] == 1000
         assert result.state_changes[GameState.MINING_XP] == 200
         assert result.state_changes[GameState.MINING_LEVEL] == 2

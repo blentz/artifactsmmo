@@ -238,11 +238,12 @@ class ActionDiagnostics:
 
         return analysis
 
-    def get_available_actions(self, current_state: dict[GameState, Any]) -> list[BaseAction]:
+    def get_available_actions(self, current_state: dict[GameState, Any], game_data: Any = None) -> list[BaseAction]:
         """Get all actions that can be executed in current state.
 
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
+            game_data: Game data object containing maps, monsters, resources for action generation
 
         Return values:
             List of BaseAction instances that can be executed immediately
@@ -254,9 +255,7 @@ class ActionDiagnostics:
         available_actions = []
 
         try:
-            # Generate actions using the registry with dummy game data
-            # In a real implementation, we'd need actual game data
-            game_data: dict[str, Any] = {}  # Placeholder
+            # Generate actions using the registry with provided game data
             all_actions = self.action_registry.generate_actions_for_state(current_state, game_data)
 
             for action in all_actions:

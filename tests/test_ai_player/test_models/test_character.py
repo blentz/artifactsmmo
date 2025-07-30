@@ -34,9 +34,9 @@ class TestInventorySlot:
         with pytest.raises(ValidationError):
             InventorySlot(slot=0, code="item", quantity=1)
             
-        # Invalid quantity (must be >= 1)
+        # Invalid quantity (must be >= 0)
         with pytest.raises(ValidationError):
-            InventorySlot(slot=1, code="item", quantity=0)
+            InventorySlot(slot=1, code="item", quantity=-1)
 
     def test_inventory_slot_assignment_validation(self):
         """Test assignment validation after creation"""

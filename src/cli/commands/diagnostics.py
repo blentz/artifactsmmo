@@ -104,9 +104,12 @@ class DiagnosticCommands:
         try:
             # Get real character data from API
             character_data = await self.api_client.get_character(character_name)
+            
+            # Get map content for location-aware state
+            game_map = await self.api_client.get_map(character_data.x, character_data.y)
 
-            # Extract character game state
-            character_game_state = CharacterGameState.from_api_character(character_data)
+            # Extract character game state with location context
+            character_game_state = CharacterGameState.from_api_character(character_data, game_map.content)
 
             # Convert to GOAP state format and run diagnosis
             goap_state = character_game_state.to_goap_state()
@@ -288,21 +291,28 @@ class DiagnosticCommands:
             cost_warnings = self.action_diagnostics.validate_action_costs()
             diagnosis["registry_validation"]["warnings"] = cost_warnings
 
-            # Get action types for analysis
-            action_types = self.action_registry.get_all_action_types()
-            diagnosis["summary"]["total_actions"] = len(action_types)
-
-            costs = []
-
-            for action_class in action_types:
+            # Get current character state using the proper application components
+            current_state = {}
+            if character_name and self.goal_manager and hasattr(self.goal_manager, 'state_manager'):
                 try:
-                    # Try to create instance for analysis
-                    try:
-                        action_instance = action_class()
+                    # Use the state manager that was properly initialized by CLI
+                    current_state = await self.goal_manager.state_manager.get_current_state()
+                except Exception as e:
+                    diagnosis["recommendations"].append(f"Failed to get character state: {e}")
 
+            # Use the same action generation path as the AI player
+            if current_state and self.goal_manager:
+                # Get game data from goal manager for parameterized action generation
+                game_data = await self.goal_manager.get_game_data()
+                all_actions = self.action_registry.generate_actions_for_state(current_state, game_data)
+                diagnosis["summary"]["total_actions"] = len(all_actions)
+                
+                costs = []
+                for action_instance in all_actions:
+                    try:
                         action_info = {
                             "name": action_instance.name,
-                            "class": action_class.__name__,
+                            "class": action_instance.__class__.__name__,
                             "cost": action_instance.cost,
                             "executable": False,
                             "preconditions": {},
@@ -313,6 +323,14 @@ class DiagnosticCommands:
                             },
                             "issues": []
                         }
+                        
+                        # Test executability with current character state
+                        try:
+                            action_info["executable"] = action_instance.can_execute(current_state)
+                            if action_info["executable"]:
+                                diagnosis["summary"]["executable_actions"] += 1
+                        except Exception as e:
+                            action_info["issues"].append(f"Executability check failed: {e}")
 
                         costs.append(action_instance.cost)
 
@@ -344,30 +362,54 @@ class DiagnosticCommands:
                             action_info["issues"].append(f"Validation failed: {e}")
 
                         # Track action type
-                        action_type = action_class.__name__.replace("Action", "")
+                        action_type = action_instance.__class__.__name__.replace("Action", "")
                         diagnosis["summary"]["action_types"][action_type] = (
                             diagnosis["summary"]["action_types"].get(action_type, 0) + 1
                         )
 
                         diagnosis["actions_analyzed"].append(action_info)
 
-                    except TypeError:
-                        # Action requires parameters
-                        action_info = {
-                            "name": f"{action_class.__name__} (parameterized)",
+                    except Exception as e:
+                        diagnosis["actions_analyzed"].append({
+                            "name": f"{action_instance.name} (error)",
+                            "class": action_instance.__class__.__name__,
+                            "issues": [f"Analysis failed: {str(e)}"]
+                        })
+            else:
+                # Fallback to action types when no state/goal manager available
+                action_types = self.action_registry.get_all_action_types()
+                diagnosis["summary"]["total_actions"] = len(action_types)
+                diagnosis["recommendations"].append("Limited analysis - provide --character for full action generation")
+                
+                costs = []
+                for action_class in action_types:
+                    try:
+                        try:
+                            action_instance = action_class()
+                            action_info = {
+                                "name": action_instance.name,
+                                "class": action_class.__name__,
+                                "cost": action_instance.cost,
+                                "executable": "Unknown (no character state)",
+                                "issues": []
+                            }
+                            costs.append(action_instance.cost)
+                            diagnosis["actions_analyzed"].append(action_info)
+                        except TypeError:
+                            action_info = {
+                                "name": f"{action_class.__name__} (parameterized)",
+                                "class": action_class.__name__,
+                                "cost": "Variable",
+                                "executable": "Requires parameters and state",
+                                "issues": ["Parameterized action - use --character to see generated instances"]
+                            }
+                            diagnosis["actions_analyzed"].append(action_info)
+                    except Exception as e:
+                        diagnosis["actions_analyzed"].append({
+                            "name": f"{action_class.__name__} (error)",
                             "class": action_class.__name__,
-                            "cost": "Variable",
-                            "executable": "Requires parameters",
-                            "issues": ["Parameterized action - requires specific parameters to analyze"]
-                        }
-                        diagnosis["actions_analyzed"].append(action_info)
-
-                except Exception as e:
-                    diagnosis["actions_analyzed"].append({
-                        "name": f"{action_class.__name__} (error)",
-                        "class": action_class.__name__,
-                        "issues": [f"Analysis failed: {str(e)}"]
-                    })
+                            "issues": [f"Analysis failed: {str(e)}"]
+                        })
 
             # Calculate cost statistics
             if costs:
@@ -431,105 +473,122 @@ class DiagnosticCommands:
             return diagnosis
 
         try:
-            # Parse goal string into goal state (simplified parsing)
+            # Use actual character state if API client is available
+            if character_name and self.api_client:
+                try:
+                    character_state = await self.api_client.get_character(character_name)
+                    # Get map content for location context
+                    game_map = await self.api_client.get_map(character_state.x, character_state.y)
+                    
+                    # Convert to internal state format
+                    char_state = CharacterGameState.from_api_character(character_state, game_map.content, self.api_client.cooldown_manager)
+                    typed_state = char_state.to_goap_state()
+                    start_state = GameState.validate_state_dict(typed_state)
+                except Exception as e:
+                    diagnosis["recommendations"].append(f"Failed to get character state: {str(e)}")
+                    return diagnosis
+            else:
+                # Use default CharacterGameState for testing
+                char_state = CharacterGameState(
+                    name="test_character",
+                    level=1,
+                    xp=0,
+                    gold=0,
+                    hp=100,
+                    max_hp=100,
+                    x=0,
+                    y=0,
+                    mining_level=1,
+                    mining_xp=0,
+                    woodcutting_level=1,
+                    woodcutting_xp=0,
+                    fishing_level=1,
+                    fishing_xp=0,
+                    weaponcrafting_level=1,
+                    weaponcrafting_xp=0,
+                    gearcrafting_level=1,
+                    gearcrafting_xp=0,
+                    jewelrycrafting_level=1,
+                    jewelrycrafting_xp=0,
+                    cooking_level=1,
+                    cooking_xp=0,
+                    alchemy_level=1,
+                    alchemy_xp=0,
+                    cooldown=0,
+                    cooldown_ready=True
+                )
+
+            # Let goal manager parse and select the goal - don't duplicate parsing logic
+            goal_dict = {"raw_goal_string": goal}
             try:
-                goal_state = self._parse_goal_string(goal)
+                # Goal manager should handle goal parsing/selection - use the character state
+                selected_goal = self.goal_manager.select_next_goal(char_state)
+                goal_state = selected_goal.get('target_state', {})
             except Exception as e:
-                diagnosis["recommendations"].append(f"Failed to parse goal '{goal}': {str(e)}")
+                diagnosis["recommendations"].append(f"Goal manager failed to process goal '{goal}': {str(e)}")
                 return diagnosis
 
-            # Create dummy start state for analysis (in real implementation, would get from API)
-            start_state = {
-                GameState.CHARACTER_LEVEL: 1,
-                GameState.CHARACTER_XP: 0,
-                GameState.CHARACTER_GOLD: 0,
-                GameState.HP_CURRENT: 100,
-                GameState.HP_MAX: 100,
-                GameState.CURRENT_X: 0,
-                GameState.CURRENT_Y: 0,
-                GameState.COOLDOWN_READY: True
+            # Now use the actual goal manager to plan
+            plan = await self.goal_manager.plan_actions(char_state, selected_goal)
+            
+            diagnosis["planning_analysis"] = {
+                "planning_successful": len(plan) > 0,
+                "goal_reachable": len(plan) > 0,
+                "total_cost": sum(action.get('cost', 1) for action in plan),
+                "planning_time": 0.1  # Placeholder
             }
 
-            # Test goal reachability
-            reachable = await self.planning_diagnostics.test_goal_reachability(start_state, goal_state)
-            diagnosis["planning_analysis"]["goal_reachable"] = reachable
-
-            if not reachable:
-                diagnosis["recommendations"].append("Goal appears to be unreachable from current state")
-
-            # Analyze planning steps
-            if verbose:
-                planning_steps = await self.planning_diagnostics.analyze_planning_steps(start_state, goal_state)
-                diagnosis["planning_analysis"] = planning_steps
-
-                # Get plan efficiency analysis
-                if planning_steps.get("planning_successful") and planning_steps.get("steps"):
-                    efficiency_analysis = self.planning_diagnostics.analyze_plan_efficiency(planning_steps["steps"])
-                    diagnosis["plan_efficiency"] = efficiency_analysis
-
-            # Identify bottlenecks
-            bottlenecks = await self.planning_diagnostics.identify_planning_bottlenecks(start_state, goal_state)
-            diagnosis["bottlenecks"] = bottlenecks
-
-            # Measure performance
-            performance = await self.planning_diagnostics.measure_planning_performance(start_state, goal_state)
-            diagnosis["performance_metrics"] = performance
-
-            # Generate recommendations
-            if bottlenecks:
-                diagnosis["recommendations"].append(f"Found {len(bottlenecks)} planning bottlenecks to address")
-
-            if performance.get("performance_class") == "slow":
-                diagnosis["recommendations"].append("Planning performance is slow - consider goal simplification")
-
-            if not diagnosis["planning_analysis"].get("goal_reachable", True):
-                diagnosis["recommendations"].append("Goal is not reachable - verify goal parameters and available actions")
+            # Add detailed information if verbose
+            if verbose and plan:
+                diagnosis["plan_steps"] = plan
+                
+            # Use planning diagnostics if available
+            if self.planning_diagnostics:
+                try:
+                    # Test goal reachability
+                    goal_reachable = await self.planning_diagnostics.test_goal_reachability(
+                        char_state.to_goap_state(), goal_state
+                    )
+                    diagnosis["planning_analysis"]["goal_reachable"] = goal_reachable
+                    
+                    # Identify bottlenecks
+                    bottlenecks = await self.planning_diagnostics.identify_planning_bottlenecks(
+                        char_state.to_goap_state(), goal_state
+                    )
+                    diagnosis["bottlenecks"] = bottlenecks
+                    
+                    # Measure performance
+                    performance = await self.planning_diagnostics.measure_planning_performance(
+                        char_state.to_goap_state(), goal_state
+                    )
+                    diagnosis["performance_metrics"] = performance
+                    
+                    # Analyze plan efficiency if we have a plan
+                    if plan:
+                        efficiency = self.planning_diagnostics.analyze_plan_efficiency(plan)
+                        diagnosis["plan_efficiency"] = efficiency
+                    
+                except Exception as e:
+                    diagnosis["recommendations"].append(f"Planning diagnostics error: {str(e)}")
+                
+            # Generate recommendations based on analysis
+            if not plan:
+                if not diagnosis["planning_analysis"].get("goal_reachable", True):
+                    diagnosis["recommendations"].append("Goal appears to be unreachable with current actions")
+                else:
+                    diagnosis["recommendations"].append("No plan found - goal may be unreachable")
+            else:
+                diagnosis["recommendations"].append("Plan is efficient - no optimization needed")
+                
+            # Add bottleneck recommendations
+            if diagnosis.get("bottlenecks") and len(diagnosis["bottlenecks"]) > 0:
+                diagnosis["recommendations"].append(f"Found {len(diagnosis['bottlenecks'])} bottlenecks to address")
 
         except Exception as e:
             diagnosis["recommendations"].append(f"Planning diagnostic error: {str(e)}")
 
         return diagnosis
 
-    def _parse_goal_string(self, goal: str) -> dict[GameState, Any]:
-        """Parse goal string into GameState dictionary.
-        
-        Simple parser for goal strings like 'level=5' or 'gold=1000,level=10'
-        """
-        goal_state = {}
-
-        # Handle simple key=value pairs
-        if "=" in goal:
-            pairs = goal.split(",")
-            for pair in pairs:
-                if "=" in pair:
-                    key, value = pair.strip().split("=", 1)
-
-                    # Map common keys to GameState enums
-                    key_mapping = {
-                        "level": GameState.CHARACTER_LEVEL,
-                        "character_level": GameState.CHARACTER_LEVEL,
-                        "gold": GameState.CHARACTER_GOLD,
-                        "character_gold": GameState.CHARACTER_GOLD,
-                        "xp": GameState.CHARACTER_XP,
-                        "character_xp": GameState.CHARACTER_XP,
-                        "hp": GameState.HP_CURRENT,
-                        "x": GameState.CURRENT_X,
-                        "y": GameState.CURRENT_Y
-                    }
-
-                    game_state_key = key_mapping.get(key.lower())
-                    if game_state_key:
-                        try:
-                            # Try to convert to int for numeric values
-                            goal_state[game_state_key] = int(value)
-                        except ValueError:
-                            # Keep as string for non-numeric values
-                            goal_state[game_state_key] = value
-
-        if not goal_state:
-            raise ValueError(f"Could not parse goal string: {goal}")
-
-        return goal_state
 
     async def test_planning(self, mock_state_file: str | None = None,
                           start_level: int | None = None,

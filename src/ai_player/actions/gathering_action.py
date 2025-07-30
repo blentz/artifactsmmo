@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from ...game_data.api_client import APIClientWrapper
 from ..state.game_state import ActionResult, GameState
+from ..state.character_game_state import CharacterGameState
 from .base_action import BaseAction
 
 
@@ -109,10 +110,13 @@ class GatheringAction(BaseAction):
             Dictionary with GameState enum keys defining gathering outcomes
 
         This method returns the expected effects of gathering including skill
-        XP gains, item acquisition, inventory changes, and cooldown activation
-        using GameState enum keys for type-safe effect specification.
+        level increases, XP gains, item acquisition, and cooldown activation.
+        The values represent incremental changes that the GOAP planner can reason about.
         """
         return {
+            GameState.CHARACTER_XP: 30,        # Increase character XP by ~30 points
+            GameState.MINING_LEVEL: 1,         # May increase mining level by 1
+            GameState.MINING_XP: 40,           # Increase mining XP by ~40 points
             GameState.COOLDOWN_READY: False,
             GameState.CAN_FIGHT: False,
             GameState.CAN_GATHER: False,
@@ -122,7 +126,7 @@ class GatheringAction(BaseAction):
             GameState.CAN_REST: False,
             GameState.CAN_USE_ITEM: False,
             GameState.CAN_BANK: False,
-            GameState.INVENTORY_SPACE_USED: "+1",
+            GameState.INVENTORY_SPACE_USED: 1,  # Use 1 inventory slot
         }
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
@@ -193,6 +197,7 @@ class GatheringAction(BaseAction):
             if hasattr(gather_result.data, 'character'):
                 character = gather_result.data.character
                 state_changes.update({
+                    GameState.CHARACTER_LEVEL: character.level,
                     GameState.CHARACTER_XP: character.xp,
                     GameState.CHARACTER_GOLD: character.gold,
                     GameState.CURRENT_X: character.x,
@@ -336,7 +341,7 @@ class GatheringAction(BaseAction):
         # Default minimum skill level for gathering
         return 1
 
-    def can_execute(self, current_state: dict[GameState, Any]) -> bool:
+    def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.
 
         Parameters:

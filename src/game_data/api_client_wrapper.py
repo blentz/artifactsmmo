@@ -27,6 +27,7 @@ from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_actio
 from artifactsmmo_api_client.api.items.get_all_items_items_get import asyncio_detailed as get_all_items_asyncio_detailed
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import asyncio_detailed as get_all_monsters_asyncio_detailed
 from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import asyncio_detailed as get_all_maps_asyncio_detailed
+from artifactsmmo_api_client.api.maps.get_map_maps_x_y_get import asyncio_detailed as get_map_asyncio_detailed
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import asyncio_detailed as get_all_resources_asyncio_detailed
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_npcs_details_get import asyncio_detailed as get_all_npcs_asyncio_detailed
 from artifactsmmo_api_client.api.characters.create_character_characters_create_post import asyncio_detailed as create_character_asyncio_detailed
@@ -194,7 +195,7 @@ class APIClientWrapper:
         body = DestinationSchema(x=x, y=y)
 
         # Make API call
-        response = await action_move_my_name_action_move_post.asyncio(client=self.client, name=character_name, body=body)
+        response = await action_move_my_name_action_move_post.asyncio_detailed(client=self.client, name=character_name, body=body)
         processed_response = await self._process_response(response)
 
         # Trust API contract for cooldown structure
@@ -215,7 +216,7 @@ class APIClientWrapper:
         while managing combat cooldowns and HP changes.
         """
         # Make API call (no body needed for fight action)
-        response = await action_fight_my_name_action_fight_post.asyncio(client=self.client, name=character_name)
+        response = await action_fight_my_name_action_fight_post.asyncio_detailed(client=self.client, name=character_name)
         processed_response = await self._process_response(response)
 
         # Trust API contract for cooldown structure
@@ -405,6 +406,26 @@ class APIClientWrapper:
 
         # Transform API models to internal models
         return [GameMap.from_api_map(game_map) for game_map in processed_response.data]
+
+    async def get_map(self, x: int, y: int) -> GameMap:
+        """Get specific map location with content information.
+        
+        Parameters:
+            x: X coordinate of the map location
+            y: Y coordinate of the map location
+            
+        Return values:
+            GameMap instance with content information for the specific location
+            
+        This method retrieves detailed information about a specific map location
+        including content data (monsters, resources, NPCs, etc.) which is not
+        available in the bulk get_all_maps endpoint.
+        """
+        # Make API call
+        response = await get_map_asyncio_detailed(x=x, y=y, client=self.client)
+        processed_response = await self._process_response(response)
+        # Transform API model to internal model
+        return GameMap.from_api_map(processed_response.data)
 
     async def get_all_resources(self) -> list[GameResource]:
         """Get all resources for caching.

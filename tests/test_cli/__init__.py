@@ -109,6 +109,40 @@ class CLIMockFactory:
         client.create_character = AsyncMock(return_value=CLIMockFactory.create_character_mock())
         client.delete_character = AsyncMock(return_value=True)
         client.get_characters = AsyncMock(return_value=[CLIMockFactory.create_character_mock()])
+        client.get_character = AsyncMock(return_value=CLIMockFactory.create_character_mock())
+        
+        # Action methods
+        client.move_character = AsyncMock()
+        client.fight_monster = AsyncMock()
+        client.gather_resource = AsyncMock()
+        client.craft_item = AsyncMock()
+        client.rest_character = AsyncMock()
+        client.equip_item = AsyncMock()
+        client.unequip_item = AsyncMock()
+        
+        # Data retrieval methods
+        client.get_all_items = AsyncMock(return_value=[])
+        client.get_all_monsters = AsyncMock(return_value=[])
+        client.get_all_maps = AsyncMock(return_value=[])
+        client.get_map = AsyncMock()
+        client.get_all_resources = AsyncMock(return_value=[])
+        client.get_all_npcs = AsyncMock(return_value=[])
+        
+        # Required attributes
+        client.cooldown_manager = Mock()
+        client.cooldown_manager.update_from_character = Mock()
+        client.cooldown_manager.is_ready = Mock(return_value=True)
+        client.cooldown_manager.get_remaining_time = Mock(return_value=0.0)
+        client.cooldown_manager.update_cooldown = Mock()
+        client.cooldown_manager.wait_for_cooldown = AsyncMock()
+        client.cooldown_manager.clear_cooldown = Mock()
+        client.cooldown_manager.clear_all_cooldowns = Mock()
+        client.cooldown_manager.get_cooldown_info = Mock(return_value=None)
+        client.cooldown_manager.clear_expired_cooldowns = Mock()
+        
+        client.client = Mock()  # Underlying authenticated client
+        client.token_config = Mock()
+        client.status_codes = Mock()
         
         return client
 

@@ -51,6 +51,13 @@ class TestStateManager:
         
         client.get_character = AsyncMock(return_value=mock_character)
         client.get_character_logs = AsyncMock()
+        mock_map = Mock()
+        mock_map.content = Mock()
+        mock_map.content.type = "safe"  # Safe location type
+        client.get_map = AsyncMock(return_value=mock_map)
+        client.cooldown_manager = Mock()
+        client.cooldown_manager.update_from_character = Mock()
+        client.cooldown_manager.is_ready = Mock(return_value=True)
         return client
 
     @pytest.fixture
@@ -59,6 +66,7 @@ class TestStateManager:
         cache = Mock()
         cache.save_character_state = Mock()
         cache.load_character_state = Mock()
+        cache.load_nearby_maps = AsyncMock()
         return cache
 
     @pytest.fixture
@@ -96,7 +104,7 @@ class TestStateManager:
         # The state should be loaded from the YAML cache data we configured in the fixture
         current_state = await state_manager.get_current_state()
 
-        assert isinstance(current_state, dict)
+        assert isinstance(current_state, CharacterGameState)
         # Verify the state contains the expected GameState enum keys
         assert GameState.CHARACTER_LEVEL in current_state
         assert GameState.HP_CURRENT in current_state
@@ -137,21 +145,43 @@ class TestStateManager:
         mock_api_client.get_character.return_value = mock_character
 
         with patch.object(CharacterGameState, 'from_api_character') as mock_from_api:
-            mock_character_state = Mock()
-            mock_character_state.to_goap_state.return_value = {
-                "character_level": 5,
-                "hp_current": 80,
-                "current_x": 10,
-                "current_y": 15,
-                "cooldown_ready": 1
-            }
+            mock_character_state = CharacterGameState(
+                name="test_character",
+                level=5,
+                xp=1000,
+                gold=500,
+                hp=80,
+                max_hp=100,
+                x=10,
+                y=15,
+                mining_level=1,
+                mining_xp=0,
+                woodcutting_level=1,
+                woodcutting_xp=0,
+                fishing_level=1,
+                fishing_xp=0,
+                weaponcrafting_level=1,
+                weaponcrafting_xp=0,
+                gearcrafting_level=1,
+                gearcrafting_xp=0,
+                jewelrycrafting_level=1,
+                jewelrycrafting_xp=0,
+                cooking_level=1,
+                cooking_xp=0,
+                alchemy_level=1,
+                alchemy_xp=0,
+                cooldown=0
+            )
             mock_from_api.return_value = mock_character_state
 
             current_state = await state_manager.get_current_state()
 
-            assert isinstance(current_state, dict)
+            assert isinstance(current_state, CharacterGameState)
             mock_api_client.get_character.assert_called_once_with("test_character")
-            mock_from_api.assert_called_once_with(mock_character)
+            # Verify from_api_character was called with the character data
+            assert mock_from_api.called
+            call_args = mock_from_api.call_args[0]
+            assert call_args[0] == mock_character  # First arg should be the character
 
     @pytest.mark.asyncio
     async def test_update_state_with_changes(self, state_manager, mock_cache_manager):

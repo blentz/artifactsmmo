@@ -51,6 +51,29 @@ class CharacterGameState(BaseModel):
     # Action state
     cooldown: int = Field(ge=0)
     cooldown_ready: bool = True
+    
+    # Capability states
+    can_fight: bool = True
+    can_gather: bool = True
+    can_craft: bool = True
+    can_trade: bool = True
+    can_move: bool = True
+    can_rest: bool = True
+    can_use_item: bool = True
+    can_bank: bool = True
+    can_gain_xp: bool = True
+    xp_source_available: bool = False
+    
+    # Derived states
+    at_monster_location: bool = False
+    at_resource_location: bool = False
+    at_safe_location: bool = True
+    safe_to_fight: bool = True
+    hp_low: bool = False
+    hp_critical: bool = False
+    inventory_space_available: bool = True
+    inventory_space_used: int = Field(ge=0, default=0)
+    gained_xp: bool = False
 
     def to_goap_state(self) -> dict[str, Any]:
         """Convert to GOAP state dictionary using enum values.
@@ -97,6 +120,27 @@ class CharacterGameState(BaseModel):
             'alchemy_level': GameState.ALCHEMY_LEVEL,
             'alchemy_xp': GameState.ALCHEMY_XP,
             'cooldown_ready': GameState.COOLDOWN_READY,
+            # Capability states
+            'can_fight': GameState.CAN_FIGHT,
+            'can_gather': GameState.CAN_GATHER,
+            'can_craft': GameState.CAN_CRAFT,
+            'can_trade': GameState.CAN_TRADE,
+            'can_move': GameState.CAN_MOVE,
+            'can_rest': GameState.CAN_REST,
+            'can_use_item': GameState.CAN_USE_ITEM,
+            'can_bank': GameState.CAN_BANK,
+            'can_gain_xp': GameState.CAN_GAIN_XP,
+            'xp_source_available': GameState.XP_SOURCE_AVAILABLE,
+            # Derived states
+            'at_monster_location': GameState.AT_MONSTER_LOCATION,
+            'at_resource_location': GameState.AT_RESOURCE_LOCATION,
+            'at_safe_location': GameState.AT_SAFE_LOCATION,
+            'safe_to_fight': GameState.SAFE_TO_FIGHT,
+            'hp_low': GameState.HP_LOW,
+            'hp_critical': GameState.HP_CRITICAL,
+            'inventory_space_available': GameState.INVENTORY_SPACE_AVAILABLE,
+            'inventory_space_used': GameState.INVENTORY_SPACE_USED,
+            'gained_xp': GameState.GAINED_XP,
         }
 
         # Map available fields to enum values
@@ -107,11 +151,13 @@ class CharacterGameState(BaseModel):
         return goap_dict
 
     @classmethod
-    def from_api_character(cls, character: Any) -> 'CharacterGameState':
+    def from_api_character(cls, character: Any, map_content=None, cooldown_manager=None) -> 'CharacterGameState':
         """Create from API character response with validated state mapping.
 
         Parameters:
             character: CharacterSchema object from ArtifactsMMO API response
+            map_content: Optional MapContent object for location context
+            cooldown_manager: Optional CooldownManager for centralized cooldown tracking
 
         Return values:
             CharacterGameState instance with validated data mapped to GameState enum keys
@@ -120,6 +166,32 @@ class CharacterGameState(BaseModel):
         mapping all relevant character properties to the appropriate GameState enum keys
         while performing Pydantic validation on the data.
         """
+        # Get cooldown status from cooldown manager
+        if cooldown_manager:
+            cooldown_ready = cooldown_manager.is_ready(character.name)
+        else:
+            cooldown_ready = character.cooldown == 0
+        hp_low = character.hp < (character.max_hp * 0.3)
+        hp_critical = character.hp < (character.max_hp * 0.1)
+        
+        # Determine location states based on map content
+        at_monster_location = False
+        at_resource_location = False
+        at_safe_location = True
+        xp_source_available = False  # XP source available at this location
+        
+        if map_content:
+            if map_content.type == "monster":
+                at_monster_location = True
+                at_safe_location = False  # Monsters make location unsafe
+                xp_source_available = True  # Monsters are XP sources
+            elif map_content.type == "resource":
+                at_resource_location = True
+                xp_source_available = True  # Resources are XP sources (via gathering)
+            elif map_content.type == "workshop":
+                xp_source_available = True  # Workshops are XP sources (via crafting)
+            # Keep at_safe_location=True for workshops, tasks_master, etc.
+        
         return cls(
             name=character.name,
             level=character.level,
@@ -146,5 +218,98 @@ class CharacterGameState(BaseModel):
             alchemy_level=character.alchemy_level,
             alchemy_xp=character.alchemy_xp,
             cooldown=character.cooldown,
-            cooldown_ready=character.cooldown == 0,
+            cooldown_ready=cooldown_ready,
+            # Set capability states based on cooldown status
+            can_fight=cooldown_ready,
+            can_gather=cooldown_ready,
+            can_craft=cooldown_ready,
+            can_trade=cooldown_ready,
+            can_move=cooldown_ready,
+            can_rest=cooldown_ready,
+            can_use_item=cooldown_ready,
+            can_bank=cooldown_ready,
+            can_gain_xp=cooldown_ready,  # Can gain XP when not on cooldown
+            xp_source_available=xp_source_available,
+            # Set derived states based on map content and character state
+            at_monster_location=at_monster_location,
+            at_resource_location=at_resource_location,
+            at_safe_location=at_safe_location,
+            safe_to_fight=not hp_low,  # Safe to fight if HP is good
+            hp_low=hp_low,
+            hp_critical=hp_critical,
+            inventory_space_available=True,  # Will be updated by inventory logic
+            inventory_space_used=0,  # Will be updated by inventory logic
+            gained_xp=False,  # Reset each state update, set by actions
         )
+
+    def get(self, key: GameState, default=None):
+        """Get value by GameState enum key for compatibility with existing code.
+        
+        Parameters:
+            key: GameState enum key to look up
+            default: Default value if key not found
+            
+        Return values:
+            The value for the specified GameState key, or default if not found
+        """
+        # Create mapping from GameState enum to field names
+        state_to_field = {
+            GameState.CHARACTER_LEVEL: 'level',
+            GameState.CHARACTER_XP: 'xp', 
+            GameState.CHARACTER_GOLD: 'gold',
+            GameState.HP_CURRENT: 'hp',
+            GameState.HP_MAX: 'max_hp',
+            GameState.CURRENT_X: 'x',
+            GameState.CURRENT_Y: 'y',
+            GameState.MINING_LEVEL: 'mining_level',
+            GameState.MINING_XP: 'mining_xp',
+            GameState.WOODCUTTING_LEVEL: 'woodcutting_level', 
+            GameState.WOODCUTTING_XP: 'woodcutting_xp',
+            GameState.FISHING_LEVEL: 'fishing_level',
+            GameState.FISHING_XP: 'fishing_xp',
+            GameState.WEAPONCRAFTING_LEVEL: 'weaponcrafting_level',
+            GameState.WEAPONCRAFTING_XP: 'weaponcrafting_xp',
+            GameState.GEARCRAFTING_LEVEL: 'gearcrafting_level',
+            GameState.GEARCRAFTING_XP: 'gearcrafting_xp', 
+            GameState.JEWELRYCRAFTING_LEVEL: 'jewelrycrafting_level',
+            GameState.JEWELRYCRAFTING_XP: 'jewelrycrafting_xp',
+            GameState.COOKING_LEVEL: 'cooking_level',
+            GameState.COOKING_XP: 'cooking_xp',
+            GameState.ALCHEMY_LEVEL: 'alchemy_level',
+            GameState.ALCHEMY_XP: 'alchemy_xp',
+            GameState.COOLDOWN_READY: 'cooldown_ready',
+            GameState.CAN_FIGHT: 'can_fight',
+            GameState.CAN_GATHER: 'can_gather', 
+            GameState.CAN_CRAFT: 'can_craft',
+            GameState.CAN_TRADE: 'can_trade',
+            GameState.CAN_MOVE: 'can_move',
+            GameState.CAN_REST: 'can_rest',
+            GameState.CAN_USE_ITEM: 'can_use_item',
+            GameState.CAN_BANK: 'can_bank',
+            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
+            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
+            GameState.AT_SAFE_LOCATION: 'at_safe_location',
+            GameState.SAFE_TO_FIGHT: 'safe_to_fight',
+            GameState.HP_LOW: 'hp_low',
+            GameState.HP_CRITICAL: 'hp_critical',
+            GameState.INVENTORY_SPACE_AVAILABLE: 'inventory_space_available',
+            GameState.INVENTORY_SPACE_USED: 'inventory_space_used',
+            GameState.GAINED_XP: 'gained_xp',
+        }
+        
+        field_name = state_to_field.get(key)
+        if field_name is None:
+            return default
+            
+        return getattr(self, field_name, default)
+
+    def __getitem__(self, key: GameState):
+        """Allow dict-style access with GameState enum keys."""
+        value = self.get(key)
+        if value is None:
+            raise KeyError(f"GameState key {key} not found")
+        return value
+
+    def __contains__(self, key: GameState):
+        """Check if GameState key exists in this model."""
+        return self.get(key) is not None

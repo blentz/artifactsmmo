@@ -203,7 +203,13 @@ class TestActionRegistry:
             GameState.CURRENT_Y: 15
         }
 
-        game_data = Mock()  # Mock game data
+        game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []  # Mock game data
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         actions = action_registry.generate_actions_for_state(current_state, game_data)
 
@@ -268,6 +274,9 @@ class TestActionRegistry:
 
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         action = action_registry.get_action_by_name("factory_action_1", current_state, game_data)
 
@@ -279,6 +288,9 @@ class TestActionRegistry:
         """Test getting specific action by name when it doesn't exist"""
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         action = action_registry.get_action_by_name("nonexistent_action", current_state, game_data)
 
@@ -301,6 +313,9 @@ class TestActionFactory:
         assert hasattr(factory, 'get_action_type')
 
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
         current_state = {GameState.COOLDOWN_READY: True}
 
         instances = factory.create_instances(game_data, current_state)
@@ -334,6 +349,9 @@ class TestParameterizedActionFactory:
             GameState.COOLDOWN_READY: True
         }
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         parameters = factory.generate_parameters(game_data, current_state)
 
@@ -356,6 +374,9 @@ class TestParameterizedActionFactory:
             GameState.COOLDOWN_READY: True
         }
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         instances = factory.create_instances(game_data, current_state)
 
@@ -380,6 +401,9 @@ class TestGlobalActionFunctions:
             GameState.CURRENT_Y: 15
         }
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         # Mock the global registry
         with patch('src.ai_player.actions.ActionRegistry') as mock_registry_class:
@@ -460,10 +484,13 @@ class TestActionRegistryEdgeCases:
         
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
         
-        # Should handle exception gracefully
-        actions = registry.generate_actions_for_state(current_state, game_data)
-        assert isinstance(actions, list)
+        # Should propagate exception - don't hide bugs
+        with pytest.raises(RuntimeError, match="Factory failed"):
+            registry.generate_actions_for_state(current_state, game_data)
 
     def test_generate_actions_with_action_creation_exception(self):
         """Test action generation when action creation throws exception"""
@@ -495,6 +522,9 @@ class TestActionRegistryEdgeCases:
         
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
         
         # Should handle exception gracefully
         actions = registry.generate_actions_for_state(current_state, game_data)
@@ -640,10 +670,13 @@ class TestActionRegistryEdgeCases:
         
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
         
-        # Should handle all exceptions gracefully and return None
-        action = registry.get_action_by_name("nonexistent", current_state, game_data)
-        assert action is None
+        # Should propagate exception - don't hide bugs
+        with pytest.raises(RuntimeError, match="Factory creation failed"):
+            registry.get_action_by_name("nonexistent", current_state, game_data)
 
     def test_discover_actions_with_import_errors(self):
         """Test action discovery with module import errors"""
@@ -724,6 +757,9 @@ class TestActionRegistryEdgeCases:
         
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
         
         # Should handle exception gracefully
         action = registry.get_action_by_name("simple_failing", current_state, game_data)
@@ -801,6 +837,9 @@ class TestActionRegistryIntegration:
 
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
+        game_data.maps = []
+        game_data.resources = []
+        game_data.monsters = []
 
         # This should complete without performance issues
         actions = registry.generate_actions_for_state(current_state, game_data)

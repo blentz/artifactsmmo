@@ -10,6 +10,7 @@ converting it to the internal GameState format, and maintaining state consistenc
 throughout the AI player operation.
 """
 
+from datetime import datetime
 from typing import Any, Optional
 
 from ...game_data.api_client import APIClientWrapper
@@ -38,34 +39,26 @@ class StateManager:
         """
         self.character_name = character_name
         self.api_client = api_client
-        self._cached_state: dict[GameState, Any] | None = None
+        self._cached_state: CharacterGameState | None = None
         self._cache_manager = cache_manager
         # Use centralized characters.yaml file for state data
         self._characters_cache = YamlData("data/characters.yaml")
 
-    async def get_current_state(self) -> dict[GameState, Any]:
+    async def get_current_state(self) -> CharacterGameState:
         """Fetch current character state from cache or API using GameState enum.
         
         Parameters:
             None
             
         Return values:
-            Dictionary with GameState enum keys and current character state values
+            CharacterGameState instance with current character state
             
         This method retrieves character state from cache if available, otherwise
         fetches from the API, converts it to the internal GameState enum format,
         and returns a type-safe state dictionary for GOAP planning operations.
         """
-        # Try to get state from cache first
-        cached_state = self.load_state_from_cache()
-        if cached_state is not None:
-            self._cached_state = cached_state
-            return cached_state
-
-        # Fall back to API if no cache available
-        character_state = await self.update_state_from_api()
-        state_dict = character_state.to_goap_state()
-        self._cached_state = GameState.validate_state_dict(state_dict)
+        # Get fresh state from API (cache can be optimized later)
+        self._cached_state = await self.update_state_from_api()
         return self._cached_state
 
     async def update_state_from_api(self) -> CharacterGameState:
@@ -83,8 +76,19 @@ class StateManager:
         """
         # Get raw API character schema
         api_character = await self.api_client.get_character(self.character_name)
-        # Transform to internal model at the boundary
-        character_state = CharacterGameState.from_api_character(api_character)
+        
+        # Update cooldown manager with character data
+        self.api_client.cooldown_manager.update_from_character(api_character)
+        
+        # Get map content for current location to set location flags correctly
+        game_map = await self.api_client.get_map(api_character.x, api_character.y)
+        
+        # Load nearby maps dynamically based on character position
+        if self._cache_manager:
+            await self._cache_manager.load_nearby_maps(api_character.x, api_character.y, radius=5)
+        
+        # Transform to internal model at the boundary with location context
+        character_state = CharacterGameState.from_api_character(api_character, game_map.content, self.api_client.cooldown_manager)
         return character_state
 
     def update_state_from_result(self, action_result: ActionResult) -> None:
@@ -103,9 +107,19 @@ class StateManager:
         if self._cached_state is None:
             self._cached_state = {}
 
+        # Check if position will change to update location flags
+        position_changed = (
+            GameState.CURRENT_X in action_result.state_changes or 
+            GameState.CURRENT_Y in action_result.state_changes
+        )
+
         # Apply all state changes from the action result
         for state_key, new_value in action_result.state_changes.items():
             self._cached_state[state_key] = new_value
+
+        # Update location flags if position changed
+        if position_changed:
+            self._update_location_flags_async()
 
         # Update cooldown state if action result indicates a cooldown
         if action_result.cooldown_seconds > 0:
@@ -119,6 +133,64 @@ class StateManager:
             self._cached_state[GameState.CAN_REST] = False
             self._cached_state[GameState.CAN_USE_ITEM] = False
             self._cached_state[GameState.CAN_BANK] = False
+
+    def _update_location_flags_async(self) -> None:
+        """Update location flags based on current position - schedules async update.
+        
+        This method schedules an async update of location flags based on the character's
+        current position by checking map content. It's called after position changes
+        to ensure location flags remain accurate for GOAP planning.
+        """
+        # Get current position from cached state
+        current_x = self._cached_state.get(GameState.CURRENT_X, 0)
+        current_y = self._cached_state.get(GameState.CURRENT_Y, 0)
+        
+        # Create a task to update location flags asynchronously
+        import asyncio
+        try:
+            # Try to get the current event loop
+            loop = asyncio.get_running_loop()
+            # Schedule the async update
+            loop.create_task(self._update_location_flags(current_x, current_y))
+        except RuntimeError:
+            # No event loop running, location flags will be updated on next API sync
+            pass
+
+    async def _update_location_flags(self, x: int, y: int) -> None:
+        """Update location flags based on map content at specified coordinates.
+        
+        Parameters:
+            x: X coordinate to check
+            y: Y coordinate to check
+            
+        This method fetches map content at the specified coordinates and updates
+        the cached state with appropriate location flags for GOAP planning.
+        """
+        try:
+            # Get map content at the new position
+            map_data = await self.api_client.get_map(x, y)
+            
+            # Reset all location flags
+            self._cached_state[GameState.AT_MONSTER_LOCATION] = False
+            self._cached_state[GameState.AT_RESOURCE_LOCATION] = False
+            self._cached_state[GameState.AT_SAFE_LOCATION] = True
+            self._cached_state[GameState.XP_SOURCE_AVAILABLE] = False
+            
+            # Set appropriate flags based on map content
+            if map_data.content:
+                if map_data.content.type == "monster":
+                    self._cached_state[GameState.AT_MONSTER_LOCATION] = True
+                    self._cached_state[GameState.AT_SAFE_LOCATION] = False
+                    self._cached_state[GameState.XP_SOURCE_AVAILABLE] = True
+                elif map_data.content.type == "resource":
+                    self._cached_state[GameState.AT_RESOURCE_LOCATION] = True
+                    self._cached_state[GameState.XP_SOURCE_AVAILABLE] = True
+                elif map_data.content.type == "workshop":
+                    self._cached_state[GameState.XP_SOURCE_AVAILABLE] = True
+                    
+        except Exception:
+            # If map lookup fails, location flags will be updated on next API sync
+            pass
 
     def get_cached_state(self) -> dict[GameState, Any]:
         """Get locally cached state using GameState enum.
@@ -278,6 +350,30 @@ class StateManager:
         # Save the fresh state to cache
         self.save_state_to_cache(fresh_state)
         return fresh_state
+    
+    def update_cooldown_state(self) -> None:
+        """Update action availability based on cooldown status.
+        
+        This method checks if the character's cooldown has expired and re-enables
+        all action capabilities when the cooldown is ready, fixing the issue where
+        actions remain permanently disabled after cooldown.
+        """
+        if self._cached_state is None:
+            return
+            
+        # Check if cooldown is ready
+        cooldown_ready = self._cached_state.get(GameState.COOLDOWN_READY, True)
+        
+        if cooldown_ready:
+            # Re-enable all action capabilities when cooldown is ready
+            self._cached_state[GameState.CAN_FIGHT] = True
+            self._cached_state[GameState.CAN_GATHER] = True
+            self._cached_state[GameState.CAN_CRAFT] = True
+            self._cached_state[GameState.CAN_TRADE] = True
+            self._cached_state[GameState.CAN_MOVE] = True
+            self._cached_state[GameState.CAN_REST] = True
+            self._cached_state[GameState.CAN_USE_ITEM] = True
+            self._cached_state[GameState.CAN_BANK] = True
 
     def save_state_to_cache(self, state: dict[GameState, Any]) -> None:
         """Save state to centralized characters.yaml cache.

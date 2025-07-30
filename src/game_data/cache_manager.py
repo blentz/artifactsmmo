@@ -175,6 +175,43 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
+    async def load_nearby_maps(self, center_x: int, center_y: int, radius: int = 5) -> None:
+        """Load individual maps in a radius around the given position.
+        
+        Parameters:
+            center_x: X coordinate of the center position
+            center_y: Y coordinate of the center position
+            radius: Radius around the center to load maps
+            
+        Return values:
+            None (updates internal cache)
+            
+        This method dynamically loads map details in a radius around the given
+        position, ensuring the AI player has current map content information
+        for nearby locations without hardcoding specific coordinates.
+        """
+        # Get current cached maps
+        current_maps = await self.get_all_maps()
+        existing_coords = {(m.x, m.y) for m in current_maps}
+        
+        # Load maps in radius that aren't already cached
+        maps_to_add = []
+        for x in range(center_x - radius, center_x + radius + 1):
+            for y in range(center_y - radius, center_y + radius + 1):
+                if (x, y) not in existing_coords:
+                    try:
+                        individual_map = await self._api_client.get_map(x, y)
+                        maps_to_add.append(individual_map)
+                    except Exception:
+                        # Some coordinates might not exist, that's fine
+                        pass
+        
+        # Add new maps to cache if any were found
+        if maps_to_add:
+            enhanced_maps = current_maps + maps_to_add
+            self.save_cache_data("maps", enhanced_maps)
+            self._update_metadata("maps")
+
     async def get_all_resources(self, force_refresh: bool = False) -> list['GameResource']:
         """Get all resources with caching.
         
@@ -269,7 +306,20 @@ class CacheManager:
         try:
             yaml_data = YamlData(cache_file)
             if yaml_data.data and "data" in yaml_data.data:
-                return yaml_data.data["data"]
+                raw_data = yaml_data.data["data"]
+                # Convert raw dictionaries to Pydantic models based on data type
+                if data_type == "maps":
+                    return [GameMap(**item) for item in raw_data]
+                elif data_type == "monsters":
+                    return [GameMonster(**item) for item in raw_data]
+                elif data_type == "resources":
+                    return [GameResource(**item) for item in raw_data]
+                elif data_type == "npcs":
+                    return [GameNPC(**item) for item in raw_data]
+                elif data_type == "items":
+                    return [GameItem(**item) for item in raw_data]
+                else:
+                    return raw_data
             return None
         except Exception:
             return None

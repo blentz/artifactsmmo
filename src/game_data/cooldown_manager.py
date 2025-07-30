@@ -6,8 +6,8 @@ ArtifactsMMO AI player system. Handles timing validation and cooldown tracking.
 """
 
 import asyncio
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Any
 
 from .cooldown_info import CooldownInfo
 
@@ -52,6 +52,40 @@ class CooldownManager:
             reason=cooldown_data.reason.value if hasattr(cooldown_data.reason, 'value') else str(cooldown_data.reason)
         )
         self.character_cooldowns[character_name] = cooldown_info
+
+    def update_from_character(self, character: Any) -> None:
+        """Update cooldown from character API data.
+        
+        Parameters:
+            character: CharacterSchema from API response with cooldown info
+            
+        Return values:
+            None (updates internal state)
+        """
+        if hasattr(character, 'cooldown_expiration') and character.cooldown_expiration:
+            cooldown_info = CooldownInfo(
+                character_name=character.name,
+                expiration=character.cooldown_expiration.isoformat(),
+                total_seconds=character.cooldown,
+                remaining_seconds=character.cooldown,
+                reason="unknown"
+            )
+            self.character_cooldowns[character.name] = cooldown_info
+        elif character.cooldown > 0:
+            # If no expiration timestamp but cooldown > 0, character is on cooldown
+            expiration = datetime.now(timezone.utc) + timedelta(seconds=character.cooldown)
+            cooldown_info = CooldownInfo(
+                character_name=character.name,
+                expiration=expiration.isoformat(),
+                total_seconds=character.cooldown,
+                remaining_seconds=character.cooldown,
+                reason="unknown"
+            )
+            self.character_cooldowns[character.name] = cooldown_info
+        else:
+            # Character is ready, remove any existing cooldown
+            if character.name in self.character_cooldowns:
+                del self.character_cooldowns[character.name]
 
     def is_ready(self, character_name: str) -> bool:
         """Check if character can perform actions.

@@ -174,7 +174,7 @@ class TestCompleteAIPlayerWorkflow:
         from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
         action_registry = ActionRegistry()
-        goal_manager = GoalManager(action_registry, cooldown_manager)
+        goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
         
         # Create real AIPlayer and initialize with real components
         from src.ai_player.ai_player import AIPlayer
@@ -193,12 +193,36 @@ class TestCompleteAIPlayerWorkflow:
         assert ai_player.is_running() is False
         
         # Test emergency handling - simpler test that shouldn't hang
-        emergency_state = {
-            GameState.HP_CURRENT: 5,
-            GameState.HP_MAX: 100,
-            GameState.HP_CRITICAL: True,
-            GameState.COOLDOWN_READY: True
-        }
+        from src.ai_player.state.character_game_state import CharacterGameState
+        emergency_state = CharacterGameState(
+            name="test_character",
+            level=10,
+            xp=2000,  
+            gold=100,
+            hp=5,  # Critical HP
+            max_hp=100,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
+            cooldown=0,
+            cooldown_ready=True,
+            hp_critical=True  # Explicitly set critical HP condition
+        )
         
         # Should handle emergency without crashing
         await ai_player.handle_emergency(emergency_state)
@@ -235,6 +259,11 @@ class TestCompleteAIPlayerWorkflow:
         
         # Return different characters to show progression
         mock_api_client.get_character = AsyncMock(side_effect=[initial_character, progressed_character])
+        
+        # Ensure mock_api_client has cooldown_manager (in case fixture doesn't provide it)
+        from tests.test_integration import MockFactory
+        if not hasattr(mock_api_client, 'cooldown_manager'):
+            mock_api_client.cooldown_manager = MockFactory.create_cooldown_manager_mock()
 
         # Setup realistic character state progression
         from src.ai_player.state.game_state import CharacterGameState
@@ -323,7 +352,7 @@ class TestCompleteAIPlayerWorkflow:
         from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
         action_registry = ActionRegistry()
-        goal_manager = GoalManager(action_registry, cooldown_manager)
+        goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
         # Create real AIPlayer
         from src.ai_player.ai_player import AIPlayer
@@ -381,12 +410,13 @@ class TestCompleteAIPlayerWorkflow:
         state1 = await state_manager.get_current_state()
         state2 = await state_manager.get_current_state()
         
-        assert isinstance(state1, dict)
-        assert isinstance(state2, dict)
+        from src.ai_player.state.character_game_state import CharacterGameState
+        assert isinstance(state1, CharacterGameState)
+        assert isinstance(state2, CharacterGameState)
         
-        # Both should contain GameState enum keys
-        assert GameState.CHARACTER_LEVEL in state1
-        assert GameState.CHARACTER_LEVEL in state2
+        # Both should have character level data
+        assert state1.level >= 1
+        assert state2.level >= 1
 
     @pytest.mark.asyncio
     async def test_ai_player_error_recovery(self, mock_api_client):
@@ -472,7 +502,7 @@ class TestCompleteAIPlayerWorkflow:
         from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
         action_registry = ActionRegistry()
-        goal_manager = GoalManager(action_registry, cooldown_manager)
+        goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
         # Create real AIPlayer
         from src.ai_player.ai_player import AIPlayer
@@ -498,12 +528,35 @@ class TestCompleteAIPlayerWorkflow:
             pass
 
         # Test emergency handling during error conditions
-        emergency_state = {
-            GameState.HP_CRITICAL: True,
-            GameState.HP_CURRENT: 10,
-            GameState.HP_MAX: 100,
-            GameState.COOLDOWN_READY: True
-        }
+        emergency_state = CharacterGameState(
+            name="error_recovery_test",
+            level=10,
+            xp=2000,
+            gold=100,
+            hp=10,  # Low HP  
+            max_hp=100,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
+            cooldown=0,
+            cooldown_ready=True,
+            hp_critical=True  # Explicitly set critical HP condition for emergency test
+        )
 
         # Should handle emergency without crashing even if API is unstable
         await ai_player.handle_emergency(emergency_state)
@@ -628,7 +681,7 @@ class TestCompleteAIPlayerWorkflow:
         from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
         action_registry = ActionRegistry()
-        goal_manager = GoalManager(action_registry, cooldown_manager)
+        goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
         # Create real AIPlayer
         from src.ai_player.ai_player import AIPlayer
@@ -643,29 +696,70 @@ class TestCompleteAIPlayerWorkflow:
         assert status['dependencies_initialized'] is True
         
         # Test emergency handling with critical HP state
-        critical_emergency_state = {
-            GameState.HP_CURRENT: 8,
-            GameState.HP_MAX: 140,
-            GameState.HP_CRITICAL: True,
-            GameState.COOLDOWN_READY: True,
-            GameState.CURRENT_X: 5,
-            GameState.CURRENT_Y: 5,
-            GameState.AT_SAFE_LOCATION: False
-        }
+        critical_emergency_state = CharacterGameState(
+            name="emergency_test",
+            level=10,
+            xp=2000,
+            gold=100,
+            hp=8,  # Critical HP
+            max_hp=140,
+            x=5,  # Not at safe location
+            y=5,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
+            cooldown=0,
+            cooldown_ready=True,
+            hp_critical=True  # Explicitly set critical HP condition for emergency test
+        )
 
         # Handle multiple emergency scenarios
         await ai_player.handle_emergency(critical_emergency_state)
         
         # Test another emergency scenario - zero HP
-        zero_hp_state = {
-            GameState.HP_CURRENT: 0,
-            GameState.HP_MAX: 140,
-            GameState.HP_CRITICAL: True,
-            GameState.COOLDOWN_READY: True,
-            GameState.CURRENT_X: 10,
-            GameState.CURRENT_Y: 10,
-            GameState.AT_SAFE_LOCATION: False
-        }
+        zero_hp_state = CharacterGameState(
+            name="emergency_test",
+            level=10,
+            xp=2000,
+            gold=100,
+            hp=0,  # Zero HP - critical emergency
+            max_hp=140,
+            x=10,
+            y=10,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
+            cooldown=0,
+            cooldown_ready=True,
+            hp_critical=True,  # Zero HP is definitely critical
+            at_safe_location=False
+        )
         
         await ai_player.handle_emergency(zero_hp_state)
 
@@ -849,7 +943,7 @@ class TestCharacterManagementWorkflow:
         action_registry = Mock()
         action_registry.generate_actions_for_state = Mock(return_value=[])
         
-        goal_manager = GoalManager(action_registry, cooldown_manager)
+        goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
         
         # Mock goal manager's plan_actions to prevent hanging
         goal_manager.plan_actions = AsyncMock(return_value=[])

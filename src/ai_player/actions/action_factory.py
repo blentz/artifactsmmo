@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..state.game_state import GameState
+from ..state.character_game_state import CharacterGameState
 from .base_action import BaseAction
 
 
@@ -16,12 +17,12 @@ class ActionFactory(ABC):
     """Abstract factory for generating parameterized action instances"""
 
     @abstractmethod
-    def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
+    def create_instances(self, game_data: Any, current_state: CharacterGameState) -> list[BaseAction]:
         """Generate all possible action instances for current game state.
 
         Parameters:
             game_data: Complete game data including maps, items, monsters, resources
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
 
         Return values:
             List of BaseAction instances generated for current conditions

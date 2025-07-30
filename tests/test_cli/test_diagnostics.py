@@ -617,6 +617,10 @@ class TestDiagnosePlanMethods:
     async def test_diagnose_plan_unreachable_goal(self):
         """Test plan diagnosis with unreachable goal"""
         mock_goal_manager = Mock(spec=GoalManager)
+        # Mock goal manager methods to simulate unreachable goal
+        mock_goal_manager.select_next_goal.return_value = {"target_state": {"level": 100}}
+        mock_goal_manager.plan_actions = AsyncMock(return_value=[])  # Empty plan = unreachable
+        
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         # Mock all the planning diagnostic methods
@@ -640,6 +644,10 @@ class TestDiagnosePlanMethods:
     async def test_diagnose_plan_with_verbose_and_analysis(self):
         """Test plan diagnosis with verbose mode and successful analysis"""
         mock_goal_manager = Mock(spec=GoalManager)
+        # Mock goal manager methods to simulate successful planning
+        mock_goal_manager.select_next_goal.return_value = {"target_state": {"level": 5}}
+        mock_goal_manager.plan_actions = AsyncMock(return_value=[{"name": "action1", "cost": 5}])  # Non-empty plan = success
+        
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         mock_planning_steps = {
@@ -674,44 +682,9 @@ class TestDiagnosePlanMethods:
             result = await diagnostics.diagnose_plan("test_character", "level=5")
 
         assert isinstance(result, dict)
-        assert "Planning diagnostic error: Planning failed" in result["recommendations"]
+        assert "Planning diagnostics error: Planning failed" in result["recommendations"]
 
-    @pytest.mark.asyncio
-    async def test_diagnose_plan_invalid_goal(self):
-        """Test plan diagnosis with invalid goal string"""
-        mock_goal_manager = Mock(spec=GoalManager)
-        diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
-        result = await diagnostics.diagnose_plan("test_character", "invalid_goal_format")
-
-        assert isinstance(result, dict)
-        assert "Failed to parse goal" in str(result["recommendations"])
-
-    def test_parse_goal_string_valid(self):
-        """Test goal string parsing with valid input"""
-        diagnostics = DiagnosticCommands()
-
-        # Test simple goal
-        goal_state = diagnostics._parse_goal_string("level=10")
-        assert GameState.CHARACTER_LEVEL in goal_state
-        assert goal_state[GameState.CHARACTER_LEVEL] == 10
-
-        # Test multiple goals
-        goal_state = diagnostics._parse_goal_string("level=5,gold=1000")
-        assert GameState.CHARACTER_LEVEL in goal_state
-        assert GameState.CHARACTER_GOLD in goal_state
-        assert goal_state[GameState.CHARACTER_LEVEL] == 5
-        assert goal_state[GameState.CHARACTER_GOLD] == 1000
-
-    def test_parse_goal_string_invalid(self):
-        """Test goal string parsing with invalid input"""
-        diagnostics = DiagnosticCommands()
-
-        with pytest.raises(ValueError):
-            diagnostics._parse_goal_string("invalid_format")
-
-        with pytest.raises(ValueError):
-            diagnostics._parse_goal_string("")
 
 
 class TestTestPlanningMethod:

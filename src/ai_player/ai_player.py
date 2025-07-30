@@ -18,6 +18,7 @@ from .action_executor import ActionExecutor
 from .actions import ActionRegistry
 from .goal_manager import GoalManager
 from .state.game_state import GameState
+from .state.character_game_state import CharacterGameState
 from .state.state_manager import StateManager
 
 
@@ -206,12 +207,12 @@ class AIPlayer:
         self.logger.info("Main game loop ended")
 
     async def plan_actions(
-        self, current_state: dict[GameState, Any], goal: dict[GameState, Any]
+        self, current_state: CharacterGameState, goal: dict[GameState, Any]
     ) -> list[dict[str, Any]]:
         """Generate action sequence using GOAP planner.
 
         Parameters:
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
             goal: Dictionary with GameState enum keys and target values
 
         Return values:
@@ -226,8 +227,12 @@ class AIPlayer:
             return []
 
         try:
-            plan = await self.goal_manager.plan_actions(current_state, goal)
-            self.logger.debug(f"Generated plan: {plan}")
+            # Use cooldown-aware planning with character name
+            target_state = goal.get('target_state', {})
+            plan = await self.goal_manager.plan_with_cooldown_awareness(
+                self.character_name, current_state, target_state
+            )
+            self.logger.debug(f"Generated cooldown-aware plan: {plan}")
             return plan
         except Exception as e:
             self.logger.error(f"Planning failed: {e}")
@@ -269,7 +274,7 @@ class AIPlayer:
             self._execution_stats["failed_actions"] += 1
             return False
 
-    def should_replan(self, current_state: dict[GameState, Any]) -> bool:
+    def should_replan(self, current_state: CharacterGameState) -> bool:
         """Determine if replanning is needed due to state changes.
 
         Parameters:
@@ -293,7 +298,9 @@ class AIPlayer:
         # Check if goal has been achieved
         goal_achieved = True
         for goal_key, goal_value in self._current_goal.items():
-            current_value = current_state.get(goal_key)
+            # Convert to GOAP state to check current values
+            goap_state = current_state.to_goap_state()
+            current_value = goap_state.get(goal_key.value if isinstance(goal_key, GameState) else goal_key)
             if current_value != goal_value:
                 goal_achieved = False
                 break
@@ -303,25 +310,16 @@ class AIPlayer:
             return True
 
         # Check for critical state changes that invalidate current plan
-        critical_states = [
-            GameState.HP_CRITICAL,
-            GameState.HP_LOW,
-            GameState.INVENTORY_FULL,
-            GameState.COOLDOWN_READY
-        ]
-
-        for state_key in critical_states:
-            if state_key in current_state:
-                if state_key == GameState.HP_CRITICAL and current_state[state_key]:
-                    self.logger.warning("Critical HP detected, replanning needed")
-                    return True
-                elif state_key == GameState.INVENTORY_FULL and current_state[state_key]:
-                    self.logger.info("Inventory full, may need to replan")
-                    return True
+        if current_state.hp_critical:
+            self.logger.warning("Critical HP detected, replanning needed")
+            return True
+        elif not current_state.inventory_space_available:
+            self.logger.info("Inventory full, may need to replan")
+            return True
 
         return False
 
-    async def handle_emergency(self, current_state: dict[GameState, Any]) -> None:
+    async def handle_emergency(self, current_state: CharacterGameState) -> None:
         """Handle emergency situations (low HP, unexpected state).
 
         Parameters:
@@ -337,7 +335,7 @@ class AIPlayer:
         emergency_handled = False
 
         # Check for critical HP
-        if current_state.get(GameState.HP_CRITICAL, False):
+        if current_state.hp_critical:
             self.logger.warning("EMERGENCY: Critical HP detected")
 
             # Clear current plan to force emergency actions
@@ -345,16 +343,16 @@ class AIPlayer:
 
             # Set emergency goal for HP recovery
             self._current_goal = {
-                GameState.HP_CURRENT: current_state.get(GameState.HP_MAX, 100)
+                GameState.HP_CURRENT: current_state.max_hp
             }
 
             emergency_handled = True
             self._execution_stats["emergency_interventions"] += 1
 
         # Check for low HP (less critical but still concerning)
-        elif current_state.get(GameState.HP_LOW, False):
-            hp_current = current_state.get(GameState.HP_CURRENT, 0)
-            hp_max = current_state.get(GameState.HP_MAX, 100)
+        elif current_state.hp_low:
+            hp_current = current_state.hp
+            hp_max = current_state.max_hp
 
             if hp_current < (hp_max * 0.3):  # Less than 30% HP
                 self.logger.warning(f"EMERGENCY: Low HP detected ({hp_current}/{hp_max})")
@@ -372,12 +370,12 @@ class AIPlayer:
 
         # Check if character is stuck or in invalid state (only if no other emergency handled)
         if not emergency_handled:
-            if not current_state.get(GameState.COOLDOWN_READY, True):
+            if not current_state.cooldown_ready:
                 # Character is on cooldown, this is normal
                 pass
-            elif not any(current_state.get(action_state, False) for action_state in [
-                GameState.CAN_FIGHT, GameState.CAN_GATHER, GameState.CAN_CRAFT,
-                GameState.CAN_TRADE, GameState.CAN_MOVE, GameState.CAN_REST
+            elif not any([
+                current_state.can_fight, current_state.can_gather, current_state.can_craft,
+                current_state.can_trade, current_state.can_move, current_state.can_rest
             ]):
                 self.logger.warning("EMERGENCY: Character appears to be in invalid state (no actions available)")
 

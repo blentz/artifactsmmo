@@ -19,7 +19,11 @@ from ..state.game_state import GameState
 from .action_factory import ActionFactory
 from .action_registry import ActionRegistry
 from .base_action import BaseAction
+from .combat_action_factory import CombatActionFactory
+from .gathering_action_factory import GatheringActionFactory
+from .movement_action_factory import MovementActionFactory
 from .parameterized_action_factory import ParameterizedActionFactory
+from .rest_action_factory import RestActionFactory
 
 # Global action registry instance
 _global_registry: ActionRegistry | None = None
@@ -30,6 +34,18 @@ def get_global_registry() -> ActionRegistry:
     global _global_registry
     if _global_registry is None:
         _global_registry = ActionRegistry()
+        
+        # Register all action factories
+        movement_factory = MovementActionFactory()
+        combat_factory = CombatActionFactory()
+        gathering_factory = GatheringActionFactory()
+        rest_factory = RestActionFactory()
+        
+        _global_registry.register_factory(movement_factory)
+        _global_registry.register_factory(combat_factory)
+        _global_registry.register_factory(gathering_factory)
+        _global_registry.register_factory(rest_factory)
+        
     return _global_registry
 
 

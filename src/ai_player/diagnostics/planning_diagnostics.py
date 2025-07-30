@@ -400,7 +400,7 @@ class PlanningDiagnostics:
             # Check if actions are available
             try:
                 # Try to get some actions from goal manager
-                actions = self.goal_manager.create_goap_actions()
+                actions = await self.goal_manager.create_goap_actions()
                 if not actions or len(actions.conditions) == 0:
                     bottlenecks.append("No actions available for planning")
             except Exception:

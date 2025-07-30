@@ -73,16 +73,52 @@ def mock_api_client():
     client.get_character = AsyncMock()
     client.move_character = AsyncMock()
     client.rest_character = AsyncMock()
+    client.get_map = AsyncMock()
     client.extract_character_state = Mock()
+    
+    # Add cooldown_manager attribute with proper return values
+    client.cooldown_manager = Mock()
+    client.cooldown_manager.is_ready.return_value = True
+    client.cooldown_manager.get_remaining_time.return_value = 0.0
 
-    # Default character response
+    # Default character response with all required attributes
     mock_character = Mock()
+    mock_character.name = "TestChar"
     mock_character.hp = 100
     mock_character.max_hp = 100
     mock_character.x = 0
     mock_character.y = 0
+    mock_character.level = 1
+    mock_character.xp = 0
+    mock_character.gold = 0
     mock_character.cooldown = 0
+    mock_character.mining_level = 1
+    mock_character.mining_xp = 0
+    mock_character.woodcutting_level = 1
+    mock_character.woodcutting_xp = 0
+    mock_character.fishing_level = 1
+    mock_character.fishing_xp = 0
+    mock_character.weaponcrafting_level = 1
+    mock_character.weaponcrafting_xp = 0
+    mock_character.gearcrafting_level = 1
+    mock_character.gearcrafting_xp = 0
+    mock_character.jewelrycrafting_level = 1
+    mock_character.jewelrycrafting_xp = 0
+    mock_character.cooking_level = 1
+    mock_character.cooking_xp = 0
+    mock_character.alchemy_level = 1
+    mock_character.alchemy_xp = 0
+    mock_character.inventory = []
+    mock_character.inventory_max_items = 20
+    mock_character.task = ""
+    mock_character.task_progress = 0
+    mock_character.task_total = 0
     client.get_character.return_value = mock_character
+
+    # Default map response
+    mock_map = Mock()
+    mock_map.content = None
+    client.get_map.return_value = mock_map
 
     # Default character state extraction
     mock_state = Mock(spec=CharacterGameState)
@@ -416,38 +452,87 @@ class TestHandleActionError:
 class TestProcessActionResult:
     """Test process_action_result method"""
 
-    def test_process_result_with_cooldown(self, action_executor):
+    async def test_process_result_with_cooldown(self, action_executor):
         """Test processing result with cooldown information"""
         action = MockAction("test_action")
         api_response = Mock()
-        api_response.cooldown = Mock()
-        api_response.cooldown.total_seconds = 10
-
-        result = action_executor.process_action_result(api_response, action)
+        # Explicitly set character to None to avoid Mock auto-generation
+        api_response.character = None
+        
+        # Create a complete cooldown mock based on actual API structure
+        cooldown_mock = Mock()
+        cooldown_mock.total_seconds = 10
+        cooldown_mock.remaining_seconds = 10
+        cooldown_mock.expiration = "2025-07-29T12:45:00Z"
+        cooldown_mock.reason = Mock()
+        cooldown_mock.reason.value = "action"
+        api_response.cooldown = cooldown_mock
+        
+        result = await action_executor.process_action_result(api_response, action)
 
         assert result.cooldown_seconds == 10
         assert result.success is True
         assert GameState.COOLDOWN_READY in result.state_changes
 
-    def test_process_result_with_character_data(self, action_executor, mock_api_client):
+    async def test_process_result_with_character_data(self, action_executor, mock_api_client):
         """Test processing result with character data"""
         action = MockAction("test_action")
         api_response = Mock()
+        
+        # Create a complete mock character with all required attributes
         api_response.character = Mock()
+        api_response.character.name = "TestChar"
+        api_response.character.x = 1
+        api_response.character.y = 1
+        api_response.character.hp = 100
+        api_response.character.max_hp = 120
+        api_response.character.level = 2
+        api_response.character.xp = 50
+        api_response.character.gold = 10
+        api_response.character.cooldown = 0
+        api_response.character.mining_level = 1
+        api_response.character.mining_xp = 0
+        api_response.character.woodcutting_level = 1
+        api_response.character.woodcutting_xp = 0
+        api_response.character.fishing_level = 1
+        api_response.character.fishing_xp = 0
+        api_response.character.weaponcrafting_level = 1
+        api_response.character.weaponcrafting_xp = 0
+        api_response.character.gearcrafting_level = 1
+        api_response.character.gearcrafting_xp = 0
+        api_response.character.jewelrycrafting_level = 1
+        api_response.character.jewelrycrafting_xp = 0
+        api_response.character.cooking_level = 1
+        api_response.character.cooking_xp = 0
+        api_response.character.alchemy_level = 1
+        api_response.character.alchemy_xp = 0
+        api_response.character.inventory = []
+        api_response.character.inventory_max_items = 20
+        api_response.character.task = ""
+        api_response.character.task_progress = 0
+        api_response.character.task_total = 0
         api_response.cooldown = None  # Explicitly set to None to avoid mock issues
+        
+        # Mock the get_map call
+        mock_api_client.get_map.return_value = Mock()
+        mock_api_client.get_map.return_value.content = None
 
-        result = action_executor.process_action_result(api_response, action)
+        result = await action_executor.process_action_result(api_response, action)
 
-        mock_api_client.extract_character_state.assert_called_once_with(api_response.character)
+        mock_api_client.get_map.assert_called_once_with(1, 1)
         assert result.success is True
 
-    def test_process_result_exception_handling(self, action_executor):
+    async def test_process_result_exception_handling(self, action_executor):
         """Test processing result with exception"""
         action = MockAction("test_action")
         api_response = Mock()
-
-        with patch.object(action_executor.api_client, 'extract_character_state', side_effect=Exception("Test error")):
-            result = action_executor.process_action_result(api_response, action)
+        api_response.character = Mock()
+        api_response.character.x = 1
+        api_response.character.y = 1
+        
+        # Mock get_map to raise an exception
+        with patch.object(action_executor.api_client, 'get_map', side_effect=Exception("Test error")):
+            result = await action_executor.process_action_result(api_response, action)
 
             assert result.success is False
             assert "Failed to process result" in result.message
@@ -521,24 +606,27 @@ class TestGetActionByName:
         """Test successful action retrieval by name"""
         mock_action = MockAction("test_action")
         action_executor.action_registry.get_action_by_name.return_value = mock_action
+        current_state = {GameState.COOLDOWN_READY: True}
 
-        result = action_executor.get_action_by_name("test_action")
+        result = action_executor.get_action_by_name("test_action", current_state)
 
         assert result == mock_action
-        action_executor.action_registry.get_action_by_name.assert_called_once()
+        action_executor.action_registry.get_action_by_name.assert_called_once_with("test_action", current_state, None)
 
     def test_get_action_by_name_not_found(self, action_executor):
         """Test action retrieval when action not found"""
         action_executor.action_registry.get_action_by_name.return_value = None
+        current_state = {GameState.COOLDOWN_READY: True}
 
-        result = action_executor.get_action_by_name("nonexistent_action")
+        result = action_executor.get_action_by_name("nonexistent_action", current_state)
         assert result is None
 
     def test_get_action_by_name_exception(self, action_executor):
         """Test action retrieval with exception"""
         action_executor.action_registry.get_action_by_name.side_effect = Exception("Test error")
+        current_state = {GameState.COOLDOWN_READY: True}
 
-        result = action_executor.get_action_by_name("test_action")
+        result = action_executor.get_action_by_name("test_action", current_state)
         assert result is None
 
 
@@ -908,27 +996,29 @@ class TestAdditionalCoverage:
 
             assert result is None  # No recovery possible
 
-    def test_process_action_result_cooldown_remaining_seconds(self, action_executor):
+    async def test_process_action_result_cooldown_remaining_seconds(self, action_executor):
         """Test process_action_result with remaining_seconds cooldown"""
         action = MockAction("test_action")
         api_response = Mock()
+        api_response.character = None
         api_response.cooldown = Mock()
         api_response.cooldown.remaining_seconds = 15
         # Don't set total_seconds so it uses remaining_seconds
         delattr(api_response.cooldown, 'total_seconds')
 
-        result = action_executor.process_action_result(api_response, action)
+        result = await action_executor.process_action_result(api_response, action)
 
         assert result.cooldown_seconds == 15
 
-    def test_process_action_result_with_error_message(self, action_executor):
+    async def test_process_action_result_with_error_message(self, action_executor):
         """Test process_action_result when API response has error/failure message"""
         action = MockAction("test_action")
         api_response = Mock()
+        api_response.character = None
         api_response.message = "Action failed due to insufficient resources"
         api_response.cooldown = None  # Explicitly set to avoid mock issues
 
-        result = action_executor.process_action_result(api_response, action)
+        result = await action_executor.process_action_result(api_response, action)
 
         assert result.success is False  # Should detect failure from message
         assert "insufficient resources" in result.message
@@ -1137,14 +1227,15 @@ class TestAdditionalCoverageMissing:
             mock_sleep.assert_called_once_with(10)  # min(10, 30)
             assert result is True
 
-    def test_process_action_result_success_with_failed_in_message(self, action_executor):
+    async def test_process_action_result_success_with_failed_in_message(self, action_executor):
         """Test process_action_result when message contains 'failed'"""
         action = MockAction("test_action")
         api_response = Mock()
+        api_response.character = None
         api_response.message = "Action failed to complete properly"
         api_response.cooldown = None
 
-        result = action_executor.process_action_result(api_response, action)
+        result = await action_executor.process_action_result(api_response, action)
 
         assert result.success is False
         assert "failed to complete" in result.message
@@ -1334,15 +1425,16 @@ class TestAdditionalCoverageMissing:
             assert result is True
             # The state update code (line 191) should be executed
 
-    def test_process_action_result_no_message_attribute(self, action_executor):
+    async def test_process_action_result_no_message_attribute(self, action_executor):
         """Test process_action_result when API response has no message attribute"""
         action = MockAction("test_action")
         api_response = Mock()
         # Create a clean mock without message or error attributes
         api_response = type('MockResponse', (), {})()
+        api_response.character = None
         api_response.cooldown = None
 
-        result = action_executor.process_action_result(api_response, action)
+        result = await action_executor.process_action_result(api_response, action)
 
         # Success should be True because no error or message attribute
         assert result.success is True
