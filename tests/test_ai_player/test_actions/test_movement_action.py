@@ -174,7 +174,7 @@ class TestMovementAction:
         assert isinstance(result, ActionResult)
         assert result.success is True
         assert isinstance(result.message, str)
-        assert result.cooldown_seconds > 0
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
         # Verify state changes match expected effects
         assert GameState.CURRENT_X in result.state_changes
@@ -238,7 +238,7 @@ class TestMovementAction:
             assert isinstance(result, ActionResult)
             assert result.success is True
             assert "movement" in result.message.lower()
-            assert result.cooldown_seconds > 0  # Should indicate cooldown time
+            assert result.cooldown_seconds == 0  # Actual cooldown comes from API response  # Should indicate cooldown time
 
     def test_movement_action_distance_calculation(self) -> None:
         """Test distance calculation for movement cost"""

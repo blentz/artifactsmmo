@@ -147,7 +147,7 @@ class CombatAction(BaseAction):
             success=True,
             message=f"Combat action ready for execution against {self.target_monster or 'monster'}",
             state_changes=self.get_effects(),
-            cooldown_seconds=8  # Typical combat cooldown
+            cooldown_seconds=0  # Actual cooldown will be extracted from API response
         )
 
     def is_safe_to_fight(self, current_state: dict[GameState, Any]) -> bool:

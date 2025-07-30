@@ -152,57 +152,67 @@ class AIPlayer:
         self.logger.info("Starting main game loop")
 
         while self._running and not self._stop_requested:
-            try:
-                # Get current character state
-                if not self.state_manager:
-                    self.logger.error("StateManager not available")
+            # Get current character state
+            if not self.state_manager:
+                self.logger.error("StateManager not available")
+                break
+
+            current_state = await self.state_manager.get_current_state()
+            print(f"DEBUG: Current state cooldown_ready: {current_state.cooldown_ready}")
+
+            # Check for emergency situations first
+            await self.handle_emergency(current_state)
+
+            # Check if character is on cooldown before planning
+            if not current_state.cooldown_ready:
+                self.logger.info(f"Character on cooldown, waiting...")
+                await asyncio.sleep(2.0)  # Wait and check again
+                continue
+
+            # Check if we need to replan
+            print(f"DEBUG: Checking if should replan. should_replan={self.should_replan(current_state)}, current_plan is None={self._current_plan is None}")
+            if self.should_replan(current_state) or self._current_plan is None:
+                self.logger.info("Planning new action sequence")
+
+                # Select next goal
+                if not self.goal_manager:
+                    self.logger.error("GoalManager not available")
                     break
 
-                current_state = await self.state_manager.get_current_state()
+                goal = self.goal_manager.select_next_goal(current_state)
+                print(f"DEBUG AIPlayer: Selected goal: {goal}")
+                self._current_goal = goal
 
-                # Check for emergency situations first
-                await self.handle_emergency(current_state)
+                # Plan actions to achieve goal
+                if not goal:
+                    raise RuntimeError(f"Goal manager returned empty goal for character {self.character_name}. This is a bug in goal selection logic.")
+                
+                plan = await self.plan_actions(current_state, goal)
+                self._execution_stats["replanning_count"] += 1
 
-                # Check if we need to replan
-                if self.should_replan(current_state) or self._current_plan is None:
-                    self.logger.info("Planning new action sequence")
+                if not plan:
+                    self.logger.warning("No valid plan found, waiting before retry")
+                    self._current_plan = None  # Set to None so we'll replan next cycle
+                    await asyncio.sleep(5.0)
+                    continue
 
-                    # Select next goal
-                    if not self.goal_manager:
-                        self.logger.error("GoalManager not available")
-                        break
+                # Only set current plan if we got a valid plan
+                self._current_plan = plan
 
-                    goal = self.goal_manager.select_next_goal(current_state)
-                    self._current_goal = goal
+                self.logger.info(f"Generated plan with {len(plan)} actions")
 
-                    # Plan actions to achieve goal
-                    plan = await self.plan_actions(current_state, goal)
-                    self._current_plan = plan
-                    self._execution_stats["replanning_count"] += 1
+            # Execute the current plan
+            if self._current_plan:
+                success = await self.execute_plan(self._current_plan)
+                if success:
+                    self.logger.info("Plan executed successfully")
+                    self._current_plan = None  # Plan completed
+                else:
+                    self.logger.warning("Plan execution failed, will replan")
+                    self._current_plan = None  # Force replanning
 
-                    if not plan:
-                        self.logger.warning("No valid plan found, waiting before retry")
-                        await asyncio.sleep(5.0)
-                        continue
-
-                    self.logger.info(f"Generated plan with {len(plan)} actions")
-
-                # Execute the current plan
-                if self._current_plan:
-                    success = await self.execute_plan(self._current_plan)
-                    if success:
-                        self.logger.info("Plan executed successfully")
-                        self._current_plan = None  # Plan completed
-                    else:
-                        self.logger.warning("Plan execution failed, will replan")
-                        self._current_plan = None  # Force replanning
-
-                # Brief pause before next cycle
-                await asyncio.sleep(1.0)
-
-            except Exception as e:
-                self.logger.error(f"Error in main loop: {e}")
-                await asyncio.sleep(5.0)  # Wait before retrying
+            # Brief pause before next cycle
+            await asyncio.sleep(1.0)
 
         self.logger.info("Main game loop ended")
 
@@ -222,16 +232,22 @@ class AIPlayer:
         that will transition the character from the current state to the goal
         state, considering action costs and preconditions.
         """
+        print("DEBUG: plan_actions method called!")
+        print(f"DEBUG: goal parameter: {goal}")
         if not self.goal_manager:
-            self.logger.error("GoalManager not available for planning")
-            return []
+            raise RuntimeError("GoalManager not available for planning - this is a critical initialization bug")
+        
+        print(f"DEBUG: GoalManager is available, proceeding with planning")
 
+        # Use cooldown-aware planning with character name
+        target_state = goal.get('target_state', {})
+        print(f"DEBUG AIPlayer: Planning for target_state: {target_state}")
+        
         try:
-            # Use cooldown-aware planning with character name
-            target_state = goal.get('target_state', {})
             plan = await self.goal_manager.plan_with_cooldown_awareness(
                 self.character_name, current_state, target_state
             )
+            print(f"DEBUG AIPlayer: Plan result: {plan}")
             self.logger.debug(f"Generated cooldown-aware plan: {plan}")
             return plan
         except Exception as e:
@@ -526,4 +542,5 @@ class AIPlayer:
         self.action_executor = action_executor
         self.action_registry = action_registry
 
+        print(f"DEBUG: Dependencies set - goal_manager: {self.goal_manager is not None}")
         self.logger.info("Dependencies initialized successfully")

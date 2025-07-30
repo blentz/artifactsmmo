@@ -12,6 +12,7 @@ from typing import Any
 
 from ..goal_manager import GoalManager
 from ..state.game_state import GameState
+from ..state.character_game_state import CharacterGameState
 
 
 class PlanningDiagnostics:
@@ -33,12 +34,12 @@ class PlanningDiagnostics:
         self.goal_manager = goal_manager
 
     async def analyze_planning_steps(
-        self, start_state: dict[GameState, Any], goal_state: dict[GameState, Any]
+        self, start_state: 'CharacterGameState', goal_state: dict[GameState, Any]
     ) -> dict[str, Any]:
         """Analyze step-by-step GOAP planning process.
 
         Parameters:
-            start_state: Dictionary with GameState enum keys defining initial state
+            start_state: CharacterGameState instance defining initial state
             goal_state: Dictionary with GameState enum keys defining target state
 
         Return values:
@@ -60,14 +61,9 @@ class PlanningDiagnostics:
         try:
             start_time = datetime.now()
 
-            # Convert states to GOAP format
-            GameState.to_goap_dict(start_state)
-            GameState.to_goap_dict(goal_state)
-
             # Try to create a plan using the goal manager
             try:
-                # Use the goal manager's planning functionality
-                # This is a simplified version since we don't have full implementation
+                # Use the goal manager's planning functionality with CharacterGameState
                 plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
 
                 if plan:
@@ -75,8 +71,8 @@ class PlanningDiagnostics:
                     analysis["steps"] = plan
                     analysis["total_cost"] = len(plan)  # Simplified cost calculation
 
-                    # Analyze state transitions
-                    current_state = start_state.copy()
+                    # Analyze state transitions - start_state must be CharacterGameState
+                    current_state = start_state.to_goap_state()
                     for i, action in enumerate(plan):
                         analysis["state_transitions"].append({
                             "step": i + 1,
@@ -98,11 +94,11 @@ class PlanningDiagnostics:
 
         return analysis
 
-    async def test_goal_reachability(self, start_state: dict[GameState, Any], goal_state: dict[GameState, Any]) -> bool:
+    async def test_goal_reachability(self, start_state: CharacterGameState, goal_state: dict[GameState, Any]) -> bool:
         """Test if goal is reachable from start state.
 
         Parameters:
-            start_state: Dictionary with GameState enum keys defining initial state
+            start_state: CharacterGameState instance defining initial state
             goal_state: Dictionary with GameState enum keys defining target state
 
         Return values:
@@ -363,12 +359,12 @@ class PlanningDiagnostics:
         return simulation
 
     async def identify_planning_bottlenecks(
-        self, start_state: dict[GameState, Any], goal_state: dict[GameState, Any]
+        self, start_state: CharacterGameState, goal_state: dict[GameState, Any]
     ) -> list[str]:
         """Identify what prevents efficient planning.
 
         Parameters:
-            start_state: Dictionary with GameState enum keys defining initial state
+            start_state: CharacterGameState instance defining initial state
             goal_state: Dictionary with GameState enum keys defining target state
 
         Return values:
@@ -385,14 +381,17 @@ class PlanningDiagnostics:
             if not await self.test_goal_reachability(start_state, goal_state):
                 bottlenecks.append("Goal appears to be unreachable from current state")
 
+            # Get state as dict once
+            start_state_dict = start_state.to_goap_state()
+            
             # Check for large state space
-            state_diff = len(goal_state) + len(start_state)
+            state_diff = len(goal_state) + len(start_state_dict)
             if state_diff > 20:
                 bottlenecks.append("Large state space may slow down planning")
 
             # Check for very high goal values
             for key, value in goal_state.items():
-                current_value = start_state.get(key, 0)
+                current_value = start_state_dict.get(key.value, 0)
                 if isinstance(value, int) and isinstance(current_value, int):
                     if value > current_value + 100:
                         bottlenecks.append(f"Large gap in {key.value}: {current_value} -> {value}")
@@ -408,7 +407,7 @@ class PlanningDiagnostics:
 
             # Check for missing required state keys
             required_keys = {GameState.CHARACTER_LEVEL, GameState.COOLDOWN_READY}
-            missing_keys = [key for key in required_keys if key not in start_state]
+            missing_keys = [key for key in required_keys if key.value not in start_state_dict]
             if missing_keys:
                 bottlenecks.append(f"Missing required state keys: {[k.value for k in missing_keys]}")
 
@@ -418,12 +417,12 @@ class PlanningDiagnostics:
         return bottlenecks
 
     async def measure_planning_performance(
-        self, start_state: dict[GameState, Any], goal_state: dict[GameState, Any]
+        self, start_state: CharacterGameState, goal_state: dict[GameState, Any]
     ) -> dict[str, Any]:
         """Measure planning algorithm performance metrics.
 
         Parameters:
-            start_state: Dictionary with GameState enum keys defining initial state
+            start_state: CharacterGameState instance defining initial state
             goal_state: Dictionary with GameState enum keys defining target state
 
         Return values:
@@ -444,7 +443,8 @@ class PlanningDiagnostics:
             start_time = datetime.now()
 
             # Measure memory before planning
-            initial_memory = sys.getsizeof(start_state) + sys.getsizeof(goal_state)
+            start_state_dict = start_state.to_goap_state()
+            initial_memory = sys.getsizeof(start_state_dict) + sys.getsizeof(goal_state)
 
             # Attempt planning
             try:

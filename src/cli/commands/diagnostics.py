@@ -545,21 +545,23 @@ class DiagnosticCommands:
             # Use planning diagnostics if available
             if self.planning_diagnostics:
                 try:
+                    # Pass CharacterGameState directly to diagnostics methods
+                    
                     # Test goal reachability
                     goal_reachable = await self.planning_diagnostics.test_goal_reachability(
-                        char_state.to_goap_state(), goal_state
+                        char_state, goal_state
                     )
                     diagnosis["planning_analysis"]["goal_reachable"] = goal_reachable
                     
                     # Identify bottlenecks
                     bottlenecks = await self.planning_diagnostics.identify_planning_bottlenecks(
-                        char_state.to_goap_state(), goal_state
+                        char_state, goal_state
                     )
                     diagnosis["bottlenecks"] = bottlenecks
                     
                     # Measure performance
                     performance = await self.planning_diagnostics.measure_planning_performance(
-                        char_state.to_goap_state(), goal_state
+                        char_state, goal_state
                     )
                     diagnosis["performance_metrics"] = performance
                     

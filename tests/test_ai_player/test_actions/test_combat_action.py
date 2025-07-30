@@ -201,7 +201,7 @@ class TestCombatAction:
         assert isinstance(result, ActionResult)
         assert result.success is True
         assert isinstance(result.message, str)
-        assert result.cooldown_seconds > 0
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
         # Verify expected effects from combat action
         assert GameState.COOLDOWN_READY in result.state_changes
@@ -226,7 +226,7 @@ class TestCombatAction:
         assert isinstance(result, ActionResult)
         # Combat attempt may still be "successful" even if character lost
         assert isinstance(result.success, bool)
-        assert result.cooldown_seconds > 0
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
         # Should update HP to reflect defeat
         if GameState.HP_CURRENT in result.state_changes:
@@ -253,7 +253,7 @@ class TestCombatAction:
         assert isinstance(result, ActionResult)
         assert result.success is True  # Action coordination succeeds
         assert isinstance(result.message, str)
-        assert result.cooldown_seconds > 0
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
     @pytest.mark.asyncio
     async def test_combat_action_execute_inventory_full(self):
@@ -275,7 +275,7 @@ class TestCombatAction:
         assert isinstance(result, ActionResult)
         assert result.success is True  # Action coordination succeeds regardless of inventory state
         assert isinstance(result.message, str)
-        assert result.cooldown_seconds > 0
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
     def test_combat_action_monster_targeting(self):
         """Test combat action with different monster targets"""
@@ -672,7 +672,7 @@ class TestCombatActionHelperMethods:
         assert isinstance(result, ActionResult)
         assert result.success is True  # Action coordination succeeds
         assert isinstance(result.message, str)
-        assert result.cooldown_seconds > 0
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
     def test_combat_action_unsafe_conditions(self):
         """Test combat action execute with unsafe conditions"""

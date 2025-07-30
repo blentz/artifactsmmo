@@ -563,19 +563,19 @@ class CLIManager:
             print("-" * 60)
 
             for char in characters:
-                ai_status = "Running" if char['name'] in self.running_players else "Stopped"
+                ai_status = "Running" if char.name in self.running_players else "Stopped"
 
                 if args.detailed:
-                    print(f"Name: {char['name']}")
-                    print(f"  Level: {char['level']}")
-                    print(f"  Location: ({char['x']}, {char['y']})")
-                    print(f"  Skin: {char['skin']}")
-                    print(f"  HP: {char['hp']}/{char['max_hp']}")
-                    print(f"  Gold: {char['gold']}")
+                    print(f"Name: {char.name}")
+                    print(f"  Level: {char.level}")
+                    print(f"  Location: ({char.x}, {char.y})")
+                    print(f"  Skin: {char.skin}")
+                    print(f"  HP: {char.hp}/{char.max_hp}")
+                    print(f"  Gold: {char.gold}")
                     print(f"  AI Status: {ai_status}")
                     print("-" * 60)
                 else:
-                    print(f"{char['name']:<15} Lv.{char['level']:<3} ({char['x']:>3},{char['y']:>3}) {ai_status}")
+                    print(f"{char.name:<15} Lv.{char.level:<3} ({char.x:>3},{char.y:>3}) {ai_status}")
 
             print(f"\nCharacter data cached in: data/characters.yaml")
 

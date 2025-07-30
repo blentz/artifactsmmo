@@ -104,8 +104,6 @@ class StateManager:
         local state cache, keeping the state synchronized without requiring
         additional API calls after each action execution.
         """
-        if self._cached_state is None:
-            self._cached_state = {}
 
         # Check if position will change to update location flags
         position_changed = (
@@ -113,9 +111,41 @@ class StateManager:
             GameState.CURRENT_Y in action_result.state_changes
         )
 
-        # Apply all state changes from the action result
+        # Apply all state changes from the action result by updating the model
+        current_data = self._cached_state.model_dump()
+        
+        # Map GameState enum keys back to model field names
+        state_to_field = {
+            GameState.CHARACTER_LEVEL: 'level',
+            GameState.CHARACTER_XP: 'xp',
+            GameState.CHARACTER_GOLD: 'gold',
+            GameState.HP_CURRENT: 'hp',
+            GameState.HP_MAX: 'max_hp',
+            GameState.CURRENT_X: 'x',
+            GameState.CURRENT_Y: 'y',
+            GameState.COOLDOWN_READY: 'cooldown_ready',
+            GameState.CAN_FIGHT: 'can_fight',
+            GameState.CAN_GATHER: 'can_gather',
+            GameState.CAN_CRAFT: 'can_craft',
+            GameState.CAN_TRADE: 'can_trade',
+            GameState.CAN_MOVE: 'can_move',
+            GameState.CAN_REST: 'can_rest',
+            GameState.CAN_USE_ITEM: 'can_use_item',
+            GameState.CAN_BANK: 'can_bank',
+            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
+            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
+            GameState.AT_SAFE_LOCATION: 'at_safe_location',
+            GameState.GAINED_XP: 'gained_xp',
+        }
+        
+        # Apply state changes to the model data
         for state_key, new_value in action_result.state_changes.items():
-            self._cached_state[state_key] = new_value
+            field_name = state_to_field.get(state_key)
+            if field_name and field_name in current_data:
+                current_data[field_name] = new_value
+
+        # Create a new CharacterGameState instance with updated data
+        self._cached_state = CharacterGameState(**current_data)
 
         # Update location flags if position changed
         if position_changed:
@@ -123,16 +153,20 @@ class StateManager:
 
         # Update cooldown state if action result indicates a cooldown
         if action_result.cooldown_seconds > 0:
-            self._cached_state[GameState.COOLDOWN_READY] = False
-            # Update dependent action availability states
-            self._cached_state[GameState.CAN_FIGHT] = False
-            self._cached_state[GameState.CAN_GATHER] = False
-            self._cached_state[GameState.CAN_CRAFT] = False
-            self._cached_state[GameState.CAN_TRADE] = False
-            self._cached_state[GameState.CAN_MOVE] = False
-            self._cached_state[GameState.CAN_REST] = False
-            self._cached_state[GameState.CAN_USE_ITEM] = False
-            self._cached_state[GameState.CAN_BANK] = False
+            # Update model with cooldown effects
+            cooldown_data = self._cached_state.model_dump()
+            cooldown_data.update({
+                'cooldown_ready': False,
+                'can_fight': False,
+                'can_gather': False,
+                'can_craft': False,
+                'can_trade': False,
+                'can_move': False,
+                'can_rest': False,
+                'can_use_item': False,
+                'can_bank': False,
+            })
+            self._cached_state = CharacterGameState(**cooldown_data)
 
     def _update_location_flags_async(self) -> None:
         """Update location flags based on current position - schedules async update.
@@ -141,9 +175,10 @@ class StateManager:
         current position by checking map content. It's called after position changes
         to ensure location flags remain accurate for GOAP planning.
         """
+            
         # Get current position from cached state
-        current_x = self._cached_state.get(GameState.CURRENT_X, 0)
-        current_y = self._cached_state.get(GameState.CURRENT_Y, 0)
+        current_x = self._cached_state.x
+        current_y = self._cached_state.y
         
         # Create a task to update location flags asynchronously
         import asyncio
@@ -166,53 +201,61 @@ class StateManager:
         This method fetches map content at the specified coordinates and updates
         the cached state with appropriate location flags for GOAP planning.
         """
+            
         try:
             # Get map content at the new position
             map_data = await self.api_client.get_map(x, y)
             
+            # Get current model data
+            current_data = self._cached_state.model_dump()
+            
             # Reset all location flags
-            self._cached_state[GameState.AT_MONSTER_LOCATION] = False
-            self._cached_state[GameState.AT_RESOURCE_LOCATION] = False
-            self._cached_state[GameState.AT_SAFE_LOCATION] = True
-            self._cached_state[GameState.XP_SOURCE_AVAILABLE] = False
+            current_data.update({
+                'at_monster_location': False,
+                'at_resource_location': False,
+                'at_safe_location': True,
+                'xp_source_available': False,
+            })
             
             # Set appropriate flags based on map content
             if map_data.content:
                 if map_data.content.type == "monster":
-                    self._cached_state[GameState.AT_MONSTER_LOCATION] = True
-                    self._cached_state[GameState.AT_SAFE_LOCATION] = False
-                    self._cached_state[GameState.XP_SOURCE_AVAILABLE] = True
+                    current_data.update({
+                        'at_monster_location': True,
+                        'at_safe_location': False,
+                        'xp_source_available': True,
+                    })
                 elif map_data.content.type == "resource":
-                    self._cached_state[GameState.AT_RESOURCE_LOCATION] = True
-                    self._cached_state[GameState.XP_SOURCE_AVAILABLE] = True
+                    current_data.update({
+                        'at_resource_location': True,
+                        'xp_source_available': True,
+                    })
                 elif map_data.content.type == "workshop":
-                    self._cached_state[GameState.XP_SOURCE_AVAILABLE] = True
+                    current_data.update({
+                        'xp_source_available': True,
+                    })
+            
+            # Update the cached state with new model instance
+            self._cached_state = CharacterGameState(**current_data)
                     
         except Exception:
             # If map lookup fails, location flags will be updated on next API sync
             pass
 
-    def get_cached_state(self) -> dict[GameState, Any]:
-        """Get locally cached state using GameState enum.
+    def get_cached_state(self) -> CharacterGameState | None:
+        """Get locally cached state as CharacterGameState model.
         
         Parameters:
             None
             
         Return values:
-            Dictionary with GameState enum keys and cached state values
+            CharacterGameState instance with cached state, or None if no cache
             
         This method retrieves the character state from local cache without
         making API calls, providing fast access to the most recently known
         state for GOAP planning and decision making.
         """
-        if self._cached_state is None:
-            # Try to load from file cache
-            cached = self.load_state_from_cache()
-            if cached is not None:
-                self._cached_state = cached
-            else:
-                return {}
-        return self._cached_state.copy()
+        return self._cached_state
 
     async def validate_state_consistency(self, state: dict[GameState, Any] | None = None) -> bool:
         """Verify state consistency - either validates provided state against rules, or compares cached vs API state.
@@ -323,14 +366,14 @@ class StateManager:
             # If API call fails, assume inconsistency
             return False
 
-    async def force_refresh(self) -> dict[GameState, Any]:
+    async def force_refresh(self) -> CharacterGameState:
         """Force refresh state from API.
         
         Parameters:
             None
             
         Return values:
-            Dictionary with GameState enum keys and refreshed state values
+            CharacterGameState instance with refreshed state values
             
         This method bypasses any caching and forces a fresh state retrieval
         from the API, useful for error recovery or when state consistency
@@ -341,15 +384,13 @@ class StateManager:
 
         # Fetch fresh data directly from API (bypass cache)
         character_state = await self.update_state_from_api()
-        state_dict = character_state.to_goap_state()
-        fresh_state = GameState.validate_state_dict(state_dict)
 
         # Update cached state with fresh data
-        self._cached_state = fresh_state
+        self._cached_state = character_state
 
         # Save the fresh state to cache
-        self.save_state_to_cache(fresh_state)
-        return fresh_state
+        self.save_state_to_cache(character_state)
+        return character_state
     
     def update_cooldown_state(self) -> None:
         """Update action availability based on cooldown status.
@@ -358,28 +399,28 @@ class StateManager:
         all action capabilities when the cooldown is ready, fixing the issue where
         actions remain permanently disabled after cooldown.
         """
-        if self._cached_state is None:
-            return
             
         # Check if cooldown is ready
-        cooldown_ready = self._cached_state.get(GameState.COOLDOWN_READY, True)
-        
-        if cooldown_ready:
+        if self._cached_state.cooldown_ready:
             # Re-enable all action capabilities when cooldown is ready
-            self._cached_state[GameState.CAN_FIGHT] = True
-            self._cached_state[GameState.CAN_GATHER] = True
-            self._cached_state[GameState.CAN_CRAFT] = True
-            self._cached_state[GameState.CAN_TRADE] = True
-            self._cached_state[GameState.CAN_MOVE] = True
-            self._cached_state[GameState.CAN_REST] = True
-            self._cached_state[GameState.CAN_USE_ITEM] = True
-            self._cached_state[GameState.CAN_BANK] = True
+            current_data = self._cached_state.model_dump()
+            current_data.update({
+                'can_fight': True,
+                'can_gather': True,
+                'can_craft': True,
+                'can_trade': True,
+                'can_move': True,
+                'can_rest': True,
+                'can_use_item': True,
+                'can_bank': True,
+            })
+            self._cached_state = CharacterGameState(**current_data)
 
-    def save_state_to_cache(self, state: dict[GameState, Any]) -> None:
+    def save_state_to_cache(self, state: CharacterGameState) -> None:
         """Save state to centralized characters.yaml cache.
         
         Parameters:
-            state: Dictionary with GameState enum keys and state values to cache
+            state: CharacterGameState instance to cache
             
         Return values:
             None (writes to cache file)
@@ -388,8 +429,8 @@ class StateManager:
         file, maintaining consistency with the existing data structure used by
         the CLI and cache manager.
         """
-        # Convert GameState enum keys to strings for YAML serialization
-        serializable_state = {key.value: value for key, value in state.items()}
+        # Convert CharacterGameState to serializable dict
+        serializable_state = state.model_dump()
 
         # Find and update character in centralized data
         if self._characters_cache.data and 'data' in self._characters_cache.data:
@@ -555,9 +596,39 @@ class StateManager:
         using GameState enum keys, enabling precise state updates from
         action results and API responses.
         """
+        # Require valid cached state - fail if not available
         if self._cached_state is None:
-            self._cached_state = {}
-        self._cached_state[state_key] = value
+            raise RuntimeError("No cached state available. Must sync with API first.")
+
+        # Map GameState enum to field name and update the model (same as sync version)
+        state_to_field = {
+            GameState.CHARACTER_LEVEL: 'level',
+            GameState.CHARACTER_XP: 'xp',
+            GameState.CHARACTER_GOLD: 'gold',
+            GameState.HP_CURRENT: 'hp',
+            GameState.HP_MAX: 'max_hp',
+            GameState.CURRENT_X: 'x',
+            GameState.CURRENT_Y: 'y',
+            GameState.COOLDOWN_READY: 'cooldown_ready',
+            GameState.CAN_FIGHT: 'can_fight',
+            GameState.CAN_GATHER: 'can_gather',
+            GameState.CAN_CRAFT: 'can_craft',
+            GameState.CAN_TRADE: 'can_trade',
+            GameState.CAN_MOVE: 'can_move',
+            GameState.CAN_REST: 'can_rest',
+            GameState.CAN_USE_ITEM: 'can_use_item',
+            GameState.CAN_BANK: 'can_bank',
+            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
+            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
+            GameState.AT_SAFE_LOCATION: 'at_safe_location',
+            GameState.GAINED_XP: 'gained_xp',
+        }
+        
+        field_name = state_to_field.get(state_key)
+        if field_name:
+            current_data = self._cached_state.model_dump()
+            current_data[field_name] = value
+            self._cached_state = CharacterGameState(**current_data)
 
         # Save updated state to cache
         self.save_state_to_cache(self._cached_state)
@@ -582,22 +653,82 @@ class StateManager:
 
         # Initialize cached state if not present
         if self._cached_state is None:
-            self._cached_state = {}
+            # Try to get cached state from file, otherwise create minimal state
+            cached_state = self.get_cached_state()
+            if cached_state is None:
+                # Create minimal default state for update
+                self._cached_state = CharacterGameState(
+                    name=self.character_name,
+                    level=1, xp=0, gold=0, hp=1, max_hp=1,
+                    x=0, y=0,
+                    mining_level=1, mining_xp=0,
+                    woodcutting_level=1, woodcutting_xp=0,
+                    fishing_level=1, fishing_xp=0,
+                    weaponcrafting_level=1, weaponcrafting_xp=0,
+                    gearcrafting_level=1, gearcrafting_xp=0,
+                    jewelrycrafting_level=1, jewelrycrafting_xp=0,
+                    cooking_level=1, cooking_xp=0,
+                    alchemy_level=1, alchemy_xp=0,
+                    cooldown=0, cooldown_ready=True,
+                    can_fight=True, can_gather=True, can_craft=True,
+                    can_trade=True, can_move=True, can_rest=True,
+                    can_use_item=True, can_bank=True, can_gain_xp=True,
+                    xp_source_available=False, at_monster_location=False,
+                    at_resource_location=False, at_safe_location=True,
+                    safe_to_fight=True, hp_low=False, hp_critical=False,
+                    inventory_space_available=True, inventory_space_used=0,
+                    gained_xp=False
+                )
+            else:
+                self._cached_state = cached_state
 
-        # Apply state changes
-        self._cached_state.update(state_changes)
+        # Apply state changes by updating the model data
+        current_data = self._cached_state.model_dump()
+        
+        # Map GameState enum keys back to model field names
+        state_to_field = {
+            GameState.CHARACTER_LEVEL: 'level',
+            GameState.CHARACTER_XP: 'xp',
+            GameState.CHARACTER_GOLD: 'gold',
+            GameState.HP_CURRENT: 'hp',
+            GameState.HP_MAX: 'max_hp',
+            GameState.CURRENT_X: 'x',
+            GameState.CURRENT_Y: 'y',
+            GameState.COOLDOWN_READY: 'cooldown_ready',
+            GameState.CAN_FIGHT: 'can_fight',
+            GameState.CAN_GATHER: 'can_gather',
+            GameState.CAN_CRAFT: 'can_craft',
+            GameState.CAN_TRADE: 'can_trade',
+            GameState.CAN_MOVE: 'can_move',
+            GameState.CAN_REST: 'can_rest',
+            GameState.CAN_USE_ITEM: 'can_use_item',
+            GameState.CAN_BANK: 'can_bank',
+            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
+            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
+            GameState.AT_SAFE_LOCATION: 'at_safe_location',
+            GameState.GAINED_XP: 'gained_xp',
+        }
+        
+        # Apply state changes to the model data
+        for state_key, new_value in state_changes.items():
+            field_name = state_to_field.get(state_key)
+            if field_name and field_name in current_data:
+                current_data[field_name] = new_value
+
+        # Create a new CharacterGameState instance with updated data
+        self._cached_state = CharacterGameState(**current_data)
 
         # Save updated state to cache
         self.save_state_to_cache(self._cached_state)
 
-    async def sync_with_api(self) -> dict[GameState, Any]:
+    async def sync_with_api(self) -> CharacterGameState:
         """Synchronize local state with API data and save to cache.
         
         Parameters:
             None
             
         Return values:
-            Dictionary with GameState enum keys and synchronized state values
+            CharacterGameState instance with synchronized state values
             
         This method fetches fresh character data from the API, updates the
         local cache with the new data, and persists the synchronized state
@@ -605,16 +736,14 @@ class StateManager:
         """
         # Get fresh state from API (bypass cache)
         character_state = await self.update_state_from_api()
-        state_dict = character_state.to_goap_state()
-        fresh_state = GameState.validate_state_dict(state_dict)
 
         # Update cached state
-        self._cached_state = fresh_state
+        self._cached_state = character_state
 
         # Save synchronized state to cache
-        self.save_state_to_cache(fresh_state)
+        self.save_state_to_cache(character_state)
 
-        return fresh_state
+        return character_state
 
     async def apply_action_result(self, action_result: ActionResult) -> None:
         """Apply action execution result to local state and save to cache.
@@ -636,14 +765,14 @@ class StateManager:
         if self._cached_state is not None:
             self.save_state_to_cache(self._cached_state)
 
-    async def refresh_state_from_api(self) -> dict[GameState, Any]:
+    async def refresh_state_from_api(self) -> CharacterGameState:
         """Force refresh state from API, bypassing cache.
         
         Parameters:
             None
             
         Return values:
-            Dictionary with GameState enum keys and refreshed state values
+            CharacterGameState instance with refreshed state values
             
         This method bypasses all caching mechanisms to fetch the most current
         character state directly from the API, useful for error recovery or
@@ -694,8 +823,6 @@ class StateManager:
         without triggering API calls. For the most current state, use the async
         version which can fetch from API if needed.
         """
-        if self._cached_state is None:
-            return None
         return self._cached_state.get(state_key)
 
     def set_state_value_sync(self, state_key: GameState, value: Any) -> None:
@@ -712,6 +839,28 @@ class StateManager:
         without triggering cache save operations. For persistent updates,
         use the async version which saves to cache.
         """
-        if self._cached_state is None:
-            self._cached_state = {}
-        self._cached_state[state_key] = value
+        # Map GameState enum to field name and update the model
+        state_to_field = {
+            GameState.CHARACTER_LEVEL: 'level',
+            GameState.CHARACTER_XP: 'xp',
+            GameState.CHARACTER_GOLD: 'gold',
+            GameState.HP_CURRENT: 'hp',
+            GameState.HP_MAX: 'max_hp',
+            GameState.CURRENT_X: 'x',
+            GameState.CURRENT_Y: 'y',
+            GameState.COOLDOWN_READY: 'cooldown_ready',
+            GameState.CAN_FIGHT: 'can_fight',
+            GameState.CAN_GATHER: 'can_gather',
+            GameState.CAN_CRAFT: 'can_craft',
+            GameState.CAN_TRADE: 'can_trade',
+            GameState.CAN_MOVE: 'can_move',
+            GameState.CAN_REST: 'can_rest',
+            GameState.CAN_USE_ITEM: 'can_use_item',
+            GameState.CAN_BANK: 'can_bank',
+        }
+        
+        field_name = state_to_field.get(state_key)
+        if field_name:
+            current_data = self._cached_state.model_dump()
+            current_data[field_name] = value
+            self._cached_state = CharacterGameState(**current_data)

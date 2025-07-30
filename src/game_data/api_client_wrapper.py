@@ -39,6 +39,7 @@ from src.lib.httpstatus import ArtifactsHTTPStatus
 from .models import CooldownInfo, GameItem, GameMonster, GameMap, GameResource, GameNPC
 from .token_config import TokenConfig
 from .cooldown_manager import CooldownManager
+from ..ai_player.models.character import Character
 
 
 class APIClientWrapper:
@@ -121,28 +122,25 @@ class APIClientWrapper:
         # For delete operations, success is indicated by 200 status
         return response.status_code == 200
 
-    async def get_characters(self) -> list[dict]:
+    async def get_characters(self) -> list[Character]:
         """Get list of user's characters.
         
         Parameters:
             None (uses authenticated token for user identification)
             
         Return values:
-            List of character dictionaries for the authenticated user
+            List of Character Pydantic models for the authenticated user
             
         This method retrieves all characters associated with the authenticated
-        user account, transforming API schemas to dictionaries at the boundary.
+        user account, transforming API schemas to internal Pydantic models at the boundary.
         """
-        # Import Character locally to avoid circular imports
-        from ..ai_player.models.character import Character
-        
         # Make API call
         response = await get_my_characters_my_characters_get.asyncio_detailed(client=self.client)
         processed_response = await self._process_response(response)
 
-        # Transform API schemas to internal Pydantic models, then to dictionaries at the boundary
+        # Transform API schemas to internal Pydantic models (model boundary enforcement)
         characters = [Character.from_api_character(char) for char in processed_response.data]
-        return [char.model_dump() for char in characters]
+        return characters
 
     async def get_character(self, name: str) -> Any:
         """Get specific character by name.

@@ -151,7 +151,7 @@ class MovementAction(BaseAction):
             success=True,
             message=f"Movement to ({self.target_x}, {self.target_y}) planned",
             state_changes=state_changes,
-            cooldown_seconds=5,  # Estimated movement cooldown
+            cooldown_seconds=0,  # Actual cooldown will be extracted from API response
         )
 
     def calculate_distance(self, current_x: int, current_y: int) -> int:

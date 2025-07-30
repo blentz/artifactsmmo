@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from ..lib.yaml_data import YamlData
 from .api_client import APIClientWrapper
 from .models import GameItem, GameMonster, GameMap, GameResource, GameNPC
+from ..ai_player.models.character import Character
 
 
 class CacheMetadata(BaseModel):
@@ -318,6 +319,8 @@ class CacheManager:
                     return [GameNPC(**item) for item in raw_data]
                 elif data_type == "items":
                     return [GameItem(**item) for item in raw_data]
+                elif data_type == "characters":
+                    return [Character(**item) for item in raw_data]
                 else:
                     return raw_data
             return None
@@ -432,14 +435,14 @@ class CacheManager:
         yaml_data = YamlData(cache_file)
         yaml_data.save(data=character_dict)
 
-    async def cache_all_characters(self, force_refresh: bool = False) -> list[dict]:
+    async def cache_all_characters(self, force_refresh: bool = False) -> list[Character]:
         """Cache all characters data from API.
         
         Parameters:
             force_refresh: Whether to bypass cache and fetch fresh data from API
             
         Return values:
-            List of dictionaries representing all user characters
+            List of Character Pydantic models representing all user characters
             
         This method retrieves all characters associated with the authenticated
         user account and caches the data using internal Pydantic models following
@@ -452,15 +455,14 @@ class CacheManager:
             if cached_data is not None:
                 return cached_data
 
-        # Get character dictionaries from API client (already transformed at boundary)
-        character_dicts = await self._api_client.get_characters()
+        # Get Character Pydantic models from API client (already transformed at boundary)
+        characters = await self._api_client.get_characters()
         
-        # Save character data using YAML data method
-        cache_file = f"{self.cache_dir}/{data_type}.yaml"
-        self._save_yaml_data(cache_file, character_dicts)
+        # Cache the internal Pydantic models using model_dump for serialization
+        self.save_cache_data(data_type, characters)
         self._update_metadata(data_type)
         
-        return character_dicts
+        return characters
 
     def get_character_from_cache(self, character_name: str) -> dict[str, Any] | None:
         """Get specific character data from centralized characters cache.

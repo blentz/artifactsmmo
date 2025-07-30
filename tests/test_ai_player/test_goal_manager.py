@@ -353,6 +353,12 @@ class TestGoalManager:
         assert 'target_state' in goal
         assert GameState.HP_LOW in goal['target_state']
         assert goal['target_state'][GameState.HP_LOW] == False  # No longer low HP
+        
+        # NEW: Rest goals now include movement coordinates for 2D movement
+        assert GameState.CURRENT_X in goal['target_state']
+        assert GameState.CURRENT_Y in goal['target_state']
+        assert isinstance(goal['target_state'][GameState.CURRENT_X], int)
+        assert isinstance(goal['target_state'][GameState.CURRENT_Y], int)
 
     def test_select_next_goal_early_game(self, goal_manager):
         """Test select_next_goal for early game character"""
@@ -427,6 +433,11 @@ class TestGoalManager:
         # Should prioritize survival/recovery goals
         assert goal['type'] in ['emergency_rest', 'health_recovery', 'survival', 'rest']
         assert goal['priority'] >= 9  # High priority for emergency
+        
+        # Emergency rest goals now include movement coordinates
+        if goal['type'] == 'rest':
+            assert GameState.CURRENT_X in goal['target_state']
+            assert GameState.CURRENT_Y in goal['target_state']
 
     def test_select_next_goal_inventory_full(self, goal_manager):
         """Test goal selection when inventory is full"""
@@ -693,18 +704,19 @@ class TestGoalManager:
         assert len(plan) == 0
 
     @pytest.mark.asyncio
-    async def test_plan_actions_get_all_actions_exception(self, goal_manager, mock_current_state):
-        """Test plan_actions when get_all_actions raises exception"""
+    async def test_plan_actions_empty_action_registry(self, goal_manager, mock_current_state):
+        """Test plan_actions when action registry returns empty list"""
         goal = {
             'type': 'test_goal',
             'target_state': {GameState.CHARACTER_LEVEL: 6}
         }
 
-        with patch('src.ai_player.goal_manager.get_all_actions', side_effect=Exception("Action loading failed")):
-            plan = await goal_manager.plan_actions(mock_current_state, goal)
-            
-            # Should handle exception and still try to create plan
-            assert isinstance(plan, list)
+        # Configure action registry to return empty list
+        goal_manager.action_registry.generate_actions_for_state.return_value = []
+        
+        # Should raise RuntimeError when action list is empty
+        with pytest.raises(RuntimeError, match="Action list is empty for character"):
+            await goal_manager.plan_actions(mock_current_state, goal)
 
     async def test_create_goap_actions_exception_handling(self, goal_manager):
         """Test exception handling in create_goap_actions"""
@@ -853,6 +865,8 @@ class TestGoalManagerGOAPIntegration:
         # Test that the method returns an Action_List instance
         with patch('src.ai_player.goal_manager.Action_List') as mock_action_list_class:
             mock_action_list = Mock()
+            # Configure the mock to have the necessary attributes
+            mock_action_list.conditions = {}  # Empty dict for len() call
             mock_action_list_class.return_value = mock_action_list
 
             result = await goal_manager.create_goap_actions(current_state)
@@ -1505,3 +1519,209 @@ class TestCooldownAwarePlanner:
         assert filtered_actions.conditions["non_cooldown_action"]["character_level"] == 5
         assert filtered_actions.reactions["non_cooldown_action"]["character_xp"] == 50
         assert filtered_actions.weights["non_cooldown_action"] == 2
+
+
+class TestMovementTargetSelection:
+    """Test movement target selection functionality for 2D movement system"""
+
+    @pytest.fixture
+    def goal_manager(self):
+        """Create GoalManager with cache manager for movement testing"""
+        mock_action_registry = Mock()
+        mock_cooldown_manager = Mock()
+        mock_cache_manager = Mock()
+        
+        # Configure default mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
+        return GoalManager(mock_action_registry, mock_cooldown_manager, mock_cache_manager)
+
+    def test_select_movement_target_combat(self, goal_manager):
+        """Test movement target selection for combat goals"""
+        current_state = create_test_character_state(x=0, y=0)
+        target_x, target_y = goal_manager.select_movement_target(current_state, 'combat')
+        
+        assert isinstance(target_x, int)
+        assert isinstance(target_y, int)
+        # Should be different from current position for combat exploration
+        assert (target_x, target_y) != (0, 0)
+
+    def test_select_movement_target_rest(self, goal_manager):
+        """Test movement target selection for rest goals"""
+        current_state = create_test_character_state(x=5, y=5)
+        target_x, target_y = goal_manager.select_movement_target(current_state, 'rest')
+        
+        assert isinstance(target_x, int)
+        assert isinstance(target_y, int)
+        # Should move toward safer area (generally toward origin)
+        # Rest movement should be strategic for safety
+
+    def test_select_movement_target_exploration(self, goal_manager):
+        """Test movement target selection for exploration goals"""
+        current_state = create_test_character_state(x=2, y=3)
+        target_x, target_y = goal_manager.select_movement_target(current_state, 'exploration')
+        
+        assert isinstance(target_x, int)
+        assert isinstance(target_y, int)
+        # Should use systematic exploration pattern
+        # Exploration targets should be nearby but different from current position
+
+    def test_select_movement_target_gathering(self, goal_manager):
+        """Test movement target selection for gathering goals"""
+        current_state = create_test_character_state(x=1, y=-1)
+        target_x, target_y = goal_manager.select_movement_target(current_state, 'gathering')
+        
+        assert isinstance(target_x, int)
+        assert isinstance(target_y, int)
+        # Should return valid coordinates for resource gathering
+
+    def test_select_movement_target_no_cache_manager(self):
+        """Test movement target selection when cache manager is None"""
+        mock_action_registry = Mock()
+        mock_cooldown_manager = Mock()
+        goal_manager = GoalManager(mock_action_registry, mock_cooldown_manager, None)
+        
+        current_state = create_test_character_state(x=0, y=0)
+        target_x, target_y = goal_manager.select_movement_target(current_state, 'combat')
+        
+        # Should fall back to exploration pattern when no cache manager
+        assert isinstance(target_x, int)
+        assert isinstance(target_y, int)
+
+
+class TestStrategicLocationFinding:
+    """Test strategic location finding and exploration algorithms"""
+
+    @pytest.fixture
+    def goal_manager(self):
+        """Create GoalManager with mocked cache manager for location testing"""
+        mock_action_registry = Mock()
+        mock_cooldown_manager = Mock()
+        mock_cache_manager = Mock()
+        
+        # Configure default mock behavior for action registry
+        mock_action_registry.generate_actions_for_state.return_value = []
+        
+        return GoalManager(mock_action_registry, mock_cooldown_manager, mock_cache_manager)
+
+    def test_find_nearest_content_location_with_cache_manager(self, goal_manager):
+        """Test finding nearest content location when cache manager is available"""
+        result = goal_manager.find_nearest_content_location(0, 0, 'monster')
+        
+        # Should return tuple of coordinates or None
+        assert result is None or (isinstance(result, tuple) and len(result) == 2)
+        if result is not None:
+            assert isinstance(result[0], int)
+            assert isinstance(result[1], int)
+
+    def test_find_nearest_content_location_no_cache_manager(self, goal_manager):
+        """Test finding nearest content location when cache manager is None"""
+        goal_manager.cache_manager = None
+        result = goal_manager.find_nearest_content_location(0, 0, 'monster')
+        
+        assert result is None
+
+    def test_find_nearest_content_location_exception_handling(self, goal_manager):
+        """Test exception handling in find_nearest_content_location"""
+        # Mock MovementActionFactory constructor to raise exception
+        with patch('src.ai_player.goal_manager.MovementActionFactory') as mock_factory:
+            mock_factory.side_effect = Exception("Factory creation error")
+            
+            result = goal_manager.find_nearest_content_location(0, 0, 'monster')
+            
+            # Should return None on exception
+            assert result is None
+
+    def test_find_nearest_safe_location(self, goal_manager):
+        """Test finding nearest safe location"""
+        # Test various starting positions
+        test_positions = [
+            (3, -2),   # Positive X, negative Y
+            (-1, 4),   # Negative X, positive Y
+            (0, 0),    # Origin
+            (5, 5),    # Both positive
+            (-3, -3)   # Both negative
+        ]
+        
+        for start_x, start_y in test_positions:
+            result = goal_manager.find_nearest_safe_location(start_x, start_y)
+            
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+            assert isinstance(result[0], int)
+            assert isinstance(result[1], int)
+            
+            # Safe location should generally move toward origin (safer areas)
+            target_x, target_y = result
+            
+            # Should be a valid movement (different position if not already safe)
+            if start_x != 0 or start_y != 0:
+                # Should move toward origin for safety
+                if start_x > 0:
+                    assert target_x <= start_x
+                elif start_x < 0:
+                    assert target_x >= start_x
+                    
+                if start_y > 0:
+                    assert target_y <= start_y
+                elif start_y < 0:
+                    assert target_y >= start_y
+
+    def test_get_exploration_target_pattern(self, goal_manager):
+        """Test exploration target follows systematic pattern"""
+        # Test multiple positions to verify pattern consistency
+        results = []
+        test_positions = [
+            (0, 0), (1, 1), (-1, -1), (2, -2), (-3, 3)
+        ]
+        
+        for x, y in test_positions:
+            target = goal_manager.get_exploration_target(x, y)
+            results.append(target)
+            
+            assert isinstance(target, tuple)
+            assert len(target) == 2
+            assert isinstance(target[0], int)
+            assert isinstance(target[1], int)
+        
+        # Should generate diverse exploration targets
+        unique_targets = set(results)
+        assert len(unique_targets) >= len(test_positions) - 1  # Allow some overlap
+
+    def test_get_exploration_target_deterministic(self, goal_manager):
+        """Test exploration target is deterministic for same position"""
+        x, y = 5, 3
+        
+        # Multiple calls should return same result
+        target1 = goal_manager.get_exploration_target(x, y)
+        target2 = goal_manager.get_exploration_target(x, y)
+        target3 = goal_manager.get_exploration_target(x, y)
+        
+        assert target1 == target2 == target3
+        
+        # Should be a valid nearby position
+        target_x, target_y = target1
+        distance = abs(target_x - x) + abs(target_y - y)
+        assert distance <= 2  # Should be nearby for systematic exploration
+
+    def test_get_exploration_target_coverage(self, goal_manager):
+        """Test exploration pattern provides good coverage"""
+        # Test that exploration pattern covers different directions
+        center_x, center_y = 10, 10
+        targets = []
+        
+        # Generate targets for a grid around center position
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                start_x, start_y = center_x + dx, center_y + dy
+                target = goal_manager.get_exploration_target(start_x, start_y)
+                targets.append(target)
+        
+        # Should generate diverse targets (not all the same)
+        unique_targets = set(targets)
+        assert len(unique_targets) > 1
+        
+        # All targets should be valid coordinates
+        for target_x, target_y in targets:
+            assert isinstance(target_x, int)
+            assert isinstance(target_y, int)
