@@ -13,9 +13,11 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any
+from typing import Any, Optional
 
-from ..game_data.api_client import APIClientWrapper, CooldownManager
+from ..game_data.api_client_wrapper import APIClientWrapper
+from ..game_data.cooldown_manager import CooldownManager
+from ..game_data.cache_manager import CacheManager
 from .actions import get_global_registry
 from .actions.base_action import BaseAction
 from .state.character_game_state import CharacterGameState
@@ -25,22 +27,24 @@ from .state.game_state import ActionResult, GameState
 class ActionExecutor:
     """Executes GOAP actions via API with cooldown and error handling"""
 
-    def __init__(self, api_client: APIClientWrapper, cooldown_manager: CooldownManager):
+    def __init__(self, api_client: APIClientWrapper, cooldown_manager: CooldownManager, cache_manager: CacheManager):
         """Initialize ActionExecutor with API client and cooldown management.
         
         Parameters:
             api_client: API client wrapper for game operations
             cooldown_manager: Manager for character cooldown tracking
+            cache_manager: CacheManager instance for accessing game data (maps, monsters, resources)
             
         Return values:
             None (constructor)
             
         This constructor initializes the ActionExecutor with the necessary
-        components for reliable action execution including API communication
-        and cooldown management for ArtifactsMMO game compliance.
+        components for reliable action execution including API communication,
+        cooldown management, and game data access for action generation.
         """
         self.api_client = api_client
         self.cooldown_manager = cooldown_manager
+        self.cache_manager = cache_manager
         self.action_registry = get_global_registry()
         self.retry_attempts = 3
         self.retry_delays = [1, 2, 4]  # exponential backoff
@@ -49,13 +53,13 @@ class ActionExecutor:
         self._last_rate_limit_time = 0.0
         self._rate_limit_wait_time = 0.0
 
-    async def execute_action(self, action: BaseAction, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+    async def execute_action(self, action: BaseAction, character_name: str, current_state: CharacterGameState) -> ActionResult:
         """Execute single action with full error handling and cooldown management.
         
         Parameters:
             action: BaseAction instance to execute
             character_name: Name of the character performing the action
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState Pydantic model with current character state
             
         Return values:
             ActionResult containing success status, message, and state changes
@@ -159,36 +163,40 @@ class ActionExecutor:
 
         try:
             self.logger = logging.getLogger(f"action_executor.{character_name}")
-            self.logger.debug(f"Starting plan execution for {len(plan)} actions")
+            self.logger.info(f"ActionExecutor: Starting plan execution for {len(plan)} actions")
+            self.logger.info(f"ActionExecutor: Plan content: {plan}")
             # Get initial character state
+            self.logger.info("ActionExecutor: Getting character data from API...")
             character = await self.api_client.get_character(character_name)
+            self.logger.info(f"ActionExecutor: Got character data: {character.name} at ({character.x}, {character.y})")
             
             # Get map content for location context
+            self.logger.info("ActionExecutor: Getting map data from API...")
             game_map = await self.api_client.get_map(character.x, character.y)
+            self.logger.info(f"ActionExecutor: Got map data: {game_map}")
             
-            # Convert to internal state format
+            # Convert to internal state format - keep as CharacterGameState
+            self.logger.info("ActionExecutor: Converting to CharacterGameState...")
             character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
-            current_state = character_state.to_goap_state()
+            self.logger.info(f"ActionExecutor: Initial state loaded successfully")
 
-            # Convert string keys back to GameState enum for type safety
-            typed_state = GameState.validate_state_dict(current_state)
-            self.logger.debug(f"Initial state loaded successfully")
-
+            self.logger.info(f"ActionExecutor: Starting for loop with {len(plan)} actions")
             for i, action_info in enumerate(plan):
                 try:
-                    self.logger.debug(f"Processing plan step {i+1}: {action_info}")
+                    self.logger.info(f"ActionExecutor: Processing plan step {i+1}: {action_info.get('name', 'unknown')}")
                     # Extract action name and parameters
                     action_name = action_info.get('action', action_info.get('name'))
+                    self.logger.info(f"ActionExecutor: Extracted action name: '{action_name}'")
                     if not action_name:
-                        self.logger.debug(f"No action name found in action_info: {action_info}")
+                        self.logger.error(f"No action name found in action_info: {action_info}")
                         return False
                     
-                    self.logger.debug(f"Extracted action name: '{action_name}'")
-
                     # Get action instance from registry using actual current state
-                    action = self.get_action_by_name(action_name, typed_state)
+                    self.logger.info(f"ActionExecutor: Getting action from registry: '{action_name}'")
+                    action = await self.get_action_by_name(action_name, character_state)
+                    self.logger.info(f"ActionExecutor: Got action from registry: {action}")
                     if not action:
-                        self.logger.debug(f"Could not find action '{action_name}' in registry")
+                        self.logger.warning(f"Could not find action '{action_name}' in registry")
                         return False
                     
                     self.logger.debug(f"Found action '{action_name}', executing...")
@@ -234,18 +242,30 @@ class ActionExecutor:
                                 cooldown_seconds=getattr(move_result.cooldown, "total_seconds", 5) if hasattr(move_result, "cooldown") else 5
                             )
                         except Exception as e:
-                            result = ActionResult(
-                                success=False,
-                                message=f"Movement failed for {character_name}: {str(e)}",
-                                state_changes={},
-                                cooldown_seconds=0
-                            )
+                            # Check for HTTP 490 "CHARACTER_ALREADY_MAP" error
+                            if hasattr(e, 'status_code') and e.status_code == 490:
+                                result = ActionResult(
+                                    success=True,
+                                    message=f"Character {character_name} already at target location ({target_x}, {target_y})",
+                                    state_changes={
+                                        GameState.CURRENT_X: target_x,
+                                        GameState.CURRENT_Y: target_y,
+                                    },
+                                    cooldown_seconds=0  # No cooldown for non-movement
+                                )
+                            else:
+                                result = ActionResult(
+                                    success=False,
+                                    message=f"Movement failed for {character_name}: {str(e)}",
+                                    state_changes={},
+                                    cooldown_seconds=0
+                                )
                     else:
                         # Execute other actions normally
-                        result = await self.execute_action(action, character_name, typed_state)
+                        result = await self.execute_action(action, character_name, character_state)
 
                     if not result.success:
-                        self.logger.debug(f"Action '{action_name}' failed: {result.message}")
+                        self.logger.warning(f"Action '{action_name}' failed: {result.message}")
                         # Try emergency recovery for critical failures
                         if "critical" in result.message.lower() or "hp" in result.message.lower():
                             recovery_success = await self.emergency_recovery(character_name, f"Plan step {i+1} failed: {result.message}")
@@ -254,11 +274,18 @@ class ActionExecutor:
                         else:
                             return False
                     
-                    self.logger.debug(f"Action '{action_name}' succeeded: {result.message}")
+                    self.logger.info(f"Action '{action_name}' succeeded: {result.message}")
 
                     # Update state with action results
+                    # Convert character_state to typed state dictionary for updates
+                    goap_state = character_state.to_goap_state()
+                    typed_state = GameState.validate_state_dict(goap_state)
+                    
                     for state_key, new_value in result.state_changes.items():
                         typed_state[state_key] = new_value
+                        
+                    # Update the character_state object with the new values
+                    character_state = CharacterGameState.from_goap_state(typed_state)
 
                     # Wait for cooldown between actions if needed
                     if result.cooldown_seconds > 0:
@@ -311,12 +338,12 @@ class ActionExecutor:
             # Fallback: wait a short time if cooldown checking fails
             await asyncio.sleep(1)
 
-    def validate_action_preconditions(self, action: BaseAction, current_state: dict[GameState, Any]) -> bool:
+    def validate_action_preconditions(self, action: BaseAction, current_state: CharacterGameState) -> bool:
         """Verify action preconditions are met before execution.
         
         Parameters:
             action: BaseAction instance to validate preconditions for
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState Pydantic model with current character state
             
         Return values:
             Boolean indicating whether all action preconditions are satisfied
@@ -361,6 +388,15 @@ class ActionExecutor:
                     message=f"Character {character_name} is on cooldown",
                     state_changes={GameState.COOLDOWN_READY: False},
                     cooldown_seconds=5
+                )
+
+            # Handle "already at map location" (490) - treat as successful movement
+            elif status_code == 490:
+                return ActionResult(
+                    success=True,
+                    message=f"Character {character_name} already at target location",
+                    state_changes={},  # No state changes needed - already at destination
+                    cooldown_seconds=0  # No cooldown for non-movement
                 )
 
             # Handle rate limiting (429)
@@ -554,12 +590,12 @@ class ActionExecutor:
             # If we can't even get character state, recovery failed
             return False
 
-    def get_action_by_name(self, action_name: str, current_state: dict[GameState, Any]) -> BaseAction | None:
+    async def get_action_by_name(self, action_name: str, current_state: CharacterGameState) -> BaseAction | None:
         """Get action instance by name from registry using actual game state.
         
         Parameters:
             action_name: String identifier for the desired action
-            current_state: Actual current game state to use for parameterized actions
+            current_state: CharacterGameState Pydantic model with current character state
             
         Return values:
             BaseAction instance matching the name, or None if not found
@@ -568,17 +604,16 @@ class ActionExecutor:
         registry by name, using the actual game state for parameterized actions
         to ensure consistency between planning and execution phases.
         """
-        try:
-            return self.action_registry.get_action_by_name(action_name, current_state, None)
-        except Exception:
-            return None
+        # Get game data for proper action generation
+        game_data = await self.cache_manager.get_game_data()
+        return self.action_registry.get_action_by_name(action_name, current_state, game_data)
 
-    def estimate_execution_time(self, action: BaseAction, current_state: dict[GameState, Any]) -> float:
+    def estimate_execution_time(self, action: BaseAction, current_state: CharacterGameState) -> float:
         """Estimate time required to execute action including cooldown.
         
         Parameters:
             action: BaseAction instance to estimate execution time for
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState Pydantic model with current character state
             
         Return values:
             Float representing estimated seconds for complete action execution
@@ -610,7 +645,7 @@ class ActionExecutor:
 
             # Add current cooldown wait time if character not ready
             current_cooldown = 0.0
-            if not current_state.get(GameState.COOLDOWN_READY, True):
+            if not current_state.cooldown_ready:
                 current_cooldown = 2.0  # Estimate
 
             return api_call_time + cooldown_time + current_cooldown
@@ -697,13 +732,13 @@ class ActionExecutor:
             self._last_rate_limit_time = time.time()
             self._rate_limit_wait_time = 60.0
 
-    async def safe_execute(self, action: BaseAction, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+    async def safe_execute(self, action: BaseAction, character_name: str, current_state: CharacterGameState) -> ActionResult:
         """Execute action with comprehensive error handling and retries.
         
         Parameters:
             action: BaseAction instance to execute with enhanced safety measures
             character_name: Name of the character performing the action
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState Pydantic model with current character state
             
         Return values:
             ActionResult with execution outcome and comprehensive error handling

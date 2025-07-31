@@ -220,11 +220,17 @@ class ActionRegistry:
         factories to generate parameterized instances as needed for GOAP
         execution and action debugging workflows.
         """
+        # Debug: collect all action names for debugging
+        all_action_names = []
+        
         # Search through all registered factories
         for action_class, factory in self._action_factories.items():
             factory_actions = factory.create_instances(game_data, current_state)
             for action in factory_actions:
+                all_action_names.append(action.name)
                 if action.name == name:
                     return action
-
+        
+        # Debug logging for missing actions
+        print(f"DEBUG: Action '{name}' not found. Available actions: {all_action_names[:10]}...")
         return None

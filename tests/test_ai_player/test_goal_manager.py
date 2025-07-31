@@ -292,17 +292,19 @@ class TestGoalManager:
         assert isinstance(goals, list)
         assert len(goals) > 0
 
-        # Should contain level progression goal
-        level_goals = [g for g in goals if 'target_state' in g and GameState.CHARACTER_LEVEL in g['target_state']]
+        # Should contain level progression goal (boolean-based)
+        level_goals = [g for g in goals if 'target_state' in g and GameState.GAINED_XP in g['target_state']]
         assert len(level_goals) > 0
-        assert level_goals[0]['target_state'][GameState.CHARACTER_LEVEL] == 4  # Next level
+        assert level_goals[0]['target_state'][GameState.GAINED_XP] == True
+        assert level_goals[0]['target_state'][GameState.CAN_GAIN_XP] == True
 
-        # Should contain skill goals
-        mining_goals = [g for g in goals if 'target_state' in g and GameState.MINING_LEVEL in g['target_state']]
-        assert len(mining_goals) > 0
-        assert mining_goals[0]['target_state'][GameState.MINING_LEVEL] == 3  # Next mining level
+        # Should contain skill goals (boolean-based)
+        skill_goals = [g for g in goals if g.get('type') == 'skill_training']
+        assert len(skill_goals) > 0
+        assert skill_goals[0]['target_state'][GameState.GAINED_XP] == True
+        assert skill_goals[0]['target_state'][GameState.CAN_GAIN_XP] == True
 
-        # Should contain economic goal
+        # Should contain economic goal (still numeric as it's not XP/level related)
         gold_goals = [g for g in goals if 'target_state' in g and GameState.CHARACTER_GOLD in g['target_state']]
         assert len(gold_goals) > 0
         assert gold_goals[0]['target_state'][GameState.CHARACTER_GOLD] == 600  # Current + 500

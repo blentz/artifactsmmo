@@ -115,13 +115,13 @@ Analyze GOAP planning process for specific goals:
 
 ```bash
 # Basic planning analysis
-uv run python -m src.cli.main diagnose-plan my_character level=20
+uv run python -m src.cli.main diagnose-plan my_character "gain xp"
 
 # Verbose planning with step details
-uv run python -m src.cli.main diagnose-plan my_character "gold=1000,level=18" --verbose --show-steps
+uv run python -m src.cli.main diagnose-plan my_character "gain xp" --verbose --show-steps
 
-# Complex goal planning
-uv run python -m src.cli.main diagnose-plan my_character "x=10,y=15" --verbose
+# Movement goal planning
+uv run python -m src.cli.main diagnose-plan my_character --gained-xp true --current-x 5 --current-y 5
 ```
 
 **Sample Output:**
@@ -168,6 +168,9 @@ Test planning algorithms with mock scenarios:
 ```bash
 # Level progression simulation
 uv run python -m src.cli.main test-planning --start-level 1 --goal-level 5 --dry-run
+
+# Custom character and goal testing
+uv run python -m src.cli.main test-planning --character my_character --goal "gain_xp"
 
 # Custom state simulation from file
 uv run python -m src.cli.main test-planning --mock-state-file tests/fixtures/level_1_state.json
@@ -298,7 +301,7 @@ Recommendations (1):
 
 3. **Analyze planning process** for the problematic goal:
    ```bash
-   uv run python -m src.cli.main diagnose-plan my_character "your_goal" --verbose --show-steps
+   uv run python -m src.cli.main diagnose-plan my_character "gain xp" --verbose --show-steps
    ```
 
 4. **Test with simulations** to isolate issues:
@@ -315,7 +318,7 @@ Recommendations (1):
 
 2. **Measure planning performance** for target scenarios:
    ```bash
-   uv run python -m src.cli.main diagnose-plan my_character "target_goal" --verbose
+   uv run python -m src.cli.main diagnose-plan my_character "gain xp" --verbose
    ```
 
 3. **Run performance benchmarks**:
@@ -360,7 +363,7 @@ uv run python -m src.cli.main diagnose-cooldowns my_character --monitor
 For detailed debugging, increase logging level:
 
 ```bash
-uv run python -m src.cli.main --log-level DEBUG diagnose-plan my_character level=20
+uv run python -m src.cli.main --log-level DEBUG diagnose-plan my_character "gain xp"
 ```
 
 ## Best Practices

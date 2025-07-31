@@ -125,6 +125,11 @@ class MockParameterizedFactory(ParameterizedActionFactory):
         return parameters
 
 
+class InvalidAction:
+    """Invalid action class that doesn't inherit from BaseAction"""
+    pass
+
+
 class TestActionRegistry:
     """Test ActionRegistry functionality"""
 
@@ -242,14 +247,14 @@ class TestActionRegistry:
                 return {"invalid_key": True}
 
             def get_effects(self) -> dict[GameState, Any]:
-                return {GameState.COOLDOWN_READY: False}
+                return {}
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
-                return ActionResult(success=False, message="", state_changes={})
+            async def execute(self, api_client, current_state: dict[GameState, Any]) -> bool:
+                return True
 
         is_valid = action_registry.validate_action(InvalidAction)
-
         assert is_valid is False
+    
 
     def test_get_all_action_types(self, action_registry):
         """Test getting all registered action types"""

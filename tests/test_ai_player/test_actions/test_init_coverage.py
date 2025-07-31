@@ -14,6 +14,7 @@ from src.ai_player.actions import (
     get_all_actions, get_global_registry, register_action_factory
 )
 from src.ai_player.actions.base_action import BaseAction
+from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import ActionResult, GameState
 
 
@@ -34,7 +35,34 @@ def test_real_action_registry():
     assert len(action_types) > 0
 
     # Test global functions
-    current_state = {GameState.COOLDOWN_READY: True}
+    current_state = CharacterGameState(
+        name="TestChar",
+        level=1,
+        xp=0,
+        gold=0,
+        hp=100,
+        max_hp=100,
+        x=0,
+        y=0,
+        mining_level=1,
+        mining_xp=0,
+        woodcutting_level=1,
+        woodcutting_xp=0,
+        fishing_level=1,
+        fishing_xp=0,
+        weaponcrafting_level=1,
+        weaponcrafting_xp=0,
+        gearcrafting_level=1,
+        gearcrafting_xp=0,
+        jewelrycrafting_level=1,
+        jewelrycrafting_xp=0,
+        cooking_level=1,
+        cooking_xp=0,
+        alchemy_level=1,
+        alchemy_xp=0,
+        cooldown=0,
+        cooldown_ready=True
+    )
     game_data = {}
 
     actions = get_all_actions(current_state, game_data)

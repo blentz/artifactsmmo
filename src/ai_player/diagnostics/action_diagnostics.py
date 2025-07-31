@@ -10,6 +10,7 @@ from typing import Any
 
 from ..actions import ActionRegistry
 from ..actions.base_action import BaseAction
+from ..state.character_game_state import CharacterGameState
 from ..state.game_state import GameState
 
 
@@ -238,11 +239,11 @@ class ActionDiagnostics:
 
         return analysis
 
-    def get_available_actions(self, current_state: dict[GameState, Any], game_data: Any = None) -> list[BaseAction]:
+    def get_available_actions(self, current_state: CharacterGameState, game_data: Any = None) -> list[BaseAction]:
         """Get all actions that can be executed in current state.
 
         Parameters:
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState instance with current character state
             game_data: Game data object containing maps, monsters, resources for action generation
 
         Return values:

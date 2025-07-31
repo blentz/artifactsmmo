@@ -80,66 +80,16 @@ class InventoryOptimizer:
             )
 
     async def get_current_bank(self, character_name: str) -> BankState:
-        """Get current bank state from API"""
-        try:
-            # Get bank data from API
-            bank_data = await self.api_client.get_bank_items(character_name)
-
-            # Parse bank items
-            items = []
-            total_value = 0
-
-            if hasattr(bank_data, 'data') and bank_data.data:
-                for bank_item in bank_data.data:
-                    # Create ItemInfo from bank data
-                    item_info = ItemInfo(
-                        code=bank_item.get('code', ''),
-                        name=bank_item.get('code', '').replace('_', ' ').title(),  # Fallback name
-                        type="unknown",  # Would need item database lookup
-                        level=1,  # Would need item database lookup
-                        quantity=bank_item.get('quantity', 1),
-                        slot=None,  # Bank items don't have slots
-                        tradeable=True,  # Default assumption
-                        craftable=False,  # Would need item database lookup
-                        consumable=False,  # Would need item database lookup
-                        stackable=True,  # Default assumption
-                        value=1  # Would need item database lookup
-                    )
-                    items.append(item_info)
-                    total_value += item_info.total_value
-
-            # Get bank information - try different possible attributes
-            bank_info = {}
-            if hasattr(bank_data, 'data') and isinstance(bank_data.data, dict):
-                bank_info = bank_data.data
-            elif hasattr(bank_data, 'data') and hasattr(bank_data.data, '__dict__'):
-                bank_info = bank_data.data.__dict__
-
-            # Calculate bank metrics with fallbacks
-            max_slots = bank_info.get('slots', 200)  # Default bank size
-            used_slots = len(items)
-            gold = bank_info.get('gold', 0)
-
-            # Create bank state
-            bank_state = BankState(
-                items=items,
-                max_slots=max_slots,
-                used_slots=used_slots,
-                total_value=total_value,
-                gold=gold
-            )
-
-            return bank_state
-
-        except Exception:
-            # Return empty bank state on error
-            return BankState(
-                items=[],
-                max_slots=200,
-                used_slots=0,
-                total_value=0,
-                gold=0
-            )
+        """Get current bank state via StateManager"""
+        # This should be implemented by StateManager, not directly here
+        # For now, return a stub implementation
+        return BankState(
+            items=[],
+            max_slots=200,
+            used_slots=0,
+            total_value=0,
+            gold=0
+        )
 
     def optimize_inventory_space(self, character_name: str, character_state: dict[GameState, Any]) -> list[OptimizationRecommendation]:
         """Generate recommendations to optimize inventory space"""

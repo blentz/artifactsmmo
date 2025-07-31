@@ -74,6 +74,10 @@ class CharacterGameState(BaseModel):
     inventory_space_available: bool = True
     inventory_space_used: int = Field(ge=0, default=0)
     gained_xp: bool = False
+    
+    # Additional states required by actions
+    enemy_nearby: bool = False
+    resource_available: bool = False
 
     def to_goap_state(self) -> dict[str, Any]:
         """Convert to GOAP state dictionary using enum values.
@@ -141,6 +145,8 @@ class CharacterGameState(BaseModel):
             'inventory_space_available': GameState.INVENTORY_SPACE_AVAILABLE,
             'inventory_space_used': GameState.INVENTORY_SPACE_USED,
             'gained_xp': GameState.GAINED_XP,
+            'enemy_nearby': GameState.ENEMY_NEARBY,
+            'resource_available': GameState.RESOURCE_AVAILABLE,
         }
 
         # Map available fields to enum values
@@ -179,15 +185,19 @@ class CharacterGameState(BaseModel):
         at_resource_location = False
         at_safe_location = True
         xp_source_available = False  # XP source available at this location
+        enemy_nearby = False  # Enemy at current location
+        resource_available = False  # Resource at current location
         
         if map_content:
             if map_content.type == "monster":
                 at_monster_location = True
                 at_safe_location = False  # Monsters make location unsafe
                 xp_source_available = True  # Monsters are XP sources
+                enemy_nearby = True  # Enemy is at this location
             elif map_content.type == "resource":
                 at_resource_location = True
                 xp_source_available = True  # Resources are XP sources (via gathering)
+                resource_available = True  # Resource is at this location
             elif map_content.type == "workshop":
                 xp_source_available = True  # Workshops are XP sources (via crafting)
             # Keep at_safe_location=True for workshops, tasks_master, etc.
@@ -240,6 +250,8 @@ class CharacterGameState(BaseModel):
             inventory_space_available=True,  # Will be updated by inventory logic
             inventory_space_used=0,  # Will be updated by inventory logic
             gained_xp=False,  # Reset each state update, set by actions
+            enemy_nearby=enemy_nearby,  # Set based on map content
+            resource_available=resource_available,  # Set based on map content
         )
 
     def get(self, key: GameState, default=None):
@@ -295,6 +307,8 @@ class CharacterGameState(BaseModel):
             GameState.INVENTORY_SPACE_AVAILABLE: 'inventory_space_available',
             GameState.INVENTORY_SPACE_USED: 'inventory_space_used',
             GameState.GAINED_XP: 'gained_xp',
+            GameState.ENEMY_NEARBY: 'enemy_nearby',  
+            GameState.RESOURCE_AVAILABLE: 'resource_available',
         }
         
         field_name = state_to_field.get(key)
@@ -313,3 +327,79 @@ class CharacterGameState(BaseModel):
     def __contains__(self, key: GameState):
         """Check if GameState key exists in this model."""
         return self.get(key) is not None
+
+    @classmethod
+    def from_goap_state(cls, goap_state: dict[str, Any]) -> 'CharacterGameState':
+        """Create CharacterGameState from GOAP state dictionary.
+        
+        Parameters:
+            goap_state: Dictionary with string keys (GameState enum values) and state data
+            
+        Return values:
+            CharacterGameState instance with data populated from GOAP state
+        """
+        # Reverse mapping from GameState enum values to field names
+        enum_to_field = {
+            GameState.CHARACTER_LEVEL.value: 'level',
+            GameState.CHARACTER_XP.value: 'xp',
+            GameState.CHARACTER_GOLD.value: 'gold',
+            GameState.HP_CURRENT.value: 'hp',
+            GameState.HP_MAX.value: 'max_hp',
+            GameState.CURRENT_X.value: 'x',
+            GameState.CURRENT_Y.value: 'y',
+            GameState.MINING_LEVEL.value: 'mining_level',
+            GameState.MINING_XP.value: 'mining_xp',
+            GameState.WOODCUTTING_LEVEL.value: 'woodcutting_level',
+            GameState.WOODCUTTING_XP.value: 'woodcutting_xp',
+            GameState.FISHING_LEVEL.value: 'fishing_level',
+            GameState.FISHING_XP.value: 'fishing_xp',
+            GameState.WEAPONCRAFTING_LEVEL.value: 'weaponcrafting_level',
+            GameState.WEAPONCRAFTING_XP.value: 'weaponcrafting_xp',
+            GameState.GEARCRAFTING_LEVEL.value: 'gearcrafting_level',
+            GameState.GEARCRAFTING_XP.value: 'gearcrafting_xp',
+            GameState.JEWELRYCRAFTING_LEVEL.value: 'jewelrycrafting_level',
+            GameState.JEWELRYCRAFTING_XP.value: 'jewelrycrafting_xp',
+            GameState.COOKING_LEVEL.value: 'cooking_level',
+            GameState.COOKING_XP.value: 'cooking_xp',
+            GameState.ALCHEMY_LEVEL.value: 'alchemy_level',
+            GameState.ALCHEMY_XP.value: 'alchemy_xp',
+            GameState.COOLDOWN_READY.value: 'cooldown_ready',
+            GameState.CAN_FIGHT.value: 'can_fight',
+            GameState.CAN_GATHER.value: 'can_gather',
+            GameState.CAN_CRAFT.value: 'can_craft',
+            GameState.CAN_TRADE.value: 'can_trade',
+            GameState.CAN_MOVE.value: 'can_move',
+            GameState.CAN_REST.value: 'can_rest',
+            GameState.CAN_USE_ITEM.value: 'can_use_item',
+            GameState.CAN_BANK.value: 'can_bank',
+            GameState.CAN_GAIN_XP.value: 'can_gain_xp',
+            GameState.XP_SOURCE_AVAILABLE.value: 'xp_source_available',
+            GameState.AT_MONSTER_LOCATION.value: 'at_monster_location',
+            GameState.AT_RESOURCE_LOCATION.value: 'at_resource_location',
+            GameState.AT_SAFE_LOCATION.value: 'at_safe_location',
+            GameState.SAFE_TO_FIGHT.value: 'safe_to_fight',
+            GameState.HP_LOW.value: 'hp_low',
+            GameState.HP_CRITICAL.value: 'hp_critical',
+            GameState.INVENTORY_SPACE_AVAILABLE.value: 'inventory_space_available',
+            GameState.INVENTORY_SPACE_USED.value: 'inventory_space_used',
+            GameState.GAINED_XP.value: 'gained_xp',
+            GameState.ENEMY_NEARBY.value: 'enemy_nearby',
+            GameState.RESOURCE_AVAILABLE.value: 'resource_available',
+        }
+        
+        # Create field data dictionary
+        field_data = {}
+        
+        # Map GOAP state to model fields
+        for goap_key, value in goap_state.items():
+            field_name = enum_to_field.get(goap_key)
+            if field_name:
+                field_data[field_name] = value
+        
+        # Ensure required fields have defaults
+        if 'name' not in field_data:
+            field_data['name'] = 'unknown'
+        if 'cooldown' not in field_data:
+            field_data['cooldown'] = 0
+            
+        return cls(**field_data)

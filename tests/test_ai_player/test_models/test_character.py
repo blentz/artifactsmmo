@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from src.ai_player.models.character import Character, InventorySlot
+from src.game_data.character import Character, InventorySlot
 
 
 class TestInventorySlot:

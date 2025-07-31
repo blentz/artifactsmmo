@@ -146,27 +146,7 @@ class GoalManager:
         This method searches game data for the nearest location containing the
         specified content type within the movement action factory's generation range.
         """
-        if not self.cache_manager:
-            return None
-            
-        try:
-            # Use movement action factory's range (3 tiles) to ensure actions exist
-            movement_factory = MovementActionFactory()
-            nearby_locations = movement_factory.get_nearby_locations(current_x, current_y, radius=3)
-            
-            # Check each nearby location for content type  
-            for location in nearby_locations:
-                x, y = location["target_x"], location["target_y"]
-                # This would need to check game data for content at (x, y)
-                # For now, return a strategic nearby location
-                if content_type == 'monster':
-                    # Move toward areas likely to have monsters (slightly away from origin)
-                    if x != current_x or y != current_y:
-                        return (x, y)
-                        
-        except Exception as e:
-            print(f"Warning: Error finding {content_type} locations: {e}")
-            
+        # Fall back to simple exploration pattern - let movement action factory handle validation
         return None
 
     def find_nearest_safe_location(self, current_x: int, current_y: int) -> tuple[int, int] | None:
@@ -412,8 +392,8 @@ class GoalManager:
                 'type': 'level_up',
                 'priority': 1,
                 'target_state': {
-                    GameState.CHARACTER_LEVEL: current_level + 1,
-                    GameState.CHARACTER_XP: current_state.get(GameState.CHARACTER_XP, 0) + 500
+                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
                 }
             })
 
@@ -424,8 +404,8 @@ class GoalManager:
                 'type': 'skill_training',
                 'priority': 2,
                 'target_state': {
-                    GameState.MINING_LEVEL: mining_level + 1,
-                    GameState.MINING_XP: current_state.get(GameState.MINING_XP, 0) + 200
+                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP (via gathering)
                 }
             })
 
@@ -435,8 +415,8 @@ class GoalManager:
                 'type': 'skill_training',
                 'priority': 2,
                 'target_state': {
-                    GameState.WOODCUTTING_LEVEL: woodcutting_level + 1,
-                    GameState.WOODCUTTING_XP: current_state.get(GameState.WOODCUTTING_XP, 0) + 200
+                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP (via gathering)
                 }
             })
 
@@ -475,8 +455,8 @@ class GoalManager:
                 'type': 'level_up',
                 'priority': 1,
                 'target_state': {
-                    GameState.CHARACTER_LEVEL: current_level + 1,
-                    GameState.CHARACTER_XP: current_state.get(GameState.CHARACTER_XP, 0) + 1000
+                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
                 }
             })
 
@@ -504,8 +484,8 @@ class GoalManager:
                 'type': 'level_up',
                 'priority': 1,
                 'target_state': {
-                    GameState.CHARACTER_LEVEL: current_level + 1,
-                    GameState.CHARACTER_XP: current_state.get(GameState.CHARACTER_XP, 0) + 2000
+                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
                 }
             })
 
@@ -704,8 +684,8 @@ class GoalManager:
             'type': 'level_up',
             'priority': 1,
             'target_state': {
-                GameState.CHARACTER_LEVEL: current_level + 1,
-                GameState.CHARACTER_XP: current_state.get(GameState.CHARACTER_XP, 0) + 500
+                GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
             }
         })
 

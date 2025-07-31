@@ -14,6 +14,8 @@ from .game_map import GameMap
 from .game_resource import GameResource
 from .game_npc import GameNPC
 from .map_content import MapContent
+from .movement_result import MovementResult
+from .character import Character, InventorySlot
 
 # Re-export all models for backwards compatibility
 __all__ = [
@@ -23,5 +25,8 @@ __all__ = [
     "GameMap",
     "GameResource",
     "GameNPC",
-    "MapContent"
+    "MapContent",
+    "MovementResult",
+    "Character",
+    "InventorySlot"
 ]

@@ -46,7 +46,7 @@ class CooldownManager:
         """
         cooldown_info = CooldownInfo(
             character_name=character_name,
-            expiration=cooldown_data.expiration,
+            expiration=cooldown_data.expiration.isoformat(),
             total_seconds=cooldown_data.total_seconds,
             remaining_seconds=cooldown_data.remaining_seconds,
             reason=cooldown_data.reason.value if hasattr(cooldown_data.reason, 'value') else str(cooldown_data.reason)
@@ -152,7 +152,7 @@ class CooldownManager:
             return 0.0
 
         cooldown_info = self.character_cooldowns[character_name]
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)  # Use UTC timezone for consistent comparison
 
         try:
             expiration = datetime.fromisoformat(cooldown_info.expiration.replace('Z', '+00:00'))

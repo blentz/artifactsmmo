@@ -390,6 +390,16 @@ class CLIManager:
             help="Path to JSON file containing mock character state"
         )
         test_parser.add_argument(
+            "--character",
+            type=str,
+            help="Character name for testing"
+        )
+        test_parser.add_argument(
+            "--goal",
+            type=str,
+            help="Custom goal for testing (e.g. 'move to (1,1)', 'gain xp', 'mine copper')"
+        )
+        test_parser.add_argument(
             "--start-level",
             type=int,
             help="Starting character level for simulation"
@@ -701,7 +711,7 @@ class CLIManager:
             state_manager = StateManager(args.name, self.api_client, cache_manager)
             action_registry = get_global_registry()
             goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager, cache_manager)
-            action_executor = ActionExecutor(self.api_client, self.api_client.cooldown_manager)
+            action_executor = ActionExecutor(self.api_client, self.api_client.cooldown_manager, cache_manager)
 
             # Initialize AI player dependencies
             ai_player.initialize_dependencies(state_manager, goal_manager, action_executor, action_registry)
@@ -968,6 +978,8 @@ class CLIManager:
 
             result = await diagnostic_commands.test_planning(
                 mock_state_file=args.mock_state_file,
+                character=getattr(args, 'character', None),
+                goal=getattr(args, 'goal', None),
                 start_level=args.start_level,
                 goal_level=args.goal_level,
                 dry_run=args.dry_run

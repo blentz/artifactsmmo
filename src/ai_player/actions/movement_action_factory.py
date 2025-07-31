@@ -33,17 +33,14 @@ class MovementActionFactory(ParameterizedActionFactory):
         a small radius, keeping the action space manageable while ensuring the
         character can move to adjacent positions for exploration.
         """
-        current_x = getattr(current_state, 'current_x', 0)
-        current_y = getattr(current_state, 'current_y', 0)
+        current_x = getattr(current_state, 'x', 0)
+        current_y = getattr(current_state, 'y', 0)
 
         # Generate only nearby locations in a 3-tile radius
         nearby_locations = self.get_nearby_locations(current_x, current_y, radius=3)
         
-        # Filter out current location
-        filtered_locations = []
-        for location in nearby_locations:
-            if location["target_x"] != current_x or location["target_y"] != current_y:
-                filtered_locations.append(location)
+        # Filter out invalid coordinates based on known map data
+        filtered_locations = self.filter_valid_positions(nearby_locations, game_data)
 
         # Enhance locations with content information to enable proper GOAP planning
         # This allows the planner to understand that moving to monster/resource locations
@@ -126,14 +123,21 @@ class MovementActionFactory(ParameterizedActionFactory):
         positions are included in movement planning.
         """
         valid_positions = []
-        movement_action = MovementAction(0, 0)
-
+        
+        # If no game data, return empty list to avoid generating invalid actions
+        if not game_data or not hasattr(game_data, 'maps'):
+            return valid_positions
+        
+        # Create set of valid coordinates from cached map data
+        valid_coords = {(m.x, m.y) for m in game_data.maps if hasattr(m, 'x') and hasattr(m, 'y')}
+        
         for position in positions:
             x = position.get("target_x")
             y = position.get("target_y")
 
             if x is not None and y is not None:
-                if movement_action.is_valid_position(x, y):
+                # Only include positions that exist in the cached map data
+                if (x, y) in valid_coords:
                     valid_positions.append(position)
 
         return valid_positions

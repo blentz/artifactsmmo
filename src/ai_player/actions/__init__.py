@@ -15,6 +15,7 @@ for backwards compatibility.
 
 from typing import Any
 
+from ..state.character_game_state import CharacterGameState
 from ..state.game_state import GameState
 from .action_factory import ActionFactory
 from .action_registry import ActionRegistry
@@ -49,11 +50,11 @@ def get_global_registry() -> ActionRegistry:
     return _global_registry
 
 
-def get_all_actions(current_state: dict[GameState, Any], game_data: Any) -> list[BaseAction]:
+def get_all_actions(current_state: CharacterGameState, game_data: Any) -> list[BaseAction]:
     """Global function to get all available action instances for GOAP system.
 
     Parameters:
-        current_state: Dictionary with GameState enum keys and current values
+        current_state: CharacterGameState instance with current character state
         game_data: Complete game data for action generation
 
     Return values:

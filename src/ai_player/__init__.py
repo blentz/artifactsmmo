@@ -102,13 +102,13 @@ def create_ai_player(character_name: str) -> AIPlayer:
 
 
 def get_available_actions(
-    current_state: dict[GameState, Any],
+    current_state: CharacterGameState,
     game_data: Any | None = None
 ) -> list[BaseAction]:
     """Get all available actions for the current game state.
 
     Parameters:
-        current_state: Dictionary with GameState enum keys and current values
+        current_state: CharacterGameState instance with current character state
         game_data: Optional game data for parameterized action generation
 
     Return values:

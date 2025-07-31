@@ -36,10 +36,9 @@ from artifactsmmo_api_client.api.my_characters import action_move_my_name_action
 from artifactsmmo_api_client.api.my_characters import action_fight_my_name_action_fight_post
 
 from src.lib.httpstatus import ArtifactsHTTPStatus
-from .models import CooldownInfo, GameItem, GameMonster, GameMap, GameResource, GameNPC
+from .models import CooldownInfo, GameItem, GameMonster, GameMap, GameResource, GameNPC, MovementResult, Character
 from .token_config import TokenConfig
 from .cooldown_manager import CooldownManager
-from ..ai_player.models.character import Character
 
 
 class APIClientWrapper:
@@ -174,7 +173,7 @@ class APIClientWrapper:
         # Return raw API character schema
         return api_character
 
-    async def move_character(self, character_name: str, x: int, y: int) -> 'ActionMoveSchema':
+    async def move_character(self, character_name: str, x: int, y: int) -> MovementResult:
         """Move character to coordinates.
         
         Parameters:
@@ -183,7 +182,7 @@ class APIClientWrapper:
             y: Target Y coordinate
             
         Return values:
-            ActionMoveSchema with movement result and cooldown information
+            MovementResult with movement result and cooldown information
             
         This method moves the specified character to the given coordinates,
         pathfinding validation, cooldown timing, and movement result
@@ -196,9 +195,14 @@ class APIClientWrapper:
         response = await action_move_my_name_action_move_post.asyncio_detailed(client=self.client, name=character_name, body=body)
         processed_response = await self._process_response(response)
 
-        # Trust API contract for cooldown structure
-        self.cooldown_manager.update_cooldown(character_name, processed_response.data.cooldown)
-        return processed_response.data
+        # Transform API response to internal model (model boundary enforcement)
+        movement_result = MovementResult.from_api_movement_response(processed_response.data, character_name)
+        
+        # Update cooldown manager
+        if movement_result.cooldown:
+            self.cooldown_manager.update_cooldown(character_name, processed_response.data.cooldown)
+            
+        return movement_result
 
     async def fight_monster(self, character_name: str) -> 'ActionFightSchema':
         """Fight monster at current location.
@@ -547,7 +551,7 @@ class APIClientWrapper:
 
         return CooldownInfo(
             character_name="unknown",
-            expiration=cooldown_data.expiration,
+            expiration=cooldown_data.expiration.isoformat(),
             total_seconds=cooldown_data.total_seconds,
             remaining_seconds=cooldown_data.remaining_seconds,
             reason=cooldown_data.reason.value if hasattr(cooldown_data.reason, 'value') else str(cooldown_data.reason)

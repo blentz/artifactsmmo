@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from ..lib.yaml_data import YamlData
 from .api_client import APIClientWrapper
 from .models import GameItem, GameMonster, GameMap, GameResource, GameNPC
-from ..ai_player.models.character import Character
+from .character import Character
 
 
 class CacheMetadata(BaseModel):
@@ -195,17 +195,30 @@ class CacheManager:
         current_maps = await self.get_all_maps()
         existing_coords = {(m.x, m.y) for m in current_maps}
         
-        # Load maps in radius that aren't already cached
+        # Track coordinates that returned 404 (Resource not found) to avoid repeated requests
+        if not hasattr(self, '_invalid_coords'):
+            self._invalid_coords = set()
+        
+        # Use a much smaller radius to reduce API load - just immediate neighbors
+        actual_radius = min(radius, 2)  # Cap at 2 tiles radius (5x5 grid = 25 requests max)
+        
+        # Load maps in radius that aren't already cached or known to be invalid
         maps_to_add = []
-        for x in range(center_x - radius, center_x + radius + 1):
-            for y in range(center_y - radius, center_y + radius + 1):
-                if (x, y) not in existing_coords:
+        for x in range(center_x - actual_radius, center_x + actual_radius + 1):
+            for y in range(center_y - actual_radius, center_y + actual_radius + 1):
+                coord = (x, y)
+                if coord not in existing_coords and coord not in self._invalid_coords:
                     try:
                         individual_map = await self._api_client.get_map(x, y)
                         maps_to_add.append(individual_map)
-                    except Exception:
-                        # Some coordinates might not exist, that's fine
-                        pass
+                    except ValueError as e:
+                        # Based on API client analysis: 404s raise ValueError("Resource not found")
+                        # These are permanent failures safe to cache
+                        if "Resource not found" in str(e):
+                            self._invalid_coords.add(coord)
+                        # Let other ValueError types (rate limits, etc.) bubble up for proper handling
+                        else:
+                            raise
         
         # Add new maps to cache if any were found
         if maps_to_add:
@@ -680,3 +693,39 @@ class CacheManager:
         """Delete cache directory."""
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
+
+    async def get_game_data(self) -> Any:
+        """Get comprehensive game data for action generation.
+        
+        Parameters:
+            None
+            
+        Return values:
+            Game data object containing maps, monsters, resources, NPCs, and items
+            
+        This method retrieves all necessary game data from the cache for
+        use in parameterized action generation, particularly movement actions that
+        need to know valid locations and strategic targets.
+        """
+        try:
+            # Create a simple game data object with all necessary information
+            class GameData:
+                def __init__(self):
+                    self.maps = []
+                    self.monsters = []
+                    self.resources = []
+                    self.npcs = []
+                    self.items = []
+            
+            game_data = GameData()
+            
+            # Get all game data from cache manager
+            game_data.maps = await self.get_all_maps()
+            game_data.monsters = await self.get_all_monsters()
+            game_data.resources = await self.get_all_resources()
+            game_data.npcs = await self.get_all_npcs()
+            game_data.items = await self.get_all_items()
+            
+            return game_data
+        except Exception:
+            return None

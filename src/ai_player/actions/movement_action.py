@@ -76,7 +76,36 @@ class MovementAction(BaseAction):
         readiness, valid target location, and path accessibility using GameState
         enum keys for type-safe condition checking.
         """
-        return {GameState.COOLDOWN_READY: True, GameState.CAN_MOVE: True}
+        return {
+            GameState.COOLDOWN_READY: True, 
+            GameState.CAN_MOVE: True
+        }
+
+    def can_execute(self, current_state: dict[GameState, Any]) -> bool:
+        """Override can_execute to include location check.
+
+        Parameters:
+            current_state: Dictionary with GameState enum keys and current values
+
+        Return values:
+            Boolean indicating whether movement action can be executed
+
+        This method adds location-specific validation to ensure the character
+        is not already at the target location, preventing unnecessary API calls
+        and HTTP 490 "CHARACTER_ALREADY_MAP" errors.
+        """
+        # First check basic preconditions from parent class
+        if not super().can_execute(current_state):
+            return False
+        
+        # Check if character is not already at target location
+        current_x = current_state.get(GameState.CURRENT_X, 0)
+        current_y = current_state.get(GameState.CURRENT_Y, 0)
+        
+        # Only allow movement if we're not already at the target
+        is_not_at_target = (current_x != self.target_x or current_y != self.target_y)
+        
+        return is_not_at_target
 
     def get_effects(self) -> dict[GameState, Any]:
         """Movement effects using GameState enum.
@@ -115,22 +144,21 @@ class MovementAction(BaseAction):
         return effects
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
-        """Execute movement via state manager coordination.
+        """Execute movement action - signals need for actual API movement call.
 
         Parameters:
             character_name: Name of the character to move
             current_state: Dictionary with GameState enum keys and current values
 
         Return values:
-            ActionResult with success status, message, and position changes
+            ActionResult indicating movement requirements for ActionExecutor
 
-        This method coordinates movement execution through the proper architecture,
-        working with the action executor's state management rather than direct API calls.
-        The actual API interaction should be handled by the ActionExecutor/StateManager.
+        This method returns the expected state changes for movement, which signals 
+        to the ActionExecutor that it needs to make the actual movement API call.
+        The ActionExecutor will detect movement actions and handle the API interaction.
         """
-        # For now, return expected state changes - the ActionExecutor should handle the actual API call
-        # This is the intended architecture where actions define what should happen,
-        # and the executor/state manager handles how to make it happen
+        # Return expected state changes to signal movement requirements
+        # The ActionExecutor will see this is a movement action and make the API call
         
         state_changes = {
             GameState.CURRENT_X: self.target_x,
@@ -142,16 +170,19 @@ class MovementAction(BaseAction):
         if hasattr(self, '_location_type'):
             if self._location_type == 'monster':
                 state_changes[GameState.AT_MONSTER_LOCATION] = True
+                state_changes[GameState.AT_SAFE_LOCATION] = False
+                state_changes[GameState.XP_SOURCE_AVAILABLE] = True
             elif self._location_type == 'resource':
                 state_changes[GameState.AT_RESOURCE_LOCATION] = True
+                state_changes[GameState.XP_SOURCE_AVAILABLE] = True
             elif self._location_type == 'workshop':
-                state_changes[GameState.AT_WORKSHOP_LOCATION] = True
+                state_changes[GameState.XP_SOURCE_AVAILABLE] = True
 
         return ActionResult(
             success=True,
-            message=f"Movement to ({self.target_x}, {self.target_y}) planned",
+            message=f"Movement to ({self.target_x}, {self.target_y}) will be executed via API",
             state_changes=state_changes,
-            cooldown_seconds=0,  # Actual cooldown will be extracted from API response
+            cooldown_seconds=5,  # Expected movement cooldown
         )
 
     def calculate_distance(self, current_x: int, current_y: int) -> int:
