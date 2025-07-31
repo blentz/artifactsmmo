@@ -15,18 +15,16 @@ from src.ai_player.action_executor import ActionExecutor
 from src.ai_player.ai_player import AIPlayer
 from src.ai_player.goal_manager import GoalManager
 from src.ai_player.inventory_optimizer import InventoryOptimizer
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.game_state import GameState
 from src.ai_player.state.state_manager import StateManager
 from src.cli.main import async_main as cli_main
 from src.game_data.api_client import APIClientWrapper
 from src.game_data.cache_manager import CacheManager
 from tests.fixtures.api_responses import (
-    APIResponseFixtures,
     get_mock_action_response,
     get_mock_character,
 )
-from tests.fixtures.character_states import CharacterStateFixtures, get_test_character_state
-from tests.fixtures.planning_scenarios import PlanningScenarioFixtures
+from tests.fixtures.character_states import get_test_character_state
 
 
 class TestCompleteAIPlayerWorkflow:
@@ -108,7 +106,7 @@ class TestCompleteAIPlayerWorkflow:
     async def test_complete_ai_player_workflow_success(self, mock_api_client):
         """Test complete successful AI player workflow with real components"""
         character_name = "test_character"
-        
+
         # Setup realistic API responses for character data
         mock_character = get_mock_character(level=10, name=character_name)
         mock_character.hp = 100
@@ -117,7 +115,7 @@ class TestCompleteAIPlayerWorkflow:
         mock_character.y = 0
         mock_character.cooldown = 0
         mock_api_client.get_character = AsyncMock(return_value=mock_character)
-        
+
         # Setup realistic character state extraction
         from src.ai_player.state.game_state import CharacterGameState
         character_state = CharacterGameState(
@@ -149,55 +147,60 @@ class TestCompleteAIPlayerWorkflow:
             gold=500
         )
         mock_api_client.extract_character_state = Mock(return_value=character_state)
-        
+
         # Setup cooldown manager
         from src.game_data.api_client import CooldownManager
         cooldown_manager = CooldownManager()
-        
+
         # Create real ActionExecutor with mocked API client
         from src.ai_player.action_executor import ActionExecutor
+
+        # Mock cache manager
+        mock_cache_manager = Mock()
+
         action_executor = ActionExecutor(
             api_client=mock_api_client,
-            cooldown_manager=cooldown_manager
+            cooldown_manager=cooldown_manager,
+            cache_manager=mock_cache_manager
         )
-        
+
         # Create real StateManager with mocked API client
         from src.ai_player.state.state_manager import StateManager
         from src.game_data.cache_manager import CacheManager
         cache_manager = Mock(spec=CacheManager)
         cache_manager.get_character_data = AsyncMock(return_value=None)
         cache_manager.cache_character_data = AsyncMock()
-        
+
         state_manager = StateManager(character_name, mock_api_client, cache_manager)
-        
-        # Create real GoalManager 
-        from src.ai_player.goal_manager import GoalManager
+
+        # Create real GoalManager
         from src.ai_player.actions import ActionRegistry
+        from src.ai_player.goal_manager import GoalManager
         action_registry = ActionRegistry()
         goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
-        
+
         # Create real AIPlayer and initialize with real components
         from src.ai_player.ai_player import AIPlayer
-        
+
         ai_player = AIPlayer(character_name)
         ai_player.initialize_dependencies(state_manager, goal_manager, action_executor, action_registry)
-        
+
         # Test setting a goal
         test_goal = {GameState.CHARACTER_LEVEL: 11}
         await ai_player.set_goal(test_goal)
-        
+
         # Verify goal was set
         status = ai_player.get_status()
         assert status['dependencies_initialized'] is True
         assert status['current_goal'] == test_goal
         assert ai_player.is_running() is False
-        
+
         # Test emergency handling - simpler test that shouldn't hang
         from src.ai_player.state.character_game_state import CharacterGameState
         emergency_state = CharacterGameState(
             name="test_character",
             level=10,
-            xp=2000,  
+            xp=2000,
             gold=100,
             hp=5,  # Critical HP
             max_hp=100,
@@ -223,14 +226,14 @@ class TestCompleteAIPlayerWorkflow:
             cooldown_ready=True,
             hp_critical=True  # Explicitly set critical HP condition
         )
-        
+
         # Should handle emergency without crashing
         await ai_player.handle_emergency(emergency_state)
-        
+
         # Verify emergency was tracked in status
         updated_status = ai_player.get_status()
         assert updated_status['execution_stats']['emergency_interventions'] >= 1
-        
+
         # Verify the test completed successfully and all real functionality worked
         # API calls would occur during actual gameplay, but are not triggered by these specific operations
         assert status['dependencies_initialized'] is True
@@ -248,7 +251,7 @@ class TestCompleteAIPlayerWorkflow:
         initial_character.x = 0
         initial_character.y = 0
         initial_character.cooldown = 0
-        
+
         # Character after some actions with XP progression
         progressed_character = get_mock_character(level=10, name=character_name)
         progressed_character.hp = 100
@@ -256,10 +259,10 @@ class TestCompleteAIPlayerWorkflow:
         progressed_character.x = 5
         progressed_character.y = 5
         progressed_character.cooldown = 0
-        
+
         # Return different characters to show progression
         mock_api_client.get_character = AsyncMock(side_effect=[initial_character, progressed_character])
-        
+
         # Ensure mock_api_client has cooldown_manager (in case fixture doesn't provide it)
         from tests.test_integration import MockFactory
         if not hasattr(mock_api_client, 'cooldown_manager'):
@@ -295,7 +298,7 @@ class TestCompleteAIPlayerWorkflow:
             alchemy_xp=0,
             gold=500
         )
-        
+
         progressed_state = CharacterGameState(
             name="test_character",
             level=10,
@@ -324,33 +327,36 @@ class TestCompleteAIPlayerWorkflow:
             alchemy_xp=0,
             gold=600  # Some gold gained
         )
-        
+
         mock_api_client.extract_character_state = Mock(side_effect=[initial_state, progressed_state])
 
         # Setup cooldown manager
         from src.game_data.api_client import CooldownManager
         cooldown_manager = CooldownManager()
 
+        # Create cache manager mock first
+        from src.game_data.cache_manager import CacheManager
+        cache_manager = Mock(spec=CacheManager)
+
         # Create real ActionExecutor
         from src.ai_player.action_executor import ActionExecutor
         action_executor = ActionExecutor(
             api_client=mock_api_client,
-            cooldown_manager=cooldown_manager
+            cooldown_manager=cooldown_manager,
+            cache_manager=cache_manager
         )
 
         # Create real StateManager
         from src.ai_player.state.state_manager import StateManager
-        from src.game_data.cache_manager import CacheManager
-        cache_manager = Mock(spec=CacheManager)
         cache_manager.get_character_data = AsyncMock(return_value=None)
         cache_manager.cache_character_data = AsyncMock()
         cache_manager.load_character_state = Mock(return_value=None)  # No cached state
-        
+
         state_manager = StateManager(character_name, mock_api_client, cache_manager)
 
         # Create real GoalManager
-        from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
+        from src.ai_player.goal_manager import GoalManager
         action_registry = ActionRegistry()
         goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
@@ -377,7 +383,7 @@ class TestCompleteAIPlayerWorkflow:
             GameState.CURRENT_X: 0,
             GameState.CURRENT_Y: 0
         }
-        
+
         # Use asyncio.wait_for to add timeout to planning operations
         import asyncio
         try:
@@ -385,10 +391,10 @@ class TestCompleteAIPlayerWorkflow:
                 ai_player.plan_actions(current_state, level_up_goal),
                 timeout=5.0  # 5 second timeout
             )
-            
+
             # Verify plan was generated (should be a list, even if empty)
             assert isinstance(plan, list)
-            
+
             # Test plan execution with real components (only if we have a plan)
             if plan:
                 execution_result = await asyncio.wait_for(
@@ -396,24 +402,24 @@ class TestCompleteAIPlayerWorkflow:
                     timeout=5.0  # 5 second timeout
                 )
                 assert isinstance(execution_result, bool)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # If planning times out, just create an empty plan for testing
             plan = []
             assert isinstance(plan, list)
-        
+
         # Test that status tracking works correctly
         final_status = ai_player.get_status()
         assert final_status['dependencies_initialized'] is True
         assert final_status['current_goal'] == level_up_goal
-        
+
         # Test that multiple state queries work
         state1 = await state_manager.get_current_state()
         state2 = await state_manager.get_current_state()
-        
+
         from src.ai_player.state.character_game_state import CharacterGameState
         assert isinstance(state1, CharacterGameState)
         assert isinstance(state2, CharacterGameState)
-        
+
         # Both should have character level data
         assert state1.level >= 1
         assert state2.level >= 1
@@ -430,7 +436,7 @@ class TestCompleteAIPlayerWorkflow:
         mock_character.x = 0
         mock_character.y = 0
         mock_character.cooldown = 0
-        
+
         # First call fails, second succeeds
         from unittest.mock import AsyncMock
         async def failing_get_character(name):
@@ -438,11 +444,11 @@ class TestCompleteAIPlayerWorkflow:
             if not hasattr(failing_get_character, 'call_count'):
                 failing_get_character.call_count = 0
             failing_get_character.call_count += 1
-            
+
             if failing_get_character.call_count == 1:
                 raise Exception("API connection failed")
             return mock_character
-        
+
         mock_api_client.get_character = AsyncMock(side_effect=failing_get_character)
 
         # Setup character state
@@ -481,26 +487,29 @@ class TestCompleteAIPlayerWorkflow:
         from src.game_data.api_client import CooldownManager
         cooldown_manager = CooldownManager()
 
+        # Create cache manager mock first
+        from src.game_data.cache_manager import CacheManager
+        cache_manager = Mock(spec=CacheManager)
+
         # Create real ActionExecutor
         from src.ai_player.action_executor import ActionExecutor
         action_executor = ActionExecutor(
             api_client=mock_api_client,
-            cooldown_manager=cooldown_manager
+            cooldown_manager=cooldown_manager,
+            cache_manager=cache_manager
         )
 
         # Create real StateManager
         from src.ai_player.state.state_manager import StateManager
-        from src.game_data.cache_manager import CacheManager
-        cache_manager = Mock(spec=CacheManager)
         cache_manager.get_character_data = AsyncMock(return_value=None)
         cache_manager.cache_character_data = AsyncMock()
         cache_manager.load_character_state = Mock(return_value=None)
-        
+
         state_manager = StateManager(character_name, mock_api_client, cache_manager)
 
         # Create real GoalManager
-        from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
+        from src.ai_player.goal_manager import GoalManager
         action_registry = ActionRegistry()
         goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
@@ -517,12 +526,12 @@ class TestCompleteAIPlayerWorkflow:
         try:
             # This should trigger error recovery - first call fails, but should retry
             state = await state_manager.get_current_state()
-            
+
             # Should eventually succeed after retry
             assert isinstance(state, dict)
             assert GameState.CHARACTER_LEVEL in state
-            
-        except Exception as e:
+
+        except Exception:
             # If it still fails, that's okay - we're testing that errors are handled gracefully
             # and don't crash the system
             pass
@@ -533,7 +542,7 @@ class TestCompleteAIPlayerWorkflow:
             level=10,
             xp=2000,
             gold=100,
-            hp=10,  # Low HP  
+            hp=10,  # Low HP
             max_hp=100,
             x=0,
             y=0,
@@ -564,7 +573,7 @@ class TestCompleteAIPlayerWorkflow:
         # Verify emergency handling was tracked
         status = ai_player.get_status()
         assert status['execution_stats']['emergency_interventions'] >= 1
-        
+
         # Verify the system is still functional after error recovery
         assert status['dependencies_initialized'] is True
         assert ai_player.is_running() is False
@@ -581,7 +590,7 @@ class TestCompleteAIPlayerWorkflow:
         emergency_character.x = 5  # Potentially unsafe location
         emergency_character.y = 5
         emergency_character.cooldown = 0
-        
+
         # Character after emergency recovery
         recovered_character = get_mock_character(level=10, name=character_name)
         recovered_character.hp = 140  # Full HP
@@ -589,7 +598,7 @@ class TestCompleteAIPlayerWorkflow:
         recovered_character.x = 0  # Safe location
         recovered_character.y = 0
         recovered_character.cooldown = 0
-        
+
         # Return different states showing emergency progression
         mock_api_client.get_character = AsyncMock(side_effect=[emergency_character, recovered_character])
 
@@ -623,7 +632,7 @@ class TestCompleteAIPlayerWorkflow:
             alchemy_xp=0,
             gold=500
         )
-        
+
         # Character state after emergency recovery
         recovered_state = CharacterGameState(
             name="test_character",
@@ -653,33 +662,36 @@ class TestCompleteAIPlayerWorkflow:
             alchemy_xp=0,
             gold=500
         )
-        
+
         mock_api_client.extract_character_state = Mock(side_effect=[emergency_state, recovered_state])
 
         # Setup cooldown manager
         from src.game_data.api_client import CooldownManager
         cooldown_manager = CooldownManager()
 
+        # Create cache manager mock first
+        from src.game_data.cache_manager import CacheManager
+        cache_manager = Mock(spec=CacheManager)
+
         # Create real ActionExecutor
         from src.ai_player.action_executor import ActionExecutor
         action_executor = ActionExecutor(
             api_client=mock_api_client,
-            cooldown_manager=cooldown_manager
+            cooldown_manager=cooldown_manager,
+            cache_manager=cache_manager
         )
 
         # Create real StateManager
         from src.ai_player.state.state_manager import StateManager
-        from src.game_data.cache_manager import CacheManager
-        cache_manager = Mock(spec=CacheManager)
         cache_manager.get_character_data = AsyncMock(return_value=None)
         cache_manager.cache_character_data = AsyncMock()
         cache_manager.load_character_state = Mock(return_value=None)
-        
+
         state_manager = StateManager(character_name, mock_api_client, cache_manager)
 
         # Create real GoalManager
-        from src.ai_player.goal_manager import GoalManager
         from src.ai_player.actions import ActionRegistry
+        from src.ai_player.goal_manager import GoalManager
         action_registry = ActionRegistry()
         goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
@@ -690,11 +702,11 @@ class TestCompleteAIPlayerWorkflow:
 
         # Set a normal goal first
         await ai_player.set_goal({GameState.CHARACTER_LEVEL: 11})
-        
+
         # Verify initial setup
         status = ai_player.get_status()
         assert status['dependencies_initialized'] is True
-        
+
         # Test emergency handling with critical HP state
         critical_emergency_state = CharacterGameState(
             name="emergency_test",
@@ -728,7 +740,7 @@ class TestCompleteAIPlayerWorkflow:
 
         # Handle multiple emergency scenarios
         await ai_player.handle_emergency(critical_emergency_state)
-        
+
         # Test another emergency scenario - zero HP
         zero_hp_state = CharacterGameState(
             name="emergency_test",
@@ -760,24 +772,24 @@ class TestCompleteAIPlayerWorkflow:
             hp_critical=True,  # Zero HP is definitely critical
             at_safe_location=False
         )
-        
+
         await ai_player.handle_emergency(zero_hp_state)
 
         # Verify emergency interventions were tracked
         final_status = ai_player.get_status()
         assert final_status['execution_stats']['emergency_interventions'] >= 2
-        
+
         # Verify the system remains functional after multiple emergencies
         assert final_status['dependencies_initialized'] is True
         assert ai_player.is_running() is False
-        
+
         # Test that planning still works after emergency handling
         current_state = {
             GameState.CHARACTER_LEVEL: 10,
             GameState.HP_CURRENT: 140,
             GameState.COOLDOWN_READY: True
         }
-        
+
         plan = await ai_player.plan_actions(current_state, {GameState.CHARACTER_LEVEL: 11})
         assert isinstance(plan, list)
 
@@ -804,7 +816,7 @@ class TestCharacterManagementWorkflow:
     async def test_character_creation_to_ai_execution_workflow(self):
         """Test complete workflow from character creation to AI execution with real components"""
         character_name = "workflow_test_character"
-        
+
         # Create local mock API client to avoid fixture hanging issues
         mock_api_client = Mock()
         mock_api_client.move_character = AsyncMock()
@@ -815,7 +827,7 @@ class TestCharacterManagementWorkflow:
         mock_api_client.get_cooldown_info = AsyncMock()
         mock_api_client.create_character = AsyncMock()
         mock_api_client.extract_character_state = Mock()
-        
+
         # Setup character creation flow
         new_character = get_mock_character(level=1, name=character_name)
         new_character.hp = 50
@@ -823,7 +835,7 @@ class TestCharacterManagementWorkflow:
         new_character.x = 0
         new_character.y = 0
         new_character.cooldown = 0
-        
+
         # Character after some progression
         progressed_character = get_mock_character(level=2, name=character_name)
         progressed_character.hp = 60
@@ -831,7 +843,7 @@ class TestCharacterManagementWorkflow:
         progressed_character.x = 2
         progressed_character.y = 3
         progressed_character.cooldown = 0
-        
+
         # Mock the full character lifecycle
         mock_api_client.create_character = AsyncMock(return_value=new_character)
         mock_api_client.get_character = AsyncMock(side_effect=[new_character, progressed_character])
@@ -866,7 +878,7 @@ class TestCharacterManagementWorkflow:
             alchemy_xp=0,
             gold=100
         )
-        
+
         progressed_state = CharacterGameState(
             name="test_character",
             level=2,
@@ -895,12 +907,12 @@ class TestCharacterManagementWorkflow:
             alchemy_xp=0,
             gold=150
         )
-        
+
         mock_api_client.extract_character_state = Mock(side_effect=[initial_state, progressed_state])
 
         # 1. Test character creation (simulated)
         created_character = await mock_api_client.create_character(character_name, "men1")
-        
+
         assert created_character.name == character_name
         assert created_character.level == 1
 
@@ -908,19 +920,21 @@ class TestCharacterManagementWorkflow:
         from src.game_data.api_client import CooldownManager
         cooldown_manager = CooldownManager()
 
+        from src.game_data.cache_manager import CacheManager
+        cache_manager = Mock(spec=CacheManager)
+
         from src.ai_player.action_executor import ActionExecutor
         action_executor = ActionExecutor(
             api_client=mock_api_client,
-            cooldown_manager=cooldown_manager
+            cooldown_manager=cooldown_manager,
+            cache_manager=cache_manager
         )
 
         from src.ai_player.state.state_manager import StateManager
-        from src.game_data.cache_manager import CacheManager
-        cache_manager = Mock(spec=CacheManager)
         cache_manager.get_character_data = AsyncMock(return_value=None)
         cache_manager.cache_character_data = AsyncMock()
         cache_manager.load_character_state = Mock(return_value=None)
-        
+
         # Define current state for mocking
         current_state = {
             GameState.CHARACTER_LEVEL: 1,
@@ -929,22 +943,22 @@ class TestCharacterManagementWorkflow:
             GameState.CURRENT_X: 0,
             GameState.CURRENT_Y: 0
         }
-        
+
         state_manager = StateManager(character_name, mock_api_client, cache_manager)
-        
+
         # Mock get_current_state to prevent hanging
         state_manager.get_current_state = AsyncMock(return_value=current_state)
         state_manager.get_cached_state = Mock(return_value=current_state)
         state_manager.save_state = AsyncMock()
-        
+
         from src.ai_player.goal_manager import GoalManager
-        
+
         # Use mock ActionRegistry to avoid hanging during action discovery
         action_registry = Mock()
         action_registry.generate_actions_for_state = Mock(return_value=[])
-        
+
         goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
-        
+
         # Mock goal manager's plan_actions to prevent hanging
         goal_manager.plan_actions = AsyncMock(return_value=[])
 
@@ -962,7 +976,7 @@ class TestCharacterManagementWorkflow:
         assert status['current_goal'] == initial_goal
 
         # 4. Test planning for a new character
-        
+
         plan = await ai_player.plan_actions(current_state, initial_goal)
         assert isinstance(plan, list)
 
@@ -970,14 +984,14 @@ class TestCharacterManagementWorkflow:
         # Instead of starting the full loop (which can hang), test the preparation steps
         assert ai_player._check_dependencies() is True
         assert not ai_player.is_running()
-        
+
         # Test that the AI player is properly configured for execution
         status_before = ai_player.get_status()
         assert status_before['dependencies_initialized'] is True
 
         # Verify workflow completion - character creation and AI player setup
         mock_api_client.create_character.assert_called_once_with(character_name, "men1")
-        
+
         # Verify AI player is ready for autonomous gameplay
         final_status = ai_player.get_status()
         assert final_status['dependencies_initialized'] is True
@@ -1230,7 +1244,7 @@ class TestCLIWorkflows:
 
         # Store original argv to restore later
         original_argv = sys.argv[:]
-        
+
         try:
             with patch('src.cli.main.APIClientWrapper') as mock_api_wrapper_class, \
                  patch('src.cli.main.CacheManager') as mock_cache_manager_class:
@@ -1241,7 +1255,7 @@ class TestCLIWorkflows:
                 mock_api_client.get_characters = AsyncMock(return_value=[mock_character])
                 mock_api_client.delete_character = AsyncMock(return_value=True)
                 mock_api_wrapper_class.return_value = mock_api_client
-                
+
                 # Mock cache manager
                 mock_cache_manager = Mock()
                 mock_cache_manager.cache_all_characters = AsyncMock(return_value=[mock_character])
@@ -1267,7 +1281,7 @@ class TestCLIWorkflows:
 
                 await cli_main()
                 mock_api_client.delete_character.assert_called_once_with(character_name)
-                
+
         finally:
             # Restore original argv
             sys.argv[:] = original_argv
@@ -1279,13 +1293,13 @@ class TestCLIWorkflows:
 
         # Store original argv to restore later
         original_argv = sys.argv[:]
-        
+
         try:
             with patch('src.cli.main.AIPlayer') as mock_ai_player_class, \
                  patch('src.cli.main.APIClientWrapper') as mock_api_wrapper_class, \
                  patch('src.cli.main.CacheManager') as mock_cache_manager_class, \
                  patch('src.cli.main.StateManager') as mock_state_manager_class, \
-                 patch('src.cli.main.ActionRegistry') as mock_action_registry_class, \
+                 patch('src.cli.main.get_global_registry') as mock_get_global_registry, \
                  patch('src.cli.main.GoalManager') as mock_goal_manager_class, \
                  patch('src.cli.main.ActionExecutor') as mock_action_executor_class:
 
@@ -1299,20 +1313,20 @@ class TestCLIWorkflows:
                 mock_character_data.y = 15
                 mock_api_client.get_characters = AsyncMock(return_value=[mock_character_data])
                 mock_api_wrapper_class.return_value = mock_api_client
-                
+
                 # Mock all components
                 mock_cache_manager = Mock()
                 mock_cache_manager_class.return_value = mock_cache_manager
-                
-                mock_state_manager = Mock() 
+
+                mock_state_manager = Mock()
                 mock_state_manager_class.return_value = mock_state_manager
-                
+
                 mock_action_registry = Mock()
-                mock_action_registry_class.return_value = mock_action_registry
-                
+                mock_get_global_registry.return_value = mock_action_registry
+
                 mock_goal_manager = Mock()
                 mock_goal_manager_class.return_value = mock_goal_manager
-                
+
                 mock_action_executor = Mock()
                 mock_action_executor_class.return_value = mock_action_executor
 
@@ -1348,7 +1362,7 @@ class TestCLIWorkflows:
                 await cli_main()
                 # The character should not be running, so stop won't be called
                 # This is the expected behavior - no assertion needed, just verify no exception
-                
+
         finally:
             # Restore original argv
             sys.argv[:] = original_argv
@@ -1536,7 +1550,7 @@ class TestPerformanceWorkflows:
             test_plans = []
             for _ in range(10):  # Create 10 small plans to simulate frequent execution
                 test_plans.append([{'name': 'gather_copper', 'cost': 3}])
-            
+
             # Execute all plans
             results = []
             for plan in test_plans:
@@ -1548,7 +1562,7 @@ class TestPerformanceWorkflows:
 
             # Verify all plans executed successfully
             assert all(results)
-            
+
             # Performance assertions (adjust thresholds as needed)
             assert execution_time < 5.0  # Should complete in reasonable time
             assert mock_executor.execute_plan.call_count == len(test_plans)

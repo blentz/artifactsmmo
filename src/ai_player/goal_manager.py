@@ -12,11 +12,10 @@ action plans that efficiently progress the character toward maximum level achiev
 from typing import Any
 
 from ..lib.goap import Action_List, Planner
-from .actions import ActionRegistry, BaseAction, get_all_actions
-from .actions.movement_action_factory import MovementActionFactory
+from .actions import ActionRegistry, BaseAction
 from .cooldown_aware_planner import CooldownAwarePlanner
-from .state.game_state import GameState
 from .state.character_game_state import CharacterGameState
+from .state.game_state import GameState
 
 
 class GoalManager:
@@ -24,15 +23,15 @@ class GoalManager:
 
     def __init__(self, action_registry: ActionRegistry, cooldown_manager, cache_manager=None):
         """Initialize GoalManager with action registry, cooldown management, and game data access.
-        
+
         Parameters:
             action_registry: ActionRegistry instance for action discovery and generation
             cooldown_manager: CooldownManager instance for timing constraint validation
             cache_manager: CacheManager instance for accessing game data (maps, monsters, resources)
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor initializes the GoalManager with the action registry for
         dynamic action generation, cooldown manager for timing-aware planning, and
         cache manager for accessing game data needed for movement action generation.
@@ -41,24 +40,24 @@ class GoalManager:
         self.cooldown_manager = cooldown_manager
         self.cache_manager = cache_manager
         self.planner = None
-        
+
 
     async def get_game_data(self) -> Any:
         """Get comprehensive game data for action generation.
-        
+
         Parameters:
             None
-            
+
         Return values:
             Game data object containing maps, monsters, resources, NPCs, and items
-            
+
         This method retrieves all necessary game data from the cache manager for
         use in parameterized action generation, particularly movement actions that
         need to know valid locations and strategic targets.
         """
         if not self.cache_manager:
             return None
-            
+
         try:
             # Create a simple game data object with all necessary information
             class GameData:
@@ -68,12 +67,12 @@ class GoalManager:
                     self.resources = []
                     self.npcs = []
                     self.items = []
-            
+
             game_data = GameData()
-            
+
             # Get all game data from cache manager
             all_maps = await self.cache_manager.get_all_maps()
-            
+
             # Use cached map data directly - no need for individual API calls
             # The bulk map data from get_all_maps() should be sufficient for planning
             game_data.maps = all_maps
@@ -81,30 +80,30 @@ class GoalManager:
             game_data.resources = await self.cache_manager.get_all_resources()
             game_data.npcs = await self.cache_manager.get_all_npcs()
             game_data.items = await self.cache_manager.get_all_items()
-            
+
             return game_data
-            
+
         except Exception as e:
             print(f"Error loading game data: {e}")
             return None
 
     def select_movement_target(self, current_state: CharacterGameState, goal_type: str) -> tuple[int, int]:
         """Select intelligent movement target based on goals and game data.
-        
+
         Parameters:
             current_state: Current character state with position and attributes
             goal_type: Type of goal driving movement ('combat', 'rest', 'exploration', etc.)
-            
+
         Return values:
             Tuple of (target_x, target_y) coordinates for movement
-            
+
         This method selects movement targets using strategic game data analysis,
         considering character needs, nearby content, and exploration patterns for
         optimal character positioning and goal achievement.
         """
         current_x = current_state.x
         current_y = current_state.y
-        
+
         # Try to get strategic locations from game data
         if self.cache_manager:
             try:
@@ -113,36 +112,36 @@ class GoalManager:
                     target = self.find_nearest_content_location(current_x, current_y, 'monster')
                     if target:
                         return target
-                
+
                 # For rest goals, find safe locations (no monsters)
                 elif goal_type == 'rest':
                     target = self.find_nearest_safe_location(current_x, current_y)
                     if target:
                         return target
-                
+
                 # For resource gathering, find resource locations
                 elif goal_type == 'gathering':
                     target = self.find_nearest_content_location(current_x, current_y, 'resource')
                     if target:
                         return target
-                        
+
             except Exception as e:
                 print(f"Warning: Could not access strategic locations: {e}")
-        
+
         # Fallback: intelligent exploration pattern
         return self.get_exploration_target(current_x, current_y)
 
     def find_nearest_content_location(self, current_x: int, current_y: int, content_type: str) -> tuple[int, int] | None:
         """Find the nearest location with specified content type within movement range.
-        
+
         Parameters:
             current_x: Current X coordinate
-            current_y: Current Y coordinate  
+            current_y: Current Y coordinate
             content_type: Type of content to find ('monster', 'resource', etc.)
-            
+
         Return values:
             Tuple of (x, y) coordinates if found, None otherwise
-            
+
         This method searches game data for the nearest location containing the
         specified content type within the movement action factory's generation range.
         """
@@ -151,61 +150,61 @@ class GoalManager:
 
     def find_nearest_safe_location(self, current_x: int, current_y: int) -> tuple[int, int] | None:
         """Find the nearest safe location (no monsters) for resting.
-        
+
         Parameters:
             current_x: Current X coordinate
             current_y: Current Y coordinate
-            
+
         Return values:
             Tuple of (x, y) coordinates for safe location, None if none found
-            
+
         This method identifies safe locations without monsters where the character
         can rest to recover HP, prioritizing nearby accessible positions.
         """
         # For now, prioritize moving toward origin (0,0) as generally safer
         # This is a simple heuristic that can be improved with actual game data
-        
+
         if current_x > 0:
             target_x = current_x - 1
         elif current_x < 0:
             target_x = current_x + 1
         else:
             target_x = current_x
-            
+
         if current_y > 0:
             target_y = current_y - 1
         elif current_y < 0:
             target_y = current_y + 1
         else:
             target_y = current_y
-            
+
         # Ensure we don't stay in place
         if target_x == current_x and target_y == current_y:
             target_x = current_x + 1
-            
+
         return (target_x, target_y)
 
     def get_exploration_target(self, current_x: int, current_y: int) -> tuple[int, int]:
         """Get exploration target using systematic pattern.
-        
+
         Parameters:
             current_x: Current X coordinate
             current_y: Current Y coordinate
-            
+
         Return values:
             Tuple of (x, y) coordinates for exploration movement
-            
+
         This method generates exploration targets using a systematic pattern
         that ensures thorough map coverage while staying within the movement
         action factory's generation range for guaranteed action availability.
         """
         # Use a simple spiral exploration pattern
         # This ensures systematic exploration while staying within action range
-        
+
         # Start with cardinal directions for systematic exploration
         exploration_offsets = [
             (1, 0),   # East
-            (0, 1),   # North  
+            (0, 1),   # North
             (-1, 0),  # West
             (0, -1),  # South
             (1, 1),   # Northeast
@@ -213,14 +212,14 @@ class GoalManager:
             (-1, -1), # Southwest
             (1, -1),  # Southeast
         ]
-        
+
         # Select based on current position to create a pattern
         index = (abs(current_x) + abs(current_y)) % len(exploration_offsets)
         offset_x, offset_y = exploration_offsets[index]
-        
+
         target_x = current_x + offset_x
         target_y = current_y + offset_y
-        
+
         return (target_x, target_y)
 
     def select_next_goal(self, current_state: CharacterGameState) -> dict[GameState, Any]:
@@ -232,7 +231,7 @@ class GoalManager:
         current_hp = current_state.hp
         max_hp = current_state.max_hp
         hp_ratio = current_hp / max_hp if max_hp > 0 else 1.0
-        
+
         if hp_ratio < 0.3:  # Less than 30% HP
             # Find a safe location for resting
             target_x, target_y = self.select_movement_target(current_state, 'rest')
@@ -247,10 +246,8 @@ class GoalManager:
             }
 
         # If at monster location and can fight, fight
-        current_x = current_state.x
-        current_y = current_state.y
         at_monster_location = current_state.at_monster_location
-        
+
         if at_monster_location and hp_ratio > 0.5:
             return {
                 'type': 'combat',
@@ -260,7 +257,7 @@ class GoalManager:
                     GameState.COOLDOWN_READY: False
                 }
             }
-        
+
         # If healthy but not at monster location, move to find monsters
         elif hp_ratio > 0.5:
             target_x, target_y = self.select_movement_target(current_state, 'combat')
@@ -276,7 +273,7 @@ class GoalManager:
 
         # Otherwise, move strategically - use intelligent 2D movement
         target_x, target_y = self.select_movement_target(current_state, 'exploration')
-        
+
         return {
             'type': 'movement',
             'priority': 6,
@@ -296,7 +293,7 @@ class GoalManager:
 
         # Create GOAP planner with current actions
         planner = await self._create_goap_planner(current_state, goal_state)
-        
+
         # Check if planner has actions
         action_list = await self.create_goap_actions(current_state)
         if not action_list.conditions:
@@ -309,15 +306,15 @@ class GoalManager:
 
     async def plan_with_cooldown_awareness(self, character_name: str, current_state: CharacterGameState, goal_state: dict[GameState, Any]) -> list[dict[str, Any]]:
         """Generate plan considering current cooldown state and timing.
-        
+
         Parameters:
             character_name: Name of the character for cooldown checking
             current_state: Dictionary with GameState enum keys and current values
             goal_state: Dictionary with GameState enum keys and target values
-            
+
         Return values:
             List of action dictionaries with timing-aware sequencing
-            
+
         This method generates action plans that account for character cooldown
         status, either deferring planning until ready or filtering actions
         that require cooldown readiness for optimal execution timing.
@@ -332,13 +329,13 @@ class GoalManager:
 
     def should_defer_planning(self, character_name: str) -> bool:
         """Check if planning should be deferred due to cooldown.
-        
+
         Parameters:
             character_name: Name of the character to check cooldown status
-            
+
         Return values:
             Boolean indicating whether planning should wait for cooldown expiry
-            
+
         This method determines if GOAP planning should be postponed because
         the character is currently on cooldown, preventing immediate action
         execution and making current planning ineffective.
@@ -353,7 +350,7 @@ class GoalManager:
         # Use ActionRegistry to get all available actions for current state
         game_data = await self.get_game_data()
         print(f"DEBUG: Game data loaded: {game_data is not None}")
-        
+
         all_actions = self.action_registry.generate_actions_for_state(current_state, game_data)
         print(f"DEBUG: Generated {len(all_actions)} actions from registry")
 
@@ -361,7 +358,7 @@ class GoalManager:
         for action_instance in all_actions:
             name, conditions, effects, weight = self.convert_action_to_goap(action_instance)
             action_list.add_condition(name, **conditions)
-            action_list.add_reaction(name, **effects)  
+            action_list.add_reaction(name, **effects)
             action_list.set_weight(name, weight)
 
         print(f"DEBUG: Created GOAP action list with {len(action_list.conditions)} actions")
@@ -372,13 +369,13 @@ class GoalManager:
 
     def get_early_game_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get goals for levels 1-10.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             List of goal dictionaries appropriate for early game progression
-            
+
         This method generates goals suitable for beginning characters including
         basic resource gathering, equipment crafting, and skill development
         that form the foundation for character progression.
@@ -435,13 +432,13 @@ class GoalManager:
 
     def get_mid_game_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get goals for levels 11-30.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             List of goal dictionaries appropriate for mid-game progression
-            
+
         This method generates goals for intermediate character development
         including advanced combat, economic activities, and skill optimization
         that bridge early game fundamentals with late game mastery.
@@ -464,13 +461,13 @@ class GoalManager:
 
     def get_late_game_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get goals for levels 31-45.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             List of goal dictionaries appropriate for late game progression
-            
+
         This method generates goals for advanced character optimization
         including maximum level achievement, rare item collection, and
         mastery of all game systems for ultimate character development.
@@ -493,14 +490,14 @@ class GoalManager:
 
     def prioritize_goals(self, available_goals: list[dict[GameState, Any]], current_state: dict[GameState, Any]) -> dict[GameState, Any]:
         """Select highest priority goal from available options.
-        
+
         Parameters:
             available_goals: List of possible goal dictionaries to choose from
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Single goal dictionary representing the highest priority objective
-            
+
         This method evaluates available goals against current character state
         and priority weights to select the most appropriate goal, considering
         survival needs, progression efficiency, and strategic objectives.
@@ -552,14 +549,14 @@ class GoalManager:
 
     def is_goal_achievable(self, goal: dict[GameState, Any], current_state: dict[GameState, Any]) -> bool:
         """Check if goal can be achieved with current actions.
-        
+
         Parameters:
             goal: Dictionary with GameState enum keys defining target state
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Boolean indicating whether goal is achievable with available actions
-            
+
         This method analyzes whether the specified goal can be reached from
         the current state using the available action set, enabling intelligent
         goal selection and preventing impossible planning attempts.
@@ -572,7 +569,7 @@ class GoalManager:
             current_value = current_state.get(state_key, 0)
 
             # Check if goal is reasonable (not too far from current state)
-            if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
+            if isinstance(target_value, int | float) and isinstance(current_value, int | float):
                 if target_value > current_value * 10:  # Arbitrary threshold
                     return False
 
@@ -580,14 +577,14 @@ class GoalManager:
 
     def estimate_goal_cost(self, goal: dict[GameState, Any], current_state: dict[GameState, Any]) -> int:
         """Estimate planning cost for achieving goal.
-        
+
         Parameters:
             goal: Dictionary with GameState enum keys defining target state
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Integer representing estimated GOAP cost to achieve the goal
-            
+
         This method calculates an approximate cost for achieving the specified
         goal from the current state, enabling efficient goal prioritization
         and resource planning for optimal AI player decision making.
@@ -598,7 +595,7 @@ class GoalManager:
 
         for state_key, target_value in target_state.items():
             current_value = current_state.get(state_key, 0)
-            if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
+            if isinstance(target_value, int | float) and isinstance(current_value, int | float):
                 diff = abs(target_value - current_value)
                 total_cost += diff
             else:
@@ -608,13 +605,13 @@ class GoalManager:
 
     def max_level_achieved(self, current_state: CharacterGameState) -> bool:
         """Check if character has reached maximum level (45).
-        
+
         Parameters:
             current_state: CharacterGameState Pydantic model with character attributes
-            
+
         Return values:
             Boolean indicating whether character has reached level 45
-            
+
         This method checks if the character has achieved the maximum level
         in ArtifactsMMO (level 45), which serves as the primary completion
         condition for autonomous AI player operation.
@@ -623,13 +620,13 @@ class GoalManager:
 
     def get_survival_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get emergency goals for low HP, danger situations.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             List of emergency goal dictionaries for immediate survival needs
-            
+
         This method generates high-priority survival goals when the character
         is in danger including HP recovery, escape from combat, and movement
         to safe locations for emergency character preservation.
@@ -665,19 +662,19 @@ class GoalManager:
 
     def get_progression_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get XP and level advancement goals.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             List of progression goal dictionaries for character advancement
-            
+
         This method generates goals focused on character progression including
         combat for XP, skill training, equipment upgrades, and level advancement
         activities that drive the character toward maximum level achievement.
         """
         goals = []
-        current_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
+        current_state.get(GameState.CHARACTER_LEVEL, 1)
 
         # Basic progression goal
         goals.append({
@@ -693,13 +690,13 @@ class GoalManager:
 
     def get_economic_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get gold accumulation and trading goals.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             List of economic goal dictionaries for wealth building and resource management
-            
+
         This method generates goals focused on economic activities including
         trading, crafting for profit, resource gathering for sale, and market
         arbitrage opportunities for sustainable character development.
@@ -760,13 +757,13 @@ class GoalManager:
 
     def convert_action_to_goap(self, action: BaseAction) -> tuple[str, dict[str, Any], dict[str, Any], int]:
         """Convert BaseAction to GOAP format (name, conditions, effects, weight).
-        
+
         Parameters:
             action: BaseAction instance to convert to GOAP format
-            
+
         Return values:
             Tuple containing action name, conditions, effects, and weight
-            
+
         This method transforms a modular BaseAction into the tuple format
         required by the GOAP library, enabling seamless integration between
         the type-safe action system and GOAP planning algorithms.
@@ -785,14 +782,14 @@ class GoalManager:
 
     def validate_plan(self, plan: list[dict[str, Any]], current_state: dict[GameState, Any]) -> bool:
         """Validate that generated plan is executable.
-        
+
         Parameters:
             plan: List of action dictionaries representing the planned sequence
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Boolean indicating whether the plan is valid and executable
-            
+
         This method validates that the generated GOAP plan is feasible by
         checking action preconditions, state transitions, and resource
         requirements to ensure successful execution in the AI player system.
@@ -801,14 +798,14 @@ class GoalManager:
 
     def update_goal_priorities(self, current_state: dict[GameState, Any], priorities: dict[str, int]) -> dict[str, int]:
         """Update goal priorities based on current state.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
             priorities: Current priority mapping for goal types
-            
+
         Return values:
             Updated priority mapping based on current conditions
-            
+
         This method adjusts goal priorities dynamically based on character state,
         enabling adaptive planning that responds to changing conditions like
         low HP, inventory status, and progression opportunities.
@@ -844,7 +841,7 @@ class GoalManager:
     async def _create_goap_planner(self, current_state: CharacterGameState, goal_state: dict[GameState, Any], character_name: str | None = None) -> 'Planner':
         """Create GOAP planner instance with current state and goals."""
         print(f"DEBUG: Creating GOAP planner for character: {character_name}")
-        
+
         # Use the Pydantic model's proper conversion method
         goap_current_state = current_state.to_goap_state()
         goap_goal_state = {key.value: value for key, value in goal_state.items()}
@@ -878,14 +875,14 @@ class GoalManager:
 
     def get_available_goals(self, current_state: dict[GameState, Any], filters: dict[str, Any] | None = None) -> list[dict[GameState, Any]]:
         """Get all available goals with optional filtering.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
             filters: Optional filtering criteria for goal selection
-            
+
         Return values:
             List of available goal dictionaries matching filter criteria
-            
+
         This method generates all available goals for the current state and
         applies optional filtering to provide targeted goal selection for
         specific planning scenarios and strategic objectives.
@@ -957,14 +954,14 @@ class GoalManager:
 
     def evaluate_goal_feasibility(self, current_state: dict[GameState, Any], goal: dict[GameState, Any], simple: bool = True) -> bool | dict[str, Any]:
         """Evaluate whether a goal is feasible and estimate effort.
-        
+
         Parameters:
             goal: Goal dictionary with target state specification
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Dictionary containing feasibility analysis and effort estimates
-            
+
         This method analyzes goal feasibility by checking resource requirements,
         action availability, and estimated completion time to enable intelligent
         goal selection and planning optimization.
@@ -990,7 +987,7 @@ class GoalManager:
         for state_key, target_value in target_state.items():
             current_value = current_state.get(state_key, 0)
 
-            if isinstance(target_value, (int, float)) and isinstance(current_value, (int, float)):
+            if isinstance(target_value, int | float) and isinstance(current_value, int | float):
                 if target_value > current_value:
                     difference = target_value - current_value
                     # Check if the jump is too large (impossible)
@@ -1029,13 +1026,13 @@ class GoalManager:
 
     def convert_state_for_goap(self, current_state: dict[GameState, Any]) -> dict[str, Any]:
         """Convert GameState enum state to string-keyed state for GOAP.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Dictionary with string keys suitable for GOAP library usage
-            
+
         This method converts the type-safe GameState enum-based state format
         to the string-based format required by the GOAP library, enabling
         seamless integration between the AI player and planning systems.
@@ -1050,13 +1047,13 @@ class GoalManager:
 
     def _calculate_survival_priority(self, current_state: dict[GameState, Any]) -> int:
         """Calculate survival priority based on HP and danger level.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Integer priority score (1-10) for survival goals
-            
+
         This method calculates survival priority based on current HP ratio,
         danger level, and immediate threats to determine urgency of survival
         actions like resting, healing, or escaping combat situations.
@@ -1080,19 +1077,19 @@ class GoalManager:
 
     def _calculate_progression_priority(self, current_state: dict[GameState, Any]) -> int:
         """Calculate progression priority based on character level and advancement needs.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Integer priority score (1-10) for progression goals
-            
+
         This method calculates progression priority based on character level,
         experience to next level, and advancement opportunities to determine
         urgency of leveling and skill improvement activities.
         """
         character_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
-        character_xp = current_state.get(GameState.CHARACTER_XP, 0)
+        current_state.get(GameState.CHARACTER_XP, 0)
 
         # Early game progression is high priority
         if character_level <= 1:
@@ -1110,13 +1107,13 @@ class GoalManager:
 
     def _calculate_economic_priority(self, current_state: dict[GameState, Any]) -> int:
         """Calculate economic priority based on gold and inventory status.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Integer priority score (1-10) for economic goals
-            
+
         This method calculates economic priority based on current gold amount,
         inventory space, and trading opportunities to determine urgency of
         wealth-building and resource management activities.
@@ -1146,15 +1143,15 @@ class GoalManager:
 
     def _adjust_priorities_based_on_history(self, priorities: dict[str, int], recent_actions: list[dict[str, Any]], current_state: dict[GameState, Any]) -> dict[str, int]:
         """Adjust priorities based on recent action history and outcomes.
-        
+
         Parameters:
             priorities: Current priority mapping for goal types
             recent_actions: List of recently executed actions with results
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Adjusted priority mapping based on recent performance
-            
+
         This method analyzes recent action history to adjust goal priorities,
         reducing priority for recently successful activities and boosting
         priority for neglected or unsuccessful areas.
@@ -1179,14 +1176,14 @@ class GoalManager:
 
     def _balance_goal_priorities(self, priorities: dict[str, int], current_state: dict[GameState, Any]) -> dict[str, int]:
         """Balance goal priorities to prevent single-goal focus.
-        
+
         Parameters:
             priorities: Current priority mapping for goal types
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Balanced priority mapping encouraging diverse goal pursuit
-            
+
         This method balances goal priorities to encourage diverse character
         development, boosting neglected areas and moderating over-prioritized
         goals to prevent stagnation in single skill areas.
@@ -1213,13 +1210,13 @@ class GoalManager:
 
     def convert_actions_for_goap(self, actions: list['BaseAction']) -> 'Action_List':
         """Convert BaseAction list to GOAP Action_List format.
-        
+
         Parameters:
             actions: List of BaseAction instances to convert
-            
+
         Return values:
             Action_List object suitable for GOAP planning
-            
+
         This method transforms a list of type-safe BaseAction instances into
         the Action_List format required by the GOAP library, enabling the
         planner to work with the modular action system.

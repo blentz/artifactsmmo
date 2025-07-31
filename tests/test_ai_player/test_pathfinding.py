@@ -772,10 +772,10 @@ class TestPathfindingAlgorithm:
 
     def test_abstract_find_path(self):
         """Test that abstract find_path method raises NotImplementedError"""
-        
+
         class TestAlgorithm(PathfindingAlgorithm):
             pass  # Don't implement find_path to trigger the abstract method
-        
+
         with pytest.raises(TypeError):
             TestAlgorithm()
 
@@ -795,7 +795,7 @@ class TestPathfindingServiceWithRealData:
                 maps_data = GameDataFixtures.get_maps_data()
                 resources_data = GameDataFixtures.get_resources_data()
                 monsters_data = GameDataFixtures.get_monsters_data()
-                
+
                 # Convert to mock objects with attributes
                 self.maps = []
                 for map_item in maps_data:
@@ -806,7 +806,7 @@ class TestPathfindingServiceWithRealData:
                     map_obj.skin = map_item['skin']
                     map_obj.content = map_item['content']
                     self.maps.append(map_obj)
-                
+
                 self.resources = []
                 for resource_item in resources_data:
                     resource_obj = type('Resource', (), {})()
@@ -816,7 +816,7 @@ class TestPathfindingServiceWithRealData:
                     resource_obj.level = resource_item['level']
                     # Find matching map location for this resource
                     for map_obj in self.maps:
-                        if (hasattr(map_obj, 'content') and 
+                        if (hasattr(map_obj, 'content') and
                             map_obj.content.get('code') == resource_item['code']):
                             resource_obj.x = map_obj.x
                             resource_obj.y = map_obj.y
@@ -826,7 +826,7 @@ class TestPathfindingServiceWithRealData:
                         resource_obj.x = 5
                         resource_obj.y = 5
                     self.resources.append(resource_obj)
-                
+
                 self.monsters = []
                 for monster_item in monsters_data:
                     monster_obj = type('Monster', (), {})()
@@ -836,7 +836,7 @@ class TestPathfindingServiceWithRealData:
                     monster_obj.hp = monster_item['hp']
                     # Find matching map location for this monster
                     for map_obj in self.maps:
-                        if (hasattr(map_obj, 'content') and 
+                        if (hasattr(map_obj, 'content') and
                             map_obj.content.get('code') == monster_item['code']):
                             monster_obj.x = map_obj.x
                             monster_obj.y = map_obj.y
@@ -863,10 +863,10 @@ class TestPathfindingServiceWithRealData:
     def test_get_map_bounds_with_real_data(self):
         """Test map bounds calculation with real game data"""
         bounds = self.service.get_map_bounds(self.game_data)
-        
+
         # Should include all coordinate ranges from maps, resources, monsters
         min_x, min_y, max_x, max_y = bounds
-        
+
         # Verify bounds include known map coordinates with padding
         assert min_x <= -2 - 5  # Grand Exchange at x=-2 with padding
         assert max_x >= 2 + 5   # Copper Mine at x=2 with padding
@@ -883,7 +883,7 @@ class TestPathfindingServiceWithRealData:
 
         empty_data = EmptyGameData()
         bounds = self.service.get_map_bounds(empty_data)
-        
+
         # Should use default bounds
         assert bounds == (-50, -50, 50, 50)
 
@@ -891,9 +891,9 @@ class TestPathfindingServiceWithRealData:
         """Test pathfinding using real game data for bounds and obstacles"""
         start = (0, 0)  # Spawn Island
         goal = (2, 0)   # Copper Mine
-        
+
         result = self.service.find_path(start, goal, self.game_data)
-        
+
         assert result.success
         assert result.path[0] == start
         assert result.path[-1] == goal
@@ -903,7 +903,7 @@ class TestPathfindingServiceWithRealData:
         """Test PathfindingService movement action generation"""
         path = [(0, 0), (1, 0), (2, 0)]
         actions = self.service.generate_movement_actions(path)
-        
+
         assert len(actions) == 2
         assert actions[0].target_x == 1 and actions[0].target_y == 0
         assert actions[1].target_x == 2 and actions[1].target_y == 0
@@ -912,9 +912,9 @@ class TestPathfindingServiceWithRealData:
         """Test finding path to nearest target using real game coordinates"""
         start = (0, 0)  # Spawn Island
         targets = [(2, 0), (-1, 0), (-2, 0)]  # Copper Mine, Bank, Grand Exchange
-        
+
         result = self.service.find_path_to_nearest(start, targets, self.game_data)
-        
+
         assert result.success
         assert result.path[0] == start
         # Should find path to nearest target (likely Bank at -1,0)
@@ -937,7 +937,7 @@ class TestMovementPlannerWithRealData:
                 maps_data = GameDataFixtures.get_maps_data()
                 resources_data = GameDataFixtures.get_resources_data()
                 monsters_data = GameDataFixtures.get_monsters_data()
-                
+
                 # Convert to mock objects with attributes matching real API
                 self.maps = []
                 for map_item in maps_data:
@@ -948,7 +948,7 @@ class TestMovementPlannerWithRealData:
                     map_obj.skin = map_item['skin']
                     map_obj.content = map_item['content']
                     self.maps.append(map_obj)
-                
+
                 self.resources = []
                 for resource_item in resources_data:
                     resource_obj = type('Resource', (), {})()
@@ -959,7 +959,7 @@ class TestMovementPlannerWithRealData:
                     resource_obj.level = resource_item['level']
                     # Find matching map location for this resource
                     for map_obj in self.maps:
-                        if (hasattr(map_obj, 'content') and 
+                        if (hasattr(map_obj, 'content') and
                             map_obj.content.get('code') == resource_item['code']):
                             resource_obj.x = map_obj.x
                             resource_obj.y = map_obj.y
@@ -969,7 +969,7 @@ class TestMovementPlannerWithRealData:
                         resource_obj.x = 5
                         resource_obj.y = 5
                     self.resources.append(resource_obj)
-                
+
                 self.monsters = []
                 for monster_item in monsters_data:
                     monster_obj = type('Monster', (), {})()
@@ -979,7 +979,7 @@ class TestMovementPlannerWithRealData:
                     monster_obj.hp = monster_item['hp']
                     # Find matching map location for this monster
                     for map_obj in self.maps:
-                        if (hasattr(map_obj, 'content') and 
+                        if (hasattr(map_obj, 'content') and
                             map_obj.content.get('code') == monster_item['code']):
                             monster_obj.x = map_obj.x
                             monster_obj.y = map_obj.y
@@ -1006,7 +1006,7 @@ class TestMovementPlannerWithRealData:
     def test_plan_movement_to_resource_with_real_data(self):
         """Test resource movement planning with real API data"""
         result = self.planner.plan_movement_to_resource((0, 0), "copper_rocks", self.game_data)
-        
+
         assert result.success
         assert len(result.path) > 0
         # Should end at the copper rocks location (2, 0)
@@ -1015,7 +1015,7 @@ class TestMovementPlannerWithRealData:
     def test_plan_movement_to_monster_with_real_data(self):
         """Test monster movement planning with real API data"""
         result = self.planner.plan_movement_to_monster((0, 0), (1, 10), self.game_data)
-        
+
         assert result.success
         assert len(result.path) > 0
         # Should find path to goblin at level 8 which is in range (1, 10)
@@ -1023,7 +1023,7 @@ class TestMovementPlannerWithRealData:
     def test_plan_movement_to_bank_with_real_data(self):
         """Test bank movement planning with real API data"""
         result = self.planner.plan_movement_to_bank((0, 0), self.game_data)
-        
+
         assert result.success
         assert len(result.path) > 0
         # Should end at bank location (-1, 0)
@@ -1032,7 +1032,7 @@ class TestMovementPlannerWithRealData:
     def test_plan_movement_to_grand_exchange_with_real_data(self):
         """Test Grand Exchange movement planning with real API data"""
         result = self.planner.plan_movement_to_grand_exchange((0, 0), self.game_data)
-        
+
         assert result.success
         assert len(result.path) > 0
         # Should end at Grand Exchange location (-2, 0)
@@ -1042,9 +1042,9 @@ class TestMovementPlannerWithRealData:
         """Test escape route planning when candidates are found"""
         current_pos = (0, 0)
         danger_pos = (1, 1)
-        
+
         result = self.planner.plan_escape_route(current_pos, danger_pos, self.game_data)
-        
+
         # Should either succeed or fail gracefully
         assert isinstance(result.success, bool)
         if result.success:
@@ -1058,7 +1058,7 @@ class TestMovementPlannerWithRealData:
         """Test ranged positioning fallback when no ranged positions available"""
         # Test the ranged positioning directly with a simple scenario
         result = self.planner.get_strategic_positioning((0, 0), (3, 3), "ranged", self.game_data)
-        
+
         # Should succeed - either with ranged positioning or fallback to adjacent
         assert result.success
         assert len(result.path) > 0
@@ -1078,10 +1078,10 @@ class TestDijkstraPathfindingMissingLines:
         # This test targets the continue statement on line 376
         start = (0, 0)
         goal = (2, 0)
-        
+
         # Use a simple path that might cause revisiting
         result = self.dijkstra.find_path(start, goal, self.empty_obstacles, self.bounds)
-        
+
         assert result.success
         assert result.path[0] == start
         assert result.path[-1] == goal
@@ -1091,10 +1091,10 @@ class TestDijkstraPathfindingMissingLines:
         # This test targets the continue statement around line 412
         start = (0, 0)
         goal = (3, 3)
-        
+
         # Create a scenario that might trigger the path comparison
         result = self.dijkstra.find_path(start, goal, self.empty_obstacles, self.bounds)
-        
+
         assert result.success
         assert result.total_cost > 0
 
@@ -1120,7 +1120,7 @@ class TestPathfindingServiceMissingLines:
 
         path = [(0, 0), (1, 0), (2, 0), (3, 0)]
         optimized = self.service.optimize_path(path)
-        
+
         # Should still have some optimization
         assert len(optimized) >= 2
         assert optimized[0] == (0, 0)
@@ -1133,7 +1133,7 @@ class TestPathfindingServiceMissingLines:
         # This targets lines 611-613 in optimize_path
         path = [(0, 0), (1, 0)]  # Very short path to trigger edge case
         optimized = self.service.optimize_path(path)
-        
+
         assert optimized == [(0, 0), (1, 0)]
 
     def test_is_position_accessible_fallback_algorithm(self):
@@ -1144,7 +1144,7 @@ class TestPathfindingServiceMissingLines:
             pass
 
         service = PathfindingService(MockAlgorithm())
-        
+
         # Should use fallback AStarPathfinding
         result = service.is_position_accessible((0, 0), None)
         assert isinstance(result, bool)
@@ -1169,7 +1169,7 @@ class TestMovementPlannerMissingLines:
 
         game_data = MockGameData()
         result = self.planner.plan_movement_to_resource((0, 0), "copper_rocks", game_data)
-        
+
         assert not result.success
         assert "No resources of type 'copper_rocks' found" in result.message
 
@@ -1185,7 +1185,7 @@ class TestMovementPlannerMissingLines:
         self.planner.pathfinding_service.algorithm.is_valid_position = mock_is_valid_position
 
         result = self.planner.plan_escape_route((0, 0), (1, 1), None)
-        
+
         assert not result.success
         assert "No safe escape position found" in result.message
 
@@ -1201,7 +1201,7 @@ class TestMovementPlannerMissingLines:
         def mock_find_path_to_nearest(start, targets, game_data):
             from src.ai_player.pathfinding import PathfindingResult
             return PathfindingResult(
-                success=False, path=[], movement_actions=[], 
+                success=False, path=[], movement_actions=[],
                 total_cost=0, total_distance=0, message="No path found"
             )
 
@@ -1209,7 +1209,7 @@ class TestMovementPlannerMissingLines:
 
         # Call _find_ranged_position directly
         result = self.planner._find_ranged_position((0, 0), (5, 5), None)
-        
+
         # Should fallback to adjacent position method
         assert isinstance(result.success, bool)
 
@@ -1225,7 +1225,7 @@ class TestPathfindingAlgorithmAbstractMethod:
         # This targets line 67 - the pass statement in abstract method
         # We can't instantiate the abstract class directly, but we can
         # create a minimal implementation that calls the abstract method
-        
+
         class MinimalAlgorithm(PathfindingAlgorithm):
             def find_path(self, start, goal, obstacles, bounds):
                 # Call the parent method to hit line 67
@@ -1234,10 +1234,10 @@ class TestPathfindingAlgorithmAbstractMethod:
                 except:
                     # Expected to fail or return None
                     return None
-        
+
         algorithm = MinimalAlgorithm()
         result = algorithm.find_path((0, 0), (1, 1), set(), (0, 0, 10, 10))
-        
+
         # The abstract method implementation just has pass, so it returns None
         assert result is None
 

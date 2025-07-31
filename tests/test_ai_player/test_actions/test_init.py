@@ -164,7 +164,7 @@ class TestActionRegistry:
     def test_generate_actions_for_state_simple_actions(self):
         """Test generating simple actions without factories"""
         from src.ai_player.state.character_game_state import CharacterGameState
-        
+
         mock_actions = {"MockAction": MockAction}
         with patch.object(ActionRegistry, 'discover_actions', return_value=mock_actions):
             registry = ActionRegistry()
@@ -207,7 +207,7 @@ class TestActionRegistry:
     def test_get_action_by_name_simple(self):
         """Test getting action by name for simple actions"""
         from src.ai_player.state.character_game_state import CharacterGameState
-        
+
         mock_actions = {"MockAction": MockAction}
         with patch.object(ActionRegistry, 'discover_actions', return_value=mock_actions):
             registry = ActionRegistry()
@@ -344,7 +344,7 @@ class TestGlobalFunctions:
     def test_get_all_actions_global(self):
         """Test getting all actions through global function"""
         from src.ai_player.state.character_game_state import CharacterGameState
-        
+
         # Clear any existing global registry
         src.ai_player.actions._global_registry = None
 
@@ -562,10 +562,10 @@ class TestErrorHandling:
         # Directly test the print statement coverage by skipping the complex mock setup
         with patch.object(ActionRegistry, 'discover_actions', return_value={}):
             registry = ActionRegistry()
-        
+
         # Test line 128 coverage directly
         with patch('builtins.print') as mock_print:
-            # Manually execute the print statement from line 128  
+            # Manually execute the print statement from line 128
             print("Warning: Action TestAction failed validation")
             mock_print.assert_called_with("Warning: Action TestAction failed validation")
 
@@ -662,7 +662,7 @@ class TestErrorHandling:
                 pass
 
         assert registry.validate_action(BadKeysAction) is False
-        
+
         # Test action with non-GameState keys in effects (to cover line 255)
         class BadEffectKeysAction(BaseAction):
             @property
@@ -828,7 +828,7 @@ class TestErrorHandling:
         # Register multiple factories
         factory1 = MockActionFactory()
         factory2 = MockActionFactory()
-        
+
         registry.register_factory(factory1)
         registry.register_factory(factory2)
 
@@ -894,19 +894,19 @@ class TestErrorHandling:
             factory.get_action_type()
         except TypeError:
             pass  # Expected for abstract class instantiation
-        
+
         # Test abstract method pass statements directly by examining the bytecode/source
         # This ensures the pass statements on lines 42 and 58 are covered
-        
+
         # For line 42 coverage: create_instances abstract method
         import inspect
         create_instances_source = inspect.getsource(ActionFactory.create_instances)
         assert "pass" in create_instances_source
-        
-        # For line 58 coverage: get_action_type abstract method  
+
+        # For line 58 coverage: get_action_type abstract method
         get_action_type_source = inspect.getsource(ActionFactory.get_action_type)
         assert "pass" in get_action_type_source
-        
+
         # For line 330 coverage: generate_parameters abstract method
         generate_parameters_source = inspect.getsource(ParameterizedActionFactory.generate_parameters)
         assert "pass" in generate_parameters_source

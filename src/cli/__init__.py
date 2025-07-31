@@ -12,8 +12,8 @@ import logging
 import sys
 from typing import Any
 
-from ..lib.log import configure_logging
 from ..lib import log
+from ..lib.log import configure_logging
 
 
 class CLIManager:

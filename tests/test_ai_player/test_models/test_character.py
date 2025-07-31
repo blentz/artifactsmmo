@@ -7,6 +7,7 @@ API integration, and property calculations.
 
 from datetime import datetime
 from unittest.mock import Mock
+
 import pytest
 from pydantic import ValidationError
 
@@ -19,7 +20,7 @@ class TestInventorySlot:
     def test_inventory_slot_creation(self):
         """Test creating valid inventory slot"""
         slot = InventorySlot(slot=1, code="iron_ore", quantity=5)
-        
+
         assert slot.slot == 1
         assert slot.code == "iron_ore"
         assert slot.quantity == 5
@@ -29,11 +30,11 @@ class TestInventorySlot:
         # Valid slot
         slot = InventorySlot(slot=10, code="copper_ore", quantity=1)
         assert slot.slot == 10
-        
+
         # Invalid slot number (must be >= 1)
         with pytest.raises(ValidationError):
             InventorySlot(slot=0, code="item", quantity=1)
-            
+
         # Invalid quantity (must be >= 0)
         with pytest.raises(ValidationError):
             InventorySlot(slot=1, code="item", quantity=-1)
@@ -41,11 +42,11 @@ class TestInventorySlot:
     def test_inventory_slot_assignment_validation(self):
         """Test assignment validation after creation"""
         slot = InventorySlot(slot=1, code="iron_ore", quantity=5)
-        
+
         # Valid assignment
         slot.quantity = 10
         assert slot.quantity == 10
-        
+
         # Invalid assignment
         with pytest.raises(ValidationError):
             slot.quantity = -1
@@ -112,7 +113,7 @@ class TestCharacter:
             cooldown=0,
             inventory_max_items=20
         )
-        
+
         assert char.name == "TestChar"
         assert char.level == 1
         assert char.skin == "men1"  # Default value
@@ -125,12 +126,12 @@ class TestCharacter:
         char_data['level'] = 45
         char = Character(**char_data)
         assert char.level == 45
-        
+
         # Invalid level (too low)
         char_data['level'] = 0
         with pytest.raises(ValidationError):
             Character(**char_data)
-            
+
         # Invalid level (too high)
         char_data['level'] = 46
         with pytest.raises(ValidationError):
@@ -139,18 +140,18 @@ class TestCharacter:
     def test_character_validation_skill_levels(self):
         """Test skill level validation"""
         char_data = self._get_valid_character_data()
-        
+
         # Valid skill levels
         char_data['mining_level'] = 30
         char = Character(**char_data)
         assert char.mining_level == 30
-        
+
         # Invalid skill level (too low)
         char_data['mining_level'] = 0
         with pytest.raises(ValidationError):
             Character(**char_data)
-            
-        # Invalid skill level (too high) 
+
+        # Invalid skill level (too high)
         char_data['mining_level'] = 46
         with pytest.raises(ValidationError):
             Character(**char_data)
@@ -158,19 +159,19 @@ class TestCharacter:
     def test_character_validation_negative_values(self):
         """Test validation of fields that must be non-negative"""
         char_data = self._get_valid_character_data()
-        
+
         # Valid values
         char_data['xp'] = 50
         char_data['gold'] = 1000
         char = Character(**char_data)
         assert char.xp == 50
         assert char.gold == 1000
-        
+
         # Invalid negative values
         char_data['xp'] = -1
         with pytest.raises(ValidationError):
             Character(**char_data)
-            
+
         char_data['xp'] = 0  # Reset
         char_data['gold'] = -100
         with pytest.raises(ValidationError):
@@ -183,7 +184,7 @@ class TestCharacter:
             InventorySlot(slot=1, code="iron_ore", quantity=10),
             InventorySlot(slot=2, code="copper_ore", quantity=5)
         ]
-        
+
         char = Character(**char_data)
         assert len(char.inventory) == 2
         assert char.inventory[0].code == "iron_ore"
@@ -194,19 +195,19 @@ class TestCharacter:
         char_data = self._get_valid_character_data()
         expiration_time = datetime.now()
         char_data['cooldown_expiration'] = expiration_time
-        
+
         char = Character(**char_data)
         assert char.cooldown_expiration == expiration_time
 
     def test_is_cooldown_ready_property(self):
         """Test is_cooldown_ready property"""
         char_data = self._get_valid_character_data()
-        
+
         # Cooldown ready
         char_data['cooldown'] = 0
         char = Character(**char_data)
         assert char.is_cooldown_ready is True
-        
+
         # Cooldown not ready
         char_data['cooldown'] = 5
         char = Character(**char_data)
@@ -216,12 +217,12 @@ class TestCharacter:
         """Test inventory_space_available property"""
         char_data = self._get_valid_character_data()
         char_data['inventory_max_items'] = 20
-        
+
         # Empty inventory
         char_data['inventory'] = None
         char = Character(**char_data)
         assert char.inventory_space_available == 20
-        
+
         # Partially filled inventory
         char_data['inventory'] = [
             InventorySlot(slot=1, code="iron_ore", quantity=10),
@@ -234,14 +235,14 @@ class TestCharacter:
         """Test is_inventory_full property"""
         char_data = self._get_valid_character_data()
         char_data['inventory_max_items'] = 2
-        
+
         # Not full
         char_data['inventory'] = [
             InventorySlot(slot=1, code="iron_ore", quantity=10)
         ]
         char = Character(**char_data)
         assert char.is_inventory_full is False
-        
+
         # Full inventory
         char_data['inventory'] = [
             InventorySlot(slot=1, code="iron_ore", quantity=10),
@@ -263,7 +264,7 @@ class TestCharacter:
         api_char.speed = 15
         api_char.hp = 80
         api_char.max_hp = 100
-        
+
         # Set all skill levels
         api_char.mining_level = 5
         api_char.mining_xp = 200
@@ -289,7 +290,7 @@ class TestCharacter:
         api_char.alchemy_level = 1
         api_char.alchemy_xp = 0
         api_char.alchemy_max_xp = 100
-        
+
         # Set combat stats
         api_char.haste = 5
         api_char.critical_strike = 10
@@ -308,13 +309,13 @@ class TestCharacter:
         api_char.res_earth = 8
         api_char.res_water = 3
         api_char.res_air = 2
-        
+
         # Position and cooldown
         api_char.x = 10
         api_char.y = 20
         api_char.cooldown = 3
         api_char.cooldown_expiration = None
-        
+
         # Equipment slots
         api_char.weapon_slot = "iron_sword"
         api_char.rune_slot = ""
@@ -334,19 +335,19 @@ class TestCharacter:
         api_char.utility2_slot = ""
         api_char.utility2_slot_quantity = 0
         api_char.bag_slot = ""
-        
+
         # Task info
         api_char.task = "Kill 10 goblins"
         api_char.task_type = "monsters"
         api_char.task_progress = 3
         api_char.task_total = 10
-        
+
         # Inventory
         api_char.inventory_max_items = 25
         api_char.inventory = None
-        
+
         char = Character.from_api_character(api_char)
-        
+
         assert char.name == "APIChar"
         assert char.level == 10
         assert char.skin == "women1"
@@ -360,18 +361,18 @@ class TestCharacter:
     def test_from_api_character_with_skin_enum(self):
         """Test creating Character from API character with skin enum"""
         api_char = Mock()
-        
+
         # Set minimal required fields first
         self._set_minimal_api_char_fields(api_char)
-        
+
         # Mock skin as enum with value attribute (after minimal fields)
         skin_enum = Mock()
         skin_enum.value = "men2"
         api_char.skin = skin_enum
-        
+
         # Ensure inventory is None to avoid the hasattr check issue
         api_char.inventory = None
-        
+
         char = Character.from_api_character(api_char)
         assert char.skin == "men2"
 
@@ -379,22 +380,22 @@ class TestCharacter:
         """Test creating Character from API character with inventory"""
         api_char = Mock()
         self._set_minimal_api_char_fields(api_char)
-        
+
         # Mock inventory slots
         slot1 = Mock()
         slot1.slot = 1
         slot1.code = "iron_ore"
         slot1.quantity = 15
-        
+
         slot2 = Mock()
         slot2.slot = 3
         slot2.code = "copper_ore"
         slot2.quantity = 8
-        
+
         api_char.inventory = [slot1, slot2]
-        
+
         char = Character.from_api_character(api_char)
-        
+
         assert len(char.inventory) == 2
         assert char.inventory[0].slot == 1
         assert char.inventory[0].code == "iron_ore"
@@ -408,7 +409,7 @@ class TestCharacter:
         api_char = Mock()
         self._set_minimal_api_char_fields(api_char)
         api_char.inventory = None
-        
+
         char = Character.from_api_character(api_char)
         assert char.inventory is None
 
@@ -417,7 +418,7 @@ class TestCharacter:
         api_char = Mock()
         self._set_minimal_api_char_fields(api_char)
         api_char.inventory = []
-        
+
         char = Character.from_api_character(api_char)
         # Empty list is treated as falsy, so becomes None
         assert char.inventory is None
@@ -426,7 +427,7 @@ class TestCharacter:
         """Test equipment slot default values"""
         char_data = self._get_valid_character_data()
         char = Character(**char_data)
-        
+
         assert char.weapon_slot == ""
         assert char.shield_slot == ""
         assert char.helmet_slot == ""
@@ -437,7 +438,7 @@ class TestCharacter:
         """Test task field default values"""
         char_data = self._get_valid_character_data()
         char = Character(**char_data)
-        
+
         assert char.task == ""
         assert char.task_type == ""
         assert char.task_progress == 0
@@ -447,11 +448,11 @@ class TestCharacter:
         """Test that assignment validation works"""
         char_data = self._get_valid_character_data()
         char = Character(**char_data)
-        
+
         # Valid assignment
         char.level = 25
         assert char.level == 25
-        
+
         # Invalid assignment
         with pytest.raises(ValidationError):
             char.level = 50  # Too high
@@ -527,7 +528,7 @@ class TestCharacter:
         api_char.speed = 10
         api_char.hp = 50
         api_char.max_hp = 50
-        
+
         # Set all skill levels to minimum
         api_char.mining_level = 1
         api_char.mining_xp = 0
@@ -553,7 +554,7 @@ class TestCharacter:
         api_char.alchemy_level = 1
         api_char.alchemy_xp = 0
         api_char.alchemy_max_xp = 100
-        
+
         # Set combat stats to 0
         api_char.haste = 0
         api_char.critical_strike = 0
@@ -572,14 +573,14 @@ class TestCharacter:
         api_char.res_earth = 0
         api_char.res_water = 0
         api_char.res_air = 0
-        
+
         # Position and cooldown
         api_char.x = 0
         api_char.y = 0
         api_char.cooldown = 0
         # Add cooldown_expiration attribute explicitly as None
         api_char.cooldown_expiration = None
-        
+
         # Equipment slots (all empty)
         api_char.weapon_slot = ""
         api_char.rune_slot = ""
@@ -599,12 +600,12 @@ class TestCharacter:
         api_char.utility2_slot = ""
         api_char.utility2_slot_quantity = 0
         api_char.bag_slot = ""
-        
+
         # Task info (empty)
         api_char.task = ""
         api_char.task_type = ""
         api_char.task_progress = 0
         api_char.task_total = 0
-        
+
         # Inventory
         api_char.inventory_max_items = 20

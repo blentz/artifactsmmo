@@ -35,18 +35,18 @@ def get_global_registry() -> ActionRegistry:
     global _global_registry
     if _global_registry is None:
         _global_registry = ActionRegistry()
-        
+
         # Register all action factories
         movement_factory = MovementActionFactory()
         combat_factory = CombatActionFactory()
         gathering_factory = GatheringActionFactory()
         rest_factory = RestActionFactory()
-        
+
         _global_registry.register_factory(movement_factory)
         _global_registry.register_factory(combat_factory)
         _global_registry.register_factory(gathering_factory)
         _global_registry.register_factory(rest_factory)
-        
+
     return _global_registry
 
 
@@ -88,7 +88,7 @@ def register_action_factory(factory: ActionFactory) -> None:
 # Export all classes for backwards compatibility
 __all__ = [
     "ActionFactory",
-    "ActionRegistry", 
+    "ActionRegistry",
     "ParameterizedActionFactory",
     "get_global_registry",
     "get_all_actions",

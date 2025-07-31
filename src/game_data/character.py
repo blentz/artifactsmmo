@@ -7,14 +7,15 @@ while maintaining exact field name compatibility.
 """
 
 from datetime import datetime
-from typing import Optional, List, Any
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class InventorySlot(BaseModel):
     """Inventory slot item data"""
     model_config = ConfigDict(validate_assignment=True)
-    
+
     slot: int = Field(ge=1)
     code: str
     quantity: int = Field(ge=0)  # Empty slots have quantity 0
@@ -23,23 +24,23 @@ class InventorySlot(BaseModel):
 class Character(BaseModel):
     """Character model aligned with artifactsmmo-api-client CharacterSchema"""
     model_config = ConfigDict(validate_assignment=True)
-    
+
     # Basic character info
     name: str
     account: str
     skin: str = Field(default="men1")
-    
+
     # Character progression
     level: int = Field(ge=1, le=45)
     xp: int = Field(ge=0)
     max_xp: int = Field(ge=0)
     gold: int = Field(ge=0)
     speed: int = Field(ge=0)
-    
+
     # Health
     hp: int = Field(ge=0)
     max_hp: int = Field(ge=1)
-    
+
     # Skills - exact field names from API
     mining_level: int = Field(ge=1, le=45)
     mining_xp: int = Field(ge=0)
@@ -65,7 +66,7 @@ class Character(BaseModel):
     alchemy_level: int = Field(ge=1, le=45)
     alchemy_xp: int = Field(ge=0)
     alchemy_max_xp: int = Field(ge=0)
-    
+
     # Combat stats - exact field names from API
     haste: int = Field(ge=0)
     critical_strike: int = Field(ge=0)
@@ -84,15 +85,15 @@ class Character(BaseModel):
     res_earth: int = Field(ge=0)
     res_water: int = Field(ge=0)
     res_air: int = Field(ge=0)
-    
+
     # Position
     x: int
     y: int
-    
+
     # Cooldown
     cooldown: int = Field(ge=0)
-    cooldown_expiration: Optional[datetime] = None
-    
+    cooldown_expiration: datetime | None = None
+
     # Equipment slots - exact field names from API
     weapon_slot: str = Field(default="")
     rune_slot: str = Field(default="")
@@ -112,24 +113,24 @@ class Character(BaseModel):
     utility2_slot: str = Field(default="")
     utility2_slot_quantity: int = Field(ge=0, default=0)
     bag_slot: str = Field(default="")
-    
+
     # Task info - exact field names from API
     task: str = Field(default="")
     task_type: str = Field(default="")
     task_progress: int = Field(ge=0, default=0)
     task_total: int = Field(ge=0, default=0)
-    
+
     # Inventory
     inventory_max_items: int = Field(ge=1)
-    inventory: Optional[List[InventorySlot]] = None
-    
+    inventory: list[InventorySlot] | None = None
+
     @classmethod
     def from_api_character(cls, api_character: Any) -> "Character":
         """Create Character from API CharacterSchema
-        
+
         Args:
             api_character: CharacterSchema instance from artifactsmmo-api-client
-            
+
         Returns:
             Character instance with all fields mapped from API response
         """
@@ -144,7 +145,7 @@ class Character(BaseModel):
                 )
                 for slot in api_character.inventory
             ]
-        
+
         # Create character with all API fields mapped
         return cls(
             name=api_character.name,
@@ -227,18 +228,18 @@ class Character(BaseModel):
             inventory_max_items=api_character.inventory_max_items,
             inventory=inventory_slots,
         )
-    
+
     @property
     def is_cooldown_ready(self) -> bool:
         """Check if character cooldown has expired"""
         return self.cooldown == 0
-    
+
     @property
     def inventory_space_available(self) -> int:
         """Calculate available inventory space"""
         used_slots = len(self.inventory) if self.inventory else 0
         return self.inventory_max_items - used_slots
-    
+
     @property
     def is_inventory_full(self) -> bool:
         """Check if inventory is full"""

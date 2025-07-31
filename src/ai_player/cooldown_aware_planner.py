@@ -17,15 +17,15 @@ class CooldownAwarePlanner(Planner):
 
     def __init__(self, cooldown_manager, *args, **kwargs):
         """Initialize CooldownAwarePlanner with cooldown management.
-        
+
         Parameters:
             cooldown_manager: CooldownManager instance for timing constraint validation
             *args: Additional arguments passed to parent Planner constructor
             **kwargs: Additional keyword arguments passed to parent Planner constructor
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor initializes the extended GOAP planner with cooldown
         awareness capabilities, enabling planning that considers character
         cooldown timing constraints for realistic action sequencing.
@@ -35,13 +35,13 @@ class CooldownAwarePlanner(Planner):
 
     def calculate_with_timing_constraints(self, character_name: str) -> list[dict[str, Any]]:
         """Generate plan considering current cooldown state.
-        
+
         Parameters:
             character_name: Name of the character for cooldown-aware planning
-            
+
         Return values:
             List of action dictionaries with optimal timing considering cooldowns
-            
+
         This method generates GOAP plans that account for character cooldown
         status, optimizing action timing and preventing invalid plans that
         would fail due to cooldown constraints in the AI player system.
@@ -58,14 +58,14 @@ class CooldownAwarePlanner(Planner):
 
     def filter_actions_by_cooldown(self, actions: Action_List, character_name: str) -> Action_List:
         """Filter out actions that require character to be off cooldown when character is on cooldown.
-        
+
         Parameters:
             actions: Action_List containing all possible actions
             character_name: Name of the character to check cooldown status
-            
+
         Return values:
             Action_List with cooldown-incompatible actions removed
-            
+
         This method filters the available action list to remove actions that
         require cooldown readiness when the character is currently on cooldown,
         preventing invalid planning attempts in the GOAP system.
@@ -93,13 +93,13 @@ class CooldownAwarePlanner(Planner):
 
     def estimate_plan_duration(self, plan: list[dict[str, Any]]) -> timedelta:
         """Estimate total time to execute plan including cooldowns.
-        
+
         Parameters:
             plan: List of action dictionaries representing the planned sequence
-            
+
         Return values:
             Timedelta representing estimated total execution time
-            
+
         This method calculates the expected time required to execute a complete
         action plan including individual action cooldowns and sequencing timing,
         enabling accurate planning and scheduling in the AI player system.
@@ -125,13 +125,13 @@ class CooldownAwarePlanner(Planner):
 
     def defer_planning_until_ready(self, character_name: str) -> datetime | None:
         """Return when planning should be deferred until character is off cooldown.
-        
+
         Parameters:
             character_name: Name of the character to check cooldown deferral timing
-            
+
         Return values:
             Datetime when planning can resume, or None if character is ready now
-            
+
         This method determines if GOAP planning should be deferred due to character
         cooldown status, returning the specific time when planning can safely resume
         to avoid generating invalid action plans.

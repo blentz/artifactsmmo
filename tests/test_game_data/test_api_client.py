@@ -149,11 +149,11 @@ class TestAPIClientWrapper:
                 def __init__(self):
                     self.name = "test_character"
                     self.level = 1
-            
+
             class MockData:
                 def __init__(self):
                     self.data = MockCharacter()
-            
+
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.data = MockData()
@@ -190,7 +190,7 @@ class TestAPIClientWrapper:
 
             with pytest.raises(ValueError, match="Rate limit exceeded"):
                 await wrapper.create_character("test_character", "men1")
-                
+
             # Verify that sleep was called with the retry-after value
             mock_sleep.assert_called_once_with(60.0)
 
@@ -232,13 +232,13 @@ class TestAPIClientWrapper:
             mock_character.alchemy_level = 1
             mock_character.alchemy_xp = 100
             mock_character.cooldown = 0
-            
+
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.data = mock_character
 
             mock_get.asyncio_detailed = AsyncMock(return_value=mock_response)
-            
+
             # Mock _process_response to return the character data directly
             mock_processed = Mock()
             mock_processed.data = mock_character
@@ -288,37 +288,48 @@ class TestAPIClientWrapper:
             class MockReason:
                 def __init__(self):
                     self.value = "move"
-            
+
             class MockCooldown:
                 def __init__(self):
-                    self.expiration = (datetime.now() + timedelta(seconds=5)).isoformat()
+                    self.expiration = datetime.now() + timedelta(seconds=5)  # Use datetime object, not string
                     self.total_seconds = 5
                     self.remaining_seconds = 5
                     self.reason = MockReason()
-            
+
             class MockCharacterData:
                 def __init__(self):
                     self.x = 25
                     self.y = 30
-                    self.cooldown = MockCooldown()
-            
+
             class MockData:
                 def __init__(self):
-                    self.data = MockCharacterData()
-            
+                    self.character = MockCharacterData()
+                    self.cooldown = MockCooldown()
+
+            # MockData represents the actual API response data
+            mock_data = MockData()
+
+            # The API client returns an object with a .data attribute containing the actual data
+            class MockParsedResponse:
+                def __init__(self):
+                    self.data = mock_data
+
             mock_response = Mock()
             mock_response.status_code = 200
-            mock_response.data = MockData()
-            mock_response.parsed = mock_response.data
+            mock_response.parsed = MockParsedResponse()
 
             mock_move.asyncio_detailed = AsyncMock(return_value=mock_response)
 
             wrapper = APIClientWrapper()
             result = await wrapper.move_character("test_character", 25, 30)
 
-            assert result == mock_response.parsed.data
+            # result should be a MovementResult object
+            assert hasattr(result, 'x')
+            assert hasattr(result, 'y')
+            assert hasattr(result, 'character_name')
             assert result.x == 25
             assert result.y == 30
+            assert result.character_name == "test_character"
 
     @pytest.mark.asyncio
     async def test_move_character_cooldown_error(self, mock_token_config):
@@ -356,18 +367,18 @@ class TestAPIClientWrapper:
             class MockReason:
                 def __init__(self):
                     self.value = "fight"
-            
+
             class MockCooldown:
                 def __init__(self):
-                    self.expiration = (datetime.now() + timedelta(seconds=8)).isoformat()
+                    self.expiration = datetime.now() + timedelta(seconds=8)
                     self.total_seconds = 8
                     self.remaining_seconds = 8
                     self.reason = MockReason()
-            
+
             class MockFight:
                 def __init__(self):
                     self.result = "win"
-            
+
             class MockFightData:
                 def __init__(self):
                     self.xp = 150
@@ -375,11 +386,11 @@ class TestAPIClientWrapper:
                     self.hp = 75
                     self.cooldown = MockCooldown()
                     self.fight = MockFight()
-            
+
             class MockData:
                 def __init__(self):
                     self.data = MockFightData()
-            
+
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.data = MockData()
@@ -450,7 +461,7 @@ class TestCooldownManager:
 
         # Mock API cooldown response
         mock_cooldown_data = Mock()
-        mock_cooldown_data.expiration = (datetime.now() + timedelta(seconds=30)).isoformat()
+        mock_cooldown_data.expiration = datetime.now() + timedelta(seconds=30)
         mock_cooldown_data.total_seconds = 30
         mock_cooldown_data.remaining_seconds = 25
         mock_cooldown_data.reason = Mock()
@@ -640,7 +651,7 @@ class TestAPIClientIntegration:
 
             # Simulate action that causes cooldown
             mock_cooldown_data = Mock()
-            mock_cooldown_data.expiration = (datetime.now() + timedelta(seconds=10)).isoformat()
+            mock_cooldown_data.expiration = datetime.now() + timedelta(seconds=10)
             mock_cooldown_data.total_seconds = 10
             mock_cooldown_data.remaining_seconds = 10
             mock_cooldown_data.reason = Mock()
@@ -709,7 +720,7 @@ class TestAPIClientErrorHandling:
              patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
 
             client = APIClientWrapper("test_token")
-            
+
             # Test with invalid skin that will trigger ValueError
             with pytest.raises(ValueError, match="Invalid skin"):
                 await client.create_character("test_char", "invalid_skin_code")
@@ -728,15 +739,15 @@ class TestAPIClientErrorHandling:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
-            
-            # Create response without data attribute  
+
+            # Create response without data attribute
             mock_response = Mock()
             del mock_response.data
             mock_process.return_value = mock_response
-            
+
             client = APIClientWrapper("test_token")
             result = await client.get_all_resources()
-            
+
             # Should return empty list as fallback
             assert result == []
 
@@ -750,12 +761,12 @@ class TestAPIClientErrorHandling:
              patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
 
             client = APIClientWrapper("test_token")
-            
+
             # Mock 400 bad request response
             mock_response = Mock()
             mock_response.status_code = 400
             mock_response.content = b"Bad request error"
-            
+
             with pytest.raises(ValueError, match="API error 400: Bad request error"):
                 await client._process_response(mock_response)
 
@@ -769,11 +780,11 @@ class TestAPIClientErrorHandling:
              patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
 
             client = APIClientWrapper("test_token")
-            
+
             # Mock 500 server error response
             mock_response = Mock()
             mock_response.status_code = 500
             mock_response.content = b"Internal server error"
-            
+
             with pytest.raises(ValueError, match="API error 500: Internal server error"):
                 await client._process_response(mock_response)

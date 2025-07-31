@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from src.ai_player.ai_player import AIPlayer
-from src.ai_player.state.game_state import GameState
 from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import GameState
 
 
 class TestAIPlayerInitialization:
@@ -181,7 +181,7 @@ class TestAIPlayerGoalManagement:
         assert ai_player._current_goal == valid_goal
 
         # Invalid goal with string key
-        invalid_goal = {"invalid_key": 10}  
+        invalid_goal = {"invalid_key": 10}
         with pytest.raises(ValueError, match="Goal key invalid_key is not a GameState enum"):
             await ai_player.set_goal(invalid_goal)  # type: ignore
 
@@ -879,21 +879,21 @@ class TestAIPlayerIntegration:
         # Mock the main_loop to avoid infinite loop while still testing the flow
         original_main_loop = ai_player.main_loop
         loop_iterations = 0
-        
+
         async def mock_main_loop() -> None:
             nonlocal loop_iterations
             ai_player._running = True
-            
+
             # Simulate one cycle of the main loop
             while ai_player._running and not ai_player._stop_requested and loop_iterations < 2:
                 loop_iterations += 1
-                
+
                 # Get current state
                 current_state = await state_manager.get_current_state()
-                
+
                 # Handle emergency situations
                 await ai_player.handle_emergency(current_state)
-                
+
                 # Plan actions
                 if ai_player.should_replan(current_state) or ai_player._current_plan is None:
                     goal = goal_manager.select_next_goal(current_state)
@@ -901,7 +901,7 @@ class TestAIPlayerIntegration:
                     plan = await ai_player.plan_actions(current_state, goal)
                     ai_player._current_plan = plan
                     ai_player._execution_stats["replanning_count"] += 1
-                
+
                 # Execute plan
                 if ai_player._current_plan:
                     success = await ai_player.execute_plan(ai_player._current_plan)
@@ -909,13 +909,13 @@ class TestAIPlayerIntegration:
                         ai_player._current_plan = None
                     else:
                         ai_player._current_plan = None
-                
+
                 # Stop after achieving goal or completing iterations
                 if loop_iterations >= 2:
                     ai_player._stop_requested = True
-                    
+
                 await asyncio.sleep(0.01)  # Brief pause
-            
+
             ai_player._running = False
 
         # Replace main_loop temporarily

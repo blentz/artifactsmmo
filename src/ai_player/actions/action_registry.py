@@ -11,8 +11,8 @@ import pkgutil
 from pathlib import Path
 from typing import Any
 
-from ..state.game_state import GameState
 from ..state.character_game_state import CharacterGameState
+from ..state.game_state import GameState
 from .action_factory import ActionFactory
 from .base_action import BaseAction
 
@@ -222,7 +222,7 @@ class ActionRegistry:
         """
         # Debug: collect all action names for debugging
         all_action_names = []
-        
+
         # Search through all registered factories
         for action_class, factory in self._action_factories.items():
             factory_actions = factory.create_instances(game_data, current_state)
@@ -230,7 +230,7 @@ class ActionRegistry:
                 all_action_names.append(action.name)
                 if action.name == name:
                     return action
-        
+
         # Debug logging for missing actions
         print(f"DEBUG: Action '{name}' not found. Available actions: {all_action_names[:10]}...")
         return None

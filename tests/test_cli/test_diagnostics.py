@@ -273,8 +273,9 @@ class TestDiagnoseStateMethods:
     @pytest.mark.asyncio
     async def test_diagnose_state_with_api_client(self):
         """Test state diagnosis with API client"""
-        from src.ai_player.state.game_state import GameState, CharacterGameState
         from unittest.mock import patch
+
+        from src.ai_player.state.game_state import CharacterGameState, GameState
 
         # Mock character data
         mock_character_data = Mock()
@@ -620,7 +621,7 @@ class TestDiagnosePlanMethods:
         # Mock goal manager methods to simulate unreachable goal
         mock_goal_manager.select_next_goal.return_value = {"target_state": {"level": 100}}
         mock_goal_manager.plan_actions = AsyncMock(return_value=[])  # Empty plan = unreachable
-        
+
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         # Mock all the planning diagnostic methods
@@ -647,7 +648,7 @@ class TestDiagnosePlanMethods:
         # Mock goal manager methods to simulate successful planning
         mock_goal_manager.select_next_goal.return_value = {"target_state": {"level": 5}}
         mock_goal_manager.plan_actions = AsyncMock(return_value=[{"name": "action1", "cost": 5}])  # Non-empty plan = success
-        
+
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         mock_planning_steps = {

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.game_data.cache_manager import CacheManager, CacheMetadata
-from src.game_data.models import GameItem, GameMonster, GameMap, GameResource, GameNPC
+from src.game_data.models import GameItem, GameMap, GameMonster, GameNPC, GameResource
 from tests.fixtures.api_responses import GameDataFixtures
 
 
@@ -218,7 +218,7 @@ class TestCacheManager:
             {"code": "merchant", "name": "Town Merchant", "description": "A friendly merchant"},
             {"code": "blacksmith", "name": "Town Blacksmith", "description": "A skilled blacksmith"}
         ]
-        
+
         for info in npc_info:
             mock_npc = Mock()
             # Set up attributes for GameNPC.from_api_npc transformation

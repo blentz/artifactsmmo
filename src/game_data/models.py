@@ -7,21 +7,21 @@ convention while maintaining the same import interface.
 """
 
 # Import all models from their separate files
+from .character import Character, InventorySlot
 from .cooldown_info import CooldownInfo
 from .game_item import GameItem
-from .game_monster import GameMonster
 from .game_map import GameMap
-from .game_resource import GameResource
+from .game_monster import GameMonster
 from .game_npc import GameNPC
+from .game_resource import GameResource
 from .map_content import MapContent
 from .movement_result import MovementResult
-from .character import Character, InventorySlot
 
 # Re-export all models for backwards compatibility
 __all__ = [
     "CooldownInfo",
     "GameItem",
-    "GameMonster", 
+    "GameMonster",
     "GameMap",
     "GameResource",
     "GameNPC",

@@ -6,26 +6,26 @@ and game data synchronization with the ArtifactsMMO API.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, Mock
 from typing import Any, Dict, Optional
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.game_data.api_client import APIClientWrapper, CooldownManager, TokenConfig
 from src.game_data.cache_manager import CacheManager, CacheMetadata
-from tests.fixtures.api_responses import APIResponseFixtures, GameDataFixtures, ErrorResponseFixtures
+from tests.fixtures.api_responses import APIResponseFixtures, ErrorResponseFixtures, GameDataFixtures
 
 
 class GameDataTestUtils:
     """Test utilities specific to game_data component testing"""
-    
+
     @staticmethod
-    def create_mock_token_config(token: Optional[str] = None) -> TokenConfig:
+    def create_mock_token_config(token: str | None = None) -> TokenConfig:
         """Create a mock TokenConfig for testing"""
         if token is None:
             token = "a" * 32  # Valid 32-character token
         return TokenConfig(token=token)
-    
+
     @staticmethod
     def create_mock_api_client(authenticated: bool = True) -> Mock:
         """Create a mock APIClientWrapper for testing"""
@@ -34,28 +34,28 @@ class GameDataTestUtils:
         mock_client.token_config = GameDataTestUtils.create_mock_token_config() if authenticated else None
         mock_client.cooldown_manager = Mock(spec=CooldownManager)
         return mock_client
-    
+
     @staticmethod
     def create_mock_cache_metadata(
-        last_updated: Optional[datetime] = None,
+        last_updated: datetime | None = None,
         cache_version: str = "1.0.0",
-        data_sources: Optional[Dict[str, Any]] = None
+        data_sources: dict[str, Any] | None = None
     ) -> CacheMetadata:
         """Create mock cache metadata for testing"""
         if last_updated is None:
             last_updated = datetime.now()
         if data_sources is None:
             data_sources = {}
-        
+
         return CacheMetadata(
             last_updated=last_updated,
             cache_version=cache_version,
             data_sources=data_sources
         )
-    
+
     @staticmethod
     def create_mock_cache_manager(
-        cache_dir: Optional[str] = None,
+        cache_dir: str | None = None,
         has_cached_data: bool = True
     ) -> Mock:
         """Create a mock CacheManager for testing"""
@@ -64,7 +64,7 @@ class GameDataTestUtils:
         mock_cache.has_cached_data = Mock(return_value=has_cached_data)
         mock_cache.metadata = GameDataTestUtils.create_mock_cache_metadata()
         return mock_cache
-    
+
     @staticmethod
     def create_mock_cooldown_manager(
         has_active_cooldowns: bool = False,
@@ -81,9 +81,9 @@ class GameDataTestUtils:
 
 class GameDataTestFixtures:
     """Test fixtures specific to game_data component"""
-    
+
     @staticmethod
-    def get_test_character_data() -> Dict[str, Any]:
+    def get_test_character_data() -> dict[str, Any]:
         """Get standardized test character data"""
         response_mock = APIResponseFixtures.get_character_response("test_char", level=5)
         # Extract the character data from the mock response
@@ -103,24 +103,24 @@ class GameDataTestFixtures:
             "account": "test_account",
             "skin": "men1"
         }
-    
+
     @staticmethod
-    def get_test_game_data() -> list[Dict[str, Any]]:
+    def get_test_game_data() -> list[dict[str, Any]]:
         """Get standardized test game data"""
         return GameDataFixtures.get_items_data()
-    
+
     @staticmethod
     def get_test_error_response() -> Mock:
         """Get standardized test error response"""
         return ErrorResponseFixtures.get_rate_limit_error()
-    
+
     @staticmethod
     def get_expired_cache_metadata() -> CacheMetadata:
         """Get cache metadata that is expired for testing"""
         return GameDataTestUtils.create_mock_cache_metadata(
             last_updated=datetime.now() - timedelta(hours=25)
         )
-    
+
     @staticmethod
     def get_fresh_cache_metadata() -> CacheMetadata:
         """Get cache metadata that is fresh for testing"""
@@ -141,7 +141,7 @@ __all__ = [
     "timedelta",
     # Re-export game_data components for testing
     "APIClientWrapper",
-    "CooldownManager", 
+    "CooldownManager",
     "TokenConfig",
     "CacheManager",
     "CacheMetadata",

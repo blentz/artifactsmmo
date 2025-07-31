@@ -7,9 +7,9 @@ inventory optimization actions and recommendations.
 
 from typing import Any
 
-from .state.game_state import GameState
-from .inventory_models import OptimizationRecommendation
 from .inventory_banking import BankManager
+from .inventory_models import OptimizationRecommendation
+from .state.game_state import GameState
 
 
 class InventoryActionExecutor:

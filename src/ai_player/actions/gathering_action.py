@@ -12,8 +12,8 @@ resource collection mechanics within the modular action system.
 from typing import Any, Optional
 
 from ...game_data.api_client import APIClientWrapper
-from ..state.game_state import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
+from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
 
 

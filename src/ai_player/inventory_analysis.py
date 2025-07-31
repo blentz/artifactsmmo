@@ -7,8 +7,8 @@ their value and priority for inventory management decisions.
 
 from typing import Any
 
-from .state.game_state import GameState
 from .inventory_models import ItemInfo, ItemPriority
+from .state.game_state import GameState
 
 
 class ItemAnalyzer:
@@ -21,14 +21,14 @@ class ItemAnalyzer:
 
     def analyze_item_priority(self, item: ItemInfo, character_state: dict[GameState, Any]) -> ItemPriority:
         """Determine item priority based on current character state and goals.
-        
+
         Parameters:
             item: ItemInfo object containing item details and metadata
             character_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             ItemPriority enum indicating item importance for current objectives
-            
+
         This method analyzes an item's relevance to current character goals,
         active tasks, and progression needs to assign appropriate priority
         for inventory management and resource allocation decisions.
@@ -91,14 +91,14 @@ class ItemAnalyzer:
 
     def calculate_item_utility(self, item: ItemInfo, character_state: dict[GameState, Any]) -> float:
         """Calculate utility score for item.
-        
+
         Parameters:
             item: ItemInfo object containing item details and metadata
             character_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Float representing item utility score (0.0 to 1.0)
-            
+
         This method calculates a numerical utility score for an item based
         on its value for current tasks, economic potential, and character
         progression needs, enabling quantitative inventory optimization.
@@ -155,14 +155,14 @@ class ItemAnalyzer:
 
     def is_item_needed_for_tasks(self, item_code: str, character_name: str) -> bool:
         """Check if item is needed for active or available tasks.
-        
+
         Parameters:
             item_code: Item identifier code to check requirements for
             character_name: Name of the character to check task requirements
-            
+
         Return values:
             Boolean indicating whether item is required for character tasks
-            
+
         This method checks if an item is required for the character's active
         tasks or upcoming task objectives, preventing accidental disposal
         of items needed for quest completion or progression.

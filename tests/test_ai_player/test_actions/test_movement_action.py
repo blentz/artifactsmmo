@@ -6,7 +6,7 @@ location validation, and API integration for character movement.
 """
 
 from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -14,7 +14,6 @@ from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.actions.movement_action import MovementAction
 from src.ai_player.actions.movement_action_factory import MovementActionFactory
 from src.ai_player.state.game_state import ActionResult, GameState
-from src.lib.httpstatus import ArtifactsHTTPStatus
 
 
 class TestMovementAction:
@@ -208,7 +207,7 @@ class TestMovementAction:
 
     @pytest.mark.asyncio
     async def test_movement_action_execute_cooldown_error(self) -> None:
-        """Test movement action execution with cooldown error"""
+        """Test movement action execution returns correct state changes"""
         action = MovementAction(20, 25)
 
         current_state = {
@@ -217,28 +216,14 @@ class TestMovementAction:
             GameState.CURRENT_Y: 15
         }
 
-        # Mock API client with cooldown error
-        with patch('src.ai_player.actions.movement_action.APIClientWrapper') as mock_api_client_class:
-            mock_api_client = Mock()
-            mock_api_client.move_character = AsyncMock()
+        # MovementAction.execute() doesn't make API calls - it returns expected state changes
+        # The ActionExecutor handles actual API calls and cooldown errors
+        result = await action.execute("test_character", current_state)
 
-            # Mock cooldown error response (HTTP 499)
-            class MockCooldownError(Exception):
-                def __init__(self, message: str):
-                    super().__init__(message)
-                    self.status_code = ArtifactsHTTPStatus["CHARACTER_COOLDOWN"]
-
-            cooldown_error = MockCooldownError("Character on cooldown")
-            mock_api_client.move_character.side_effect = cooldown_error
-
-            mock_api_client_class.return_value = mock_api_client
-
-            result = await action.execute("test_character", current_state)
-
-            assert isinstance(result, ActionResult)
-            assert result.success is True
-            assert "movement" in result.message.lower()
-            assert result.cooldown_seconds == 0  # Actual cooldown comes from API response  # Should indicate cooldown time
+        assert isinstance(result, ActionResult)
+        assert result.success is True
+        assert "movement" in result.message.lower()
+        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
 
     def test_movement_action_distance_calculation(self) -> None:
         """Test distance calculation for movement cost"""
@@ -368,31 +353,18 @@ class TestMovementActionValidation:
             GameState.HP_CURRENT: 90
         }
 
-        # Mock successful execution
-        with patch('src.ai_player.actions.movement_action.APIClientWrapper') as mock_api_client_class:
-            mock_api_client = Mock()
-            mock_api_client.move_character = AsyncMock()
+        # MovementAction.execute() returns expected state changes without API calls
+        result = await action.execute("test_char", current_state)
 
-            mock_response = Mock()
-            mock_response.x = target_x
-            mock_response.y = target_y
-            mock_response.cooldown = Mock()
-            mock_response.cooldown.total_seconds = 3
-            mock_api_client.move_character.return_value = mock_response
+        # Verify successful execution and state consistency
+        assert result.success is True
+        assert result.state_changes[GameState.CURRENT_X] == target_x
+        assert result.state_changes[GameState.CURRENT_Y] == target_y
+        assert result.state_changes[GameState.COOLDOWN_READY] is False
 
-            mock_api_client_class.return_value = mock_api_client
-
-            result = await action.execute("test_char", current_state)
-
-            if result.success:
-                # State changes should be consistent
-                assert result.state_changes[GameState.CURRENT_X] == target_x
-                assert result.state_changes[GameState.CURRENT_Y] == target_y
-                assert result.state_changes[GameState.COOLDOWN_READY] is False
-
-                # Should not modify unrelated state
-                assert GameState.HP_CURRENT not in result.state_changes
-                assert GameState.CHARACTER_LEVEL not in result.state_changes
+        # Should not modify unrelated state
+        assert GameState.HP_CURRENT not in result.state_changes
+        assert GameState.CHARACTER_LEVEL not in result.state_changes
 
 
 class TestMovementActionIntegration:
@@ -525,14 +497,14 @@ class TestMovementActionFactory:
         mock_content1 = Mock()
         mock_content1.type = "monster"
         mock_map1.content = mock_content1
-        
+
         mock_map2 = Mock()
         mock_map2.x = 15
         mock_map2.y = 20
         mock_content2 = Mock()
         mock_content2.type = "resource"
         mock_map2.content = mock_content2
-        
+
         mock_game_data.maps = [mock_map1, mock_map2]
 
         strategic = factory.get_strategic_locations(mock_game_data)
@@ -560,7 +532,22 @@ class TestMovementActionFactory:
             {'target_x': 0},                     # Invalid (missing target_y)
         ]
 
-        valid_positions = factory.filter_valid_positions(positions, None)
+        # Create mock game_data with maps
+        class MockMap:
+            def __init__(self, x: int, y: int):
+                self.x = x
+                self.y = y
+
+        class MockGameData:
+            def __init__(self):
+                self.maps = [
+                    MockMap(0, 0),
+                    MockMap(25, 25),
+                    # Note: (100, 100) and (-100, 0) are not included, making them invalid
+                ]
+
+        game_data = MockGameData()
+        valid_positions = factory.filter_valid_positions(positions, game_data)
 
         # Should only include the first two valid positions
         assert len(valid_positions) == 2
@@ -571,13 +558,38 @@ class TestMovementActionFactory:
         """Test generate_parameters method"""
         factory = MovementActionFactory()
 
-        current_state = {
-            GameState.CURRENT_X: 10,
-            GameState.CURRENT_Y: 15
-        }
+        # Create mock CharacterGameState (not dict)
+        from src.ai_player.state.character_game_state import CharacterGameState
+        current_state = CharacterGameState(
+            name="test_character",
+            level=1, xp=0, gold=0,
+            hp=100, max_hp=100, x=10, y=15,
+            mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
+            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
+            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
+            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0,
+            cooldown=0, cooldown_ready=True,
+            inventory_space_available=True, inventory_space_used=0
+        )
 
-        # Test with None game_data
-        parameters = factory.generate_parameters(None, current_state)
+        # Create mock game_data with nearby map tiles
+        class MockMap:
+            def __init__(self, x: int, y: int):
+                self.x = x
+                self.y = y
+                self.content = None  # No content for basic tiles
+
+        class MockGameData:
+            def __init__(self):
+                # Include tiles in a 3-tile radius around (10, 15)
+                self.maps = []
+                for x in range(7, 14):  # 10-3 to 10+3
+                    for y in range(12, 19):  # 15-3 to 15+3
+                        if abs(x - 10) + abs(y - 15) <= 3 and (x != 10 or y != 15):
+                            self.maps.append(MockMap(x, y))
+
+        game_data = MockGameData()
+        parameters = factory.generate_parameters(game_data, current_state)
         assert isinstance(parameters, list)
         assert len(parameters) > 0  # Should have nearby locations
 

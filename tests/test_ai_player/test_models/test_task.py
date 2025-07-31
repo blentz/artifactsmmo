@@ -6,9 +6,9 @@ including TaskReward and Task models with comprehensive validation and
 functionality testing.
 """
 
-import pytest
-from typing import Any, List
 from unittest.mock import Mock
+
+import pytest
 
 from src.ai_player.models.task import Task, TaskReward
 
@@ -19,7 +19,7 @@ class TestTaskReward:
     def test_task_reward_creation(self):
         """Test basic TaskReward creation"""
         reward = TaskReward(code="copper", quantity=5)
-        
+
         assert reward.code == "copper"
         assert reward.quantity == 5
 
@@ -27,25 +27,25 @@ class TestTaskReward:
         """Test TaskReward requires positive quantity"""
         with pytest.raises(ValueError):
             TaskReward(code="gold", quantity=0)
-        
+
         with pytest.raises(ValueError):
             TaskReward(code="gold", quantity=-1)
 
     def test_task_reward_gold_reward(self):
         """Test gold reward creation"""
         reward = TaskReward(code="gold", quantity=100)
-        
+
         assert reward.code == "gold"
         assert reward.quantity == 100
 
     def test_task_reward_assignment_validation(self):
         """Test TaskReward validates assignment"""
         reward = TaskReward(code="iron", quantity=3)
-        
+
         # Valid assignment
         reward.quantity = 10
         assert reward.quantity == 10
-        
+
         # Invalid assignment should raise error
         with pytest.raises(ValueError):
             reward.quantity = -5
@@ -57,7 +57,7 @@ class TestTaskBasicCreation:
     def test_task_minimal_creation(self):
         """Test Task creation with minimal required fields"""
         task = Task(code="task1", type="monsters", total=5)
-        
+
         assert task.code == "task1"
         assert task.type == "monsters"
         assert task.total == 5
@@ -70,7 +70,7 @@ class TestTaskBasicCreation:
         """Test Task creation with all optional fields"""
         rewards = [TaskReward(code="gold", quantity=100)]
         items = [{"code": "copper_ore", "quantity": 3}]
-        
+
         task = Task(
             code="task2",
             type="items",
@@ -80,7 +80,7 @@ class TestTaskBasicCreation:
             items=items,
             rewards=rewards
         )
-        
+
         assert task.code == "task2"
         assert task.type == "items"
         assert task.total == 10
@@ -93,18 +93,18 @@ class TestTaskBasicCreation:
         """Test Task requires positive total"""
         with pytest.raises(ValueError):
             Task(code="invalid", type="monsters", total=0)
-        
+
         with pytest.raises(ValueError):
             Task(code="invalid", type="monsters", total=-1)
 
     def test_task_assignment_validation(self):
         """Test Task validates field assignments"""
         task = Task(code="test", type="monsters", total=5)
-        
+
         # Valid assignment
         task.total = 10
         assert task.total == 10
-        
+
         # Invalid assignment should raise error
         with pytest.raises(ValueError):
             task.total = -1
@@ -119,9 +119,9 @@ class TestTaskFromApiTask:
         api_task.code = "api_task1"
         api_task.type = "monsters"
         api_task.total = 8
-        
+
         task = Task.from_api_task(api_task)
-        
+
         assert task.code == "api_task1"
         assert task.type == "monsters"
         assert task.total == 8
@@ -139,9 +139,9 @@ class TestTaskFromApiTask:
         api_task.skill = "woodcutting"
         api_task.level = 10
         api_task.items = [{"code": "ash_wood", "quantity": 5}]
-        
+
         task = Task.from_api_task(api_task)
-        
+
         assert task.code == "api_task2"
         assert task.type == "items"
         assert task.total == 15
@@ -156,19 +156,19 @@ class TestTaskFromApiTask:
         api_reward1 = Mock(spec=['code', 'quantity'])
         api_reward1.code = "gold"
         api_reward1.quantity = 200
-        
+
         api_reward2 = Mock(spec=['code', 'quantity'])
         api_reward2.code = "copper"
         api_reward2.quantity = 3
-        
+
         api_task = Mock(spec=['code', 'type', 'total', 'rewards'])
         api_task.code = "reward_task"
         api_task.type = "monsters"
         api_task.total = 12
         api_task.rewards = [api_reward1, api_reward2]
-        
+
         task = Task.from_api_task(api_task)
-        
+
         assert task.code == "reward_task"
         assert task.type == "monsters"
         assert task.total == 12
@@ -185,9 +185,9 @@ class TestTaskFromApiTask:
         api_task.code = "no_rewards"
         api_task.type = "items"
         api_task.total = 6
-        
+
         task = Task.from_api_task(api_task)
-        
+
         assert task.code == "no_rewards"
         assert task.rewards is None
 
@@ -198,9 +198,9 @@ class TestTaskFromApiTask:
         api_task.type = "monsters"
         api_task.total = 4
         api_task.rewards = []
-        
+
         task = Task.from_api_task(api_task)
-        
+
         assert task.code == "empty_rewards"
         assert task.rewards is None
 
@@ -210,9 +210,9 @@ class TestTaskFromApiTask:
         api_task.code = "minimal_api"
         api_task.type = "items"
         api_task.total = 3
-        
+
         task = Task.from_api_task(api_task)
-        
+
         assert task.code == "minimal_api"
         assert task.type == "items"
         assert task.total == 3
@@ -314,7 +314,7 @@ class TestTaskCharacterValidation:
         """Test character can complete task with no requirements"""
         task = Task(code="simple", type="monsters", total=5)
         character = Mock()
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -323,7 +323,7 @@ class TestTaskCharacterValidation:
         task = Task(code="level_task", type="monsters", total=5, level=10)
         character = Mock()
         character.level = 15
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -332,7 +332,7 @@ class TestTaskCharacterValidation:
         task = Task(code="level_task", type="monsters", total=5, level=10)
         character = Mock()
         character.level = 8
-        
+
         result = task.can_complete_with_character(character)
         assert result is False
 
@@ -340,7 +340,7 @@ class TestTaskCharacterValidation:
         """Test character without level attribute passes level check"""
         task = Task(code="level_task", type="monsters", total=5, level=10)
         character = Mock(spec=[])  # No attributes
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -349,7 +349,7 @@ class TestTaskCharacterValidation:
         task = Task(code="skill_task", type="items", total=5, skill="mining", level=8)
         character = Mock(spec=['mining_level'])
         character.mining_level = 10
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -358,7 +358,7 @@ class TestTaskCharacterValidation:
         task = Task(code="skill_task", type="items", total=5, skill="mining", level=8)
         character = Mock(spec=['mining_level'])
         character.mining_level = 5
-        
+
         result = task.can_complete_with_character(character)
         assert result is False
 
@@ -366,7 +366,7 @@ class TestTaskCharacterValidation:
         """Test character without skill attribute passes skill check"""
         task = Task(code="skill_task", type="items", total=5, skill="woodcutting", level=5)
         character = Mock(spec=[])  # No attributes
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -375,7 +375,7 @@ class TestTaskCharacterValidation:
         task = Task(code="skill_task", type="items", total=5, skill="fishing")
         character = Mock(spec=['fishing_level'])
         character.fishing_level = 3
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -385,7 +385,7 @@ class TestTaskCharacterValidation:
         character = Mock(spec=['level', 'mining_level'])
         character.level = 15
         character.mining_level = 15
-        
+
         result = task.can_complete_with_character(character)
         assert result is True
 
@@ -395,7 +395,7 @@ class TestTaskCharacterValidation:
         character = Mock(spec=['level', 'mining_level'])
         character.level = 15
         character.mining_level = 8
-        
+
         result = task.can_complete_with_character(character)
         assert result is False
 
@@ -406,14 +406,14 @@ class TestTaskRewardMethods:
     def test_get_gold_reward_no_rewards(self):
         """Test get_gold_reward returns 0 when no rewards"""
         task = Task(code="no_rewards", type="monsters", total=5)
-        
+
         result = task.get_gold_reward()
         assert result == 0
 
     def test_get_gold_reward_empty_rewards(self):
         """Test get_gold_reward returns 0 when rewards is empty list"""
         task = Task(code="empty_rewards", type="monsters", total=5, rewards=[])
-        
+
         result = task.get_gold_reward()
         assert result == 0
 
@@ -421,7 +421,7 @@ class TestTaskRewardMethods:
         """Test get_gold_reward returns correct amount for single gold reward"""
         rewards = [TaskReward(code="gold", quantity=150)]
         task = Task(code="gold_task", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_gold_reward()
         assert result == 150
 
@@ -433,7 +433,7 @@ class TestTaskRewardMethods:
             TaskReward(code="gold", quantity=50)
         ]
         task = Task(code="multi_gold", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_gold_reward()
         assert result == 150
 
@@ -444,7 +444,7 @@ class TestTaskRewardMethods:
             TaskReward(code="Gold", quantity=25)
         ]
         task = Task(code="case_gold", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_gold_reward()
         assert result == 100
 
@@ -455,21 +455,21 @@ class TestTaskRewardMethods:
             TaskReward(code="iron", quantity=5)
         ]
         task = Task(code="no_gold", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_gold_reward()
         assert result == 0
 
     def test_get_item_rewards_no_rewards(self):
         """Test get_item_rewards returns empty list when no rewards"""
         task = Task(code="no_rewards", type="monsters", total=5)
-        
+
         result = task.get_item_rewards()
         assert result == []
 
     def test_get_item_rewards_empty_rewards(self):
         """Test get_item_rewards returns empty list when rewards is empty"""
         task = Task(code="empty_rewards", type="monsters", total=5, rewards=[])
-        
+
         result = task.get_item_rewards()
         assert result == []
 
@@ -480,7 +480,7 @@ class TestTaskRewardMethods:
             TaskReward(code="GOLD", quantity=50)
         ]
         task = Task(code="only_gold", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_item_rewards()
         assert result == []
 
@@ -491,7 +491,7 @@ class TestTaskRewardMethods:
             TaskReward(code="iron", quantity=3)
         ]
         task = Task(code="only_items", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_item_rewards()
         assert len(result) == 2
         assert result[0].code == "copper"
@@ -508,7 +508,7 @@ class TestTaskRewardMethods:
             TaskReward(code="iron", quantity=3)
         ]
         task = Task(code="mixed_rewards", type="monsters", total=5, rewards=rewards)
-        
+
         result = task.get_item_rewards()
         assert len(result) == 2
         assert result[0].code == "copper"
@@ -523,10 +523,10 @@ class TestTaskEdgeCases:
     def test_task_with_none_skill_but_level(self):
         """Test task with None skill but level set behaves correctly"""
         task = Task(code="edge_case", type="items", total=5, skill=None, level=10)
-        
+
         assert not task.has_skill_requirement
         assert task.has_level_requirement
-        
+
         character = Mock()
         character.level = 15
         assert task.can_complete_with_character(character) is True
@@ -534,7 +534,7 @@ class TestTaskEdgeCases:
     def test_task_reward_string_representation(self):
         """Test TaskReward can be represented as string"""
         reward = TaskReward(code="gold", quantity=100)
-        
+
         # Should not raise an exception
         str_repr = str(reward)
         assert "gold" in str_repr
@@ -543,7 +543,7 @@ class TestTaskEdgeCases:
     def test_task_string_representation(self):
         """Test Task can be represented as string"""
         task = Task(code="test_task", type="monsters", total=5)
-        
+
         # Should not raise an exception
         str_repr = str(task)
         assert "test_task" in str_repr
@@ -556,9 +556,9 @@ class TestTaskEdgeCases:
             {"code": "copper_ore", "quantity": 5, "extra_field": "value"},
             {"code": "iron_ore", "quantity": 3}
         ]
-        
+
         task = Task(code="complex", type="items", total=10, items=complex_items)
-        
+
         assert task.has_item_requirements is True
         assert task.items == complex_items
 
@@ -567,7 +567,7 @@ class TestTaskEdgeCases:
         task1 = Task(code="same_task", type="monsters", total=5)
         task2 = Task(code="same_task", type="monsters", total=5)
         task3 = Task(code="different_task", type="monsters", total=5)
-        
+
         # Pydantic models should support equality comparison
         assert task1 == task2
         assert task1 != task3

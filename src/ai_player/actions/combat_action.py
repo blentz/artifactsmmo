@@ -9,30 +9,29 @@ The CombatAction demonstrates proper handling of combat mechanics and
 state management for monster fighting scenarios.
 """
 
-from typing import Any, Optional
+from typing import Any
 
-from ...game_data.api_client import APIClientWrapper
-from ..state.game_state import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
+from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
 
 
 class CombatAction(BaseAction):
     """Combat action for fighting monsters using GameState enum.
-    
+
     Handles monster fighting with proper HP and location preconditions,
     integrating with the API for actual combat execution.
     """
 
     def __init__(self, target_monster: str | None = None):
         """Initialize CombatAction with optional target monster.
-        
+
         Parameters:
             target_monster: Specific monster code to target, or None for any monster
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor creates a combat action instance for fighting monsters,
         optionally targeting a specific monster type for strategic combat
         planning within the AI player system.
@@ -42,13 +41,13 @@ class CombatAction(BaseAction):
     @property
     def name(self) -> str:
         """Unique combat action identifier.
-        
+
         Parameters:
             None (property)
-            
+
         Return values:
             String identifier for the combat action in GOAP planning
-            
+
         This property provides the unique action name used by the GOAP planner
         to identify and reference the combat action in planning sequences,
         including target monster information when specified.
@@ -60,13 +59,13 @@ class CombatAction(BaseAction):
     @property
     def cost(self) -> int:
         """GOAP cost for combat action.
-        
+
         Parameters:
             None (property)
-            
+
         Return values:
             Integer cost value for GOAP planning optimization
-            
+
         This property returns the planning cost for combat actions, enabling
         the GOAP planner to balance combat against other actions based on
         risk, reward, and strategic priorities.
@@ -75,13 +74,13 @@ class CombatAction(BaseAction):
 
     def get_preconditions(self) -> dict[GameState, Any]:
         """Combat preconditions using minimal meta-information GameStates.
-        
+
         Parameters:
             None
-            
+
         Return values:
             Dictionary with GameState enum keys defining combat requirements
-            
+
         This method returns the meta-information preconditions for combat,
         focusing on capability states rather than specific API values.
         Uses boolean flags to enable proper action chaining.
@@ -101,13 +100,13 @@ class CombatAction(BaseAction):
 
     def get_effects(self) -> dict[GameState, Any]:
         """Combat effects using minimal meta-information GameStates.
-        
+
         Parameters:
             None
-            
+
         Return values:
             Dictionary with GameState enum keys defining combat meta-outcomes
-            
+
         This method returns the meta-information effects of combat that enable
         action chaining for XP progression goals. Uses boolean flags to indicate
         capabilities achieved, not specific API values (respecting no-hardcode rule).
@@ -120,14 +119,14 @@ class CombatAction(BaseAction):
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
         """Execute combat via API client.
-        
+
         Parameters:
             character_name: Name of the character to engage in combat
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             ActionResult with success status, message, and combat outcome changes
-            
+
         This method executes the combat action through the API client, handling
         safety validation, combat mechanics, HP management, and result processing
         for monster fighting in the AI player system.
@@ -152,13 +151,13 @@ class CombatAction(BaseAction):
 
     def is_safe_to_fight(self, current_state: dict[GameState, Any]) -> bool:
         """Check if character has sufficient HP for combat.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Boolean indicating whether character can safely engage in combat
-            
+
         This method evaluates the character's current HP against safety
         thresholds to determine if combat engagement is safe, preventing
         character death and ensuring sustainable gameplay.
@@ -183,13 +182,13 @@ class CombatAction(BaseAction):
 
     def calculate_combat_risk(self, current_state: dict[GameState, Any]) -> float:
         """Calculate risk level for current combat scenario.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Float representing combat risk level (0.0 = safe, 1.0 = extremely risky)
-            
+
         This method analyzes character stats, equipment, HP percentage, and
         monster level to calculate combat risk, enabling strategic combat
         planning and retreat decision making.
@@ -235,13 +234,13 @@ class CombatAction(BaseAction):
 
     def should_retreat(self, current_state: dict[GameState, Any]) -> bool:
         """Determine if character should retreat from combat.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Boolean indicating whether character should disengage from combat
-            
+
         This method evaluates current combat conditions including HP level,
         enemy strength, and escape routes to determine if tactical retreat
         is necessary for character survival.
@@ -281,10 +280,10 @@ class CombatAction(BaseAction):
 
     def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.
-        
+
         Parameters:
             current_state: Dictionary with GameState enum keys and current values
-            
+
         Return values:
             Boolean indicating whether all preconditions are satisfied
         """
@@ -295,10 +294,10 @@ class CombatAction(BaseAction):
 
     def validate_preconditions(self) -> bool:
         """Validate that all preconditions use valid GameState enum keys.
-        
+
         Parameters:
             None (operates on self)
-            
+
         Return values:
             Boolean indicating whether all precondition keys are valid GameState enums
         """
@@ -310,10 +309,10 @@ class CombatAction(BaseAction):
 
     def validate_effects(self) -> bool:
         """Validate that all effects use valid GameState enum keys.
-        
+
         Parameters:
             None (operates on self)
-            
+
         Return values:
             Boolean indicating whether all effect keys are valid GameState enums
         """

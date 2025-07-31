@@ -56,13 +56,13 @@ class TaskReward:
 
     def calculate_value(self, character_level: int) -> float:
         """Calculate relative value of rewards for character.
-        
+
         Parameters:
             character_level: Current level of the character for value scaling
-            
+
         Return values:
             Float representing the relative value of these rewards for the character
-            
+
         This method calculates the total value of task rewards considering XP value
         at the character's current level, gold amount, and item values to enable
         task prioritization and optimal reward selection.
@@ -91,13 +91,13 @@ class TaskRequirement:
 
     def can_satisfy(self, character_state: dict[GameState, Any]) -> bool:
         """Check if character can satisfy requirements.
-        
+
         Parameters:
             character_state: Dictionary with GameState enum keys and current character state
-            
+
         Return values:
             Boolean indicating whether character meets all task requirements
-            
+
         This method validates that the character meets all requirements including
         minimum level, required skills, inventory items, and location constraints
         before task acceptance or completion using GameState enum validation.
@@ -150,13 +150,13 @@ class Task:
 
     def is_suitable_for_character(self, character_state: dict[GameState, Any]) -> bool:
         """Check if task is suitable for character's current state.
-        
+
         Parameters:
             character_state: Dictionary with GameState enum keys and current character state
-            
+
         Return values:
             Boolean indicating whether task is appropriate for character's current progression
-            
+
         This method evaluates task suitability considering character level, skills,
         equipment, and progression state to ensure task selection aligns with
         optimal character development and efficiency goals.
@@ -192,13 +192,13 @@ class Task:
 
     def calculate_efficiency_score(self, character_state: dict[GameState, Any]) -> float:
         """Calculate task efficiency (reward/time ratio).
-        
+
         Parameters:
             character_state: Dictionary with GameState enum keys and current character state
-            
+
         Return values:
             Float representing task efficiency score (higher = more efficient)
-            
+
         This method calculates the efficiency of completing this task considering
         reward value versus estimated completion time for the character's current
         state, enabling optimal task prioritization and selection.

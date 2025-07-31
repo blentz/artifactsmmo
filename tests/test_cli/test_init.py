@@ -7,7 +7,6 @@ and module initialization with comprehensive mocking of dependencies.
 """
 
 import argparse
-import asyncio
 import sys
 from unittest.mock import AsyncMock, Mock, patch
 

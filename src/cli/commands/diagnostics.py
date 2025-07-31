@@ -21,7 +21,7 @@ from ...ai_player.diagnostics.action_diagnostics import ActionDiagnostics
 from ...ai_player.diagnostics.planning_diagnostics import PlanningDiagnostics
 from ...ai_player.diagnostics.state_diagnostics import StateDiagnostics
 from ...ai_player.goal_manager import GoalManager
-from ...ai_player.state.game_state import GameState, CharacterGameState
+from ...ai_player.state.game_state import CharacterGameState, GameState
 from ...game_data.api_client import APIClientWrapper, CooldownManager
 
 
@@ -32,15 +32,15 @@ class DiagnosticCommands:
                  goal_manager: GoalManager | None = None,
                  api_client: APIClientWrapper | None = None):
         """Initialize diagnostic commands with utility instances.
-        
+
         Parameters:
             action_registry: Optional ActionRegistry instance for action diagnostics
             goal_manager: Optional GoalManager instance for planning diagnostics
             api_client: Optional APIClientWrapper instance for real character data
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor initializes the diagnostic command system with
         instances of state, action, and planning diagnostic utilities for
         comprehensive AI player troubleshooting and analysis.
@@ -66,19 +66,19 @@ class DiagnosticCommands:
 
     def _parse_goal_parameters(self, goal_string: str) -> dict[GameState, Any]:
         """Parse goal parameters using argparse for proper argument handling.
-        
+
         Parameters:
             goal_string: String containing goal parameters (e.g., "level=2 gold=1000")
-            
+
         Return values:
             Dictionary with GameState enum keys and parsed values
-            
+
         This method uses argparse to properly parse goal parameters from the
         command line format, handling proper type conversion and validation.
         """
         # Create a parser for goal parameters
         parser = argparse.ArgumentParser(description="Goal parameters", add_help=False)
-        
+
         def str_to_bool(v):
             """Convert string to boolean properly"""
             if isinstance(v, bool):
@@ -89,7 +89,7 @@ class DiagnosticCommands:
                 return False
             else:
                 raise argparse.ArgumentTypeError('Boolean value expected.')
-        
+
         # Add boolean goal parameters that align with goal manager implementation
         parser.add_argument('--gained-xp', type=str_to_bool, help='Goal: XP was gained this cycle')
         parser.add_argument('--can-gain-xp', type=str_to_bool, help='Goal: Character can gain XP')
@@ -98,7 +98,7 @@ class DiagnosticCommands:
         parser.add_argument('--cooldown-ready', type=str_to_bool, help='Goal: Cooldown is ready')
         parser.add_argument('--hp-low', type=str_to_bool, help='Goal: HP is low/high')
         parser.add_argument('--safe-to-fight', type=str_to_bool, help='Goal: Safe to fight')
-        
+
         # Convert simple format "level=2" to "--level 2" for argparse
         if '=' in goal_string and not goal_string.startswith('-'):
             # Convert "level=2 gold=1000" to "--level 2 --gold 1000"
@@ -112,11 +112,11 @@ class DiagnosticCommands:
         else:
             # Already in proper format or use shlex for complex parsing
             goal_args = shlex.split(goal_string)
-        
+
         try:
             args = parser.parse_args(goal_args)
             goal_state = {}
-            
+
             # Map parsed arguments to GameState enum keys (boolean-based goals)
             if getattr(args, 'gained_xp', None) is not None:
                 goal_state[GameState.GAINED_XP] = getattr(args, 'gained_xp')
@@ -132,9 +132,9 @@ class DiagnosticCommands:
                 goal_state[GameState.HP_LOW] = getattr(args, 'hp_low')
             if getattr(args, 'safe_to_fight', None) is not None:
                 goal_state[GameState.SAFE_TO_FIGHT] = getattr(args, 'safe_to_fight')
-                
+
             return goal_state
-            
+
         except SystemExit:
             # argparse calls sys.exit on error, catch it and re-raise as regular exception
             raise ValueError(f"Invalid goal parameters: {goal_string}")
@@ -143,14 +143,14 @@ class DiagnosticCommands:
 
     async def diagnose_state(self, character_name: str, validate_enum: bool = False) -> dict[str, Any]:
         """Diagnose current character state and validation.
-        
+
         Parameters:
             character_name: Name of the character to diagnose
             validate_enum: Whether to perform GameState enum validation
-            
+
         Return values:
             Dictionary containing state analysis, validation results, and diagnostics
-            
+
         This method provides comprehensive character state analysis including
         current values, GameState enum validation, and consistency checking
         for troubleshooting AI player state management issues.
@@ -183,7 +183,7 @@ class DiagnosticCommands:
         try:
             # Get real character data from API
             character_data = await self.api_client.get_character(character_name)
-            
+
             # Get map content for location-aware state
             game_map = await self.api_client.get_map(character_data.x, character_data.y)
 
@@ -238,14 +238,14 @@ class DiagnosticCommands:
 
     def diagnose_state_data(self, state_data: dict[GameState, Any], validate_enum: bool = False) -> dict[str, Any]:
         """Diagnose provided character state data.
-        
+
         Parameters:
             state_data: Dictionary with GameState enum keys and current values
             validate_enum: Whether to perform GameState enum validation
-            
+
         Return values:
             Dictionary containing state analysis, validation results, and diagnostics
-            
+
         This method provides comprehensive character state analysis using
         provided state data, performing validation, consistency checks,
         and generating diagnostic recommendations.
@@ -317,16 +317,16 @@ class DiagnosticCommands:
                              list_all: bool = False,
                              show_preconditions: bool = False) -> dict[str, Any]:
         """Diagnose available actions and their properties.
-        
+
         Parameters:
             character_name: Optional character name for state-specific action analysis
             show_costs: Whether to include GOAP action costs in output
             list_all: Whether to list all actions regardless of character state
             show_preconditions: Whether to display action preconditions and effects
-            
+
         Return values:
             Dictionary containing action analysis, availability, and property details
-            
+
         This method provides comprehensive analysis of available actions including
         their preconditions, effects, costs, and executability for troubleshooting
         GOAP planning and action availability issues.
@@ -354,6 +354,8 @@ class DiagnosticCommands:
         diagnosis["diagnostic_time"] = datetime.now().isoformat()
 
         if not self.action_diagnostics:
+            diagnosis["registry_validation"]["valid"] = False
+            diagnosis["registry_validation"]["errors"].append("ActionRegistry not available")
             diagnosis["recommendations"].append(
                 "Action diagnostics unavailable - ActionRegistry required for full analysis"
             )
@@ -385,7 +387,7 @@ class DiagnosticCommands:
                 game_data = await self.goal_manager.get_game_data()
                 all_actions = self.action_registry.generate_actions_for_state(current_state, game_data)
                 diagnosis["summary"]["total_actions"] = len(all_actions)
-                
+
                 costs = []
                 for action_instance in all_actions:
                     try:
@@ -402,7 +404,7 @@ class DiagnosticCommands:
                             },
                             "issues": []
                         }
-                        
+
                         # Test executability with current character state
                         try:
                             action_info["executable"] = action_instance.can_execute(current_state)
@@ -459,7 +461,7 @@ class DiagnosticCommands:
                 action_types = self.action_registry.get_all_action_types()
                 diagnosis["summary"]["total_actions"] = len(action_types)
                 diagnosis["recommendations"].append("Limited analysis - provide --character for full action generation")
-                
+
                 costs = []
                 for action_class in action_types:
                     try:
@@ -516,16 +518,16 @@ class DiagnosticCommands:
                           verbose: bool = False,
                           show_steps: bool = False) -> dict[str, Any]:
         """Diagnose GOAP planning process for specific goal.
-        
+
         Parameters:
             character_name: Name of the character for planning analysis
             goal: String representation of the goal to plan for
             verbose: Whether to include detailed planning algorithm steps
             show_steps: Whether to display each step in the generated plan
-            
+
         Return values:
             Dictionary containing planning analysis, step details, and optimization data
-            
+
         This method analyzes the GOAP planning process for a specific goal,
         providing detailed insights into plan generation, action selection,
         and optimization for troubleshooting planning issues.
@@ -558,11 +560,11 @@ class DiagnosticCommands:
                     character_state = await self.api_client.get_character(character_name)
                     # Get map content for location context
                     game_map = await self.api_client.get_map(character_state.x, character_state.y)
-                    
+
                     # Convert to internal state format
                     char_state = CharacterGameState.from_api_character(character_state, game_map.content, self.api_client.cooldown_manager)
                     typed_state = char_state.to_goap_state()
-                    start_state = GameState.validate_state_dict(typed_state)
+                    GameState.validate_state_dict(typed_state)
                 except Exception as e:
                     diagnosis["recommendations"].append(f"Failed to get character state: {str(e)}")
                     return diagnosis
@@ -620,7 +622,7 @@ class DiagnosticCommands:
 
             # Now use the actual goal manager to plan
             plan = await self.goal_manager.plan_actions(char_state, selected_goal)
-            
+
             diagnosis["planning_analysis"] = {
                 "planning_successful": len(plan) > 0,
                 "goal_reachable": len(plan) > 0,
@@ -631,38 +633,38 @@ class DiagnosticCommands:
             # Add detailed information if verbose
             if verbose and plan:
                 diagnosis["plan_steps"] = plan
-                
+
             # Use planning diagnostics if available
             if self.planning_diagnostics:
                 try:
                     # Pass CharacterGameState directly to diagnostics methods
-                    
+
                     # Test goal reachability
                     goal_reachable = await self.planning_diagnostics.test_goal_reachability(
                         char_state, goal_state
                     )
                     diagnosis["planning_analysis"]["goal_reachable"] = goal_reachable
-                    
+
                     # Identify bottlenecks
                     bottlenecks = await self.planning_diagnostics.identify_planning_bottlenecks(
                         char_state, goal_state
                     )
                     diagnosis["bottlenecks"] = bottlenecks
-                    
+
                     # Measure performance
                     performance = await self.planning_diagnostics.measure_planning_performance(
                         char_state, goal_state
                     )
                     diagnosis["performance_metrics"] = performance
-                    
+
                     # Analyze plan efficiency if we have a plan
                     if plan:
                         efficiency = self.planning_diagnostics.analyze_plan_efficiency(plan)
                         diagnosis["plan_efficiency"] = efficiency
-                    
+
                 except Exception as e:
                     diagnosis["recommendations"].append(f"Planning diagnostics error: {str(e)}")
-                
+
             # Generate recommendations based on analysis
             if not plan:
                 if not diagnosis["planning_analysis"].get("goal_reachable", True):
@@ -671,7 +673,7 @@ class DiagnosticCommands:
                     diagnosis["recommendations"].append("No plan found - goal may be unreachable")
             else:
                 diagnosis["recommendations"].append("Plan is efficient - no optimization needed")
-                
+
             # Add bottleneck recommendations
             if diagnosis.get("bottlenecks") and len(diagnosis["bottlenecks"]) > 0:
                 diagnosis["recommendations"].append(f"Found {len(diagnosis['bottlenecks'])} bottlenecks to address")
@@ -689,7 +691,7 @@ class DiagnosticCommands:
                           goal_level: int | None = None,
                           dry_run: bool = False) -> dict[str, Any]:
         """Test planning with mock scenarios and custom goals.
-        
+
         Parameters:
             mock_state_file: Optional path to JSON file containing mock character state
             character: Optional character name for real character testing
@@ -697,10 +699,10 @@ class DiagnosticCommands:
             start_level: Optional starting character level for simulation
             goal_level: Optional target level for planning simulation
             dry_run: Whether to simulate without API calls
-            
+
         Return values:
             Dictionary containing planning test results, scenarios, and performance metrics
-            
+
         This method enables testing of GOAP planning algorithms using mock scenarios
         and simulated character states, providing validation of planning logic without
         requiring live character data or API interactions.
@@ -768,17 +770,17 @@ class DiagnosticCommands:
                     if self.api_client:
                         api_character = await self.api_client.get_character(character)
                         game_map = await self.api_client.get_map(api_character.x, api_character.y)
-                        character_state = CharacterGameState.from_api_character(
+                        CharacterGameState.from_api_character(
                             api_character, game_map.content, self.api_client.cooldown_manager
                         )
-                        
+
                         # Test planning with real character state and custom goal
                         planning_result = await self.diagnose_plan(
                             character_name=character,
                             goal=goal,
                             verbose=False
                         )
-                        
+
                         test_results["scenarios_tested"].append({
                             "name": f"Custom Goal Test: {character} -> {goal}",
                             "success": planning_result.get("planning_successful", False),
@@ -787,7 +789,7 @@ class DiagnosticCommands:
                             "character": character,
                             "goal": goal
                         })
-                        
+
                         # Update overall success
                         if not planning_result.get("planning_successful", False):
                             test_results["overall_success"] = False
@@ -795,7 +797,7 @@ class DiagnosticCommands:
                     else:
                         test_results["issues"].append("API client required for character-based testing")
                         test_results["overall_success"] = False
-                        
+
                 except Exception as e:
                     test_results["issues"].append(f"Custom goal test failed: {str(e)}")
                     test_results["overall_success"] = False
@@ -902,13 +904,13 @@ class DiagnosticCommands:
 
     async def diagnose_weights(self, show_action_costs: bool = False) -> dict[str, Any]:
         """Diagnose action weights and GOAP configuration.
-        
+
         Parameters:
             show_action_costs: Whether to display detailed action cost breakdowns
-            
+
         Return values:
             Dictionary containing weight analysis, configuration validation, and optimization suggestions
-            
+
         This method analyzes the GOAP action weights and configuration settings
         to identify potential optimization opportunities, validate weight balance,
         and ensure effective planning performance for the AI player system.
@@ -935,6 +937,8 @@ class DiagnosticCommands:
         diagnosis["diagnostic_time"] = datetime.now().isoformat()
 
         if not self.action_diagnostics:
+            diagnosis["configuration_validation"]["valid"] = False
+            diagnosis["configuration_validation"]["errors"].append("ActionRegistry not available for weight analysis")
             diagnosis["recommendations"].append(
                 "Weight diagnostics unavailable - ActionRegistry required for analysis"
             )
@@ -1100,14 +1104,14 @@ class DiagnosticCommands:
 
     async def diagnose_cooldowns(self, character_name: str, monitor: bool = False) -> dict[str, Any]:
         """Diagnose cooldown management and timing.
-        
+
         Parameters:
             character_name: Name of the character to monitor cooldown status
             monitor: Whether to provide continuous cooldown monitoring
-            
+
         Return values:
             Dictionary containing cooldown status, timing analysis, and compliance metrics
-            
+
         This method analyzes character cooldown management including timing accuracy,
         API compliance, and cooldown prediction for troubleshooting timing issues
         and ensuring proper action execution scheduling.
@@ -1242,22 +1246,22 @@ class DiagnosticCommands:
 
     def format_state_output(self, diagnostic_result: dict[str, Any]) -> str:
         """Format state diagnostic results for CLI display.
-        
+
         Parameters:
             diagnostic_result: Full diagnostic result dictionary from diagnose_state()
-            
+
         Return values:
             Formatted string representation suitable for CLI output
-            
-        This method formats complete state diagnostic results into a human-readable 
+
+        This method formats complete state diagnostic results into a human-readable
         format for CLI display, including validation, statistics, and recommendations.
         """
         lines = []
-        
+
         # Header
         character_name = diagnostic_result.get("character_name", "Unknown")
         lines.append(f"=== STATE DIAGNOSTICS: {character_name} ===")
-        
+
         # API character data if available
         if "api_character_data" in diagnostic_result:
             lines.append("\n=== API CHARACTER DATA ===")
@@ -1269,26 +1273,26 @@ class DiagnosticCommands:
             position = char_data.get('position', {})
             lines.append(f"Position: ({position.get('x', 'N/A')}, {position.get('y', 'N/A')})")
             lines.append(f"Skin: {char_data.get('skin', 'N/A')}")
-        
+
         # State validation
         validation = diagnostic_result.get("state_validation", {})
         lines.append("\n=== STATE VALIDATION ===")
         lines.append(f"Valid: {validation.get('valid', 'Unknown')}")
-        
+
         issues = validation.get("issues", [])
         if issues:
             lines.append(f"Issues ({len(issues)}):")
             for issue in issues:
                 lines.append(f"  • {issue}")
-        
+
         missing_keys = validation.get("missing_required_keys", [])
         if missing_keys:
             lines.append(f"Missing required keys: {missing_keys}")
-        
+
         invalid_values = validation.get("invalid_values", [])
         if invalid_values:
             lines.append(f"Invalid values: {invalid_values}")
-        
+
         # State statistics
         stats = diagnostic_result.get("state_statistics", {})
         if stats:
@@ -1300,7 +1304,7 @@ class DiagnosticCommands:
             lines.append(f"Total skill levels: {stats.get('total_skill_levels', 0)}")
             lines.append(f"Average skill level: {stats.get('average_skill_level', 0):.1f}")
             lines.append(f"Progress to max: {stats.get('progress_to_max', 0):.1f}%")
-        
+
         # Cooldown status
         if "cooldown_status" in diagnostic_result:
             cooldown = diagnostic_result["cooldown_status"]
@@ -1309,74 +1313,74 @@ class DiagnosticCommands:
             lines.append(f"Remaining seconds: {cooldown.get('remaining_seconds', 'N/A')}")
             if cooldown.get('reason'):
                 lines.append(f"Reason: {cooldown['reason']}")
-        
+
         # Recommendations
         recommendations = diagnostic_result.get("recommendations", [])
         if recommendations:
             lines.append(f"\n=== RECOMMENDATIONS ({len(recommendations)}) ===")
             for rec in recommendations:
                 lines.append(f"  • {rec}")
-        
+
         return "\n".join(lines)
 
     def format_action_output(self, diagnostic_result: dict[str, Any]) -> str:
         """Format action diagnostic results for CLI display.
-        
+
         Parameters:
             diagnostic_result: Full diagnostic result dictionary from diagnose_actions()
-            
+
         Return values:
             Formatted string representation suitable for CLI output
-            
+
         This method formats complete action diagnostic results into a readable format
         for CLI display, including action analysis, summary, and recommendations.
         """
         # Handle empty or None input
         if not diagnostic_result:
             return "No action data to display"
-        
+
         lines = []
-        
+
         # Header
         character_name = diagnostic_result.get("character_name", "All Actions")
         lines.append(f"=== ACTION DIAGNOSTICS: {character_name} ===")
-        
+
         # Registry status
         registry_available = diagnostic_result.get("registry_available", False)
         lines.append(f"Action registry available: {registry_available}")
-        
+
         # Summary
         summary = diagnostic_result.get("summary", {})
         total_actions = summary.get("total_actions", 0)
         lines.append(f"Total actions analyzed: {total_actions}")
-        
+
         if total_actions > 0:
             executable_actions = summary.get("executable_actions", 0)
             cost_range = summary.get("cost_range", {})
             lines.append(f"Executable actions: {executable_actions}")
             lines.append(f"Cost range: {cost_range.get('min', 0)} - {cost_range.get('max', 0)}")
-            
+
             action_types = summary.get("action_types", {})
             if action_types:
                 lines.append(f"Action types: {', '.join(f'{k}({v})' for k, v in action_types.items())}")
-        
+
         # Registry validation
         registry_validation = diagnostic_result.get("registry_validation", {})
         valid = registry_validation.get("valid", True)
         lines.append(f"Registry validation: {'✓ Valid' if valid else '✗ Invalid'}")
-        
+
         errors = registry_validation.get("errors", [])
         if errors:
             lines.append(f"\nRegistry errors ({len(errors)}):")
             for error in errors:
                 lines.append(f"  • {error}")
-        
+
         warnings = registry_validation.get("warnings", [])
         if warnings:
             lines.append(f"\nRegistry warnings ({len(warnings)}):")
             for warning in warnings:
                 lines.append(f"  • {warning}")
-        
+
         # Individual action analysis
         actions_analyzed = diagnostic_result.get("actions_analyzed", [])
         if actions_analyzed:
@@ -1407,51 +1411,51 @@ class DiagnosticCommands:
                     lines.append("    Issues:")
                     for issue in action_info['issues']:
                         lines.append(f"      • {issue}")
-        
+
         # Recommendations
         recommendations = diagnostic_result.get("recommendations", [])
         if recommendations:
             lines.append(f"\n=== RECOMMENDATIONS ({len(recommendations)}) ===")
             for rec in recommendations:
                 lines.append(f"  • {rec}")
-        
+
         return "\n".join(lines)
 
     def format_planning_output(self, diagnostic_result: dict[str, Any]) -> str:
         """Format planning diagnostic results for CLI display.
-        
+
         Parameters:
             diagnostic_result: Full diagnostic result dictionary from diagnose_plan()
-            
+
         Return values:
             Formatted string representation suitable for CLI planning visualization
-            
+
         This method formats complete planning diagnostic results into a visual representation
         for CLI display, showing planning analysis, performance metrics, and recommendations.
         """
         # Handle empty or None input
         if not diagnostic_result:
             return "No planning data to display"
-        
+
         lines = []
-        
+
         # Header
         character_name = diagnostic_result.get("character_name", "Unknown")
         goal = diagnostic_result.get("goal", "Unknown")
         lines.append(f"=== PLANNING DIAGNOSTICS: {character_name} ===")
         lines.append(f"Goal: {goal}")
-        
+
         # Planning availability
         planning_available = diagnostic_result.get("planning_available", False)
         lines.append(f"Planning system available: {planning_available}")
-        
+
         # Planning analysis
         analysis = diagnostic_result.get("planning_analysis", {})
         if analysis:
             lines.append("\n=== PLANNING ANALYSIS ===")
             success = analysis.get('planning_successful', False)
             lines.append(f"Planning successful: {success}")
-            
+
             goal_reachable = analysis.get('goal_reachable', 'Unknown')
             lines.append(f"Goal reachable: {goal_reachable}")
 
@@ -1485,41 +1489,41 @@ class DiagnosticCommands:
                     step_num = transition.get('step', '?')
                     action_name = transition.get('action', 'Unknown')
                     lines.append(f"  Step {step_num}: {action_name}")
-        
+
         # Plan efficiency
         efficiency = diagnostic_result.get("plan_efficiency", {})
         if efficiency:
-            lines.append(f"\n=== PLAN EFFICIENCY ===")
+            lines.append("\n=== PLAN EFFICIENCY ===")
             efficiency_score = efficiency.get('efficiency_score', 0)
             lines.append(f"Efficiency score: {efficiency_score:.2f}")
-            
+
             suggestions = efficiency.get('optimization_suggestions', [])
             if suggestions:
                 lines.append("Optimization suggestions:")
                 for suggestion in suggestions:
                     lines.append(f"  • {suggestion}")
-        
+
         # Bottlenecks
         bottlenecks = diagnostic_result.get("bottlenecks", [])
         if bottlenecks:
             lines.append(f"\n=== BOTTLENECKS ({len(bottlenecks)}) ===")
             for bottleneck in bottlenecks:
                 lines.append(f"  • {bottleneck}")
-        
+
         # Performance metrics
         performance = diagnostic_result.get("performance_metrics", {})
         if performance:
-            lines.append(f"\n=== PERFORMANCE METRICS ===")
+            lines.append("\n=== PERFORMANCE METRICS ===")
             planning_time = performance.get('planning_time_seconds', 0)
             success = performance.get('success', False)
             performance_class = performance.get('performance_class', 'unknown')
             lines.append(f"Planning time: {planning_time:.3f}s")
             lines.append(f"Success: {success}")
             lines.append(f"Performance class: {performance_class}")
-            
+
             if 'error' in performance:
                 lines.append(f"Error: {performance['error']}")
-        
+
         # Recommendations
         recommendations = diagnostic_result.get("recommendations", [])
         if recommendations:
@@ -1531,13 +1535,13 @@ class DiagnosticCommands:
 
     def validate_state_keys(self, state_dict: dict[str, Any]) -> list[str]:
         """Validate that all state keys exist in GameState enum.
-        
+
         Parameters:
             state_dict: Dictionary with string keys representing game state
-            
+
         Return values:
             List of invalid state keys that don't exist in GameState enum
-            
+
         This method validates state dictionary keys against the GameState enum
         to identify invalid keys that could cause runtime errors, ensuring
         type safety throughout the state management system.

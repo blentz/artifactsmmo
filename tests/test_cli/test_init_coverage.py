@@ -5,16 +5,17 @@ This module specifically tests the utility functions and classes
 defined in the CLI test __init__.py module to ensure 100% coverage.
 """
 
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
 
 from tests.test_cli import (
+    ASYNC_CLI_TEST_TIMEOUT,
+    CLI_COMMAND_TIMEOUT,
+    CLI_TEST_TIMEOUT,
     CLIMockFactory,
     CLITestAssertions,
     CLITestHelpers,
-    CLI_TEST_TIMEOUT,
-    ASYNC_CLI_TEST_TIMEOUT,
-    CLI_COMMAND_TIMEOUT
 )
 
 
@@ -24,7 +25,7 @@ class TestCLIMockFactory:
     def test_create_cli_manager_mock(self):
         """Test CLI manager mock creation"""
         cli_manager = CLIMockFactory.create_cli_manager_mock()
-        
+
         assert cli_manager is not None
         assert hasattr(cli_manager, 'log_manager')
         assert hasattr(cli_manager, 'api_client')
@@ -47,7 +48,7 @@ class TestCLIMockFactory:
     def test_create_argument_parser_mock(self):
         """Test argument parser mock creation"""
         parser = CLIMockFactory.create_argument_parser_mock()
-        
+
         assert parser is not None
         assert parser.prog == "artifactsmmo-ai-player"
         assert parser.description == "ArtifactsMMO AI Player CLI"
@@ -60,7 +61,7 @@ class TestCLIMockFactory:
     def test_create_parsed_args_mock_defaults(self):
         """Test parsed arguments mock with defaults"""
         args = CLIMockFactory.create_parsed_args_mock()
-        
+
         assert args.command == "list-characters"
         assert args.log_level == 'INFO'
         assert args.token_file == 'TOKEN'
@@ -78,7 +79,7 @@ class TestCLIMockFactory:
             detailed=True,
             log_level="DEBUG"
         )
-        
+
         assert args.command == "create-character"
         assert args.name == "custom_char"
         assert args.skin == "women1"
@@ -88,7 +89,7 @@ class TestCLIMockFactory:
     def test_create_api_client_mock(self):
         """Test API client mock creation"""
         client = CLIMockFactory.create_api_client_mock()
-        
+
         assert client is not None
         assert hasattr(client, 'create_character')
         assert hasattr(client, 'delete_character')
@@ -97,7 +98,7 @@ class TestCLIMockFactory:
     def test_create_character_mock_defaults(self):
         """Test character mock with defaults"""
         character = CLIMockFactory.create_character_mock()
-        
+
         assert character.name == "test_character"
         assert character.level == 1
         assert character.x == 0
@@ -120,7 +121,7 @@ class TestCLIMockFactory:
             gold=500,
             xp=1000
         )
-        
+
         assert character.name == "custom_char"
         assert character.level == 5
         assert character.x == 10
@@ -133,7 +134,7 @@ class TestCLIMockFactory:
     def test_create_ai_player_mock(self):
         """Test AI player mock creation"""
         ai_player = CLIMockFactory.create_ai_player_mock("test_char")
-        
+
         assert ai_player.character_name == "test_char"
         assert hasattr(ai_player, 'start')
         assert hasattr(ai_player, 'stop')
@@ -145,7 +146,7 @@ class TestCLIMockFactory:
     def test_create_diagnostic_commands_mock(self):
         """Test diagnostic commands mock creation"""
         diagnostic = CLIMockFactory.create_diagnostic_commands_mock()
-        
+
         assert hasattr(diagnostic, 'diagnose_state')
         assert hasattr(diagnostic, 'diagnose_actions')
         assert hasattr(diagnostic, 'diagnose_plan')
@@ -153,7 +154,7 @@ class TestCLIMockFactory:
         assert hasattr(diagnostic, 'format_state_output')
         assert hasattr(diagnostic, 'format_action_output')
         assert hasattr(diagnostic, 'format_planning_output')
-        
+
         # Test return values
         assert diagnostic.diagnose_state() == {'state': 'valid'}
         assert diagnostic.diagnose_actions() == [{'action': 'move'}]
@@ -169,11 +170,11 @@ class TestCLITestAssertions:
         args = Mock()
         args.command = "test-command"
         args.name = "test_name"
-        
+
         # Should not raise exception
         CLITestAssertions.assert_command_parsed(
-            args, 
-            "test-command", 
+            args,
+            "test-command",
             {"name": "test_name"}
         )
 
@@ -181,7 +182,7 @@ class TestCLITestAssertions:
         """Test failed command parsing assertion"""
         args = Mock()
         args.command = "wrong-command"
-        
+
         with pytest.raises(AssertionError, match="Expected command"):
             CLITestAssertions.assert_command_parsed(args, "test-command")
 
@@ -190,11 +191,11 @@ class TestCLITestAssertions:
         args = Mock()
         args.name = "test_char"
         args.skin = "men1"
-        
+
         # Should not raise exception
         CLITestAssertions.assert_character_command_args(
-            args, 
-            character_name="test_char", 
+            args,
+            character_name="test_char",
             skin="men1"
         )
 
@@ -202,10 +203,10 @@ class TestCLITestAssertions:
         """Test failed character command args assertion"""
         args = Mock()
         args.name = "wrong_char"
-        
+
         with pytest.raises(AssertionError, match="Expected character name"):
             CLITestAssertions.assert_character_command_args(
-                args, 
+                args,
                 character_name="test_char"
             )
 
@@ -215,7 +216,7 @@ class TestCLITestAssertions:
         args.name = "ai_char"
         args.goal = "level_up"
         args.max_runtime = 60
-        
+
         # Should not raise exception
         CLITestAssertions.assert_ai_player_command_args(
             args,
@@ -230,7 +231,7 @@ class TestCLITestAssertions:
         args.name = "debug_char"
         args.verbose = True
         args.dry_run = False
-        
+
         # Should not raise exception
         CLITestAssertions.assert_diagnostic_command_args(
             args,
@@ -246,10 +247,10 @@ class TestCLITestAssertions:
             Mock(__str__=lambda x: "Test output message"),
             Mock(__str__=lambda x: "Another message")
         ]
-        
+
         # Should not raise exception
         CLITestAssertions.assert_cli_output_contains(
-            print_mock, 
+            print_mock,
             "Test output"
         )
 
@@ -259,10 +260,10 @@ class TestCLITestAssertions:
         print_mock.call_args_list = [
             Mock(__str__=lambda x: "TEST OUTPUT MESSAGE")
         ]
-        
+
         # Should not raise exception
         CLITestAssertions.assert_cli_output_contains(
-            print_mock, 
+            print_mock,
             "test output",
             case_sensitive=False
         )
@@ -273,10 +274,10 @@ class TestCLITestAssertions:
         print_mock.call_args_list = [
             Mock(__str__=lambda x: "Different message")
         ]
-        
+
         with pytest.raises(AssertionError, match="Expected text.*not found"):
             CLITestAssertions.assert_cli_output_contains(
-                print_mock, 
+                print_mock,
                 "Missing text"
             )
 
@@ -286,7 +287,7 @@ class TestCLITestAssertions:
         print_mock.call_args_list = [
             Mock(__str__=lambda x: "Error: Something went wrong")
         ]
-        
+
         # Should not raise exception
         CLITestAssertions.assert_error_message_printed(print_mock)
 
@@ -296,7 +297,7 @@ class TestCLITestAssertions:
         print_mock.call_args_list = [
             Mock(__str__=lambda x: "Success: Everything is fine")
         ]
-        
+
         with pytest.raises(AssertionError, match="No error message"):
             CLITestAssertions.assert_error_message_printed(print_mock)
 
@@ -306,7 +307,7 @@ class TestCLITestAssertions:
         print_mock.call_args_list = [
             Mock(__str__=lambda x: "Success: Operation completed")
         ]
-        
+
         # Should not raise exception
         CLITestAssertions.assert_success_message_printed(print_mock)
 
@@ -316,7 +317,7 @@ class TestCLITestAssertions:
         print_mock.call_args_list = [
             Mock(__str__=lambda x: "Error: Something failed")
         ]
-        
+
         with pytest.raises(AssertionError, match="No success message"):
             CLITestAssertions.assert_success_message_printed(print_mock)
 
@@ -327,7 +328,7 @@ class TestCLITestHelpers:
     def test_create_character_creation_scenario_defaults(self):
         """Test character creation scenario with defaults"""
         scenario = CLITestHelpers.create_character_creation_scenario()
-        
+
         assert 'args' in scenario
         assert 'expected_success' in scenario
         assert 'character_data' in scenario
@@ -343,7 +344,7 @@ class TestCLITestHelpers:
             skin="women1",
             should_succeed=False
         )
-        
+
         assert scenario['expected_success'] is False
         assert scenario['args'].name == 'custom_char'
         assert scenario['args'].skin == 'women1'
@@ -351,7 +352,7 @@ class TestCLITestHelpers:
     def test_create_ai_player_scenario_defaults(self):
         """Test AI player scenario with defaults"""
         scenario = CLITestHelpers.create_ai_player_scenario()
-        
+
         assert 'args' in scenario
         assert 'ai_player' in scenario
         assert 'expected_success' in scenario
@@ -367,7 +368,7 @@ class TestCLITestHelpers:
             max_runtime=120,
             should_succeed=False
         )
-        
+
         assert scenario['expected_success'] is False
         assert scenario['args'].name == 'custom_ai'
         assert scenario['args'].goal == 'level_up'
@@ -376,7 +377,7 @@ class TestCLITestHelpers:
     def test_create_diagnostic_scenario_defaults(self):
         """Test diagnostic scenario with defaults"""
         scenario = CLITestHelpers.create_diagnostic_scenario()
-        
+
         assert 'args' in scenario
         assert 'diagnostic_commands' in scenario
         assert 'expected_diagnostic_type' in scenario
@@ -391,7 +392,7 @@ class TestCLITestHelpers:
             character_name="debug_char",
             options={"verbose": True, "show_costs": True}
         )
-        
+
         assert scenario['expected_diagnostic_type'] == 'diagnose-actions'
         assert scenario['args'].command == 'diagnose-actions'
         assert scenario['args'].name == 'debug_char'
@@ -403,14 +404,14 @@ class TestCLITestHelpers:
         """Test CLI command execution simulation for create character"""
         cli_manager = Mock()
         cli_manager.handle_create_character = AsyncMock()
-        
+
         args = Mock()
         args.command = 'create-character'
-        
+
         result = await CLITestHelpers.simulate_cli_command_execution(
             cli_manager, 'create-character', args
         )
-        
+
         assert result['command_executed'] == 'create-character'
         assert result['args_used'] == args
         assert result['cli_manager_state'] == cli_manager
@@ -421,15 +422,15 @@ class TestCLITestHelpers:
         """Test CLI command execution with mock dependencies"""
         cli_manager = Mock()
         cli_manager.handle_list_characters = AsyncMock()
-        
+
         args = Mock()
         mock_api_client = Mock()
-        
+
         result = await CLITestHelpers.simulate_cli_command_execution(
-            cli_manager, 'list-characters', args, 
+            cli_manager, 'list-characters', args,
             {'api_client': mock_api_client}
         )
-        
+
         assert cli_manager.api_client == mock_api_client
         cli_manager.handle_list_characters.assert_called_once_with(args)
 
@@ -441,7 +442,7 @@ class TestCLITestHelpers:
             'run-character', 'stop-character', 'status-character',
             'diagnose-state', 'diagnose-actions', 'diagnose-plan', 'test-planning'
         ]
-        
+
         for command in commands_to_test:
             cli_manager = Mock()
             # Set up all the handler methods
@@ -455,13 +456,13 @@ class TestCLITestHelpers:
             cli_manager.handle_diagnose_actions = AsyncMock()
             cli_manager.handle_diagnose_plan = AsyncMock()
             cli_manager.handle_test_planning = AsyncMock()
-            
+
             args = Mock()
-            
+
             result = await CLITestHelpers.simulate_cli_command_execution(
                 cli_manager, command, args
             )
-            
+
             assert result['command_executed'] == command
             assert result['args_used'] == args
             assert result['cli_manager_state'] == cli_manager
@@ -469,10 +470,10 @@ class TestCLITestHelpers:
     def test_create_argument_parsing_test_cases(self):
         """Test argument parsing test cases creation"""
         test_cases = CLITestHelpers.create_argument_parsing_test_cases()
-        
+
         assert isinstance(test_cases, list)
         assert len(test_cases) > 0
-        
+
         # Check first test case structure
         first_case = test_cases[0]
         assert 'name' in first_case
@@ -495,10 +496,10 @@ class TestCLITestHelpers:
     def test_create_error_scenarios(self):
         """Test error scenarios creation"""
         error_scenarios = CLITestHelpers.create_error_scenarios()
-        
+
         assert isinstance(error_scenarios, list)
         assert len(error_scenarios) > 0
-        
+
         # Check first error scenario structure
         first_scenario = error_scenarios[0]
         assert 'name' in first_scenario
@@ -578,12 +579,21 @@ class TestCLIFixtures:
     def test_fixture_functions_direct(self):
         """Test fixture functions directly to ensure 100% coverage"""
         from tests.test_cli import (
-            cli_mock_factory, cli_assertions, cli_helpers, mock_cli_manager,
-            mock_argument_parser, mock_api_client, mock_character, mock_ai_player,
-            mock_diagnostic_commands, sample_parsed_args, character_creation_scenario,
-            ai_player_scenario, diagnostic_scenario
+            ai_player_scenario,
+            character_creation_scenario,
+            cli_assertions,
+            cli_helpers,
+            cli_mock_factory,
+            diagnostic_scenario,
+            mock_ai_player,
+            mock_api_client,
+            mock_argument_parser,
+            mock_character,
+            mock_cli_manager,
+            mock_diagnostic_commands,
+            sample_parsed_args,
         )
-        
+
         # Test each fixture function exists and is callable
         assert callable(cli_mock_factory)
         assert callable(cli_assertions)
@@ -621,14 +631,14 @@ class TestCLIIntegrationScenarios:
             character_name="workflow_char",
             skin="men1"
         )
-        
+
         # Validate scenario
         cli_assertions.assert_command_parsed(
             creation_scenario['args'],
             'create-character',
             {'name': 'workflow_char', 'skin': 'men1'}
         )
-        
+
         assert creation_scenario['expected_success'] is True
 
     @pytest.mark.asyncio
@@ -640,7 +650,7 @@ class TestCLIIntegrationScenarios:
             goal="level_up",
             max_runtime=60
         )
-        
+
         # Validate scenario
         cli_assertions.assert_ai_player_command_args(
             ai_scenario['args'],
@@ -648,7 +658,7 @@ class TestCLIIntegrationScenarios:
             goal="level_up",
             max_runtime=60
         )
-        
+
         assert ai_scenario['expected_success'] is True
 
     @pytest.mark.asyncio
@@ -660,40 +670,40 @@ class TestCLIIntegrationScenarios:
             character_name="diag_char",
             options={"verbose": True, "show_steps": True}
         )
-        
+
         # Validate scenario
         cli_assertions.assert_diagnostic_command_args(
             diag_scenario['args'],
             character_name="diag_char",
             verbose=True
         )
-        
+
         assert diag_scenario['expected_diagnostic_type'] == "diagnose-plan"
 
     def test_error_handling_scenarios(self, cli_helpers):
         """Test error handling scenarios"""
         error_scenarios = cli_helpers.create_error_scenarios()
-        
+
         # Test each error scenario has required fields
         for scenario in error_scenarios:
             assert 'name' in scenario
             assert 'error_type' in scenario
             assert 'error_message' in scenario
             assert 'expected_error_text' in scenario
-            
+
             # Verify error types are exception classes
             assert issubclass(scenario['error_type'], BaseException)
 
     def test_argument_parsing_test_cases(self, cli_helpers):
         """Test argument parsing test case generation"""
         test_cases = cli_helpers.create_argument_parsing_test_cases()
-        
+
         # Verify structure of each test case
         for case in test_cases:
             assert 'name' in case
             assert 'args' in case
             assert 'expected_command' in case
             assert 'expected_valid' in case
-            
+
             # Verify args is a list
             assert isinstance(case['args'], list)

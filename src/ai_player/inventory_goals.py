@@ -7,8 +7,8 @@ based on inventory optimization needs for the AI player.
 
 from typing import Any
 
-from .state.game_state import GameState
 from .inventory_optimization import InventoryOptimizer
+from .state.game_state import GameState
 
 
 class InventoryGoalGenerator:

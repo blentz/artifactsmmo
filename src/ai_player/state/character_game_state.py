@@ -51,7 +51,7 @@ class CharacterGameState(BaseModel):
     # Action state
     cooldown: int = Field(ge=0)
     cooldown_ready: bool = True
-    
+
     # Capability states
     can_fight: bool = True
     can_gather: bool = True
@@ -63,7 +63,7 @@ class CharacterGameState(BaseModel):
     can_bank: bool = True
     can_gain_xp: bool = True
     xp_source_available: bool = False
-    
+
     # Derived states
     at_monster_location: bool = False
     at_resource_location: bool = False
@@ -74,7 +74,7 @@ class CharacterGameState(BaseModel):
     inventory_space_available: bool = True
     inventory_space_used: int = Field(ge=0, default=0)
     gained_xp: bool = False
-    
+
     # Additional states required by actions
     enemy_nearby: bool = False
     resource_available: bool = False
@@ -179,7 +179,7 @@ class CharacterGameState(BaseModel):
             cooldown_ready = character.cooldown == 0
         hp_low = character.hp < (character.max_hp * 0.3)
         hp_critical = character.hp < (character.max_hp * 0.1)
-        
+
         # Determine location states based on map content
         at_monster_location = False
         at_resource_location = False
@@ -187,7 +187,7 @@ class CharacterGameState(BaseModel):
         xp_source_available = False  # XP source available at this location
         enemy_nearby = False  # Enemy at current location
         resource_available = False  # Resource at current location
-        
+
         if map_content:
             if map_content.type == "monster":
                 at_monster_location = True
@@ -201,7 +201,7 @@ class CharacterGameState(BaseModel):
             elif map_content.type == "workshop":
                 xp_source_available = True  # Workshops are XP sources (via crafting)
             # Keep at_safe_location=True for workshops, tasks_master, etc.
-        
+
         return cls(
             name=character.name,
             level=character.level,
@@ -256,18 +256,18 @@ class CharacterGameState(BaseModel):
 
     def get(self, key: GameState, default=None):
         """Get value by GameState enum key for compatibility with existing code.
-        
+
         Parameters:
             key: GameState enum key to look up
             default: Default value if key not found
-            
+
         Return values:
             The value for the specified GameState key, or default if not found
         """
         # Create mapping from GameState enum to field names
         state_to_field = {
             GameState.CHARACTER_LEVEL: 'level',
-            GameState.CHARACTER_XP: 'xp', 
+            GameState.CHARACTER_XP: 'xp',
             GameState.CHARACTER_GOLD: 'gold',
             GameState.HP_CURRENT: 'hp',
             GameState.HP_MAX: 'max_hp',
@@ -275,14 +275,14 @@ class CharacterGameState(BaseModel):
             GameState.CURRENT_Y: 'y',
             GameState.MINING_LEVEL: 'mining_level',
             GameState.MINING_XP: 'mining_xp',
-            GameState.WOODCUTTING_LEVEL: 'woodcutting_level', 
+            GameState.WOODCUTTING_LEVEL: 'woodcutting_level',
             GameState.WOODCUTTING_XP: 'woodcutting_xp',
             GameState.FISHING_LEVEL: 'fishing_level',
             GameState.FISHING_XP: 'fishing_xp',
             GameState.WEAPONCRAFTING_LEVEL: 'weaponcrafting_level',
             GameState.WEAPONCRAFTING_XP: 'weaponcrafting_xp',
             GameState.GEARCRAFTING_LEVEL: 'gearcrafting_level',
-            GameState.GEARCRAFTING_XP: 'gearcrafting_xp', 
+            GameState.GEARCRAFTING_XP: 'gearcrafting_xp',
             GameState.JEWELRYCRAFTING_LEVEL: 'jewelrycrafting_level',
             GameState.JEWELRYCRAFTING_XP: 'jewelrycrafting_xp',
             GameState.COOKING_LEVEL: 'cooking_level',
@@ -291,7 +291,7 @@ class CharacterGameState(BaseModel):
             GameState.ALCHEMY_XP: 'alchemy_xp',
             GameState.COOLDOWN_READY: 'cooldown_ready',
             GameState.CAN_FIGHT: 'can_fight',
-            GameState.CAN_GATHER: 'can_gather', 
+            GameState.CAN_GATHER: 'can_gather',
             GameState.CAN_CRAFT: 'can_craft',
             GameState.CAN_TRADE: 'can_trade',
             GameState.CAN_MOVE: 'can_move',
@@ -307,14 +307,14 @@ class CharacterGameState(BaseModel):
             GameState.INVENTORY_SPACE_AVAILABLE: 'inventory_space_available',
             GameState.INVENTORY_SPACE_USED: 'inventory_space_used',
             GameState.GAINED_XP: 'gained_xp',
-            GameState.ENEMY_NEARBY: 'enemy_nearby',  
+            GameState.ENEMY_NEARBY: 'enemy_nearby',
             GameState.RESOURCE_AVAILABLE: 'resource_available',
         }
-        
+
         field_name = state_to_field.get(key)
         if field_name is None:
             return default
-            
+
         return getattr(self, field_name, default)
 
     def __getitem__(self, key: GameState):
@@ -331,10 +331,10 @@ class CharacterGameState(BaseModel):
     @classmethod
     def from_goap_state(cls, goap_state: dict[str, Any]) -> 'CharacterGameState':
         """Create CharacterGameState from GOAP state dictionary.
-        
+
         Parameters:
             goap_state: Dictionary with string keys (GameState enum values) and state data
-            
+
         Return values:
             CharacterGameState instance with data populated from GOAP state
         """
@@ -386,20 +386,20 @@ class CharacterGameState(BaseModel):
             GameState.ENEMY_NEARBY.value: 'enemy_nearby',
             GameState.RESOURCE_AVAILABLE.value: 'resource_available',
         }
-        
+
         # Create field data dictionary
         field_data = {}
-        
+
         # Map GOAP state to model fields
         for goap_key, value in goap_state.items():
             field_name = enum_to_field.get(goap_key)
             if field_name:
                 field_data[field_name] = value
-        
+
         # Ensure required fields have defaults
         if 'name' not in field_data:
             field_data['name'] = 'unknown'
         if 'cooldown' not in field_data:
             field_data['cooldown'] = 0
-            
+
         return cls(**field_data)

@@ -254,7 +254,7 @@ class TestActionRegistry:
 
         is_valid = action_registry.validate_action(InvalidAction)
         assert is_valid is False
-    
+
 
     def test_get_all_action_types(self, action_registry):
         """Test getting all registered action types"""
@@ -446,29 +446,29 @@ class TestActionRegistryEdgeCases:
     def test_discover_actions_with_validation_failure(self):
         """Test action discovery when validation fails"""
         registry = ActionRegistry()
-        
+
         class BadAction(BaseAction):
             def __init__(self):
                 pass
-            
-            @property 
+
+            @property
             def name(self) -> str:
                 return "bad_action"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 # Return invalid key to trigger validation failure
                 return {"invalid_key": True}
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         # This should return False and trigger the warning print
         is_valid = registry.validate_action(BadAction)
         assert is_valid is False
@@ -476,23 +476,23 @@ class TestActionRegistryEdgeCases:
     def test_generate_actions_with_factory_exception(self):
         """Test action generation when factory throws exception"""
         registry = ActionRegistry()
-        
+
         class FailingFactory(ActionFactory):
             def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
                 raise RuntimeError("Factory failed")
-                
+
             def get_action_type(self) -> type[BaseAction]:
                 return MockAction
-        
+
         failing_factory = FailingFactory()
         registry.register_factory(failing_factory)
-        
+
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
         game_data.maps = []
         game_data.resources = []
         game_data.monsters = []
-        
+
         # Should propagate exception - don't hide bugs
         with pytest.raises(RuntimeError, match="Factory failed"):
             registry.generate_actions_for_state(current_state, game_data)
@@ -500,37 +500,37 @@ class TestActionRegistryEdgeCases:
     def test_generate_actions_with_action_creation_exception(self):
         """Test action generation when action creation throws exception"""
         registry = ActionRegistry()
-        
+
         class FailingAction(BaseAction):
             def __init__(self):
                 raise RuntimeError("Action creation failed")
-                
+
             @property
             def name(self) -> str:
                 return "failing_action"
-                
-            @property 
+
+            @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: True}
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         # Manually add to discovered actions to trigger creation exception
         registry._discovered_actions["FailingAction"] = FailingAction
-        
+
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
         game_data.maps = []
         game_data.resources = []
         game_data.monsters = []
-        
+
         # Should handle exception gracefully
         actions = registry.generate_actions_for_state(current_state, game_data)
         assert isinstance(actions, list)
@@ -538,89 +538,89 @@ class TestActionRegistryEdgeCases:
     def test_validate_action_missing_method(self):
         """Test validation with action missing required method"""
         registry = ActionRegistry()
-        
+
         class IncompleteAction:
             # Not inheriting from BaseAction and missing methods
             @property
             def name(self) -> str:
                 return "incomplete"
             # Missing other required methods like cost, get_preconditions, etc.
-        
+
         is_valid = registry.validate_action(IncompleteAction)
         assert is_valid is False
 
     def test_validate_action_preconditions_not_dict(self):
         """Test validation when preconditions returns non-dict"""
         registry = ActionRegistry()
-        
+
         class BadPreconditionsAction(BaseAction):
             @property
             def name(self) -> str:
                 return "bad_preconditions"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 return "not a dict"  # Invalid return type
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         is_valid = registry.validate_action(BadPreconditionsAction)
         assert is_valid is False
 
     def test_validate_action_effects_not_dict(self):
         """Test validation when effects returns non-dict"""
         registry = ActionRegistry()
-        
+
         class BadEffectsAction(BaseAction):
             @property
             def name(self) -> str:
                 return "bad_effects"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: True}
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return "not a dict"  # Invalid return type
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         is_valid = registry.validate_action(BadEffectsAction)
         assert is_valid is False
 
     def test_validate_action_method_exception(self):
         """Test validation when action methods throw exceptions"""
         registry = ActionRegistry()
-        
+
         class ExceptionAction(BaseAction):
             @property
             def name(self) -> str:
                 return "exception_action"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 raise RuntimeError("Preconditions failed")
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         # Should handle exception gracefully and still return True for basic structure
         is_valid = registry.validate_action(ExceptionAction)
         assert is_valid is True  # Should pass because structure is valid
@@ -628,57 +628,57 @@ class TestActionRegistryEdgeCases:
     def test_validate_action_general_exception(self):
         """Test validation with general exception"""
         registry = ActionRegistry()
-        
+
         class CompletelyBrokenAction:
             # Not even inheriting from BaseAction
             pass
-        
+
         is_valid = registry.validate_action(CompletelyBrokenAction)
         assert is_valid is False
 
     def test_get_action_by_name_with_exceptions(self):
         """Test get_action_by_name with various exception scenarios"""
         registry = ActionRegistry()
-        
+
         class ParameterizedFailingAction(BaseAction):
             def __init__(self, param):
                 if param == "fail":
                     raise RuntimeError("Failed to create")
                 self._param = param
-                
+
             @property
             def name(self) -> str:
                 return f"param_action_{self._param}"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: True}
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         class FailingParameterizedFactory(ActionFactory):
             def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
                 raise RuntimeError("Factory creation failed")
-                
+
             def get_action_type(self) -> type[BaseAction]:
                 return ParameterizedFailingAction
-        
+
         registry._discovered_actions["ParameterizedFailingAction"] = ParameterizedFailingAction
         registry.register_factory(FailingParameterizedFactory())
-        
+
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
         game_data.maps = []
         game_data.resources = []
         game_data.monsters = []
-        
+
         # Should propagate exception - don't hide bugs
         with pytest.raises(RuntimeError, match="Factory creation failed"):
             registry.get_action_by_name("nonexistent", current_state, game_data)
@@ -686,22 +686,22 @@ class TestActionRegistryEdgeCases:
     def test_discover_actions_with_import_errors(self):
         """Test action discovery with module import errors"""
         registry = ActionRegistry()
-        
+
         # Mock the import to fail for certain modules
         with patch('importlib.import_module') as mock_import, \
              patch('pkgutil.iter_modules') as mock_iter:
-            
+
             mock_iter.return_value = [
                 (None, 'failing_module', False),
             ]
-            
+
             def mock_import_side_effect(module_name):
                 if 'failing_module' in module_name:
                     raise ImportError("Module import failed")
                 return Mock()
-            
+
             mock_import.side_effect = mock_import_side_effect
-            
+
             # Should handle import error gracefully
             discovered = registry.discover_actions()
             assert isinstance(discovered, dict)
@@ -709,25 +709,25 @@ class TestActionRegistryEdgeCases:
     def test_validate_action_with_effects_exception(self):
         """Test validation when effects method throws exception"""
         registry = ActionRegistry()
-        
+
         class EffectsExceptionAction(BaseAction):
             @property
             def name(self) -> str:
                 return "effects_exception"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: True}
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 raise RuntimeError("Effects failed")
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         # Should handle exception and still validate structure
         is_valid = registry.validate_action(EffectsExceptionAction)
         assert is_valid is True
@@ -735,37 +735,37 @@ class TestActionRegistryEdgeCases:
     def test_get_action_by_name_simple_action_exception(self):
         """Test get_action_by_name when simple action creation throws exception"""
         registry = ActionRegistry()
-        
+
         class SimpleFailingAction(BaseAction):
             def __init__(self):
                 raise RuntimeError("Simple action creation failed")
-                
+
             @property
             def name(self) -> str:
                 return "simple_failing"
-                
+
             @property
             def cost(self) -> int:
                 return 1
-                
+
             def get_preconditions(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: True}
-                
+
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
-                
+
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
-        
+
         # Add to discovered actions manually
         registry._discovered_actions["SimpleFailingAction"] = SimpleFailingAction
-        
+
         current_state = {GameState.COOLDOWN_READY: True}
         game_data = Mock()
         game_data.maps = []
         game_data.resources = []
         game_data.monsters = []
-        
+
         # Should handle exception gracefully
         action = registry.get_action_by_name("simple_failing", current_state, game_data)
         assert action is None

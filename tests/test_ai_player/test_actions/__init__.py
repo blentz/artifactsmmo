@@ -34,7 +34,6 @@ from src.ai_player.actions.movement_action_factory import MovementActionFactory
 from src.ai_player.actions.rest_action import RestAction
 from src.ai_player.state.game_state import ActionResult, GameState
 
-
 # Test Utilities and Fixtures
 
 class TestActionMixin:
@@ -149,13 +148,13 @@ class TestActionMixin:
             return False
         if not hasattr(action, 'cost') or not isinstance(action.cost, int):
             return False
-        
+
         # Check required methods
         required_methods = ['get_preconditions', 'get_effects', 'execute', 'can_execute', 'validate_preconditions', 'validate_effects']
         for method_name in required_methods:
             if not hasattr(action, method_name):
                 return False
-        
+
         # Validate state usage
         try:
             preconditions = action.get_preconditions()
@@ -164,14 +163,14 @@ class TestActionMixin:
             for key in preconditions.keys():
                 if not isinstance(key, GameState):
                     return False
-            
+
             effects = action.get_effects()
             if not isinstance(effects, dict):
                 return False
             for key in effects.keys():
                 if not isinstance(key, GameState):
                     return False
-            
+
             return True
         except Exception:
             return False
@@ -229,7 +228,7 @@ class TestActionSystemIntegration(TestActionMixin):
             CombatAction("chicken"),
             MovementAction(2, 0)
         ]
-        
+
         for action in concrete_actions:
             assert self.validate_action_interface(action), f"Action {action.__class__.__name__} does not properly implement BaseAction interface"
 
@@ -237,17 +236,17 @@ class TestActionSystemIntegration(TestActionMixin):
         """Test that action registry discovers all concrete action implementations"""
         discovered_types = action_registry.get_all_action_types()
         action_type_names = {action_type.__name__ for action_type in discovered_types}
-        
+
         # Should discover all concrete action classes
         expected_actions = {'RestAction', 'GatheringAction', 'CombatAction', 'MovementAction'}
-        
+
         for expected_action in expected_actions:
             assert expected_action in action_type_names, f"Action registry failed to discover {expected_action}"
 
     def test_action_registry_validates_all_discovered_actions(self, action_registry):
         """Test that all discovered actions pass validation"""
         discovered_types = action_registry.get_all_action_types()
-        
+
         for action_type in discovered_types:
             assert action_registry.validate_action(action_type), f"Discovered action {action_type.__name__} failed validation"
 
@@ -255,10 +254,10 @@ class TestActionSystemIntegration(TestActionMixin):
         """Test MovementActionFactory integration with action registry"""
         factory = MovementActionFactory()
         action_registry.register_factory(factory)
-        
+
         # Test that factory generates valid movement actions
         movement_actions = factory.create_instances(mock_game_data, base_game_state)
-        
+
         assert len(movement_actions) > 0
         for action in movement_actions:
             assert isinstance(action, MovementAction)
@@ -270,19 +269,19 @@ class TestActionSystemIntegration(TestActionMixin):
         # Register movement factory
         movement_factory = MovementActionFactory()
         action_registry.register_factory(movement_factory)
-        
+
         # Generate all available actions
         all_actions = action_registry.generate_actions_for_state(base_game_state, mock_game_data)
-        
+
         assert len(all_actions) > 0
-        
+
         # Verify we have different types of actions
         action_types = {type(action).__name__ for action in all_actions}
-        
+
         # Should have movement actions from factory
         movement_actions = [action for action in all_actions if isinstance(action, MovementAction)]
         assert len(movement_actions) > 0
-        
+
         # All actions should pass interface validation
         for action in all_actions:
             assert self.validate_action_interface(action)
@@ -295,13 +294,13 @@ class TestActionSystemIntegration(TestActionMixin):
             CombatAction("chicken"),
             MovementAction(2, 0)
         ]
-        
+
         for action in actions:
             # All preconditions should use GameState enum
             preconditions = action.get_preconditions()
             for key in preconditions.keys():
                 assert isinstance(key, GameState), f"Action {action.__class__.__name__} uses non-GameState key: {key}"
-            
+
             # All effects should use GameState enum
             effects = action.get_effects()
             for key in effects.keys():
@@ -316,7 +315,7 @@ class TestActionSystemIntegration(TestActionMixin):
             MovementAction(1, 1),  # Short distance
             MovementAction(10, 10)  # Long distance
         ]
-        
+
         for action in actions:
             cost = action.cost
             assert isinstance(cost, int), f"Action {action.__class__.__name__} cost is not an integer: {cost}"
@@ -327,7 +326,7 @@ class TestActionSystemIntegration(TestActionMixin):
         """Test that action interfaces are consistent and properly implemented"""
         # Test with a rest action with mocked API client
         rest_action = RestAction(api_client=mock_api_client)
-        
+
         # Test that all methods return expected types
         assert isinstance(rest_action.name, str)
         assert isinstance(rest_action.cost, int)
@@ -336,12 +335,12 @@ class TestActionSystemIntegration(TestActionMixin):
         assert isinstance(rest_action.can_execute(base_game_state), bool)
         assert isinstance(rest_action.validate_preconditions(), bool)
         assert isinstance(rest_action.validate_effects(), bool)
-        
+
         # Preconditions and effects should use GameState enum
         preconditions = rest_action.get_preconditions()
         for key in preconditions.keys():
             assert isinstance(key, GameState)
-        
+
         effects = rest_action.get_effects()
         for key in effects.keys():
             assert isinstance(key, GameState)
@@ -350,10 +349,10 @@ class TestActionSystemIntegration(TestActionMixin):
         """Test global registry functions work with real action implementations"""
         # Test get_all_actions global function
         all_actions = get_all_actions(base_game_state, mock_game_data)
-        
+
         assert isinstance(all_actions, list)
         assert len(all_actions) >= 0  # May be empty if no factories registered
-        
+
         for action in all_actions:
             assert isinstance(action, BaseAction)
             assert self.validate_action_interface(action)
@@ -364,54 +363,54 @@ class TestActionSystemIntegration(TestActionMixin):
         movement_action = MovementAction(2, 0)  # Move to copper mine
         gathering_action = GatheringAction("copper_ore")  # Gather copper
         rest_action = RestAction()  # Rest to recover
-        
+
         # Simulate state progression
         current_state = base_game_state.copy()
-        
+
         # Check movement action can execute
         if movement_action.can_execute(current_state):
             # Apply movement effects
             movement_effects = movement_action.get_effects()
             current_state.update(movement_effects)
-            
+
             # Update for gathering (at resource location)
             current_state[GameState.AT_TARGET_LOCATION] = True
             current_state[GameState.RESOURCE_AVAILABLE] = True
             current_state[GameState.COOLDOWN_READY] = True
-            
+
             # Check gathering can execute after movement
             gathering_can_execute = gathering_action.can_execute(current_state)
             # Should be able to determine if gathering is possible
             assert isinstance(gathering_can_execute, bool)
-            
+
             if gathering_can_execute:
                 # Apply gathering effects
                 gathering_effects = gathering_action.get_effects()
                 current_state.update(gathering_effects)
-                
+
                 # Reset cooldown for rest
                 current_state[GameState.COOLDOWN_READY] = True
-                
+
                 # Rest should always be executable
                 assert rest_action.can_execute(current_state)
 
     def test_action_name_uniqueness_within_type(self, mock_game_data):
         """Test that parameterized actions generate unique names"""
         factory = MovementActionFactory()
-        
+
         current_state = {
             GameState.CURRENT_X: 0,
             GameState.CURRENT_Y: 0,
             GameState.COOLDOWN_READY: True,
             GameState.CAN_MOVE: True
         }
-        
+
         movement_actions = factory.create_instances(mock_game_data, current_state)
         action_names = [action.name for action in movement_actions]
-        
+
         # All names should be unique
         assert len(action_names) == len(set(action_names)), "Movement actions generated duplicate names"
-        
+
         # Names should follow expected pattern
         for name in action_names:
             assert "move_to_" in name, f"Movement action name does not follow expected pattern: {name}"
@@ -421,13 +420,13 @@ class TestActionSystemIntegration(TestActionMixin):
         class BrokenFactory(ActionFactory):
             def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
                 raise RuntimeError("Factory intentionally broken")
-            
+
             def get_action_type(self) -> type[BaseAction]:
                 return RestAction
-        
+
         broken_factory = BrokenFactory()
         action_registry.register_factory(broken_factory)
-        
+
         # Should not raise exception, should handle gracefully
         actions = action_registry.generate_actions_for_state(base_game_state, {})
         assert isinstance(actions, list)  # May be empty but should be a list
@@ -437,11 +436,11 @@ class TestActionSystemIntegration(TestActionMixin):
         # Test imports that should work from the actions package
         from src.ai_player.actions import ActionFactory, ActionRegistry, get_all_actions
         from src.ai_player.actions.base_action import BaseAction
-        from src.ai_player.actions.rest_action import RestAction
-        from src.ai_player.actions.movement_action import MovementAction
-        from src.ai_player.actions.gathering_action import GatheringAction
         from src.ai_player.actions.combat_action import CombatAction
-        
+        from src.ai_player.actions.gathering_action import GatheringAction
+        from src.ai_player.actions.movement_action import MovementAction
+        from src.ai_player.actions.rest_action import RestAction
+
         # All imports should succeed
         assert ActionFactory is not None
         assert ActionRegistry is not None
@@ -463,14 +462,14 @@ class TestActionSystemCompatibility(TestActionMixin):
             GameState.CHARACTER_LEVEL: 1,
             GameState.COOLDOWN_READY: True
         }
-        
+
         actions = [
             RestAction(),
             GatheringAction("copper_ore"),
             CombatAction("chicken"),
             MovementAction(1, 1)
         ]
-        
+
         for action in actions:
             # Should not raise exceptions when checking preconditions
             try:
@@ -487,17 +486,17 @@ class TestActionSystemCompatibility(TestActionMixin):
             CombatAction("chicken"),
             MovementAction(1, 1)
         ]
-        
+
         for action in actions:
             # Test with correct state types
             valid_result = action.can_execute(base_game_state)
             assert isinstance(valid_result, bool)
-            
+
             # Test with some invalid state types
             corrupted_state = base_game_state.copy()
             corrupted_state[GameState.CHARACTER_LEVEL] = "not_a_number"  # Should be int
             corrupted_state[GameState.COOLDOWN_READY] = "not_a_boolean"  # Should be bool
-            
+
             # Should handle type mismatches gracefully
             try:
                 invalid_result = action.can_execute(corrupted_state)
@@ -511,9 +510,9 @@ class TestActionSystemCompatibility(TestActionMixin):
         short_movement = MovementAction(1, 1)
         medium_movement = MovementAction(5, 5)
         long_movement = MovementAction(10, 10)
-        
+
         assert short_movement.cost <= medium_movement.cost <= long_movement.cost, "Movement costs should scale with distance"
-        
+
         # Test that costs are reasonable
         assert short_movement.cost >= 1, "Even short movements should have positive cost"
         assert long_movement.cost <= 100, "Long movements should not have excessive cost"
@@ -526,11 +525,11 @@ class TestActionSystemCompatibility(TestActionMixin):
             CombatAction("chicken"),
             MovementAction(1, 1)
         ]
-        
+
         for action in actions:
             preconditions = action.get_preconditions()
             effects = action.get_effects()
-            
+
             # Check for logical consistency
             for state_key in preconditions.keys():
                 if state_key in effects:
@@ -538,13 +537,13 @@ class TestActionSystemCompatibility(TestActionMixin):
                     # the modification should be reasonable
                     precond_value = preconditions[state_key]
                     effect_value = effects[state_key]
-                    
+
                     # For boolean states, if we require True, we shouldn't set it to True again
                     # (that would be redundant but not contradictory)
                     if isinstance(precond_value, bool) and isinstance(effect_value, bool):
                         # This is fine - actions can modify boolean states they depend on
                         pass
-                    
+
                     # For numeric states, effects should be reasonable
                     if isinstance(precond_value, (int, float)) and isinstance(effect_value, (int, float)):
                         # This is normal - actions can modify numeric states
@@ -555,40 +554,40 @@ class TestActionSystemCompatibility(TestActionMixin):
         registry = ActionRegistry()
         factory = MovementActionFactory()
         registry.register_factory(factory)
-        
+
         # Simulate concurrent access to registry
         def generate_actions():
             return registry.generate_actions_for_state(base_game_state, mock_game_data)
-        
+
         # This should not raise exceptions even if called multiple times
         results = []
         for _ in range(10):
             actions = generate_actions()
             results.append(len(actions))
-        
+
         # Results should be consistent
         assert all(count == results[0] for count in results), "Registry generated inconsistent results"
 
     def test_memory_efficiency_with_many_actions(self, base_game_state, mock_game_data):
         """Test that action generation is memory efficient"""
         registry = ActionRegistry()
-        
+
         # Create a factory that generates many actions
         class HighVolumeFactory(ActionFactory):
             def create_instances(self, game_data: Any, current_state: dict[GameState, Any]) -> list[BaseAction]:
                 return [RestAction() for _ in range(1000)]  # Generate 1000 rest actions
-            
+
             def get_action_type(self) -> type[BaseAction]:
                 return RestAction
-        
+
         high_volume_factory = HighVolumeFactory()
         registry.register_factory(high_volume_factory)
-        
+
         # This should complete without memory issues
         actions = registry.generate_actions_for_state(base_game_state, mock_game_data)
-        
+
         assert len(actions) >= 1000
-        
+
         # Clean up explicitly
         del actions
 
@@ -601,30 +600,30 @@ class TestActionSystemDocumentation(TestActionMixin):
         registry = ActionRegistry()
         factory = MovementActionFactory()
         registry.register_factory(factory)
-        
+
         all_actions = registry.generate_actions_for_state(base_game_state, mock_game_data)
-        
+
         for action in all_actions:
             name = action.name
             assert isinstance(name, str), f"Action name is not a string: {name}"
             assert len(name) > 0, "Action name is empty"
             assert len(name) <= 100, f"Action name is too long: {name}"
             assert not name.isspace(), "Action name is only whitespace"
-            
+
             # Names should be descriptive
             assert any(char.isalnum() for char in name), f"Action name contains no alphanumeric characters: {name}"
 
     def test_action_types_provide_introspection(self):
         """Test that action types can be introspected for debugging"""
         action_classes = [RestAction, GatheringAction, CombatAction, MovementAction]
-        
+
         for action_class in action_classes:
             # Should have docstrings
             assert action_class.__doc__ is not None, f"Action class {action_class.__name__} lacks docstring"
-            
+
             # Should have meaningful class name
             assert action_class.__name__.endswith('Action'), f"Action class name doesn't follow convention: {action_class.__name__}"
-            
+
             # Should be subclass of BaseAction
             assert issubclass(action_class, BaseAction), f"Action class {action_class.__name__} is not a BaseAction subclass"
 
@@ -633,7 +632,7 @@ class TestActionSystemDocumentation(TestActionMixin):
         # Should be able to get all action types
         action_types = action_registry.get_all_action_types()
         assert isinstance(action_types, list)
-        
+
         # Should be able to validate actions
         for action_type in action_types:
             validation_result = action_registry.validate_action(action_type)
@@ -642,18 +641,18 @@ class TestActionSystemDocumentation(TestActionMixin):
     def test_factory_system_is_introspectable(self):
         """Test that factory system provides introspection capabilities"""
         factory = MovementActionFactory()
-        
+
         # Should be able to get action type
         action_type = factory.get_action_type()
         assert action_type == MovementAction
-        
+
         # Should be able to generate parameters
         mock_state = {GameState.CURRENT_X: 0, GameState.CURRENT_Y: 0}
         mock_data = self.create_mock_game_data()
-        
+
         parameters = factory.generate_parameters(mock_data, mock_state)
         assert isinstance(parameters, list)
-        
+
         for param_set in parameters:
             assert isinstance(param_set, dict)
             assert 'target_x' in param_set
@@ -665,15 +664,14 @@ class TestActionSystemDocumentation(TestActionMixin):
 def test_action_system_package_structure():
     """Test that action system package structure is correct"""
     # Test that main action classes can be imported
-    from src.ai_player.actions.base_action import BaseAction
-    from src.ai_player.actions.rest_action import RestAction
-    from src.ai_player.actions.movement_action import MovementAction
-    from src.ai_player.actions.gathering_action import GatheringAction
-    from src.ai_player.actions.combat_action import CombatAction
-    
     # Test that registry components can be imported
-    from src.ai_player.actions import ActionRegistry, ActionFactory, get_all_actions
-    
+    from src.ai_player.actions import ActionFactory, ActionRegistry, get_all_actions
+    from src.ai_player.actions.base_action import BaseAction
+    from src.ai_player.actions.combat_action import CombatAction
+    from src.ai_player.actions.gathering_action import GatheringAction
+    from src.ai_player.actions.movement_action import MovementAction
+    from src.ai_player.actions.rest_action import RestAction
+
     # All imports should succeed without errors
     assert BaseAction is not None
     assert RestAction is not None
@@ -692,10 +690,8 @@ def test_action_system_provides_complete_interface():
         ActionRegistry,
         ParameterizedActionFactory,
         get_all_actions,
-        get_global_registry,
-        register_action_factory,
     )
-    
+
     # All expected components should be available
     assert ActionFactory is not None
     assert ActionRegistry is not None

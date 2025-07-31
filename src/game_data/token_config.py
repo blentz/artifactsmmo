@@ -17,13 +17,13 @@ class TokenConfig(BaseModel):
     @classmethod
     def from_file(cls, token_file: str = "TOKEN") -> 'TokenConfig':
         """Load and validate token from file.
-        
+
         Parameters:
             token_file: Path to file containing API token (default: "TOKEN")
-            
+
         Return values:
             TokenConfig instance with validated token
-            
+
         This method loads an API token from the specified file path and validates
         it using Pydantic constraints to ensure proper format before use
         in API authentication.

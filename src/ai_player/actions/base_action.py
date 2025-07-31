@@ -13,8 +13,8 @@ type safety through the GameState enum.
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..state.game_state import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
+from ..state.game_state import ActionResult, GameState
 
 
 class BaseAction(ABC):

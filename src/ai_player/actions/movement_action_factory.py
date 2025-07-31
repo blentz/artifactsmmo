@@ -7,7 +7,6 @@ to all valid locations in the game world.
 
 from typing import Any
 
-from ..state.game_state import GameState
 from ..state.character_game_state import CharacterGameState
 from .movement_action import MovementAction
 from .parameterized_action_factory import ParameterizedActionFactory
@@ -38,7 +37,7 @@ class MovementActionFactory(ParameterizedActionFactory):
 
         # Generate only nearby locations in a 3-tile radius
         nearby_locations = self.get_nearby_locations(current_x, current_y, radius=3)
-        
+
         # Filter out invalid coordinates based on known map data
         filtered_locations = self.filter_valid_positions(nearby_locations, game_data)
 
@@ -98,9 +97,9 @@ class MovementActionFactory(ParameterizedActionFactory):
                 x = map_data.x
                 y = map_data.y
                 content = map_data.content
-                
+
                 location_params = {"target_x": x, "target_y": y}
-                
+
                 # Add location type information for specialized movement actions
                 if content:
                     location_params["location_type"] = content.type
@@ -123,14 +122,14 @@ class MovementActionFactory(ParameterizedActionFactory):
         positions are included in movement planning.
         """
         valid_positions = []
-        
+
         # If no game data, return empty list to avoid generating invalid actions
         if not game_data or not hasattr(game_data, 'maps'):
             return valid_positions
-        
+
         # Create set of valid coordinates from cached map data
         valid_coords = {(m.x, m.y) for m in game_data.maps if hasattr(m, 'x') and hasattr(m, 'y')}
-        
+
         for position in positions:
             x = position.get("target_x")
             y = position.get("target_y")
@@ -157,25 +156,25 @@ class MovementActionFactory(ParameterizedActionFactory):
         information for proper movement action effect calculation.
         """
         enhanced_locations = []
-        
+
         if not game_data or not hasattr(game_data, 'maps'):
             return locations
-        
+
         # Create a lookup map for efficient content checking
         content_map = {}
         for map_data in game_data.maps:
             if map_data.content:
                 content_map[(map_data.x, map_data.y)] = map_data.content.type
-        
+
         # Enhance each location with content type if available
         for location in locations:
             x = location["target_x"]
             y = location["target_y"]
             enhanced_location = location.copy()
-            
+
             if (x, y) in content_map:
                 enhanced_location["location_type"] = content_map[(x, y)]
-            
+
             enhanced_locations.append(enhanced_location)
-        
+
         return enhanced_locations

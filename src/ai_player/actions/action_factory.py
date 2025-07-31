@@ -8,7 +8,6 @@ parameterized action instances in the GOAP system.
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..state.game_state import GameState
 from ..state.character_game_state import CharacterGameState
 from .base_action import BaseAction
 

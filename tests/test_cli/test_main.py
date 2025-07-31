@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.cli.main import CLIManager, async_main, main, generate_random_character_name
+from src.cli.main import CLIManager, async_main, generate_random_character_name, main
 
 
 class TestRandomNameGeneration:
@@ -26,7 +26,7 @@ class TestRandomNameGeneration:
         """Test that generated names contain only allowed characters"""
         import string
         allowed_chars = set(string.ascii_letters + string.digits + '_-')
-        
+
         for _ in range(100):  # Test multiple generations
             name = generate_random_character_name()
             name_chars = set(name)
@@ -44,7 +44,7 @@ class TestRandomNameGeneration:
         for _ in range(50):
             name = generate_random_character_name()
             names.add(name)
-        
+
         # Should generate at least 40 unique names out of 50 attempts
         # (allowing for some small chance of duplicates)
         assert len(names) >= 40, f"Only {len(names)} unique names generated out of 50 attempts"
@@ -53,7 +53,7 @@ class TestRandomNameGeneration:
         """Test that generated names comply with API pattern ^[a-zA-Z0-9_-]+$"""
         import re
         api_pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
-        
+
         for _ in range(100):
             name = generate_random_character_name()
             assert api_pattern.match(name), f"Name '{name}' does not match API pattern ^[a-zA-Z0-9_-]+$"
@@ -113,35 +113,35 @@ class TestCLIManager:
     @patch('src.cli.main.get_global_registry')
     @patch('src.cli.main.CacheManager')
     @patch('src.cli.main.APIClientWrapper')
-    def test_initialize_diagnostic_components(self, mock_api_wrapper, mock_cache_manager, 
+    def test_initialize_diagnostic_components(self, mock_api_wrapper, mock_cache_manager,
                                             mock_get_global_registry, mock_goal_manager, mock_diagnostic_commands):
         """Test diagnostic components initialization"""
         cli_manager = CLIManager()
         token_file = "test_token.txt"
-        
+
         # Mock the instances that will be created
         mock_api_instance = Mock()
         mock_api_wrapper.return_value = mock_api_instance
         mock_api_instance.cooldown_manager = Mock()
-        
+
         mock_cache_instance = Mock()
         mock_cache_manager.return_value = mock_cache_instance
-        
+
         mock_registry_instance = Mock()
         mock_get_global_registry.return_value = mock_registry_instance
-        
+
         mock_goal_instance = Mock()
         mock_goal_manager.return_value = mock_goal_instance
-        
+
         mock_diagnostic_instance = Mock()
         mock_diagnostic_commands.return_value = mock_diagnostic_instance
-        
+
         result = cli_manager._initialize_diagnostic_components(token_file)
-        
+
         # Verify API client was created and stored
         mock_api_wrapper.assert_called_once_with(token_file)
         assert cli_manager.api_client == mock_api_instance
-        
+
         # Verify all components were initialized
         mock_cache_manager.assert_called_once_with(mock_api_instance)
         mock_get_global_registry.assert_called_once()
@@ -153,47 +153,47 @@ class TestCLIManager:
             goal_manager=mock_goal_instance,
             api_client=mock_api_instance
         )
-        
+
         assert result == mock_diagnostic_instance
 
     @patch('src.cli.main.DiagnosticCommands')
     @patch('src.cli.main.GoalManager')
     @patch('src.cli.main.get_global_registry')
     @patch('src.cli.main.CacheManager')
-    def test_initialize_diagnostic_components_existing_api_client(self, mock_cache_manager, 
+    def test_initialize_diagnostic_components_existing_api_client(self, mock_cache_manager,
                                                                 mock_get_global_registry, mock_goal_manager, mock_diagnostic_commands):
         """Test diagnostic components initialization when API client already exists"""
         cli_manager = CLIManager()
         token_file = "test_token.txt"
-        
+
         # Set up existing API client
         existing_api_client = Mock()
         existing_api_client.cooldown_manager = Mock()
         cli_manager.api_client = existing_api_client
-        
+
         # Mock the instances that will be created
         mock_cache_instance = Mock()
         mock_cache_manager.return_value = mock_cache_instance
-        
+
         mock_registry_instance = Mock()
         mock_get_global_registry.return_value = mock_registry_instance
-        
+
         mock_goal_instance = Mock()
         mock_goal_manager.return_value = mock_goal_instance
-        
+
         mock_diagnostic_instance = Mock()
         mock_diagnostic_commands.return_value = mock_diagnostic_instance
-        
+
         result = cli_manager._initialize_diagnostic_components(token_file)
-        
+
         # Verify existing API client was used (not created)
         assert cli_manager.api_client == existing_api_client
-        
+
         # Verify all components were initialized with existing client
         mock_cache_manager.assert_called_once_with(existing_api_client)
         mock_get_global_registry.assert_called_once()
         mock_goal_manager.assert_called_once_with(mock_registry_instance, existing_api_client.cooldown_manager, mock_cache_instance)
-        
+
         assert result == mock_diagnostic_instance
 
 
@@ -210,7 +210,7 @@ class TestArgumentParsing:
         assert args.command == 'create-character'
         assert args.name == 'test_char'
         assert args.skin == 'men1'
-        
+
         # Test create-character command without name (should allow random generation)
         args = parser.parse_args(['create-character', 'men2'])
         assert args.command == 'create-character'
@@ -374,10 +374,10 @@ class TestCharacterCommandHandlers:
 
         # Verify that random name generation was called
         mock_gen.assert_called_once()
-        
+
         # Verify that a random name was generated and used
         mock_client.create_character.assert_called_once_with('RandName12', 'women1')
-        
+
         # Check that random name generation was logged
         print_calls = [str(call) for call in mock_print.call_args_list]
         assert any('Generated random character name: RandName12' in call for call in print_calls)
@@ -547,11 +547,11 @@ class TestCharacterCommandHandlers:
 
         with patch('builtins.print'), \
              patch('src.cli.main.CacheManager') as mock_cache_manager_class:
-            
+
             mock_cache_manager = AsyncMock()
             mock_cache_manager.cache_all_characters.return_value = mock_characters
             mock_cache_manager_class.return_value = mock_cache_manager
-            
+
             await cli_manager.handle_list_characters(mock_args)
 
         mock_cache_manager.cache_all_characters.assert_called_once()
@@ -576,11 +576,11 @@ class TestCharacterCommandHandlers:
 
         with patch('builtins.print'), \
              patch('src.cli.main.CacheManager') as mock_cache_manager_class:
-            
+
             mock_cache_manager = AsyncMock()
             mock_cache_manager.cache_all_characters.return_value = mock_characters
             mock_cache_manager_class.return_value = mock_cache_manager
-            
+
             await cli_manager.handle_list_characters(mock_args)
 
         mock_cache_manager.cache_all_characters.assert_called_once()
@@ -727,7 +727,7 @@ class TestDiagnosticCommandHandlers:
         mock_diagnostic_commands = Mock()
         mock_diagnostic_commands.diagnose_state = AsyncMock()
         mock_diagnostic_commands.format_state_output = Mock()
-        
+
         with patch.object(cli_manager, '_initialize_diagnostic_components', return_value=mock_diagnostic_commands):
             mock_result = {'state': 'valid'}
             mock_diagnostic_commands.diagnose_state.return_value = mock_result
@@ -828,12 +828,13 @@ class TestDiagnosticCommandHandlers:
             with patch('builtins.print'):
                 await cli_manager.handle_test_planning(mock_args)
 
-            mock_diagnostic_commands.test_planning.assert_called_once_with(
-                mock_state_file=None,
-                start_level=1,
-                goal_level=5,
-                dry_run=True
-            )
+            # Check that test_planning was called with the correct parameters
+            mock_diagnostic_commands.test_planning.assert_called_once()
+            call_args = mock_diagnostic_commands.test_planning.call_args
+            assert call_args.kwargs['mock_state_file'] is None
+            assert call_args.kwargs['start_level'] == 1
+            assert call_args.kwargs['goal_level'] == 5
+            assert call_args.kwargs['dry_run'] is True
 
 
 class TestMainFunctions:
@@ -907,7 +908,7 @@ class TestMainFunctions:
             coro.close()
             # Then raise the exception
             raise Exception("Test error")
-        
+
         with patch('src.cli.main.asyncio.run', side_effect=mock_asyncio_run):
             # Main function should let general exceptions bubble up
             with pytest.raises(Exception, match="Test error"):
@@ -1613,7 +1614,7 @@ class TestCLIIntegration:
             mock_ai_player.start = AsyncMock()
             mock_ai_player.initialize_dependencies = Mock()
             mock_ai_player_class.return_value = mock_ai_player
-            
+
             # Mock print to raise an exception after the player is added to running_players
             # This will cause an exception between line 483 (adding to dict) and line 492 (the try block)
             def side_effect_print(*args, **kwargs):
@@ -1633,19 +1634,19 @@ class TestCLIIntegration:
         """Test the __name__ == '__main__' guard execution - targets line 835"""
         # Direct approach: execute the __main__ guard condition with mocking
         import src.cli.main
-        
+
         # Mock sys.argv and main function to avoid actual CLI execution
         with patch('sys.argv', ['test', '--help']), \
              patch('sys.exit'), \
              patch.object(src.cli.main, 'main') as mock_main:
-            
+
             # Execute the exact code from lines 834-835
             # This will test that the __main__ guard works and calls main()
             exec("""
 if __name__ == '__main__':
     main()
 """, {'__name__': '__main__', 'main': mock_main})
-            
+
             # Verify that main() was called by the guard
             mock_main.assert_called_once()
 

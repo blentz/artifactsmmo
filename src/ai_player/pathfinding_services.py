@@ -8,8 +8,8 @@ planning functionality for the AI player system.
 from typing import Any
 
 from .actions.movement_action import MovementAction
+from .pathfinding_algorithms import AStarPathfinding, PathfindingAlgorithm
 from .pathfinding_models import PathfindingResult
-from .pathfinding_algorithms import PathfindingAlgorithm, AStarPathfinding
 
 
 class PathfindingService:
@@ -73,13 +73,13 @@ class PathfindingService:
 
     def optimize_path(self, path: list[tuple[int, int]]) -> list[tuple[int, int]]:
         """Optimize path by removing unnecessary waypoints.
-        
+
         Parameters:
             path: List of coordinates representing the original path
-            
+
         Return values:
             List of coordinates with unnecessary waypoints removed
-            
+
         This method implements line-of-sight optimization to reduce the number
         of waypoints in a path by removing intermediate points when a direct
         line is possible, improving movement efficiency for the AI player.
@@ -114,14 +114,14 @@ class PathfindingService:
 
     def _has_line_of_sight(self, start: tuple[int, int], end: tuple[int, int]) -> bool:
         """Check if there's a clear line of sight between two points.
-        
+
         Parameters:
             start: Starting position coordinates
             end: Ending position coordinates
-            
+
         Return values:
             Boolean indicating if direct movement is possible
-            
+
         This method uses Bresenham's line algorithm to check if all points
         on the line between start and end are valid movement positions,
         enabling path optimization through line-of-sight checks.
@@ -224,13 +224,13 @@ class PathfindingService:
 
     def cache_map_data(self, game_data: Any) -> None:
         """Cache map information for faster pathfinding.
-        
+
         Parameters:
             game_data: Game data to cache for pathfinding operations
-            
+
         Return values:
             None
-            
+
         This method caches frequently accessed map data like obstacles and
         boundaries to improve pathfinding performance by avoiding repeated
         data extraction from game data structures.
@@ -273,15 +273,15 @@ class PathfindingService:
     def find_safe_position_near(self, target: tuple[int, int], radius: int = 3,
                                game_data: Any = None) -> tuple[int, int] | None:
         """Find safe position near target (useful for combat positioning).
-        
+
         Parameters:
             target: Target position coordinates as (x, y) tuple
             radius: Maximum distance from target to search for safe position
             game_data: Game data for obstacle and boundary information
-            
+
         Return values:
             Tuple of coordinates for safe position, or None if no safe position found
-            
+
         This method searches for an accessible position within the specified radius
         of the target, useful for strategic positioning during combat or resource
         gathering activities where proximity is important.
@@ -336,15 +336,15 @@ class MovementPlanner:
     def plan_movement_to_resource(self, current_pos: tuple[int, int], resource_type: str,
                                  game_data: Any) -> PathfindingResult:
         """Plan movement to nearest resource of specified type.
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             resource_type: Type of resource to find (e.g., "ash_tree", "copper_rock")
             game_data: Game data containing resource location information
-            
+
         Return values:
             PathfindingResult with path to nearest resource of specified type
-            
+
         This method searches the game data for resources matching the specified
         type and plans an optimal path to the nearest one, supporting efficient
         resource gathering for the AI player's economic activities.
@@ -384,15 +384,15 @@ class MovementPlanner:
     def plan_movement_to_monster(self, current_pos: tuple[int, int], monster_level_range: tuple[int, int],
                                 game_data: Any) -> PathfindingResult:
         """Plan movement to suitable monster for combat.
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             monster_level_range: Tuple of (min_level, max_level) for suitable monsters
             game_data: Game data containing monster location and level information
-            
+
         Return values:
             PathfindingResult with path to nearest suitable monster for combat
-            
+
         This method searches for monsters within the specified level range and
         plans an optimal path to the nearest one, supporting combat activities
         and experience farming for the AI player.
@@ -432,15 +432,15 @@ class MovementPlanner:
     def plan_movement_to_npc(self, current_pos: tuple[int, int], npc_type: str,
                             game_data: Any) -> PathfindingResult:
         """Plan movement to specific NPC type.
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             npc_type: Type or name of NPC to find (e.g., "banker", "blacksmith")
             game_data: Game data containing NPC location information
-            
+
         Return values:
             PathfindingResult with path to nearest NPC of specified type
-            
+
         This method searches for NPCs matching the specified type and plans
         an optimal path to the nearest one, supporting trading, banking, and
         other NPC interaction activities for the AI player.
@@ -478,14 +478,14 @@ class MovementPlanner:
 
     def plan_movement_to_bank(self, current_pos: tuple[int, int], game_data: Any) -> PathfindingResult:
         """Plan movement to nearest bank.
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             game_data: Game data containing bank location information
-            
+
         Return values:
             PathfindingResult with path to nearest bank for storage operations
-            
+
         This method finds the nearest bank location and plans an optimal path
         to it, supporting inventory management and item storage activities
         for the AI player's economic operations.
@@ -496,14 +496,14 @@ class MovementPlanner:
     def plan_movement_to_grand_exchange(self, current_pos: tuple[int, int],
                                        game_data: Any) -> PathfindingResult:
         """Plan movement to Grand Exchange.
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             game_data: Game data containing Grand Exchange location information
-            
+
         Return values:
             PathfindingResult with path to Grand Exchange for trading operations
-            
+
         This method finds the Grand Exchange location and plans an optimal path
         to it, supporting trading and marketplace activities for the AI player's
         economic operations and item acquisition.
@@ -514,15 +514,15 @@ class MovementPlanner:
     def plan_escape_route(self, current_pos: tuple[int, int], danger_pos: tuple[int, int],
                          game_data: Any) -> PathfindingResult:
         """Plan escape route away from danger.
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             danger_pos: Position of danger to escape from as (x, y) tuple
             game_data: Game data for obstacle and boundary information
-            
+
         Return values:
             PathfindingResult with path away from danger to a safe location
-            
+
         This method plans an escape route by finding the furthest safe position
         from the danger location within a reasonable distance, supporting survival
         and retreat strategies for the AI player during combat or dangerous situations.
@@ -578,16 +578,16 @@ class MovementPlanner:
     def get_strategic_positioning(self, current_pos: tuple[int, int], target_pos: tuple[int, int],
                                  strategy: str, game_data: Any) -> PathfindingResult:
         """Get strategic position relative to target (combat, gathering, etc.).
-        
+
         Parameters:
             current_pos: Current character position as (x, y) tuple
             target_pos: Target position for strategic positioning
             strategy: Strategy type ("combat", "gathering", "ranged", "melee")
             game_data: Game data for positioning calculations
-            
+
         Return values:
             PathfindingResult with path to strategic position relative to target
-            
+
         This method calculates an optimal strategic position relative to a target
         based on the specified strategy, supporting tactical positioning for
         combat, resource gathering, and other strategic activities.

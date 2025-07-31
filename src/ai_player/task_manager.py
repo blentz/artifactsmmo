@@ -7,33 +7,31 @@ principle while maintaining the same import interface.
 """
 
 # Import all classes from their logical group files
-from .task_models import (
-    TaskType, TaskPriority, TaskProgress, TaskReward, TaskRequirement, Task
-)
-from .task_management import TaskManager
 from .task_goals import TaskGoalGenerator
-from .task_tracking import TaskProgressTracker
+from .task_management import TaskManager
+from .task_models import Task, TaskPriority, TaskProgress, TaskRequirement, TaskReward, TaskType
 from .task_optimization import TaskOptimizer
+from .task_tracking import TaskProgressTracker
 
 # Re-export all classes for backwards compatibility
 __all__ = [
     # Enums and Models
     "TaskType",
-    "TaskPriority", 
+    "TaskPriority",
     "TaskProgress",
     "TaskReward",
     "TaskRequirement",
     "Task",
-    
+
     # Core Management
     "TaskManager",
-    
+
     # Goal Generation
     "TaskGoalGenerator",
-    
+
     # Progress Tracking
     "TaskProgressTracker",
-    
+
     # Optimization
     "TaskOptimizer"
 ]

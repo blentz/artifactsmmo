@@ -7,13 +7,13 @@ convention while maintaining the same import interface.
 """
 
 # Import all classes from their new separate files
-from .token_config import TokenConfig
 from .api_client_wrapper import APIClientWrapper
 from .cooldown_manager import CooldownManager
+from .token_config import TokenConfig
 
 # Re-export all classes for backwards compatibility
 __all__ = [
     "TokenConfig",
-    "APIClientWrapper", 
+    "APIClientWrapper",
     "CooldownManager"
 ]

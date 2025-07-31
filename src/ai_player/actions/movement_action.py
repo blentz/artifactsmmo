@@ -10,8 +10,6 @@ enum for type safety and integration with the API client for actual execution.
 
 from typing import Any
 
-from ...game_data.api_client import APIClientWrapper
-from ...lib.httpstatus import ArtifactsHTTPStatus
 from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
 
@@ -77,7 +75,7 @@ class MovementAction(BaseAction):
         enum keys for type-safe condition checking.
         """
         return {
-            GameState.COOLDOWN_READY: True, 
+            GameState.COOLDOWN_READY: True,
             GameState.CAN_MOVE: True
         }
 
@@ -97,14 +95,14 @@ class MovementAction(BaseAction):
         # First check basic preconditions from parent class
         if not super().can_execute(current_state):
             return False
-        
+
         # Check if character is not already at target location
         current_x = current_state.get(GameState.CURRENT_X, 0)
         current_y = current_state.get(GameState.CURRENT_Y, 0)
-        
+
         # Only allow movement if we're not already at the target
         is_not_at_target = (current_x != self.target_x or current_y != self.target_y)
-        
+
         return is_not_at_target
 
     def get_effects(self) -> dict[GameState, Any]:
@@ -127,7 +125,7 @@ class MovementAction(BaseAction):
             # Do NOT disable all capabilities - they should be re-enabled when cooldown expires
             # The StateManager.update_cooldown_state() method handles capability restoration
         }
-        
+
         # Set location-specific flags based on target coordinates
         # These will be dynamically set by MovementActionFactory based on map content
         if hasattr(self, '_location_type'):
@@ -140,7 +138,7 @@ class MovementAction(BaseAction):
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
             elif self._location_type == 'workshop':
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
-        
+
         return effects
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
@@ -153,19 +151,19 @@ class MovementAction(BaseAction):
         Return values:
             ActionResult indicating movement requirements for ActionExecutor
 
-        This method returns the expected state changes for movement, which signals 
+        This method returns the expected state changes for movement, which signals
         to the ActionExecutor that it needs to make the actual movement API call.
         The ActionExecutor will detect movement actions and handle the API interaction.
         """
         # Return expected state changes to signal movement requirements
         # The ActionExecutor will see this is a movement action and make the API call
-        
+
         state_changes = {
             GameState.CURRENT_X: self.target_x,
             GameState.CURRENT_Y: self.target_y,
             GameState.COOLDOWN_READY: False,
         }
-        
+
         # Set location-specific flags based on target coordinates if available
         if hasattr(self, '_location_type'):
             if self._location_type == 'monster':
@@ -182,7 +180,7 @@ class MovementAction(BaseAction):
             success=True,
             message=f"Movement to ({self.target_x}, {self.target_y}) will be executed via API",
             state_changes=state_changes,
-            cooldown_seconds=5,  # Expected movement cooldown
+            cooldown_seconds=0,  # Actual cooldown comes from API response
         )
 
     def calculate_distance(self, current_x: int, current_y: int) -> int:

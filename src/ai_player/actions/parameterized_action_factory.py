@@ -8,7 +8,6 @@ requiring parameters (locations, targets, etc.).
 from abc import abstractmethod
 from typing import Any
 
-from ..state.game_state import GameState
 from ..state.character_game_state import CharacterGameState
 from .action_factory import ActionFactory
 from .base_action import BaseAction
@@ -46,13 +45,13 @@ class ParameterizedActionFactory(ActionFactory):
         for params in self.generate_parameters(game_data, current_state):
             # Extract location_type for special handling
             location_type = params.pop("location_type", None)
-            
+
             # Create the action instance
             instance = self.action_class(**params)
-            
+
             # Set location type as a private attribute if provided
             if location_type:
                 instance._location_type = location_type
-            
+
             instances.append(instance)
         return instances

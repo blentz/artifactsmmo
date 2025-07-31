@@ -457,30 +457,30 @@ class TestInventoryState:
         assert inventory.free_slots == 0
         assert inventory.is_full is True
         assert inventory.space_utilization == 100.0
-    
+
     @pytest.mark.asyncio
     async def test_get_current_bank_data_dict(self):
         """Test get_current_bank - now a stub implementation"""
         mock_api_client = AsyncMock()
         mock_item_analyzer = Mock()
         optimizer = InventoryOptimizer(mock_item_analyzer, mock_api_client)
-        
+
         result = await optimizer.get_current_bank("test_char")
-        
+
         # Current implementation is a stub
         assert isinstance(result, BankState)
         assert result.max_slots == 200  # Default stub value
         assert result.gold == 0  # Default stub value
-    
+
     @pytest.mark.asyncio
     async def test_get_current_bank_data_object(self):
         """Test get_current_bank - now a stub implementation"""
         mock_api_client = AsyncMock()
         mock_item_analyzer = Mock()
         optimizer = InventoryOptimizer(mock_item_analyzer, mock_api_client)
-        
+
         result = await optimizer.get_current_bank("test_char")
-        
+
         # Current implementation is a stub
         assert isinstance(result, BankState)
         assert result.max_slots == 200  # Default stub value
@@ -1450,11 +1450,11 @@ class TestItemAnalyzerAdditionalCoverage:
         item_analyzer = ItemAnalyzer()
         mock_api_client = AsyncMock()
         inventory_optimizer = InventoryOptimizer(item_analyzer, mock_api_client)
-        
+
         # Create a scenario that will cause an exception during processing
         # By passing None as character_state which will cause issues with .get() calls
         recommendations = inventory_optimizer.optimize_inventory_space("test_char", None)
-        
+
         # Should return empty list on exception
         assert isinstance(recommendations, list)
         assert len(recommendations) == 0

@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.lib.request_throttle import RequestThrottle, get_global_throttle, throttled_request
 import src.lib.request_throttle
+from src.lib.request_throttle import RequestThrottle, get_global_throttle, throttled_request
 
 
 class TestRequestThrottle:

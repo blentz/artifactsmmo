@@ -17,8 +17,8 @@ from typing import Any
 from .action_executor import ActionExecutor
 from .actions import ActionRegistry
 from .goal_manager import GoalManager
-from .state.game_state import GameState
 from .state.character_game_state import CharacterGameState
+from .state.game_state import GameState
 from .state.state_manager import StateManager
 
 
@@ -165,7 +165,7 @@ class AIPlayer:
 
             # Check if character is on cooldown before planning
             if not current_state.cooldown_ready:
-                self.logger.info(f"Character on cooldown, waiting...")
+                self.logger.info("Character on cooldown, waiting...")
                 await asyncio.sleep(2.0)  # Wait and check again
                 continue
 
@@ -186,7 +186,7 @@ class AIPlayer:
                 # Plan actions to achieve goal
                 if not goal:
                     raise RuntimeError(f"Goal manager returned empty goal for character {self.character_name}. This is a bug in goal selection logic.")
-                
+
                 plan = await self.plan_actions(current_state, goal)
                 self._execution_stats["replanning_count"] += 1
 
@@ -236,13 +236,13 @@ class AIPlayer:
         print(f"DEBUG: goal parameter: {goal}")
         if not self.goal_manager:
             raise RuntimeError("GoalManager not available for planning - this is a critical initialization bug")
-        
-        print(f"DEBUG: GoalManager is available, proceeding with planning")
+
+        print("DEBUG: GoalManager is available, proceeding with planning")
 
         # Use cooldown-aware planning with character name
         target_state = goal.get('target_state', {})
         print(f"DEBUG AIPlayer: Planning for target_state: {target_state}")
-        
+
         try:
             plan = await self.goal_manager.plan_with_cooldown_awareness(
                 self.character_name, current_state, target_state

@@ -8,7 +8,6 @@ import os
 import tempfile
 
 
-
 def test_goap_imports():
     """Test that GOAP core classes can be imported from lib package."""
     from src.lib import Action_List, Planner, World

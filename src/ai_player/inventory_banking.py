@@ -7,8 +7,8 @@ and organization for the inventory system.
 
 from typing import Any
 
-from .state.game_state import GameState
 from .inventory_models import BankState, OptimizationRecommendation
+from .state.game_state import GameState
 
 
 class BankManager:

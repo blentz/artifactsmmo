@@ -42,7 +42,7 @@ from typing import Dict, List, Optional, Tuple
 import pytest
 
 
-def get_test_modules() -> List[str]:
+def get_test_modules() -> list[str]:
     """
     Get list of all test modules in this package.
     
@@ -66,19 +66,19 @@ def run_all_tests(verbose: bool = True, coverage: bool = True) -> int:
         int: Exit code (0 for success, non-zero for failure)
     """
     test_dir = Path(__file__).parent
-    
+
     args = [str(test_dir)]
-    
+
     if verbose:
         args.append("-v")
-        
+
     if coverage:
         args.extend(["--cov=src.lib", "--cov-report=term-missing"])
-    
+
     return pytest.main(args)
 
 
-def validate_imports() -> Tuple[bool, List[str]]:
+def validate_imports() -> tuple[bool, list[str]]:
     """
     Validate that all test modules can be imported successfully.
     
@@ -87,7 +87,7 @@ def validate_imports() -> Tuple[bool, List[str]]:
     """
     errors = []
     test_modules = get_test_modules()
-    
+
     for module_name in test_modules:
         try:
             importlib.import_module(f"tests.test_lib.{module_name}")
@@ -95,11 +95,11 @@ def validate_imports() -> Tuple[bool, List[str]]:
             errors.append(f"Failed to import {module_name}: {e}")
         except Exception as e:
             errors.append(f"Error importing {module_name}: {e}")
-    
+
     return len(errors) == 0, errors
 
 
-def check_lib_coverage() -> Dict[str, bool]:
+def check_lib_coverage() -> dict[str, bool]:
     """
     Check if all lib modules have corresponding test modules.
     
@@ -108,27 +108,27 @@ def check_lib_coverage() -> Dict[str, bool]:
     """
     lib_dir = Path(__file__).parent.parent.parent / "src" / "lib"
     lib_modules = [f.stem for f in lib_dir.glob("*.py") if f.stem != "__init__"]
-    
+
     test_modules = get_test_modules()
     test_targets = [m.replace("test_", "") for m in test_modules]
-    
+
     coverage = {}
     for module in lib_modules:
         coverage[module] = module in test_targets
-        
+
     return coverage
 
 
 # Test utilities and fixtures that can be shared across test modules
 class TestFixtures:
     """Common test fixtures and utilities for lib tests."""
-    
+
     @staticmethod
     def get_temp_yaml_path() -> str:
         """Get a temporary path for YAML test files."""
         import tempfile
         return tempfile.mktemp(suffix=".yaml")
-    
+
     @staticmethod
     def cleanup_temp_files(*paths: str) -> None:
         """Clean up temporary test files."""
@@ -144,7 +144,7 @@ class TestFixtures:
 # Re-export commonly used test utilities
 __all__ = [
     "get_test_modules",
-    "run_all_tests", 
+    "run_all_tests",
     "validate_imports",
     "check_lib_coverage",
     "TestFixtures",

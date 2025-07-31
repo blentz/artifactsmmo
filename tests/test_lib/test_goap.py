@@ -818,7 +818,7 @@ class TestGOAPIntegration:
 
     def test_coverage_lines_625_628_direct_optimization(self):
         """Test to directly trigger lines 625 and 628 in the A* optimization."""
-        from src.lib.goap import create_node, walk_path, node_in_list
+        from src.lib.goap import create_node, walk_path
 
         # Create a more complex scenario to force the optimization paths
         path = {
@@ -867,7 +867,7 @@ class TestGOAPIntegration:
     def test_coverage_line_562_explicit_none_node(self):
         """Test line 562 explicitly by manipulating the lowest node search."""
         from src.lib.goap import walk_path
-        
+
         # Create a custom path structure that will result in _lowest["node"] being None
         path = {
             "nodes": {1: {"id": 1, "f": float('inf'), "state": {"level": 1}}},  # Invalid high cost node
@@ -880,7 +880,7 @@ class TestGOAPIntegration:
             "olist": {1: {"id": 1, "f": float('inf'), "state": {"level": 1}}},  # Node with infinite cost
             "clist": {},
         }
-        
+
         # This should fail to find a valid lowest node and return []
         result = walk_path(path)
         assert result == []
@@ -890,27 +890,27 @@ class TestGOAPIntegration:
         # These lines contain bugs (line 625 uses next_node instead of next_node["id"])
         # but we need to test the code as-is. They likely won't execute properly
         # due to the KeyError, which explains why they're hard to reach.
-        
+
         # Create a scenario that forces the A* algorithm into the neighbor processing
         # where these conditions might be met
         start_state = {"level": 1, "location": 0}
         goal_state = {"level": 2, "location": 1}
-        
+
         actions = {
             "move": {"level": 1, "location": 0},
             "level_up": {"level": 1, "location": 0},
         }
-        
+
         reactions = {
             "move": {"location": 1},
             "level_up": {"level": 2},
         }
-        
+
         weights = {
             "move": 1,
             "level_up": 1,
         }
-        
+
         # This should exercise the A* pathfinding with multiple possible paths
         result = astar(start_state, goal_state, actions, reactions, weights)
         assert isinstance(result, list)
@@ -918,7 +918,7 @@ class TestGOAPIntegration:
     def test_coverage_line_562_with_invalid_f_values(self):
         """Test line 562 by creating nodes with invalid f values."""
         from src.lib.goap import walk_path
-        
+
         # Create a scenario where all nodes in olist have very high f values
         # that might not be selected as lowest
         path = {
@@ -938,7 +938,7 @@ class TestGOAPIntegration:
             },
             "clist": {},
         }
-        
+
         # This might trigger the condition where no lowest node is found
         result = walk_path(path)
         assert result == []
@@ -947,41 +947,40 @@ class TestGOAPIntegration:
         """Attempt to reach problematic lines 625/628 with error handling."""
         # Since line 625 has a bug (using next_node instead of next_node["id"]),
         # we can try to trigger it and catch the expected error
-        
-        import pytest
+
         from src.lib.goap import astar
-        
+
         # Create a complex scenario that might trigger the problematic deletion logic
         start_state = {"level": 1, "hp": 100, "location": 0}
         goal_state = {"level": 3, "hp": 100, "location": 2}
-        
+
         actions = {
             "move_1": {"level": 1, "location": 0},
             "level_up_1": {"level": 1, "location": 1},
             "move_2": {"level": 2, "location": 1},
             "level_up_2": {"level": 2, "location": 2},
         }
-        
+
         reactions = {
             "move_1": {"location": 1},
             "level_up_1": {"level": 2},
             "move_2": {"location": 2},
             "level_up_2": {"level": 3},
         }
-        
+
         weights = {
             "move_1": 10,     # High cost initially
             "level_up_1": 1,  # Low cost
             "move_2": 10,     # High cost initially
             "level_up_2": 1,  # Low cost
         }
-        
+
         # This complex scenario might trigger the path optimization conditions
         # The bug in line 625 means it likely won't complete successfully if reached
         try:
             result = astar(start_state, goal_state, actions, reactions, weights)
             assert isinstance(result, list)
-        except (KeyError, TypeError) as e:
+        except (KeyError, TypeError):
             # If we hit the bug in line 625, we expect a KeyError
             # This would actually mean we successfully triggered that line
             pass

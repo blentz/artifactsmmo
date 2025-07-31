@@ -171,8 +171,8 @@ class TestPerformance:
 
     def test_import_speed(self):
         """Test that imports happen quickly"""
-        import time
         import sys
+        import time
 
         # Clear any cached modules to ensure fresh import timing
         modules_to_clear = [
@@ -185,7 +185,6 @@ class TestPerformance:
 
         start_time = time.time()
         # Perform the actual import we're timing
-        import src.cli.commands
         end_time = time.time()
 
         # Import should complete in reasonable time (< 1 second)

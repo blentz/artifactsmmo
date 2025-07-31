@@ -30,7 +30,7 @@ class CLIMockFactory:
         cli_manager.diagnostic_commands = Mock()
         cli_manager.running_players = {}
         cli_manager.logger = Mock()
-        
+
         # Mock all CLI manager methods
         cli_manager.create_parser = Mock(return_value=CLIMockFactory.create_argument_parser_mock())
         cli_manager.setup_logging = Mock()
@@ -44,7 +44,7 @@ class CLIMockFactory:
         cli_manager.handle_diagnose_actions = AsyncMock()
         cli_manager.handle_diagnose_plan = AsyncMock()
         cli_manager.handle_test_planning = AsyncMock()
-        
+
         return cli_manager
 
     @staticmethod
@@ -70,20 +70,20 @@ class CLIMockFactory:
         args.command = command
         args.log_level = kwargs.get('log_level', 'INFO')
         args.token_file = kwargs.get('token_file', 'TOKEN')
-        
+
         # Character management args
         args.name = kwargs.get('name', 'test_character')
         args.skin = kwargs.get('skin', 'men1')
         args.detailed = kwargs.get('detailed', False)
         args.confirm = kwargs.get('confirm', False)
-        
+
         # AI player control args
         args.goal = kwargs.get('goal', None)
         args.max_runtime = kwargs.get('max_runtime', None)
         args.save_interval = kwargs.get('save_interval', 300)
         args.force = kwargs.get('force', False)
         args.monitor = kwargs.get('monitor', False)
-        
+
         # Diagnostic args
         args.validate_enum = kwargs.get('validate_enum', False)
         args.character = kwargs.get('character', 'test_character')
@@ -97,20 +97,20 @@ class CLIMockFactory:
         args.goal_level = kwargs.get('goal_level', 5)
         args.dry_run = kwargs.get('dry_run', False)
         args.filter = kwargs.get('filter', None)
-        
+
         return args
 
     @staticmethod
     def create_api_client_mock() -> AsyncMock:
         """Create a mock API client object"""
         client = AsyncMock()
-        
+
         # Character management methods
         client.create_character = AsyncMock(return_value=CLIMockFactory.create_character_mock())
         client.delete_character = AsyncMock(return_value=True)
         client.get_characters = AsyncMock(return_value=[CLIMockFactory.create_character_mock()])
         client.get_character = AsyncMock(return_value=CLIMockFactory.create_character_mock())
-        
+
         # Action methods
         client.move_character = AsyncMock()
         client.fight_monster = AsyncMock()
@@ -119,7 +119,7 @@ class CLIMockFactory:
         client.rest_character = AsyncMock()
         client.equip_item = AsyncMock()
         client.unequip_item = AsyncMock()
-        
+
         # Data retrieval methods
         client.get_all_items = AsyncMock(return_value=[])
         client.get_all_monsters = AsyncMock(return_value=[])
@@ -127,7 +127,7 @@ class CLIMockFactory:
         client.get_map = AsyncMock()
         client.get_all_resources = AsyncMock(return_value=[])
         client.get_all_npcs = AsyncMock(return_value=[])
-        
+
         # Required attributes
         client.cooldown_manager = Mock()
         client.cooldown_manager.update_from_character = Mock()
@@ -139,11 +139,11 @@ class CLIMockFactory:
         client.cooldown_manager.clear_all_cooldowns = Mock()
         client.cooldown_manager.get_cooldown_info = Mock(return_value=None)
         client.cooldown_manager.clear_expired_cooldowns = Mock()
-        
+
         client.client = Mock()  # Underlying authenticated client
         client.token_config = Mock()
         client.status_codes = Mock()
-        
+
         return client
 
     @staticmethod
@@ -201,13 +201,13 @@ class CLITestAssertions:
     def assert_command_parsed(
         args: Mock,
         expected_command: str,
-        expected_args: Dict[str, Any] | None = None
+        expected_args: dict[str, Any] | None = None
     ):
         """Assert that command was parsed correctly"""
         assert args.command == expected_command, (
             f"Expected command '{expected_command}', got '{args.command}'"
         )
-        
+
         if expected_args:
             for arg_name, expected_value in expected_args.items():
                 actual_value = getattr(args, arg_name, None)
@@ -270,11 +270,11 @@ class CLITestAssertions:
         """Assert CLI output contains expected text"""
         print_calls = [str(call) for call in print_mock.call_args_list]
         output_text = " ".join(print_calls)
-        
+
         if not case_sensitive:
             output_text = output_text.lower()
             expected_text = expected_text.lower()
-            
+
         assert expected_text in output_text, (
             f"Expected text '{expected_text}' not found in CLI output"
         )
@@ -308,7 +308,7 @@ class CLITestHelpers:
         character_name: str = "new_character",
         skin: str = "men1",
         should_succeed: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a character creation test scenario"""
         return {
             'args': CLIMockFactory.create_parsed_args_mock(
@@ -329,7 +329,7 @@ class CLITestHelpers:
         goal: str | None = None,
         max_runtime: int | None = None,
         should_succeed: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create an AI player test scenario"""
         return {
             'args': CLIMockFactory.create_parsed_args_mock(
@@ -346,15 +346,15 @@ class CLITestHelpers:
     def create_diagnostic_scenario(
         diagnostic_type: str = "diagnose-state",
         character_name: str = "diagnostic_character",
-        options: Dict[str, Any] | None = None
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Create a diagnostic command test scenario"""
         args_dict = {
             'command': diagnostic_type,
             'name': character_name,
             **(options or {})
         }
-        
+
         return {
             'args': CLIMockFactory.create_parsed_args_mock(**args_dict),
             'diagnostic_commands': CLIMockFactory.create_diagnostic_commands_mock(),
@@ -366,8 +366,8 @@ class CLITestHelpers:
         cli_manager: Mock,
         command: str,
         args: Mock,
-        mock_dependencies: Dict[str, Any] | None = None
-    ) -> Dict[str, Any]:
+        mock_dependencies: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Simulate executing a CLI command and return results"""
         if mock_dependencies:
             for attr_name, mock_obj in mock_dependencies.items():
@@ -402,7 +402,7 @@ class CLITestHelpers:
         }
 
     @staticmethod
-    def create_argument_parsing_test_cases() -> List[Dict[str, Any]]:
+    def create_argument_parsing_test_cases() -> list[dict[str, Any]]:
         """Create test cases for argument parsing validation"""
         return [
             {
@@ -445,7 +445,7 @@ class CLITestHelpers:
         return name.replace('_', '').isalnum()
 
     @staticmethod
-    def create_error_scenarios() -> List[Dict[str, Any]]:
+    def create_error_scenarios() -> list[dict[str, Any]]:
         """Create test scenarios for error handling"""
         return [
             {

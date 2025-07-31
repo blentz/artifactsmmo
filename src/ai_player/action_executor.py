@@ -13,11 +13,11 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any, Optional
+from typing import Any
 
 from ..game_data.api_client_wrapper import APIClientWrapper
-from ..game_data.cooldown_manager import CooldownManager
 from ..game_data.cache_manager import CacheManager
+from ..game_data.cooldown_manager import CooldownManager
 from .actions import get_global_registry
 from .actions.base_action import BaseAction
 from .state.character_game_state import CharacterGameState
@@ -29,15 +29,15 @@ class ActionExecutor:
 
     def __init__(self, api_client: APIClientWrapper, cooldown_manager: CooldownManager, cache_manager: CacheManager):
         """Initialize ActionExecutor with API client and cooldown management.
-        
+
         Parameters:
             api_client: API client wrapper for game operations
             cooldown_manager: Manager for character cooldown tracking
             cache_manager: CacheManager instance for accessing game data (maps, monsters, resources)
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor initializes the ActionExecutor with the necessary
         components for reliable action execution including API communication,
         cooldown management, and game data access for action generation.
@@ -55,15 +55,15 @@ class ActionExecutor:
 
     async def execute_action(self, action: BaseAction, character_name: str, current_state: CharacterGameState) -> ActionResult:
         """Execute single action with full error handling and cooldown management.
-        
+
         Parameters:
             action: BaseAction instance to execute
             character_name: Name of the character performing the action
             current_state: CharacterGameState Pydantic model with current character state
-            
+
         Return values:
             ActionResult containing success status, message, and state changes
-            
+
         This method executes a single GOAP action via the API, handling all
         error conditions, cooldown timing, and result processing to ensure
         reliable action execution within the AI player system.
@@ -146,14 +146,14 @@ class ActionExecutor:
 
     async def execute_plan(self, plan: list[dict[str, Any]], character_name: str) -> bool:
         """Execute entire action plan with state updates.
-        
+
         Parameters:
             plan: List of action dictionaries representing the planned sequence
             character_name: Name of the character to execute the plan for
-            
+
         Return values:
             Boolean indicating whether the entire plan executed successfully
-            
+
         This method executes a complete action plan by sequentially processing
         each action, handling cooldowns between actions, updating state after
         each execution, and providing comprehensive error recovery.
@@ -169,16 +169,16 @@ class ActionExecutor:
             self.logger.info("ActionExecutor: Getting character data from API...")
             character = await self.api_client.get_character(character_name)
             self.logger.info(f"ActionExecutor: Got character data: {character.name} at ({character.x}, {character.y})")
-            
+
             # Get map content for location context
             self.logger.info("ActionExecutor: Getting map data from API...")
             game_map = await self.api_client.get_map(character.x, character.y)
             self.logger.info(f"ActionExecutor: Got map data: {game_map}")
-            
+
             # Convert to internal state format - keep as CharacterGameState
             self.logger.info("ActionExecutor: Converting to CharacterGameState...")
             character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
-            self.logger.info(f"ActionExecutor: Initial state loaded successfully")
+            self.logger.info("ActionExecutor: Initial state loaded successfully")
 
             self.logger.info(f"ActionExecutor: Starting for loop with {len(plan)} actions")
             for i, action_info in enumerate(plan):
@@ -190,7 +190,7 @@ class ActionExecutor:
                     if not action_name:
                         self.logger.error(f"No action name found in action_info: {action_info}")
                         return False
-                    
+
                     # Get action instance from registry using actual current state
                     self.logger.info(f"ActionExecutor: Getting action from registry: '{action_name}'")
                     action = await self.get_action_by_name(action_name, character_state)
@@ -198,7 +198,7 @@ class ActionExecutor:
                     if not action:
                         self.logger.warning(f"Could not find action '{action_name}' in registry")
                         return False
-                    
+
                     self.logger.debug(f"Found action '{action_name}', executing...")
 
                     # Translate action to API call based on action type
@@ -229,7 +229,7 @@ class ActionExecutor:
                             # Extract target coordinates from action
                             target_x = action.target_x
                             target_y = action.target_y
-                            
+
                             move_result = await self.api_client.move_character(character_name, target_x, target_y)
                             result = ActionResult(
                                 success=True,
@@ -273,17 +273,17 @@ class ActionExecutor:
                                 return False
                         else:
                             return False
-                    
+
                     self.logger.info(f"Action '{action_name}' succeeded: {result.message}")
 
                     # Update state with action results
                     # Convert character_state to typed state dictionary for updates
                     goap_state = character_state.to_goap_state()
                     typed_state = GameState.validate_state_dict(goap_state)
-                    
+
                     for state_key, new_value in result.state_changes.items():
                         typed_state[state_key] = new_value
-                        
+
                     # Update the character_state object with the new values
                     character_state = CharacterGameState.from_goap_state(typed_state)
 
@@ -307,13 +307,13 @@ class ActionExecutor:
 
     async def wait_for_cooldown(self, character_name: str) -> None:
         """Wait for character cooldown to expire before action execution.
-        
+
         Parameters:
             character_name: Name of the character to check cooldown for
-            
+
         Return values:
             None (async operation)
-            
+
         This method checks the character's cooldown status and waits
         asynchronously until the cooldown expires, ensuring API compliance
         and preventing 499 cooldown errors during action execution.
@@ -340,14 +340,14 @@ class ActionExecutor:
 
     def validate_action_preconditions(self, action: BaseAction, current_state: CharacterGameState) -> bool:
         """Verify action preconditions are met before execution.
-        
+
         Parameters:
             action: BaseAction instance to validate preconditions for
             current_state: CharacterGameState Pydantic model with current character state
-            
+
         Return values:
             Boolean indicating whether all action preconditions are satisfied
-            
+
         This method validates that the current game state meets all the
         preconditions required for the action, preventing failed execution
         attempts and ensuring optimal action planning efficiency.
@@ -361,21 +361,21 @@ class ActionExecutor:
 
     async def handle_action_error(self, action: BaseAction, error: Exception, character_name: str) -> ActionResult | None:
         """Handle API errors during action execution with recovery strategies.
-        
+
         Parameters:
             action: BaseAction instance that encountered an error during execution
             error: Exception that occurred during action execution
             character_name: Name of the character that experienced the error
-            
+
         Return values:
             Optional ActionResult with recovery outcome, or None if unrecoverable
-            
+
         This method implements comprehensive error handling for action execution
         including retry logic, emergency recovery, and graceful degradation
         strategies to maintain AI player operation despite API issues.
         """
         error_message = str(error)
-        error_type = type(error).__name__
+        type(error).__name__
 
         # Handle specific error types
         if hasattr(error, 'status_code'):
@@ -445,14 +445,14 @@ class ActionExecutor:
 
     async def process_action_result(self, api_response: Any, action: BaseAction) -> ActionResult:
         """Convert API response to ActionResult with state changes.
-        
+
         Parameters:
             api_response: Raw API response from action execution
             action: BaseAction instance that was executed
-            
+
         Return values:
             ActionResult containing processed success status, message, and state changes
-            
+
         This method transforms the raw API response into a standardized ActionResult
         format, extracting state changes, cooldown information, and execution
         status for consistent result handling throughout the system.
@@ -482,7 +482,7 @@ class ActionExecutor:
                 # Get map content for location context
                 character = api_response.character
                 game_map = await self.api_client.get_map(character.x, character.y)
-                
+
                 # Convert to internal state format
                 character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
                 goap_state = character_state.to_goap_state()
@@ -521,14 +521,14 @@ class ActionExecutor:
 
     async def emergency_recovery(self, character_name: str, error_context: str) -> bool:
         """Perform emergency recovery actions (rest, move to safety).
-        
+
         Parameters:
             character_name: Name of the character requiring emergency recovery
             error_context: String describing the error context that triggered recovery
-            
+
         Return values:
             Boolean indicating whether emergency recovery was successful
-            
+
         This method implements emergency recovery procedures including moving
         to safe locations, resting to recover HP, and clearing problematic
         states to restore AI player operation after critical errors.
@@ -592,14 +592,14 @@ class ActionExecutor:
 
     async def get_action_by_name(self, action_name: str, current_state: CharacterGameState) -> BaseAction | None:
         """Get action instance by name from registry using actual game state.
-        
+
         Parameters:
             action_name: String identifier for the desired action
             current_state: CharacterGameState Pydantic model with current character state
-            
+
         Return values:
             BaseAction instance matching the name, or None if not found
-            
+
         This method retrieves a specific action instance from the action
         registry by name, using the actual game state for parameterized actions
         to ensure consistency between planning and execution phases.
@@ -610,14 +610,14 @@ class ActionExecutor:
 
     def estimate_execution_time(self, action: BaseAction, current_state: CharacterGameState) -> float:
         """Estimate time required to execute action including cooldown.
-        
+
         Parameters:
             action: BaseAction instance to estimate execution time for
             current_state: CharacterGameState Pydantic model with current character state
-            
+
         Return values:
             Float representing estimated seconds for complete action execution
-            
+
         This method calculates the total time required for action execution
         including API call time, processing time, and resulting cooldown
         period for accurate planning and scheduling.
@@ -656,15 +656,15 @@ class ActionExecutor:
 
     async def verify_action_success(self, action: BaseAction, result: ActionResult, character_name: str) -> bool:
         """Verify action was executed successfully by checking state changes.
-        
+
         Parameters:
             action: BaseAction instance that was executed
             result: ActionResult containing execution outcome and state changes
             character_name: Name of the character that executed the action
-            
+
         Return values:
             Boolean indicating whether action execution was verified as successful
-            
+
         This method validates action execution success by comparing expected
         state changes with actual results, ensuring action effects match
         expectations for reliable GOAP planning feedback.
@@ -700,13 +700,13 @@ class ActionExecutor:
 
     def handle_rate_limit(self, retry_after: int) -> None:
         """Handle API rate limiting with appropriate backoff.
-        
+
         Parameters:
             retry_after: Number of seconds to wait before retrying as specified by API
-            
+
         Return values:
             None (implements waiting strategy)
-            
+
         This method implements appropriate backoff strategies for API rate
         limiting including exponential backoff, jitter, and compliance with
         server-specified retry intervals to maintain API access.
@@ -734,15 +734,15 @@ class ActionExecutor:
 
     async def safe_execute(self, action: BaseAction, character_name: str, current_state: CharacterGameState) -> ActionResult:
         """Execute action with comprehensive error handling and retries.
-        
+
         Parameters:
             action: BaseAction instance to execute with enhanced safety measures
             character_name: Name of the character performing the action
             current_state: CharacterGameState Pydantic model with current character state
-            
+
         Return values:
             ActionResult with execution outcome and comprehensive error handling
-            
+
         This method provides the highest level of action execution safety
         including precondition validation, retry logic, error recovery,
         and result verification for maximum reliability.

@@ -7,10 +7,9 @@ A* and Dijkstra algorithms for efficient path calculation in the game world.
 
 import heapq
 from abc import ABC, abstractmethod
-from typing import Any
 
 from .actions.movement_action import MovementAction
-from .pathfinding_models import PathNode, PathfindingResult
+from .pathfinding_models import PathfindingResult, PathNode
 
 
 class PathfindingAlgorithm(ABC):
@@ -20,16 +19,16 @@ class PathfindingAlgorithm(ABC):
     def find_path(self, start: tuple[int, int], goal: tuple[int, int], obstacles: set[tuple[int, int]],
                   bounds: tuple[int, int, int, int]) -> PathfindingResult:
         """Find optimal path from start to goal avoiding obstacles.
-        
+
         Parameters:
             start: Starting coordinates as (x, y) tuple
             goal: Target destination coordinates as (x, y) tuple
             obstacles: Set of coordinate tuples representing blocked positions
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             PathfindingResult containing success status, path coordinates, and movement actions
-            
+
         This method implements the abstract pathfinding interface to find an optimal
         path from start to goal while avoiding obstacles and staying within map
         boundaries, suitable for GOAP movement planning.
@@ -43,16 +42,16 @@ class AStarPathfinding(PathfindingAlgorithm):
     def find_path(self, start: tuple[int, int], goal: tuple[int, int], obstacles: set[tuple[int, int]],
                   bounds: tuple[int, int, int, int]) -> PathfindingResult:
         """A* pathfinding with obstacle avoidance.
-        
+
         Parameters:
             start: Starting coordinates as (x, y) tuple
             goal: Target destination coordinates as (x, y) tuple
             obstacles: Set of coordinate tuples representing blocked positions
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             PathfindingResult with optimal path using A* algorithm evaluation
-            
+
         This method implements the A* pathfinding algorithm with Manhattan distance
         heuristic to find the optimal path while avoiding obstacles and respecting
         map boundaries for efficient character navigation.
@@ -178,14 +177,14 @@ class AStarPathfinding(PathfindingAlgorithm):
 
     def heuristic(self, pos1: tuple[int, int], pos2: tuple[int, int]) -> int:
         """Manhattan distance heuristic.
-        
+
         Parameters:
             pos1: First position coordinates as (x, y) tuple
             pos2: Second position coordinates as (x, y) tuple
-            
+
         Return values:
             Integer representing Manhattan distance between the two positions
-            
+
         This method calculates the Manhattan distance heuristic for A* pathfinding,
         providing an admissible estimate of movement cost between positions for
         optimal pathfinding performance in grid-based movement.
@@ -194,14 +193,14 @@ class AStarPathfinding(PathfindingAlgorithm):
 
     def get_neighbors(self, node: PathNode, bounds: tuple[int, int, int, int]) -> list[PathNode]:
         """Get valid neighboring positions.
-        
+
         Parameters:
             node: Current PathNode to find neighbors for
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             List of PathNode objects representing valid adjacent positions
-            
+
         This method generates all valid neighboring positions for the current node
         considering map boundaries and movement constraints, supporting 4-directional
         movement for A* pathfinding exploration.
@@ -226,16 +225,16 @@ class AStarPathfinding(PathfindingAlgorithm):
     def is_valid_position(self, x: int, y: int, obstacles: set[tuple[int, int]],
                           bounds: tuple[int, int, int, int]) -> bool:
         """Check if position is valid (not obstacle, within bounds).
-        
+
         Parameters:
             x: X coordinate to validate
             y: Y coordinate to validate
             obstacles: Set of coordinate tuples representing blocked positions
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             Boolean indicating whether position is accessible for movement
-            
+
         This method validates that a position is within map boundaries, not blocked
         by obstacles, and accessible for character movement in the pathfinding
         algorithm exploration process.
@@ -272,16 +271,16 @@ class DijkstraPathfinding(PathfindingAlgorithm):
     def find_path(self, start: tuple[int, int], goal: tuple[int, int], obstacles: set[tuple[int, int]],
                   bounds: tuple[int, int, int, int]) -> PathfindingResult:
         """Dijkstra pathfinding with guaranteed optimal solution.
-        
+
         Parameters:
             start: Starting coordinates as (x, y) tuple
             goal: Target destination coordinates as (x, y) tuple
             obstacles: Set of coordinate tuples representing blocked positions
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             PathfindingResult with optimal path using Dijkstra algorithm
-            
+
         This method implements Dijkstra's pathfinding algorithm which guarantees
         finding the optimal path by exploring all nodes in order of distance from
         start, without using heuristics for efficient pathfinding.
@@ -412,14 +411,14 @@ class DijkstraPathfinding(PathfindingAlgorithm):
 
     def get_neighbors(self, node: PathNode, bounds: tuple[int, int, int, int]) -> list[PathNode]:
         """Get valid neighboring positions.
-        
+
         Parameters:
             node: Current PathNode to find neighbors for
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             List of PathNode objects representing valid adjacent positions
-            
+
         This method generates all valid neighboring positions for the current node
         considering map boundaries and movement constraints, supporting 4-directional
         movement for Dijkstra pathfinding exploration.
@@ -444,16 +443,16 @@ class DijkstraPathfinding(PathfindingAlgorithm):
     def is_valid_position(self, x: int, y: int, obstacles: set[tuple[int, int]],
                           bounds: tuple[int, int, int, int]) -> bool:
         """Check if position is valid (not obstacle, within bounds).
-        
+
         Parameters:
             x: X coordinate to validate
             y: Y coordinate to validate
             obstacles: Set of coordinate tuples representing blocked positions
             bounds: Map boundaries as (min_x, min_y, max_x, max_y) tuple
-            
+
         Return values:
             Boolean indicating whether position is accessible for movement
-            
+
         This method validates that a position is within map boundaries, not blocked
         by obstacles, and accessible for character movement in the Dijkstra
         algorithm exploration process.

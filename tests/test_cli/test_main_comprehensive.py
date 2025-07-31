@@ -8,24 +8,13 @@ by the architecture.
 """
 
 import argparse
-import asyncio
-import logging
-import pytest
-import random
 import string
-import sys
-from io import StringIO
-from unittest.mock import AsyncMock, MagicMock, Mock, patch, call
-from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
 
-from src.cli.main import CLIManager, generate_random_character_name, main
+import pytest
+
 from src.ai_player.ai_player import AIPlayer
-from src.ai_player.actions import ActionRegistry
-from src.ai_player.goal_manager import GoalManager
-from src.ai_player.state.state_manager import StateManager
-from src.game_data.api_client import APIClientWrapper
-from src.game_data.cache_manager import CacheManager
-from src.cli.commands.diagnostics import DiagnosticCommands
+from src.cli.main import CLIManager, generate_random_character_name, main
 
 
 class TestGenerateRandomCharacterName:
@@ -40,7 +29,7 @@ class TestGenerateRandomCharacterName:
     def test_generate_random_character_name_allowed_characters(self):
         """Test that generated names only contain allowed characters."""
         allowed_chars = set(string.ascii_letters + string.digits + '_-')
-        
+
         for _ in range(100):  # Test multiple generations
             name = generate_random_character_name()
             name_chars = set(name)
@@ -65,7 +54,7 @@ class TestGenerateRandomCharacterName:
         """Test name generation with mocked randomness for predictable results."""
         mock_randint.return_value = 6  # Fixed length
         mock_choice.side_effect = ['a', 'b', 'c', 'd', 'e', 'f']  # Fixed choices
-        
+
         name = generate_random_character_name()
         assert name == 'abcdef'
         mock_randint.assert_called_once_with(6, 10)
@@ -78,7 +67,7 @@ class TestCLIManagerInitialization:
     def test_cli_manager_init(self):
         """Test basic CLIManager initialization."""
         cli_manager = CLIManager()
-        
+
         assert cli_manager.log_manager is not None
         assert cli_manager.api_client is None
         assert cli_manager.diagnostic_commands is not None
@@ -94,9 +83,9 @@ class TestCLIManagerInitialization:
         mock_diagnostic_instance = Mock()
         mock_log_manager.return_value = mock_log_instance
         mock_diagnostics.return_value = mock_diagnostic_instance
-        
+
         cli_manager = CLIManager()
-        
+
         assert cli_manager.log_manager == mock_log_instance
         assert cli_manager.diagnostic_commands == mock_diagnostic_instance
         mock_log_manager.assert_called_once()
@@ -111,38 +100,38 @@ class TestCLIManagerDiagnosticComponents:
     @patch('src.cli.main.get_global_registry')
     @patch('src.cli.main.GoalManager')
     def test_initialize_diagnostic_components_new_api_client(
-        self, mock_goal_manager, mock_registry, 
+        self, mock_goal_manager, mock_registry,
         mock_cache_manager, mock_api_client_wrapper
     ):
         """Test diagnostic components initialization when API client doesn't exist."""
         cli_manager = CLIManager()
-        
+
         # Mock return values
         mock_api_instance = Mock()
         mock_cache_instance = Mock()
         mock_registry_instance = Mock()
         mock_goal_instance = Mock()
-        
+
         mock_api_client_wrapper.return_value = mock_api_instance
         mock_cache_manager.return_value = mock_cache_instance
         mock_registry.return_value = mock_registry_instance
         mock_goal_manager.return_value = mock_goal_instance
-        
+
         result = cli_manager._initialize_diagnostic_components("test_token.txt")
-        
+
         # Verify API client was created and assigned
         assert cli_manager.api_client == mock_api_instance
         mock_api_client_wrapper.assert_called_once_with("test_token.txt")
-        
+
         # Verify all components were initialized properly
         mock_cache_manager.assert_called_once_with(mock_api_instance)
         mock_registry.assert_called_once()
         mock_goal_manager.assert_called_once_with(
-            mock_registry_instance, 
-            mock_api_instance.cooldown_manager, 
+            mock_registry_instance,
+            mock_api_instance.cooldown_manager,
             mock_cache_instance
         )
-        
+
         # Result should be a DiagnosticCommands instance
         assert result is not None
 
@@ -152,31 +141,31 @@ class TestCLIManagerDiagnosticComponents:
     @patch('src.cli.main.GoalManager')
     @patch('src.cli.main.DiagnosticCommands')
     def test_initialize_diagnostic_components_existing_api_client(
-        self, mock_diagnostic_commands, mock_goal_manager, mock_registry, 
+        self, mock_diagnostic_commands, mock_goal_manager, mock_registry,
         mock_cache_manager, mock_api_client_wrapper
     ):
         """Test diagnostic components initialization when API client already exists."""
         cli_manager = CLIManager()
         existing_api_client = Mock()
         cli_manager.api_client = existing_api_client
-        
+
         # Mock return values
         mock_cache_instance = Mock()
         mock_registry_instance = Mock()
         mock_goal_instance = Mock()
         mock_diagnostic_instance = Mock()
-        
+
         mock_cache_manager.return_value = mock_cache_instance
         mock_registry.return_value = mock_registry_instance
         mock_goal_manager.return_value = mock_goal_instance
         mock_diagnostic_commands.return_value = mock_diagnostic_instance
-        
+
         result = cli_manager._initialize_diagnostic_components("test_token.txt")
-        
+
         # Verify existing API client was used, not created
         assert cli_manager.api_client == existing_api_client
         mock_api_client_wrapper.assert_not_called()
-        
+
         # Verify components were initialized with existing client
         mock_cache_manager.assert_called_once_with(existing_api_client)
         mock_goal_manager.assert_called_once_with(
@@ -184,7 +173,7 @@ class TestCLIManagerDiagnosticComponents:
             existing_api_client.cooldown_manager,
             mock_cache_instance
         )
-        
+
         assert result == mock_diagnostic_instance
 
 
@@ -195,7 +184,7 @@ class TestCLIManagerArgumentParser:
         """Test that create_parser returns a properly configured ArgumentParser."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         assert isinstance(parser, argparse.ArgumentParser)
         assert "ArtifactsMMO AI Player" in parser.description
         assert parser.formatter_class == argparse.RawDescriptionHelpFormatter
@@ -204,7 +193,7 @@ class TestCLIManagerArgumentParser:
         """Test that global options are properly configured."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         # Test parsing global options
         args = parser.parse_args(['--log-level', 'DEBUG', '--token-file', 'test.token', 'list-characters'])
         assert args.log_level == 'DEBUG'
@@ -214,7 +203,7 @@ class TestCLIManagerArgumentParser:
         """Test that default values are set correctly."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         args = parser.parse_args(['list-characters'])
         assert args.log_level == 'INFO'
         assert args.token_file == 'TOKEN'
@@ -223,7 +212,7 @@ class TestCLIManagerArgumentParser:
         """Test that invalid log levels are rejected."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         with pytest.raises(SystemExit):
             parser.parse_args(['--log-level', 'INVALID', 'list-characters'])
 
@@ -234,7 +223,7 @@ class TestCLIManagerArgumentParser:
         """Test that all command setup methods are called."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         mock_char.assert_called_once()
         mock_ai.assert_called_once()
         mock_diag.assert_called_once()
@@ -247,7 +236,7 @@ class TestCLIManagerCharacterCommands:
         """Test create-character command setup."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         # Test valid create command
         args = parser.parse_args(['create-character', 'men1'])
         assert args.command == 'create-character'
@@ -259,7 +248,7 @@ class TestCLIManagerCharacterCommands:
         """Test create-character command with custom name."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         args = parser.parse_args(['create-character', 'women1', '--name', 'test_char'])
         assert args.command == 'create-character'
         assert args.skin == 'women1'
@@ -269,7 +258,7 @@ class TestCLIManagerCharacterCommands:
         """Test create-character command with invalid skin."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         with pytest.raises(SystemExit):
             parser.parse_args(['create-character', 'invalid_skin'])
 
@@ -277,7 +266,7 @@ class TestCLIManagerCharacterCommands:
         """Test delete-character command setup."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         args = parser.parse_args(['delete-character', 'test_char'])
         assert args.command == 'delete-character'
         assert args.name == 'test_char'
@@ -288,7 +277,7 @@ class TestCLIManagerCharacterCommands:
         """Test delete-character command with confirmation flag."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         args = parser.parse_args(['delete-character', 'test_char', '--confirm'])
         assert args.confirm is True
 
@@ -296,7 +285,7 @@ class TestCLIManagerCharacterCommands:
         """Test list-characters command setup."""
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
-        
+
         args = parser.parse_args(['list-characters'])
         assert args.command == 'list-characters'
         assert args.func == cli_manager.handle_list_characters
@@ -319,20 +308,20 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_character.skin = "men1"
         mock_api_instance.create_character.return_value = mock_character
         mock_api_wrapper.return_value = mock_api_instance
-        
+
         cli_manager = CLIManager()
-        
+
         # Create args object
         args = Mock()
         args.skin = "men1"
         args.name = None
         args.token_file = "test_token.txt"
-        
+
         # Use a valid name that passes validation (3-12 chars)
         with patch('src.cli.main.generate_random_character_name', return_value="test_char"):
             with patch('builtins.print') as mock_print:
                 await cli_manager.handle_create_character(args)
-        
+
         # Verify API client was created and character creation was called
         mock_api_wrapper.assert_called_once_with("test_token.txt")
         mock_api_instance.create_character.assert_called_once_with("test_char", "men1")
@@ -348,17 +337,17 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_character.skin = "women2"
         mock_api_instance.create_character.return_value = mock_character
         mock_api_wrapper.return_value = mock_api_instance
-        
+
         cli_manager = CLIManager()
-        
+
         # Create args object
         args = Mock()
         args.skin = "women2"
         args.name = "user_name"
         args.token_file = "test_token.txt"
-        
+
         await cli_manager.handle_create_character(args)
-        
+
         # Verify character creation was called with provided name
         mock_api_instance.create_character.assert_called_once_with("user_name", "women2")
 
@@ -370,14 +359,14 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_api_instance = AsyncMock()
         mock_api_instance.create_character.side_effect = Exception("API Error")
         mock_api_wrapper.return_value = mock_api_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.skin = "men1"
         args.name = "test_char"
         args.token_file = "test_token.txt"
-        
+
         # Should handle the exception gracefully
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_create_character(args)
@@ -393,16 +382,16 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_api_instance = AsyncMock()
         mock_api_instance.delete_character.return_value = True
         mock_api_wrapper.return_value = mock_api_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.name = "test_char"
         args.confirm = False
         args.token_file = "test_token.txt"
-        
+
         await cli_manager.handle_delete_character(args)
-        
+
         # Verify confirmation was requested and deletion was called
         mock_input.assert_called_once()
         mock_api_instance.delete_character.assert_called_once_with("test_char")
@@ -415,17 +404,17 @@ class TestCLIManagerAsyncCommandHandlers:
         # Setup mocks
         mock_api_instance = AsyncMock()
         mock_api_wrapper.return_value = mock_api_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.name = "test_char"
         args.confirm = False
         args.token_file = "test_token.txt"
-        
+
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_delete_character(args)
-        
+
         # Verify confirmation was requested but deletion was NOT called
         mock_input.assert_called_once()
         mock_api_instance.delete_character.assert_not_called()
@@ -438,17 +427,17 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_api_instance = AsyncMock()
         mock_api_instance.delete_character.return_value = True
         mock_api_wrapper.return_value = mock_api_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.name = "test_char"
         args.confirm = True
         args.token_file = "test_token.txt"
-        
+
         with patch('builtins.input') as mock_input:
             await cli_manager.handle_delete_character(args)
-        
+
         # Verify no confirmation was requested, deletion was called directly
         mock_input.assert_not_called()
         mock_api_instance.delete_character.assert_called_once_with("test_char")
@@ -468,16 +457,16 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_cache_instance.cache_all_characters.return_value = mock_characters
         mock_api_wrapper.return_value = mock_api_instance
         mock_cache_manager.return_value = mock_cache_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.token_file = "test_token.txt"
         args.detailed = False  # Simple output format
-        
+
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_list_characters(args)
-        
+
         # Verify cache manager was created and characters were fetched
         mock_cache_manager.assert_called_once_with(mock_api_instance)
         mock_cache_instance.cache_all_characters.assert_called_once()
@@ -498,16 +487,16 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_cache_instance.cache_all_characters.return_value = mock_characters
         mock_api_wrapper.return_value = mock_api_instance
         mock_cache_manager.return_value = mock_cache_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.token_file = "test_token.txt"
         args.detailed = True  # Detailed output format
-        
+
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_list_characters(args)
-        
+
         # Should print detailed character information
         assert mock_print.call_count >= 5  # More calls for detailed format
 
@@ -522,15 +511,15 @@ class TestCLIManagerAsyncCommandHandlers:
         mock_cache_instance.cache_all_characters.return_value = []
         mock_api_wrapper.return_value = mock_api_instance
         mock_cache_manager.return_value = mock_cache_instance
-        
+
         cli_manager = CLIManager()
-        
+
         args = Mock()
         args.token_file = "test_token.txt"
-        
+
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_list_characters(args)
-        
+
         # Should print no characters message
         mock_print.assert_any_call("No characters found on this account.")
 
@@ -543,7 +532,7 @@ class TestMainFunction:
         """Test basic main function execution."""
         with patch('asyncio.run') as mock_asyncio_run:
             main()
-        
+
         # Verify asyncio.run was called with async_main
         mock_asyncio_run.assert_called_once()
         # The argument to asyncio.run should be the result of calling async_main()
@@ -557,7 +546,7 @@ class TestMainFunction:
             with patch('builtins.print') as mock_print:
                 with patch('sys.exit') as mock_exit:
                     main()
-        
+
         # Should print cancellation message and exit
         mock_print.assert_called_with("\nOperation cancelled by user.")
         mock_exit.assert_called_once_with(1)
@@ -581,15 +570,15 @@ class TestAsyncMainFunction:
         mock_args = Mock()
         mock_args.func = AsyncMock()
         mock_args.log_level = 'INFO'
-        
+
         mock_manager_instance.create_parser.return_value = mock_parser
         mock_manager_instance.setup_logging = Mock()
         mock_parser.parse_args.return_value = mock_args
         mock_cli_manager.return_value = mock_manager_instance
-        
+
         from src.cli.main import async_main
         await async_main()
-        
+
         # Verify components were initialized
         mock_cli_manager.assert_called_once()
         mock_manager_instance.create_parser.assert_called_once()
@@ -606,15 +595,15 @@ class TestAsyncMainFunction:
         mock_args = Mock()
         mock_args.func = AsyncMock()
         mock_args.log_level = 'DEBUG'
-        
+
         mock_manager_instance.create_parser.return_value = mock_parser
         mock_manager_instance.setup_logging = Mock()
         mock_parser.parse_args.return_value = mock_args
         mock_cli_manager.return_value = mock_manager_instance
-        
+
         from src.cli.main import async_main
         await async_main()
-        
+
         # Verify debug log level was set
         mock_manager_instance.setup_logging.assert_called_once_with('DEBUG')
 
@@ -627,16 +616,16 @@ class TestAsyncMainFunction:
         mock_args = Mock()
         del mock_args.func  # No func attribute (no command)
         mock_args.log_level = 'INFO'
-        
+
         mock_manager_instance.create_parser.return_value = mock_parser
         mock_manager_instance.setup_logging = Mock()
         mock_parser.parse_args.return_value = mock_args
         mock_parser.print_help = Mock()
         mock_cli_manager.return_value = mock_manager_instance
-        
+
         from src.cli.main import async_main
         await async_main()
-        
+
         # Should call print_help
         mock_parser.print_help.assert_called_once()
 
@@ -647,14 +636,14 @@ class TestCLIManagerIntegrationScenarios:
     def test_running_players_management(self):
         """Test management of running AI players."""
         cli_manager = CLIManager()
-        
+
         # Initially empty
         assert len(cli_manager.running_players) == 0
-        
+
         # Add a mock player
         mock_player = Mock(spec=AIPlayer)
         cli_manager.running_players["test_char"] = mock_player
-        
+
         assert len(cli_manager.running_players) == 1
         assert cli_manager.running_players["test_char"] == mock_player
 
@@ -663,9 +652,9 @@ class TestCLIManagerIntegrationScenarios:
         """Test that logger is properly initialized."""
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
-        
+
         cli_manager = CLIManager()
-        
+
         mock_get_logger.assert_called_with("cli.manager")
         assert cli_manager.logger == mock_logger
 

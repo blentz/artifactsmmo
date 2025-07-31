@@ -6,6 +6,7 @@ of game resources throughout the AI player system.
 """
 
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 

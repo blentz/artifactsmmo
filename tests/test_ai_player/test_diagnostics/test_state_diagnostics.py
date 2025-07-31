@@ -4,12 +4,12 @@ Tests for StateDiagnostics class.
 Comprehensive test coverage for state validation and analysis functionality.
 """
 
+
 import pytest
-from typing import Any
 
 from src.ai_player.diagnostics.state_diagnostics import StateDiagnostics
 from src.ai_player.state.game_state import GameState
-from tests.fixtures.character_states import CharacterStateFixtures, get_test_character_state
+from tests.fixtures.character_states import CharacterStateFixtures
 
 
 class TestStateDiagnostics:
@@ -274,14 +274,14 @@ class TestStateDiagnostics:
         """Test comprehensive state change analysis with fixture data."""
         old_state = CharacterStateFixtures.get_level_10_experienced()
         new_state = CharacterStateFixtures.get_level_25_advanced()
-        
+
         analysis = state_diagnostics.analyze_state_changes(old_state, new_state)
-        
+
         assert analysis["has_changes"] is True
         assert len(analysis["changes"]) > 0
         assert "progression_metrics" in analysis
         assert len(analysis["positive_changes"]) > 0
-        
+
         # Verify progression metrics
         metrics = analysis["progression_metrics"]
         assert metrics["level_gained"] == 15  # From 10 to 25
@@ -292,7 +292,7 @@ class TestStateDiagnostics:
     def test_analyze_state_changes_no_changes(self, state_diagnostics, valid_state):
         """Test state change analysis when no changes exist."""
         analysis = state_diagnostics.analyze_state_changes(valid_state, valid_state)
-        
+
         assert analysis["has_changes"] is False
         assert len(analysis["changes"]) == 0
         assert len(analysis["positive_changes"]) == 0
@@ -303,14 +303,14 @@ class TestStateDiagnostics:
         # Test with emergency low HP scenario
         normal_state = CharacterStateFixtures.get_level_10_experienced()
         emergency_state = CharacterStateFixtures.get_emergency_low_hp()
-        
+
         analysis = state_diagnostics.analyze_state_changes(normal_state, emergency_state)
-        
+
         assert analysis["has_changes"] is True
         assert len(analysis["concerning_changes"]) > 0
-        
+
         # Should detect HP decrease as concerning
-        hp_changes = [change for change in analysis["concerning_changes"] 
+        hp_changes = [change for change in analysis["concerning_changes"]
                      if change["key"] == GameState.HP_CURRENT.value]
         assert len(hp_changes) > 0
 
@@ -318,7 +318,7 @@ class TestStateDiagnostics:
         """Test comprehensive state formatting with all sections."""
         state = CharacterStateFixtures.get_level_25_advanced()
         formatted = state_diagnostics.format_state_for_display(state)
-        
+
         # Check all required sections are present
         assert "=== CHARACTER PROGRESSION ===" in formatted
         assert "=== HEALTH STATUS ===" in formatted
@@ -326,7 +326,7 @@ class TestStateDiagnostics:
         assert "=== SKILLS ===" in formatted
         assert "=== ACTION STATUS ===" in formatted
         assert "=== OTHER STATES ===" in formatted
-        
+
         # Check specific values are displayed
         assert "character_level: 25" in formatted
         assert "character_gold: 10000" in formatted
@@ -341,9 +341,9 @@ class TestStateDiagnostics:
             GameState.HP_CURRENT: 100,
             GameState.HP_MAX: 100
         }
-        
+
         formatted = state_diagnostics.format_state_for_display(minimal_state)
-        
+
         assert "character_level: 1" in formatted
         assert "hp_current: 100" in formatted
         assert "hp_percentage: 100.0%" in formatted
@@ -352,7 +352,7 @@ class TestStateDiagnostics:
         """Test comprehensive state statistics generation."""
         state = CharacterStateFixtures.get_level_25_advanced()
         stats = state_diagnostics.get_state_statistics(state)
-        
+
         assert stats["character_level"] == 25
         assert stats["total_xp"] == 15000
         assert stats["gold"] == 10000
@@ -360,7 +360,7 @@ class TestStateDiagnostics:
         assert stats["total_skill_levels"] > 0
         assert stats["average_skill_level"] > 1
         assert stats["progress_to_max"] > 50  # Level 25 is more than halfway to 45
-        
+
         # Check skills dictionary structure
         assert "mining" in stats["skills"]
         assert "level" in stats["skills"]["mining"]
@@ -368,16 +368,16 @@ class TestStateDiagnostics:
 
     def test_get_state_statistics_edge_cases(self, state_diagnostics):
         """Test state statistics with edge cases."""
-        # Test with zero/missing values - note CHARACTER_LEVEL ends with '_level' 
+        # Test with zero/missing values - note CHARACTER_LEVEL ends with '_level'
         # so it gets counted as a skill in the current implementation
         minimal_state = {
             GameState.CHARACTER_LEVEL: 1,
             GameState.HP_CURRENT: 0,
             GameState.HP_MAX: 100
         }
-        
+
         stats = state_diagnostics.get_state_statistics(minimal_state)
-        
+
         assert stats["character_level"] == 1
         assert stats["total_xp"] == 0  # Default value
         assert stats["gold"] == 0  # Default value
@@ -390,15 +390,15 @@ class TestStateDiagnostics:
         """Test progression metrics calculation."""
         old_state = CharacterStateFixtures.get_level_1_starter()
         new_state = CharacterStateFixtures.get_level_10_experienced()
-        
+
         metrics = state_diagnostics._calculate_progression_metrics(old_state, new_state)
-        
+
         assert metrics["level_gained"] == 9  # From 1 to 10
         assert metrics["xp_gained"] > 0
         assert metrics["gold_gained"] > 0
         assert metrics["hp_change"] > 0  # HP should increase
         assert len(metrics["skills_improved"]) > 0
-        
+
         # Check skill improvement details
         for skill_improvement in metrics["skills_improved"]:
             assert "skill" in skill_improvement
@@ -412,16 +412,16 @@ class TestStateDiagnostics:
         # Test with empty states
         empty_analysis = state_diagnostics.check_state_consistency({}, {})
         assert empty_analysis["consistent"] is True
-        
+
         # Test with None values
         state_with_none = {GameState.CHARACTER_LEVEL: None}
         errors = state_diagnostics.detect_invalid_state_values(state_with_none)
         assert len(errors) > 0
-        
+
         # Test formatting with empty state
         formatted_empty = state_diagnostics.format_state_for_display({})
         assert "CHARACTER PROGRESSION" in formatted_empty
-        
+
         # Test statistics with empty state
         stats_empty = state_diagnostics.get_state_statistics({})
         assert stats_empty["character_level"] == 0
@@ -434,12 +434,12 @@ class TestStateDiagnostics:
         errors = state_diagnostics.detect_invalid_state_values(inventory_full_state)
         # Should have no validation errors (inventory full is a valid state)
         assert len(errors) == 0
-        
+
         # Test on cooldown scenario
         cooldown_state = CharacterStateFixtures.get_character_on_cooldown()
         stats = state_diagnostics.get_state_statistics(cooldown_state)
         assert stats["character_level"] == 10
-        
+
         # Test wealthy trader scenario
         trader_state = CharacterStateFixtures.get_wealthy_trader()
         formatted = state_diagnostics.format_state_for_display(trader_state)
@@ -456,10 +456,10 @@ class TestStateDiagnostics:
             GameState.MINING_LEVEL: 1,
             GameState.MINING_XP: 0
         }
-        
+
         errors = state_diagnostics.detect_invalid_state_values(min_valid_state)
         assert len(errors) == 0
-        
+
         # Test maximum valid values
         max_valid_state = {
             GameState.CHARACTER_LEVEL: 45,
@@ -469,10 +469,10 @@ class TestStateDiagnostics:
             GameState.MINING_LEVEL: 45,
             GameState.MINING_XP: 999999
         }
-        
+
         errors = state_diagnostics.detect_invalid_state_values(max_valid_state)
         assert len(errors) == 0
-        
+
         # Test boundary violations
         boundary_invalid_state = {
             GameState.CHARACTER_LEVEL: 0,  # Below minimum
@@ -480,6 +480,6 @@ class TestStateDiagnostics:
             GameState.MINING_LEVEL: 46,  # Above maximum
             GameState.CHARACTER_GOLD: -1  # Below minimum
         }
-        
+
         errors = state_diagnostics.detect_invalid_state_values(boundary_invalid_state)
         assert len(errors) >= 4

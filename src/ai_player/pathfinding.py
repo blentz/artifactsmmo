@@ -7,26 +7,26 @@ principle while maintaining the same import interface.
 """
 
 # Import all classes from their logical group files
-from .pathfinding_models import PathNode, PathfindingResult
-from .pathfinding_algorithms import PathfindingAlgorithm, AStarPathfinding, DijkstraPathfinding
-from .pathfinding_services import PathfindingService, MovementPlanner
+from .pathfinding_algorithms import AStarPathfinding, DijkstraPathfinding, PathfindingAlgorithm
 from .pathfinding_config import PathfindingConfig
+from .pathfinding_models import PathfindingResult, PathNode
+from .pathfinding_services import MovementPlanner, PathfindingService
 
 # Re-export all classes for backwards compatibility
 __all__ = [
     # Data Models
     "PathNode",
     "PathfindingResult",
-    
+
     # Algorithms
     "PathfindingAlgorithm",
-    "AStarPathfinding", 
+    "AStarPathfinding",
     "DijkstraPathfinding",
-    
+
     # Services
     "PathfindingService",
     "MovementPlanner",
-    
+
     # Configuration
     "PathfindingConfig"
 ]

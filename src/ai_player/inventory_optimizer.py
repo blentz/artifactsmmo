@@ -7,16 +7,20 @@ principle while maintaining the same import interface.
 """
 
 # Import all classes from their logical group files
-from .inventory_models import (
-    ItemPriority, InventoryAction, ItemInfo, InventoryState, 
-    BankState, OptimizationRecommendation
-)
+from .inventory_actions import InventoryActionExecutor
 from .inventory_analysis import ItemAnalyzer
-from .inventory_optimization import InventoryOptimizer
+from .inventory_automation import AutoInventoryManager
 from .inventory_banking import BankManager
 from .inventory_goals import InventoryGoalGenerator
-from .inventory_automation import AutoInventoryManager
-from .inventory_actions import InventoryActionExecutor
+from .inventory_models import (
+    BankState,
+    InventoryAction,
+    InventoryState,
+    ItemInfo,
+    ItemPriority,
+    OptimizationRecommendation,
+)
+from .inventory_optimization import InventoryOptimizer
 
 # Re-export all classes for backwards compatibility
 __all__ = [
@@ -27,22 +31,22 @@ __all__ = [
     "InventoryState",
     "BankState",
     "OptimizationRecommendation",
-    
+
     # Analysis
     "ItemAnalyzer",
-    
+
     # Core Optimization
     "InventoryOptimizer",
-    
+
     # Banking
     "BankManager",
-    
+
     # Goal Generation
     "InventoryGoalGenerator",
-    
+
     # Automation
     "AutoInventoryManager",
-    
+
     # Action Execution
     "InventoryActionExecutor"
 ]

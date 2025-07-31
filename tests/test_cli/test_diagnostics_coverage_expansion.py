@@ -6,9 +6,8 @@ code paths in the DiagnosticCommands class, focusing on error conditions,
 edge cases, and CLI argument parsing scenarios.
 """
 
-import json
-from unittest.mock import AsyncMock, Mock, patch
 from io import StringIO
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -28,7 +27,7 @@ class TestDiagnosticCommandsValidScenarios:
         mock_registry = Mock(spec=ActionRegistry)
         mock_goal_manager = Mock(spec=GoalManager)
         mock_api_client = Mock(spec=APIClientWrapper)
-        
+
         return DiagnosticCommands(
             action_registry=mock_registry,
             goal_manager=mock_goal_manager,
@@ -39,17 +38,17 @@ class TestDiagnosticCommandsValidScenarios:
         """Test parsing valid goal parameters"""
         # Test the = format which is supported
         goal_string = "gained-xp=true"
-        
+
         result = diagnostics_full._parse_goal_parameters(goal_string)
-        
+
         assert result[GameState.GAINED_XP] == True
 
     def test_parse_goal_parameters_multiple_equals_format(self, diagnostics_full):
         """Test parsing multiple parameters with = format"""
         goal_string = "gained-xp=true hp-low=false"
-        
+
         result = diagnostics_full._parse_goal_parameters(goal_string)
-        
+
         assert result[GameState.GAINED_XP] == True
         assert result[GameState.HP_LOW] == False
 
@@ -114,9 +113,9 @@ class TestDiagnosticCommandsValidScenarios:
             GameState.COOLDOWN_READY: True,
             GameState.AT_MONSTER_LOCATION: False
         }
-        
+
         result = diagnostics_full.diagnose_state_data(state_data, validate_enum=True)
-        
+
         assert isinstance(result, dict)
         # The actual return structure includes different keys
         assert "state_statistics" in result
@@ -126,16 +125,16 @@ class TestDiagnosticCommandsValidScenarios:
     async def test_diagnose_weights_basic(self):
         """Test diagnose_weights with minimal setup"""
         diagnostics = DiagnosticCommands()
-        
+
         result = await diagnostics.diagnose_weights(show_action_costs=False)
-        
+
         assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_diagnose_actions_without_registry(self):
         """Test diagnose_actions without action registry"""
         diagnostics = DiagnosticCommands()  # No registry
-        
+
         with patch('sys.stdout', new_callable=StringIO):
             result = await diagnostics.diagnose_actions("test_char")
             # Should handle gracefully without crashing
@@ -144,7 +143,7 @@ class TestDiagnosticCommandsValidScenarios:
     async def test_diagnose_plan_without_planning_diagnostics(self):
         """Test diagnose_plan without planning diagnostics"""
         diagnostics = DiagnosticCommands()  # No goal manager
-        
+
         with patch('sys.stdout', new_callable=StringIO):
             result = await diagnostics.diagnose_plan("test_char", "gained-xp=true")
             # Should handle gracefully without crashing
@@ -182,11 +181,11 @@ class TestDiagnosticCommandsErrorConditions:
                 await diagnostics.diagnose_state("test_char")
             except:
                 pass  # Expected to fail without proper setup
-            
+
             # Just verify it attempted to run
             assert mock_stdout.getvalue() is not None
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_diagnose_cooldowns_basic(self, diagnostics):
         """Test diagnose_cooldowns with minimal setup"""
         with patch('sys.stdout', new_callable=StringIO):

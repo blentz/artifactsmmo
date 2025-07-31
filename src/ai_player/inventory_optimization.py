@@ -7,12 +7,16 @@ inventory optimization strategies and recommendations.
 
 from typing import Any
 
-from .state.game_state import GameState
-from .inventory_models import (
-    ItemInfo, InventoryState, BankState, OptimizationRecommendation,
-    InventoryAction, ItemPriority
-)
 from .inventory_analysis import ItemAnalyzer
+from .inventory_models import (
+    BankState,
+    InventoryAction,
+    InventoryState,
+    ItemInfo,
+    ItemPriority,
+    OptimizationRecommendation,
+)
+from .state.game_state import GameState
 
 
 class InventoryOptimizer:

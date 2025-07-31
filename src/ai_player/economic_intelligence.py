@@ -788,7 +788,6 @@ class EconomicIntelligence:
 
     async def analyze_market_opportunities(self, character_state: dict[str, Any]) -> list[TradeDecision]:
         """Analyze current market for trading opportunities"""
-        opportunities = []
 
         # Update market data for tracked items
         await self.data_collector.update_all_tracked_items()
@@ -1151,7 +1150,6 @@ class PortfolioManager:
         hhi = sum(c ** 2 for c in concentrations)
 
         # Convert to diversification score (1 = perfectly diversified, 0 = concentrated)
-        max_hhi = 1.0  # When all holdings in one item
         diversification_score = 1.0 - hhi
 
         return max(0.0, min(1.0, diversification_score))
@@ -1232,7 +1230,6 @@ class PortfolioManager:
             return metrics
 
         # Calculate portfolio returns over time
-        portfolio_returns = []
 
         # Simplified calculation using transaction history
         if len(self.transaction_history) > 1:

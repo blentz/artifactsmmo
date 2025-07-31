@@ -20,7 +20,7 @@ class TestStateManager:
     def mock_api_client(self):
         """Mock API client for testing"""
         client = Mock()
-        
+
         # Create a mock character with all required fields
         mock_character = Mock()
         mock_character.name = "test_character"
@@ -48,7 +48,7 @@ class TestStateManager:
         mock_character.cooking_xp = 0
         mock_character.alchemy_level = 1
         mock_character.alchemy_xp = 0
-        
+
         client.get_character = AsyncMock(return_value=mock_character)
         client.get_character_logs = AsyncMock()
         mock_map = Mock()
@@ -440,10 +440,10 @@ class TestStateManager:
     @pytest.mark.asyncio
     async def test_set_state_value(self, state_manager, mock_cache_manager):
         """Test setting specific state value"""
-        
+
         # Initialize state first by calling get_current_state (which loads from cache)
         await state_manager.get_current_state()
-        
+
         await state_manager.set_state_value(GameState.HP_CURRENT, 95)
 
         # Verify that state update is triggered

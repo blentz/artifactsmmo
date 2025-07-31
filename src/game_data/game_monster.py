@@ -6,6 +6,7 @@ of game monsters throughout the AI player system.
 """
 
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -16,11 +17,11 @@ class GameMonster(BaseModel):
     level: int = Field(ge=1, description="Monster level")
     hp: int = Field(ge=1, description="Monster health points")
     attack_fire: int = Field(ge=0, description="Fire attack damage")
-    attack_earth: int = Field(ge=0, description="Earth attack damage") 
+    attack_earth: int = Field(ge=0, description="Earth attack damage")
     attack_water: int = Field(ge=0, description="Water attack damage")
     attack_air: int = Field(ge=0, description="Air attack damage")
     res_fire: int = Field(description="Fire resistance (negative values indicate vulnerability)")
-    res_earth: int = Field(description="Earth resistance (negative values indicate vulnerability)") 
+    res_earth: int = Field(description="Earth resistance (negative values indicate vulnerability)")
     res_water: int = Field(description="Water resistance (negative values indicate vulnerability)")
     res_air: int = Field(description="Air resistance (negative values indicate vulnerability)")
     min_gold: int = Field(ge=0, description="Minimum gold dropped")

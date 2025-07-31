@@ -14,18 +14,18 @@ system and CLI diagnostic commands:
 
 Example usage:
     from .diagnostics import StateDiagnostics, ActionDiagnostics, PlanningDiagnostics
-    
+
     # Create diagnostic instances
     state_diag = StateDiagnostics()
     action_diag = ActionDiagnostics(action_registry)
     planning_diag = PlanningDiagnostics(goal_manager)
-    
+
     # Validate state
     state_issues = state_diag.detect_invalid_state_values(current_state)
-    
+
     # Analyze actions
     action_errors = action_diag.validate_action_registry()
-    
+
     # Test planning
     plan_feasible = planning_diag.test_goal_reachability(start_state, goal_state)
 """

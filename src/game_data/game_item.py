@@ -5,7 +5,8 @@ This module defines the GameItem Pydantic model for internal representation
 of game items throughout the AI player system.
 """
 
-from typing import Optional, Any
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -18,7 +19,7 @@ class GameItem(BaseModel):
     subtype: str = Field(description="Item subtype/subcategory")
     description: str = Field(description="Item description")
     effects: list[dict[str, Any]] = Field(default_factory=list, description="Item effects and bonuses")
-    craft: Optional[dict[str, Any]] = Field(default=None, description="Crafting requirements")
+    craft: dict[str, Any] | None = Field(default=None, description="Crafting requirements")
     tradeable: bool = Field(default=True, description="Whether item can be traded")
 
     @classmethod

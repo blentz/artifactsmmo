@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import Any
 
 from ..goal_manager import GoalManager
-from ..state.game_state import GameState
 from ..state.character_game_state import CharacterGameState
+from ..state.game_state import GameState
 
 
 class PlanningDiagnostics:
@@ -383,7 +383,7 @@ class PlanningDiagnostics:
 
             # Get state as dict once
             start_state_dict = start_state.to_goap_state()
-            
+
             # Check for large state space
             state_diff = len(goal_state) + len(start_state_dict)
             if state_diff > 20:

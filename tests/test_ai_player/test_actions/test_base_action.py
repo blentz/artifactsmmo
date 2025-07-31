@@ -93,43 +93,43 @@ class TestBaseAction:
         """Test to achieve 100% coverage of abstract method pass statements"""
         # This test specifically targets the pass statements in abstract methods
         # by using introspection to call them directly
-        
+
         # Get the abstract methods from BaseAction
         abstract_methods = BaseAction.__abstractmethods__
-        
+
         # Verify that all expected abstract methods are present
         expected_methods = {'name', 'cost', 'get_preconditions', 'get_effects', 'execute'}
         assert abstract_methods == expected_methods
-        
+
         # Call the abstract methods directly on the class to cover the pass statements
         try:
             # These will trigger the pass statements for coverage
             BaseAction.name.fget(BaseAction)  # type: ignore
         except (TypeError, AttributeError):
             pass  # Expected to fail
-            
+
         try:
             BaseAction.cost.fget(BaseAction)  # type: ignore
         except (TypeError, AttributeError):
             pass  # Expected to fail
-            
+
         try:
             BaseAction.get_preconditions(BaseAction)  # type: ignore
         except (TypeError, AttributeError):
             pass  # Expected to fail
-            
+
         try:
             BaseAction.get_effects(BaseAction)  # type: ignore
         except (TypeError, AttributeError):
             pass  # Expected to fail
-            
+
         # Test the async execute method coverage
         import asyncio
         try:
             # Create an async task to call the abstract execute method
             async def test_abstract_execute():
                 return await BaseAction.execute(BaseAction, "test", {})  # type: ignore
-            
+
             # This should fail but covers the pass statement
             asyncio.run(test_abstract_execute())
         except (TypeError, AttributeError, RuntimeError):

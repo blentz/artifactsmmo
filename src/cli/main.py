@@ -19,9 +19,9 @@ from typing import Any
 
 import src.lib.log as log_module
 
-from ..ai_player.ai_player import AIPlayer
 from ..ai_player.action_executor import ActionExecutor
-from ..ai_player.actions import ActionRegistry, get_global_registry
+from ..ai_player.actions import get_global_registry
+from ..ai_player.ai_player import AIPlayer
 from ..ai_player.goal_manager import GoalManager
 from ..ai_player.state.state_manager import StateManager
 from ..game_data.api_client import APIClientWrapper
@@ -32,26 +32,26 @@ from .commands.diagnostics import DiagnosticCommands
 
 def generate_random_character_name() -> str:
     """Generate random character name with format ([a-zA-Z0-9_-]{6,10}).
-    
+
     Parameters:
         None
-        
+
     Return values:
         String containing randomized character name matching API requirements
-        
+
     This function generates a random character name using alphanumeric characters,
     underscores, and hyphens with a length between 6-10 characters
     as required by the ArtifactsMMO API validation rules.
     """
     # Characters allowed by API: alphanumeric, underscore, hyphen (no periods)
     allowed_chars = string.ascii_letters + string.digits + '_-'
-    
+
     # Random length between 6 and 10 characters
     name_length = random.randint(6, 10)
-    
+
     # Generate random name
     random_name = ''.join(random.choice(allowed_chars) for _ in range(name_length))
-    
+
     return random_name
 
 
@@ -60,13 +60,13 @@ class CLIManager:
 
     def __init__(self):
         """Initialize CLI manager for command coordination.
-        
+
         Parameters:
             None
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor initializes the CLI manager that coordinates all
         command-line operations including character management, AI player
         control, and diagnostic commands for the ArtifactsMMO AI Player.
@@ -79,13 +79,13 @@ class CLIManager:
 
     def _initialize_diagnostic_components(self, token_file: str) -> DiagnosticCommands:
         """Initialize all components required for diagnostics.
-        
+
         Parameters:
             token_file: Path to API token file
-            
+
         Return values:
             Fully initialized DiagnosticCommands instance
-            
+
         This method ensures all required components (APIClientWrapper, ActionRegistry,
         GoalManager) are properly initialized and available for diagnostic operations.
         These components are essential - if any fail to initialize, it's a system bug
@@ -96,12 +96,12 @@ class CLIManager:
 
         # Initialize required components - these MUST work or it's a system bug
         cache_manager = CacheManager(self.api_client)
-        
+
         # Use the global action registry to ensure consistent factory registration
         action_registry = get_global_registry()
-        
+
         goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager, cache_manager)
-        
+
         return DiagnosticCommands(
             action_registry=action_registry,
             goal_manager=goal_manager,
@@ -110,13 +110,13 @@ class CLIManager:
 
     def create_parser(self) -> argparse.ArgumentParser:
         """Create argument parser with all command groups.
-        
+
         Parameters:
             None
-            
+
         Return values:
             ArgumentParser configured with all CLI commands and options
-            
+
         This method creates and configures the main argument parser with
         all subcommands for character management, AI player control, and
         diagnostic operations, including global options like logging levels.
@@ -151,13 +151,13 @@ class CLIManager:
 
     def setup_character_commands(self, subparsers) -> None:
         """Setup character management commands.
-        
+
         Parameters:
             subparsers: Subparser group for adding character commands
-            
+
         Return values:
             None (modifies subparsers)
-            
+
         This method configures all character-related CLI commands including
         create-character, delete-character, and list-characters with their
         respective arguments and validation requirements.
@@ -231,13 +231,13 @@ class CLIManager:
 
     def setup_ai_player_commands(self, subparsers) -> None:
         """Setup AI player control commands.
-        
+
         Parameters:
             subparsers: Subparser group for adding AI player commands
-            
+
         Return values:
             None (modifies subparsers)
-            
+
         This method configures all AI player control CLI commands including
         run-character, stop-character, and status-character with their
         respective arguments and operational parameters.
@@ -302,13 +302,13 @@ class CLIManager:
 
     def setup_diagnostic_commands(self, subparsers) -> None:
         """Setup diagnostic and troubleshooting commands.
-        
+
         Parameters:
             subparsers: Subparser group for adding diagnostic commands
-            
+
         Return values:
             None (modifies subparsers)
-            
+
         This method configures comprehensive diagnostic CLI commands including
         state inspection, action analysis, GOAP planning visualization, and
         system configuration troubleshooting for AI player debugging.
@@ -446,13 +446,13 @@ class CLIManager:
 
     async def handle_create_character(self, args) -> None:
         """Handle character creation command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name and skin
-            
+
         Return values:
             None (async operation)
-            
+
         This method processes the create-character command by validating input
         parameters, calling the API client to create the character, and providing
         user feedback on success or failure. If no name is provided, generates
@@ -494,13 +494,13 @@ class CLIManager:
 
     async def handle_delete_character(self, args) -> None:
         """Handle character deletion command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name to delete
-            
+
         Return values:
             None (async operation)
-            
+
         This method processes the delete-character command by confirming the
         deletion request, calling the API client to remove the character, and
         cleaning up associated data files.
@@ -541,13 +541,13 @@ class CLIManager:
 
     async def handle_list_characters(self, args) -> None:
         """Handle character listing command.
-        
+
         Parameters:
             args: Parsed command arguments for listing options
-            
+
         Return values:
             None (async operation)
-            
+
         This method processes the list-characters command by retrieving all
         user characters from the cache manager and displaying their information
         in a formatted table with levels, locations, and status.
@@ -566,7 +566,7 @@ class CLIManager:
 
             if not characters:
                 print("No characters found on this account.")
-                print(f"Character data cached in: data/characters.yaml")
+                print("Character data cached in: data/characters.yaml")
                 return
 
             print(f"\nFound {len(characters)} character(s):")
@@ -587,7 +587,7 @@ class CLIManager:
                 else:
                     print(f"{char.name:<15} Lv.{char.level:<3} ({char.x:>3},{char.y:>3}) {ai_status}")
 
-            print(f"\nCharacter data cached in: data/characters.yaml")
+            print("\nCharacter data cached in: data/characters.yaml")
 
         except Exception as e:
             self.logger.error(f"Failed to list characters: {e}")
@@ -595,13 +595,13 @@ class CLIManager:
 
     async def handle_load_data(self, args) -> None:
         """Handle game data loading command.
-        
+
         Parameters:
             args: Parsed command arguments for data loading options
-            
+
         Return values:
             None (async operation)
-            
+
         This method loads and caches all game data from the API including
         items, monsters, maps, resources, NPCs, and characters for offline
         access by the AI player system.
@@ -629,51 +629,51 @@ class CLIManager:
 
             for data_type in data_types_to_load:
                 print(f"Loading {data_type}...")
-                
+
                 try:
                     if data_type == "items":
                         items = await cache_manager.get_all_items(force_refresh=force_refresh)
                         print(f"✓ Cached {len(items)} items in data/items.yaml")
-                    
+
                     elif data_type == "monsters":
                         monsters = await cache_manager.get_all_monsters(force_refresh=force_refresh)
                         print(f"✓ Cached {len(monsters)} monsters in data/monsters.yaml")
-                    
+
                     elif data_type == "maps":
                         maps = await cache_manager.get_all_maps(force_refresh=force_refresh)
                         print(f"✓ Cached {len(maps)} maps in data/maps.yaml")
-                    
+
                     elif data_type == "resources":
                         resources = await cache_manager.get_all_resources(force_refresh=force_refresh)
                         print(f"✓ Cached {len(resources)} resources in data/resources.yaml")
-                    
+
                     elif data_type == "npcs":
                         npcs = await cache_manager.get_all_npcs(force_refresh=force_refresh)
                         print(f"✓ Cached {len(npcs)} NPCs in data/npcs.yaml")
-                    
+
                     elif data_type == "characters":
                         characters = await cache_manager.cache_all_characters(force_refresh=force_refresh)
                         print(f"✓ Cached {len(characters)} characters in data/characters.yaml")
-                        
+
                 except Exception as e:
                     self.logger.error(f"Failed to load {data_type}: {e}")
                     print(f"✗ Error loading {data_type}: {e}")
 
             if args.init:
-                print(f"\n🎉 Game data initialization complete!")
-                print(f"All game data has been cached and is ready for use.")
-                print(f"Cache files location: data/ directory")
-                print(f"\nAvailable data files:")
-                print(f"  - data/characters.yaml (your characters)")
-                print(f"  - data/items.yaml (all game items)")
-                print(f"  - data/monsters.yaml (all monsters)")
-                print(f"  - data/maps.yaml (all map locations)")
-                print(f"  - data/resources.yaml (all gatherable resources)")
-                print(f"  - data/npcs.yaml (all NPCs and traders)")
-                print(f"  - data/metadata.yaml (cache management)")
+                print("\n🎉 Game data initialization complete!")
+                print("All game data has been cached and is ready for use.")
+                print("Cache files location: data/ directory")
+                print("\nAvailable data files:")
+                print("  - data/characters.yaml (your characters)")
+                print("  - data/items.yaml (all game items)")
+                print("  - data/monsters.yaml (all monsters)")
+                print("  - data/maps.yaml (all map locations)")
+                print("  - data/resources.yaml (all gatherable resources)")
+                print("  - data/npcs.yaml (all NPCs and traders)")
+                print("  - data/metadata.yaml (cache management)")
             else:
-                print(f"\nGame data loading complete!")
-                print(f"All cached data is stored in the 'data/' directory")
+                print("\nGame data loading complete!")
+                print("All cached data is stored in the 'data/' directory")
 
         except Exception as e:
             # Let specific exceptions bubble up - don't mask errors with generic handling
@@ -682,13 +682,13 @@ class CLIManager:
 
     async def handle_run_character(self, args) -> None:
         """Handle AI player run command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name and options
-            
+
         Return values:
             None (async operation)
-            
+
         This method starts the autonomous AI player for the specified character,
         initializing all systems, beginning the main game loop, and providing
         real-time status updates during operation.
@@ -741,7 +741,7 @@ class CLIManager:
                     del self.running_players[args.name]
                 print(f"AI player for '{args.name}' stopped.")
 
-        except Exception as e:
+        except Exception:
             # Clean up on error then let exception bubble up
             if args.name in self.running_players:
                 del self.running_players[args.name]
@@ -749,13 +749,13 @@ class CLIManager:
 
     async def handle_stop_character(self, args) -> None:
         """Handle AI player stop command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name to stop
-            
+
         Return values:
             None (async operation)
-            
+
         This method gracefully stops the autonomous AI player for the specified
         character, saving current state, completing ongoing actions, and providing
         confirmation of successful shutdown.
@@ -792,13 +792,13 @@ class CLIManager:
 
     async def handle_character_status(self, args) -> None:
         """Handle character status command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name for status query
-            
+
         Return values:
             None (async operation)
-            
+
         This method retrieves and displays comprehensive character status including
         current level, location, equipment, active goals, and AI player operational
         status for monitoring and debugging purposes.
@@ -826,7 +826,7 @@ class CLIManager:
 
             # AI Player status
             if args.name in self.running_players:
-                ai_player = self.running_players[args.name]
+                self.running_players[args.name]
                 print("\n=== AI Player Status ===")
                 print("Status: Running")
                 # TODO: Add more AI player status details when available
@@ -852,13 +852,13 @@ class CLIManager:
 
     async def handle_diagnose_state(self, args) -> None:
         """Handle state diagnostic command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name and diagnostic options
-            
+
         Return values:
             None (async operation)
-            
+
         This method executes comprehensive character state diagnostics including
         GameState enum validation, state consistency checking, and detailed
         analysis for troubleshooting state management issues.
@@ -866,7 +866,7 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
-            
+
             print(f"Running state diagnostics for character '{args.name}'...")
 
             result = await diagnostic_commands.diagnose_state(
@@ -884,13 +884,13 @@ class CLIManager:
 
     async def handle_diagnose_actions(self, args) -> None:
         """Handle action diagnostic command.
-        
+
         Parameters:
             args: Parsed command arguments containing diagnostic options and filters
-            
+
         Return values:
             None (async operation)
-            
+
         This method analyzes available actions including preconditions, effects,
         costs, and executability for troubleshooting GOAP planning and action
         availability issues in the AI player system.
@@ -898,14 +898,14 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
-            
+
             # If character name provided, set up proper state management
             if args.character:
                 cache_manager = CacheManager(self.api_client)
                 state_manager = StateManager(args.character, self.api_client, cache_manager)
                 # Update the diagnostic commands with the state manager
                 diagnostic_commands.goal_manager.state_manager = state_manager
-            
+
             print("Running action diagnostics...")
 
             result = await diagnostic_commands.diagnose_actions(
@@ -925,13 +925,13 @@ class CLIManager:
 
     async def handle_diagnose_plan(self, args) -> None:
         """Handle planning diagnostic command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name, goal, and verbosity options
-            
+
         Return values:
             None (async operation)
-            
+
         This method provides detailed analysis of GOAP planning processes including
         step-by-step visualization, optimization insights, and troubleshooting
         guidance for planning algorithm performance.
@@ -939,7 +939,7 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
-            
+
             print(f"Running planning diagnostics for character '{args.name}' with goal '{args.goal}'...")
 
             result = await diagnostic_commands.diagnose_plan(
@@ -959,13 +959,13 @@ class CLIManager:
 
     async def handle_test_planning(self, args) -> None:
         """Handle planning simulation command.
-        
+
         Parameters:
             args: Parsed command arguments containing simulation parameters and scenarios
-            
+
         Return values:
             None (async operation)
-            
+
         This method executes GOAP planning simulations using mock scenarios
         and test data to validate planning algorithms without requiring live
         character data or API interactions.
@@ -973,7 +973,7 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
-            
+
             print("Running planning simulation tests...")
 
             result = await diagnostic_commands.test_planning(
@@ -996,13 +996,13 @@ class CLIManager:
 
     async def handle_diagnose_weights(self, args) -> None:
         """Handle weight diagnostics command.
-        
+
         Parameters:
             args: Parsed command arguments containing diagnostic options
-            
+
         Return values:
             None (async operation)
-            
+
         This method executes GOAP weight and configuration diagnostics to identify
         optimization opportunities, validate weight balance, and ensure effective
         planning performance for the AI player system.
@@ -1010,7 +1010,7 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
-            
+
             print("Running weight and configuration diagnostics...")
 
             result = await diagnostic_commands.diagnose_weights(
@@ -1027,13 +1027,13 @@ class CLIManager:
 
     async def handle_diagnose_cooldowns(self, args) -> None:
         """Handle cooldown diagnostics command.
-        
+
         Parameters:
             args: Parsed command arguments containing character name and monitoring options
-            
+
         Return values:
             None (async operation)
-            
+
         This method executes cooldown management diagnostics to analyze timing
         accuracy, API compliance, and cooldown prediction for troubleshooting
         timing issues and ensuring proper action execution scheduling.
@@ -1041,7 +1041,7 @@ class CLIManager:
         try:
             # Initialize all diagnostic components - these MUST work or it's a bug
             diagnostic_commands = self._initialize_diagnostic_components(args.token_file)
-            
+
             print(f"Running cooldown diagnostics for character '{args.name}'...")
 
             result = await diagnostic_commands.diagnose_cooldowns(
@@ -1059,79 +1059,79 @@ class CLIManager:
 
     def format_weights_output(self, weights_data: dict[str, Any]) -> str:
         """Format weight analysis for CLI display.
-        
+
         Parameters:
             weights_data: Dictionary containing weight analysis and configuration data
-            
+
         Return values:
             Formatted string representation suitable for CLI output
-            
+
         This method formats GOAP weight analysis into a readable format for CLI
         display, showing cost distributions, optimization opportunities, and
         configuration validation results for debugging planning performance.
         """
         lines = []
         lines.append("=== WEIGHT & CONFIGURATION ANALYSIS ===")
-        
+
         # Configuration validation
         config_valid = weights_data.get("configuration_validation", {}).get("valid", True)
         lines.append(f"Configuration valid: {config_valid}")
-        
+
         warnings = weights_data.get("configuration_validation", {}).get("warnings", [])
         errors = weights_data.get("configuration_validation", {}).get("errors", [])
-        
+
         if warnings:
             lines.append(f"\nWarnings ({len(warnings)}):")
             for warning in warnings:
                 lines.append(f"  • {warning}")
-                
+
         if errors:
             lines.append(f"\nErrors ({len(errors)}):")
             for error in errors:
                 lines.append(f"  • {error}")
-        
+
         # Cost analysis
         cost_analysis = weights_data.get("cost_analysis", {})
         total_actions = cost_analysis.get("total_actions_analyzed", 0)
         lines.append(f"\nActions analyzed: {total_actions}")
-        
+
         stats = cost_analysis.get("cost_statistics", {})
         if stats:
             lines.append(f"Cost range: {stats.get('min_cost', 0)} - {stats.get('max_cost', 0)}")
             lines.append(f"Average cost: {stats.get('average_cost', 0):.2f}")
-        
+
         # Outliers
         outliers = cost_analysis.get("outliers", [])
         if outliers:
             lines.append(f"\nHigh-cost outliers ({len(outliers)}):")
             for outlier in outliers:
                 lines.append(f"  • {outlier.get('name', 'Unknown')}: {outlier.get('cost', 0)} (x{outlier.get('multiplier', 0):.1f})")
-        
+
         # Optimization opportunities
         opportunities = weights_data.get("optimization_opportunities", [])
         if opportunities:
             lines.append(f"\nOptimization opportunities ({len(opportunities)}):")
             for opportunity in opportunities:
                 lines.append(f"  • {opportunity}")
-        
+
         # Recommendations
         recommendations = weights_data.get("recommendations", [])
         if recommendations:
             lines.append(f"\nRecommendations ({len(recommendations)}):")
             for rec in recommendations:
                 lines.append(f"  • {rec}")
-        
+
         return "\n".join(lines)
 
     def format_cooldowns_output(self, cooldowns_data: dict[str, Any]) -> str:
         """Format cooldown analysis for CLI display.
-        
+
         Parameters:
             cooldowns_data: Dictionary containing cooldown status and timing analysis
-            
+
         Return values:
             Formatted string representation suitable for CLI output
-            
+
         This method formats cooldown analysis into a readable format for CLI
         display, showing timing status, compliance metrics, and monitoring
         data for debugging action execution timing issues.
@@ -1139,47 +1139,47 @@ class CLIManager:
         lines = []
         character_name = cooldowns_data.get("character_name", "Unknown")
         lines.append(f"=== COOLDOWN ANALYSIS: {character_name} ===")
-        
+
         # API availability
         api_available = cooldowns_data.get("api_available", False)
         cooldown_manager_available = cooldowns_data.get("cooldown_manager_available", False)
         lines.append(f"API available: {api_available}")
         lines.append(f"Cooldown manager available: {cooldown_manager_available}")
-        
+
         # Cooldown status
         cooldown_status = cooldowns_data.get("cooldown_status", {})
         ready = cooldown_status.get("ready")
         if ready is not None:
             lines.append(f"Character ready: {ready}")
-            
+
         remaining = cooldown_status.get("remaining_seconds")
         if remaining is not None:
             lines.append(f"Remaining time: {remaining:.1f}s")
-            
+
         compliance = cooldown_status.get("compliance_status", "unknown")
         lines.append(f"Compliance status: {compliance}")
-        
+
         reason = cooldown_status.get("reason")
         if reason:
             lines.append(f"Last action: {reason}")
-        
+
         # Timing analysis
         timing_analysis = cooldowns_data.get("timing_analysis", {})
         api_cooldown = timing_analysis.get("api_cooldown_seconds", 30)
         lines.append(f"\nAPI cooldown standard: {api_cooldown}s")
-        
+
         timing_warnings = timing_analysis.get("timing_warnings", [])
         if timing_warnings:
             lines.append(f"\nTiming warnings ({len(timing_warnings)}):")
             for warning in timing_warnings:
                 lines.append(f"  • {warning}")
-        
+
         precision_issues = timing_analysis.get("precision_issues", [])
         if precision_issues:
             lines.append(f"\nPrecision issues ({len(precision_issues)}):")
             for issue in precision_issues:
                 lines.append(f"  • {issue}")
-        
+
         # Monitoring data
         monitoring_data = cooldowns_data.get("monitoring_data", [])
         if monitoring_data:
@@ -1188,33 +1188,33 @@ class CLIManager:
                 timestamp = entry.get("timestamp", "Unknown")
                 status = entry.get("status", "Unknown")
                 lines.append(f"  [{timestamp}] {status}")
-                
+
                 cooldown_ready = entry.get("cooldown_ready")
                 if cooldown_ready is not None:
                     lines.append(f"    Ready: {cooldown_ready}")
-                    
+
                 remaining_secs = entry.get("remaining_seconds")
                 if remaining_secs is not None:
                     lines.append(f"    Remaining: {remaining_secs:.1f}s")
-        
+
         # Recommendations
         recommendations = cooldowns_data.get("recommendations", [])
         if recommendations:
             lines.append(f"\nRecommendations ({len(recommendations)}):")
             for rec in recommendations:
                 lines.append(f"  • {rec}")
-        
+
         return "\n".join(lines)
 
     def setup_logging(self, log_level: str) -> None:
         """Configure logging based on CLI arguments.
-        
+
         Parameters:
             log_level: String representing desired logging level (DEBUG, INFO, WARNING, ERROR)
-            
+
         Return values:
             None (configures global logging)
-            
+
         This method configures the application logging system using the async
         logger from src/lib/log.py with the specified level, enabling appropriate
         verbosity for debugging and monitoring AI player operations.
@@ -1244,13 +1244,13 @@ class CLIManager:
 
 def main() -> None:
     """Main CLI entry point.
-    
+
     Parameters:
         None
-        
+
     Return values:
         None (program entry point)
-        
+
     This function serves as the main entry point for the ArtifactsMMO AI Player
     command-line interface, initializing the CLI manager, parsing arguments,
     and routing commands to appropriate handlers.
@@ -1265,13 +1265,13 @@ def main() -> None:
 
 async def async_main() -> None:
     """Async wrapper for main CLI functionality.
-    
+
     Parameters:
         None
-        
+
     Return values:
         None (async wrapper)
-        
+
     This function provides an async wrapper for the main CLI functionality,
     enabling proper async/await handling for API calls, AI player operations,
     and other asynchronous components in the system.

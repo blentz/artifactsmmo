@@ -7,10 +7,10 @@ inventory management that runs continuously in the background.
 
 from typing import Any
 
-from .state.game_state import GameState
+from .inventory_banking import BankManager
 from .inventory_models import InventoryAction, InventoryState
 from .inventory_optimization import InventoryOptimizer
-from .inventory_banking import BankManager
+from .state.game_state import GameState
 
 
 class AutoInventoryManager:

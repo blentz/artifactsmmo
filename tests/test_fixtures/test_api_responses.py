@@ -5,21 +5,20 @@ This module provides complete test coverage for all API response fixture
 classes and convenience functions to ensure they generate valid mock data.
 """
 
-import pytest
-from datetime import datetime, timedelta
-from typing import Any
-from unittest.mock import Mock
+from datetime import datetime
 
+import pytest
+
+from src.lib.httpstatus import ArtifactsHTTPStatus
 from tests.fixtures.api_responses import (
     APIResponseFixtures,
-    GameDataFixtures,
-    ErrorResponseFixtures,
     APIResponseSequences,
-    get_mock_character,
+    ErrorResponseFixtures,
+    GameDataFixtures,
     get_mock_action_response,
-    get_mock_error
+    get_mock_character,
+    get_mock_error,
 )
-from src.lib.httpstatus import ArtifactsHTTPStatus
 
 
 class TestAPIResponseFixtures:
@@ -28,7 +27,7 @@ class TestAPIResponseFixtures:
     def test_get_character_response_default(self):
         """Test get_character_response with default parameters"""
         character = APIResponseFixtures.get_character_response()
-        
+
         # Basic attributes
         assert character.name == "test_character"
         assert character.level == 10
@@ -44,23 +43,23 @@ class TestAPIResponseFixtures:
         assert character.server == "1"
         assert character.account == "test_account"
         assert character.skin == "men1"
-        
+
         # Skills - should be level-appropriate
         assert character.mining_level == 8  # max(1, level - 2)
         assert character.woodcutting_level == 7  # max(1, level - 3)
         assert character.fishing_level == 6  # max(1, level - 4)
-        
+
         # Equipment - level-appropriate
         assert character.weapon_slot == "iron_sword"  # level >= 5
         assert character.helmet_slot == "leather_helmet"  # level >= 3
         assert character.body_armor_slot == "iron_chestplate"  # level >= 7
         assert character.leg_armor_slot == "leather_pants"  # level >= 4
         assert character.boots_slot == "leather_boots"  # level >= 2
-        
+
         # Inventory
         assert character.inventory_max_items == 22  # 20 + (level // 5)
         assert len(character.inventory) == 3  # level >= 5
-        
+
         # Bank
         assert character.bank_max_items == 55  # 50 + (level // 2)
         assert character.bank_gold == 500  # level * 50
@@ -68,7 +67,7 @@ class TestAPIResponseFixtures:
     def test_get_character_response_custom_level(self):
         """Test get_character_response with custom level"""
         character = APIResponseFixtures.get_character_response(level=1)
-        
+
         assert character.level == 1
         assert character.xp == 250
         assert character.max_xp == 500
@@ -85,11 +84,11 @@ class TestAPIResponseFixtures:
             "hp": 50
         }
         character = APIResponseFixtures.get_character_response(
-            name="overridden_name", 
-            level=15, 
+            name="overridden_name",
+            level=15,
             customizations=customizations
         )
-        
+
         assert character.name == "custom_char"  # Customization overrides
         assert character.level == 15
         assert character.gold == 5000  # Customized
@@ -102,17 +101,17 @@ class TestAPIResponseFixtures:
             cooldown_seconds=45,
             reason="mining"
         )
-        
+
         assert character.name == "cooldown_char"
         assert character.cooldown == 45
         assert character.cooldown_expiration is not None
-        
+
         # Check cooldown details
         assert hasattr(character, 'cooldown_details')
         assert character.cooldown_details.total_seconds == 45
         assert character.cooldown_details.remaining_seconds == 45
         assert character.cooldown_details.reason.value == "mining"
-        
+
         # Verify expiration time is in the future
         expiration = datetime.fromisoformat(character.cooldown_expiration)
         assert expiration > datetime.now()
@@ -120,7 +119,7 @@ class TestAPIResponseFixtures:
     def test_get_fight_response_default(self):
         """Test get_fight_response with default parameters"""
         response = APIResponseFixtures.get_fight_response()
-        
+
         assert response.data.xp == 150
         assert response.data.gold == 25
         assert response.data.hp == 80  # 90 - 10 hp_lost
@@ -130,7 +129,7 @@ class TestAPIResponseFixtures:
         assert len(response.data.fight.drops) == 1
         assert response.data.fight.drops[0]["code"] == "feather"
         assert response.data.fight.logs == ["You fought a monster and win!"]
-        
+
         # Cooldown
         assert response.data.cooldown.total_seconds == 8
         assert response.data.cooldown.remaining_seconds == 8
@@ -149,7 +148,7 @@ class TestAPIResponseFixtures:
             hp_lost=40,
             drops=custom_drops
         )
-        
+
         assert response.data.fight.result == "lose"
         assert response.data.xp == 0
         assert response.data.gold == 0
@@ -160,7 +159,7 @@ class TestAPIResponseFixtures:
     def test_get_move_response(self):
         """Test get_move_response"""
         response = APIResponseFixtures.get_move_response(25, 35)
-        
+
         assert response.data.x == 25
         assert response.data.y == 35
         assert response.data.cooldown.total_seconds == 3
@@ -170,7 +169,7 @@ class TestAPIResponseFixtures:
     def test_get_gather_response_default(self):
         """Test get_gather_response with default parameters"""
         response = APIResponseFixtures.get_gather_response()
-        
+
         assert response.data.xp == 50
         assert response.data.item.code == "copper_ore"
         assert response.data.item.quantity == 1
@@ -184,7 +183,7 @@ class TestAPIResponseFixtures:
             quantity=3,
             xp_gained=75
         )
-        
+
         assert response.data.xp == 75
         assert response.data.item.code == "iron_ore"
         assert response.data.item.quantity == 3
@@ -192,7 +191,7 @@ class TestAPIResponseFixtures:
     def test_get_craft_response_default(self):
         """Test get_craft_response with default parameters"""
         response = APIResponseFixtures.get_craft_response()
-        
+
         assert response.data.xp == 100
         assert response.data.item.code == "iron_sword"
         assert response.data.item.quantity == 1
@@ -206,7 +205,7 @@ class TestAPIResponseFixtures:
             quantity=2,
             xp_gained=75
         )
-        
+
         assert response.data.xp == 75
         assert response.data.item.code == "leather_boots"
         assert response.data.item.quantity == 2
@@ -214,7 +213,7 @@ class TestAPIResponseFixtures:
     def test_get_rest_response_default(self):
         """Test get_rest_response with default parameters"""
         response = APIResponseFixtures.get_rest_response()
-        
+
         assert response.data.hp == 100
         assert response.data.hp_restored == 50
         assert response.data.cooldown.total_seconds == 2
@@ -223,7 +222,7 @@ class TestAPIResponseFixtures:
     def test_get_rest_response_custom(self):
         """Test get_rest_response with custom parameters"""
         response = APIResponseFixtures.get_rest_response(hp_recovered=25)
-        
+
         assert response.data.hp_restored == 25
 
 
@@ -233,10 +232,10 @@ class TestGameDataFixtures:
     def test_get_items_data(self):
         """Test get_items_data returns valid item data"""
         items = GameDataFixtures.get_items_data()
-        
+
         assert isinstance(items, list)
         assert len(items) >= 4  # We expect at least 4 items
-        
+
         # Check first item (Copper Ore)
         copper_ore = items[0]
         assert copper_ore["name"] == "Copper Ore"
@@ -245,7 +244,7 @@ class TestGameDataFixtures:
         assert copper_ore["type"] == "resource"
         assert copper_ore["subtype"] == "mining"
         assert copper_ore["craft"] is None
-        
+
         # Check weapon item (Iron Sword)
         iron_sword = next(item for item in items if item["code"] == "iron_sword")
         assert iron_sword["name"] == "Iron Sword"
@@ -259,10 +258,10 @@ class TestGameDataFixtures:
     def test_get_monsters_data(self):
         """Test get_monsters_data returns valid monster data"""
         monsters = GameDataFixtures.get_monsters_data()
-        
+
         assert isinstance(monsters, list)
         assert len(monsters) >= 3  # We expect at least 3 monsters
-        
+
         # Check first monster (Chicken)
         chicken = monsters[0]
         assert chicken["name"] == "Chicken"
@@ -272,7 +271,7 @@ class TestGameDataFixtures:
         assert chicken["min_gold"] == 1
         assert chicken["max_gold"] == 3
         assert len(chicken["drops"]) == 2
-        
+
         # Check high-level monster (Ancient Dragon)
         dragon = next(monster for monster in monsters if monster["code"] == "ancient_dragon")
         assert dragon["name"] == "Ancient Dragon"
@@ -284,10 +283,10 @@ class TestGameDataFixtures:
     def test_get_resources_data(self):
         """Test get_resources_data returns valid resource data"""
         resources = GameDataFixtures.get_resources_data()
-        
+
         assert isinstance(resources, list)
         assert len(resources) >= 4  # We expect at least 4 resources
-        
+
         # Check mining resource
         copper_rocks = resources[0]
         assert copper_rocks["name"] == "Copper Rocks"
@@ -295,7 +294,7 @@ class TestGameDataFixtures:
         assert copper_rocks["skill"] == "mining"
         assert copper_rocks["level"] == 1
         assert len(copper_rocks["drops"]) == 1
-        
+
         # Check fishing resource
         pond = next(resource for resource in resources if resource["code"] == "pond")
         assert pond["skill"] == "fishing"
@@ -304,17 +303,17 @@ class TestGameDataFixtures:
     def test_get_maps_data(self):
         """Test get_maps_data returns valid map data"""
         maps = GameDataFixtures.get_maps_data()
-        
+
         assert isinstance(maps, list)
         assert len(maps) >= 5  # We expect at least 5 map locations
-        
+
         # Check spawn location
         spawn = maps[0]
         assert spawn["name"] == "Spawn Island"
         assert spawn["x"] == 0
         assert spawn["y"] == 0
         assert spawn["content"]["type"] == "spawn"
-        
+
         # Check resource location
         copper_mine = next(location for location in maps if location["name"] == "Copper Mine")
         assert copper_mine["content"]["type"] == "resource"
@@ -327,19 +326,19 @@ class TestErrorResponseFixtures:
     def test_get_character_not_found_error(self):
         """Test get_character_not_found_error"""
         error = ErrorResponseFixtures.get_character_not_found_error()
-        
+
         assert error.status_code == 404
         assert error.detail == "Character not found"
 
     def test_get_character_cooldown_error(self):
         """Test get_character_cooldown_error"""
         error = ErrorResponseFixtures.get_character_cooldown_error(60)
-        
+
         assert error.status_code == ArtifactsHTTPStatus["CHARACTER_COOLDOWN"]
         assert "60 seconds" in error.detail
         assert error.cooldown.remaining_seconds == 60
         assert error.cooldown.total_seconds == 70  # remaining + 10
-        
+
         # Verify expiration is in the future
         expiration = datetime.fromisoformat(error.cooldown.expiration)
         assert expiration > datetime.now()
@@ -347,14 +346,14 @@ class TestErrorResponseFixtures:
     def test_get_inventory_full_error(self):
         """Test get_inventory_full_error"""
         error = ErrorResponseFixtures.get_inventory_full_error()
-        
+
         assert error.status_code == ArtifactsHTTPStatus["INVENTORY_FULL"]
         assert error.detail == "Inventory is full"
 
     def test_get_rate_limit_error(self):
         """Test get_rate_limit_error"""
         error = ErrorResponseFixtures.get_rate_limit_error(120)
-        
+
         assert error.status_code == 429
         assert error.detail == "Too many requests"
         assert error.headers["Retry-After"] == "120"
@@ -362,7 +361,7 @@ class TestErrorResponseFixtures:
     def test_get_server_error(self):
         """Test get_server_error"""
         error = ErrorResponseFixtures.get_server_error()
-        
+
         assert error.status_code == 500
         assert error.detail == "Internal server error"
 
@@ -373,16 +372,16 @@ class TestAPIResponseSequences:
     def test_get_character_progression_sequence(self):
         """Test get_character_progression_sequence"""
         sequence = APIResponseSequences.get_character_progression_sequence()
-        
+
         assert isinstance(sequence, list)
         assert len(sequence) == 5  # Levels 1-5
-        
+
         # Verify progression
         for i, character in enumerate(sequence):
             expected_level = i + 1
             assert character.level == expected_level
             assert character.name == "progression_char"
-        
+
         # Check XP progression
         assert sequence[1].xp == 500  # Level 2
         assert sequence[2].xp == 750  # Level 3
@@ -391,37 +390,37 @@ class TestAPIResponseSequences:
     def test_get_combat_sequence(self):
         """Test get_combat_sequence"""
         sequence = APIResponseSequences.get_combat_sequence()
-        
+
         assert isinstance(sequence, list)
         assert len(sequence) == 5
-        
+
         # First two should be wins
         assert sequence[0].data.fight.result == "win"
         assert sequence[1].data.fight.result == "win"
-        
+
         # Third should be a loss
         assert sequence[2].data.fight.result == "lose"
         assert sequence[2].data.xp == 0
         assert sequence[2].data.gold == 0
-        
+
         # Fourth should be rest response
         assert hasattr(sequence[3].data, 'hp_restored')
-        
+
         # Fifth should be another win
         assert sequence[4].data.fight.result == "win"
 
     def test_get_gathering_and_crafting_sequence(self):
         """Test get_gathering_and_crafting_sequence"""
         sequence = APIResponseSequences.get_gathering_and_crafting_sequence()
-        
+
         assert isinstance(sequence, list)
         assert len(sequence) == 4
-        
+
         # First three should be gathering
         assert sequence[0].data.item.code == "copper_ore"
         assert sequence[1].data.item.code == "copper_ore"
         assert sequence[2].data.item.code == "ash_wood"
-        
+
         # Fourth should be crafting
         assert sequence[3].data.item.code == "iron_sword"
 
@@ -434,11 +433,11 @@ class TestConvenienceFunctions:
         # Default usage
         character = get_mock_character()
         assert character.level == 10
-        
+
         # Custom level
         character_level_5 = get_mock_character(level=5)
         assert character_level_5.level == 5
-        
+
         # Custom attributes
         character_custom = get_mock_character(level=15, name="custom_char")
         assert character_custom.level == 15
@@ -449,20 +448,20 @@ class TestConvenienceFunctions:
         # Fight action
         fight_response = get_mock_action_response("fight")
         assert hasattr(fight_response.data, 'fight')
-        
+
         # Move action
         move_response = get_mock_action_response("move", x=10, y=15)
         assert move_response.data.x == 10
         assert move_response.data.y == 15
-        
+
         # Gather action
         gather_response = get_mock_action_response("gather")
         assert hasattr(gather_response.data, 'item')
-        
+
         # Craft action
         craft_response = get_mock_action_response("craft")
         assert hasattr(craft_response.data, 'item')
-        
+
         # Rest action
         rest_response = get_mock_action_response("rest")
         assert hasattr(rest_response.data, 'hp_restored')
@@ -477,19 +476,19 @@ class TestConvenienceFunctions:
         # Character not found
         error = get_mock_error("character_not_found")
         assert error.status_code == 404
-        
+
         # Cooldown error
         cooldown_error = get_mock_error("cooldown", seconds=45)
         assert cooldown_error.cooldown.remaining_seconds == 45
-        
+
         # Inventory full
         inventory_error = get_mock_error("inventory_full")
         assert inventory_error.status_code == ArtifactsHTTPStatus["INVENTORY_FULL"]
-        
+
         # Rate limit
         rate_limit_error = get_mock_error("rate_limit", retry_after=90)
         assert rate_limit_error.headers["Retry-After"] == "90"
-        
+
         # Server error
         server_error = get_mock_error("server_error")
         assert server_error.status_code == 500
@@ -506,7 +505,7 @@ class TestMockObjectProperties:
     def test_character_mock_attributes(self):
         """Test that character mocks have all expected attributes"""
         character = APIResponseFixtures.get_character_response()
-        
+
         # Basic character attributes
         required_attrs = [
             'name', 'level', 'xp', 'max_xp', 'gold', 'hp', 'max_hp',
@@ -514,7 +513,7 @@ class TestMockObjectProperties:
         ]
         for attr in required_attrs:
             assert hasattr(character, attr), f"Missing attribute: {attr}"
-        
+
         # Skill attributes
         skill_attrs = [
             'mining_level', 'mining_xp', 'mining_max_xp',
@@ -523,7 +522,7 @@ class TestMockObjectProperties:
         ]
         for attr in skill_attrs:
             assert hasattr(character, attr), f"Missing skill attribute: {attr}"
-        
+
         # Equipment slots
         equipment_attrs = [
             'weapon_slot', 'shield_slot', 'helmet_slot', 'body_armor_slot',
@@ -537,10 +536,10 @@ class TestMockObjectProperties:
     def test_action_response_structure(self):
         """Test that action responses have proper structure"""
         fight_response = APIResponseFixtures.get_fight_response()
-        
+
         # Data object exists
         assert hasattr(fight_response, 'data')
-        
+
         # Fight-specific data
         assert hasattr(fight_response.data, 'fight')
         assert hasattr(fight_response.data.fight, 'result')
@@ -548,7 +547,7 @@ class TestMockObjectProperties:
         assert hasattr(fight_response.data.fight, 'gold')
         assert hasattr(fight_response.data.fight, 'drops')
         assert hasattr(fight_response.data.fight, 'logs')
-        
+
         # Cooldown structure
         assert hasattr(fight_response.data, 'cooldown')
         assert hasattr(fight_response.data.cooldown, 'total_seconds')
@@ -560,7 +559,7 @@ class TestMockObjectProperties:
     def test_error_response_structure(self):
         """Test that error responses have proper structure"""
         cooldown_error = ErrorResponseFixtures.get_character_cooldown_error()
-        
+
         assert hasattr(cooldown_error, 'status_code')
         assert hasattr(cooldown_error, 'detail')
         assert hasattr(cooldown_error, 'cooldown')
@@ -578,7 +577,7 @@ class TestDataConsistency:
         low_level = APIResponseFixtures.get_character_response(level=1)
         assert low_level.mining_level == 1  # Should be 1 due to max(1, level-2)
         assert low_level.weapon_slot is None  # Too low level for weapon
-        
+
         # Test higher level character
         high_level = APIResponseFixtures.get_character_response(level=20)
         assert high_level.mining_level == 18  # level - 2
@@ -587,12 +586,12 @@ class TestDataConsistency:
     def test_cooldown_consistency(self):
         """Test that cooldown data is consistent"""
         character = APIResponseFixtures.get_character_on_cooldown(cooldown_seconds=30)
-        
+
         # Cooldown value should match
         assert character.cooldown == 30
         assert character.cooldown_details.remaining_seconds == 30
         assert character.cooldown_details.total_seconds == 30
-        
+
         # Expiration should be approximately 30 seconds from now
         expiration = datetime.fromisoformat(character.cooldown_expiration)
         now = datetime.now()
@@ -602,7 +601,7 @@ class TestDataConsistency:
     def test_game_data_structure_consistency(self):
         """Test that game data has consistent structure"""
         items = GameDataFixtures.get_items_data()
-        
+
         for item in items:
             # All items should have basic fields
             assert "name" in item
@@ -610,7 +609,7 @@ class TestDataConsistency:
             assert "level" in item
             assert "type" in item
             assert "description" in item
-            
+
             # Items with craft should have proper structure
             if item["craft"] is not None:
                 assert "skill" in item["craft"]

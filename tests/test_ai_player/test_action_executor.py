@@ -16,6 +16,7 @@ from src.ai_player.action_executor import ActionExecutor
 from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.state.game_state import ActionResult, CharacterGameState, GameState
 from src.game_data.api_client import APIClientWrapper, CooldownManager
+from src.game_data.cache_manager import CacheManager
 
 
 class MockAction(BaseAction):
@@ -75,7 +76,7 @@ def mock_api_client():
     client.rest_character = AsyncMock()
     client.get_map = AsyncMock()
     client.extract_character_state = Mock()
-    
+
     # Add cooldown_manager attribute with proper return values
     client.cooldown_manager = Mock()
     client.cooldown_manager.is_ready.return_value = True
@@ -147,6 +148,17 @@ def mock_cooldown_manager():
 
 
 @pytest.fixture
+def mock_cache_manager():
+    """Create mock cache manager for testing"""
+    manager = Mock(spec=CacheManager)
+    manager.get_maps = Mock(return_value=[])
+    manager.get_monsters = Mock(return_value=[])
+    manager.get_resources = Mock(return_value=[])
+    manager.is_initialized = Mock(return_value=True)
+    return manager
+
+
+@pytest.fixture
 def mock_action_registry():
     """Create mock action registry for testing"""
     registry = Mock()
@@ -155,12 +167,12 @@ def mock_action_registry():
 
 
 @pytest.fixture
-def action_executor(mock_api_client, mock_cooldown_manager):
+def action_executor(mock_api_client, mock_cooldown_manager, mock_cache_manager):
     """Create ActionExecutor instance with mocked dependencies"""
     with patch('src.ai_player.action_executor.get_global_registry') as mock_registry_fn:
         mock_registry = Mock()
         mock_registry_fn.return_value = mock_registry
-        executor = ActionExecutor(mock_api_client, mock_cooldown_manager)
+        executor = ActionExecutor(mock_api_client, mock_cooldown_manager, mock_cache_manager)
         executor.action_registry = mock_registry
         return executor
 
@@ -168,16 +180,17 @@ def action_executor(mock_api_client, mock_cooldown_manager):
 class TestActionExecutorInit:
     """Test ActionExecutor initialization"""
 
-    def test_init_with_dependencies(self, mock_api_client, mock_cooldown_manager):
+    def test_init_with_dependencies(self, mock_api_client, mock_cooldown_manager, mock_cache_manager):
         """Test successful initialization with all dependencies"""
         with patch('src.ai_player.action_executor.get_global_registry') as mock_registry_fn:
             mock_registry = Mock()
             mock_registry_fn.return_value = mock_registry
 
-            executor = ActionExecutor(mock_api_client, mock_cooldown_manager)
+            executor = ActionExecutor(mock_api_client, mock_cooldown_manager, mock_cache_manager)
 
             assert executor.api_client == mock_api_client
             assert executor.cooldown_manager == mock_cooldown_manager
+            assert executor.cache_manager == mock_cache_manager
             assert executor.action_registry == mock_registry
             assert executor.retry_attempts == 3
             assert executor.retry_delays == [1, 2, 4]
@@ -458,7 +471,7 @@ class TestProcessActionResult:
         api_response = Mock()
         # Explicitly set character to None to avoid Mock auto-generation
         api_response.character = None
-        
+
         # Create a complete cooldown mock based on actual API structure
         cooldown_mock = Mock()
         cooldown_mock.total_seconds = 10
@@ -467,7 +480,7 @@ class TestProcessActionResult:
         cooldown_mock.reason = Mock()
         cooldown_mock.reason.value = "action"
         api_response.cooldown = cooldown_mock
-        
+
         result = await action_executor.process_action_result(api_response, action)
 
         assert result.cooldown_seconds == 10
@@ -478,7 +491,7 @@ class TestProcessActionResult:
         """Test processing result with character data"""
         action = MockAction("test_action")
         api_response = Mock()
-        
+
         # Create a complete mock character with all required attributes
         api_response.character = Mock()
         api_response.character.name = "TestChar"
@@ -512,7 +525,7 @@ class TestProcessActionResult:
         api_response.character.task_progress = 0
         api_response.character.task_total = 0
         api_response.cooldown = None  # Explicitly set to None to avoid mock issues
-        
+
         # Mock the get_map call
         mock_api_client.get_map.return_value = Mock()
         mock_api_client.get_map.return_value.content = None
@@ -529,7 +542,7 @@ class TestProcessActionResult:
         api_response.character = Mock()
         api_response.character.x = 1
         api_response.character.y = 1
-        
+
         # Mock get_map to raise an exception
         with patch.object(action_executor.api_client, 'get_map', side_effect=Exception("Test error")):
             result = await action_executor.process_action_result(api_response, action)
@@ -602,41 +615,59 @@ class TestEmergencyRecovery:
 class TestGetActionByName:
     """Test get_action_by_name method"""
 
-    def test_get_action_by_name_success(self, action_executor):
+    async def test_get_action_by_name_success(self, action_executor):
         """Test successful action retrieval by name"""
         mock_action = MockAction("test_action")
         action_executor.action_registry.get_action_by_name.return_value = mock_action
+        action_executor.cache_manager.get_game_data = AsyncMock(return_value={"test": "data"})
         current_state = {GameState.COOLDOWN_READY: True}
 
-        result = action_executor.get_action_by_name("test_action", current_state)
+        result = await action_executor.get_action_by_name("test_action", current_state)
 
         assert result == mock_action
-        action_executor.action_registry.get_action_by_name.assert_called_once_with("test_action", current_state, None)
+        action_executor.cache_manager.get_game_data.assert_called_once()
+        action_executor.action_registry.get_action_by_name.assert_called_once_with("test_action", current_state, {"test": "data"})
 
-    def test_get_action_by_name_not_found(self, action_executor):
+    async def test_get_action_by_name_not_found(self, action_executor):
         """Test action retrieval when action not found"""
+        action_executor.cache_manager.get_game_data = AsyncMock(return_value={"test": "data"})
         action_executor.action_registry.get_action_by_name.return_value = None
         current_state = {GameState.COOLDOWN_READY: True}
 
-        result = action_executor.get_action_by_name("nonexistent_action", current_state)
+        result = await action_executor.get_action_by_name("nonexistent_action", current_state)
         assert result is None
 
-    def test_get_action_by_name_exception(self, action_executor):
+    async def test_get_action_by_name_exception(self, action_executor):
         """Test action retrieval with exception"""
+        action_executor.cache_manager.get_game_data = AsyncMock(return_value={"test": "data"})
         action_executor.action_registry.get_action_by_name.side_effect = Exception("Test error")
         current_state = {GameState.COOLDOWN_READY: True}
 
-        result = action_executor.get_action_by_name("test_action", current_state)
-        assert result is None
+        with pytest.raises(Exception, match="Test error"):
+            await action_executor.get_action_by_name("test_action", current_state)
 
 
 class TestEstimateExecutionTime:
     """Test estimate_execution_time method"""
 
+    def _create_test_character_state(self, cooldown_ready: bool = True) -> CharacterGameState:
+        """Helper to create test CharacterGameState"""
+        return CharacterGameState(
+            name="test_character",
+            level=1, xp=0, gold=0,
+            hp=100, max_hp=100, x=0, y=0,
+            mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
+            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
+            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
+            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0,
+            cooldown=0 if cooldown_ready else 5, cooldown_ready=cooldown_ready,
+            inventory_space_available=True, inventory_space_used=0
+        )
+
     def test_estimate_move_action(self, action_executor):
         """Test time estimation for movement action"""
         action = MockAction("move_to_5_5")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = self._create_test_character_state(cooldown_ready=True)
 
         result = action_executor.estimate_execution_time(action, current_state)
 
@@ -646,7 +677,7 @@ class TestEstimateExecutionTime:
     def test_estimate_fight_action(self, action_executor):
         """Test time estimation for fight action"""
         action = MockAction("fight_monster")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = self._create_test_character_state(cooldown_ready=True)
 
         result = action_executor.estimate_execution_time(action, current_state)
 
@@ -655,7 +686,7 @@ class TestEstimateExecutionTime:
     def test_estimate_with_current_cooldown(self, action_executor):
         """Test time estimation with current cooldown"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: False}
+        current_state = self._create_test_character_state(cooldown_ready=False)
 
         result = action_executor.estimate_execution_time(action, current_state)
 
@@ -1062,6 +1093,20 @@ class TestAdditionalCoverage:
 class TestAdditionalCoverageMissing:
     """Additional tests to cover the remaining uncovered lines"""
 
+    def _create_test_character_state(self, cooldown_ready: bool = True) -> CharacterGameState:
+        """Helper to create test CharacterGameState"""
+        return CharacterGameState(
+            name="test_character",
+            level=1, xp=0, gold=0,
+            hp=100, max_hp=100, x=0, y=0,
+            mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
+            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
+            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
+            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0,
+            cooldown=0 if cooldown_ready else 5, cooldown_ready=cooldown_ready,
+            inventory_space_available=True, inventory_space_used=0
+        )
+
     @pytest.mark.asyncio
     async def test_execute_action_verification_fails_return_false(self, action_executor):
         """Test execute_action when verification fails and returns ActionResult"""
@@ -1292,7 +1337,7 @@ class TestAdditionalCoverageMissing:
     def test_estimate_execution_time_craft_action(self, action_executor):
         """Test time estimation for craft action"""
         action = MockAction("craft_sword")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = self._create_test_character_state(cooldown_ready=True)
 
         result = action_executor.estimate_execution_time(action, current_state)
 
@@ -1301,7 +1346,7 @@ class TestAdditionalCoverageMissing:
     def test_estimate_execution_time_gather_action(self, action_executor):
         """Test time estimation for gather action"""
         action = MockAction("gather_copper")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = self._create_test_character_state(cooldown_ready=True)
 
         result = action_executor.estimate_execution_time(action, current_state)
 
@@ -1310,7 +1355,7 @@ class TestAdditionalCoverageMissing:
     def test_estimate_execution_time_rest_action(self, action_executor):
         """Test time estimation for rest action"""
         action = MockAction("rest_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = self._create_test_character_state(cooldown_ready=True)
 
         result = action_executor.estimate_execution_time(action, current_state)
 

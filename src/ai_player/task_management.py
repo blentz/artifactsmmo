@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .state.game_state import GameState
-from .task_models import Task, TaskProgress, TaskType, TaskPriority, TaskRequirement, TaskReward
+from .task_models import Task, TaskPriority, TaskProgress, TaskRequirement, TaskReward, TaskType
 
 
 class TaskManager:
@@ -17,13 +17,13 @@ class TaskManager:
 
     def __init__(self, api_client):
         """Initialize TaskManager with API client for task operations.
-        
+
         Parameters:
             api_client: API client wrapper for fetching task data from ArtifactsMMO
-            
+
         Return values:
             None (constructor)
-            
+
         This constructor initializes the TaskManager with task tracking collections
         and API client integration, setting up the infrastructure for task
         discovery, progress monitoring, and completion management.
@@ -37,13 +37,13 @@ class TaskManager:
 
     async def fetch_available_tasks(self, character_name: str) -> list[Task]:
         """Fetch all available tasks from API.
-        
+
         Parameters:
             character_name: Name of the character to fetch available tasks for
-            
+
         Return values:
             List of Task objects representing all available tasks for the character
-            
+
         This method retrieves all tasks available to the specified character from
         the ArtifactsMMO API, filtering by character level and requirements while
         caching results for efficient subsequent access.
@@ -105,13 +105,13 @@ class TaskManager:
 
     async def get_character_tasks(self, character_name: str) -> list[TaskProgress]:
         """Get character's current active tasks.
-        
+
         Parameters:
             character_name: Name of the character to retrieve active tasks for
-            
+
         Return values:
             List of TaskProgress objects representing currently active tasks
-            
+
         This method retrieves all active tasks for the specified character including
         progress tracking, completion status, and estimated completion times for
         planning and prioritization purposes.
@@ -141,14 +141,14 @@ class TaskManager:
     def select_optimal_task(self, character_state: dict[GameState, Any],
                            available_tasks: list[Task]) -> Task | None:
         """Select the most optimal task for character progression.
-        
+
         Parameters:
             character_state: Dictionary with GameState enum keys and current character state
             available_tasks: List of Task objects to choose from
-            
+
         Return values:
             Task object representing the optimal choice, or None if no suitable task
-            
+
         This method analyzes available tasks considering character state, efficiency
         scores, rewards, and progression goals to select the most beneficial task
         for current character development and AI player objectives.
@@ -203,7 +203,7 @@ class TaskManager:
 
         if hp_low:
             recommendations.append("Consider healing before accepting combat tasks")
-        
+
         if inventory_full:
             recommendations.append("Clear inventory space before accepting gathering tasks")
 
@@ -219,14 +219,14 @@ class TaskManager:
     def is_item_needed_for_tasks(self, item_code: str, character_name: str) -> bool:
         """Check if item is needed for any active or available tasks"""
         # Check active tasks
-        active_tasks = self.active_tasks.get(character_name, [])
-        
+        self.active_tasks.get(character_name, [])
+
         # Check available tasks from cache
         available_tasks = self.task_cache.get(character_name, [])
-        
+
         for task in available_tasks:
             for required_item in task.requirements.required_items:
                 if required_item.get('code') == item_code:
                     return True
-        
+
         return False
