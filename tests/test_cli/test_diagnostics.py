@@ -6,13 +6,16 @@ state diagnostics, action analysis, and GOAP planning visualization.
 """
 
 import json
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from src.ai_player.actions import ActionRegistry
 from src.ai_player.goal_manager import GoalManager
-from src.ai_player.state.game_state import GameState
+from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import CooldownInfo, GameState
+from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
 from src.cli.commands.diagnostics import DiagnosticCommands
 from src.game_data.api_client import APIClientWrapper
 
@@ -41,7 +44,7 @@ class TestDiagnosticCommandsInit:
 
     def test_init_with_goal_manager(self):
         """Test initialization with GoalManager"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         assert diagnostics.goal_manager is mock_goal_manager
@@ -51,7 +54,7 @@ class TestDiagnosticCommandsInit:
     def test_init_with_all_dependencies(self):
         """Test initialization with all dependencies"""
         mock_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
 
         diagnostics = DiagnosticCommands(
             action_registry=mock_registry,
@@ -78,7 +81,7 @@ class TestDiagnosticCommandsInit:
     def test_init_with_all_dependencies_including_api(self):
         """Test initialization with all dependencies including API client"""
         mock_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = Mock(spec=APIClientWrapper)
 
         diagnostics = DiagnosticCommands(
@@ -273,9 +276,6 @@ class TestDiagnoseStateMethods:
     @pytest.mark.asyncio
     async def test_diagnose_state_with_api_client(self):
         """Test state diagnosis with API client"""
-        from unittest.mock import patch
-
-        from src.ai_player.state.game_state import CharacterGameState, GameState
 
         # Mock character data
         mock_character_data = Mock()
@@ -590,7 +590,7 @@ class TestDiagnosePlanMethods:
         """Test plan diagnosis without PlanningDiagnostics"""
         diagnostics = DiagnosticCommands()  # No goal manager provided
 
-        result = await diagnostics.diagnose_plan("test_character", "level=5")
+        result = await diagnostics.diagnose_plan("test_character", "level_up")
 
         assert isinstance(result, dict)
         assert result["planning_available"] is False
@@ -599,14 +599,14 @@ class TestDiagnosePlanMethods:
     @pytest.mark.asyncio
     async def test_diagnose_plan_with_planning_diagnostics(self):
         """Test plan diagnosis with PlanningDiagnostics"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability', return_value=True):
             with patch.object(diagnostics.planning_diagnostics, 'identify_planning_bottlenecks', return_value=[]):
                 with patch.object(diagnostics.planning_diagnostics, 'measure_planning_performance',
                                 return_value={"success": True, "performance_class": "fast"}):
-                    result = await diagnostics.diagnose_plan("test_character", "level=5")
+                    result = await diagnostics.diagnose_plan("test_character", "level_up")
 
         assert isinstance(result, dict)
         assert result["planning_available"] is True
@@ -617,10 +617,14 @@ class TestDiagnosePlanMethods:
     @pytest.mark.asyncio
     async def test_diagnose_plan_unreachable_goal(self):
         """Test plan diagnosis with unreachable goal"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         # Mock goal manager methods to simulate unreachable goal
-        mock_goal_manager.select_next_goal.return_value = {"target_state": {"level": 100}}
-        mock_goal_manager.plan_actions = AsyncMock(return_value=[])  # Empty plan = unreachable
+        # Create proper GOAPTargetState for unreachable goal
+        unreachable_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 100})
+        mock_goal_manager.select_next_goal.return_value = unreachable_goal
+        # Create empty GOAPActionPlan for unreachable goal
+        empty_plan = GOAPActionPlan(actions=[], total_cost=0, estimated_duration=0.0, plan_id="empty")
+        mock_goal_manager.plan_actions = AsyncMock(return_value=empty_plan)
 
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
@@ -632,7 +636,7 @@ class TestDiagnosePlanMethods:
             return_value={"success": False, "performance_class": "slow"}
         )
 
-        result = await diagnostics.diagnose_plan("test_character", "level=100", verbose=True)
+        result = await diagnostics.diagnose_plan("test_character", "level_up", verbose=True)
 
         assert isinstance(result, dict)
         unreachable_recommendation = any("Goal appears to be unreachable" in rec for rec in result["recommendations"])
@@ -644,10 +648,15 @@ class TestDiagnosePlanMethods:
     @pytest.mark.asyncio
     async def test_diagnose_plan_with_verbose_and_analysis(self):
         """Test plan diagnosis with verbose mode and successful analysis"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         # Mock goal manager methods to simulate successful planning
-        mock_goal_manager.select_next_goal.return_value = {"target_state": {"level": 5}}
-        mock_goal_manager.plan_actions = AsyncMock(return_value=[{"name": "action1", "cost": 5}])  # Non-empty plan = success
+        # Create proper GOAPTargetState for successful goal
+        successful_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 5})
+        mock_goal_manager.select_next_goal.return_value = successful_goal
+        # Create non-empty GOAPActionPlan for successful planning
+        successful_action = GOAPAction(name="action1", action_type="test", cost=5)
+        successful_plan = GOAPActionPlan(actions=[successful_action], total_cost=5, estimated_duration=1.0, plan_id="success")
+        mock_goal_manager.plan_actions = AsyncMock(return_value=successful_plan)
 
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
@@ -667,7 +676,7 @@ class TestDiagnosePlanMethods:
                     with patch.object(diagnostics.planning_diagnostics, 'identify_planning_bottlenecks', new_callable=AsyncMock, return_value=[]):
                         with patch.object(diagnostics.planning_diagnostics, 'measure_planning_performance',
                                         new_callable=AsyncMock, return_value={"success": True, "performance_class": "fast"}):
-                            result = await diagnostics.diagnose_plan("test_character", "level=5", verbose=True)
+                            result = await diagnostics.diagnose_plan("test_character", "level_up", verbose=True)
 
         assert isinstance(result, dict)
         assert result["planning_analysis"]["planning_successful"] is True
@@ -676,11 +685,11 @@ class TestDiagnosePlanMethods:
     @pytest.mark.asyncio
     async def test_diagnose_plan_exception_handling(self):
         """Test plan diagnosis exception handling"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability', new_callable=AsyncMock, side_effect=Exception("Planning failed")):
-            result = await diagnostics.diagnose_plan("test_character", "level=5")
+            result = await diagnostics.diagnose_plan("test_character", "level_up")
 
         assert isinstance(result, dict)
         assert "Planning diagnostics error: Planning failed" in result["recommendations"]
@@ -705,7 +714,7 @@ class TestTestPlanningMethod:
     @pytest.mark.asyncio
     async def test_test_planning_with_mock_file(self):
         """Test planning test with mock state file"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         mock_state_data = {
@@ -720,9 +729,14 @@ class TestTestPlanningMethod:
             with patch('pathlib.Path.open', create=True) as mock_open:
                 mock_open.return_value.__enter__.return_value.read.return_value = json.dumps(mock_state_data)
                 with patch('json.load', return_value=mock_state_data):
-                    with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability', return_value=True):
-                        with patch.object(diagnostics.planning_diagnostics, 'measure_planning_performance',
-                                        return_value={"success": True, "planning_time_seconds": 0.1, "plan_length": 3}):
+                    with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
+                        async def mock_reachability_func():
+                            return True
+                        mock_reachability.side_effect = mock_reachability_func
+                        with patch.object(diagnostics.planning_diagnostics, 'measure_planning_performance') as mock_performance:
+                            async def mock_performance_func():
+                                return {"success": True, "planning_time_seconds": 0.1, "plan_length": 3}
+                            mock_performance.side_effect = mock_performance_func
                             result = await diagnostics.test_planning(mock_state_file="test_state.json", goal_level=10)
 
         assert isinstance(result, dict)
@@ -732,7 +746,7 @@ class TestTestPlanningMethod:
     @pytest.mark.asyncio
     async def test_test_planning_default_scenarios(self):
         """Test planning test with default scenarios"""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability', new_callable=AsyncMock, return_value=True):
@@ -884,9 +898,6 @@ class TestDiagnoseCooldownsMethod:
     @pytest.mark.asyncio
     async def test_diagnose_cooldowns_on_cooldown(self):
         """Test cooldown diagnosis when character is on cooldown"""
-        from datetime import datetime, timedelta
-
-        from src.ai_player.state.game_state import CooldownInfo
 
         # Mock character data
         mock_character_data = Mock()
@@ -1106,7 +1117,7 @@ class TestDiagnosticIntegration:
     def test_full_initialization_flow(self):
         """Test complete initialization with all dependencies"""
         mock_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
 
         diagnostics = DiagnosticCommands(
             action_registry=mock_registry,
@@ -1124,7 +1135,7 @@ class TestDiagnosticIntegration:
     async def test_diagnostic_workflow_sequence(self):
         """Test running multiple diagnostics in sequence"""
         mock_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
 
         diagnostics = DiagnosticCommands(
             action_registry=mock_registry,
@@ -1142,11 +1153,19 @@ class TestDiagnosticIntegration:
         assert isinstance(action_result, dict)
 
         # Run planning diagnosis
-        with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability', return_value=True):
-            with patch.object(diagnostics.planning_diagnostics, 'identify_planning_bottlenecks', return_value=[]):
-                with patch.object(diagnostics.planning_diagnostics, 'measure_planning_performance',
-                                return_value={"success": True}):
-                    plan_result = await diagnostics.diagnose_plan("test_character", "level=5")
+        with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
+            async def mock_reachability_func():
+                return True
+            mock_reachability.side_effect = mock_reachability_func
+            with patch.object(diagnostics.planning_diagnostics, 'identify_planning_bottlenecks') as mock_bottlenecks:
+                async def mock_bottlenecks_func():
+                    return []
+                mock_bottlenecks.side_effect = mock_bottlenecks_func
+                with patch.object(diagnostics.planning_diagnostics, 'measure_planning_performance') as mock_performance:
+                    async def mock_performance_func():
+                        return {"success": True}
+                    mock_performance.side_effect = mock_performance_func
+                    plan_result = await diagnostics.diagnose_plan("test_character", "level_up")
         assert isinstance(plan_result, dict)
 
         # All should have completed successfully
@@ -1181,7 +1200,7 @@ class TestDiagnosticIntegration:
     async def test_performance_with_complex_scenarios(self):
         """Test diagnostic performance with complex scenarios"""
         mock_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
 
         # Create a large number of mock actions to test performance
         large_action_list = []

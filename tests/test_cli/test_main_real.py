@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.cli.main import CLIManager, generate_random_character_name
+from src.cli.main import CLIManager, generate_random_character_name, main
 
 
 class TestUtilityFunctions:
@@ -352,14 +352,14 @@ class TestMainIntegration:
 
     def test_main_function_exists(self):
         """Test that main function exists."""
-        from src.cli.main import main
+        # main imported at top
         assert callable(main)
 
     @patch('sys.argv', ['cli.py', 'list'])
     @patch('src.cli.main.asyncio.run')
     def test_main_function_execution(self, mock_asyncio_run):
         """Test main function can be called."""
-        from src.cli.main import main
+        # main imported at top
 
         # Should not raise an exception
         main()

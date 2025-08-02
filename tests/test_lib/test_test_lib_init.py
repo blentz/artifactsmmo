@@ -5,12 +5,15 @@ Validates that the test package initialization provides all expected utilities
 and functions correctly.
 """
 
+import importlib
 import os
 import tempfile
 from unittest.mock import patch
 
+import tests.test_lib
 from tests.test_lib import (
     TestFixtures,
+    __all__,
     check_lib_coverage,
     get_test_modules,
     run_all_tests,
@@ -150,8 +153,6 @@ class TestValidateImports:
 
     def test_validate_imports_import_error_handling(self):
         """Test that validate_imports handles ImportError exceptions."""
-        import tests.test_lib
-
         # Temporarily replace get_test_modules to return a non-existent module
         original_get_test_modules = tests.test_lib.get_test_modules
         tests.test_lib.get_test_modules = lambda: ["nonexistent_test_module"]
@@ -167,10 +168,6 @@ class TestValidateImports:
 
     def test_validate_imports_general_exception_handling(self):
         """Test that validate_imports handles general exceptions."""
-        import importlib
-
-        import tests.test_lib
-
         # Save originals
         original_get_test_modules = tests.test_lib.get_test_modules
         original_import_module = importlib.import_module
@@ -310,8 +307,6 @@ class TestModuleStructure:
 
     def test_all_exports_available(self):
         """Test that all expected exports are available in __all__."""
-        from tests.test_lib import __all__
-
         expected_exports = [
             "get_test_modules",
             "run_all_tests",
@@ -325,14 +320,6 @@ class TestModuleStructure:
 
     def test_can_import_all_exports(self):
         """Test that all exports can be imported successfully."""
-        from tests.test_lib import (
-            TestFixtures,
-            check_lib_coverage,
-            get_test_modules,
-            run_all_tests,
-            validate_imports,
-        )
-
         # Basic smoke test - make sure nothing is None
         assert get_test_modules is not None
         assert run_all_tests is not None
@@ -342,8 +329,6 @@ class TestModuleStructure:
 
     def test_module_docstring_exists(self):
         """Test that the module has a comprehensive docstring."""
-        import tests.test_lib
-
         assert tests.test_lib.__doc__ is not None
         assert len(tests.test_lib.__doc__.strip()) > 100
         assert "ArtifactsMMO AI Player Library" in tests.test_lib.__doc__

@@ -5,41 +5,66 @@ This module manages dynamic goal selection and GOAP planning for the AI player.
 It integrates with the existing GOAP library to provide intelligent goal prioritization
 based on character progression and current game state.
 
-The GoalManager uses the modular action system and GameState enum to generate
-action plans that efficiently progress the character toward maximum level achievement.
+Enhanced with intelligent goal selection using weighted multi-factor scoring,
+level-appropriate monster targeting, crafting analysis, and strategic planning
+for level 5 progression with appropriate gear.
 """
 
+import logging
+import time
 from typing import Any
 
 from ..lib.goap import Action_List, Planner
 from .actions import ActionRegistry, BaseAction
 from .cooldown_aware_planner import CooldownAwarePlanner
+from .exceptions import GoalFactoryError, MaxDepthExceededError, NoValidGoalError
+from .goal_selector import GoalWeightCalculator
+from .goals.base_goal import BaseGoal
+from .goals.equipment_goal import EquipmentGoal
+from .goals.gathering_goal import GatheringGoal
+from .goals.movement_goal import MovementGoal
+from .goals.rest_goal import RestGoal
+from .goals.sub_goal_request import SubGoalRequest
 from .state.character_game_state import CharacterGameState
 from .state.game_state import GameState
+from .state.state_manager import StateManager
+from .types.game_data import GameData
+from .types.goap_models import GoalFactoryContext, GOAPAction, GOAPActionPlan, GOAPTargetState
 
 
 class GoalManager:
     """Manages dynamic goal selection and cooldown-aware GOAP planning"""
 
-    def __init__(self, action_registry: ActionRegistry, cooldown_manager, cache_manager=None):
-        """Initialize GoalManager with action registry, cooldown management, and game data access.
+    def __init__(self, action_registry: ActionRegistry, cooldown_manager, cache_manager=None, state_manager: StateManager = None):
+        """Initialize GoalManager with enhanced goal selection and analysis capabilities.
 
         Parameters:
             action_registry: ActionRegistry instance for action discovery and generation
             cooldown_manager: CooldownManager instance for timing constraint validation
             cache_manager: CacheManager instance for accessing game data (maps, monsters, resources)
+            state_manager: StateManager instance for sub-goal factory support
 
         Return values:
             None (constructor)
 
-        This constructor initializes the GoalManager with the action registry for
-        dynamic action generation, cooldown manager for timing-aware planning, and
-        cache manager for accessing game data needed for movement action generation.
+        This constructor initializes the GoalManager with the enhanced goal system including:
+        - Weighted goal selection using multi-factor scoring
+        - Level-appropriate monster targeting and analysis modules
+        - Strategic crafting and equipment evaluation
+        - Sub-goal request processing for dynamic dependency resolution
         """
         self.action_registry = action_registry
         self.cooldown_manager = cooldown_manager
         self.cache_manager = cache_manager
+        self.state_manager = state_manager
         self.planner = None
+
+        # Initialize enhanced goal selection system
+        self.goal_weight_calculator = GoalWeightCalculator()
+        self.active_sub_goals = []  # Track active sub-goal requests
+
+        # Initialize logger
+        self.logger = logging.getLogger(__name__)
 
 
     async def get_game_data(self) -> Any:
@@ -59,27 +84,24 @@ class GoalManager:
             return None
 
         try:
-            # Create a simple game data object with all necessary information
-            class GameData:
-                def __init__(self):
-                    self.maps = []
-                    self.monsters = []
-                    self.resources = []
-                    self.npcs = []
-                    self.items = []
-
-            game_data = GameData()
-
-            # Get all game data from cache manager
+            # Get all game data from cache manager and create typed GameData instance
             all_maps = await self.cache_manager.get_all_maps()
+            all_monsters = await self.cache_manager.get_all_monsters()
+            all_resources = await self.cache_manager.get_all_resources()
+            all_npcs = await self.cache_manager.get_all_npcs()
+            all_items = await self.cache_manager.get_all_items()
 
-            # Use cached map data directly - no need for individual API calls
-            # The bulk map data from get_all_maps() should be sufficient for planning
-            game_data.maps = all_maps
-            game_data.monsters = await self.cache_manager.get_all_monsters()
-            game_data.resources = await self.cache_manager.get_all_resources()
-            game_data.npcs = await self.cache_manager.get_all_npcs()
-            game_data.items = await self.cache_manager.get_all_items()
+            # Create properly typed GameData instance
+            game_data = GameData(
+                maps=all_maps,
+                monsters=all_monsters,
+                resources=all_resources,
+                npcs=all_npcs,
+                items=all_items
+            )
+
+            # Validate that essential game data is present
+            game_data.validate_required_data()
 
             return game_data
 
@@ -222,110 +244,103 @@ class GoalManager:
 
         return (target_x, target_y)
 
-    def select_next_goal(self, current_state: CharacterGameState) -> dict[GameState, Any]:
-        """Select next achievable goal - use direct state goals that map to actual actions."""
+    async def select_next_goal(self, current_state: CharacterGameState) -> 'GOAPTargetState':
+        """Select next achievable goal using enhanced goal system, return GOAPTargetState directly."""
         if self.max_level_achieved(current_state):
-            return {}
+            return GOAPTargetState()
 
-        # Check HP first - if low, rest
-        current_hp = current_state.hp
-        max_hp = current_state.max_hp
-        hp_ratio = current_hp / max_hp if max_hp > 0 else 1.0
+        game_data = await self.get_game_data()
+        selected_goal, sub_goal_requests = self.goal_weight_calculator.select_optimal_goal(
+            current_state, game_data
+        )
 
-        if hp_ratio < 0.3:  # Less than 30% HP
-            # Find a safe location for resting
-            target_x, target_y = self.select_movement_target(current_state, 'rest')
-            return {
-                'type': 'rest',
-                'priority': 10,
-                'target_state': {
-                    GameState.CURRENT_X: target_x,
-                    GameState.CURRENT_Y: target_y,
-                    GameState.HP_LOW: False
-                }
-            }
+        if sub_goal_requests:
+            self.active_sub_goals.extend(sub_goal_requests)
 
-        # If at monster location and can fight, fight
-        at_monster_location = current_state.at_monster_location
+            # Process the first sub-goal instead of the parent goal
+            if self.active_sub_goals:
+                sub_goal_request = self.active_sub_goals.pop(0)
+                self.logger.debug(f"Processing sub-goal: {sub_goal_request.goal_type}")
 
-        if at_monster_location and hp_ratio > 0.5:
-            return {
-                'type': 'combat',
-                'priority': 8,
-                'target_state': {
-                    # Use actual state changes that combat action provides
-                    GameState.COOLDOWN_READY: False
-                }
-            }
+                # Create goal factory context
+                context = GoalFactoryContext(
+                    character_state=current_state,
+                    game_data=game_data,
+                    parent_goal_type=type(selected_goal).__name__ if selected_goal else None,
+                    recursion_depth=0,
+                    max_depth=10
+                )
 
-        # If healthy but not at monster location, move to find monsters
-        elif hp_ratio > 0.5:
-            target_x, target_y = self.select_movement_target(current_state, 'combat')
-            return {
-                'type': 'movement',
-                'priority': 7,
-                'target_state': {
-                    GameState.CURRENT_X: target_x,
-                    GameState.CURRENT_Y: target_y,
-                    GameState.COOLDOWN_READY: False
-                }
-            }
+                try:
+                    # Create goal from sub-request
+                    sub_goal = self.create_goal_from_sub_request(sub_goal_request, context)
 
-        # Otherwise, move strategically - use intelligent 2D movement
-        target_x, target_y = self.select_movement_target(current_state, 'exploration')
+                    # Get target state from sub-goal
+                    target_state_obj = sub_goal.get_target_state(current_state, game_data)
 
-        return {
-            'type': 'movement',
-            'priority': 6,
-            'target_state': {
-                GameState.CURRENT_X: target_x,
-                GameState.CURRENT_Y: target_y,
-                GameState.COOLDOWN_READY: False
-            }
+                    # Return the sub-goal's target state
+                    return target_state_obj
+
+                except (GoalFactoryError, ValueError) as e:
+                    self.logger.warning(f"Failed to create sub-goal: {e}")
+                    # Fall through to process the original goal
+
+        if not selected_goal:
+            return GOAPTargetState()
+
+        # Use unified architecture - get target state from goal's get_target_state method
+        target_state_obj = selected_goal.get_target_state(current_state, game_data)
+        target_state_dict = target_state_obj.to_goap_dict()
+
+        # Map goal class names to expected test types
+        goal_type = type(selected_goal).__name__
+        goal_type_mapping = {
+            'CombatGoal': 'combat_goal',
+            'GatheringGoal': 'gathering_goal',
+            'CraftingGoal': 'crafting_goal',
+            'EquipmentGoal': 'equipment_goal',
+            'RestGoal': 'rest',
+            'HealthRecoveryGoal': 'health_recovery',
+            'EmergencyRestGoal': 'emergency_rest',
+            'SurvivalGoal': 'survival',
+            'InventoryManagementGoal': 'inventory_management'
         }
 
-    async def plan_actions(self, current_state: CharacterGameState, goal: dict[GameState, Any] | dict[str, Any]) -> list[dict[str, Any]]:
-        """Generate action sequence using cooldown-aware GOAP planner."""
-        # Extract target state from goal
-        goal_state = goal.get('target_state', {})
-        if not goal_state:
-            return []
+        # Return the GOAPTargetState object directly as per unified architecture
+        return target_state_obj
 
-        # Create GOAP planner with current actions
-        planner = await self._create_goap_planner(current_state, goal_state)
 
-        # Check if planner has actions
-        action_list = await self.create_goap_actions(current_state)
-        if not action_list.conditions:
-            return []
+    async def plan_actions(self, current_state: CharacterGameState, goal: GOAPTargetState) -> GOAPActionPlan:
+        """Generate action sequence using cooldown-aware GOAP planner.
+        
+        Raises:
+            PlanningError: If no valid plan can be found
+        """
+        return await self.plan_to_target_state(current_state, goal)
 
-        # Generate plan
-        plan = planner.calculate()
-
-        return plan if plan else []
-
-    async def plan_with_cooldown_awareness(self, character_name: str, current_state: CharacterGameState, goal_state: dict[GameState, Any]) -> list[dict[str, Any]]:
+    async def plan_with_cooldown_awareness(self, character_name: str, current_state: CharacterGameState, goal_state: dict[GameState, bool | int | float | str]) -> GOAPActionPlan:
         """Generate plan considering current cooldown state and timing.
 
         Parameters:
             character_name: Name of the character for cooldown checking
-            current_state: Dictionary with GameState enum keys and current values
+            current_state: CharacterGameState with current character state
             goal_state: Dictionary with GameState enum keys and target values
 
         Return values:
-            List of action dictionaries with timing-aware sequencing
+            GOAPActionPlan with timing-aware action sequence
+
+        Raises:
+            PlanningError: If no valid plan can be found
 
         This method generates action plans that account for character cooldown
         status, either deferring planning until ready or filtering actions
         that require cooldown readiness for optimal execution timing.
         """
-        # Create planner with cooldown awareness
-        planner = await self._create_goap_planner(current_state, goal_state, character_name)
+        # Convert goal_state dict to GOAPTargetState
+        target_state = GOAPTargetState(target_states=goal_state)
 
-        # Use the standard GOAP calculate method - the method that was called doesn't exist
-        plan = planner.calculate()
-
-        return plan if plan else []
+        # Use plan_to_target_state which handles everything properly
+        return await self.plan_to_target_state(current_state, target_state)
 
     def should_defer_planning(self, character_name: str) -> bool:
         """Check if planning should be deferred due to cooldown.
@@ -838,16 +853,16 @@ class GoalManager:
 
         return updated_priorities
 
-    async def _create_goap_planner(self, current_state: CharacterGameState, goal_state: dict[GameState, Any], character_name: str | None = None) -> 'Planner':
+    async def _create_goap_planner(self, current_state: CharacterGameState, goal_state: dict[GameState, bool | int | float | str], character_name: str | None = None) -> 'Planner':
         """Create GOAP planner instance with current state and goals."""
-        print(f"DEBUG: Creating GOAP planner for character: {character_name}")
+        self.logger.debug(f"Creating GOAP planner for character: {character_name}")
 
         # Use the Pydantic model's proper conversion method
         goap_current_state = current_state.to_goap_state()
-        goap_goal_state = {key.value: value for key, value in goal_state.items()}
+        goap_goal_state = {key: value for key, value in goal_state.items()}
 
-        print(f"DEBUG: Current state keys: {list(goap_current_state.keys())}")
-        print(f"DEBUG: Goal state: {goap_goal_state}")
+        self.logger.debug(f"Current state keys: {list(goap_current_state.keys())}")
+        self.logger.debug(f"Goal state: {goap_goal_state}")
 
         # Create action list
         action_list = await self.create_goap_actions(current_state)
@@ -1238,3 +1253,120 @@ class GoalManager:
     def _convert_actions_for_goap(self, actions: list['BaseAction']) -> 'Action_List':
         """Alias for convert_actions_for_goap for backward compatibility with tests."""
         return self.convert_actions_for_goap(actions)
+
+    # Enhanced methods for unified sub-goal architecture
+
+    def create_goal_from_sub_request(
+        self,
+        sub_goal_request: SubGoalRequest,
+        context: GoalFactoryContext
+    ) -> BaseGoal:
+        """Factory method to convert SubGoalRequest to appropriate Goal instance.
+        
+        Parameters:
+            sub_goal_request: Pydantic model with sub-goal requirements
+            context: GoalFactoryContext with character state, game data, and depth info
+            
+        Return values:
+            BaseGoal: Concrete goal instance that uses GOAP facilities
+            
+        Raises:
+            GoalFactoryError: If sub_goal_request.goal_type is not supported
+            MaxDepthExceededError: If recursion depth exceeds maximum
+        """
+        # Check recursion depth limit
+        if context.recursion_depth >= context.max_depth:
+            raise MaxDepthExceededError(context.max_depth)
+
+        # Validate context has required data
+        if context.character_state is None:
+            raise GoalFactoryError(sub_goal_request.goal_type, "GoalFactoryContext must include character_state")
+
+        if sub_goal_request.goal_type == "move_to_location":
+            return MovementGoal(
+                target_x=sub_goal_request.parameters["target_x"],
+                target_y=sub_goal_request.parameters["target_y"]
+            )
+
+        elif sub_goal_request.goal_type == "reach_hp_threshold":
+            return RestGoal(
+                min_hp_percentage=sub_goal_request.parameters.get("min_hp_percentage", 0.8)
+            )
+
+        elif sub_goal_request.goal_type == "obtain_item":
+            return GatheringGoal(
+                target_material_code=sub_goal_request.parameters["item_code"]
+            )
+
+        elif sub_goal_request.goal_type == "equip_item_type":
+            return EquipmentGoal(
+                target_slot=sub_goal_request.parameters["item_type"],
+                max_item_level=sub_goal_request.parameters["max_level"]
+            )
+        else:
+            raise GoalFactoryError(sub_goal_request.goal_type, f"Unknown sub-goal type: {sub_goal_request.goal_type}")
+
+    async def plan_to_target_state(
+        self,
+        current_state: CharacterGameState,
+        target_state: GOAPTargetState
+    ) -> GOAPActionPlan:
+        """Plan actions to reach target state using GOAP with state validation.
+        
+        Parameters:
+            current_state: Pydantic model with current character state
+            target_state: Pydantic model with target state requirements
+            
+        Return values:
+            GOAPActionPlan: Pydantic model with ordered action sequence
+            
+        Raises:
+            PlanningError: If no valid plan can be found
+            NoValidGoalError: If GOAP planner could not find valid action sequence
+        """
+        # Validate target state before planning if state_manager available
+        if self.state_manager:
+            await self.state_manager.validate_goap_target_state(target_state)
+
+        # Convert target state to dict with string keys for GOAP planner
+        goal_state = target_state.to_goap_dict()
+
+        self.logger.debug(f"Goal state for planner: {goal_state}")
+        self.logger.debug(f"Number of goal conditions: {len(goal_state)}")
+
+        # Create GOAP planner
+        planner = await self._create_goap_planner(current_state, goal_state)
+
+        # Generate plan
+        raw_plan = planner.calculate()
+
+        if not raw_plan:
+            raise NoValidGoalError("GOAP planner could not find valid action sequence")
+
+        # Convert to type-safe GOAPActionPlan
+        goap_actions = []
+        total_cost = 0
+        estimated_duration = 0.0
+
+        for action in raw_plan:
+            # Convert action dictionary to GOAPAction
+            goap_action = {
+                "name": action.get('name', 'unknown_action'),
+                "action_type": action.get('action_type', 'UnknownAction'),
+                "parameters": action.get('parameters', {}),
+                "cost": action.get('cost', 1),
+                "estimated_duration": action.get('estimated_duration', 1.0)
+            }
+
+            # Create GOAPAction from the action
+            goap_action_obj = GOAPAction(**goap_action)
+            goap_actions.append(goap_action_obj)
+            total_cost += goap_action_obj.cost
+            estimated_duration += goap_action_obj.estimated_duration
+
+        return GOAPActionPlan(
+            actions=goap_actions,
+            total_cost=total_cost,
+            estimated_duration=estimated_duration,
+            plan_id=f"plan_{current_state.name}_{time.time()}"
+        )

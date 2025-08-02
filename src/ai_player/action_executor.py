@@ -20,40 +20,61 @@ from ..game_data.cache_manager import CacheManager
 from ..game_data.cooldown_manager import CooldownManager
 from .actions import get_global_registry
 from .actions.base_action import BaseAction
+from .exceptions import MaxDepthExceededError, NoValidGoalError, RecursiveSubGoalError, StateConsistencyError
+from .goal_manager import GoalManager
+from .state.action_result import ActionResult, GameState
 from .state.character_game_state import CharacterGameState
-from .state.game_state import ActionResult, GameState
+from .state.state_manager import StateManager
+from .types.goap_models import GOAPActionPlan, SubGoalExecutionResult
 
 
 class ActionExecutor:
     """Executes GOAP actions via API with cooldown and error handling"""
 
-    def __init__(self, api_client: APIClientWrapper, cooldown_manager: CooldownManager, cache_manager: CacheManager):
-        """Initialize ActionExecutor with API client and cooldown management.
+    def __init__(
+        self,
+        api_client: APIClientWrapper,
+        cooldown_manager: CooldownManager,
+        cache_manager: CacheManager,
+        goal_manager: GoalManager = None,
+        state_manager: StateManager = None,
+        max_subgoal_depth: int = 10
+    ):
+        """Initialize ActionExecutor with API client and unified sub-goal support.
 
         Parameters:
             api_client: API client wrapper for game operations
             cooldown_manager: Manager for character cooldown tracking
             cache_manager: CacheManager instance for accessing game data (maps, monsters, resources)
+            goal_manager: GoalManager instance for sub-goal factory support
+            state_manager: StateManager instance for recursive state management
+            max_subgoal_depth: Maximum recursion depth for sub-goal execution
 
         Return values:
             None (constructor)
 
         This constructor initializes the ActionExecutor with the necessary
         components for reliable action execution including API communication,
-        cooldown management, and game data access for action generation.
+        cooldown management, game data access, and recursive sub-goal execution.
         """
         self.api_client = api_client
         self.cooldown_manager = cooldown_manager
         self.cache_manager = cache_manager
+        self.goal_manager = goal_manager
+        self.state_manager = state_manager
+        self.max_subgoal_depth = max_subgoal_depth
         self.action_registry = get_global_registry()
         self.retry_attempts = 3
         self.retry_delays = [1, 2, 4]  # exponential backoff
+        self.logger = logging.getLogger(__name__)
 
         # Rate limiting state tracking
         self._last_rate_limit_time = 0.0
         self._rate_limit_wait_time = 0.0
 
-    async def execute_action(self, action: BaseAction, character_name: str, current_state: CharacterGameState) -> ActionResult:
+    async def execute_action(
+        self, action: BaseAction, character_name: str, current_state: CharacterGameState
+    ) -> ActionResult:
         """Execute single action with full error handling and cooldown management.
 
         Parameters:
@@ -84,7 +105,17 @@ class ActionExecutor:
             # Execute the action with retry logic
             for attempt in range(self.retry_attempts):
                 try:
-                    result = await action.execute(character_name, current_state)
+                    # Convert CharacterGameState to dict[GameState, Any] for action
+                    state_dict = current_state.to_goap_state()
+                    typed_state = GameState.validate_state_dict(state_dict)
+
+                    # Pass API client and cooldown manager to action
+                    result = await action.execute(
+                        character_name,
+                        typed_state,
+                        api_client=self.api_client,
+                        cooldown_manager=self.cooldown_manager
+                    )
 
                     # Process and validate the result
                     if result.success:
@@ -144,11 +175,11 @@ class ActionExecutor:
                 cooldown_seconds=0
             )
 
-    async def execute_plan(self, plan: list[dict[str, Any]], character_name: str) -> bool:
+    async def execute_plan(self, plan: list[BaseAction], character_name: str) -> bool:
         """Execute entire action plan with state updates.
 
         Parameters:
-            plan: List of action dictionaries representing the planned sequence
+            plan: List of BaseAction instances representing the planned sequence
             character_name: Name of the character to execute the plan for
 
         Return values:
@@ -177,115 +208,41 @@ class ActionExecutor:
 
             # Convert to internal state format - keep as CharacterGameState
             self.logger.info("ActionExecutor: Converting to CharacterGameState...")
-            character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
+            character_state = CharacterGameState.from_api_character(
+                character, game_map.content, self.api_client.cooldown_manager
+            )
             self.logger.info("ActionExecutor: Initial state loaded successfully")
 
             self.logger.info(f"ActionExecutor: Starting for loop with {len(plan)} actions")
-            for i, action_info in enumerate(plan):
+            for i, action in enumerate(plan):
                 try:
-                    self.logger.info(f"ActionExecutor: Processing plan step {i+1}: {action_info.get('name', 'unknown')}")
-                    # Extract action name and parameters
-                    action_name = action_info.get('action', action_info.get('name'))
-                    self.logger.info(f"ActionExecutor: Extracted action name: '{action_name}'")
-                    if not action_name:
-                        self.logger.error(f"No action name found in action_info: {action_info}")
-                        return False
+                    self.logger.info(f"ActionExecutor: Processing plan step {i+1}: {action.name}")
+                    self.logger.debug(f"Executing action '{action.name}'...")
 
-                    # Get action instance from registry using actual current state
-                    self.logger.info(f"ActionExecutor: Getting action from registry: '{action_name}'")
-                    action = await self.get_action_by_name(action_name, character_state)
-                    self.logger.info(f"ActionExecutor: Got action from registry: {action}")
-                    if not action:
-                        self.logger.warning(f"Could not find action '{action_name}' in registry")
-                        return False
-
-                    self.logger.debug(f"Found action '{action_name}', executing...")
-
-                    # Translate action to API call based on action type
-                    if action.name == "combat":
-                        try:
-                            fight_result = await self.api_client.fight_monster(character_name)
-                            result = ActionResult(
-                                success=True,
-                                message=f"Combat successful: {fight_result.data.fight.result}",
-                                state_changes={
-                                    GameState.CHARACTER_XP: fight_result.data.character.xp,
-                                    GameState.CHARACTER_GOLD: fight_result.data.character.gold,
-                                    GameState.HP_CURRENT: fight_result.data.character.hp,
-                                    GameState.COOLDOWN_READY: False,
-                                },
-                                cooldown_seconds=fight_result.data.cooldown.total_seconds
-                            )
-                        except Exception as e:
-                            result = ActionResult(
-                                success=False,
-                                message=f"Combat failed: {str(e)}",
-                                state_changes={},
-                                cooldown_seconds=0
-                            )
-                    elif action.name.startswith("move_to_"):
-                        # Handle movement actions via API
-                        try:
-                            # Extract target coordinates from action
-                            target_x = action.target_x
-                            target_y = action.target_y
-
-                            move_result = await self.api_client.move_character(character_name, target_x, target_y)
-                            result = ActionResult(
-                                success=True,
-                                message=f"Moved character {character_name} to ({move_result.x}, {move_result.y})",
-                                state_changes={
-                                    GameState.CURRENT_X: move_result.x,
-                                    GameState.CURRENT_Y: move_result.y,
-                                    GameState.COOLDOWN_READY: False,
-                                },
-                                cooldown_seconds=getattr(move_result.cooldown, "total_seconds", 5) if hasattr(move_result, "cooldown") else 5
-                            )
-                        except Exception as e:
-                            # Check for HTTP 490 "CHARACTER_ALREADY_MAP" error
-                            if hasattr(e, 'status_code') and e.status_code == 490:
-                                result = ActionResult(
-                                    success=True,
-                                    message=f"Character {character_name} already at target location ({target_x}, {target_y})",
-                                    state_changes={
-                                        GameState.CURRENT_X: target_x,
-                                        GameState.CURRENT_Y: target_y,
-                                    },
-                                    cooldown_seconds=0  # No cooldown for non-movement
-                                )
-                            else:
-                                result = ActionResult(
-                                    success=False,
-                                    message=f"Movement failed for {character_name}: {str(e)}",
-                                    state_changes={},
-                                    cooldown_seconds=0
-                                )
-                    else:
-                        # Execute other actions normally
-                        result = await self.execute_action(action, character_name, character_state)
+                    # Execute all actions through the proper execute_action method
+                    # This delegates to StateManager for API calls, maintaining proper architecture
+                    result = await self.execute_action(action, character_name, character_state)
 
                     if not result.success:
-                        self.logger.warning(f"Action '{action_name}' failed: {result.message}")
+                        self.logger.warning(f"Action '{action.name}' failed: {result.message}")
                         # Try emergency recovery for critical failures
                         if "critical" in result.message.lower() or "hp" in result.message.lower():
-                            recovery_success = await self.emergency_recovery(character_name, f"Plan step {i+1} failed: {result.message}")
+                            recovery_success = await self.emergency_recovery(
+                                character_name, f"Plan step {i+1} failed: {result.message}"
+                            )
                             if not recovery_success:
                                 return False
                         else:
                             return False
 
-                    self.logger.info(f"Action '{action_name}' succeeded: {result.message}")
+                    self.logger.info(f"Action '{action.name}' succeeded: {result.message}")
 
-                    # Update state with action results
-                    # Convert character_state to typed state dictionary for updates
-                    goap_state = character_state.to_goap_state()
-                    typed_state = GameState.validate_state_dict(goap_state)
+                    # Delegate state updates to StateManager for proper synchronization
+                    # Apply the action result through StateManager
+                    await self.state_manager.apply_action_result(result)
 
-                    for state_key, new_value in result.state_changes.items():
-                        typed_state[state_key] = new_value
-
-                    # Update the character_state object with the new values
-                    character_state = CharacterGameState.from_goap_state(typed_state)
+                    # Get the updated state from StateManager (with proper cooldown sync)
+                    character_state = await self.state_manager.get_current_state()
 
                     # Wait for cooldown between actions if needed
                     if result.cooldown_seconds > 0:
@@ -293,7 +250,9 @@ class ActionExecutor:
 
                 except Exception as e:
                     # Try emergency recovery for action execution errors
-                    recovery_success = await self.emergency_recovery(character_name, f"Plan execution error at step {i+1}: {str(e)}")
+                    recovery_success = await self.emergency_recovery(
+                        character_name, f"Plan execution error at step {i+1}: {str(e)}"
+                    )
                     if not recovery_success:
                         return False
 
@@ -359,7 +318,9 @@ class ActionExecutor:
             # If precondition checking fails, be conservative and return False
             return False
 
-    async def handle_action_error(self, action: BaseAction, error: Exception, character_name: str) -> ActionResult | None:
+    async def handle_action_error(
+        self, action: BaseAction, error: Exception, character_name: str
+    ) -> ActionResult | None:
         """Handle API errors during action execution with recovery strategies.
 
         Parameters:
@@ -484,7 +445,9 @@ class ActionExecutor:
                 game_map = await self.api_client.get_map(character.x, character.y)
 
                 # Convert to internal state format
-                character_state = CharacterGameState.from_api_character(character, game_map.content, self.api_client.cooldown_manager)
+                character_state = CharacterGameState.from_api_character(
+                    character, game_map.content, self.api_client.cooldown_manager
+                )
                 goap_state = character_state.to_goap_state()
                 typed_state = GameState.validate_state_dict(goap_state)
 
@@ -825,3 +788,210 @@ class ActionExecutor:
                 state_changes={},
                 cooldown_seconds=0
             )
+
+    # Enhanced methods for unified sub-goal architecture
+
+    async def execute_action_with_subgoals(
+        self,
+        action: BaseAction,
+        character_name: str,
+        current_state: CharacterGameState,
+        depth: int = 0
+    ) -> ActionResult:
+        """Execute action with recursive sub-goal handling and state consistency validation.
+        
+        Parameters:
+            action: BaseAction instance to execute
+            character_name: Character identifier
+            current_state: Pydantic model with current character state
+            depth: Current recursion depth (0 = top level)
+            
+        Return values:
+            ActionResult: Pydantic model with execution outcome
+            
+        Raises:
+            MaxDepthExceededError: If depth > max_subgoal_depth
+            RecursiveSubGoalError: If sub-goal chain fails
+        """
+
+        # Depth limit protection
+        if depth > self.max_subgoal_depth:
+            raise MaxDepthExceededError(self.max_subgoal_depth)
+
+        # Ensure we have required dependencies for sub-goal support
+        if not self.goal_manager or not self.state_manager:
+            # Fall back to regular execution if dependencies not available
+            return await self.execute_action(action, character_name, current_state)
+
+        # Capture pre-execution state for validation
+        pre_execution_state = current_state.model_copy()
+
+        # Execute action using existing execute_action method
+        result = await self.execute_action(action, character_name, current_state)
+
+        # Handle sub-goal requests recursively
+        if not result.success and result.sub_goal_requests:
+            for sub_goal_request in result.sub_goal_requests:
+                try:
+                    # Create factory context using StateManager
+                    context = self.state_manager.create_goal_factory_context(
+                        parent_goal_type=type(action).__name__,
+                        recursion_depth=depth + 1,
+                        max_depth=self.max_subgoal_depth
+                    )
+
+                    # Use GoalManager factory to create Goal instance
+                    sub_goal = self.goal_manager.create_goal_from_sub_request(
+                        sub_goal_request, context
+                    )
+
+                    # Get target state using same facility as regular goals
+                    target_state = sub_goal.get_target_state(context.character_state, context.game_data)
+
+                    # Use GOAP planning (same facility as regular goals) - validation happens inside
+                    sub_plan = await self.goal_manager.plan_to_target_state(
+                        context.character_state, target_state
+                    )
+
+                    if not sub_plan.is_empty:
+                        # Execute sub-plan recursively
+                        sub_result = await self.execute_plan_recursive(
+                            sub_plan, character_name, depth + 1
+                        )
+
+                        if sub_result.success:
+                            # Force refresh state after sub-goal completion
+                            refreshed_state = await self.state_manager.refresh_state_for_parent_action(depth)
+
+                            # Validate state transition
+                            await self.state_manager.validate_recursive_state_transition(
+                                pre_execution_state, refreshed_state, depth
+                            )
+
+                            # Retry parent action with refreshed state
+                            return await self.execute_action_with_subgoals(
+                                action, character_name, refreshed_state, depth
+                            )
+
+                except (StateConsistencyError, MaxDepthExceededError, NoValidGoalError) as e:
+                    # Log error and continue with remaining sub-goal requests
+                    self.logger.warning(f"Sub-goal execution failed: {e}")
+                    continue
+                except Exception as e:
+                    # Wrap unexpected errors in RecursiveSubGoalError
+                    raise RecursiveSubGoalError(
+                        type(action).__name__,
+                        sub_goal_request.goal_type,
+                        depth,
+                        str(e)
+                    )
+
+        return result
+
+    async def execute_plan_recursive(
+        self,
+        plan: GOAPActionPlan,
+        character_name: str,
+        depth: int
+    ) -> SubGoalExecutionResult:
+        """Execute plan with recursive sub-goal support and state consistency tracking.
+        
+        Parameters:
+            plan: Pydantic model with ordered action sequence
+            character_name: Character identifier  
+            depth: Current recursion depth
+            
+        Return values:
+            SubGoalExecutionResult: Pydantic model with execution results
+            
+        Raises:
+            MaxDepthExceededError: If depth > max_subgoal_depth
+        """
+        start_time = time.time()
+        actions_executed = 0
+
+        try:
+            # Check depth limit
+            if depth > self.max_subgoal_depth:
+                raise MaxDepthExceededError(self.max_subgoal_depth)
+
+            # Get initial state for result tracking
+            if self.state_manager:
+                initial_state = await self.state_manager.get_current_state()
+            else:
+                # Fallback if state manager not available
+                initial_state = None
+
+            for goap_action in plan.actions:
+                # Convert GOAPAction to BaseAction instance
+                action = await self.get_action_by_name(goap_action.name, initial_state)
+                if not action:
+                    return SubGoalExecutionResult(
+                        success=False,
+                        depth_reached=depth,
+                        actions_executed=actions_executed,
+                        execution_time=time.time() - start_time,
+                        error_message=f"Action '{goap_action.name}' not found"
+                    )
+
+                # Get current state for this action
+                if self.state_manager:
+                    current_state = await self.state_manager.get_current_state()
+                else:
+                    current_state = initial_state
+
+                # Execute with recursive sub-goal handling
+                result = await self.execute_action_with_subgoals(
+                    action, character_name, current_state, depth
+                )
+
+                actions_executed += 1
+
+                if not result.success:
+                    return SubGoalExecutionResult(
+                        success=False,
+                        depth_reached=depth,
+                        actions_executed=actions_executed,
+                        execution_time=time.time() - start_time,
+                        error_message=result.message
+                    )
+
+            # Get final state after all actions
+            if self.state_manager:
+                final_state = await self.state_manager.get_current_state()
+            else:
+                final_state = None
+
+            return SubGoalExecutionResult(
+                success=True,
+                depth_reached=depth,
+                actions_executed=actions_executed,
+                execution_time=time.time() - start_time,
+                final_state=final_state
+            )
+
+        except (MaxDepthExceededError, StateConsistencyError, NoValidGoalError) as e:
+            return SubGoalExecutionResult(
+                success=False,
+                depth_reached=depth,
+                actions_executed=actions_executed,
+                execution_time=time.time() - start_time,
+                error_message=str(e)
+            )
+
+    async def get_action_by_name(self, action_name: str, current_state: CharacterGameState) -> BaseAction:
+        """Get action instance by name for execution using the action registry."""
+        if not self.cache_manager:
+            return None
+
+        # Get game data for action creation
+        game_data = await self.cache_manager.get_game_data()
+
+        # Use the action registry to get available actions and find matching one
+        available_actions = self.action_registry.get_available_actions(current_state, game_data)
+
+        for action in available_actions:
+            if action.name == action_name:
+                return action
+
+        return None

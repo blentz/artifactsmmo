@@ -31,11 +31,13 @@ Example:
     pytest tests/test_lib/test_goap.py
 
     # Import test utilities
-    from tests.test_lib import run_all_tests, get_test_modules
+    # These utilities are defined in this module
 """
 
 import importlib
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -126,13 +128,11 @@ class TestFixtures:
     @staticmethod
     def get_temp_yaml_path() -> str:
         """Get a temporary path for YAML test files."""
-        import tempfile
         return tempfile.mktemp(suffix=".yaml")
 
     @staticmethod
     def cleanup_temp_files(*paths: str) -> None:
         """Clean up temporary test files."""
-        import os
         for path in paths:
             try:
                 if os.path.exists(path):

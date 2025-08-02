@@ -39,50 +39,6 @@ class TestDiagnosticCommandsWorking:
         assert diagnostic_commands.goal_manager == goal_manager
         assert diagnostic_commands.api_client == api_client
 
-    def test_parse_goal_parameters_working_cases(self):
-        """Test goal parameter parsing for cases that work."""
-        diagnostic_commands = DiagnosticCommands()
-
-        # Empty string
-        result = diagnostic_commands._parse_goal_parameters("")
-        assert isinstance(result, dict)
-        assert len(result) == 0
-
-        # Simple boolean
-        result = diagnostic_commands._parse_goal_parameters("--gained-xp true")
-        assert result == {GameState.GAINED_XP: True}
-
-        # Multiple parameters
-        result = diagnostic_commands._parse_goal_parameters("--gained-xp true --cooldown-ready false")
-        expected = {
-            GameState.GAINED_XP: True,
-            GameState.COOLDOWN_READY: False
-        }
-        assert result == expected
-
-    def test_parse_goal_parameters_boolean_values(self):
-        """Test different boolean value formats."""
-        diagnostic_commands = DiagnosticCommands()
-
-        # Test various true values
-        for true_val in ['true', 'True', 'TRUE', 'yes', 'y', '1']:
-            result = diagnostic_commands._parse_goal_parameters(f"--gained-xp {true_val}")
-            assert result[GameState.GAINED_XP] is True
-
-        # Test various false values
-        for false_val in ['false', 'False', 'FALSE', 'no', 'n', '0']:
-            result = diagnostic_commands._parse_goal_parameters(f"--gained-xp {false_val}")
-            assert result[GameState.GAINED_XP] is False
-
-    def test_parse_goal_parameters_equals_format(self):
-        """Test key=value format parsing."""
-        diagnostic_commands = DiagnosticCommands()
-
-        result = diagnostic_commands._parse_goal_parameters("gained-xp=true")
-        assert result == {GameState.GAINED_XP: True}
-
-        result = diagnostic_commands._parse_goal_parameters("cooldown-ready=false")
-        assert result == {GameState.COOLDOWN_READY: False}
 
     @pytest.mark.asyncio
     async def test_diagnose_state_no_api_client(self):
@@ -296,22 +252,6 @@ class TestDiagnosticCommandsWorking:
         assert full_diagnostic_commands.planning_diagnostics is not None
         assert full_diagnostic_commands.cooldown_manager is not None
 
-    def test_parameter_validation_edge_cases(self):
-        """Test parameter parsing edge cases."""
-        diagnostic_commands = DiagnosticCommands()
-
-        # Test with None input
-        try:
-            result = diagnostic_commands._parse_goal_parameters(None)
-            # Should handle gracefully
-            assert isinstance(result, dict)
-        except (TypeError, AttributeError):
-            # Also acceptable if it raises expected errors
-            pass
-
-        # Test with invalid format - should raise ValueError
-        with pytest.raises(ValueError, match="Invalid goal parameters"):
-            diagnostic_commands._parse_goal_parameters("invalid format")
 
     def test_diagnostic_methods_exist(self):
         """Test that all expected diagnostic methods exist."""

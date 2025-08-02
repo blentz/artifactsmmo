@@ -5,12 +5,14 @@ This module tests the BaseAction interface, validation methods,
 and ensures proper GameState enum usage in all action implementations.
 """
 
+import asyncio
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 from src.ai_player.actions.base_action import BaseAction
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
 
 
 class ConcreteTestAction(BaseAction):
@@ -40,7 +42,7 @@ class ConcreteTestAction(BaseAction):
             GameState.CHARACTER_XP: 100
         }
 
-    async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+    async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
         return ActionResult(
             success=True,
             message=f"Test action executed for {character_name}",
@@ -72,7 +74,7 @@ class InvalidTestAction(BaseAction):
             GameState.COOLDOWN_READY: False
         }
 
-    async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+    async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
         return ActionResult(
             success=False,
             message="This action should not execute",
@@ -98,7 +100,7 @@ class TestBaseAction:
         abstract_methods = BaseAction.__abstractmethods__
 
         # Verify that all expected abstract methods are present
-        expected_methods = {'name', 'cost', 'get_preconditions', 'get_effects', 'execute'}
+        expected_methods = {'name', 'cost', 'get_preconditions', 'get_effects', '_execute_api_call'}
         assert abstract_methods == expected_methods
 
         # Call the abstract methods directly on the class to cover the pass statements
@@ -124,7 +126,6 @@ class TestBaseAction:
             pass  # Expected to fail
 
         # Test the async execute method coverage
-        import asyncio
         try:
             # Create an async task to call the abstract execute method
             async def test_abstract_execute():
@@ -196,13 +197,14 @@ class TestBaseAction:
     async def test_action_execute_with_character_name(self):
         """Test that execute method properly uses character name"""
         action = ConcreteTestAction()
+        mock_api_client = Mock()
 
         current_state = {
             GameState.COOLDOWN_READY: True,
             GameState.HP_CURRENT: 80
         }
 
-        result = await action.execute("specific_character", current_state)
+        result = await action.execute("specific_character", current_state, api_client=mock_api_client)
 
         assert "specific_character" in result.message
 
@@ -289,7 +291,7 @@ class TestBaseAction:
                     GameState.COOLDOWN_READY: False
                 }
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         action = InvalidEffectsAction()
@@ -336,7 +338,7 @@ class TestActionResultIntegration:
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(
                     success=False,
                     message="Action execution failed",
@@ -347,7 +349,9 @@ class TestActionResultIntegration:
         action = FailingAction()
         current_state = {GameState.COOLDOWN_READY: True}
 
-        result = await action.execute("test_char", current_state)
+        # Provide a mock API client to trigger _execute_api_call path
+        mock_api_client = Mock()
+        result = await action.execute("test_char", current_state, api_client=mock_api_client)
 
         assert result.success is False
         assert "failed" in result.message
@@ -388,7 +392,7 @@ class TestActionValidationScenarios:
                     GameState.INVENTORY_SPACE_AVAILABLE: 2
                 }
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(
                     success=True,
                     message="Complex action completed",
@@ -475,7 +479,7 @@ class TestActionExceptionHandling:
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         action = BrokenPreconditionsAction()
@@ -516,7 +520,7 @@ class TestActionExceptionHandling:
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         action = BrokenValidationAction()
@@ -543,7 +547,7 @@ class TestActionExceptionHandling:
                 # This will raise an exception when called
                 raise RuntimeError("Simulated effects validation error")
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         action = BrokenEffectsValidationAction()
@@ -570,7 +574,7 @@ class TestActionExceptionHandling:
             def get_effects(self) -> dict[GameState, Any]:
                 return {GameState.COOLDOWN_READY: False}
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         action = NonDictPreconditionsAction()
@@ -597,7 +601,7 @@ class TestActionExceptionHandling:
                 # Return something that's not a dict
                 return "not a dict"  # type: ignore
 
-            async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         action = NonDictEffectsAction()

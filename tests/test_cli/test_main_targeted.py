@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.cli.main import CLIManager, generate_random_character_name
+from src.cli.main import CLIManager, generate_random_character_name, main, async_main
 
 
 class TestUtilityFunctions:
@@ -117,7 +117,7 @@ class TestArgumentParsing:
 
     def test_create_parser_basic(self):
         """Test basic argument parser creation."""
-        from src.cli.main import CLIManager
+        # CLIManager imported at top
 
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
@@ -129,7 +129,7 @@ class TestArgumentParsing:
 
     def test_create_parser_help_available(self):
         """Test that help is available for parser."""
-        from src.cli.main import CLIManager
+        # CLIManager imported at top
 
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
@@ -140,7 +140,7 @@ class TestArgumentParsing:
 
     def test_create_parser_subcommands(self):
         """Test that main subcommands are available."""
-        from src.cli.main import CLIManager
+        # CLIManager imported at top
 
         cli_manager = CLIManager()
         parser = cli_manager.create_parser()
@@ -167,12 +167,12 @@ class TestMainFunction:
 
     def test_main_function_exists(self):
         """Test that main function exists and is callable."""
-        from src.cli.main import main
+        # main imported at top
         assert callable(main)
 
     def test_async_main_function_exists(self):
         """Test that async_main function exists and is callable."""
-        from src.cli.main import async_main
+        # async_main imported at top
         assert callable(async_main)
 
 

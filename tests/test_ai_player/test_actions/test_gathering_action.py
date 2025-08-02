@@ -11,7 +11,7 @@ import pytest
 
 from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.actions.gathering_action import GatheringAction
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
 
 
 class TestGatheringAction:

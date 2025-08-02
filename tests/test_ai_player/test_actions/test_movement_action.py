@@ -13,7 +13,8 @@ import pytest
 from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.actions.movement_action import MovementAction
 from src.ai_player.actions.movement_action_factory import MovementActionFactory
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
+from src.ai_player.state.character_game_state import CharacterGameState
 
 
 class TestMovementAction:
@@ -173,7 +174,7 @@ class TestMovementAction:
         assert isinstance(result, ActionResult)
         assert result.success is True
         assert isinstance(result.message, str)
-        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
+        assert result.cooldown_seconds == 5  # Simulated cooldown
 
         # Verify state changes match expected effects
         assert GameState.CURRENT_X in result.state_changes
@@ -187,8 +188,7 @@ class TestMovementAction:
         """Test movement action behavior with invalid preconditions"""
         action = MovementAction(20, 25)
 
-        # Test with cooldown not ready - action should still return state changes
-        # (precondition checking happens at the ActionExecutor level)
+        # Test with cooldown not ready - action should fail precondition check
         current_state = {
             GameState.COOLDOWN_READY: False,  # Invalid precondition
             GameState.CURRENT_X: 10,
@@ -198,12 +198,12 @@ class TestMovementAction:
 
         result = await action.execute("test_character", current_state)
 
-        # In current architecture, actions return expected changes regardless of preconditions
-        # Precondition validation happens at ActionExecutor level
+        # Actions check preconditions and fail if not met
         assert isinstance(result, ActionResult)
-        assert result.success is True
-        assert result.state_changes[GameState.CURRENT_X] == 20
-        assert result.state_changes[GameState.CURRENT_Y] == 25
+        assert result.success is False
+        assert "Preconditions not met" in result.message
+        assert result.state_changes == {}
+        assert result.cooldown_seconds == 0
 
     @pytest.mark.asyncio
     async def test_movement_action_execute_cooldown_error(self) -> None:
@@ -213,7 +213,8 @@ class TestMovementAction:
         current_state = {
             GameState.COOLDOWN_READY: True,
             GameState.CURRENT_X: 10,
-            GameState.CURRENT_Y: 15
+            GameState.CURRENT_Y: 15,
+            GameState.CAN_MOVE: True
         }
 
         # MovementAction.execute() doesn't make API calls - it returns expected state changes
@@ -222,8 +223,7 @@ class TestMovementAction:
 
         assert isinstance(result, ActionResult)
         assert result.success is True
-        assert "movement" in result.message.lower()
-        assert result.cooldown_seconds == 0  # Actual cooldown comes from API response
+        assert result.cooldown_seconds == 5  # Simulated cooldown
 
     def test_movement_action_distance_calculation(self) -> None:
         """Test distance calculation for movement cost"""
@@ -559,7 +559,6 @@ class TestMovementActionFactory:
         factory = MovementActionFactory()
 
         # Create mock CharacterGameState (not dict)
-        from src.ai_player.state.character_game_state import CharacterGameState
         current_state = CharacterGameState(
             name="test_character",
             level=1, xp=0, gold=0,

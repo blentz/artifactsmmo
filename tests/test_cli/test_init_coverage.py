@@ -16,6 +16,19 @@ from tests.test_cli import (
     CLIMockFactory,
     CLITestAssertions,
     CLITestHelpers,
+    ai_player_scenario,
+    character_creation_scenario,
+    cli_assertions,
+    cli_helpers,
+    cli_mock_factory,
+    diagnostic_scenario,
+    mock_ai_player,
+    mock_api_client,
+    mock_argument_parser,
+    mock_character,
+    mock_cli_manager,
+    mock_diagnostic_commands,
+    sample_parsed_args,
 )
 
 
@@ -578,21 +591,6 @@ class TestCLIFixtures:
 
     def test_fixture_functions_direct(self):
         """Test fixture functions directly to ensure 100% coverage"""
-        from tests.test_cli import (
-            ai_player_scenario,
-            character_creation_scenario,
-            cli_assertions,
-            cli_helpers,
-            cli_mock_factory,
-            diagnostic_scenario,
-            mock_ai_player,
-            mock_api_client,
-            mock_argument_parser,
-            mock_character,
-            mock_cli_manager,
-            mock_diagnostic_commands,
-            sample_parsed_args,
-        )
 
         # Test each fixture function exists and is callable
         assert callable(cli_mock_factory)

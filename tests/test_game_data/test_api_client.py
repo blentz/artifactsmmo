@@ -12,6 +12,7 @@ import pytest
 
 from src.ai_player.state.game_state import CooldownInfo
 from src.game_data.api_client import APIClientWrapper, CooldownManager, TokenConfig
+from src.lib.httpstatus import ArtifactsHTTPStatus
 
 
 class TestTokenConfig:
@@ -200,7 +201,7 @@ class TestAPIClientWrapper:
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
              patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
              patch('src.game_data.api_client_wrapper.get_character_characters_name_get') as mock_get, \
-             patch.object(APIClientWrapper, '_process_response', new=AsyncMock()) as mock_process:
+             patch.object(APIClientWrapper, '_process_response', new_callable=AsyncMock) as mock_process:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -342,7 +343,6 @@ class TestAPIClientWrapper:
             mock_client_class.return_value = mock_client
 
             # Mock cooldown error response (499)
-            from src.lib.httpstatus import ArtifactsHTTPStatus
             mock_response = Mock()
             mock_response.status_code = ArtifactsHTTPStatus["CHARACTER_COOLDOWN"]
 
@@ -735,7 +735,7 @@ class TestAPIClientErrorHandling:
         with patch.object(TokenConfig, 'from_file', return_value=mock_token_config), \
              patch('src.game_data.api_client_wrapper.AuthenticatedClient') as mock_client_class, \
              patch('src.game_data.api_client_wrapper.get_all_resources_asyncio_detailed') as mock_get, \
-             patch.object(APIClientWrapper, '_process_response', new=AsyncMock()) as mock_process:
+             patch.object(APIClientWrapper, '_process_response', new_callable=AsyncMock) as mock_process:
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client

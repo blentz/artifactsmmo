@@ -28,6 +28,7 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 ## Antipatterns to avoid
 - DO NOT use print statements to report fake success. Fix the errors you see.
 - DO NOT simplify problems. Stop working and ask the user for clarification or directions instead.
+- DO NOT use TYPE_CHECKING for any reason.
 
 ## API Interaction Guidelines
 - This AI player can't function without game API data. No defaulting will overcome that.

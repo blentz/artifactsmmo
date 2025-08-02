@@ -9,7 +9,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.ai_player.state.game_state import ActionResult, CharacterGameState, GameState
+from src.ai_player.state.action_result import ActionResult
+from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import GameState
 from src.ai_player.state.state_manager import StateManager
 
 
@@ -48,6 +50,19 @@ class TestStateManager:
         mock_character.cooking_xp = 0
         mock_character.alchemy_level = 1
         mock_character.alchemy_xp = 0
+        # Equipment slots
+        mock_character.weapon_slot = ""
+        mock_character.rune_slot = ""
+        mock_character.shield_slot = ""
+        mock_character.helmet_slot = ""
+        mock_character.body_armor_slot = ""
+        mock_character.leg_armor_slot = ""
+        mock_character.boots_slot = ""
+        mock_character.ring1_slot = ""
+        mock_character.ring2_slot = ""
+        mock_character.amulet_slot = ""
+        mock_character.artifact1_slot = ""
+        mock_character.cooldown_expiration_utc = None
 
         client.get_character = AsyncMock(return_value=mock_character)
         client.get_character_logs = AsyncMock()

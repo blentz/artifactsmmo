@@ -9,10 +9,10 @@ The CombatAction demonstrates proper handling of combat mechanics and
 state management for monster fighting scenarios.
 """
 
-from typing import Any
+from typing import Any, Optional
 
+from ..state.action_result import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
-from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
 
 
@@ -277,6 +277,92 @@ class CombatAction(BaseAction):
                     return True
 
         return False  # Safe to continue combat
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Execute combat via API client.
+        
+        Parameters:
+            character_name: Name of the character to engage in combat
+            current_state: Dictionary with GameState enum keys and current values
+            api_client: API client for making the combat call
+            cooldown_manager: Optional cooldown manager for tracking cooldowns
+            
+        Return values:
+            ActionResult with actual combat result from API
+            
+        This method makes the actual API call to fight and handles
+        the response, updating cooldowns and returning the real state changes.
+        """
+        # Make the actual API call to fight
+        fight_result = await api_client.fight_monster(character_name)
+
+        if fight_result:
+            # Update cooldown if manager provided and cooldown data exists
+            if cooldown_manager and hasattr(fight_result, 'cooldown'):
+                cooldown_manager.update_cooldown(character_name, fight_result.cooldown)
+
+            # Build state changes based on successful combat
+            state_changes = {
+                GameState.COOLDOWN_READY: False,
+                GameState.CAN_FIGHT: False,
+                GameState.CAN_GATHER: False,
+                GameState.CAN_CRAFT: False,
+                GameState.CAN_TRADE: False,
+                GameState.CAN_MOVE: False,
+                GameState.CAN_REST: False,
+                GameState.CAN_USE_ITEM: False,
+                GameState.CAN_BANK: False,
+            }
+
+            # Update character state from API response
+            if hasattr(fight_result, 'character'):
+                character = fight_result.character
+                # Use comprehensive state extraction
+                character_states = self._extract_character_state(character)
+                state_changes.update(character_states)
+
+                # Mark that XP was gained
+                if hasattr(fight_result, 'details') and fight_result.details:
+                    if hasattr(fight_result.details, 'xp') and fight_result.details.xp > 0:
+                        state_changes[GameState.GAINED_XP] = True
+                        state_changes[GameState.CAN_GAIN_XP] = True
+
+            # Get cooldown duration
+            cooldown_seconds = 0
+            if hasattr(fight_result, 'cooldown'):
+                cooldown_seconds = fight_result.cooldown.total_seconds
+
+            # Build success message
+            message = "Combat successful"
+            if hasattr(fight_result, 'details') and fight_result.details:
+                # Extract combat details for message
+                if hasattr(fight_result.details, 'xp'):
+                    message = f"Combat successful: Gained {fight_result.details.xp} XP"
+                if hasattr(fight_result.details, 'gold'):
+                    message += f", {fight_result.details.gold} gold"
+                if hasattr(fight_result.details, 'drops') and fight_result.details.drops:
+                    drops_str = ", ".join([f"{drop.quantity}x {drop.code}" for drop in fight_result.details.drops])
+                    message += f", dropped {drops_str}"
+
+            return ActionResult(
+                success=True,
+                message=message,
+                state_changes=state_changes,
+                cooldown_seconds=cooldown_seconds
+            )
+        else:
+            return ActionResult(
+                success=False,
+                message="Combat failed: No response from API",
+                state_changes={},
+                cooldown_seconds=0
+            )
 
     def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.

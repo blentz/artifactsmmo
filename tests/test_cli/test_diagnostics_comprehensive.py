@@ -51,7 +51,7 @@ class TestDiagnosticCommandsInitialization:
 
     def test_diagnostic_commands_init_with_goal_manager(self):
         """Test DiagnosticCommands initialization with goal manager."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
 
         diagnostic_commands = DiagnosticCommands(goal_manager=mock_goal_manager)
 
@@ -72,7 +72,7 @@ class TestDiagnosticCommandsInitialization:
     def test_diagnostic_commands_init_all_components(self):
         """Test DiagnosticCommands initialization with all components."""
         mock_action_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = Mock(spec=APIClientWrapper)
 
         diagnostic_commands = DiagnosticCommands(
@@ -89,86 +89,6 @@ class TestDiagnosticCommandsInitialization:
         assert diagnostic_commands.cooldown_manager is not None
 
 
-class TestGoalParameterParsing:
-    """Test goal parameter parsing functionality."""
-
-    def test_parse_goal_parameters_empty_string(self):
-        """Test parsing empty goal string."""
-        diagnostic_commands = DiagnosticCommands()
-
-        result = diagnostic_commands._parse_goal_parameters("")
-
-        assert isinstance(result, dict)
-        assert len(result) == 0
-
-    def test_parse_goal_parameters_boolean_values(self):
-        """Test parsing boolean goal parameters."""
-        diagnostic_commands = DiagnosticCommands()
-
-        # Test various boolean formats
-        test_cases = [
-            ("--gained-xp true", {GameState.GAINED_XP: True}),
-            ("--can-gain-xp false", {GameState.CAN_GAIN_XP: False}),
-            ("--cooldown-ready yes", {GameState.COOLDOWN_READY: True}),
-            ("--hp-low no", {GameState.HP_LOW: False}),
-            ("--safe-to-fight 1", {GameState.SAFE_TO_FIGHT: True}),
-            ("--at-monster-location 0", {GameState.AT_MONSTER_LOCATION: False})
-        ]
-
-        for goal_string, expected in test_cases:
-            result = diagnostic_commands._parse_goal_parameters(goal_string)
-            assert result == expected
-
-    def test_parse_goal_parameters_equals_format(self):
-        """Test parsing goal parameters in key=value format."""
-        diagnostic_commands = DiagnosticCommands()
-
-        # The parser converts "key=value" format to "--key value"
-        goal_string = "gained-xp=true cooldown-ready=false"
-        result = diagnostic_commands._parse_goal_parameters(goal_string)
-
-        expected = {
-            GameState.GAINED_XP: True,
-            GameState.COOLDOWN_READY: False
-        }
-        assert result == expected
-
-    def test_parse_goal_parameters_multiple_values(self):
-        """Test parsing multiple goal parameters."""
-        diagnostic_commands = DiagnosticCommands()
-
-        goal_string = "--gained-xp true --cooldown-ready false --safe-to-fight true"
-        result = diagnostic_commands._parse_goal_parameters(goal_string)
-
-        expected = {
-            GameState.GAINED_XP: True,
-            GameState.COOLDOWN_READY: False,
-            GameState.SAFE_TO_FIGHT: True
-        }
-        assert result == expected
-
-    def test_parse_goal_parameters_invalid_boolean(self):
-        """Test parsing invalid boolean values."""
-        diagnostic_commands = DiagnosticCommands()
-
-        with pytest.raises(ValueError, match="Invalid goal parameters"):
-            diagnostic_commands._parse_goal_parameters("--gained-xp invalid")
-
-    def test_str_to_bool_function(self):
-        """Test the internal str_to_bool function."""
-        diagnostic_commands = DiagnosticCommands()
-
-        # Access the internal function through parsing
-        true_values = ['yes', 'true', 't', 'y', '1', 'YES', 'True', 'T', 'Y']
-        false_values = ['no', 'false', 'f', 'n', '0', 'NO', 'False', 'F', 'N']
-
-        for true_val in true_values:
-            result = diagnostic_commands._parse_goal_parameters(f"--gained-xp {true_val}")
-            assert result[GameState.GAINED_XP] is True
-
-        for false_val in false_values:
-            result = diagnostic_commands._parse_goal_parameters(f"--gained-xp {false_val}")
-            assert result[GameState.GAINED_XP] is False
 
 
 class TestStateDiagnostics:
@@ -352,7 +272,7 @@ class TestPlanningDiagnostics:
     @pytest.mark.asyncio
     async def test_diagnose_plan_basic(self):
         """Test basic plan diagnosis."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = AsyncMock()
         diagnostic_commands = DiagnosticCommands(
             goal_manager=mock_goal_manager,
@@ -367,8 +287,12 @@ class TestPlanningDiagnostics:
         # Mock the methods that are actually called
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_reachability, \
              patch.object(diagnostic_commands.planning_diagnostics, 'identify_planning_bottlenecks') as mock_bottlenecks:
-            mock_reachability.return_value = True
-            mock_bottlenecks.return_value = []
+            async def mock_reachability_func():
+                return True
+            mock_reachability.side_effect = mock_reachability_func
+            async def mock_bottlenecks_func():
+                return []
+            mock_bottlenecks.side_effect = mock_bottlenecks_func
 
             result = await diagnostic_commands.diagnose_plan("test_char", "level_up")
 
@@ -379,7 +303,7 @@ class TestPlanningDiagnostics:
     @pytest.mark.asyncio
     async def test_diagnose_plan_with_goal_parameters(self):
         """Test plan diagnosis with specific goal parameters."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = AsyncMock()
         diagnostic_commands = DiagnosticCommands(
             goal_manager=mock_goal_manager,
@@ -392,7 +316,9 @@ class TestPlanningDiagnostics:
 
         # Mock the methods that are actually called
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
-            mock_reachability.return_value = True
+            async def mock_reachability_func():
+                return True
+            mock_reachability.side_effect = mock_reachability_func
 
             result = await diagnostic_commands.diagnose_plan(
                 "test_char",
@@ -405,7 +331,7 @@ class TestPlanningDiagnostics:
     @pytest.mark.asyncio
     async def test_diagnose_plan_verbose_mode(self):
         """Test plan diagnosis in verbose mode."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = AsyncMock()
         diagnostic_commands = DiagnosticCommands(
             goal_manager=mock_goal_manager,
@@ -417,7 +343,9 @@ class TestPlanningDiagnostics:
 
         # Mock the methods that are actually called
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
-            mock_reachability.return_value = True
+            async def mock_reachability_func():
+                return True
+            mock_reachability.side_effect = mock_reachability_func
 
             result = await diagnostic_commands.diagnose_plan("test_char", "level_up", verbose=True)
 
@@ -427,7 +355,7 @@ class TestPlanningDiagnostics:
     @pytest.mark.asyncio
     async def test_diagnose_plan_show_steps(self):
         """Test plan diagnosis with step visualization."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = AsyncMock()
         diagnostic_commands = DiagnosticCommands(
             goal_manager=mock_goal_manager,
@@ -439,7 +367,9 @@ class TestPlanningDiagnostics:
 
         # Mock the methods that are actually called
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
-            mock_reachability.return_value = True
+            async def mock_reachability_func():
+                return True
+            mock_reachability.side_effect = mock_reachability_func
 
             result = await diagnostic_commands.diagnose_plan("test_char", "level_up", show_steps=True)
 
@@ -465,7 +395,7 @@ class TestPlanningTesting:
     @pytest.mark.asyncio
     async def test_test_planning_with_mock_state_file(self):
         """Test planning testing with mock state file."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostic_commands = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         mock_state_data = {
@@ -486,7 +416,7 @@ class TestPlanningTesting:
     @pytest.mark.asyncio
     async def test_test_planning_with_level_range(self):
         """Test planning testing with start/goal level range."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostic_commands = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
@@ -503,7 +433,7 @@ class TestPlanningTesting:
     @pytest.mark.asyncio
     async def test_test_planning_dry_run(self):
         """Test planning testing in dry run mode."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostic_commands = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_reachability:
@@ -517,7 +447,7 @@ class TestPlanningTesting:
     @pytest.mark.asyncio
     async def test_test_planning_invalid_mock_file(self):
         """Test planning testing with invalid mock state file."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostic_commands = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch('builtins.open', side_effect=FileNotFoundError()):
@@ -672,7 +602,7 @@ class TestDiagnosticCommandsIntegration:
     def test_diagnostic_commands_all_components_integration(self):
         """Test that all diagnostic components work together."""
         mock_action_registry = Mock(spec=ActionRegistry)
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = Mock(spec=APIClientWrapper)
 
         diagnostic_commands = DiagnosticCommands(

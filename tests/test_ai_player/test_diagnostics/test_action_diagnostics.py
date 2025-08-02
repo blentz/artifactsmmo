@@ -4,7 +4,7 @@ Tests for ActionDiagnostics class.
 Comprehensive test coverage for action registry inspection and validation.
 """
 
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import Mock
 
 import pytest
@@ -12,6 +12,7 @@ import pytest
 from src.ai_player.actions import ActionRegistry
 from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.diagnostics.action_diagnostics import ActionDiagnostics
+from src.ai_player.state.action_result import ActionResult
 from src.ai_player.state.game_state import GameState
 
 
@@ -43,10 +44,24 @@ class MockAction(BaseAction):
         }
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]):
-        from src.ai_player.state.game_state import ActionResult
         return ActionResult(
             success=True,
             message="Mock action executed",
+            state_changes=self.get_effects(),
+            cooldown_seconds=5
+        )
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> 'ActionResult':
+        """Mock implementation of API call execution for testing"""
+        return ActionResult(
+            success=True,
+            message="Mock API action executed",
             state_changes=self.get_effects(),
             cooldown_seconds=5
         )
@@ -73,6 +88,21 @@ class InvalidMockAction(BaseAction):
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]):
         pass
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> 'ActionResult':
+        """Mock implementation of API call execution for testing"""
+        return ActionResult(
+            success=True,
+            message="Invalid mock API action executed",
+            state_changes={},
+            cooldown_seconds=5
+        )
 
 
 class TestActionDiagnostics:
@@ -268,6 +298,9 @@ class ParameterizedMockAction(BaseAction):
     async def execute(self, character_name: str, current_state: dict[GameState, Any]):
         pass
 
+    async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+        return ActionResult(success=True, message="Parameterized mock action", state_changes={}, cooldown_seconds=1)
+
 
 class ExceptionAction(BaseAction):
     """Action that raises exceptions for testing error handling"""
@@ -302,6 +335,9 @@ class ExceptionAction(BaseAction):
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]):
         pass
+
+    async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+        return ActionResult(success=True, message="Exception action", state_changes={}, cooldown_seconds=1)
 
 
 class EdgeCaseMockAction(BaseAction):
@@ -348,6 +384,9 @@ class EdgeCaseMockAction(BaseAction):
 
     async def execute(self, character_name: str, current_state: dict[GameState, Any]):
         pass
+
+    async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+        return ActionResult(success=True, message="Edge case action", state_changes={}, cooldown_seconds=1)
 
 
 class TestActionDiagnosticsIntegration:
@@ -560,6 +599,9 @@ class TestActionDiagnosticsIntegration:
             async def execute(self, character_name: str, current_state):
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="Bad validation action", state_changes={})
+
         registry.get_all_action_types.return_value = [BadValidationAction]
         errors = diagnostics.validate_action_registry()
         assert len(errors) > 0
@@ -582,6 +624,9 @@ class TestActionDiagnosticsIntegration:
 
             async def execute(self, character_name: str, current_state):
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=True, message="No movement action", state_changes={})
 
         action = NoMovementAction()
         analysis = diagnostics.analyze_action_effects(action)
@@ -616,6 +661,9 @@ class TestActionDiagnosticsIntegration:
             async def execute(self, character_name: str, current_state):
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="Cost exception action", state_changes={})
+
         registry.get_all_action_types.return_value = [CostExceptionAction]
         warnings = diagnostics.validate_action_costs()
         warning_text = " ".join(warnings)
@@ -639,6 +687,9 @@ class TestActionDiagnosticsIntegration:
 
             async def execute(self, character_name: str, current_state):
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="Effects exception action", state_changes={})
 
         registry.get_all_action_types.return_value = [EffectsExceptionAction]
         conflicts = diagnostics.detect_action_conflicts()
@@ -688,6 +739,9 @@ class TestActionDiagnosticsIntegration:
             async def execute(self, character_name: str, current_state):
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=True, message="Combat action no XP", state_changes={})
+
         action = CombatActionNoXP()
         analysis = diagnostics.analyze_action_effects(action)
         recommendations = " ".join(analysis["recommendations"])
@@ -718,6 +772,9 @@ class TestActionDiagnosticsIntegration:
 
             async def execute(self, character_name: str, current_state):
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="Failing execute action", state_changes={})
 
         registry.generate_actions_for_state.return_value = [FailingExecuteAction()]
 
@@ -773,6 +830,9 @@ class TestActionDiagnosticsIntegration:
 
             async def execute(self, character_name: str, current_state):
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="Validation exception action", state_changes={})
 
         action = ValidationExceptionAction()
         formatted = diagnostics.format_action_info(action)

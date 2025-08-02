@@ -40,4 +40,4 @@ class RestActionFactory(ActionFactory):
         # Extract API client from game_data if available
         api_client = getattr(game_data, 'api_client', None) if game_data else None
 
-        return [RestAction(api_client=api_client)]
+        return [RestAction()]

@@ -4,6 +4,7 @@ Tests cover all classes and functions in src/lib/goap.py with 100% code coverage
 including edge cases, error conditions, and integration scenarios.
 """
 
+import copy
 
 import pytest
 
@@ -689,9 +690,7 @@ class TestGOAPIntegration:
     def test_coverage_astar_path_optimization_lines_625_628(self):
         """Test to trigger lines 625 and 628: path optimization in A*."""
         # This test creates a complex scenario to trigger the A* optimization paths
-        import copy
 
-        from src.lib.goap import create_node
 
         # Setup a path context that will trigger the optimization conditions
         path = {
@@ -732,7 +731,6 @@ class TestGOAPIntegration:
 
     def test_coverage_line_562_walk_path_no_lowest_node(self):
         """Test to cover line 562: when no lowest node is found in walk_path."""
-        from src.lib.goap import walk_path
 
         # Create a path where olist has invalid entries that won't be selected
         path = {
@@ -756,7 +754,6 @@ class TestGOAPIntegration:
 
     def test_coverage_lines_625_628_node_optimization(self):
         """Test to cover lines 625 and 628: A* node optimization paths."""
-        from src.lib.goap import create_node, walk_path
 
         # Create a specific scenario to trigger the node optimization code
         path = {
@@ -798,7 +795,6 @@ class TestGOAPIntegration:
 
     def test_coverage_line_562_no_lowest_node_found(self):
         """Test to cover line 562: when no lowest node is found in walk_path."""
-        from src.lib.goap import walk_path
 
         # Create a path with no valid nodes in open list that can be selected
         path = {
@@ -818,7 +814,6 @@ class TestGOAPIntegration:
 
     def test_coverage_lines_625_628_direct_optimization(self):
         """Test to directly trigger lines 625 and 628 in the A* optimization."""
-        from src.lib.goap import create_node, walk_path
 
         # Create a more complex scenario to force the optimization paths
         path = {
@@ -866,7 +861,6 @@ class TestGOAPIntegration:
 
     def test_coverage_line_562_explicit_none_node(self):
         """Test line 562 explicitly by manipulating the lowest node search."""
-        from src.lib.goap import walk_path
 
         # Create a custom path structure that will result in _lowest["node"] being None
         path = {
@@ -917,7 +911,6 @@ class TestGOAPIntegration:
 
     def test_coverage_line_562_with_invalid_f_values(self):
         """Test line 562 by creating nodes with invalid f values."""
-        from src.lib.goap import walk_path
 
         # Create a scenario where all nodes in olist have very high f values
         # that might not be selected as lowest
@@ -948,7 +941,6 @@ class TestGOAPIntegration:
         # Since line 625 has a bug (using next_node instead of next_node["id"]),
         # we can try to trigger it and catch the expected error
 
-        from src.lib.goap import astar
 
         # Create a complex scenario that might trigger the problematic deletion logic
         start_state = {"level": 1, "hp": 100, "location": 0}

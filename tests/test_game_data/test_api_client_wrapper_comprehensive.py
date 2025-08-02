@@ -14,9 +14,8 @@ import pytest
 
 # Break circular import by patching modules before importing
 with patch.dict('sys.modules', {'src.ai_player.action_executor': Mock()}):
-    from src.game_data.api_client_wrapper import APIClientWrapper
+    from src.game_data.api_client import APIClientWrapper, CooldownManager
     from src.game_data.character import Character
-    from src.game_data.cooldown_manager import CooldownManager
     from src.game_data.models import GameItem, GameMap, GameMonster, GameNPC, GameResource
     from src.lib.httpstatus import ArtifactsHTTPStatus
 

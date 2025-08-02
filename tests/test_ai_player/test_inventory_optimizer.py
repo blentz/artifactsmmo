@@ -11,14 +11,18 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.ai_player.inventory_optimizer import (
+    AutoInventoryManager,
     BankManager,
     BankState,
     InventoryAction,
+    InventoryActionExecutor,
+    InventoryGoalGenerator,
     InventoryOptimizer,
     InventoryState,
     ItemAnalyzer,
     ItemInfo,
     ItemPriority,
+    OptimizationRecommendation,
 )
 from src.ai_player.state.game_state import GameState
 from tests.fixtures.api_responses import APIResponseFixtures
@@ -942,7 +946,6 @@ class TestInventoryGoalGeneratorStubMethods:
 
     @pytest.fixture
     def inventory_goal_generator(self):
-        from src.ai_player.inventory_optimizer import InventoryGoalGenerator, InventoryOptimizer
         item_analyzer = ItemAnalyzer()
         api_client = AsyncMock()
         inventory_optimizer = InventoryOptimizer(item_analyzer, api_client)
@@ -988,7 +991,6 @@ class TestAutoInventoryManagerStubMethods:
 
     @pytest.fixture
     def auto_inventory_manager(self):
-        from src.ai_player.inventory_optimizer import AutoInventoryManager, BankManager, InventoryOptimizer
         item_analyzer = ItemAnalyzer()
         api_client = AsyncMock()
         inventory_optimizer = InventoryOptimizer(item_analyzer, api_client)
@@ -1054,14 +1056,12 @@ class TestInventoryActionExecutorStubMethods:
 
     @pytest.fixture
     def inventory_action_executor(self):
-        from src.ai_player.inventory_optimizer import BankManager, InventoryActionExecutor
         api_client = AsyncMock()
         bank_manager = BankManager(api_client)
         return InventoryActionExecutor(api_client, bank_manager)
 
     @pytest.fixture
     def sample_recommendation(self):
-        from src.ai_player.inventory_optimizer import OptimizationRecommendation
         return OptimizationRecommendation(
             action=InventoryAction.SELL_NPC,
             item_code="test_item",

@@ -7,12 +7,14 @@ including unit tests, integration tests, and fixtures for test-driven developmen
 
 import asyncio
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import yaml
 
 # Test configuration
 TEST_TIMEOUT = 30.0
@@ -109,7 +111,6 @@ class TestAssertions:
         call_count: int = 1
     ):
         """Assert that a mock was called within a timeout period"""
-        import time
         start_time = time.time()
         while (time.time() - start_time) < timeout:
             if mock_obj.call_count >= call_count:
@@ -176,7 +177,6 @@ class TestHelpers:
         filename: str = "test_config.yaml"
     ) -> Path:
         """Create a test configuration file"""
-        import yaml
 
         config_file = config_dir / filename
         with open(config_file, 'w') as f:

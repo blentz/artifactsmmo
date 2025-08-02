@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock
 from src.ai_player.action_executor import ActionExecutor
 from src.ai_player.goal_manager import GoalManager
 from src.ai_player.inventory_optimizer import InventoryOptimizer
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
 from src.ai_player.state.state_manager import StateManager
 from src.game_data.api_client import APIClientWrapper, CooldownManager
 from src.game_data.cache_manager import CacheManager

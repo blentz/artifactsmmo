@@ -7,6 +7,7 @@ edge cases, and integration with dependencies.
 """
 
 import asyncio
+import types
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -14,9 +15,45 @@ import pytest
 
 from src.ai_player.action_executor import ActionExecutor
 from src.ai_player.actions.base_action import BaseAction
-from src.ai_player.state.game_state import ActionResult, CharacterGameState, GameState
+from src.ai_player.state.action_result import ActionResult
+from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import GameState
+from src.ai_player.types.game_data import GameData
 from src.game_data.api_client import APIClientWrapper, CooldownManager
 from src.game_data.cache_manager import CacheManager
+
+
+def create_test_character_state(**overrides) -> CharacterGameState:
+    """Helper function to create a standard CharacterGameState for tests."""
+    defaults = {
+        'name': 'test_character',
+        'level': 1,
+        'xp': 0,
+        'gold': 0,
+        'hp': 100,
+        'max_hp': 100,
+        'x': 0,
+        'y': 0,
+        'mining_level': 1,
+        'mining_xp': 0,
+        'woodcutting_level': 1,
+        'woodcutting_xp': 0,
+        'fishing_level': 1,
+        'fishing_xp': 0,
+        'weaponcrafting_level': 1,
+        'weaponcrafting_xp': 0,
+        'gearcrafting_level': 1,
+        'gearcrafting_xp': 0,
+        'jewelrycrafting_level': 1,
+        'jewelrycrafting_xp': 0,
+        'cooking_level': 1,
+        'cooking_xp': 0,
+        'alchemy_level': 1,
+        'alchemy_xp': 0,
+        'cooldown': 0
+    }
+    defaults.update(overrides)
+    return CharacterGameState(**defaults)
 
 
 class MockAction(BaseAction):
@@ -46,7 +83,14 @@ class MockAction(BaseAction):
     def get_effects(self) -> dict[GameState, Any]:
         return self._effects
 
-    async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager = None
+    ) -> ActionResult:
+        """Mock implementation of API call execution"""
         if self._execute_exception:
             raise self._execute_exception
 
@@ -55,7 +99,7 @@ class MockAction(BaseAction):
 
         return ActionResult(
             success=True,
-            message=f"Mock action {self._name} executed",
+            message=f"Mock action {self._name} executed via API",
             state_changes=self._effects,
             cooldown_seconds=5
         )
@@ -166,6 +210,62 @@ def mock_action_registry():
     return registry
 
 
+def setup_character_mocks(action_executor):
+    """Helper function to set up common character, map, and cooldown mocks"""
+    # Set up mock character data
+    mock_character = Mock()
+    mock_character.name = "test_character"
+    mock_character.level = 1
+    mock_character.xp = 0
+    mock_character.gold = 0
+    mock_character.hp = 100
+    mock_character.max_hp = 100
+    mock_character.x = 0
+    mock_character.y = 0
+    mock_character.cooldown = 0
+    # Add skill levels
+    mock_character.mining_level = 1
+    mock_character.mining_xp = 0
+    mock_character.woodcutting_level = 1
+    mock_character.woodcutting_xp = 0
+    mock_character.fishing_level = 1
+    mock_character.fishing_xp = 0
+    mock_character.weaponcrafting_level = 1
+    mock_character.weaponcrafting_xp = 0
+    mock_character.gearcrafting_level = 1
+    mock_character.gearcrafting_xp = 0
+    mock_character.jewelrycrafting_level = 1
+    mock_character.jewelrycrafting_xp = 0
+    mock_character.cooking_level = 1
+    mock_character.cooking_xp = 0
+    mock_character.alchemy_level = 1
+    mock_character.alchemy_xp = 0
+    # Add equipment slots
+    mock_character.weapon_slot = ""
+    mock_character.rune_slot = ""
+    mock_character.shield_slot = ""
+    mock_character.helmet_slot = ""
+    mock_character.body_armor_slot = ""
+    mock_character.leg_armor_slot = ""
+    mock_character.boots_slot = ""
+    mock_character.ring1_slot = ""
+    mock_character.ring2_slot = ""
+    mock_character.amulet_slot = ""
+    mock_character.artifact1_slot = ""
+    mock_character.cooldown_expiration_utc = None
+    action_executor.api_client.get_character.return_value = mock_character
+
+    # Set up mock map data
+    mock_map = Mock()
+    mock_map.content = Mock()
+    action_executor.api_client.get_map.return_value = mock_map
+
+    # Set up cooldown manager to return boolean
+    action_executor.cooldown_manager.is_ready.return_value = True
+
+    return mock_character
+
+
 @pytest.fixture
 def action_executor(mock_api_client, mock_cooldown_manager, mock_cache_manager):
     """Create ActionExecutor instance with mocked dependencies"""
@@ -203,7 +303,7 @@ class TestExecuteAction:
     async def test_execute_action_success(self, action_executor):
         """Test successful action execution"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         result = await action_executor.execute_action(action, "test_character", current_state)
 
@@ -215,7 +315,7 @@ class TestExecuteAction:
     async def test_execute_action_preconditions_fail(self, action_executor):
         """Test action execution with failed preconditions"""
         action = MockAction("test_action", preconditions={GameState.CHARACTER_LEVEL: 10})
-        current_state = {GameState.CHARACTER_LEVEL: 5}  # Insufficient level
+        current_state = create_test_character_state(level=5)  # Insufficient level
 
         result = await action_executor.execute_action(action, "test_character", current_state)
 
@@ -229,7 +329,7 @@ class TestExecuteAction:
         mock_cooldown_manager.get_remaining_time.return_value = 2.0
 
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         result = await action_executor.execute_action(action, "test_character", current_state)
 
@@ -245,15 +345,15 @@ class TestExecuteAction:
         call_count = 0
         original_execute = action.execute
 
-        async def failing_execute(character_name, current_state):
+        async def failing_execute(character_name, current_state, api_client=None, cooldown_manager=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 return ActionResult(success=False, message="Temporary failure", state_changes={}, cooldown_seconds=0)
-            return await original_execute(character_name, current_state)
+            return await original_execute(character_name, current_state, api_client, cooldown_manager)
 
         action.execute = failing_execute
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         result = await action_executor.execute_action(action, "test_character", current_state)
 
@@ -265,7 +365,7 @@ class TestExecuteAction:
         """Test action execution with exception handling"""
         action = MockAction("test_action")
         action.set_execute_exception(Exception("Test error"))
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'handle_action_error', return_value=None) as mock_handle_error:
             result = await action_executor.execute_action(action, "test_character", current_state)
@@ -287,13 +387,13 @@ class TestExecutePlan:
     @pytest.mark.asyncio
     async def test_execute_plan_success(self, action_executor):
         """Test successful plan execution"""
-        plan = [
-            {"action": "test_action_1"},
-            {"action": "test_action_2"}
-        ]
+        # Create proper BaseAction objects instead of dictionaries
+        action1 = MockAction("test_action_1")
+        action2 = MockAction("test_action_2")
+        plan = [action1, action2]
 
-        mock_action = MockAction("test_action_1")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
+        # Set up common mocks
+        setup_character_mocks(action_executor)
 
         with patch.object(action_executor, 'execute_action') as mock_execute:
             mock_execute.return_value = ActionResult(
@@ -318,6 +418,9 @@ class TestExecutePlan:
     async def test_execute_plan_with_emergency_recovery(self, action_executor):
         """Test plan execution with emergency recovery"""
         plan = [{"action": "test_action"}]
+
+        # Set up common mocks
+        setup_character_mocks(action_executor)
 
         mock_action = MockAction("test_action")
         action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
@@ -383,7 +486,7 @@ class TestValidateActionPreconditions:
     def test_validate_preconditions_success(self, action_executor):
         """Test successful precondition validation"""
         action = MockAction("test_action", preconditions={GameState.COOLDOWN_READY: True})
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         result = action_executor.validate_action_preconditions(action, current_state)
         assert result is True
@@ -391,7 +494,7 @@ class TestValidateActionPreconditions:
     def test_validate_preconditions_failure(self, action_executor):
         """Test failed precondition validation"""
         action = MockAction("test_action", preconditions={GameState.CHARACTER_LEVEL: 10})
-        current_state = {GameState.CHARACTER_LEVEL: 5}
+        current_state = create_test_character_state(level=5)
 
         result = action_executor.validate_action_preconditions(action, current_state)
         assert result is False
@@ -524,11 +627,29 @@ class TestProcessActionResult:
         api_response.character.task = ""
         api_response.character.task_progress = 0
         api_response.character.task_total = 0
+        # Add equipment slots
+        api_response.character.weapon_slot = ""
+        api_response.character.rune_slot = ""
+        api_response.character.shield_slot = ""
+        api_response.character.helmet_slot = ""
+        api_response.character.body_armor_slot = ""
+        api_response.character.leg_armor_slot = ""
+        api_response.character.boots_slot = ""
+        api_response.character.ring1_slot = ""
+        api_response.character.ring2_slot = ""
+        api_response.character.amulet_slot = ""
+        api_response.character.artifact1_slot = ""
+        api_response.character.cooldown_expiration_utc = None
         api_response.cooldown = None  # Explicitly set to None to avoid mock issues
 
         # Mock the get_map call
-        mock_api_client.get_map.return_value = Mock()
-        mock_api_client.get_map.return_value.content = None
+        mock_map = Mock()
+        mock_map.content = None  # Explicitly set content to None
+        mock_api_client.get_map.return_value = mock_map
+
+        # Mock cooldown manager
+        mock_api_client.cooldown_manager = Mock()
+        mock_api_client.cooldown_manager.is_ready.return_value = True
 
         result = await action_executor.process_action_result(api_response, action)
 
@@ -618,30 +739,59 @@ class TestGetActionByName:
     async def test_get_action_by_name_success(self, action_executor):
         """Test successful action retrieval by name"""
         mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name.return_value = mock_action
-        action_executor.cache_manager.get_game_data = AsyncMock(return_value={"test": "data"})
-        current_state = {GameState.COOLDOWN_READY: True}
+
+        # Mock the action registry to return a list of actions including our target
+        action_executor.action_registry.get_available_actions.return_value = [mock_action]
+        action_executor.cache_manager.get_game_data = AsyncMock(return_value=GameData())
+
+        current_state = CharacterGameState(
+            name="test_char", level=5, xp=1000, gold=100, hp=80, max_hp=100,
+            x=10, y=15, cooldown=0, mining_level=3, mining_xp=150,
+            woodcutting_level=2, woodcutting_xp=50, fishing_level=1, fishing_xp=0,
+            weaponcrafting_level=1, weaponcrafting_xp=0, gearcrafting_level=1, gearcrafting_xp=0,
+            jewelrycrafting_level=1, jewelrycrafting_xp=0, cooking_level=1, cooking_xp=0,
+            alchemy_level=1, alchemy_xp=0
+        )
 
         result = await action_executor.get_action_by_name("test_action", current_state)
 
         assert result == mock_action
         action_executor.cache_manager.get_game_data.assert_called_once()
-        action_executor.action_registry.get_action_by_name.assert_called_once_with("test_action", current_state, {"test": "data"})
+        action_executor.action_registry.get_available_actions.assert_called_once()
 
     async def test_get_action_by_name_not_found(self, action_executor):
         """Test action retrieval when action not found"""
-        action_executor.cache_manager.get_game_data = AsyncMock(return_value={"test": "data"})
-        action_executor.action_registry.get_action_by_name.return_value = None
-        current_state = {GameState.COOLDOWN_READY: True}
+
+        # Mock action registry to return empty list (no actions available)
+        action_executor.action_registry.get_available_actions.return_value = []
+        action_executor.cache_manager.get_game_data = AsyncMock(return_value=GameData())
+
+        current_state = CharacterGameState(
+            name="test_char", level=5, xp=1000, gold=100, hp=80, max_hp=100,
+            x=10, y=15, cooldown=0, mining_level=3, mining_xp=150,
+            woodcutting_level=2, woodcutting_xp=50, fishing_level=1, fishing_xp=0,
+            weaponcrafting_level=1, weaponcrafting_xp=0, gearcrafting_level=1, gearcrafting_xp=0,
+            jewelrycrafting_level=1, jewelrycrafting_xp=0, cooking_level=1, cooking_xp=0,
+            alchemy_level=1, alchemy_xp=0
+        )
 
         result = await action_executor.get_action_by_name("nonexistent_action", current_state)
         assert result is None
 
     async def test_get_action_by_name_exception(self, action_executor):
         """Test action retrieval with exception"""
-        action_executor.cache_manager.get_game_data = AsyncMock(return_value={"test": "data"})
-        action_executor.action_registry.get_action_by_name.side_effect = Exception("Test error")
-        current_state = {GameState.COOLDOWN_READY: True}
+
+        action_executor.cache_manager.get_game_data = AsyncMock(return_value=GameData())
+        action_executor.action_registry.get_available_actions.side_effect = Exception("Test error")
+
+        current_state = CharacterGameState(
+            name="test_char", level=5, xp=1000, gold=100, hp=80, max_hp=100,
+            x=10, y=15, cooldown=0, mining_level=3, mining_xp=150,
+            woodcutting_level=2, woodcutting_xp=50, fishing_level=1, fishing_xp=0,
+            weaponcrafting_level=1, weaponcrafting_xp=0, gearcrafting_level=1, gearcrafting_xp=0,
+            jewelrycrafting_level=1, jewelrycrafting_xp=0, cooking_level=1, cooking_xp=0,
+            alchemy_level=1, alchemy_xp=0
+        )
 
         with pytest.raises(Exception, match="Test error"):
             await action_executor.get_action_by_name("test_action", current_state)
@@ -805,7 +955,7 @@ class TestSafeExecute:
     async def test_safe_execute_success(self, action_executor):
         """Test successful safe execution"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'execute_action') as mock_execute, \
              patch.object(action_executor, 'verify_action_success', return_value=True) as mock_verify:
@@ -824,7 +974,7 @@ class TestSafeExecute:
     async def test_safe_execute_preconditions_fail(self, action_executor):
         """Test safe execution with failed preconditions"""
         action = MockAction("test_action", preconditions={GameState.CHARACTER_LEVEL: 10})
-        current_state = {GameState.CHARACTER_LEVEL: 5}
+        current_state = create_test_character_state(level=5)
 
         result = await action_executor.safe_execute(action, "test_character", current_state)
 
@@ -835,7 +985,7 @@ class TestSafeExecute:
     async def test_safe_execute_verification_failure(self, action_executor):
         """Test safe execution with verification failure"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'execute_action') as mock_execute, \
              patch.object(action_executor, 'verify_action_success', return_value=False) as mock_verify, \
@@ -855,7 +1005,7 @@ class TestSafeExecute:
     async def test_safe_execute_with_emergency_recovery(self, action_executor):
         """Test safe execution with emergency recovery"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'execute_action') as mock_execute, \
              patch.object(action_executor, 'emergency_recovery', return_value=True) as mock_recovery, \
@@ -874,7 +1024,7 @@ class TestSafeExecute:
     async def test_safe_execute_exception_handling(self, action_executor):
         """Test safe execution with exception handling"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'execute_action', side_effect=Exception("Test error")) as mock_execute, \
              patch.object(action_executor, 'emergency_recovery', return_value=False) as mock_recovery, \
@@ -894,7 +1044,7 @@ class TestAdditionalCoverage:
     async def test_execute_action_verification_success_but_no_cooldown_update(self, action_executor):
         """Test execute_action when verification succeeds but no cooldown update needed"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Mock verification to return True
         with patch.object(action_executor, 'verify_action_success', return_value=True):
@@ -906,7 +1056,7 @@ class TestAdditionalCoverage:
     async def test_execute_action_fallback_result_path(self, action_executor):
         """Test execute_action fallback result path (shouldn't be reached normally)"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Mock to make all retry attempts fail in an unexpected way
         action.execute = AsyncMock(side_effect=[
@@ -1111,7 +1261,7 @@ class TestAdditionalCoverageMissing:
     async def test_execute_action_verification_fails_return_false(self, action_executor):
         """Test execute_action when verification fails and returns ActionResult"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'verify_action_success', return_value=False):
             result = await action_executor.execute_action(action, "test_character", current_state)
@@ -1123,7 +1273,7 @@ class TestAdditionalCoverageMissing:
     async def test_execute_action_final_retry_failure(self, action_executor):
         """Test execute_action when all retries fail"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Set up action to always fail
         action.set_execute_result(ActionResult(
@@ -1139,7 +1289,7 @@ class TestAdditionalCoverageMissing:
     async def test_execute_action_fallback_return_statement(self, action_executor):
         """Test the fallback return statement that shouldn't be reached normally"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Patch the for loop to simulate completion without returning
         # We'll replace the entire execute_action method temporarily to force the fallback
@@ -1255,17 +1405,26 @@ class TestAdditionalCoverageMissing:
     @pytest.mark.asyncio
     async def test_execute_plan_with_cooldown_wait(self, action_executor):
         """Test execute_plan with action that has cooldown"""
-        plan = [{"action": "test_action"}]
-
+        # Create proper BaseAction object instead of dictionary
         mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
+        plan = [mock_action]
+
+        # Set up common mocks
+        setup_character_mocks(action_executor)
+
+        # Mock state_manager methods
+        mock_state_manager = Mock()
+        mock_state_manager.apply_action_result = AsyncMock()
+        mock_state_manager.get_current_state = AsyncMock(return_value=create_test_character_state())
+        action_executor.state_manager = mock_state_manager
 
         with patch.object(action_executor, 'execute_action') as mock_execute, \
              patch('asyncio.sleep') as mock_sleep:
 
-            mock_execute.return_value = ActionResult(
-                success=True, message="Success", state_changes={}, cooldown_seconds=10
-            )
+            async def mock_execute_action(*args, **kwargs):
+                return ActionResult(success=True, message="Success", state_changes={}, cooldown_seconds=10)
+
+            mock_execute.side_effect = mock_execute_action
 
             result = await action_executor.execute_plan(plan, "test_character")
 
@@ -1379,7 +1538,7 @@ class TestAdditionalCoverageMissing:
     async def test_safe_execute_critical_failure_recovery_fails(self, action_executor):
         """Test safe_execute when critical failure recovery fails"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         with patch.object(action_executor, 'execute_action') as mock_execute, \
              patch.object(action_executor, 'emergency_recovery', return_value=False) as mock_recovery, \
@@ -1398,7 +1557,7 @@ class TestAdditionalCoverageMissing:
     async def test_safe_execute_final_fallback_result(self, action_executor):
         """Test safe_execute reaching the final fallback result"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         original_retry_delays = action_executor.retry_delays
         action_executor.retry_delays = [0.001, 0.001, 0.001, 0.001, 0.001]  # Fast retries
@@ -1422,7 +1581,7 @@ class TestAdditionalCoverageMissing:
     async def test_execute_action_handle_error_returns_result(self, action_executor):
         """Test execute_action when handle_action_error returns a recovery result"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         recovery_result = ActionResult(
             success=False, message="Recovered from error", state_changes={}, cooldown_seconds=5
@@ -1440,7 +1599,7 @@ class TestAdditionalCoverageMissing:
     async def test_execute_action_unexpected_exception(self, action_executor):
         """Test execute_action with unexpected exception in outer try block"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Mock validate_action_preconditions to throw an unexpected exception
         with patch.object(action_executor, 'validate_action_preconditions', side_effect=Exception("Unexpected error")):
@@ -1454,6 +1613,9 @@ class TestAdditionalCoverageMissing:
     async def test_execute_plan_state_update_with_changes(self, action_executor):
         """Test execute_plan properly updating state from action results"""
         plan = [{"action": "test_action"}]
+
+        # Set up common mocks
+        setup_character_mocks(action_executor)
 
         mock_action = MockAction("test_action")
         action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
@@ -1489,7 +1651,7 @@ class TestAdditionalCoverageMissing:
     async def test_safe_execute_fallback_result_reached(self, action_executor):
         """Test safe_execute reaching fallback result (shouldn't happen normally)"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Temporarily reduce max_safe_attempts to 1 to force quick completion
         with patch.object(action_executor, 'execute_action') as mock_execute, \
@@ -1539,7 +1701,6 @@ class TestAdditionalCoverageMissing:
                 )
 
             # Apply the patch
-            import types
             action_executor.safe_execute = types.MethodType(patched_safe_execute, action_executor)
 
             result = await action_executor.safe_execute(action, "test_character", current_state)
@@ -1551,7 +1712,7 @@ class TestAdditionalCoverageMissing:
     async def test_safe_execute_critical_exception_fallback(self, action_executor):
         """Test safe_execute critical exception in outer try block"""
         action = MockAction("test_action")
-        current_state = {GameState.COOLDOWN_READY: True}
+        current_state = create_test_character_state()
 
         # Mock validate_action_preconditions to throw exception
         with patch.object(action_executor, 'validate_action_preconditions', side_effect=Exception("Critical error")):

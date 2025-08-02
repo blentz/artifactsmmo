@@ -5,7 +5,7 @@ This module tests the automatic action discovery, factory registration,
 dynamic action generation, and validation of the action registry system.
 """
 
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -18,7 +18,7 @@ from src.ai_player.actions import (
     register_action_factory,
 )
 from src.ai_player.actions.base_action import BaseAction
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
 
 
 class MockAction(BaseAction):
@@ -48,6 +48,21 @@ class MockAction(BaseAction):
             message=f"Mock action {self._name} executed",
             state_changes=self.get_effects(),
             cooldown_seconds=1
+        )
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Mock implementation of API call execution for testing"""
+        return ActionResult(
+            success=True,
+            message=f"Mock API action {self._name} executed",
+            state_changes=self.get_effects(),
+            cooldown_seconds=5
         )
 
 
@@ -86,6 +101,21 @@ class MockParameterizedAction(BaseAction):
             message=f"Moved to ({self.target_x}, {self.target_y})",
             state_changes=self.get_effects(),
             cooldown_seconds=2
+        )
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Mock implementation of API call execution for testing"""
+        return ActionResult(
+            success=True,
+            message=f"API moved to ({self.target_x}, {self.target_y})",
+            state_changes=self.get_effects(),
+            cooldown_seconds=5
         )
 
 
@@ -249,8 +279,8 @@ class TestActionRegistry:
             def get_effects(self) -> dict[GameState, Any]:
                 return {}
 
-            async def execute(self, api_client, current_state: dict[GameState, Any]) -> bool:
-                return True
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any = None, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=True, message="Invalid action", state_changes={}, cooldown_seconds=0)
 
         is_valid = action_registry.validate_action(InvalidAction)
         assert is_valid is False
@@ -469,6 +499,9 @@ class TestActionRegistryEdgeCases:
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
         # This should return False and trigger the warning print
         is_valid = registry.validate_action(BadAction)
         assert is_valid is False
@@ -571,6 +604,9 @@ class TestActionRegistryEdgeCases:
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
         is_valid = registry.validate_action(BadPreconditionsAction)
         assert is_valid is False
 
@@ -594,6 +630,9 @@ class TestActionRegistryEdgeCases:
                 return "not a dict"  # Invalid return type
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
                 return ActionResult(success=False, message="", state_changes={})
 
         is_valid = registry.validate_action(BadEffectsAction)

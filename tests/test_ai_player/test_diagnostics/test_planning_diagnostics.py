@@ -14,6 +14,7 @@ from src.ai_player.diagnostics.planning_diagnostics import PlanningDiagnostics
 from src.ai_player.goal_manager import GoalManager
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
+from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan
 
 
 class TestPlanningDiagnostics:
@@ -260,7 +261,8 @@ class TestPlanningDiagnostics:
 
     def test_analyze_plan_efficiency_empty_plan(self):
         """Test efficiency analysis of empty plan"""
-        result = self.diagnostics.analyze_plan_efficiency([])
+        empty_plan = GOAPActionPlan(actions=[], total_cost=0, estimated_duration=0.0, plan_id="empty")
+        result = self.diagnostics.analyze_plan_efficiency(empty_plan)
 
         assert result["total_actions"] == 0
         assert result["total_cost"] == 0
@@ -271,12 +273,13 @@ class TestPlanningDiagnostics:
 
     def test_analyze_plan_efficiency_with_actions(self):
         """Test efficiency analysis with actions"""
-        plan = [
-            {"name": "move_to_location", "cost": 2},
-            {"name": "gather_copper", "cost": 3},
-            {"name": "gather_copper", "cost": 3},  # Duplicate
-            {"name": "craft_item", "cost": 1}
+        actions = [
+            GOAPAction(name="move_to_location", action_type="movement", cost=2),
+            GOAPAction(name="gather_copper", action_type="gathering", cost=3),
+            GOAPAction(name="gather_copper", action_type="gathering", cost=3),  # Duplicate
+            GOAPAction(name="craft_item", action_type="crafting", cost=1)
         ]
+        plan = GOAPActionPlan(actions=actions, total_cost=9, estimated_duration=4.0, plan_id="test")
 
         result = self.diagnostics.analyze_plan_efficiency(plan)
 
@@ -292,12 +295,14 @@ class TestPlanningDiagnostics:
     def test_analyze_plan_efficiency_optimization_suggestions(self):
         """Test efficiency analysis optimization suggestions"""
         # Long plan
-        long_plan = [{"name": f"action_{i}", "cost": 1} for i in range(15)]
+        long_actions = [GOAPAction(name=f"action_{i}", action_type="test", cost=1) for i in range(15)]
+        long_plan = GOAPActionPlan(actions=long_actions, total_cost=15, estimated_duration=15.0, plan_id="long")
         result = self.diagnostics.analyze_plan_efficiency(long_plan)
         assert any("quite long" in suggestion for suggestion in result["optimization_suggestions"])
 
         # Single action type plan
-        single_type_plan = [{"name": "move_action", "cost": 1}] * 3
+        single_actions = [GOAPAction(name="move_action", action_type="move", cost=1) for _ in range(3)]
+        single_type_plan = GOAPActionPlan(actions=single_actions, total_cost=3, estimated_duration=3.0, plan_id="single")
         result = self.diagnostics.analyze_plan_efficiency(single_type_plan)
         assert any("only one action type" in suggestion for suggestion in result["optimization_suggestions"])
 

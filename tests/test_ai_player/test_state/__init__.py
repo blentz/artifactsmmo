@@ -24,7 +24,9 @@ with the game API while maintaining high code coverage and test reliability.
 
 from typing import Any, Dict
 
-from src.ai_player.state.game_state import ActionResult, CharacterGameState, CooldownInfo, GameState
+from src.ai_player.state.action_result import ActionResult
+from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import CooldownInfo, GameState
 
 
 def create_mock_character_state(**overrides: Any) -> dict[GameState, Any]:

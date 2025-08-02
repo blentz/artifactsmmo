@@ -6,9 +6,12 @@ argument parsing, command routing, logging configuration, and error handling.
 """
 
 import argparse
+import re
+import string
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import src.cli.main
 
 from src.cli.main import CLIManager, async_main, generate_random_character_name, main
 
@@ -24,7 +27,6 @@ class TestRandomNameGeneration:
 
     def test_generate_random_character_name_characters(self):
         """Test that generated names contain only allowed characters"""
-        import string
         allowed_chars = set(string.ascii_letters + string.digits + '_-')
 
         for _ in range(100):  # Test multiple generations
@@ -51,14 +53,11 @@ class TestRandomNameGeneration:
 
     def test_generate_random_character_name_api_compliance(self):
         """Test that generated names comply with API pattern ^[a-zA-Z0-9_-]+$"""
-        import re
         api_pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
 
         for _ in range(100):
             name = generate_random_character_name()
             assert api_pattern.match(name), f"Name '{name}' does not match API pattern ^[a-zA-Z0-9_-]+$"
-
-
 class TestCLIManager:
     """Test CLIManager class"""
 
@@ -195,8 +194,6 @@ class TestCLIManager:
         mock_goal_manager.assert_called_once_with(mock_registry_instance, existing_api_client.cooldown_manager, mock_cache_instance)
 
         assert result == mock_diagnostic_instance
-
-
 class TestArgumentParsing:
     """Test CLI argument parsing"""
 
@@ -312,8 +309,6 @@ class TestArgumentParsing:
         # Missing character name for run-character
         with pytest.raises(SystemExit):
             parser.parse_args(['run-character'])
-
-
 class TestCharacterCommandHandlers:
     """Test character command handlers"""
 
@@ -584,8 +579,6 @@ class TestCharacterCommandHandlers:
             await cli_manager.handle_list_characters(mock_args)
 
         mock_cache_manager.cache_all_characters.assert_called_once()
-
-
 class TestAIPlayerCommandHandlers:
     """Test AI player command handlers"""
 
@@ -708,8 +701,6 @@ class TestAIPlayerCommandHandlers:
             await cli_manager.handle_character_status(mock_args)
 
         mock_client.get_characters.assert_called_once()
-
-
 class TestDiagnosticCommandHandlers:
     """Test diagnostic command handlers"""
 
@@ -835,8 +826,6 @@ class TestDiagnosticCommandHandlers:
             assert call_args.kwargs['start_level'] == 1
             assert call_args.kwargs['goal_level'] == 5
             assert call_args.kwargs['dry_run'] is True
-
-
 class TestMainFunctions:
     """Test main CLI entry points"""
 
@@ -913,8 +902,6 @@ class TestMainFunctions:
             # Main function should let general exceptions bubble up
             with pytest.raises(Exception, match="Test error"):
                 main()
-
-
 class TestErrorHandling:
     """Test error handling in CLI commands"""
 
@@ -956,8 +943,6 @@ class TestErrorHandling:
 
                 # Should print error message
                 assert any("Error running state diagnostics" in str(call) for call in mock_print.call_args_list)
-
-
 class TestCLIIntegration:
     """Integration tests for CLI components"""
 
@@ -1558,7 +1543,7 @@ class TestCLIIntegration:
         """Test __name__ == '__main__' execution path"""
         with patch('src.cli.main.main') as mock_main:
             # Simulate running the module directly
-            import src.cli.main
+            # src.cli.main already imported at top
 
             # This should test line 835, but since we can't easily test the
             # __name__ == '__main__' guard in unit tests, we'll just verify
@@ -1633,7 +1618,7 @@ class TestCLIIntegration:
     def test_main_module_execution_guard(self):
         """Test the __name__ == '__main__' guard execution - targets line 835"""
         # Direct approach: execute the __main__ guard condition with mocking
-        import src.cli.main
+        # src.cli.main already imported at top
 
         # Mock sys.argv and main function to avoid actual CLI execution
         with patch('sys.argv', ['test', '--help']), \

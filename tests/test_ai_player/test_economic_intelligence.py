@@ -5,6 +5,7 @@ This module tests all components of the economic intelligence system including
 market analysis, trading strategies, portfolio management, and goal generation.
 """
 
+import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -14,6 +15,7 @@ from src.ai_player.economic_intelligence import (
     EconomicGoalGenerator,
     EconomicIntelligence,
     EconomicStrategy,
+    MarketAnalysis,
     MarketAnalyzer,
     MarketDataCollector,
     MarketTrend,
@@ -178,7 +180,6 @@ class TestMarketDataCollector:
 
         # Add item and simulate that it was updated
         collector.add_item_to_tracking("copper_ore")
-        from datetime import datetime
         collector.last_update["copper_ore"] = datetime.now()
 
         # Verify both entries exist
@@ -865,8 +866,6 @@ class TestMarketAnalysis:
 
     def test_is_good_buy_opportunity_falling_trend(self):
         """Test buy opportunity detection with falling trend"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 90, 110, 50)
         analysis = MarketAnalysis(
             item_code="test",
@@ -885,8 +884,6 @@ class TestMarketAnalysis:
 
     def test_is_good_buy_opportunity_high_prediction(self):
         """Test buy opportunity with high price prediction"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 100, 120, 50)
         analysis = MarketAnalysis(
             item_code="test",
@@ -905,8 +902,6 @@ class TestMarketAnalysis:
 
     def test_is_good_buy_opportunity_below_30d_average(self):
         """Test buy opportunity below 30-day average"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 80, 100, 50)  # Below 30d avg
         analysis = MarketAnalysis(
             item_code="test",
@@ -925,8 +920,6 @@ class TestMarketAnalysis:
 
     def test_is_good_sell_opportunity_rising_trend(self):
         """Test sell opportunity with rising trend"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 100, 110, 50)
         analysis = MarketAnalysis(
             item_code="test",
@@ -945,8 +938,6 @@ class TestMarketAnalysis:
 
     def test_is_good_sell_opportunity_price_drop_prediction(self):
         """Test sell opportunity with predicted price drop"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 100, 120, 50)
         analysis = MarketAnalysis(
             item_code="test",
@@ -965,8 +956,6 @@ class TestMarketAnalysis:
 
     def test_is_good_sell_opportunity_above_30d_average(self):
         """Test sell opportunity above 30-day average"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 110, 130, 50)  # Above 30d avg
         analysis = MarketAnalysis(
             item_code="test",
@@ -1164,8 +1153,6 @@ class TestAdditionalCoverage:
 
     def test_analyze_market_no_opportunity(self):
         """Test market analysis that finds no good opportunities"""
-        from src.ai_player.economic_intelligence import MarketAnalysis
-
         price_data = PriceData("test", datetime.now(), 100, 105, 50)  # Lower sell price
         analysis = MarketAnalysis(
             item_code="test",
@@ -1186,7 +1173,6 @@ class TestAdditionalCoverage:
 
     def test_fetch_current_prices_exception(self):
         """Test fetch current prices with exception handling"""
-        import asyncio
 
         api_client = Mock()
         collector = MarketDataCollector(api_client)
@@ -1201,7 +1187,6 @@ class TestAdditionalCoverage:
 
     def test_fetch_market_history_exception(self):
         """Test fetch market history with exception handling"""
-        import asyncio
 
         api_client = Mock()
         collector = MarketDataCollector(api_client)

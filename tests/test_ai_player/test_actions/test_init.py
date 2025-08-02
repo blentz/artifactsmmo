@@ -5,7 +5,8 @@ This test suite validates the action discovery, factory registration,
 and dynamic action generation functionality of the action registry.
 """
 
-from typing import Any
+import inspect
+from typing import Any, Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -20,7 +21,8 @@ from src.ai_player.actions import (
     register_action_factory,
 )
 from src.ai_player.actions.base_action import BaseAction
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
+from src.ai_player.state.character_game_state import CharacterGameState
 
 
 class MockAction(BaseAction):
@@ -50,6 +52,21 @@ class MockAction(BaseAction):
             state_changes=self.get_effects()
         )
 
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Mock implementation of API call execution for testing"""
+        return ActionResult(
+            success=True,
+            message="Mock API action executed",
+            state_changes=self.get_effects(),
+            cooldown_seconds=5
+        )
+
 
 class MockParameterizedAction(BaseAction):
     """Mock parameterized action for testing"""
@@ -76,6 +93,21 @@ class MockParameterizedAction(BaseAction):
             success=True,
             message=f"Mock parameterized action executed on {self.target}",
             state_changes=self.get_effects()
+        )
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Mock implementation of API call execution for testing"""
+        return ActionResult(
+            success=True,
+            message=f"Mock parameterized API action executed on {self.target}",
+            state_changes=self.get_effects(),
+            cooldown_seconds=5
         )
 
 
@@ -163,7 +195,6 @@ class TestActionRegistry:
 
     def test_generate_actions_for_state_simple_actions(self):
         """Test generating simple actions without factories"""
-        from src.ai_player.state.character_game_state import CharacterGameState
 
         mock_actions = {"MockAction": MockAction}
         with patch.object(ActionRegistry, 'discover_actions', return_value=mock_actions):
@@ -206,7 +237,6 @@ class TestActionRegistry:
 
     def test_get_action_by_name_simple(self):
         """Test getting action by name for simple actions"""
-        from src.ai_player.state.character_game_state import CharacterGameState
 
         mock_actions = {"MockAction": MockAction}
         with patch.object(ActionRegistry, 'discover_actions', return_value=mock_actions):
@@ -343,7 +373,6 @@ class TestGlobalFunctions:
 
     def test_get_all_actions_global(self):
         """Test getting all actions through global function"""
-        from src.ai_player.state.character_game_state import CharacterGameState
 
         # Clear any existing global registry
         src.ai_player.actions._global_registry = None
@@ -504,6 +533,9 @@ class TestBaseActionValidation:
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
         action = InvalidAction()
         assert action.validate_preconditions() is False
 
@@ -527,6 +559,9 @@ class TestBaseActionValidation:
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
 
         action = InvalidAction()
         assert action.validate_effects() is False
@@ -618,6 +653,9 @@ class TestErrorHandling:
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
+                
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
 
         assert registry.validate_action(BadPreconditionsAction) is False
 
@@ -639,6 +677,9 @@ class TestErrorHandling:
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
+                
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
 
         assert registry.validate_action(BadEffectsAction) is False
 
@@ -661,6 +702,9 @@ class TestErrorHandling:
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
         assert registry.validate_action(BadKeysAction) is False
 
         # Test action with non-GameState keys in effects (to cover line 255)
@@ -681,6 +725,9 @@ class TestErrorHandling:
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
 
         assert registry.validate_action(BadEffectKeysAction) is False
 
@@ -718,6 +765,9 @@ class TestErrorHandling:
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
 
         mock_actions = {"ErrorAction": ErrorAction}
         with patch.object(ActionRegistry, 'discover_actions', return_value=mock_actions):
@@ -782,6 +832,9 @@ class TestErrorHandling:
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
         mock_actions = {"RequiresParamsAction": RequiresParamsAction}
         with patch.object(ActionRegistry, 'discover_actions', return_value=mock_actions):
             registry = ActionRegistry()
@@ -812,6 +865,9 @@ class TestErrorHandling:
 
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
+
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
 
         with patch.object(ActionRegistry, 'discover_actions', return_value={}):
             registry = ActionRegistry()
@@ -857,6 +913,9 @@ class TestErrorHandling:
             async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
                 pass
 
+            async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
+                return ActionResult(success=False, message="", state_changes={})
+
         with patch.object(ActionRegistry, 'discover_actions', return_value={}):
             registry = ActionRegistry()
 
@@ -899,7 +958,6 @@ class TestErrorHandling:
         # This ensures the pass statements on lines 42 and 58 are covered
 
         # For line 42 coverage: create_instances abstract method
-        import inspect
         create_instances_source = inspect.getsource(ActionFactory.create_instances)
         assert "pass" in create_instances_source
 

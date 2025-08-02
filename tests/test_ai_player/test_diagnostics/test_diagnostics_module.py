@@ -4,6 +4,9 @@ Tests for the diagnostics module as a whole.
 Tests module exports, integration, and overall functionality.
 """
 
+import inspect
+import src.ai_player.diagnostics as diagnostics_module
+from unittest.mock import Mock
 
 # Test that all classes can be imported from the module
 from src.ai_player.diagnostics import ActionDiagnostics, PlanningDiagnostics, StateDiagnostics
@@ -29,8 +32,6 @@ class TestDiagnosticsModule:
 
     def test_module_docstring(self):
         """Test that module has proper documentation"""
-        import src.ai_player.diagnostics as diagnostics_module
-
         assert diagnostics_module.__doc__ is not None
         assert "Diagnostic System Module" in diagnostics_module.__doc__
         assert len(diagnostics_module.__all__) == 3
@@ -213,8 +214,6 @@ class TestDiagnosticsModuleDocumentation:
     def test_module_usage_example(self):
         """Test the usage example from module docstring"""
         # This should match the example in the module docstring
-        from unittest.mock import Mock
-
         # Mock dependencies
         action_registry = Mock()
         goal_manager = Mock()
@@ -246,8 +245,6 @@ class TestDiagnosticsModuleDocumentation:
 
     def test_method_signatures(self):
         """Test that key methods have expected signatures"""
-        import inspect
-
         # Test StateDiagnostics key methods
         sig = inspect.signature(StateDiagnostics.validate_state_enum_usage)
         assert 'state_dict' in sig.parameters

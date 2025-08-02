@@ -15,6 +15,7 @@ from src.ai_player.pathfinding import (
     MovementPlanner,
     PathfindingAlgorithm,
     PathfindingConfig,
+    PathfindingResult,
     PathfindingService,
     PathNode,
 )
@@ -487,7 +488,6 @@ class TestPathfindingService:
         original_find_path = self.service.find_path
 
         def mock_find_path(start, goal, game_data):
-            from src.ai_player.pathfinding import PathfindingResult
             return PathfindingResult(
                 success=False,
                 path=[],
@@ -712,7 +712,6 @@ class TestMovementPlanner:
         original_method = self.planner.pathfinding_service.find_path_to_nearest
 
         def mock_find_path_to_nearest(start, targets, game_data):
-            from src.ai_player.pathfinding import PathfindingResult
             return PathfindingResult(
                 success=False,
                 path=[],
@@ -1199,7 +1198,6 @@ class TestMovementPlannerMissingLines:
         original_method = self.planner.pathfinding_service.find_path_to_nearest
 
         def mock_find_path_to_nearest(start, targets, game_data):
-            from src.ai_player.pathfinding import PathfindingResult
             return PathfindingResult(
                 success=False, path=[], movement_actions=[],
                 total_cost=0, total_distance=0, message="No path found"

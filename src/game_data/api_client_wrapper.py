@@ -57,7 +57,7 @@ from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 
-from src.lib.httpstatus import ArtifactsHTTPStatus
+from src.lib.httpstatus import ArtifactsHTTPStatus, extend_http_status
 
 from .cooldown_manager import CooldownManager
 from .models import Character, CooldownInfo, GameItem, GameMap, GameMonster, GameNPC, GameResource, MovementResult
@@ -80,6 +80,9 @@ class APIClientWrapper:
         authentication, setting up the underlying API client and error handling
         infrastructure for reliable game operations.
         """
+        # Extend HTTPStatus enum with ArtifactsMMO-specific codes (including 499)
+        extend_http_status()
+
         self.token_config = TokenConfig.from_file(token_file)
         self.cooldown_manager = CooldownManager()
 

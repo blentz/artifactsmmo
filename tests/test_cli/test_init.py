@@ -7,6 +7,8 @@ and module initialization with comprehensive mocking of dependencies.
 """
 
 import argparse
+import logging
+import subprocess
 import sys
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -568,7 +570,6 @@ class TestCLIManagerMethods:
 
     def test_setup_logging_with_no_handlers(self):
         """Test setup_logging when root logger has no handlers"""
-        import logging
 
         cli_manager = CLIManager()
         root_logger = logging.getLogger()
@@ -745,8 +746,6 @@ class TestModuleMainExecution:
     def test_main_execution_branch(self):
         """Test the __main__ execution branch directly"""
         # Import the module to test the if __name__ == "__main__" branch
-        import subprocess
-        import sys
 
         # Run the module directly to test the __main__ branch
         result = subprocess.run(

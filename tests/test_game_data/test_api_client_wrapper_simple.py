@@ -9,13 +9,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-# Mock the problematic modules to avoid circular imports
-with patch.dict('sys.modules', {
-    'src.ai_player.action_executor': Mock(),
-    'src.ai_player': Mock()
-}):
-    import sys
-    sys.path.insert(0, '/home/brett_lentz/git/artifactsmmo')
+from src.game_data.api_client_wrapper import APIClientWrapper
+from src.game_data.cooldown_manager import CooldownManager
 
 
 class TestAPIClientWrapperCore:
@@ -38,7 +33,6 @@ class TestAPIClientWrapperCore:
             'src.ai_player': Mock(),
             'src.ai_player.models.character': Mock(),
         }):
-            from src.game_data.api_client_wrapper import APIClientWrapper
 
             wrapper = APIClientWrapper()
 
@@ -61,7 +55,6 @@ class TestAPIClientWrapperCore:
             'src.ai_player': Mock(),
             'src.ai_player.models.character': Mock(),
         }):
-            from src.game_data.api_client_wrapper import APIClientWrapper
 
             # Setup wrapper
             mock_token_instance = Mock()
@@ -87,7 +80,6 @@ class TestAPIClientWrapperCore:
             'src.ai_player': Mock(),
             'src.ai_player.models.character': Mock(),
         }):
-            from src.game_data.api_client_wrapper import APIClientWrapper
 
             wrapper = APIClientWrapper()
 
@@ -108,7 +100,6 @@ class TestAPIClientWrapperCore:
             'src.ai_player': Mock(),
             'src.ai_player.models.character': Mock(),
         }):
-            from src.game_data.api_client_wrapper import APIClientWrapper
 
             wrapper = APIClientWrapper()
 
@@ -137,7 +128,6 @@ class TestAPIClientWrapperIntegration:
             'src.ai_player.models.character': Mock(),
         }):
             # Should not raise import error
-            from src.game_data.api_client_wrapper import APIClientWrapper
             assert APIClientWrapper is not None
 
     def test_cooldown_manager_integration(self):
@@ -149,8 +139,7 @@ class TestAPIClientWrapperIntegration:
         }):
             with patch('src.game_data.api_client_wrapper.TokenConfig'):
                 with patch('src.game_data.api_client_wrapper.AuthenticatedClient'):
-                    from src.game_data.api_client_wrapper import APIClientWrapper
-                    from src.game_data.cooldown_manager import CooldownManager
+                    # CooldownManager imported at top
 
                     wrapper = APIClientWrapper()
                     assert wrapper.cooldown_manager is not None

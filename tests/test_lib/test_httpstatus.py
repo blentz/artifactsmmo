@@ -194,7 +194,6 @@ class TestIntegration:
 
     def test_module_imports_correctly(self):
         """Test that the module imports correctly."""
-        from src.lib.httpstatus import ArtifactsHTTPStatus, extend_http_status
         assert ArtifactsHTTPStatus is not None
         assert extend_http_status is not None
 

@@ -34,28 +34,6 @@ class TestDiagnosticCommandsValidScenarios:
             api_client=mock_api_client
         )
 
-    def test_parse_goal_parameters_valid_format(self, diagnostics_full):
-        """Test parsing valid goal parameters"""
-        # Test the = format which is supported
-        goal_string = "gained-xp=true"
-
-        result = diagnostics_full._parse_goal_parameters(goal_string)
-
-        assert result[GameState.GAINED_XP] == True
-
-    def test_parse_goal_parameters_multiple_equals_format(self, diagnostics_full):
-        """Test parsing multiple parameters with = format"""
-        goal_string = "gained-xp=true hp-low=false"
-
-        result = diagnostics_full._parse_goal_parameters(goal_string)
-
-        assert result[GameState.GAINED_XP] == True
-        assert result[GameState.HP_LOW] == False
-
-    def test_parse_goal_parameters_invalid_raises_error(self, diagnostics_full):
-        """Test that invalid parameters raise ValueError"""
-        with pytest.raises(ValueError, match="Invalid goal parameters"):
-            diagnostics_full._parse_goal_parameters("--nonexistent-param=true")
 
     def test_validate_state_keys_with_invalid_keys(self, diagnostics_full):
         """Test state key validation with invalid keys"""
@@ -166,11 +144,6 @@ class TestDiagnosticCommandsErrorConditions:
     def diagnostics(self):
         return DiagnosticCommands()
 
-    def test_parse_goal_parameters_with_system_exit(self, diagnostics):
-        """Test handling of SystemExit from argparse"""
-        with patch('argparse.ArgumentParser.parse_args', side_effect=SystemExit):
-            with pytest.raises(ValueError, match="Invalid goal parameters"):
-                diagnostics._parse_goal_parameters("invalid_format")
 
     @pytest.mark.asyncio
     async def test_diagnose_state_basic_functionality(self, diagnostics):

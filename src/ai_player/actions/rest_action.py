@@ -12,8 +12,8 @@ and emergency recovery within the modular action system.
 from typing import Any, Optional
 
 from ...game_data.api_client import APIClientWrapper
+from ..state.action_result import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
-from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
 
 
@@ -24,11 +24,11 @@ class RestAction(BaseAction):
     integrating with the API for actual rest execution.
     """
 
-    def __init__(self, api_client: Optional['APIClientWrapper'] = None):
+    def __init__(self):
         """Initialize RestAction for HP recovery operations.
 
         Parameters:
-            api_client: API client wrapper for rest execution
+            None
 
         Return values:
             None (constructor)
@@ -37,7 +37,6 @@ class RestAction(BaseAction):
         and safety requirements for character survival and recovery operations
         within the AI player system.
         """
-        self.api_client = api_client
         self.hp_threshold = 0.3  # Rest when HP drops below 30%
         self.safe_hp_threshold = 0.5  # Consider safe when above 50%
 
@@ -120,83 +119,6 @@ class RestAction(BaseAction):
             GameState.CAN_BANK: False,
         }
 
-    async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
-        """Execute rest via API client.
-
-        Parameters:
-            character_name: Name of the character to rest
-            current_state: Dictionary with GameState enum keys and current values
-
-        Return values:
-            ActionResult with success status, message, and HP recovery changes
-
-        This method executes the rest action through the API client, handling
-        HP recovery timing, cooldown management, and result processing for
-        character survival in the AI player system.
-        """
-        if self.api_client is None:
-            return ActionResult(
-                success=False,
-                message="API client not available for rest execution",
-                state_changes={},
-                cooldown_seconds=0
-            )
-
-        # Safety check before resting
-        if not self.needs_rest(current_state):
-            return ActionResult(
-                success=False,
-                message="Character does not need rest - HP above threshold",
-                state_changes={},
-                cooldown_seconds=0
-            )
-
-        if not self.is_safe_location(current_state):
-            return ActionResult(
-                success=False,
-                message="Location not safe for resting - find safe area first",
-                state_changes={},
-                cooldown_seconds=0
-            )
-
-        try:
-            # Execute rest via API
-            rest_result = await self.api_client.rest_character(character_name)
-
-            # Extract state changes from rest result
-            state_changes = {
-                GameState.HP_CURRENT: rest_result.data.character.hp,
-                GameState.COOLDOWN_READY: False,
-                GameState.CAN_FIGHT: False,
-                GameState.CAN_GATHER: False,
-                GameState.CAN_CRAFT: False,
-                GameState.CAN_TRADE: False,
-                GameState.CAN_MOVE: False,
-                GameState.CAN_REST: False,
-                GameState.CAN_USE_ITEM: False,
-                GameState.CAN_BANK: False,
-            }
-
-            # Update HP-based states
-            hp_percentage = rest_result.data.character.hp / rest_result.data.character.max_hp
-            state_changes[GameState.HP_LOW] = hp_percentage < self.hp_threshold
-            state_changes[GameState.HP_CRITICAL] = hp_percentage < 0.1
-            state_changes[GameState.SAFE_TO_FIGHT] = hp_percentage >= self.safe_hp_threshold
-
-            return ActionResult(
-                success=True,
-                message=f"Rest successful: Recovered to {rest_result.data.character.hp} HP",
-                state_changes=state_changes,
-                cooldown_seconds=rest_result.data.cooldown.total_seconds
-            )
-
-        except Exception as error:
-            return ActionResult(
-                success=False,
-                message=f"Rest failed: {str(error)}",
-                state_changes={},
-                cooldown_seconds=0
-            )
 
     def needs_rest(self, current_state: dict[GameState, Any]) -> bool:
         """Check if character HP is below threshold.
@@ -310,6 +232,79 @@ class RestAction(BaseAction):
         # Calculate percentage and clamp between 0.0 and 1.0
         percentage = current_hp / max_hp
         return max(0.0, min(1.0, percentage))
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Execute rest via API client.
+        
+        Parameters:
+            character_name: Name of the character to rest
+            current_state: Dictionary with GameState enum keys and current values
+            api_client: API client for making the rest call
+            cooldown_manager: Optional cooldown manager for tracking cooldowns
+            
+        Return values:
+            ActionResult with actual rest result from API
+            
+        This method makes the actual API call to rest and handles
+        the response, updating cooldowns and returning the real state changes.
+        """
+        # Make the actual API call to rest
+        rest_result = await api_client.rest_character(character_name)
+
+        if rest_result:
+            # Update cooldown if manager provided and cooldown data exists
+            if cooldown_manager and hasattr(rest_result, 'cooldown'):
+                cooldown_manager.update_cooldown(character_name, rest_result.cooldown)
+
+            # Build state changes based on successful rest
+            state_changes = {
+                GameState.COOLDOWN_READY: False,
+                GameState.CAN_FIGHT: False,
+                GameState.CAN_GATHER: False,
+                GameState.CAN_CRAFT: False,
+                GameState.CAN_TRADE: False,
+                GameState.CAN_MOVE: False,
+                GameState.CAN_REST: False,
+                GameState.CAN_USE_ITEM: False,
+                GameState.CAN_BANK: False,
+            }
+
+            # Update character state from API response
+            if hasattr(rest_result, 'character'):
+                character = rest_result.character
+                # Use comprehensive state extraction
+                character_states = self._extract_character_state(character)
+                state_changes.update(character_states)
+
+            # Get cooldown duration
+            cooldown_seconds = 0
+            if hasattr(rest_result, 'cooldown'):
+                cooldown_seconds = rest_result.cooldown.total_seconds
+
+            # Build success message
+            message = "Rest successful"
+            if hasattr(rest_result, 'character'):
+                message = f"Rest successful: HP restored to {rest_result.character.hp}/{rest_result.character.max_hp}"
+
+            return ActionResult(
+                success=True,
+                message=message,
+                state_changes=state_changes,
+                cooldown_seconds=cooldown_seconds
+            )
+        else:
+            return ActionResult(
+                success=False,
+                message="Rest failed: No response from API",
+                state_changes={},
+                cooldown_seconds=0
+            )
 
     def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.

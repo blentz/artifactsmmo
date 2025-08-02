@@ -20,6 +20,7 @@ from .goal_manager import GoalManager
 from .state.character_game_state import CharacterGameState
 from .state.game_state import GameState
 from .state.state_manager import StateManager
+from .types.goap_models import GOAPActionPlan, GOAPTargetState
 
 
 class AIPlayer:
@@ -54,8 +55,8 @@ class AIPlayer:
         # AI player state
         self._running = False
         self._stop_requested = False
-        self._current_goal: dict[GameState, Any] | None = None
-        self._current_plan: list[dict[str, Any]] | None = None
+        self._current_goal: GOAPTargetState | None = None
+        self._current_plan: GOAPActionPlan | None = None
         self._execution_stats = {
             "actions_executed": 0,
             "successful_actions": 0,
@@ -158,7 +159,7 @@ class AIPlayer:
                 break
 
             current_state = await self.state_manager.get_current_state()
-            print(f"DEBUG: Current state cooldown_ready: {current_state.cooldown_ready}")
+            self.logger.debug(f"Current state cooldown_ready: {current_state.cooldown_ready}")
 
             # Check for emergency situations first
             await self.handle_emergency(current_state)
@@ -170,8 +171,11 @@ class AIPlayer:
                 continue
 
             # Check if we need to replan
-            print(f"DEBUG: Checking if should replan. should_replan={self.should_replan(current_state)}, current_plan is None={self._current_plan is None}")
-            if self.should_replan(current_state) or self._current_plan is None:
+            should_replan = self.should_replan(current_state)
+            plan_is_none = self._current_plan is None
+            self.logger.debug(f"should_replan: {should_replan}, plan_is_none: {plan_is_none}")
+
+            if should_replan or plan_is_none:
                 self.logger.info("Planning new action sequence")
 
                 # Select next goal
@@ -179,8 +183,14 @@ class AIPlayer:
                     self.logger.error("GoalManager not available")
                     break
 
-                goal = self.goal_manager.select_next_goal(current_state)
-                print(f"DEBUG AIPlayer: Selected goal: {goal}")
+                self.logger.debug("Calling select_next_goal")
+                goal = await self.goal_manager.select_next_goal(current_state)
+                self.logger.debug(f"Goal selected: {goal}")
+                self.logger.debug(f"Goal type: {type(goal)}")
+                if hasattr(goal, 'target_states'):
+                    self.logger.debug(f"Goal has target states: {bool(goal.target_states)}")
+                else:
+                    self.logger.debug(f"Goal is dict-like: {goal}")
                 self._current_goal = goal
 
                 # Plan actions to achieve goal
@@ -190,16 +200,16 @@ class AIPlayer:
                 plan = await self.plan_actions(current_state, goal)
                 self._execution_stats["replanning_count"] += 1
 
-                if not plan:
+                # GOAPActionPlan has is_empty property
+                if plan.is_empty:
                     self.logger.warning("No valid plan found, waiting before retry")
-                    self._current_plan = None  # Set to None so we'll replan next cycle
+                    self._current_plan = None
                     await asyncio.sleep(5.0)
                     continue
 
                 # Only set current plan if we got a valid plan
                 self._current_plan = plan
-
-                self.logger.info(f"Generated plan with {len(plan)} actions")
+                self.logger.info(f"Generated plan with {len(plan.actions)} actions")
 
             # Execute the current plan
             if self._current_plan:
@@ -217,48 +227,45 @@ class AIPlayer:
         self.logger.info("Main game loop ended")
 
     async def plan_actions(
-        self, current_state: CharacterGameState, goal: dict[GameState, Any]
-    ) -> list[dict[str, Any]]:
+        self, current_state: CharacterGameState, goal: GOAPTargetState
+    ) -> GOAPActionPlan:
         """Generate action sequence using GOAP planner.
 
         Parameters:
             current_state: CharacterGameState instance with current character state
-            goal: Dictionary with GameState enum keys and target values
+            goal: GOAPTargetState object with target state specification
 
         Return values:
-            List of action dictionaries representing the planned sequence
+            GOAPActionPlan representing the planned sequence
 
         This method uses the GOAP planner to generate an optimal action sequence
         that will transition the character from the current state to the goal
         state, considering action costs and preconditions.
         """
-        print("DEBUG: plan_actions method called!")
-        print(f"DEBUG: goal parameter: {goal}")
+        self.logger.debug("plan_actions method called")
+        self.logger.debug(f"goal parameter: {goal}")
         if not self.goal_manager:
             raise RuntimeError("GoalManager not available for planning - this is a critical initialization bug")
 
-        print("DEBUG: GoalManager is available, proceeding with planning")
+        self.logger.debug("GoalManager is available, proceeding with planning")
 
-        # Use cooldown-aware planning with character name
-        target_state = goal.get('target_state', {})
-        print(f"DEBUG AIPlayer: Planning for target_state: {target_state}")
+        # Convert goal target_states to dict for plan_with_cooldown_awareness
+        goal_state_dict = {}
+        for state, value in goal.target_states.items():
+            goal_state_dict[state] = value
 
-        try:
-            plan = await self.goal_manager.plan_with_cooldown_awareness(
-                self.character_name, current_state, target_state
-            )
-            print(f"DEBUG AIPlayer: Plan result: {plan}")
-            self.logger.debug(f"Generated cooldown-aware plan: {plan}")
-            return plan
-        except Exception as e:
-            self.logger.error(f"Planning failed: {e}")
-            return []
+        plan = await self.goal_manager.plan_with_cooldown_awareness(
+            self.character_name, current_state, goal_state_dict
+        )
+        self.logger.debug(f"Plan result: {plan}")
+        self.logger.debug(f"Generated cooldown-aware plan: {plan}")
+        return plan
 
-    async def execute_plan(self, plan: list[dict[str, Any]]) -> bool:
+    async def execute_plan(self, plan: GOAPActionPlan) -> bool:
         """Execute planned action sequence.
 
         Parameters:
-            plan: List of action dictionaries to execute in sequence
+            plan: List of BaseAction instances to execute in sequence
 
         Return values:
             Boolean indicating whether the entire plan executed successfully
@@ -271,19 +278,30 @@ class AIPlayer:
             self.logger.error("ActionExecutor not available")
             return False
 
-        if not plan:
+        if plan.is_empty:
             self.logger.warning("Empty plan provided")
             return True
 
-        self.logger.info(f"Executing plan with {len(plan)} actions")
+        self.logger.info(f"Executing plan with {len(plan.actions)} actions")
 
         try:
-            success = await self.action_executor.execute_plan(plan, self.character_name)
+            # Get current state and game data for action conversion
+            current_state = await self.state_manager.get_current_state()
+            game_data = await self.goal_manager.get_game_data()
+
+            # Convert GOAPActionPlan to list of BaseActions
+            base_actions = plan.to_base_actions(
+                self.action_registry,
+                current_state,
+                game_data
+            )
+
+            success = await self.action_executor.execute_plan(base_actions, self.character_name)
             if success:
-                self._execution_stats["successful_actions"] += len(plan)
+                self._execution_stats["successful_actions"] += len(plan.actions)
             else:
                 self._execution_stats["failed_actions"] += 1
-            self._execution_stats["actions_executed"] += len(plan)
+            self._execution_stats["actions_executed"] += len(plan.actions)
             return success
         except Exception as e:
             self.logger.error(f"Plan execution failed: {e}")
@@ -313,10 +331,10 @@ class AIPlayer:
 
         # Check if goal has been achieved
         goal_achieved = True
-        for goal_key, goal_value in self._current_goal.items():
+        for goal_key, goal_value in self._current_goal.target_states.items():
             # Convert to GOAP state to check current values
             goap_state = current_state.to_goap_state()
-            current_value = goap_state.get(goal_key.value if isinstance(goal_key, GameState) else goal_key)
+            current_value = goap_state.get(goal_key)
             if current_value != goal_value:
                 goal_achieved = False
                 break
@@ -358,9 +376,9 @@ class AIPlayer:
             self._current_plan = None
 
             # Set emergency goal for HP recovery
-            self._current_goal = {
+            self._current_goal = GOAPTargetState(target_states={
                 GameState.HP_CURRENT: current_state.max_hp
-            }
+            })
 
             emergency_handled = True
             self._execution_stats["emergency_interventions"] += 1
@@ -377,9 +395,9 @@ class AIPlayer:
                 self._current_plan = None
 
                 # Set recovery goal
-                self._current_goal = {
+                self._current_goal = GOAPTargetState(target_states={
                     GameState.HP_CURRENT: int(hp_max * 0.8)  # Recover to 80%
-                }
+                })
 
                 emergency_handled = True
                 self._execution_stats["emergency_interventions"] += 1
@@ -424,9 +442,9 @@ class AIPlayer:
             "character_name": self.character_name,
             "running": self._running,
             "stop_requested": self._stop_requested,
-            "current_goal": self._current_goal,
+            "current_goal": self._current_goal.target_states if self._current_goal else None,
             "has_current_plan": self._current_plan is not None,
-            "plan_length": len(self._current_plan) if self._current_plan else 0,
+            "plan_length": len(self._current_plan.actions) if self._current_plan else 0,
             "execution_stats": self._execution_stats.copy(),
             "dependencies_initialized": self._check_dependencies()
         }
@@ -472,7 +490,8 @@ class AIPlayer:
             if not isinstance(key, GameState):
                 raise ValueError(f"Goal key {key} is not a GameState enum")
 
-        self._current_goal = goal.copy()
+        # Convert dict to GOAPTargetState for type safety
+        self._current_goal = GOAPTargetState(target_states=goal.copy())
 
         # Clear current plan to force replanning
         self._current_plan = None

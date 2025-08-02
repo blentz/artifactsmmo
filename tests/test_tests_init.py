@@ -23,6 +23,7 @@ from tests import (
     TestAssertions,
     TestHelpers,
     configure_test_environment,
+    pytest_configure,
 )
 
 
@@ -84,7 +85,6 @@ class TestConfiguration:
 
     def test_pytest_configure_calls_configure_test_environment(self):
         """Test that pytest_configure calls configure_test_environment"""
-        from tests import pytest_configure
 
         # Mock pytest config object
         mock_config = Mock()

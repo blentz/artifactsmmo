@@ -12,8 +12,8 @@ resource collection mechanics within the modular action system.
 from typing import Any, Optional
 
 from ...game_data.api_client import APIClientWrapper
+from ..state.action_result import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
-from ..state.game_state import ActionResult, GameState
 from .base_action import BaseAction
 
 
@@ -114,6 +114,7 @@ class GatheringAction(BaseAction):
         The values represent incremental changes that the GOAP planner can reason about.
         """
         return {
+            GameState.GAINED_XP: True,         # XP was gained this cycle
             GameState.CHARACTER_XP: 30,        # Increase character XP by ~30 points
             GameState.MINING_LEVEL: 1,         # May increase mining level by 1
             GameState.MINING_XP: 40,           # Increase mining XP by ~40 points
@@ -340,6 +341,85 @@ class GatheringAction(BaseAction):
         """
         # Default minimum skill level for gathering
         return 1
+
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Execute gathering via API client.
+        
+        Parameters:
+            character_name: Name of the character to perform gathering
+            current_state: Dictionary with GameState enum keys and current values
+            api_client: API client for making the gathering call
+            cooldown_manager: Optional cooldown manager for tracking cooldowns
+            
+        Return values:
+            ActionResult with actual gathering result from API
+            
+        This method makes the actual API call to gather resources and handles
+        the response, updating cooldowns and returning the real state changes.
+        """
+        # Make the actual API call to gather
+        gather_result = await api_client.gather_resource(character_name)
+
+        if gather_result:
+            # Update cooldown if manager provided and cooldown data exists
+            if cooldown_manager and hasattr(gather_result, 'cooldown'):
+                cooldown_manager.update_cooldown(character_name, gather_result.cooldown)
+
+            # Build state changes based on successful gathering
+            state_changes = {
+                GameState.COOLDOWN_READY: False,
+                GameState.CAN_FIGHT: False,
+                GameState.CAN_GATHER: False,
+                GameState.CAN_CRAFT: False,
+                GameState.CAN_TRADE: False,
+                GameState.CAN_MOVE: False,
+                GameState.CAN_REST: False,
+                GameState.CAN_USE_ITEM: False,
+                GameState.CAN_BANK: False,
+                GameState.GAINED_XP: True,  # Gathering always gives XP
+            }
+
+            # Update character state from API response
+            if hasattr(gather_result, 'character'):
+                character = gather_result.character
+                # Use comprehensive state extraction
+                character_states = self._extract_character_state(character)
+                state_changes.update(character_states)
+
+            # Get cooldown duration
+            cooldown_seconds = 0
+            if hasattr(gather_result, 'cooldown'):
+                cooldown_seconds = gather_result.cooldown.total_seconds
+
+            # Build success message
+            message = "Gathering successful"
+            if hasattr(gather_result, 'details') and gather_result.details:
+                # Extract gathering details for message
+                if hasattr(gather_result.details, 'items') and gather_result.details.items:
+                    items_str = ", ".join([f"{item.quantity}x {item.code}" for item in gather_result.details.items])
+                    message = f"Gathered: {items_str}"
+                if hasattr(gather_result.details, 'xp'):
+                    message += f" (+{gather_result.details.xp} XP)"
+
+            return ActionResult(
+                success=True,
+                message=message,
+                state_changes=state_changes,
+                cooldown_seconds=cooldown_seconds
+            )
+        else:
+            return ActionResult(
+                success=False,
+                message="Gathering failed: No response from API",
+                state_changes={},
+                cooldown_seconds=0
+            )
 
     def can_execute(self, current_state: CharacterGameState) -> bool:
         """Check if action preconditions are met in current state.

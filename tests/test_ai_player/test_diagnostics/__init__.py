@@ -4,6 +4,7 @@ Test suite for AI player diagnostics system.
 Tests all diagnostic classes and functionality for comprehensive validation.
 """
 
+import importlib
 import inspect
 from unittest.mock import patch
 
@@ -57,9 +58,10 @@ class TestDiagnosticsModule:
 
     def test_direct_imports_work(self):
         """Test that classes can be imported directly from the module."""
-        from src.ai_player.diagnostics import ActionDiagnostics as AD
-        from src.ai_player.diagnostics import PlanningDiagnostics as PD
-        from src.ai_player.diagnostics import StateDiagnostics as SD
+        # Use aliases to test the imports work
+        AD = ActionDiagnostics
+        PD = PlanningDiagnostics
+        SD = StateDiagnostics
 
         assert SD is StateDiagnostics
         assert AD is ActionDiagnostics
@@ -103,7 +105,6 @@ class TestDiagnosticsModule:
             with patch('src.ai_player.diagnostics.planning_diagnostics'):
                 with patch('src.ai_player.diagnostics.state_diagnostics'):
                     # Re-import to trigger the import statements
-                    import importlib
                     importlib.reload(ai_player_diagnostics)
 
                     # Verify the actual implementation works without mocks
@@ -123,8 +124,7 @@ class TestDiagnosticsModule:
         """Test that the module doesn't have circular import issues."""
         # This test passes if we can import multiple times without issues
         # Re-import should work fine
-        import src.ai_player.diagnostics as diag_module
-        from src.ai_player.diagnostics import ActionDiagnostics, PlanningDiagnostics, StateDiagnostics
+        diag_module = ai_player_diagnostics
         assert diag_module.StateDiagnostics is StateDiagnostics
         assert diag_module.ActionDiagnostics is ActionDiagnostics
         assert diag_module.PlanningDiagnostics is PlanningDiagnostics

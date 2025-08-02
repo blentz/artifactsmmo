@@ -30,7 +30,7 @@ class TestDiagnosticCommandsBasic:
     def test_init_with_components(self):
         """Test initialization with all components."""
         action_registry = Mock(spec=ActionRegistry)
-        goal_manager = Mock(spec=GoalManager)
+        goal_manager = AsyncMock(spec=GoalManager)
         api_client = Mock(spec=APIClientWrapper)
 
         diagnostic_commands = DiagnosticCommands(
@@ -46,29 +46,6 @@ class TestDiagnosticCommandsBasic:
         assert diagnostic_commands.planning_diagnostics is not None
         assert diagnostic_commands.cooldown_manager is not None
 
-    def test_parse_goal_parameters_empty(self):
-        """Test parsing empty goal string."""
-        diagnostic_commands = DiagnosticCommands()
-        result = diagnostic_commands._parse_goal_parameters("")
-        assert isinstance(result, dict)
-        assert len(result) == 0
-
-    def test_parse_goal_parameters_simple_boolean(self):
-        """Test parsing simple boolean parameters."""
-        diagnostic_commands = DiagnosticCommands()
-
-        result = diagnostic_commands._parse_goal_parameters("--gained-xp true")
-        assert result == {GameState.GAINED_XP: True}
-
-        result = diagnostic_commands._parse_goal_parameters("--cooldown-ready false")
-        assert result == {GameState.COOLDOWN_READY: False}
-
-    def test_parse_goal_parameters_equals_format(self):
-        """Test parsing key=value format."""
-        diagnostic_commands = DiagnosticCommands()
-
-        result = diagnostic_commands._parse_goal_parameters("gained-xp=true")
-        assert result == {GameState.GAINED_XP: True}
 
 
 class TestStateDiagnosticsBasic:
@@ -192,7 +169,7 @@ class TestPlanningDiagnosticsBasic:
     @pytest.mark.asyncio
     async def test_diagnose_plan_with_goal_manager(self):
         """Test plan diagnosis with goal manager."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         mock_api_client = AsyncMock()
 
         diagnostic_commands = DiagnosticCommands(
@@ -239,11 +216,13 @@ class TestPlanningTestingBasic:
     @pytest.mark.asyncio
     async def test_test_planning_with_goal_manager(self):
         """Test planning testing with goal manager."""
-        mock_goal_manager = Mock(spec=GoalManager)
+        mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostic_commands = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostic_commands.planning_diagnostics, 'test_goal_reachability') as mock_test:
-            mock_test.return_value = True
+            async def mock_test_func():
+                return True
+            mock_test.side_effect = mock_test_func
 
             result = await diagnostic_commands.test_planning()
 
@@ -349,34 +328,3 @@ class TestDiagnosticCommandsErrorHandling:
         assert isinstance(str_repr, str)
 
 
-class TestArgumentHandling:
-    """Test various argument handling scenarios."""
-
-    def test_boolean_parsing_variations(self):
-        """Test different boolean value formats."""
-        diagnostic_commands = DiagnosticCommands()
-
-        true_values = ['true', 'True', 'TRUE', 'yes', 'y', '1']
-        false_values = ['false', 'False', 'FALSE', 'no', 'n', '0']
-
-        for true_val in true_values:
-            result = diagnostic_commands._parse_goal_parameters(f"--gained-xp {true_val}")
-            assert result[GameState.GAINED_XP] is True
-
-        for false_val in false_values:
-            result = diagnostic_commands._parse_goal_parameters(f"--gained-xp {false_val}")
-            assert result[GameState.GAINED_XP] is False
-
-    def test_complex_goal_parameter_parsing(self):
-        """Test parsing multiple parameters."""
-        diagnostic_commands = DiagnosticCommands()
-
-        goal_string = "--gained-xp true --cooldown-ready false --safe-to-fight yes"
-        result = diagnostic_commands._parse_goal_parameters(goal_string)
-
-        expected = {
-            GameState.GAINED_XP: True,
-            GameState.COOLDOWN_READY: False,
-            GameState.SAFE_TO_FIGHT: True
-        }
-        assert result == expected

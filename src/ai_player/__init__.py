@@ -35,7 +35,9 @@ from .inventory_optimizer import InventoryOptimizer
 from .pathfinding import PathfindingService
 
 # State Management System
-from .state.game_state import ActionResult, CharacterGameState, CooldownInfo, GameState
+from .state.action_result import ActionResult, rebuild_model
+from .state.character_game_state import CharacterGameState
+from .state.game_state import CooldownInfo, GameState
 from .state.state_manager import StateManager
 
 # Specialized Components
@@ -135,6 +137,10 @@ def validate_game_state(state_dict: dict[str, Any]) -> dict[GameState, Any]:
     throughout the AI player system.
     """
     return GameState.validate_state_dict(state_dict)
+
+
+# Rebuild ActionResult model after all imports are complete
+rebuild_model()
 
 
 def initialize_ai_player_module() -> None:

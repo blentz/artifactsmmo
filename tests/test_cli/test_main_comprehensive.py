@@ -9,12 +9,13 @@ by the architecture.
 
 import argparse
 import string
+import sys
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from src.ai_player.ai_player import AIPlayer
-from src.cli.main import CLIManager, generate_random_character_name, main
+from src.cli.main import CLIManager, generate_random_character_name, main, async_main
 
 
 class TestGenerateRandomCharacterName:
@@ -527,7 +528,7 @@ class TestCLIManagerAsyncCommandHandlers:
 class TestMainFunction:
     """Test the main entry point function."""
 
-    @patch('src.cli.main.async_main')
+    @patch('src.cli.main.async_main', new_callable=AsyncMock)
     def test_main_function_basic(self, mock_async_main):
         """Test basic main function execution."""
         with patch('asyncio.run') as mock_asyncio_run:
@@ -539,7 +540,7 @@ class TestMainFunction:
         args, kwargs = mock_asyncio_run.call_args
         assert len(args) == 1  # One positional argument
 
-    @patch('src.cli.main.async_main')
+    @patch('src.cli.main.async_main', new_callable=AsyncMock)
     def test_main_function_keyboard_interrupt(self, mock_async_main):
         """Test main function keyboard interrupt handling."""
         with patch('asyncio.run', side_effect=KeyboardInterrupt()):
@@ -576,7 +577,6 @@ class TestAsyncMainFunction:
         mock_parser.parse_args.return_value = mock_args
         mock_cli_manager.return_value = mock_manager_instance
 
-        from src.cli.main import async_main
         await async_main()
 
         # Verify components were initialized
@@ -601,7 +601,6 @@ class TestAsyncMainFunction:
         mock_parser.parse_args.return_value = mock_args
         mock_cli_manager.return_value = mock_manager_instance
 
-        from src.cli.main import async_main
         await async_main()
 
         # Verify debug log level was set
@@ -623,7 +622,6 @@ class TestAsyncMainFunction:
         mock_parser.print_help = Mock()
         mock_cli_manager.return_value = mock_manager_instance
 
-        from src.cli.main import async_main
         await async_main()
 
         # Should call print_help

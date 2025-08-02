@@ -943,7 +943,6 @@ class TestCacheManager:
         cache_manager.save_cache_data("items", [])
 
         # Manually set old timestamp in metadata
-        from datetime import datetime, timedelta
         old_metadata = CacheMetadata(
             last_updated=datetime.now() - timedelta(hours=25),
             cache_version="1.0.0",

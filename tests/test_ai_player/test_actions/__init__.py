@@ -22,6 +22,7 @@ import pytest
 from src.ai_player.actions import (
     ActionFactory,
     ActionRegistry,
+    ParameterizedActionFactory,
     get_all_actions,
     get_global_registry,
     register_action_factory,
@@ -32,7 +33,7 @@ from src.ai_player.actions.gathering_action import GatheringAction
 from src.ai_player.actions.movement_action import MovementAction
 from src.ai_player.actions.movement_action_factory import MovementActionFactory
 from src.ai_player.actions.rest_action import RestAction
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
 
 # Test Utilities and Fixtures
 
@@ -434,12 +435,7 @@ class TestActionSystemIntegration(TestActionMixin):
     def test_package_imports_work_correctly(self):
         """Test that all necessary imports work from package root"""
         # Test imports that should work from the actions package
-        from src.ai_player.actions import ActionFactory, ActionRegistry, get_all_actions
-        from src.ai_player.actions.base_action import BaseAction
-        from src.ai_player.actions.combat_action import CombatAction
-        from src.ai_player.actions.gathering_action import GatheringAction
-        from src.ai_player.actions.movement_action import MovementAction
-        from src.ai_player.actions.rest_action import RestAction
+        # (imports already done at top of file)
 
         # All imports should succeed
         assert ActionFactory is not None
@@ -665,12 +661,7 @@ def test_action_system_package_structure():
     """Test that action system package structure is correct"""
     # Test that main action classes can be imported
     # Test that registry components can be imported
-    from src.ai_player.actions import ActionFactory, ActionRegistry, get_all_actions
-    from src.ai_player.actions.base_action import BaseAction
-    from src.ai_player.actions.combat_action import CombatAction
-    from src.ai_player.actions.gathering_action import GatheringAction
-    from src.ai_player.actions.movement_action import MovementAction
-    from src.ai_player.actions.rest_action import RestAction
+    # (imports already done at top of file)
 
     # All imports should succeed without errors
     assert BaseAction is not None
@@ -685,12 +676,7 @@ def test_action_system_package_structure():
 
 def test_action_system_provides_complete_interface():
     """Test that action system provides all expected interface elements"""
-    from src.ai_player.actions import (
-        ActionFactory,
-        ActionRegistry,
-        ParameterizedActionFactory,
-        get_all_actions,
-    )
+    # (imports already done at top of file)
 
     # All expected components should be available
     assert ActionFactory is not None

@@ -77,34 +77,53 @@ uv run python -m src.cli.main diagnose-cooldowns my_character --monitor
 - Support testing and simulation of planning scenarios
 
 #### 2. AI Player Core (`src/ai_player/`)
-**Purpose**: Intelligent game automation using GOAP
+**Purpose**: Intelligent game automation using Enhanced GOAP with recursive sub-goal support
 
 **Key Modules**:
 - `ai_player.py` - Main AI player orchestrator
-- `actions/` - Modular GOAP action system (one action per file)
+- `actions/` - Modular GOAP action system with factory patterns
   - `base_action.py` - Abstract base class for all actions
+  - `action_factory.py` - Factory for creating action instances
+  - `rest_action_factory.py` - Factory for specialized rest actions
   - `movement_action.py` - Movement and pathfinding
   - `combat_action.py` - Monster fighting mechanics
   - `gathering_action.py` - Resource collection
-  - `crafting_action.py` - Item creation
-  - `rest_action.py` - HP recovery
-  - `trading_action.py` - NPC interactions
-- `state/` - State management with type safety
+  - `rest_action.py` - HP recovery with intelligent location selection
+- `goals/` - Enhanced goal system with data-driven analysis
+  - `base_goal.py` - Abstract base class for intelligent goals
+  - `combat_goal.py` - Level-appropriate monster targeting
+  - `crafting_goal.py` - Recipe analysis and material planning
+  - `gathering_goal.py` - Resource collection optimization
+  - `equipment_goal.py` - Gear upgrade evaluation
+  - `movement_goal.py` - Strategic movement planning
+  - `rest_goal.py` - HP recovery goal management
+  - `sub_goal_request.py` - Sub-goal request models
+- `analysis/` - Strategic game data analysis modules
+  - `level_targeting.py` - Level-appropriate monster analysis
+  - `crafting_analysis.py` - Recipe and material dependency analysis
+  - `map_analysis.py` - Location finding and travel optimization
+- `types/` - Type-safe models for GOAP integration
+  - `goap_models.py` - Pydantic models for type-safe GOAP
+  - `game_data.py` - Game data type definitions
+- `state/` - Enhanced state management with recursive validation
   - `game_state.py` - GameState enum definitions
-  - `state_manager.py` - Game state tracking and synchronization
-- `action_executor.py` - API action execution with cooldown handling
-- `goal_manager.py` - Dynamic goal selection based on character state
-- `diagnostics/` - CLI diagnostic commands for troubleshooting
-  - `state_diagnostics.py` - State inspection and validation
-  - `action_diagnostics.py` - Action precondition/effect analysis
-  - `planning_diagnostics.py` - GOAP planning visualization
+  - `character_game_state.py` - Character state Pydantic model
+  - `state_manager.py` - State tracking with recursive sub-goal support
+- `action_executor.py` - Enhanced API action execution with recursive sub-goal handling
+- `goal_manager.py` - Intelligent goal selection with weighted analysis
+- `goal_selector.py` - Goal selection and prioritization logic
+- `exceptions.py` - Custom exceptions for error handling
+- `diagnostics/` - Enhanced CLI diagnostic commands
+  - `planning_diagnostics.py` - GOAP planning visualization and analysis
 
-**GOAP Integration**:
-- Uses existing `src/lib/goap.py` for planning algorithms
-- Modular action system with registry-based discovery
-- Type-safe state management using GameState enum
-- Maps GOAP actions to API client calls through action modules
-- Handles preconditions and effects via standardized action interface
+**Enhanced GOAP Integration**:
+- Uses existing `src/lib/goap.py` with enhanced goal-driven planning
+- Intelligent goal system with weighted selection and feasibility analysis
+- Data-driven decision making using cached game data (monsters, items, maps)
+- Recursive sub-goal architecture with factory patterns
+- Type-safe GOAP models using Pydantic for state management
+- Strategic analysis modules for level-appropriate targeting and crafting
+- Sub-goal request system for dynamic dependency resolution
 
 #### 3. Game Data Management (`src/game_data/`)
 **Purpose**: API integration and game state caching
@@ -138,11 +157,77 @@ config/
 └── goap_weights.yaml   # Action cost weights for GOAP
 ```
 
-## GOAP System Integration
+## Enhanced GOAP System Integration
 
-### Modular Action System
+### Intelligent Goal System
 
-The AI player uses a modular action system where each action is defined in its own file:
+The AI player uses an enhanced goal-driven system with data-driven analysis and recursive sub-goal support:
+
+```python
+# src/ai_player/goals/base_goal.py
+from abc import ABC, abstractmethod
+from ..state.character_game_state import CharacterGameState
+from ..types.game_data import GameData
+from ..types.goap_models import GOAPTargetState
+
+class BaseGoal(ABC):
+    """Abstract base class for all intelligent goals."""
+    
+    @abstractmethod
+    def calculate_weight(self, character_state: CharacterGameState, game_data: GameData) -> float:
+        """Calculate dynamic weight based on current conditions.
+        
+        Multi-factor scoring:
+        - Necessity (40%): Required for progression
+        - Feasibility (30%): Can be accomplished with current resources
+        - Progression Value (20%): Contributes to level 5 with appropriate gear
+        - Stability (10%): Reduces error potential
+        """
+        pass
+    
+    @abstractmethod
+    def is_feasible(self, character_state: CharacterGameState, game_data: GameData) -> bool:
+        """Check if goal can be pursued with current character state."""
+        pass
+    
+    @abstractmethod
+    def get_target_state(self, character_state: CharacterGameState, game_data: GameData) -> GOAPTargetState:
+        """Generate GOAP target state for planning."""
+        pass
+    
+    @abstractmethod
+    def get_progression_value(self, character_state: CharacterGameState) -> float:
+        """Calculate contribution to reaching level 5 with appropriate gear."""
+        pass
+```
+
+### Strategic Analysis Modules
+
+The system includes specialized analysis modules for data-driven decision making:
+
+```python
+# src/ai_player/analysis/level_targeting.py
+class LevelAppropriateTargeting:
+    def find_optimal_monsters(
+        self, 
+        character_level: int, 
+        current_position: tuple[int, int],
+        monsters: list[GameMonster],
+        maps: list[GameMap]
+    ) -> list[tuple[GameMonster, GameMap, float]]:
+        """Find monsters within character_level ± 1 with efficiency scoring.
+        
+        Uses real GameMonster data:
+        - Filter by monster.level in [character_level-1, character_level+1]
+        - Score by XP potential, gold rewards, and travel distance
+        - Cross-reference with map data for locations
+        """
+        pass
+```
+
+### Modular Action System with Factory Patterns
+
+Actions are enhanced with factory patterns and sub-goal request capabilities:
 
 ```python
 # src/ai_player/actions/base_action.py
@@ -220,26 +305,61 @@ class MovementAction(BaseAction):
         pass
 ```
 
-### Goal Management
+### Enhanced Goal Management with Recursive Sub-Goals
 
-The system implements dynamic goal selection based on character progression:
+The system implements intelligent goal selection with data-driven analysis and recursive sub-goal support:
 
-1. **Early Game Goals** (Levels 1-10):
-   - Gather basic resources
-   - Craft starting equipment
-   - Complete beginner tasks
+1. **Weighted Goal Selection**:
+   - Multi-factor scoring (necessity, feasibility, progression, stability)
+   - Real-time analysis using cached game data
+   - Dynamic priority adjustment based on character state
 
-2. **Mid Game Goals** (Levels 11-30):
-   - Optimize skill progression
-   - Economic activities (Grand Exchange)
-   - Equipment upgrades
+2. **Goal Types**:
+   - `CombatGoal`: Level-appropriate monster targeting for XP
+   - `CraftingGoal`: Recipe analysis and material planning
+   - `GatheringGoal`: Resource collection optimization
+   - `EquipmentGoal`: Gear upgrade evaluation and acquisition
+   - `MovementGoal`: Strategic movement and pathfinding
+   - `RestGoal`: HP recovery with location intelligence
 
-3. **Late Game Goals** (Levels 31-45):
-   - Maximum level achievement
-   - Rare item collection
-   - Advanced crafting mastery
+3. **Sub-Goal Architecture**:
+   - Factory pattern for converting SubGoalRequest to Goal instances
+   - Recursive execution with depth limits (max 10 levels)
+   - Unified GOAP planning for both primary and sub-goals
+   - State consistency validation during recursive execution
 
-### Type-Safe State Management
+4. **Data-Driven Analysis**:
+   - Level-appropriate monster filtering using real GameMonster data
+   - Crafting recipe analysis with material dependency trees
+   - Map analysis for optimal travel routes and resource locations
+   - Equipment evaluation based on level requirements and stat benefits
+
+### Enhanced Type-Safe State Management with Pydantic Models
+
+The enhanced system uses Pydantic models for comprehensive type safety and validation:
+
+```python
+# src/ai_player/types/goap_models.py
+class GOAPTargetState(BaseModel):
+    """Type-safe replacement for dict[GameState, Any]"""
+    target_states: dict[GameState, bool | int | float | str] = Field(
+        default_factory=dict,
+        description="Target state values indexed by GameState enum"
+    )
+    priority: int = Field(default=5, ge=1, le=10, description="Goal priority")
+    timeout_seconds: int | None = Field(default=None, description="Max execution time")
+
+class GOAPAction(BaseModel):
+    """Type-safe replacement for dict-based action representation"""
+    name: str = Field(description="Action name")
+    action_type: str = Field(description="Action type for factory")
+    parameters: dict[str, bool | int | float | str] = Field(
+        default_factory=dict,
+        description="Action parameters"
+    )
+    cost: int = Field(default=1, ge=0, description="GOAP cost")
+    estimated_duration: float = Field(default=1.0, ge=0, description="Estimated seconds")
+```
 
 The GOAP planner uses a global GameState enum for type-safe state management:
 
@@ -311,39 +431,309 @@ class GameState(StrEnum):
         return {state.value: value for state, value in state_dict.items()}
 
 class CharacterGameState(BaseModel):
-    """Pydantic model for character state using GameState enum keys"""
+    """Enhanced Pydantic model for character state with comprehensive validation"""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
     
-    def to_goap_state(self) -> Dict[str, Any]:
-        """Convert to GOAP state dictionary using enum values"""
+    # Character progression
+    name: str = Field(description="Character name")
+    level: int = Field(ge=1, le=45, description="Character level")
+    xp: int = Field(ge=0, description="Experience points")
+    max_xp: int = Field(ge=0, description="XP required for next level")
+    gold: int = Field(ge=0, description="Gold amount")
+    
+    # Health and position
+    hp: int = Field(ge=0, description="Current HP")
+    max_hp: int = Field(ge=1, description="Maximum HP")
+    x: int = Field(description="X coordinate")
+    y: int = Field(description="Y coordinate")
+    
+    # Skill levels with validation
+    mining_level: int = Field(ge=1, le=45, description="Mining skill level")
+    woodcutting_level: int = Field(ge=1, le=45, description="Woodcutting skill level")
+    fishing_level: int = Field(ge=1, le=45, description="Fishing skill level")
+    weaponcrafting_level: int = Field(ge=1, le=45, description="Weaponcrafting skill level")
+    gearcrafting_level: int = Field(ge=1, le=45, description="Gearcrafting skill level")
+    jewelrycrafting_level: int = Field(ge=1, le=45, description="Jewelrycrafting skill level")
+    cooking_level: int = Field(ge=1, le=45, description="Cooking skill level")
+    alchemy_level: int = Field(ge=1, le=45, description="Alchemy skill level")
+    
+    def to_goap_state(self) -> dict[str, Any]:
+        """Convert to GOAP state dictionary with GameState enum validation"""
         raw_dict = self.model_dump()
         return {GameState(k).value: (int(v) if isinstance(v, bool) else v) 
-                for k, v in raw_dict.items() if k in GameState}
+                for k, v in raw_dict.items() if k in [gs.value for gs in GameState]}
     
     @classmethod
     def from_api_character(cls, character: 'CharacterSchema') -> 'CharacterGameState':
-        """Create from API character response with validated state mapping"""
-        return cls(**{
-            GameState.CHARACTER_LEVEL.value: character.level,
-            GameState.CHARACTER_XP.value: character.xp,
-            GameState.CHARACTER_GOLD.value: character.gold,
-            GameState.HP_CURRENT.value: character.hp,
-            GameState.HP_MAX.value: character.max_hp,
-            GameState.CURRENT_X.value: character.x,
-            GameState.CURRENT_Y.value: character.y,
-            GameState.MINING_LEVEL.value: character.mining_level,
-            GameState.WOODCUTTING_LEVEL.value: character.woodcutting_level,
-            GameState.FISHING_LEVEL.value: character.fishing_level,
-            GameState.WEAPONCRAFTING_LEVEL.value: character.weaponcrafting_level,
-            GameState.GEARCRAFTING_LEVEL.value: character.gearcrafting_level,
-            GameState.JEWELRYCRAFTING_LEVEL.value: character.jewelrycrafting_level,
-            GameState.COOKING_LEVEL.value: character.cooking_level,
-            GameState.ALCHEMY_LEVEL.value: character.alchemy_level,
-            GameState.INVENTORY_SPACE_AVAILABLE.value: character.inventory_max_items - len(character.inventory or []),
-            GameState.COOLDOWN_READY.value: character.cooldown == 0,
-            GameState.WEAPON_EQUIPPED.value: bool(character.weapon_slot),
-            GameState.TOOL_EQUIPPED.value: bool(character.weapon_slot)
-        })
+        """Create from API character response with enhanced validation"""
+        return cls(
+            name=character.name,
+            level=character.level,
+            xp=character.xp,
+            max_xp=character.max_xp,
+            gold=character.gold,
+            hp=character.hp,
+            max_hp=character.max_hp,
+            x=character.x,
+            y=character.y,
+            mining_level=character.mining_level,
+            woodcutting_level=character.woodcutting_level,
+            fishing_level=character.fishing_level,
+            weaponcrafting_level=character.weaponcrafting_level,
+            gearcrafting_level=character.gearcrafting_level,
+            jewelrycrafting_level=character.jewelrycrafting_level,
+            cooking_level=character.cooking_level,
+            alchemy_level=character.alchemy_level
+        )
+```
+
+## Sub-Goal Architecture
+
+### Unified Sub-Goal Factory Pattern
+
+The system implements a clean, unified architecture for sub-goal integration that eliminates converters and ensures the entire system uses the same facilities:
+
+```python
+# src/ai_player/goals/sub_goal_request.py
+class SubGoalRequest(BaseModel):
+    """Pydantic model for sub-goal requests with factory integration"""
+    goal_type: str = Field(description="Type of sub-goal to create")
+    parameters: dict[str, Any] = Field(default_factory=dict, description="Sub-goal parameters")
+    priority: int = Field(default=5, ge=1, le=10, description="Urgency level")
+    requester: str = Field(description="Action/goal that requested this sub-goal")
+
+# src/ai_player/goal_manager.py
+class GoalManager:
+    def create_goal_from_sub_request(
+        self, 
+        sub_goal_request: SubGoalRequest, 
+        context: GoalFactoryContext
+    ) -> BaseGoal:
+        """Factory method to convert SubGoalRequest to appropriate Goal instance.
+        
+        No converters needed - SubGoalRequest becomes Goal instances directly.
+        Sub-goals use identical interfaces as regular goals.
+        """
+        if context.recursion_depth >= context.max_depth:
+            raise MaxDepthExceededError(context.max_depth)
+        
+        if sub_goal_request.goal_type == "move_to_location":
+            return MovementGoal(
+                target_x=sub_goal_request.parameters["target_x"],
+                target_y=sub_goal_request.parameters["target_y"]
+            )
+        elif sub_goal_request.goal_type == "reach_hp_threshold":
+            return RestGoal(
+                min_hp_percentage=sub_goal_request.parameters["min_hp_percentage"]
+            )
+        # Additional sub-goal types...
+```
+
+### Recursive Execution with Depth Limits
+
+The ActionExecutor handles sub-goals with depth-limited recursion and state consistency validation:
+
+```python
+# src/ai_player/action_executor.py
+class ActionExecutor:
+    async def execute_action_with_subgoals(
+        self, 
+        action: BaseAction, 
+        character_name: str, 
+        current_state: CharacterGameState, 
+        depth: int = 0
+    ) -> ActionResult:
+        """Execute action with recursive sub-goal handling."""
+        
+        # Depth limit protection
+        if depth > self.max_subgoal_depth:
+            raise MaxDepthExceededError(self.max_subgoal_depth)
+        
+        # Execute action using existing logic
+        result = await self.execute_action(action, character_name, current_state)
+        
+        # Handle sub-goal requests recursively
+        if not result.success and result.sub_goal_requests:
+            for sub_goal_request in result.sub_goal_requests:
+                # Use GoalManager factory to create Goal instance
+                sub_goal = self.goal_manager.create_goal_from_sub_request(
+                    sub_goal_request, context
+                )
+                
+                # Get target state using same facility as regular goals
+                target_state = sub_goal.get_target_state(context.character_state, context.game_data)
+                
+                # Use GOAP planning (same facility as regular goals)
+                sub_plan = await self.goal_manager.plan_to_target_state(
+                    context.character_state, target_state
+                )
+                
+                # Execute sub-plan recursively
+                if sub_plan.actions:
+                    sub_result = await self.execute_plan_recursive(
+                        sub_plan, character_name, depth + 1
+                    )
+                    
+                    if sub_result.success:
+                        # Refresh state and retry parent action
+                        refreshed_state = await self.state_manager.refresh_state_for_parent_action(depth)
+                        return await self.execute_action_with_subgoals(
+                            action, character_name, refreshed_state, depth
+                        )
+        
+        return result
+```
+
+## Strategic Analysis Modules
+
+### Level-Appropriate Monster Targeting
+
+The system includes intelligent monster selection based on character level and game data:
+
+```python
+# src/ai_player/analysis/level_targeting.py
+class LevelAppropriateTargeting:
+    def find_optimal_monsters(
+        self, 
+        character_level: int, 
+        current_position: tuple[int, int],
+        monsters: list[GameMonster],
+        maps: list[GameMap]
+    ) -> list[tuple[GameMonster, GameMap, float]]:
+        """Find monsters within character_level ± 1 with efficiency scoring.
+        
+        Uses real GameMonster data:
+        - Filter by monster.level in [character_level-1, character_level+1]
+        - Score by XP potential, gold rewards, and travel distance
+        - Cross-reference with map data for locations
+        """
+        # Filter level-appropriate monsters from real data
+        appropriate_monsters = [
+            monster for monster in monsters 
+            if character_level - 1 <= monster.level <= character_level + 1
+        ]
+        
+        # Find locations and calculate efficiency scores
+        monster_locations = []
+        for monster in appropriate_monsters:
+            locations = [
+                game_map for game_map in maps 
+                if (game_map.content and 
+                    game_map.content.type == "monster" and 
+                    game_map.content.code == monster.code)
+            ]
+            
+            for location in locations:
+                distance = abs(location.x - current_position[0]) + abs(location.y - current_position[1])
+                xp_potential = monster.level * 10
+                gold_potential = (monster.min_gold + monster.max_gold) / 2
+                efficiency = (xp_potential + gold_potential) / max(1, distance)
+                
+                monster_locations.append((monster, location, efficiency))
+        
+        return sorted(monster_locations, key=lambda x: x[2], reverse=True)
+```
+
+### Crafting Analysis Module
+
+Intelligent crafting analysis using real game data:
+
+```python
+# src/ai_player/analysis/crafting_analysis.py
+class CraftingAnalysisModule:
+    def analyze_recipe(
+        self, 
+        recipe_code: str, 
+        items: list[GameItem],
+        character_state: CharacterGameState
+    ) -> CraftingAnalysis:
+        """Analyze crafting recipe using real GameItem.craft data."""
+        
+        # Find item using real data - NO hardcoding
+        target_item = next((item for item in items if item.code == recipe_code), None)
+        if not target_item or not target_item.craft:
+            return CraftingAnalysis(feasible=False, reason="No recipe found")
+        
+        # Parse real crafting requirements
+        craft_data = target_item.craft
+        required_materials = craft_data.get('materials', [])
+        required_skill_level = craft_data.get('level', 1)
+        skill_name = craft_data.get('skill', 'crafting')
+        
+        # Check character skill level
+        character_skill_level = getattr(character_state, f"{skill_name}_level", 1)
+        
+        if character_skill_level < required_skill_level:
+            return CraftingAnalysis(
+                feasible=False, 
+                reason=f"Need {skill_name} level {required_skill_level}"
+            )
+        
+        return CraftingAnalysis(
+            feasible=True,
+            materials_needed=required_materials,
+            skill_required=skill_name,
+            level_required=required_skill_level,
+            result_item_level=target_item.level
+        )
+```
+
+### Map Analysis Module
+
+Location finding and travel optimization:
+
+```python
+# src/ai_player/analysis/map_analysis.py
+class MapAnalysisModule:
+    def find_nearest_content(
+        self,
+        current_pos: tuple[int, int],
+        content_type: str,
+        maps: list[GameMap],
+        level_filter: int | None = None
+    ) -> list[tuple[GameMap, float]]:
+        """Find nearest locations with specified content type.
+        
+        Returns: List of (map, distance) sorted by proximity
+        """
+        matching_maps = []
+        for game_map in maps:
+            if game_map.content and game_map.content.type == content_type:
+                # Apply level filter if specified
+                if level_filter is not None:
+                    # Cross-reference with actual content data for level filtering
+                    # Implementation depends on content type (monster, resource, etc.)
+                    pass
+                
+                distance = abs(game_map.x - current_pos[0]) + abs(game_map.y - current_pos[1])
+                matching_maps.append((game_map, distance))
+        
+        return sorted(matching_maps, key=lambda x: x[1])
+```
+
+## Exception Handling for Sub-Goal Architecture
+
+Custom exceptions for robust error handling:
+
+```python
+# src/ai_player/exceptions.py
+class SubGoalExecutionError(Exception):
+    """Raised when sub-goal execution fails"""
+    def __init__(self, depth: int, sub_goal_type: str, message: str):
+        self.depth = depth
+        self.sub_goal_type = sub_goal_type
+        super().__init__(f"Sub-goal '{sub_goal_type}' failed at depth {depth}: {message}")
+
+class MaxDepthExceededError(SubGoalExecutionError):
+    """Raised when max recursion depth is exceeded"""
+    def __init__(self, max_depth: int):
+        super().__init__(max_depth, "depth_limit", f"Maximum recursion depth {max_depth} exceeded")
+
+class StateConsistencyError(Exception):
+    """Raised when state consistency validation fails during recursive execution"""
+    def __init__(self, depth: int, message: str):
+        self.depth = depth
+        super().__init__(f"State consistency error at depth {depth}: {message}")
 ```
 
 ## API Integration Strategy
@@ -557,37 +947,87 @@ Logs are structured to support analysis and debugging:
 
 ## Configuration Management
 
-### AI Behavior Configuration (`config/ai_player.yaml`)
+### Enhanced AI Behavior Configuration (`config/ai_player.yaml`)
 
 ```yaml
+# Enhanced Goal System Configuration
 goals:
-  priority_levels:
-    survival: 10      # HP management, rest
-    progression: 8    # XP and level advancement
-    economic: 6       # Gold and trading
-    exploration: 4    # Map discovery
-    collection: 2     # Item gathering
+  # Weighted Goal Selection Factors
+  weight_factors:
+    necessity: 0.4     # Required for progression (HP critical, missing gear)
+    feasibility: 0.3   # Can be accomplished with current resources
+    progression: 0.2   # Contributes to reaching level 5 with appropriate gear
+    stability: 0.1     # Reduces error potential and maintains steady progress
+  
+  # Goal Type Priorities
+  type_priorities:
+    combat: 9          # Level-appropriate monster targeting
+    equipment: 8       # Gear upgrade evaluation
+    rest: 10           # HP recovery (highest priority when needed)
+    crafting: 7        # Recipe analysis and material planning
+    gathering: 6       # Resource collection optimization
+    movement: 5        # Strategic movement planning
 
+# Sub-Goal Architecture Configuration
 planning:
-  max_plan_depth: 10
-  replan_interval: 300  # seconds
+  max_subgoal_depth: 10           # Maximum recursive sub-goal depth
+  enable_recursive_subgoals: true # Enable recursive sub-goal execution
+  subgoal_timeout_seconds: 300    # Timeout for sub-goal execution
+  replan_interval: 300            # seconds
   emergency_replan_triggers:
     - low_hp
     - unexpected_location
     - api_error
+    - max_depth_exceeded
 
+# Strategic Analysis Configuration
+analysis:
+  level_targeting:
+    level_range: 1            # ±1 level for monster targeting
+    efficiency_weight_xp: 0.6 # Weight for XP potential in efficiency calculation
+    efficiency_weight_gold: 0.2 # Weight for gold potential
+    efficiency_weight_distance: 0.2 # Weight for travel distance (inverted)
+  
+  crafting:
+    max_material_depth: 5     # Maximum dependency tree depth for materials
+    prioritize_xp_gain: true  # Prioritize recipes that give XP
+    min_success_rate: 0.8     # Minimum success rate for crafting attempts
+  
+  equipment:
+    max_level_filter: 5       # Only consider equipment with level <= 5
+    stat_weight_damage: 0.4   # Weight for damage stats in evaluation
+    stat_weight_defense: 0.3  # Weight for defense stats
+    stat_weight_utility: 0.3  # Weight for utility stats (HP, etc.)
+
+# Enhanced Action Configuration
 actions:
   movement:
-    pathfinding_algorithm: "a_star"
-    avoid_monsters: true
+    pathfinding_algorithm: "manhattan"  # Manhattan distance for efficiency
+    avoid_higher_level_monsters: true
+    max_travel_distance: 20   # Maximum single-move distance
+  
   combat:
     min_hp_percentage: 0.3
-    preferred_combat_level_range: [-2, +1]
+    preferred_level_range: [-1, +1]  # Character level ±1
+    retreat_hp_threshold: 0.2 # HP threshold to trigger retreat
+    max_combat_duration: 60   # Maximum seconds per combat
+  
   gathering:
-    resource_priority:
-      - "copper_ore"
-      - "ash_wood" 
-      - "gudgeon"
+    prioritize_by_level: true # Prioritize resources appropriate for character level
+    min_efficiency_score: 0.5 # Minimum efficiency to attempt gathering
+  
+  rest:
+    preferred_rest_locations: # Preferred locations for resting (safer areas)
+      - "bank"
+      - "safe_zone"
+    hp_recovery_threshold: 0.8 # HP percentage to stop resting
+
+# Diagnostics and Monitoring
+diagnostics:
+  track_subgoal_depth: true    # Track recursive execution depth
+  log_subgoal_chains: true     # Log sub-goal execution chains
+  log_analysis_decisions: true # Log analysis module decisions
+  performance_monitoring: true # Monitor goal selection performance
 ```
 
 ### GOAP Weights Configuration (`config/goap_weights.yaml`)

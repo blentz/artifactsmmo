@@ -11,7 +11,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.ai_player.state.game_state import ActionResult, CharacterGameState, CooldownInfo, GameState
+from src.ai_player.state.action_result import ActionResult
+from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import CooldownInfo, GameState
 
 
 class TestGameStateEnum:
@@ -343,6 +345,17 @@ class TestCharacterGameState:
         mock_character.alchemy_level = 1
         mock_character.alchemy_xp = 0
         mock_character.weapon_slot = "copper_sword"
+        mock_character.rune_slot = ""
+        mock_character.shield_slot = ""
+        mock_character.helmet_slot = ""
+        mock_character.body_armor_slot = ""
+        mock_character.leg_armor_slot = ""
+        mock_character.boots_slot = ""
+        mock_character.ring1_slot = ""
+        mock_character.ring2_slot = ""
+        mock_character.amulet_slot = ""
+        mock_character.artifact1_slot = ""
+        mock_character.cooldown_expiration_utc = None
         mock_character.inventory = ["item1", "item2"]
         mock_character.inventory_max_items = 20
 

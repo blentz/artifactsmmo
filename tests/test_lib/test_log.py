@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 import yaml
 
+import src.lib.log
 from src.lib.log import (
     LogManager,
     character_logging_context,
@@ -35,9 +36,8 @@ class TestLogManager:
     def test_get_logger(self):
         """Test getting a logger instance."""
         # Ensure LOG_LEVEL is set to DEBUG for this test
-        from src.lib import log
-        original_level = log.LOG_LEVEL
-        log.LOG_LEVEL = logging.DEBUG
+        original_level = src.lib.log.LOG_LEVEL
+        src.lib.log.LOG_LEVEL = logging.DEBUG
 
         try:
             manager = LogManager()
@@ -47,7 +47,7 @@ class TestLogManager:
             assert logger.level == logging.DEBUG
             assert "test_logger" in manager.loggers
         finally:
-            log.LOG_LEVEL = original_level
+            src.lib.log.LOG_LEVEL = original_level
 
         # Getting the same logger should return the same instance
         logger2 = manager.get_logger("test_logger")
@@ -56,9 +56,8 @@ class TestLogManager:
     def test_setup_character_logger(self):
         """Test setting up character-specific loggers."""
         # Ensure LOG_LEVEL is set to DEBUG for this test
-        from src.lib import log
-        original_level = log.LOG_LEVEL
-        log.LOG_LEVEL = logging.DEBUG
+        original_level = src.lib.log.LOG_LEVEL
+        src.lib.log.LOG_LEVEL = logging.DEBUG
 
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -82,7 +81,7 @@ class TestLogManager:
                 logger2 = manager.setup_character_logger("test_char", log_dir)
                 assert logger is logger2
         finally:
-            log.LOG_LEVEL = original_level
+            src.lib.log.LOG_LEVEL = original_level
 
 
 class TestConfigureLogging:
@@ -151,7 +150,6 @@ class TestAsyncLogging:
 
     async def test_safely_start_logger(self):
         """Test safely starting the logger."""
-        import src.lib.log
 
         # Ensure logger is not running
         if src.lib.log._LOGGER_TASK and not src.lib.log._LOGGER_TASK.done():
@@ -184,7 +182,6 @@ class TestAsyncLogging:
 
     async def test_stop_logger(self):
         """Test stopping the logger."""
-        import src.lib.log
 
         # Start logger
         await safely_start_logger()
@@ -398,7 +395,6 @@ class TestErrorHandling:
 
     async def test_stop_logger_with_listener(self):
         """Test stopping logger when listener exists."""
-        import src.lib.log
 
         # Set up a mock listener
         mock_listener = Mock()
@@ -468,7 +464,6 @@ class TestIntegration:
 @pytest.fixture
 def clean_logging_state():
     """Clean up logging state before and after tests."""
-    import src.lib.log
 
     # Clean up before test
     if src.lib.log._LOGGER_TASK and not src.lib.log._LOGGER_TASK.done():

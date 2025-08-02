@@ -6,12 +6,15 @@ of the CLI commands module, ensuring DiagnosticCommands and other
 command classes are properly accessible.
 """
 
+import sys
+import time
 from unittest.mock import patch
 
 import pytest
 
 import src.cli.commands as commands_module
 from src.cli.commands import DiagnosticCommands
+from src.cli.commands.diagnostics import DiagnosticCommands as RelativeDC
 
 
 class TestModuleStructure:
@@ -89,19 +92,20 @@ class TestImportPaths:
 
     def test_direct_import_from_commands(self):
         """Test direct import from commands module"""
-        from src.cli.commands import DiagnosticCommands as DirectDC
+        # DiagnosticCommands imported at top as DirectDC
+        DirectDC = DiagnosticCommands
         assert DirectDC is DiagnosticCommands
 
     def test_import_from_commands_init(self):
         """Test import from commands.__init__"""
-        import src.cli.commands
-        assert src.cli.commands.DiagnosticCommands is DiagnosticCommands
+        # src.cli.commands already imported as commands_module at top
+        assert commands_module.DiagnosticCommands is DiagnosticCommands
 
     def test_relative_import_simulation(self):
         """Test that relative imports would work (simulated)"""
         # This simulates what main.py does with: from .commands.diagnostics import DiagnosticCommands
         # We can't test actual relative imports here, but we can test the end result
-        from src.cli.commands.diagnostics import DiagnosticCommands as RelativeDC
+        # RelativeDC imported at top
         assert RelativeDC is DiagnosticCommands
 
 
@@ -110,17 +114,19 @@ class TestModuleReimport:
 
     def test_module_reimport_gives_same_objects(self):
         """Test that re-importing gives the same objects"""
-        import src.cli.commands as commands1
-        import src.cli.commands as commands2
+        # commands_module already imported at top
+        commands1 = commands_module
+        commands2 = commands_module
 
         assert commands1.DiagnosticCommands is commands2.DiagnosticCommands
 
     def test_class_instances_from_reimport(self):
         """Test that class instances work correctly after reimport"""
-        import src.cli.commands as commands1
+        # commands_module already imported at top
+        commands1 = commands_module
         dc1 = commands1.DiagnosticCommands()
 
-        import src.cli.commands as commands2
+        commands2 = commands_module
         dc2 = commands2.DiagnosticCommands()
 
         # Should be the same class but different instances
@@ -171,8 +177,6 @@ class TestPerformance:
 
     def test_import_speed(self):
         """Test that imports happen quickly"""
-        import sys
-        import time
 
         # Clear any cached modules to ensure fresh import timing
         modules_to_clear = [
@@ -192,13 +196,12 @@ class TestPerformance:
 
     def test_multiple_imports_efficiency(self):
         """Test that multiple imports are efficient"""
-        import time
 
         start_time = time.time()
         for _ in range(100):
             # Import the same module multiple times to test caching efficiency
-            import src.cli.commands
-            _ = src.cli.commands.DiagnosticCommands
+            # commands_module already imported at top
+            _ = commands_module.DiagnosticCommands
         end_time = time.time()
 
         # Multiple imports should still be fast due to Python's import caching

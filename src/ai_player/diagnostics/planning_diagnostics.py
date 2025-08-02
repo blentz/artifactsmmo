@@ -211,11 +211,11 @@ class PlanningDiagnostics:
 
         return new_state
 
-    def analyze_plan_efficiency(self, plan: list[dict[str, Any]]) -> dict[str, Any]:
+    def analyze_plan_efficiency(self, plan: 'GOAPActionPlan') -> dict[str, Any]:
         """Analyze plan for efficiency and optimization opportunities.
 
         Parameters:
-            plan: List of action dictionaries to analyze for efficiency
+            plan: GOAPActionPlan to analyze for efficiency
 
         Return values:
             Dictionary containing efficiency analysis and optimization suggestions
@@ -225,30 +225,28 @@ class PlanningDiagnostics:
         to improve GOAP planning performance and execution time.
         """
         analysis: dict[str, Any] = {
-            "total_actions": len(plan),
-            "total_cost": 0,
+            "total_actions": len(plan.actions),
+            "total_cost": plan.total_cost,
             "efficiency_score": 0.0,
             "redundant_actions": [],
             "optimization_suggestions": [],
             "action_types": {}
         }
 
-        if not plan:
+        if plan.is_empty:
             return analysis
 
         # Calculate total cost and action type distribution
-        for action in plan:
-            cost = action.get("cost", 1)
-            analysis["total_cost"] += cost
-
-            action_name = action.get("name", "unknown")
+        for action in plan.actions:
+            # Total cost is already computed in the GOAPActionPlan
+            action_name = action.name
             action_type = action_name.split("_")[0] if "_" in action_name else action_name
             analysis["action_types"][action_type] = analysis["action_types"].get(action_type, 0) + 1
 
         # Look for redundant sequences
-        for i in range(len(plan) - 1):
-            current_action = plan[i].get("name", "")
-            next_action = plan[i + 1].get("name", "")
+        for i in range(len(plan.actions) - 1):
+            current_action = plan.actions[i].name
+            next_action = plan.actions[i + 1].name
 
             # Check for repeated actions
             if current_action == next_action:

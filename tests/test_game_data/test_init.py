@@ -5,6 +5,9 @@ Tests module imports, exports, and interface to ensure proper functionality
 and 100% code coverage for the game_data module initialization.
 """
 
+import importlib
+
+import src.game_data as game_data_module
 from src.game_data import (
     APIClientWrapper,
     CacheManager,
@@ -99,14 +102,13 @@ class TestGameDataModule:
 
     def test_module_docstring_exists(self) -> None:
         """Test that module has proper documentation"""
-        import src.game_data
-        assert src.game_data.__doc__ is not None
-        assert len(src.game_data.__doc__.strip()) > 0
-        assert "Game Data Module" in src.game_data.__doc__
+        # game_data_module imported at top
+        assert game_data_module.__doc__ is not None
+        assert len(game_data_module.__doc__.strip()) > 0
+        assert "Game Data Module" in game_data_module.__doc__
 
     def test_star_import_works(self) -> None:
         """Test that 'from game_data import *' only imports __all__ items"""
-        import importlib
         module = importlib.import_module("src.game_data")
 
         # Get all public attributes from module
@@ -126,7 +128,7 @@ class TestGameDataModule:
 
     def test_import_statement_completeness(self) -> None:
         """Test that all __all__ items can actually be imported"""
-        import src.game_data as game_data_module
+        # game_data_module imported at top
 
         for item_name in __all__:
             assert hasattr(game_data_module, item_name)

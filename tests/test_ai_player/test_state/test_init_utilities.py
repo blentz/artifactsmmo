@@ -6,8 +6,10 @@ package, including mock data creators and helper functions.
 """
 
 
-from src.ai_player.state.game_state import ActionResult, CooldownInfo, GameState
+from src.ai_player.state.action_result import ActionResult
+from src.ai_player.state.game_state import CooldownInfo, GameState
 from tests.test_ai_player.test_state import (
+    __all__,
     create_mock_action_result,
     create_mock_character_state,
     create_mock_cooldown_info,
@@ -248,8 +250,6 @@ class TestModuleExports:
 
     def test_all_functions_exported(self):
         """Test that all utility functions are properly exported"""
-        from tests.test_ai_player.test_state import __all__
-
         expected_exports = [
             "create_mock_character_state",
             "create_mock_action_result",
@@ -261,11 +261,7 @@ class TestModuleExports:
     def test_functions_importable(self):
         """Test that all exported functions can be imported"""
         # These imports should work without error
-        from tests.test_ai_player.test_state import (
-            create_mock_action_result,
-            create_mock_character_state,
-            create_mock_cooldown_info,
-        )
+        # (already imported at top of file)
 
         # Verify they are callable
         assert callable(create_mock_character_state)

@@ -9,9 +9,7 @@ The diagnostic commands enable deep introspection into the GOAP planning process
 state validation, action analysis, and system configuration troubleshooting.
 """
 
-import argparse
 import json
-import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,7 +19,8 @@ from ...ai_player.diagnostics.action_diagnostics import ActionDiagnostics
 from ...ai_player.diagnostics.planning_diagnostics import PlanningDiagnostics
 from ...ai_player.diagnostics.state_diagnostics import StateDiagnostics
 from ...ai_player.goal_manager import GoalManager
-from ...ai_player.state.game_state import CharacterGameState, GameState
+from ...ai_player.state.character_game_state import CharacterGameState
+from ...ai_player.state.game_state import GameState
 from ...game_data.api_client import APIClientWrapper, CooldownManager
 
 
@@ -64,82 +63,6 @@ class DiagnosticCommands:
         self.api_client = api_client
         self.cooldown_manager = CooldownManager() if api_client else None
 
-    def _parse_goal_parameters(self, goal_string: str) -> dict[GameState, Any]:
-        """Parse goal parameters using argparse for proper argument handling.
-
-        Parameters:
-            goal_string: String containing goal parameters (e.g., "level=2 gold=1000")
-
-        Return values:
-            Dictionary with GameState enum keys and parsed values
-
-        This method uses argparse to properly parse goal parameters from the
-        command line format, handling proper type conversion and validation.
-        """
-        # Create a parser for goal parameters
-        parser = argparse.ArgumentParser(description="Goal parameters", add_help=False)
-
-        def str_to_bool(v):
-            """Convert string to boolean properly"""
-            if isinstance(v, bool):
-                return v
-            if v.lower() in ('yes', 'true', 't', 'y', '1'):
-                return True
-            elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-                return False
-            else:
-                raise argparse.ArgumentTypeError('Boolean value expected.')
-
-        # Add boolean goal parameters that align with goal manager implementation
-        parser.add_argument('--gained-xp', type=str_to_bool, help='Goal: XP was gained this cycle')
-        parser.add_argument('--can-gain-xp', type=str_to_bool, help='Goal: Character can gain XP')
-        parser.add_argument('--at-monster-location', type=str_to_bool, help='Goal: At monster location')
-        parser.add_argument('--at-resource-location', type=str_to_bool, help='Goal: At resource location')
-        parser.add_argument('--cooldown-ready', type=str_to_bool, help='Goal: Cooldown is ready')
-        parser.add_argument('--hp-low', type=str_to_bool, help='Goal: HP is low/high')
-        parser.add_argument('--safe-to-fight', type=str_to_bool, help='Goal: Safe to fight')
-
-        # Convert simple format "level=2" to "--level 2" for argparse
-        if '=' in goal_string and not goal_string.startswith('-'):
-            # Convert "level=2 gold=1000" to "--level 2 --gold 1000"
-            goal_args = []
-            for param in goal_string.split():
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    goal_args.extend([f'--{key}', value])
-                else:
-                    goal_args.append(param)
-        else:
-            # Already in proper format or use shlex for complex parsing
-            goal_args = shlex.split(goal_string)
-
-        try:
-            args = parser.parse_args(goal_args)
-            goal_state = {}
-
-            # Map parsed arguments to GameState enum keys (boolean-based goals)
-            if getattr(args, 'gained_xp', None) is not None:
-                goal_state[GameState.GAINED_XP] = getattr(args, 'gained_xp')
-            if getattr(args, 'can_gain_xp', None) is not None:
-                goal_state[GameState.CAN_GAIN_XP] = getattr(args, 'can_gain_xp')
-            if getattr(args, 'at_monster_location', None) is not None:
-                goal_state[GameState.AT_MONSTER_LOCATION] = getattr(args, 'at_monster_location')
-            if getattr(args, 'at_resource_location', None) is not None:
-                goal_state[GameState.AT_RESOURCE_LOCATION] = getattr(args, 'at_resource_location')
-            if getattr(args, 'cooldown_ready', None) is not None:
-                goal_state[GameState.COOLDOWN_READY] = getattr(args, 'cooldown_ready')
-            if getattr(args, 'hp_low', None) is not None:
-                goal_state[GameState.HP_LOW] = getattr(args, 'hp_low')
-            if getattr(args, 'safe_to_fight', None) is not None:
-                goal_state[GameState.SAFE_TO_FIGHT] = getattr(args, 'safe_to_fight')
-
-            return goal_state
-
-        except SystemExit:
-            # argparse calls sys.exit on error, catch it and re-raise as regular exception
-            raise ValueError(f"Invalid goal parameters: {goal_string}")
-        except Exception as e:
-            raise ValueError(f"Failed to parse goal parameters '{goal_string}': {str(e)}")
 
     async def diagnose_state(self, character_name: str, validate_enum: bool = False) -> dict[str, Any]:
         """Diagnose current character state and validation.
@@ -599,34 +522,18 @@ class DiagnosticCommands:
                     cooldown_ready=True
                 )
 
-            # Parse user's goal if provided, otherwise use goal manager's selection
-            try:
-                # Check if user provided specific goal parameters
-                parsed_goal_state = self._parse_goal_parameters(goal)
-                if parsed_goal_state:
-                    # User provided specific goal parameters
-                    selected_goal = {"target_state": parsed_goal_state, "type": "user_specified"}
-                    goal_state = parsed_goal_state
-                else:
-                    # No specific goal parameters - use goal manager's intelligence
-                    selected_goal = self.goal_manager.select_next_goal(char_state)
-                    goal_state = selected_goal.get('target_state', {})
-            except ValueError as e:
-                # Goal parsing failed - fall back to goal manager
-                diagnosis["recommendations"].append(f"Goal parsing failed: {str(e)}, using goal manager selection")
-                selected_goal = self.goal_manager.select_next_goal(char_state)
-                goal_state = selected_goal.get('target_state', {})
-            except Exception as e:
-                diagnosis["recommendations"].append(f"Goal processing failed: {str(e)}")
-                return diagnosis
+            # Use goal manager's intelligent goal selection based on character state
+            # The goal parameter is used for diagnostic labeling but goal selection is handled by the goal manager
+            selected_goal = await self.goal_manager.select_next_goal(char_state)
+            goal_state = selected_goal.target_states if selected_goal else {}
 
             # Now use the actual goal manager to plan
             plan = await self.goal_manager.plan_actions(char_state, selected_goal)
 
             diagnosis["planning_analysis"] = {
-                "planning_successful": len(plan) > 0,
-                "goal_reachable": len(plan) > 0,
-                "total_cost": sum(action.get('cost', 1) for action in plan),
+                "planning_successful": not plan.is_empty,
+                "goal_reachable": not plan.is_empty,
+                "total_cost": plan.total_cost,
                 "planning_time": 0.1  # Placeholder
             }
 
@@ -666,7 +573,7 @@ class DiagnosticCommands:
                     diagnosis["recommendations"].append(f"Planning diagnostics error: {str(e)}")
 
             # Generate recommendations based on analysis
-            if not plan:
+            if not plan or plan.is_empty:
                 if not diagnosis["planning_analysis"].get("goal_reachable", True):
                     diagnosis["recommendations"].append("Goal appears to be unreachable with current actions")
                 else:

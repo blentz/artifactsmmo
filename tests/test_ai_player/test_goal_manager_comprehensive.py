@@ -14,6 +14,7 @@ from src.ai_player.actions import ActionRegistry, BaseAction
 from src.ai_player.goal_manager import GoalManager
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
+from src.ai_player.types.goap_models import GOAPActionPlan, GOAPTargetState
 from src.game_data.cache_manager import CacheManager
 from src.game_data.cooldown_manager import CooldownManager
 from src.lib.goap import Action_List, Planner
@@ -66,12 +67,50 @@ class TestGameDataRetrieval:
         cooldown_manager = Mock(spec=CooldownManager)
         cache_manager = AsyncMock(spec=CacheManager)
 
-        # Mock cache manager responses
-        mock_maps = [{"x": 0, "y": 0, "content": []}]
-        mock_monsters = [{"code": "chicken", "level": 1}]
-        mock_resources = [{"code": "ash_tree", "skill": "woodcutting"}]
-        mock_npcs = [{"code": "weapons_master", "x": 1, "y": 1}]
-        mock_items = [{"code": "copper_dagger", "type": "weapon"}]
+        # Mock cache manager responses with all required fields
+        mock_maps = [{
+            "name": "spawn",
+            "skin": "forest",
+            "x": 0,
+            "y": 0,
+            "content": None
+        }]
+        mock_monsters = [{
+            "code": "chicken",
+            "name": "Chicken",
+            "level": 1,
+            "hp": 50,
+            "attack_fire": 0,
+            "attack_earth": 5,
+            "attack_water": 0,
+            "attack_air": 0,
+            "res_fire": 0,
+            "res_earth": 0,
+            "res_water": 0,
+            "res_air": 0,
+            "min_gold": 1,
+            "max_gold": 3
+        }]
+        mock_resources = [{
+            "code": "ash_tree",
+            "name": "Ash Tree",
+            "skill": "woodcutting",
+            "level": 1
+        }]
+        mock_npcs = [{
+            "code": "weapons_master",
+            "name": "Weapons Master",
+            "description": "Master of weapons",
+            "type": "trader"
+        }]
+        mock_items = [{
+            "code": "copper_dagger",
+            "name": "Copper Dagger",
+            "level": 1,
+            "type": "weapon",
+            "subtype": "dagger",
+            "description": "A basic copper dagger"
+        }]
 
         cache_manager.get_all_maps.return_value = mock_maps
         cache_manager.get_all_monsters.return_value = mock_monsters
@@ -84,11 +123,27 @@ class TestGameDataRetrieval:
         result = await goal_manager.get_game_data()
 
         assert result is not None
-        assert result.maps == mock_maps
-        assert result.monsters == mock_monsters
-        assert result.resources == mock_resources
-        assert result.npcs == mock_npcs
-        assert result.items == mock_items
+        assert len(result.maps) == 1
+        assert result.maps[0].name == "spawn"
+        assert result.maps[0].x == 0
+        assert result.maps[0].y == 0
+
+        assert len(result.monsters) == 1
+        assert result.monsters[0].code == "chicken"
+        assert result.monsters[0].name == "Chicken"
+        assert result.monsters[0].level == 1
+
+        assert len(result.resources) == 1
+        assert result.resources[0].code == "ash_tree"
+        assert result.resources[0].name == "Ash Tree"
+
+        assert len(result.npcs) == 1
+        assert result.npcs[0].code == "weapons_master"
+        assert result.npcs[0].name == "Weapons Master"
+
+        assert len(result.items) == 1
+        assert result.items[0].code == "copper_dagger"
+        assert result.items[0].name == "Copper Dagger"
 
     @pytest.mark.asyncio
     async def test_get_game_data_with_exception(self):
@@ -160,7 +215,8 @@ class TestMovementTargetSelection:
 class TestGoalSelection:
     """Test goal selection functionality."""
 
-    def test_select_next_goal_early_game(self):
+    @pytest.mark.asyncio
+    async def test_select_next_goal_early_game(self):
         """Test goal selection for early game character."""
         action_registry = Mock(spec=ActionRegistry)
         cooldown_manager = Mock(spec=CooldownManager)
@@ -187,10 +243,19 @@ class TestGoalSelection:
             GameState.CHARACTER_GOLD.value: 0
         }
 
-        result = goal_manager.select_next_goal(current_state)
+        # Mock goal weight calculator to return a gathering goal for early game
+        mock_goal = Mock()
+        mock_goal.get_target_state.return_value = GOAPTargetState(
+            target_states={GameState.GAINED_XP: True, GameState.CHARACTER_LEVEL: 2},
+            priority=6
+        )
+        goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
+        type(mock_goal).__name__ = 'GatheringGoal'
 
-        assert isinstance(result, dict)
-        assert len(result) > 0
+        result = await goal_manager.select_next_goal(current_state)
+
+        assert isinstance(result, GOAPTargetState)
+        assert bool(result)  # GOAPTargetState.__bool__ checks if target_states is not empty
 
     def test_max_level_achieved_false(self):
         """Test max level check for low level character."""
@@ -406,12 +471,16 @@ class TestActionPlanning:
 
         # Mock character state
         current_state = Mock(spec=CharacterGameState)
+        current_state.name = "test_char"  # Add missing name attribute
         current_state.to_goap_state.return_value = {
             GameState.CHARACTER_LEVEL.value: 1,
             GameState.HP_CURRENT.value: 100
         }
 
-        goal = {GameState.CHARACTER_LEVEL: 2}
+        goal = GOAPTargetState(
+            target_states={GameState.CHARACTER_LEVEL: 2},
+            priority=5
+        )
 
         # Mock action registry
         mock_action = Mock(spec=BaseAction)
@@ -429,7 +498,7 @@ class TestActionPlanning:
 
             result = await goal_manager.plan_actions(current_state, goal)
 
-            assert isinstance(result, list)
+            assert isinstance(result, GOAPActionPlan)
 
     @pytest.mark.asyncio
     async def test_create_goap_actions(self):

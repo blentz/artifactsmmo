@@ -7,10 +7,31 @@ Validates that all expected exports are available and can be imported correctly.
 import os
 import tempfile
 
+import src.lib as lib
+from src.lib import (
+    Action_List,
+    ArtifactsHTTPStatus,
+    GoapData,
+    Planner,
+    RequestThrottle,
+    ThrottledAsyncTransport,
+    ThrottledTransport,
+    World,
+    YamlData,
+    astar,
+    conditions_are_met,
+    distance_to_state,
+    extend_http_status,
+    get_global_throttle,
+    init_logger,
+    safely_start_logger,
+    throttled_request,
+    walk_path,
+)
+
 
 def test_goap_imports():
     """Test that GOAP core classes can be imported from lib package."""
-    from src.lib import Action_List, Planner, World
 
     # Verify classes are available
     assert World is not None
@@ -21,11 +42,8 @@ def test_goap_imports():
     assert isinstance(World, type)
     assert isinstance(Planner, type)
     assert isinstance(Action_List, type)
-
-
 def test_goap_function_imports():
     """Test that GOAP utility functions can be imported from lib package."""
-    from src.lib import astar, conditions_are_met, distance_to_state, walk_path
 
     # Verify functions are available
     assert distance_to_state is not None
@@ -38,11 +56,8 @@ def test_goap_function_imports():
     assert callable(conditions_are_met)
     assert callable(astar)
     assert callable(walk_path)
-
-
 def test_data_persistence_imports():
     """Test that data persistence classes can be imported from lib package."""
-    from src.lib import GoapData, YamlData
 
     # Verify classes are available
     assert YamlData is not None
@@ -51,11 +66,8 @@ def test_data_persistence_imports():
     # Verify they are actually classes
     assert isinstance(YamlData, type)
     assert isinstance(GoapData, type)
-
-
 def test_logging_imports():
     """Test that logging functions can be imported from lib package."""
-    from src.lib import init_logger, safely_start_logger
 
     # Verify functions are available
     assert init_logger is not None
@@ -64,11 +76,8 @@ def test_logging_imports():
     # Verify they are callable
     assert callable(init_logger)
     assert callable(safely_start_logger)
-
-
 def test_http_status_imports():
     """Test that HTTP status utilities can be imported from lib package."""
-    from src.lib import ArtifactsHTTPStatus, extend_http_status
 
     # Verify they are available
     assert ArtifactsHTTPStatus is not None
@@ -77,11 +86,8 @@ def test_http_status_imports():
     # Verify types
     assert isinstance(ArtifactsHTTPStatus, dict)
     assert callable(extend_http_status)
-
-
 def test_throttling_imports():
     """Test that request throttling utilities can be imported from lib package."""
-    from src.lib import RequestThrottle, get_global_throttle, throttled_request
 
     # Verify they are available
     assert RequestThrottle is not None
@@ -92,11 +98,8 @@ def test_throttling_imports():
     assert isinstance(RequestThrottle, type)
     assert callable(get_global_throttle)
     assert callable(throttled_request)
-
-
 def test_transport_imports():
     """Test that HTTP transport classes can be imported from lib package."""
-    from src.lib import ThrottledAsyncTransport, ThrottledTransport
 
     # Verify classes are available
     assert ThrottledTransport is not None
@@ -105,11 +108,8 @@ def test_transport_imports():
     # Verify they are actually classes
     assert isinstance(ThrottledTransport, type)
     assert isinstance(ThrottledAsyncTransport, type)
-
-
 def test_all_exports_available():
     """Test that all items in __all__ can be imported."""
-    import src.lib as lib
 
     # Get the __all__ list
     all_exports = getattr(lib, '__all__', [])
@@ -124,11 +124,8 @@ def test_all_exports_available():
         # Get the actual object
         export_obj = getattr(lib, export_name)
         assert export_obj is not None, f"{export_name} is None"
-
-
 def test_all_items_in_exports():
     """Test that all items in __all__ are properly exported."""
-    import src.lib as lib
 
     # Get the __all__ list
     all_exports = getattr(lib, '__all__', [])
@@ -140,11 +137,8 @@ def test_all_items_in_exports():
         # Verify the exported item is not None
         export_obj = getattr(lib, export_name)
         assert export_obj is not None, f"{export_name} is None"
-
-
 def test_goap_instantiation():
     """Test that GOAP classes can be instantiated."""
-    from src.lib import Action_List, Planner, World
 
     # Test World instantiation
     world = World()
@@ -159,11 +153,8 @@ def test_goap_instantiation():
     # Test Planner instantiation (requires parameters)
     planner = Planner("test_state", "test_goal", "test_action")
     assert planner is not None
-
-
 def test_yaml_data_instantiation():
     """Test that YamlData classes can be instantiated."""
-    from src.lib import YamlData
 
     # Test in temporary directory to avoid creating files in project root
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -175,11 +166,8 @@ def test_yaml_data_instantiation():
             assert yaml_data.filename == "test_data.yaml"
         finally:
             os.chdir(original_cwd)
-
-
 def test_artifacts_http_status_content():
     """Test that ArtifactsHTTPStatus contains expected error codes."""
-    from src.lib import ArtifactsHTTPStatus
 
     # Verify it's a dictionary
     assert isinstance(ArtifactsHTTPStatus, dict)
@@ -195,11 +183,8 @@ def test_artifacts_http_status_content():
     for code in expected_codes:
         assert code in ArtifactsHTTPStatus, f"Expected error code {code} not found"
         assert isinstance(ArtifactsHTTPStatus[code], int), f"Error code {code} should be an integer"
-
-
 def test_module_docstring():
     """Test that the module has proper documentation."""
-    import src.lib as lib
 
     # Verify module has docstring
     assert lib.__doc__ is not None, "Module should have a docstring"

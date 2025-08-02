@@ -15,6 +15,7 @@ import pytest
 from src.ai_player.ai_player import AIPlayer
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
+from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
 
 
 class TestAIPlayerInitialization:
@@ -178,7 +179,7 @@ class TestAIPlayerGoalManagement:
         # Valid goal with GameState enum keys
         valid_goal = {GameState.CHARACTER_LEVEL: 10}
         await ai_player.set_goal(valid_goal)
-        assert ai_player._current_goal == valid_goal
+        assert ai_player._current_goal.target_states == valid_goal
 
         # Invalid goal with string key
         invalid_goal = {"invalid_key": 10}
@@ -187,12 +188,16 @@ class TestAIPlayerGoalManagement:
 
     async def test_set_goal_clears_current_plan(self, ai_player: AIPlayer) -> None:
         """Test that set_goal clears the current plan to force replanning"""
-        ai_player._current_plan = [{"action": "test"}]
+        from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan
+        
+        # Create a mock GOAPActionPlan instead of dict
+        mock_action = GOAPAction(name="test_action", action_type="test", cost=1)
+        ai_player._current_plan = GOAPActionPlan(actions=[mock_action], total_cost=1, estimated_duration=1.0, plan_id="test")
 
         goal = {GameState.CHARACTER_LEVEL: 5}
         await ai_player.set_goal(goal)
 
-        assert ai_player._current_goal == goal
+        assert ai_player._current_goal.target_states == goal
         assert ai_player._current_plan is None
 
 
@@ -203,8 +208,10 @@ class TestAIPlayerPlanning:
     def ai_player_with_mocks(self) -> AIPlayer:
         """Create AIPlayer with mocked dependencies"""
         ai_player = AIPlayer("test_char")
-        ai_player.goal_manager = Mock()
-        ai_player.action_executor = Mock()
+        ai_player.goal_manager = AsyncMock()
+        ai_player.action_executor = AsyncMock()
+        ai_player.state_manager = AsyncMock()
+        ai_player.action_registry = Mock()
         return ai_player
 
     async def test_plan_actions_returns_empty_list_without_goal_manager(self) -> None:
@@ -212,14 +219,14 @@ class TestAIPlayerPlanning:
         ai_player = AIPlayer("test_char")
 
         with pytest.raises(RuntimeError, match="GoalManager not available for planning"):
-            await ai_player.plan_actions({}, {})
+            await ai_player.plan_actions({}, GOAPTargetState())
 
     async def test_plan_actions_calls_goal_manager_and_returns_plan(self, ai_player_with_mocks: AIPlayer) -> None:
         """Test that plan_actions calls GoalManager and returns the plan"""
         ai_player = ai_player_with_mocks
 
         current_state = {GameState.CHARACTER_LEVEL: 1}
-        goal = {GameState.CHARACTER_LEVEL: 2}
+        goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2})
         expected_plan = [{"action": "fight", "target": "monster"}]
 
         ai_player.goal_manager.plan_with_cooldown_awareness = AsyncMock(return_value=expected_plan)  # type: ignore
@@ -227,18 +234,18 @@ class TestAIPlayerPlanning:
         result = await ai_player.plan_actions(current_state, goal)
 
         ai_player.goal_manager.plan_with_cooldown_awareness.assert_called_once_with(  # type: ignore
-            ai_player.character_name, current_state, goal.get('target_state', {})
+            ai_player.character_name, current_state, goal.to_goap_dict()
         )
         assert result == expected_plan
 
     async def test_plan_actions_handles_exceptions_gracefully(self, ai_player_with_mocks: AIPlayer) -> None:
-        """Test that plan_actions handles exceptions and returns empty list"""
+        """Test that plan_actions raises exceptions from goal manager"""
         ai_player = ai_player_with_mocks
 
         ai_player.goal_manager.plan_with_cooldown_awareness = AsyncMock(side_effect=Exception("Planning failed"))  # type: ignore
 
-        result = await ai_player.plan_actions({}, {})
-        assert result == []
+        with pytest.raises(Exception, match="Planning failed"):
+            await ai_player.plan_actions({}, GOAPTargetState())
 
     async def test_execute_plan_returns_false_without_action_executor(self) -> None:
         """Test that execute_plan returns False when ActionExecutor not available"""
@@ -251,19 +258,29 @@ class TestAIPlayerPlanning:
         """Test that execute_plan returns True for empty plan"""
         ai_player = ai_player_with_mocks
 
-        result = await ai_player.execute_plan([])
+        empty_plan = GOAPActionPlan(plan_id="test_empty")
+        result = await ai_player.execute_plan(empty_plan)
         assert result is True
 
     async def test_execute_plan_calls_action_executor_and_updates_stats(self, ai_player_with_mocks: AIPlayer) -> None:
         """Test that execute_plan calls ActionExecutor and updates execution stats"""
         ai_player = ai_player_with_mocks
 
-        plan = [{"action": "move"}, {"action": "fight"}]
-        ai_player.action_executor.execute_plan = AsyncMock(return_value=True)  # type: ignore
+        actions = [GOAPAction(name="move", action_type="movement"), GOAPAction(name="fight", action_type="combat")]
+        plan = GOAPActionPlan(actions=actions, plan_id="test_plan")
 
-        result = await ai_player.execute_plan(plan)
+        # Mock the required methods
+        ai_player.state_manager.get_current_state = AsyncMock(return_value={})  # type: ignore
+        ai_player.goal_manager.get_game_data = AsyncMock(return_value={})  # type: ignore
 
-        ai_player.action_executor.execute_plan.assert_called_once_with(plan, "test_char")  # type: ignore
+        # Mock plan.to_base_actions to return empty list for simplicity
+        base_actions = []
+        with patch.object(GOAPActionPlan, 'to_base_actions', return_value=base_actions):
+            ai_player.action_executor.execute_plan = AsyncMock(return_value=True)  # type: ignore
+
+            result = await ai_player.execute_plan(plan)
+
+            ai_player.action_executor.execute_plan.assert_called_once_with(base_actions, "test_char")  # type: ignore
         assert result is True
         assert ai_player._execution_stats["successful_actions"] == 2
         assert ai_player._execution_stats["actions_executed"] == 2
@@ -272,10 +289,18 @@ class TestAIPlayerPlanning:
         """Test that execute_plan handles failure and updates failure stats"""
         ai_player = ai_player_with_mocks
 
-        plan = [{"action": "move"}]
-        ai_player.action_executor.execute_plan = AsyncMock(return_value=False)  # type: ignore
+        actions = [GOAPAction(name="move", action_type="movement")]
+        plan = GOAPActionPlan(actions=actions, plan_id="test_plan")
 
-        result = await ai_player.execute_plan(plan)
+        # Mock the required methods like in the previous test
+        ai_player.state_manager.get_current_state = AsyncMock(return_value={})  # type: ignore
+        ai_player.goal_manager.get_game_data = AsyncMock(return_value={})  # type: ignore
+
+        base_actions = []
+        with patch.object(GOAPActionPlan, 'to_base_actions', return_value=base_actions):
+            ai_player.action_executor.execute_plan = AsyncMock(return_value=False)  # type: ignore
+
+            result = await ai_player.execute_plan(plan)
 
         assert result is False
         assert ai_player._execution_stats["failed_actions"] == 1
@@ -359,8 +384,11 @@ class TestAIPlayerReplanning:
 
     def test_should_replan_returns_true_when_goal_achieved(self, ai_player: AIPlayer) -> None:
         """Test that should_replan returns True when current goal is achieved"""
-        ai_player._current_plan = [{"action": "test"}]
-        ai_player._current_goal = {GameState.CHARACTER_LEVEL: 2}
+        from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
+        
+        mock_action = GOAPAction(name="test_action", action_type="test", cost=1)
+        ai_player._current_plan = GOAPActionPlan(actions=[mock_action], total_cost=1, estimated_duration=1.0, plan_id="test")
+        ai_player._current_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2})
 
         current_state = CharacterGameState(
             name="test_char",
@@ -393,8 +421,11 @@ class TestAIPlayerReplanning:
 
     def test_should_replan_returns_true_for_critical_hp(self, ai_player: AIPlayer) -> None:
         """Test that should_replan returns True when character has critical HP"""
-        ai_player._current_plan = [{"action": "test"}]
-        ai_player._current_goal = {GameState.CHARACTER_LEVEL: 2}
+        from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
+        
+        mock_action = GOAPAction(name="test_action", action_type="test", cost=1)
+        ai_player._current_plan = GOAPActionPlan(actions=[mock_action], total_cost=1, estimated_duration=1.0, plan_id="test")
+        ai_player._current_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2})
 
         current_state = CharacterGameState(
             name="test_char",
@@ -428,8 +459,11 @@ class TestAIPlayerReplanning:
 
     def test_should_replan_returns_true_for_inventory_full(self, ai_player: AIPlayer) -> None:
         """Test that should_replan returns True when inventory is full"""
-        ai_player._current_plan = [{"action": "test"}]
-        ai_player._current_goal = {GameState.CHARACTER_LEVEL: 2}
+        from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
+        
+        mock_action = GOAPAction(name="test_action", action_type="test", cost=1)
+        ai_player._current_plan = GOAPActionPlan(actions=[mock_action], total_cost=1, estimated_duration=1.0, plan_id="test")
+        ai_player._current_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2})
 
         current_state = CharacterGameState(
             name="test_char",
@@ -463,8 +497,11 @@ class TestAIPlayerReplanning:
 
     def test_should_replan_returns_false_for_stable_state(self, ai_player: AIPlayer) -> None:
         """Test that should_replan returns False when state is stable"""
-        ai_player._current_plan = [{"action": "test"}]
-        ai_player._current_goal = {GameState.CHARACTER_LEVEL: 2}
+        from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
+        
+        mock_action = GOAPAction(name="test_action", action_type="test", cost=1)
+        ai_player._current_plan = GOAPActionPlan(actions=[mock_action], total_cost=1, estimated_duration=1.0, plan_id="test")
+        ai_player._current_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2})
 
         current_state = CharacterGameState(
             name="test_char",
@@ -547,7 +584,7 @@ class TestAIPlayerEmergencyHandling:
         await ai_player.handle_emergency(current_state)
 
         assert ai_player._current_plan is None
-        assert ai_player._current_goal == {GameState.HP_CURRENT: 100}
+        assert ai_player._current_goal.target_states == {GameState.HP_CURRENT: 100}
         assert ai_player._execution_stats["emergency_interventions"] == 1
 
     async def test_handle_emergency_responds_to_low_hp(self, ai_player_with_mocks: AIPlayer) -> None:
@@ -588,7 +625,7 @@ class TestAIPlayerEmergencyHandling:
         await ai_player.handle_emergency(current_state)
 
         assert ai_player._current_plan is None
-        assert ai_player._current_goal == {GameState.HP_CURRENT: 80}
+        assert ai_player._current_goal.target_states == {GameState.HP_CURRENT: 80}
         assert ai_player._execution_stats["emergency_interventions"] == 1
 
     async def test_handle_emergency_refreshes_state_for_invalid_state(self, ai_player_with_mocks: AIPlayer) -> None:
@@ -689,10 +726,14 @@ class TestAIPlayerStatus:
 
     def test_get_status_returns_basic_information(self) -> None:
         """Test that get_status returns basic AI player information"""
+        from src.ai_player.types.goap_models import GOAPAction, GOAPActionPlan, GOAPTargetState
+        
         ai_player = AIPlayer("test_char")
         ai_player._running = True
-        ai_player._current_goal = {GameState.CHARACTER_LEVEL: 5}
-        ai_player._current_plan = [{"action": "test"}]
+        ai_player._current_goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 5})
+        
+        mock_action = GOAPAction(name="test_action", action_type="test", cost=1)
+        ai_player._current_plan = GOAPActionPlan(actions=[mock_action], total_cost=1, estimated_duration=1.0, plan_id="test")
 
         status = ai_player.get_status()
 
@@ -797,9 +838,9 @@ class TestAIPlayerIntegration:
         ai_player = AIPlayer("integration_test_char")
 
         # Mock all dependencies
-        state_manager = Mock()
+        state_manager = AsyncMock()
         goal_manager = Mock()
-        action_executor = Mock()
+        action_executor = AsyncMock()
         action_registry = Mock()
 
         # Set up state progression (character levels up)
@@ -861,14 +902,45 @@ class TestAIPlayerIntegration:
                 cooldown=0,
                 can_fight=True,
                 cooldown_ready=True
-            )  # Goal achieved
+            ),  # Goal achieved
+            # Add more states for additional iterations
+            CharacterGameState(
+                name="integration_test_char",
+                level=2,
+                xp=1000,
+                gold=100,
+                hp=100,
+                max_hp=100,
+                x=0,
+                y=0,
+                mining_level=1,
+                mining_xp=0,
+                woodcutting_level=1,
+                woodcutting_xp=0,
+                fishing_level=1,
+                fishing_xp=0,
+                weaponcrafting_level=1,
+                weaponcrafting_xp=0,
+                gearcrafting_level=1,
+                gearcrafting_xp=0,
+                jewelrycrafting_level=1,
+                jewelrycrafting_xp=0,
+                cooking_level=1,
+                cooking_xp=0,
+                alchemy_level=1,
+                alchemy_xp=0,
+                cooldown=0,
+                can_fight=True,
+                cooldown_ready=True
+            )  # Final state
         ]
-        state_manager.get_current_state = AsyncMock(side_effect=state_progression)
+        state_manager.get_current_state = AsyncMock(return_value=state_progression[-1])
         state_manager.force_refresh = AsyncMock()
 
         # Mock goal selection and planning
-        goal_manager.select_next_goal.return_value = {GameState.CHARACTER_LEVEL: 2}
-        goal_manager.plan_with_cooldown_awareness = AsyncMock(return_value=[{"action": "fight", "target": "monster"}])
+        goal_manager.select_next_goal = AsyncMock(return_value=GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2}))
+        goal_manager.plan_with_cooldown_awareness = AsyncMock(return_value=GOAPActionPlan(actions=[GOAPAction(name="fight", action_type="combat", parameters={"target": "monster"})], plan_id="test_plan"))
+        goal_manager.get_game_data = AsyncMock(return_value={})
 
         # Mock successful execution
         action_executor.execute_plan = AsyncMock(return_value=True)
@@ -896,7 +968,7 @@ class TestAIPlayerIntegration:
 
                 # Plan actions
                 if ai_player.should_replan(current_state) or ai_player._current_plan is None:
-                    goal = goal_manager.select_next_goal(current_state)
+                    goal = await goal_manager.select_next_goal(current_state)
                     ai_player._current_goal = goal
                     plan = await ai_player.plan_actions(current_state, goal)
                     ai_player._current_plan = plan
@@ -1057,8 +1129,9 @@ class TestAIPlayerExceptionHandling:
             cooldown=0
         )
         ai_player.state_manager.get_current_state = AsyncMock(return_value=mock_state)  # type: ignore
-        ai_player.goal_manager.select_next_goal.return_value = {GameState.CHARACTER_LEVEL: 2}  # type: ignore
+        ai_player.goal_manager.select_next_goal = AsyncMock(return_value=GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2}))  # type: ignore
         ai_player.goal_manager.plan_actions = AsyncMock(return_value=None)  # type: ignore # No plan generated
+        ai_player.goal_manager.plan_with_cooldown_awareness = AsyncMock(return_value=GOAPActionPlan(actions=[], plan_id="empty_plan"))  # type: ignore # Empty plan generated
 
         # Mock sleep to break loop
         with patch('asyncio.sleep') as mock_sleep:
@@ -1111,8 +1184,8 @@ class TestAIPlayerExceptionHandling:
             cooldown_ready=True
         )
         ai_player.state_manager.get_current_state = AsyncMock(return_value=current_state)  # type: ignore
-        ai_player.goal_manager.select_next_goal.return_value = {GameState.CHARACTER_LEVEL: 2}  # type: ignore
-        ai_player.goal_manager.plan_with_cooldown_awareness = AsyncMock(return_value=[{"action": "test"}])  # type: ignore
+        ai_player.goal_manager.select_next_goal = AsyncMock(return_value=GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 2}))  # type: ignore
+        ai_player.goal_manager.plan_with_cooldown_awareness = AsyncMock(return_value=GOAPActionPlan(actions=[GOAPAction(name="test_action", action_type="test", parameters={})], plan_id="test_plan"))  # type: ignore
 
         # Mock execute_plan to return failure initially, then break loop
         execution_attempts = 0
@@ -1143,10 +1216,18 @@ class TestAIPlayerExceptionHandling:
         """Test that execute_plan handles exceptions from ActionExecutor"""
         ai_player = ai_player_with_mocks
 
-        plan = [{"action": "test"}]
-        ai_player.action_executor.execute_plan = AsyncMock(side_effect=Exception("Executor failed"))  # type: ignore
+        actions = [GOAPAction(name="test", action_type="test")]
+        plan = GOAPActionPlan(actions=actions, plan_id="test_plan")
 
-        result = await ai_player.execute_plan(plan)
+        # Mock the required methods like in the previous tests
+        ai_player.state_manager.get_current_state = AsyncMock(return_value={})  # type: ignore
+        ai_player.goal_manager.get_game_data = AsyncMock(return_value={})  # type: ignore
+
+        base_actions = []
+        with patch.object(GOAPActionPlan, 'to_base_actions', return_value=base_actions):
+            ai_player.action_executor.execute_plan = AsyncMock(side_effect=Exception("Executor failed"))  # type: ignore
+
+            result = await ai_player.execute_plan(plan)
 
         assert result is False
         assert ai_player._execution_stats["failed_actions"] == 1

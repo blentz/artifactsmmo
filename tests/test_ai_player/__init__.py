@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.ai_player.state.game_state import ActionResult, GameState
+from src.ai_player.state.action_result import ActionResult, GameState
 
 
 class AIPlayerMockFactory:

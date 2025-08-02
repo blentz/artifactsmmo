@@ -10,12 +10,17 @@ converting it to the internal GameState format, and maintaining state consistenc
 throughout the AI player operation.
 """
 
+import asyncio
 from typing import Any
 
 from ...game_data.api_client import APIClientWrapper
 from ...game_data.cache_manager import CacheManager
 from ...lib.yaml_data import YamlData
-from .game_state import ActionResult, CharacterGameState, GameState
+from ..exceptions import StateConsistencyError
+from ..types.goap_models import GoalFactoryContext, GOAPTargetState
+from .action_result import ActionResult
+from .character_game_state import CharacterGameState
+from .game_state import GameState
 
 
 class StateManager:
@@ -180,7 +185,6 @@ class StateManager:
         current_y = self._cached_state.y
 
         # Create a task to update location flags asynchronously
-        import asyncio
         try:
             # Try to get the current event loop
             loop = asyncio.get_running_loop()
@@ -760,6 +764,11 @@ class StateManager:
         # Apply state changes from action result
         self.update_state_from_result(action_result)
 
+        # If action caused a cooldown, refresh from API to ensure proper sync
+        # This ensures cooldown_manager and state are properly synchronized
+        if action_result.cooldown_seconds > 0:
+            self._cached_state = await self.update_state_from_api()
+
         # Save updated state to cache
         if self._cached_state is not None:
             self.save_state_to_cache(self._cached_state)
@@ -863,3 +872,133 @@ class StateManager:
             current_data = self._cached_state.model_dump()
             current_data[field_name] = value
             self._cached_state = CharacterGameState(**current_data)
+
+    # Enhanced methods for unified sub-goal architecture
+
+    async def validate_goap_target_state(
+        self,
+        target_state: GOAPTargetState
+    ) -> bool:
+        """Validate GOAPTargetState Pydantic model against current game state and rules.
+        
+        Parameters:
+            target_state: Pydantic model with target state requirements
+            
+        Return values:
+            bool: True if target state is valid and achievable
+            
+        Raises:
+            StateConsistencyError: If target state validation fails
+        """
+        try:
+            # Convert GOAPTargetState to internal GameState dict format
+            target_dict = {
+                GameState(key): value
+                for key, value in target_state.target_states.items()
+            }
+
+            # Use existing validation logic with converted state
+            return self._validate_state_rules(target_dict)
+
+        except (ValueError, KeyError) as e:
+            raise StateConsistencyError(0, f"GOAPTargetState validation failed: {e}")
+
+    async def refresh_state_for_parent_action(
+        self,
+        depth: int
+    ) -> CharacterGameState:
+        """Force refresh state after sub-goal completion for parent action retry.
+        
+        Parameters:
+            depth: Current recursion depth for error context
+            
+        Return values:
+            CharacterGameState: Fresh state for parent action execution
+            
+        Raises:
+            StateConsistencyError: If state refresh fails
+        """
+        try:
+            # Force fresh API sync to get authoritative state
+            fresh_state = await self.update_state_from_api()
+
+            # Validate state consistency after refresh
+            if not await self.validate_state_consistency():
+                raise StateConsistencyError(depth, "State inconsistency detected after refresh")
+
+            return fresh_state
+
+        except (ConnectionError, TimeoutError) as e:
+            raise StateConsistencyError(depth, f"Failed to refresh state: {e}")
+
+    def create_goal_factory_context(
+        self,
+        parent_goal_type: str,
+        recursion_depth: int,
+        max_depth: int = 10
+    ) -> GoalFactoryContext:
+        """Create context for sub-goal factory with current state and depth tracking.
+        
+        Parameters:
+            parent_goal_type: Type of goal that requested the sub-goal
+            recursion_depth: Current recursion depth
+            max_depth: Maximum allowed recursion depth
+            
+        Return values:
+            GoalFactoryContext: Pydantic model with factory context
+            
+        Raises:
+            StateConsistencyError: If cached state is not available
+        """
+        if self._cached_state is None:
+            raise StateConsistencyError(recursion_depth, "No cached state available for factory context")
+
+        # Get game data from cache manager if available
+        game_data = None
+        if self._cache_manager:
+            game_data = self._cache_manager.get_game_data()
+
+        return GoalFactoryContext(
+            character_state=self._cached_state,
+            game_data=game_data,
+            parent_goal_type=parent_goal_type,
+            recursion_depth=recursion_depth,
+            max_depth=max_depth
+        )
+
+    async def validate_recursive_state_transition(
+        self,
+        pre_state: CharacterGameState,
+        post_state: CharacterGameState,
+        depth: int
+    ) -> bool:
+        """Validate state transition during recursive sub-goal execution.
+        
+        Parameters:
+            pre_state: State before sub-goal execution
+            post_state: State after sub-goal execution  
+            depth: Recursion depth for error context
+            
+        Return values:
+            bool: True if state transition is valid
+            
+        Raises:
+            StateConsistencyError: If state transition validation fails
+        """
+        try:
+            # Check that critical state values changed appropriately
+            if post_state.hp > pre_state.max_hp:
+                raise StateConsistencyError(depth, "HP cannot exceed max HP")
+
+            if post_state.level < pre_state.level:
+                raise StateConsistencyError(depth, "Character level cannot decrease")
+
+            # Validate position changes are reasonable (not teleporting)
+            distance = abs(post_state.x - pre_state.x) + abs(post_state.y - pre_state.y)
+            if distance > 10:  # Reasonable movement limit
+                raise StateConsistencyError(depth, f"Unreasonable position change: {distance} tiles")
+
+            return True
+
+        except StateConsistencyError:
+            raise

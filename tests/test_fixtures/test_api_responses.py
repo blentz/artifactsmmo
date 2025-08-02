@@ -72,8 +72,8 @@ class TestAPIResponseFixtures:
         assert character.xp == 250
         assert character.max_xp == 500
         assert character.mining_level == 1  # max(1, 1-2) = max(1, -1) = 1
-        assert character.weapon_slot is None  # level < 5
-        assert character.helmet_slot is None  # level < 3
+        assert character.weapon_slot == ""  # level < 5
+        assert character.helmet_slot == ""  # level < 3
         assert character.inventory == []  # level < 5
 
     def test_get_character_response_with_customizations(self):
@@ -576,7 +576,7 @@ class TestDataConsistency:
         # Test low level character
         low_level = APIResponseFixtures.get_character_response(level=1)
         assert low_level.mining_level == 1  # Should be 1 due to max(1, level-2)
-        assert low_level.weapon_slot is None  # Too low level for weapon
+        assert low_level.weapon_slot == ""  # Too low level for weapon
 
         # Test higher level character
         high_level = APIResponseFixtures.get_character_response(level=20)

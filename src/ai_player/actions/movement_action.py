@@ -8,9 +8,9 @@ The MovementAction demonstrates proper BaseAction implementation using GameState
 enum for type safety and integration with the API client for actual execution.
 """
 
-from typing import Any
+from typing import Any, Optional
 
-from ..state.game_state import ActionResult, GameState
+from ..state.action_result import ActionResult, GameState
 from .base_action import BaseAction
 
 
@@ -122,8 +122,14 @@ class MovementAction(BaseAction):
             GameState.CURRENT_X: self.target_x,
             GameState.CURRENT_Y: self.target_y,
             GameState.COOLDOWN_READY: False,
-            # Do NOT disable all capabilities - they should be re-enabled when cooldown expires
-            # The StateManager.update_cooldown_state() method handles capability restoration
+            GameState.CAN_FIGHT: False,
+            GameState.CAN_GATHER: False,
+            GameState.CAN_CRAFT: False,
+            GameState.CAN_TRADE: False,
+            GameState.CAN_MOVE: False,
+            GameState.CAN_REST: False,
+            GameState.CAN_USE_ITEM: False,
+            GameState.CAN_BANK: False,
         }
 
         # Set location-specific flags based on target coordinates
@@ -133,6 +139,7 @@ class MovementAction(BaseAction):
                 effects[GameState.AT_MONSTER_LOCATION] = True
                 effects[GameState.AT_SAFE_LOCATION] = False
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
+                effects[GameState.ENEMY_NEARBY] = True
             elif self._location_type == 'resource':
                 effects[GameState.AT_RESOURCE_LOCATION] = True
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
@@ -141,47 +148,76 @@ class MovementAction(BaseAction):
 
         return effects
 
-    async def execute(self, character_name: str, current_state: dict[GameState, Any]) -> ActionResult:
-        """Execute movement action - signals need for actual API movement call.
+    async def _execute_api_call(
+        self,
+        character_name: str,
+        current_state: dict[GameState, Any],
+        api_client: 'APIClientWrapper',
+        cooldown_manager: Optional['CooldownManager']
+    ) -> ActionResult:
+        """Execute movement via API client.
 
         Parameters:
             character_name: Name of the character to move
             current_state: Dictionary with GameState enum keys and current values
+            api_client: API client for making the movement call
+            cooldown_manager: Optional cooldown manager for tracking cooldowns
 
         Return values:
-            ActionResult indicating movement requirements for ActionExecutor
+            ActionResult with actual movement result from API
 
-        This method returns the expected state changes for movement, which signals
-        to the ActionExecutor that it needs to make the actual movement API call.
-        The ActionExecutor will detect movement actions and handle the API interaction.
+        This method makes the actual API call to move the character and handles
+        the response, updating cooldowns and returning the real state changes.
         """
-        # Return expected state changes to signal movement requirements
-        # The ActionExecutor will see this is a movement action and make the API call
+        # Make the actual API call
+        movement_result = await api_client.move_character(character_name, self.target_x, self.target_y)
 
-        state_changes = {
-            GameState.CURRENT_X: self.target_x,
-            GameState.CURRENT_Y: self.target_y,
-            GameState.COOLDOWN_READY: False,
-        }
+        if movement_result.success:
+            # Update cooldown if manager provided
+            if cooldown_manager and movement_result.cooldown:
+                cooldown_manager.update_cooldown(character_name, movement_result.cooldown)
 
-        # Set location-specific flags based on target coordinates if available
-        if hasattr(self, '_location_type'):
-            if self._location_type == 'monster':
-                state_changes[GameState.AT_MONSTER_LOCATION] = True
-                state_changes[GameState.AT_SAFE_LOCATION] = False
-                state_changes[GameState.XP_SOURCE_AVAILABLE] = True
-            elif self._location_type == 'resource':
-                state_changes[GameState.AT_RESOURCE_LOCATION] = True
-                state_changes[GameState.XP_SOURCE_AVAILABLE] = True
-            elif self._location_type == 'workshop':
-                state_changes[GameState.XP_SOURCE_AVAILABLE] = True
+            # Build state changes based on successful movement
+            state_changes = {
+                GameState.CURRENT_X: self.target_x,
+                GameState.CURRENT_Y: self.target_y,
+                GameState.COOLDOWN_READY: False,
+                GameState.CAN_FIGHT: False,
+                GameState.CAN_GATHER: False,
+                GameState.CAN_CRAFT: False,
+                GameState.CAN_TRADE: False,
+                GameState.CAN_MOVE: False,
+                GameState.CAN_REST: False,
+                GameState.CAN_USE_ITEM: False,
+                GameState.CAN_BANK: False,
+            }
 
-        return ActionResult(
-            success=True,
-            message=f"Movement to ({self.target_x}, {self.target_y}) will be executed via API",
-            state_changes=state_changes,
-            cooldown_seconds=0,  # Actual cooldown comes from API response
-        )
+            # Set location-specific flags if available
+            if hasattr(self, '_location_type'):
+                if self._location_type == 'monster':
+                    state_changes[GameState.AT_MONSTER_LOCATION] = True
+                    state_changes[GameState.AT_SAFE_LOCATION] = False
+                    state_changes[GameState.XP_SOURCE_AVAILABLE] = True
+                elif self._location_type == 'resource':
+                    state_changes[GameState.AT_RESOURCE_LOCATION] = True
+                    state_changes[GameState.XP_SOURCE_AVAILABLE] = True
+                elif self._location_type == 'workshop':
+                    state_changes[GameState.XP_SOURCE_AVAILABLE] = True
+
+            return ActionResult(
+                success=True,
+                message=f"Successfully moved to ({self.target_x}, {self.target_y})",
+                state_changes=state_changes,
+                cooldown_seconds=movement_result.cooldown.total_seconds if movement_result.cooldown else 0
+            )
+        else:
+            # Movement failed
+            return ActionResult(
+                success=False,
+                message=f"Failed to move: {movement_result.message}",
+                state_changes={},
+                cooldown_seconds=0
+            )
 
     def calculate_distance(self, current_x: int, current_y: int) -> int:
         """Calculate movement distance for cost estimation.

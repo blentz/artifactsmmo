@@ -5,6 +5,7 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from src.lib.yaml_data import YamlData
 
@@ -127,7 +128,6 @@ class TestYamlData:
         test_data = {"test": "data", "number": 123}
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            import yaml
             yaml.safe_dump(test_data, f)
             temp_filename = f.name
 
@@ -189,7 +189,6 @@ class TestYamlData:
 
                 # Verify file was created and contains correct data
                 assert os.path.exists(filename)
-                import yaml
                 with open(filename) as f:
                     loaded_data = yaml.safe_load(f)
                 assert loaded_data == test_data
@@ -361,7 +360,6 @@ class TestYamlData:
                 # Test file loading logging
                 # Create a file with content first
                 test_data = {"test": "data"}
-                import yaml
                 with open(filename, 'w') as f:
                     yaml.safe_dump(test_data, f)
 

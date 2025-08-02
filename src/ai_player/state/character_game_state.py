@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .game_state_enum import GameState
+from .game_state import GameState
 
 
 class CharacterGameState(BaseModel):
@@ -78,6 +78,23 @@ class CharacterGameState(BaseModel):
     # Additional states required by actions
     enemy_nearby: bool = False
     resource_available: bool = False
+
+    # Equipment slots - match API character model
+    weapon_slot: str = Field(default="")
+    rune_slot: str = Field(default="")
+    shield_slot: str = Field(default="")
+    helmet_slot: str = Field(default="")
+    body_armor_slot: str = Field(default="")
+    leg_armor_slot: str = Field(default="")
+    boots_slot: str = Field(default="")
+    ring1_slot: str = Field(default="")
+    ring2_slot: str = Field(default="")
+    amulet_slot: str = Field(default="")
+    artifact1_slot: str = Field(default="")
+
+    # Derived equipment states
+    at_workshop_location: bool = False
+    cooldown_expiration_utc: int | None = None
 
     def to_goap_state(self) -> dict[str, Any]:
         """Convert to GOAP state dictionary using enum values.
@@ -252,6 +269,21 @@ class CharacterGameState(BaseModel):
             gained_xp=False,  # Reset each state update, set by actions
             enemy_nearby=enemy_nearby,  # Set based on map content
             resource_available=resource_available,  # Set based on map content
+            # Equipment slots from API character
+            weapon_slot=getattr(character, 'weapon_slot', ''),
+            rune_slot=getattr(character, 'rune_slot', ''),
+            shield_slot=getattr(character, 'shield_slot', ''),
+            helmet_slot=getattr(character, 'helmet_slot', ''),
+            body_armor_slot=getattr(character, 'body_armor_slot', ''),
+            leg_armor_slot=getattr(character, 'leg_armor_slot', ''),
+            boots_slot=getattr(character, 'boots_slot', ''),
+            ring1_slot=getattr(character, 'ring1_slot', ''),
+            ring2_slot=getattr(character, 'ring2_slot', ''),
+            amulet_slot=getattr(character, 'amulet_slot', ''),
+            artifact1_slot=getattr(character, 'artifact1_slot', ''),
+            # Derived equipment states
+            at_workshop_location=bool(map_content and map_content.type == "workshop"),
+            cooldown_expiration_utc=getattr(character, 'cooldown_expiration_utc', None),
         )
 
     def get(self, key: GameState, default=None):
