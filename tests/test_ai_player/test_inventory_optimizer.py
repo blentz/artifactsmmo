@@ -243,8 +243,9 @@ class TestItemAnalyzer:
         mock_task_manager.is_item_needed_for_tasks = Mock(side_effect=Exception("API Error"))
         item_analyzer.task_manager = mock_task_manager
 
-        result = item_analyzer.is_item_needed_for_tasks("copper_ore", "test_char")
-        assert result is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            item_analyzer.is_item_needed_for_tasks("copper_ore", "test_char")
 
 
 class TestInventoryOptimizer:
@@ -300,12 +301,9 @@ class TestInventoryOptimizer:
         """Test inventory retrieval with API error"""
         mock_api_client.get_character.side_effect = Exception("API Error")
 
-        inventory_state = await inventory_optimizer.get_current_inventory("test_char")
-
-        # Should return empty inventory state on error
-        assert isinstance(inventory_state, InventoryState)
-        assert inventory_state.max_slots == 20
-        assert len(inventory_state.items) == 0
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await inventory_optimizer.get_current_inventory("test_char")
 
 
 class TestBankManager:
@@ -366,9 +364,9 @@ class TestBankManager:
 
         mock_api_client.action_bank_deposit_item.side_effect = Exception("API Error")
 
-        result = await bank_manager.deposit_items("test_char", items_to_deposit)
-
-        assert result is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await bank_manager.deposit_items("test_char", items_to_deposit)
 
     @pytest.mark.asyncio
     async def test_deposit_items_no_data_response(self, bank_manager, mock_api_client):
@@ -1202,42 +1200,30 @@ class TestItemAnalyzerEdgeCases:
         assert priority == ItemPriority.MEDIUM
 
     def test_is_item_needed_for_tasks_fallback_with_get_active_task(self, item_analyzer):
-        """Test fallback path with get_active_task method"""
-        # Mock task manager without is_item_needed_for_tasks but with get_active_task method
+        """Test that missing method raises AttributeError following fail-fast principles"""
+        # Mock task manager without is_item_needed_for_tasks method
         mock_task_manager = Mock()
         # Remove the method that would take precedence
         del mock_task_manager.is_item_needed_for_tasks
 
-        # Mock active task with requirements
-        mock_task = Mock()
-        mock_requirement = Mock()
-        mock_requirement.code = "test_item"
-        mock_task.requirements = [mock_requirement]
-        mock_task_manager.get_active_task = Mock(return_value=mock_task)
-
         item_analyzer.task_manager = mock_task_manager
 
-        result = item_analyzer.is_item_needed_for_tasks("test_item", "test_char")
-        assert result is True
+        # Should raise AttributeError following fail-fast principles
+        with pytest.raises(AttributeError):
+            item_analyzer.is_item_needed_for_tasks("test_item", "test_char")
 
     def test_is_item_needed_for_tasks_fallback_with_item_attribute(self, item_analyzer):
-        """Test fallback path with item attribute in requirements"""
-        # Mock task manager without is_item_needed_for_tasks but with get_active_task method
+        """Test exception propagation following fail-fast principles"""
+        # Mock task manager without is_item_needed_for_tasks method
         mock_task_manager = Mock()
         # Remove the method that would take precedence
         del mock_task_manager.is_item_needed_for_tasks
 
-        # Mock active task with requirements using item attribute
-        mock_task = Mock()
-        mock_requirement = Mock()
-        mock_requirement.item = "test_item"
-        mock_task.requirements = [mock_requirement]
-        mock_task_manager.get_active_task = Mock(return_value=mock_task)
-
         item_analyzer.task_manager = mock_task_manager
 
-        result = item_analyzer.is_item_needed_for_tasks("test_item", "test_char")
-        assert result is True
+        # Should propagate AttributeError following fail-fast principles
+        with pytest.raises(AttributeError):
+            item_analyzer.is_item_needed_for_tasks("test_item", "test_char")
 
     def test_is_item_equipment_upgrade_with_dict_current_equipment(self, item_analyzer, sample_character_state):
         """Test equipment upgrade detection when current equipment is a dict"""
@@ -1380,25 +1366,16 @@ class TestItemAnalyzerAdditionalCoverage:
         assert utility <= 1.0
 
     def test_is_item_needed_for_tasks_no_matching_requirements(self, item_analyzer):
-        """Test task checking when no requirements match (line 292)"""
+        """Test exception propagation following fail-fast principles"""
         mock_task_manager = Mock()
         # Remove the primary method
         del mock_task_manager.is_item_needed_for_tasks
 
-        # Mock active task with requirements that don't match
-        mock_task = Mock()
-        mock_requirement = Mock()
-        mock_requirement.code = "different_item"  # Different from test_item
-        # Remove item attribute to ensure no match
-        if hasattr(mock_requirement, 'item'):
-            del mock_requirement.item
-        mock_task.requirements = [mock_requirement]
-        mock_task_manager.get_active_task = Mock(return_value=mock_task)
-
         item_analyzer.task_manager = mock_task_manager
 
-        result = item_analyzer.is_item_needed_for_tasks("test_item", "test_char")
-        assert result is False
+        # Should propagate AttributeError following fail-fast principles
+        with pytest.raises(AttributeError):
+            item_analyzer.is_item_needed_for_tasks("test_item", "test_char")
 
     def test_is_item_needed_for_crafting_with_economic_intelligence(self, item_analyzer, sample_character_state):
         """Test crafting need check with economic intelligence (lines 301-304)"""
@@ -1412,15 +1389,15 @@ class TestItemAnalyzerAdditionalCoverage:
         mock_economic_intelligence.is_item_needed_for_crafting.assert_called_once_with("special_ore", sample_character_state)
 
     def test_is_item_needed_for_crafting_economic_intelligence_exception(self, item_analyzer, sample_character_state):
-        """Test crafting need check with economic intelligence exception (line 303-304)"""
+        """Test exception propagation following fail-fast principles"""
         # Mock economic intelligence that raises exception
         mock_economic_intelligence = Mock()
         mock_economic_intelligence.is_item_needed_for_crafting = Mock(side_effect=Exception("API Error"))
         item_analyzer.economic_intelligence = mock_economic_intelligence
 
-        # Should fall back to basic heuristics
-        result = item_analyzer.is_item_needed_for_crafting("copper_ore", sample_character_state)
-        assert result is True  # copper_ore is in basic crafting materials
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            item_analyzer.is_item_needed_for_crafting("copper_ore", sample_character_state)
 
     def test_is_item_needed_for_crafting_low_level_basic_materials(self, item_analyzer, sample_character_state):
         """Test crafting need for low level character with basic materials (lines 331-333)"""
@@ -1446,18 +1423,16 @@ class TestItemAnalyzerAdditionalCoverage:
 
 
     def test_optimize_inventory_space_with_exception(self):
-        """Test optimize_inventory_space exception handling (lines 566-568)"""
+        """Test exception propagation following fail-fast principles"""
         item_analyzer = ItemAnalyzer()
         mock_api_client = AsyncMock()
         inventory_optimizer = InventoryOptimizer(item_analyzer, mock_api_client)
 
         # Create a scenario that will cause an exception during processing
-        # By passing None as character_state which will cause issues with .get() calls
-        recommendations = inventory_optimizer.optimize_inventory_space("test_char", None)
-
-        # Should return empty list on exception
-        assert isinstance(recommendations, list)
-        assert len(recommendations) == 0
+        # By passing None as character_state which will cause AttributeError
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(AttributeError):
+            inventory_optimizer.optimize_inventory_space("test_char", None)
 
 
 

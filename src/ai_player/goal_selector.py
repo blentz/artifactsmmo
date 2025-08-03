@@ -14,9 +14,10 @@ from .goals.combat_goal import CombatGoal
 from .goals.crafting_goal import CraftingGoal
 from .goals.equipment_goal import EquipmentGoal
 from .goals.gathering_goal import GatheringGoal
+from .goals.rest_goal import RestGoal
 from .goals.sub_goal_request import SubGoalRequest
 from .state.character_game_state import CharacterGameState
-from .types.game_data import GameData
+from src.game_data.game_data import GameData
 
 
 class GoalWeightCalculator:
@@ -36,7 +37,8 @@ class GoalWeightCalculator:
             CombatGoal(),
             CraftingGoal(),
             GatheringGoal(),
-            EquipmentGoal()
+            EquipmentGoal(),
+            RestGoal()
         ]
 
         # Track goal selection history for adaptation
@@ -76,9 +78,13 @@ class GoalWeightCalculator:
 
             return min(10.0, adjusted_weight)
 
-        except Exception as e:
-            # Handle errors gracefully - log and return low weight
-            print(f"Error calculating weight for {type(goal).__name__}: {e}")
+        except (AttributeError, TypeError) as e:
+            # Handle component errors - missing methods or wrong types
+            print(f"Component error calculating weight for {type(goal).__name__}: {e}")
+            return 0.1
+        except ValueError as e:
+            # Handle data validation errors
+            print(f"Invalid data calculating weight for {type(goal).__name__}: {e}")
             return 0.1
 
     def select_optimal_goal(
@@ -191,8 +197,11 @@ class GoalWeightCalculator:
 
                 goal_priorities.append((goal_name, weight, is_feasible))
 
-            except Exception as e:
-                print(f"Error getting priority for {type(goal).__name__}: {e}")
+            except (AttributeError, TypeError) as e:
+                print(f"Component error getting priority for {type(goal).__name__}: {e}")
+                goal_priorities.append((type(goal).__name__, 0.0, False))
+            except ValueError as e:
+                print(f"Invalid data getting priority for {type(goal).__name__}: {e}")
                 goal_priorities.append((type(goal).__name__, 0.0, False))
 
         # Sort by weight (highest first)

@@ -21,22 +21,24 @@ class MovementAction(BaseAction):
     a template for other action implementations in the modular system.
     """
 
-    def __init__(self, target_x: int, target_y: int):
-        """Initialize MovementAction with target coordinates.
+    def __init__(self, target_x: int, target_y: int, location_type: str = None):
+        """Initialize MovementAction with target coordinates and content type.
 
         Parameters:
             target_x: X coordinate of the target destination
             target_y: Y coordinate of the target destination
+            location_type: Type of content at destination ('monster', 'resource', etc.)
 
         Return values:
             None (constructor)
 
         This constructor creates a movement action instance for the specified
-        target coordinates, enabling GOAP planning for character positioning
-        and pathfinding within the game world.
+        target coordinates with optional location content information for
+        proper state flag management after movement.
         """
         self.target_x = target_x
         self.target_y = target_y
+        self._location_type = location_type
 
     @property
     def name(self) -> str:
@@ -45,21 +47,20 @@ class MovementAction(BaseAction):
 
     @property
     def cost(self) -> int:
-        """GOAP cost for movement action based on distance.
+        """GOAP cost for movement action.
 
         Parameters:
             None (property)
 
         Return values:
-            Integer cost value calculated from distance to target location
+            Integer cost value for GOAP planning
 
-        This property calculates the GOAP planning cost based on Manhattan
-        distance to the target coordinates, enabling efficient pathfinding
-        and movement optimization in the planning process.
+        Movement actions have a standard cost since the GOAP planner
+        will evaluate different paths based on the overall plan cost.
+        Specific distance optimization is handled by the action factory
+        generating appropriate nearby targets.
         """
-        base_cost = 1
-        manhattan_distance = abs(self.target_x) + abs(self.target_y)
-        return base_cost + manhattan_distance
+        return 1
 
     def get_preconditions(self) -> dict[GameState, Any]:
         """Movement preconditions using GameState enum.

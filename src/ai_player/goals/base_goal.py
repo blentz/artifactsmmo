@@ -9,7 +9,7 @@ for weighted goal selection, feasibility checking, and GOAP target state generat
 from abc import ABC, abstractmethod
 
 from ..state.character_game_state import CharacterGameState
-from ..types.game_data import GameData
+from src.game_data.game_data import GameData
 from ..types.goap_models import GOAPTargetState
 
 

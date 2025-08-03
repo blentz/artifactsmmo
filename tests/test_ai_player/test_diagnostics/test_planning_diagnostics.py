@@ -90,32 +90,28 @@ class TestPlanningDiagnostics:
 
     @pytest.mark.asyncio
     async def test_analyze_planning_steps_planning_exception(self):
-        """Test analysis when planning raises exception"""
+        """Test that planning exceptions propagate following fail-fast principles"""
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("Planning error"))
 
-        result = await self.diagnostics.analyze_planning_steps(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
-
-        assert result["planning_successful"] is False
-        assert any("Planning failed: Planning error" in issue for issue in result["issues"])
+        with pytest.raises(Exception, match="Planning error"):
+            await self.diagnostics.analyze_planning_steps(
+                self.mock_char_state,
+                self.sample_goal_state
+            )
 
     @pytest.mark.asyncio
     async def test_analyze_planning_steps_analysis_exception(self):
-        """Test analysis when the entire analysis fails"""
-        # Make plan_actions raise exception that bubbles up to outer try-catch
+        """Test that analysis exceptions propagate following fail-fast principles"""
+        # Make plan_actions raise exception that should propagate
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("State error"))
         # Also make to_goap_state fail in the state transition analysis
         self.mock_char_state.to_goap_state.side_effect = Exception("State error")
 
-        result = await self.diagnostics.analyze_planning_steps(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
-
-        assert result["planning_successful"] is False
-        assert any("Planning failed: State error" in issue for issue in result["issues"])
+        with pytest.raises(Exception, match="State error"):
+            await self.diagnostics.analyze_planning_steps(
+                self.mock_char_state,
+                self.sample_goal_state
+            )
 
     @pytest.mark.asyncio
     async def test_test_goal_reachability_with_goal_manager_method(self):
@@ -193,18 +189,17 @@ class TestPlanningDiagnostics:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_test_goal_reachability_exception_assumes_possible(self):
-        """Test that exceptions in reachability testing assume goal is possible"""
+    async def test_test_goal_reachability_exception_propagates(self):
+        """Test that exceptions in reachability testing propagate following fail-fast principles"""
         # Remove is_goal_achievable method
         delattr(self.mock_goal_manager, 'is_goal_achievable')
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("Planning error"))
 
-        result = await self.diagnostics.test_goal_reachability(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
-
-        assert result is False  # Planning attempt failed, so unreachable
+        with pytest.raises(Exception, match="Planning error"):
+            await self.diagnostics.test_goal_reachability(
+                self.mock_char_state,
+                self.sample_goal_state
+            )
 
     def test_visualize_plan_empty_plan(self):
         """Test visualization of empty plan"""
@@ -358,7 +353,7 @@ class TestPlanningDiagnostics:
         assert result["execution_steps"][0]["executed"] is True
 
     def test_simulate_plan_execution_invalid_keys(self):
-        """Test simulation with invalid keys"""
+        """Test simulation with invalid keys propagates exception following fail-fast principles"""
         plan = [
             {
                 "name": "test_action",
@@ -368,12 +363,9 @@ class TestPlanningDiagnostics:
         ]
         start_state = {GameState.CHARACTER_LEVEL: 10}
 
-        result = self.diagnostics.simulate_plan_execution(plan, start_state)
-
-        # Should handle invalid keys gracefully
-        assert len(result["execution_steps"]) == 1
-        issues = result["execution_steps"][0]["issues"]
-        assert any("Invalid" in issue for issue in issues)
+        # Should propagate ValueError for invalid GameState enum value
+        with pytest.raises(ValueError, match="'invalid_key' is not a valid GameState"):
+            self.diagnostics.simulate_plan_execution(plan, start_state)
 
     @pytest.mark.asyncio
     async def test_identify_planning_bottlenecks_unreachable_goal(self):
@@ -445,16 +437,14 @@ class TestPlanningDiagnostics:
 
     @pytest.mark.asyncio
     async def test_identify_planning_bottlenecks_action_access_error(self):
-        """Test identification of action access error bottleneck"""
+        """Test that action access errors propagate following fail-fast principles"""
         self.mock_goal_manager.create_goap_actions = AsyncMock(side_effect=Exception("Access error"))
 
-        with patch.object(self.diagnostics, 'test_goal_reachability', return_value=True):
-            bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
+        with pytest.raises(Exception, match="Access error"):
+            await self.diagnostics.identify_planning_bottlenecks(
                 self.mock_char_state,
                 self.sample_goal_state
             )
-
-        assert any("Cannot access action registry" in bottleneck for bottleneck in bottlenecks)
 
     @pytest.mark.asyncio
     async def test_identify_planning_bottlenecks_missing_required_keys(self):
@@ -475,15 +465,14 @@ class TestPlanningDiagnostics:
 
     @pytest.mark.asyncio
     async def test_identify_planning_bottlenecks_exception_handling(self):
-        """Test bottleneck identification exception handling"""
+        """Test that bottleneck identification exceptions propagate following fail-fast principles"""
         self.mock_char_state.to_goap_state.side_effect = Exception("State error")
 
-        bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
-
-        assert any("Error analyzing bottlenecks" in bottleneck for bottleneck in bottlenecks)
+        with pytest.raises(Exception, match="State error"):
+            await self.diagnostics.identify_planning_bottlenecks(
+                self.mock_char_state,
+                self.sample_goal_state
+            )
 
     @pytest.mark.asyncio
     async def test_measure_planning_performance_success(self):
@@ -518,16 +507,14 @@ class TestPlanningDiagnostics:
 
     @pytest.mark.asyncio
     async def test_measure_planning_performance_exception(self):
-        """Test performance measurement with planning exception"""
+        """Test that performance measurement exceptions propagate following fail-fast principles"""
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("Planning error"))
 
-        metrics = await self.diagnostics.measure_planning_performance(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
-
-        assert metrics["success"] is False
-        assert "Planning error" in metrics["error"]
+        with pytest.raises(Exception, match="Planning error"):
+            await self.diagnostics.measure_planning_performance(
+                self.mock_char_state,
+                self.sample_goal_state
+            )
 
     @pytest.mark.asyncio
     async def test_measure_planning_performance_classes(self):

@@ -7,6 +7,9 @@ and organization for the inventory system.
 
 from typing import Any
 
+from ..lib.log import get_logger
+
+logger = get_logger(__name__)
 from .inventory_models import BankState, OptimizationRecommendation
 from .state.game_state import GameState
 
@@ -23,26 +26,23 @@ class BankManager:
         if not items:
             return True
 
-        try:
-            for item_code, quantity in items:
-                if quantity <= 0:
-                    continue
+        for item_code, quantity in items:
+            if quantity <= 0:
+                continue
 
-                # Use API client to deposit item
-                response = await self.api_client.action_bank_deposit_item(
-                    character_name,
-                    code=item_code,
-                    quantity=quantity
-                )
+            # Use API client to deposit item
+            response = await self.api_client.action_bank_deposit_item(
+                character_name,
+                code=item_code,
+                quantity=quantity
+            )
 
-                # Check if deposit was successful
-                if not hasattr(response, 'data') or not response.data:
-                    return False
+            # Check if deposit was successful
+            if not hasattr(response, 'data') or not response.data:
+                logger.error(f"Failed to deposit {quantity} {item_code} to bank for {character_name}")
+                return False
 
-            return True
-
-        except Exception:
-            return False
+        return True
 
     async def withdraw_items(self, character_name: str, items: list[tuple[str, int]]) -> bool:
         """Withdraw specified items from bank"""

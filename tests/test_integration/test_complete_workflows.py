@@ -419,11 +419,12 @@ class TestCompleteAIPlayerWorkflow:
 
             # Test plan execution with real components (only if we have a plan)
             if not plan.is_empty:
-                execution_result = await asyncio.wait_for(
-                    ai_player.execute_plan(plan),
-                    timeout=5.0  # 5 second timeout
-                )
-                assert isinstance(execution_result, bool)
+                # Should propagate ValueError due to missing game data following fail-fast principles
+                with pytest.raises(ValueError, match="Monster data is required but not cached"):
+                    execution_result = await asyncio.wait_for(
+                        ai_player.execute_plan(plan),
+                        timeout=5.0  # 5 second timeout
+                    )
         except TimeoutError:
             # If planning times out, just create an empty plan for testing
             plan = []
@@ -534,19 +535,9 @@ class TestCompleteAIPlayerWorkflow:
         await ai_player.set_goal({GameState.CHARACTER_LEVEL: 11})
 
         # Test error recovery through API state synchronization
-        # This will call the failing API client and should handle the error gracefully
-        try:
-            # This should trigger error recovery - first call fails, but should retry
-            state = await state_manager.get_current_state()
-
-            # Should eventually succeed after retry
-            assert isinstance(state, dict)
-            assert GameState.CHARACTER_LEVEL in state
-
-        except Exception:
-            # If it still fails, that's okay - we're testing that errors are handled gracefully
-            # and don't crash the system
-            pass
+        # With fail-fast principles, API failures should propagate immediately
+        with pytest.raises(Exception, match="API connection failed"):
+            await state_manager.get_current_state()
 
         # Test emergency handling during error conditions
         emergency_state = CharacterGameState(
@@ -1719,21 +1710,18 @@ async def test_complete_system_integration():
         mock_api_wrapper_class.return_value = mock_api_client
 
         # Test minimal integration - just verify components can work together
-        try:
-            # This would be a real integration test if the full system was implemented
-            # For now, just verify the mocking setup works
-            api_wrapper = mock_api_wrapper_class()
-            character = await api_wrapper.get_character(character_name)
+        # This would be a real integration test if the full system was implemented
+        # For now, just verify the mocking setup works
+        api_wrapper = mock_api_wrapper_class()
+        character = await api_wrapper.get_character(character_name)
 
-            assert character.name == character_name
-            assert character.level == 10
+        assert character.name == character_name
+        assert character.level == 10
 
-            # Test action execution
-            move_result = await api_wrapper.move_character(character_name, 15, 20)
-            assert hasattr(move_result, 'data')
+        # Test action execution
+        move_result = await api_wrapper.move_character(character_name, 15, 20)
+        assert hasattr(move_result, 'data')
 
-        except Exception as e:
-            pytest.fail(f"Complete system integration test failed: {e}")
 
 
 # Mark integration tests for potential exclusion in fast test runs

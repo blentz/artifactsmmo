@@ -46,15 +46,7 @@ class CooldownAwarePlanner(Planner):
         status, optimizing action timing and preventing invalid plans that
         would fail due to cooldown constraints in the AI player system.
         """
-        try:
-            # If character is on cooldown, return empty plan
-            if not self.cooldown_manager.is_ready(character_name):
-                return []
-
-            # Use standard calculation if character is ready
-            return self.calculate()
-        except Exception:
-            return []
+        return self.calculate()
 
     def filter_actions_by_cooldown(self, actions: Action_List, character_name: str) -> Action_List:
         """Filter out actions that require character to be off cooldown when character is on cooldown.

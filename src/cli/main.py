@@ -488,9 +488,15 @@ class CLIManager:
             print(f"  Location: {character.x}, {character.y}")
             print(f"  Skin: {character.skin}")
 
-        except Exception as e:
-            self.logger.error(f"Failed to create character: {e}")
-            print(f"Error creating character: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            self.logger.error(f"Network error creating character: {e}")
+            print(f"Network connection failed. Please check your internet connection and try again.")
+        except ValueError as e:
+            self.logger.error(f"Invalid character data: {e}")
+            print(f"Invalid character information: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Configuration file missing: {e}")
+            print(f"Configuration file not found: {e.filename}. Please check your setup.")
 
     async def handle_delete_character(self, args) -> None:
         """Handle character deletion command.
@@ -535,9 +541,15 @@ class CLIManager:
             else:
                 print(f"Failed to delete character '{args.name}'")
 
-        except Exception as e:
-            self.logger.error(f"Failed to delete character: {e}")
-            print(f"Error deleting character: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            self.logger.error(f"Network error deleting character: {e}")
+            print(f"Network connection failed. Please check your internet connection and try again.")
+        except ValueError as e:
+            self.logger.error(f"Invalid character deletion request: {e}")
+            print(f"Character deletion failed: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Configuration file missing: {e}")
+            print(f"Configuration file not found: {e.filename}. Please check your setup.")
 
     async def handle_list_characters(self, args) -> None:
         """Handle character listing command.
@@ -589,9 +601,15 @@ class CLIManager:
 
             print("\nCharacter data cached in: data/characters.yaml")
 
-        except Exception as e:
-            self.logger.error(f"Failed to list characters: {e}")
-            print(f"Error listing characters: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            self.logger.error(f"Network error listing characters: {e}")
+            print(f"Network connection failed. Please check your internet connection and try again.")
+        except FileNotFoundError as e:
+            self.logger.error(f"Configuration or cache file missing: {e}")
+            print(f"File not found: {e.filename}. Run 'load-data' to initialize cache.")
+        except (OSError, PermissionError) as e:
+            self.logger.error(f"File system error: {e}")
+            print(f"File system error: {e}. Please check file permissions.")
 
     async def handle_load_data(self, args) -> None:
         """Handle game data loading command.
@@ -606,79 +624,80 @@ class CLIManager:
         items, monsters, maps, resources, NPCs, and characters for offline
         access by the AI player system.
         """
-        try:
-            if not self.api_client:
-                self.api_client = APIClientWrapper(args.token_file)
+        if not self.api_client:
+            self.api_client = APIClientWrapper(args.token_file)
 
-            # Initialize cache manager
-            cache_manager = CacheManager(self.api_client)
+        # Initialize cache manager
+        cache_manager = CacheManager(self.api_client)
 
-            if args.init:
-                print("Initializing all game data for first-time setup...")
-                print("This will load all game data types and may take a moment...")
-                # Force refresh when initializing
-                force_refresh = True
+        if args.init:
+            print("Initializing all game data for first-time setup...")
+            print("This will load all game data types and may take a moment...")
+            # Force refresh when initializing
+            force_refresh = True
+            data_types_to_load = ["items", "monsters", "maps", "resources", "npcs", "characters"]
+        else:
+            print("Loading game data from API...")
+            force_refresh = args.force
+            if args.data_type == "all":
                 data_types_to_load = ["items", "monsters", "maps", "resources", "npcs", "characters"]
             else:
-                print("Loading game data from API...")
-                force_refresh = args.force
-                if args.data_type == "all":
-                    data_types_to_load = ["items", "monsters", "maps", "resources", "npcs", "characters"]
-                else:
-                    data_types_to_load = [args.data_type]
+                data_types_to_load = [args.data_type]
 
-            for data_type in data_types_to_load:
-                print(f"Loading {data_type}...")
+        for data_type in data_types_to_load:
+            print(f"Loading {data_type}...")
 
-                try:
-                    if data_type == "items":
-                        items = await cache_manager.get_all_items(force_refresh=force_refresh)
-                        print(f"✓ Cached {len(items)} items in data/items.yaml")
+            try:
+                if data_type == "items":
+                    items = await cache_manager.get_all_items(force_refresh=force_refresh)
+                    print(f"✓ Cached {len(items)} items in data/items.yaml")
 
-                    elif data_type == "monsters":
-                        monsters = await cache_manager.get_all_monsters(force_refresh=force_refresh)
-                        print(f"✓ Cached {len(monsters)} monsters in data/monsters.yaml")
+                elif data_type == "monsters":
+                    monsters = await cache_manager.get_all_monsters(force_refresh=force_refresh)
+                    print(f"✓ Cached {len(monsters)} monsters in data/monsters.yaml")
 
-                    elif data_type == "maps":
-                        maps = await cache_manager.get_all_maps(force_refresh=force_refresh)
-                        print(f"✓ Cached {len(maps)} maps in data/maps.yaml")
+                elif data_type == "maps":
+                    maps = await cache_manager.get_all_maps(force_refresh=force_refresh)
+                    print(f"✓ Cached {len(maps)} maps in data/maps.yaml")
 
-                    elif data_type == "resources":
-                        resources = await cache_manager.get_all_resources(force_refresh=force_refresh)
-                        print(f"✓ Cached {len(resources)} resources in data/resources.yaml")
+                elif data_type == "resources":
+                    resources = await cache_manager.get_all_resources(force_refresh=force_refresh)
+                    print(f"✓ Cached {len(resources)} resources in data/resources.yaml")
 
-                    elif data_type == "npcs":
-                        npcs = await cache_manager.get_all_npcs(force_refresh=force_refresh)
-                        print(f"✓ Cached {len(npcs)} NPCs in data/npcs.yaml")
+                elif data_type == "npcs":
+                    npcs = await cache_manager.get_all_npcs(force_refresh=force_refresh)
+                    print(f"✓ Cached {len(npcs)} NPCs in data/npcs.yaml")
 
-                    elif data_type == "characters":
-                        characters = await cache_manager.cache_all_characters(force_refresh=force_refresh)
-                        print(f"✓ Cached {len(characters)} characters in data/characters.yaml")
+                elif data_type == "characters":
+                    characters = await cache_manager.cache_all_characters(force_refresh=force_refresh)
+                    print(f"✓ Cached {len(characters)} characters in data/characters.yaml")
 
-                except Exception as e:
-                    self.logger.error(f"Failed to load {data_type}: {e}")
-                    print(f"✗ Error loading {data_type}: {e}")
+            except (ConnectionError, TimeoutError) as e:
+                self.logger.error(f"Network error loading {data_type}: {e}")
+                print(f"✗ Network connection failed loading {data_type}. Please check your internet connection.")
+            except ValueError as e:
+                self.logger.error(f"Data validation error loading {data_type}: {e}")
+                print(f"✗ Invalid data received for {data_type}: {e}")
+            except (OSError, PermissionError) as e:
+                self.logger.error(f"File system error loading {data_type}: {e}")
+                print(f"✗ File system error for {data_type}: {e}. Please check file permissions.")
 
-            if args.init:
-                print("\n🎉 Game data initialization complete!")
-                print("All game data has been cached and is ready for use.")
-                print("Cache files location: data/ directory")
-                print("\nAvailable data files:")
-                print("  - data/characters.yaml (your characters)")
-                print("  - data/items.yaml (all game items)")
-                print("  - data/monsters.yaml (all monsters)")
-                print("  - data/maps.yaml (all map locations)")
-                print("  - data/resources.yaml (all gatherable resources)")
-                print("  - data/npcs.yaml (all NPCs and traders)")
-                print("  - data/metadata.yaml (cache management)")
-            else:
-                print("\nGame data loading complete!")
-                print("All cached data is stored in the 'data/' directory")
+        if args.init:
+            print("\n🎉 Game data initialization complete!")
+            print("All game data has been cached and is ready for use.")
+            print("Cache files location: data/ directory")
+            print("\nAvailable data files:")
+            print("  - data/characters.yaml (your characters)")
+            print("  - data/items.yaml (all game items)")
+            print("  - data/monsters.yaml (all monsters)")
+            print("  - data/maps.yaml (all map locations)")
+            print("  - data/resources.yaml (all gatherable resources)")
+            print("  - data/npcs.yaml (all NPCs and traders)")
+            print("  - data/metadata.yaml (cache management)")
+        else:
+            print("\nGame data loading complete!")
+            print("All cached data is stored in the 'data/' directory")
 
-        except Exception as e:
-            # Let specific exceptions bubble up - don't mask errors with generic handling
-            print(f"Failed to load game data: {e}")
-            raise
 
     async def handle_run_character(self, args) -> None:
         """Handle AI player run command.
@@ -741,10 +760,19 @@ class CLIManager:
                     del self.running_players[args.name]
                 print(f"AI player for '{args.name}' stopped.")
 
-        except Exception:
-            # Clean up on error then let exception bubble up
+        except (ConnectionError, TimeoutError) as e:
+            # Clean up on network errors then let exception bubble up
             if args.name in self.running_players:
                 del self.running_players[args.name]
+            self.logger.error(f"Network error starting AI player: {e}")
+            print(f"Network connection failed. Please check your internet connection.")
+            raise
+        except (ImportError, AttributeError) as e:
+            # Clean up on configuration errors then let exception bubble up
+            if args.name in self.running_players:
+                del self.running_players[args.name]
+            self.logger.error(f"Configuration error starting AI player: {e}")
+            print(f"System configuration error: {e}")
             raise
 
     async def handle_stop_character(self, args) -> None:
@@ -783,12 +811,15 @@ class CLIManager:
 
                 print(f"✓ AI player for '{args.name}' stopped gracefully.")
 
-        except Exception as e:
-            self.logger.error(f"Failed to stop AI player: {e}")
-            print(f"Error stopping AI player: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            self.logger.error(f"Network error stopping AI player: {e}")
+            print(f"Network connection failed during shutdown. Player may still be running.")
             # Force cleanup on error
             if args.name in self.running_players:
                 del self.running_players[args.name]
+        except KeyError as e:
+            self.logger.error(f"Player not found during stop: {e}")
+            print(f"AI player '{args.name}' is not currently running.")
 
     async def handle_character_status(self, args) -> None:
         """Handle character status command.
@@ -846,9 +877,15 @@ class CLIManager:
                 print("\n=== AI Player Status ===")
                 print("Status: Stopped")
 
-        except Exception as e:
-            self.logger.error(f"Failed to get character status: {e}")
-            print(f"Error getting character status: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            self.logger.error(f"Network error getting character status: {e}")
+            print(f"Network connection failed. Cannot retrieve character status.")
+        except FileNotFoundError as e:
+            self.logger.error(f"Configuration file missing for status: {e}")
+            print(f"Configuration file not found: {e.filename}. Please check your setup.")
+        except KeyError as e:
+            self.logger.error(f"Character not found for status: {e}")
+            print(f"Character '{args.name}' not found. Use 'list-characters' to see available characters.")
 
     async def handle_diagnose_state(self, args) -> None:
         """Handle state diagnostic command.
@@ -878,9 +915,15 @@ class CLIManager:
             output = diagnostic_commands.format_state_output(result)
             print(output)
 
-        except Exception as e:
-            self.logger.error(f"Failed to diagnose state: {e}")
-            print(f"Error running state diagnostics: {e}")
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"Component error during state diagnosis: {e}")
+            print(f"System component error: {e}. This may indicate a configuration issue.")
+        except ValueError as e:
+            self.logger.error(f"Invalid data during state diagnosis: {e}")
+            print(f"Invalid character or state data: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Missing file during state diagnosis: {e}")
+            print(f"Required file not found: {e.filename}. Run 'load-data' to initialize cache.")
 
     async def handle_diagnose_actions(self, args) -> None:
         """Handle action diagnostic command.
@@ -919,9 +962,15 @@ class CLIManager:
             output = diagnostic_commands.format_action_output(result)
             print(output)
 
-        except Exception as e:
-            self.logger.error(f"Failed to diagnose actions: {e}")
-            print(f"Error running action diagnostics: {e}")
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"Component error during action diagnosis: {e}")
+            print(f"System component error: {e}. This may indicate a configuration issue.")
+        except ValueError as e:
+            self.logger.error(f"Invalid data during action diagnosis: {e}")
+            print(f"Invalid character or action data: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Missing file during action diagnosis: {e}")
+            print(f"Required file not found: {e.filename}. Run 'load-data' to initialize cache.")
 
     async def handle_diagnose_plan(self, args) -> None:
         """Handle planning diagnostic command.
@@ -953,9 +1002,15 @@ class CLIManager:
             output = diagnostic_commands.format_planning_output(result)
             print(output)
 
-        except Exception as e:
-            self.logger.error(f"Failed to diagnose planning: {e}")
-            print(f"Error running planning diagnostics: {e}")
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"Component error during planning diagnosis: {e}")
+            print(f"System component error: {e}. This may indicate a configuration issue.")
+        except ValueError as e:
+            self.logger.error(f"Invalid data during planning diagnosis: {e}")
+            print(f"Invalid planning parameters: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Missing file during planning diagnosis: {e}")
+            print(f"Required file not found: {e.filename}. Run 'load-data' to initialize cache.")
 
     async def handle_test_planning(self, args) -> None:
         """Handle planning simulation command.
@@ -990,9 +1045,15 @@ class CLIManager:
             for key, value in result.items():
                 print(f"{key}: {value}")
 
-        except Exception as e:
-            self.logger.error(f"Failed to test planning: {e}")
-            print(f"Error running planning tests: {e}")
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"Component error during planning test: {e}")
+            print(f"System component error: {e}. This may indicate a configuration issue.")
+        except ValueError as e:
+            self.logger.error(f"Invalid data during planning test: {e}")
+            print(f"Invalid test parameters: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Missing file during planning test: {e}")
+            print(f"Required file not found: {e.filename}. Run 'load-data' to initialize cache.")
 
     async def handle_diagnose_weights(self, args) -> None:
         """Handle weight diagnostics command.
@@ -1021,9 +1082,15 @@ class CLIManager:
             output = self.format_weights_output(result)
             print(output)
 
-        except Exception as e:
-            self.logger.error(f"Failed to diagnose weights: {e}")
-            print(f"Error running weight diagnostics: {e}")
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"Component error during weight diagnosis: {e}")
+            print(f"System component error: {e}. This may indicate a configuration issue.")
+        except ValueError as e:
+            self.logger.error(f"Invalid data during weight diagnosis: {e}")
+            print(f"Invalid weight configuration: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Missing file during weight diagnosis: {e}")
+            print(f"Required file not found: {e.filename}. Please check configuration files.")
 
     async def handle_diagnose_cooldowns(self, args) -> None:
         """Handle cooldown diagnostics command.
@@ -1053,9 +1120,15 @@ class CLIManager:
             output = self.format_cooldowns_output(result)
             print(output)
 
-        except Exception as e:
-            self.logger.error(f"Failed to diagnose cooldowns: {e}")
-            print(f"Error running cooldown diagnostics: {e}")
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"Component error during cooldown diagnosis: {e}")
+            print(f"System component error: {e}. This may indicate a configuration issue.")
+        except ValueError as e:
+            self.logger.error(f"Invalid data during cooldown diagnosis: {e}")
+            print(f"Invalid cooldown data: {e}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Missing file during cooldown diagnosis: {e}")
+            print(f"Required file not found: {e.filename}. Run 'load-data' to initialize cache.")
 
     def format_weights_output(self, weights_data: dict[str, Any]) -> str:
         """Format weight analysis for CLI display.

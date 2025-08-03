@@ -58,39 +58,30 @@ class PlanningDiagnostics:
             "state_transitions": []
         }
 
-        try:
-            start_time = datetime.now()
+        start_time = datetime.now()
 
-            # Try to create a plan using the goal manager
-            try:
-                # Use the goal manager's planning functionality with CharacterGameState
-                plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
+        # Use the goal manager's planning functionality with CharacterGameState
+        plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
 
-                if plan:
-                    analysis["planning_successful"] = True
-                    analysis["steps"] = plan
-                    analysis["total_cost"] = len(plan)  # Simplified cost calculation
+        if plan:
+            analysis["planning_successful"] = True
+            analysis["steps"] = plan
+            analysis["total_cost"] = len(plan)  # Simplified cost calculation
 
-                    # Analyze state transitions - start_state must be CharacterGameState
-                    current_state = start_state.to_goap_state()
-                    for i, action in enumerate(plan):
-                        analysis["state_transitions"].append({
-                            "step": i + 1,
-                            "action": action.get("name", "unknown"),
-                            "state_before": dict(current_state),
-                            "estimated_state_after": self._estimate_state_after_action(current_state, action)
-                        })
-                else:
-                    analysis["issues"].append("No plan found - goal may be unreachable")
+            # Analyze state transitions - start_state must be CharacterGameState
+            current_state = start_state.to_goap_state()
+            for i, action in enumerate(plan):
+                analysis["state_transitions"].append({
+                    "step": i + 1,
+                    "action": action.get("name", "unknown"),
+                    "state_before": dict(current_state),
+                    "estimated_state_after": self._estimate_state_after_action(current_state, action)
+                })
+        else:
+            analysis["issues"].append("No plan found - goal may be unreachable")
 
-            except Exception as e:
-                analysis["issues"].append(f"Planning failed: {str(e)}")
-
-            end_time = datetime.now()
-            analysis["planning_time"] = (end_time - start_time).total_seconds()
-
-        except Exception as e:
-            analysis["issues"].append(f"Analysis failed: {str(e)}")
+        end_time = datetime.now()
+        analysis["planning_time"] = (end_time - start_time).total_seconds()
 
         return analysis
 
@@ -108,41 +99,32 @@ class PlanningDiagnostics:
         the start state using available actions, identifying impossible
         goals before attempting expensive planning operations.
         """
-        try:
-            # Check if the goal manager can determine reachability
-            if hasattr(self.goal_manager, 'is_goal_achievable'):
-                return self.goal_manager.is_goal_achievable(goal_state, start_state)
+        # Check if the goal manager can determine reachability
+        if hasattr(self.goal_manager, 'is_goal_achievable'):
+            return self.goal_manager.is_goal_achievable(goal_state, start_state)
 
-            # Simple heuristic checks for obviously unreachable goals
-            for goal_key, goal_value in goal_state.items():
-                current_value = start_state.get(goal_key)
+        # Simple heuristic checks for obviously unreachable goals
+        for goal_key, goal_value in goal_state.items():
+            current_value = start_state.get(goal_key)
 
-                # Character level cannot decrease
-                if goal_key == GameState.CHARACTER_LEVEL:
-                    if isinstance(current_value, int) and isinstance(goal_value, int):
-                        if goal_value < current_value:
-                            return False
+            # Character level cannot decrease
+            if goal_key == GameState.CHARACTER_LEVEL:
+                if isinstance(current_value, int) and isinstance(goal_value, int):
+                    if goal_value < current_value:
+                        return False
 
-                # XP cannot decrease
-                xp_keys = {GameState.CHARACTER_XP, GameState.MINING_XP, GameState.WOODCUTTING_XP,
-                          GameState.FISHING_XP, GameState.WEAPONCRAFTING_XP, GameState.GEARCRAFTING_XP,
-                          GameState.JEWELRYCRAFTING_XP, GameState.COOKING_XP, GameState.ALCHEMY_XP}
-                if goal_key in xp_keys:
-                    if isinstance(current_value, int) and isinstance(goal_value, int):
-                        if goal_value < current_value:
-                            return False
+            # XP cannot decrease
+            xp_keys = {GameState.CHARACTER_XP, GameState.MINING_XP, GameState.WOODCUTTING_XP,
+                      GameState.FISHING_XP, GameState.WEAPONCRAFTING_XP, GameState.GEARCRAFTING_XP,
+                      GameState.JEWELRYCRAFTING_XP, GameState.COOKING_XP, GameState.ALCHEMY_XP}
+            if goal_key in xp_keys:
+                if isinstance(current_value, int) and isinstance(goal_value, int):
+                    if goal_value < current_value:
+                        return False
 
-            # Try a quick planning attempt
-            try:
-                plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
-                return plan is not None and len(plan) > 0
-            except Exception:
-                # If planning fails, assume unreachable
-                return False
-
-        except Exception:
-            # If we can't determine reachability, assume it's possible
-            return True
+        # Try a quick planning attempt
+        plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
+        return plan is not None and len(plan) > 0
 
     def visualize_plan(self, plan: list[dict[str, Any]]) -> str:
         """Create visual representation of action plan.
@@ -300,53 +282,40 @@ class PlanningDiagnostics:
                 "issues": []
             }
 
-            try:
-                # Check if action preconditions would be met
-                preconditions = action.get("preconditions", {})
-                preconditions_met = True
+            # Check if action preconditions would be met
+            preconditions = action.get("preconditions", {})
+            preconditions_met = True
 
-                for key, required_value in preconditions.items():
-                    if isinstance(key, str):
-                        try:
-                            enum_key = GameState(key)
-                        except ValueError:
-                            step_info["issues"].append(f"Invalid precondition key: {key}")
-                            continue
-                    else:
-                        enum_key = key
-
-                    current_value = current_state.get(enum_key)
-                    if current_value != required_value:
-                        preconditions_met = False
-                        step_info["issues"].append(
-                            f"Precondition not met: {enum_key.value} = {current_value}, required {required_value}"
-                        )
-
-                if preconditions_met:
-                    # Apply action effects
-                    effects = action.get("effects", {})
-                    for key, value in effects.items():
-                        if isinstance(key, str):
-                            try:
-                                enum_key = GameState(key)
-                                current_state[enum_key] = value
-                            except ValueError:
-                                step_info["issues"].append(f"Invalid effect key: {key}")
-                        else:
-                            current_state[key] = value
-
-                    step_info["executed"] = True
+            for key, required_value in preconditions.items():
+                if isinstance(key, str):
+                    enum_key = GameState(key)
                 else:
-                    simulation["success"] = False
-                    step_info["executed"] = False
+                    enum_key = key
 
-                step_info["state_after"] = dict(current_state)
-                simulation["execution_steps"].append(step_info)
+                current_value = current_state.get(enum_key)
+                if current_value != required_value:
+                    preconditions_met = False
+                    step_info["issues"].append(
+                        f"Precondition not met: {enum_key.value} = {current_value}, required {required_value}"
+                    )
 
-            except Exception as e:
-                step_info["issues"].append(f"Simulation error: {str(e)}")
+            if preconditions_met:
+                # Apply action effects
+                effects = action.get("effects", {})
+                for key, value in effects.items():
+                    if isinstance(key, str):
+                        enum_key = GameState(key)
+                        current_state[enum_key] = value
+                    else:
+                        current_state[key] = value
+
+                step_info["executed"] = True
+            else:
                 simulation["success"] = False
-                simulation["execution_steps"].append(step_info)
+                step_info["executed"] = False
+
+            step_info["state_after"] = dict(current_state)
+            simulation["execution_steps"].append(step_info)
 
         simulation["final_state"] = current_state
 
@@ -374,43 +343,36 @@ class PlanningDiagnostics:
         """
         bottlenecks = []
 
-        try:
-            # Check for unreachable goals
-            if not await self.test_goal_reachability(start_state, goal_state):
-                bottlenecks.append("Goal appears to be unreachable from current state")
+        # Check for unreachable goals
+        if not await self.test_goal_reachability(start_state, goal_state):
+            bottlenecks.append("Goal appears to be unreachable from current state")
 
-            # Get state as dict once
-            start_state_dict = start_state.to_goap_state()
+        # Get state as dict once
+        start_state_dict = start_state.to_goap_state()
 
-            # Check for large state space
-            state_diff = len(goal_state) + len(start_state_dict)
-            if state_diff > 20:
-                bottlenecks.append("Large state space may slow down planning")
+        # Check for large state space
+        state_diff = len(goal_state) + len(start_state_dict)
+        if state_diff > 20:
+            bottlenecks.append("Large state space may slow down planning")
 
-            # Check for very high goal values
-            for key, value in goal_state.items():
-                current_value = start_state_dict.get(key.value, 0)
-                if isinstance(value, int) and isinstance(current_value, int):
-                    if value > current_value + 100:
-                        bottlenecks.append(f"Large gap in {key.value}: {current_value} -> {value}")
+        # Check for very high goal values
+        for key, value in goal_state.items():
+            current_value = start_state_dict.get(key.value, 0)
+            if isinstance(value, int) and isinstance(current_value, int):
+                if value > current_value + 100:
+                    bottlenecks.append(f"Large gap in {key.value}: {current_value} -> {value}")
 
-            # Check if actions are available
-            try:
-                # Try to get some actions from goal manager
-                actions = await self.goal_manager.create_goap_actions()
-                if not actions or len(actions.conditions) == 0:
-                    bottlenecks.append("No actions available for planning")
-            except Exception:
-                bottlenecks.append("Cannot access action registry for planning")
+        # Check if actions are available
+        # Try to get some actions from goal manager
+        actions = await self.goal_manager.create_goap_actions()
+        if not actions or len(actions.conditions) == 0:
+            bottlenecks.append("No actions available for planning")
 
-            # Check for missing required state keys
-            required_keys = {GameState.CHARACTER_LEVEL, GameState.COOLDOWN_READY}
-            missing_keys = [key for key in required_keys if key.value not in start_state_dict]
-            if missing_keys:
-                bottlenecks.append(f"Missing required state keys: {[k.value for k in missing_keys]}")
-
-        except Exception as e:
-            bottlenecks.append(f"Error analyzing bottlenecks: {str(e)}")
+        # Check for missing required state keys
+        required_keys = {GameState.CHARACTER_LEVEL, GameState.COOLDOWN_READY}
+        missing_keys = [key for key in required_keys if key.value not in start_state_dict]
+        if missing_keys:
+            bottlenecks.append(f"Missing required state keys: {[k.value for k in missing_keys]}")
 
         return bottlenecks
 
@@ -437,45 +399,36 @@ class PlanningDiagnostics:
             "error": None
         }
 
-        try:
-            start_time = datetime.now()
+        start_time = datetime.now()
 
-            # Measure memory before planning
-            start_state_dict = start_state.to_goap_state()
-            initial_memory = sys.getsizeof(start_state_dict) + sys.getsizeof(goal_state)
+        # Measure memory before planning
+        start_state_dict = start_state.to_goap_state()
+        initial_memory = sys.getsizeof(start_state_dict) + sys.getsizeof(goal_state)
 
-            # Attempt planning
-            try:
-                plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
+        # Attempt planning
+        plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
 
-                if plan:
-                    metrics["success"] = True
-                    metrics["plan_length"] = len(plan)
-                else:
-                    metrics["success"] = False
-                    metrics["plan_length"] = 0
+        if plan:
+            metrics["success"] = True
+            metrics["plan_length"] = len(plan)
+        else:
+            metrics["success"] = False
+            metrics["plan_length"] = 0
 
-            except Exception as e:
-                metrics["success"] = False
-                metrics["error"] = str(e)
+        end_time = datetime.now()
+        metrics["planning_time_seconds"] = (end_time - start_time).total_seconds()
 
-            end_time = datetime.now()
-            metrics["planning_time_seconds"] = (end_time - start_time).total_seconds()
+        # Simple memory usage estimate
+        metrics["memory_usage_estimate"] = initial_memory
 
-            # Simple memory usage estimate
-            metrics["memory_usage_estimate"] = initial_memory
-
-            # Performance classification
-            planning_time = metrics["planning_time_seconds"]
-            if planning_time is not None and planning_time < 0.1:
-                metrics["performance_class"] = "fast"
-            elif planning_time is not None and planning_time < 1.0:
-                metrics["performance_class"] = "acceptable"
-            else:
-                metrics["performance_class"] = "slow"
-
-        except Exception as e:
-            metrics["error"] = f"Performance measurement failed: {str(e)}"
+        # Performance classification
+        planning_time = metrics["planning_time_seconds"]
+        if planning_time is not None and planning_time < 0.1:
+            metrics["performance_class"] = "fast"
+        elif planning_time is not None and planning_time < 1.0:
+            metrics["performance_class"] = "acceptable"
+        else:
+            metrics["performance_class"] = "slow"
 
         return metrics
 

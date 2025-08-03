@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from src.game_data.models import GameItem, GameMap, GameResource
 
 from ..state.character_game_state import CharacterGameState
-from ..types.game_data import GameData
+from src.game_data.game_data import GameData
 
 
 class RecipeStructure(BaseModel):

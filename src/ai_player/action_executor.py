@@ -89,91 +89,59 @@ class ActionExecutor:
         error conditions, cooldown timing, and result processing to ensure
         reliable action execution within the AI player system.
         """
-        try:
-            # Validate preconditions
-            if not self.validate_action_preconditions(action, current_state):
-                return ActionResult(
-                    success=False,
-                    message=f"Action {action.name} preconditions not met",
-                    state_changes={},
-                    cooldown_seconds=0
-                )
+        # Wait for cooldown first before any precondition checking
+        await self.wait_for_cooldown(character_name)
 
-            # Wait for cooldown if needed
-            await self.wait_for_cooldown(character_name)
+        # Validate preconditions
+        if not self.validate_action_preconditions(action, current_state):
+            return ActionResult(
+                success=False,
+                message=f"Action {action.name} preconditions not met",
+                state_changes={},
+                cooldown_seconds=0
+            )
 
-            # Execute the action with retry logic
-            for attempt in range(self.retry_attempts):
-                try:
-                    # Convert CharacterGameState to dict[GameState, Any] for action
-                    state_dict = current_state.to_goap_state()
-                    typed_state = GameState.validate_state_dict(state_dict)
+        # Execute the action with retry logic
+        for attempt in range(self.retry_attempts):
+            # Convert CharacterGameState to dict[GameState, Any] for action
+            state_dict = current_state.to_goap_state()
+            typed_state = GameState.validate_state_dict(state_dict)
 
-                    # Pass API client and cooldown manager to action
-                    result = await action.execute(
-                        character_name,
-                        typed_state,
-                        api_client=self.api_client,
-                        cooldown_manager=self.cooldown_manager
+            # Pass API client and cooldown manager to action
+            result = await action.execute(
+                character_name,
+                typed_state,
+                api_client=self.api_client,
+                cooldown_manager=self.cooldown_manager
+            )
+
+            # Process and validate the result
+            if result.success:
+                # Verify action success by checking state changes
+                if await self.verify_action_success(action, result, character_name):
+                    # Cooldown management is handled by the actions themselves when they process API responses
+                    # No manual cooldown update needed here as actions update via API client
+
+                    return result
+                else:
+                    return ActionResult(
+                        success=False,
+                        message=f"Action {action.name} execution verification failed",
+                        state_changes={},
+                        cooldown_seconds=0
                     )
+            else:
+                # Handle failed execution - check if it's a cooldown error
+                if "cooldown" in result.message.lower():
+                    # Don't retry cooldown errors, return immediately
+                    return result
 
-                    # Process and validate the result
-                    if result.success:
-                        # Verify action success by checking state changes
-                        if await self.verify_action_success(action, result, character_name):
-                            # Cooldown management is handled by the actions themselves when they process API responses
-                            # No manual cooldown update needed here as actions update via API client
+                if attempt < self.retry_attempts - 1:
+                    await asyncio.sleep(self.retry_delays[attempt])
+                    continue
+                else:
+                    return result
 
-                            return result
-                        else:
-                            return ActionResult(
-                                success=False,
-                                message=f"Action {action.name} execution verification failed",
-                                state_changes={},
-                                cooldown_seconds=0
-                            )
-                    else:
-                        # Handle failed execution
-                        if attempt < self.retry_attempts - 1:
-                            await asyncio.sleep(self.retry_delays[attempt])
-                            continue
-                        else:
-                            return result
-
-                except Exception as e:
-                    # Handle action-specific errors
-                    recovery_result = await self.handle_action_error(action, e, character_name)
-                    if recovery_result is not None:
-                        return recovery_result
-
-                    # If not recoverable and not last attempt, retry
-                    if attempt < self.retry_attempts - 1:
-                        await asyncio.sleep(self.retry_delays[attempt])
-                        continue
-                    else:
-                        return ActionResult(
-                            success=False,
-                            message=f"Action {action.name} failed after {self.retry_attempts} attempts: {str(e)}",
-                            state_changes={},
-                            cooldown_seconds=0
-                        )
-
-            # This shouldn't be reached, but provide fallback
-            return ActionResult(
-                success=False,
-                message=f"Action {action.name} execution completed without result",
-                state_changes={},
-                cooldown_seconds=0
-            )
-
-        except Exception as e:
-            # Handle unexpected errors
-            return ActionResult(
-                success=False,
-                message=f"Unexpected error executing {action.name}: {str(e)}",
-                state_changes={},
-                cooldown_seconds=0
-            )
 
     async def execute_plan(self, plan: list[BaseAction], character_name: str) -> bool:
         """Execute entire action plan with state updates.
@@ -192,77 +160,62 @@ class ActionExecutor:
         if not plan:
             return True
 
-        try:
-            self.logger = logging.getLogger(f"action_executor.{character_name}")
-            self.logger.info(f"ActionExecutor: Starting plan execution for {len(plan)} actions")
-            self.logger.info(f"ActionExecutor: Plan content: {plan}")
-            # Get initial character state
-            self.logger.info("ActionExecutor: Getting character data from API...")
-            character = await self.api_client.get_character(character_name)
-            self.logger.info(f"ActionExecutor: Got character data: {character.name} at ({character.x}, {character.y})")
+        self.logger = logging.getLogger(f"action_executor.{character_name}")
+        self.logger.info(f"ActionExecutor: Starting plan execution for {len(plan)} actions")
+        self.logger.info(f"ActionExecutor: Plan content: {plan}")
+        # Get initial character state
+        self.logger.info("ActionExecutor: Getting character data from API...")
+        character = await self.api_client.get_character(character_name)
+        self.logger.info(f"ActionExecutor: Got character data: {character.name} at ({character.x}, {character.y})")
 
-            # Get map content for location context
-            self.logger.info("ActionExecutor: Getting map data from API...")
-            game_map = await self.api_client.get_map(character.x, character.y)
-            self.logger.info(f"ActionExecutor: Got map data: {game_map}")
+        # Get map content for location context
+        self.logger.info("ActionExecutor: Getting map data from API...")
+        game_map = await self.api_client.get_map(character.x, character.y)
+        self.logger.info(f"ActionExecutor: Got map data: {game_map}")
 
-            # Convert to internal state format - keep as CharacterGameState
-            self.logger.info("ActionExecutor: Converting to CharacterGameState...")
-            character_state = CharacterGameState.from_api_character(
-                character, game_map.content, self.api_client.cooldown_manager
-            )
-            self.logger.info("ActionExecutor: Initial state loaded successfully")
+        # Convert to internal state format - keep as CharacterGameState
+        self.logger.info("ActionExecutor: Converting to CharacterGameState...")
+        character_state = CharacterGameState.from_api_character(
+            character, game_map.content, self.api_client.cooldown_manager
+        )
+        self.logger.info("ActionExecutor: Initial state loaded successfully")
 
-            self.logger.info(f"ActionExecutor: Starting for loop with {len(plan)} actions")
-            for i, action in enumerate(plan):
-                try:
-                    self.logger.info(f"ActionExecutor: Processing plan step {i+1}: {action.name}")
-                    self.logger.debug(f"Executing action '{action.name}'...")
+        self.logger.info(f"ActionExecutor: Starting for loop with {len(plan)} actions")
+        for i, action in enumerate(plan):
+            self.logger.info(f"ActionExecutor: Processing plan step {i+1}: {action.name}")
+            self.logger.debug(f"Executing action '{action.name}'...")
 
-                    # Execute all actions through the proper execute_action method
-                    # This delegates to StateManager for API calls, maintaining proper architecture
-                    result = await self.execute_action(action, character_name, character_state)
+            # Execute all actions through the proper execute_action method
+            # This delegates to StateManager for API calls, maintaining proper architecture
+            result = await self.execute_action(action, character_name, character_state)
 
-                    if not result.success:
-                        self.logger.warning(f"Action '{action.name}' failed: {result.message}")
-                        # Try emergency recovery for critical failures
-                        if "critical" in result.message.lower() or "hp" in result.message.lower():
-                            recovery_success = await self.emergency_recovery(
-                                character_name, f"Plan step {i+1} failed: {result.message}"
-                            )
-                            if not recovery_success:
-                                return False
-                        else:
-                            return False
-
-                    self.logger.info(f"Action '{action.name}' succeeded: {result.message}")
-
-                    # Delegate state updates to StateManager for proper synchronization
-                    # Apply the action result through StateManager
-                    await self.state_manager.apply_action_result(result)
-
-                    # Get the updated state from StateManager (with proper cooldown sync)
-                    character_state = await self.state_manager.get_current_state()
-
-                    # Wait for cooldown between actions if needed
-                    if result.cooldown_seconds > 0:
-                        await asyncio.sleep(min(result.cooldown_seconds, 30))  # Cap wait time
-
-                except Exception as e:
-                    # Try emergency recovery for action execution errors
+            if not result.success:
+                self.logger.warning(f"Action '{action.name}' failed: {result.message}")
+                # Try emergency recovery for critical failures
+                if "critical" in result.message.lower() or "hp" in result.message.lower():
                     recovery_success = await self.emergency_recovery(
-                        character_name, f"Plan execution error at step {i+1}: {str(e)}"
+                        character_name, f"Plan step {i+1} failed: {result.message}"
                     )
                     if not recovery_success:
                         return False
+                else:
+                    return False
 
-            return True
+            self.logger.info(f"Action '{action.name}' succeeded: {result.message}")
 
-        except Exception as e:
-            self.logger.debug(f"Exception in plan execution: {type(e).__name__}: {str(e)}")
-            # Final emergency recovery attempt
-            await self.emergency_recovery(character_name, f"Plan execution critical error: {str(e)}")
-            return False
+            # Delegate state updates to StateManager for proper synchronization
+            # Apply the action result through StateManager
+            await self.state_manager.apply_action_result(result)
+
+            # Get the updated state from StateManager (with proper cooldown sync)
+            character_state = await self.state_manager.get_current_state()
+
+            # Wait for cooldown between actions if needed
+            if result.cooldown_seconds > 0:
+                await asyncio.sleep(min(result.cooldown_seconds, 30))  # Cap wait time
+
+        return True
+
 
     async def wait_for_cooldown(self, character_name: str) -> None:
         """Wait for character cooldown to expire before action execution.
@@ -277,25 +230,20 @@ class ActionExecutor:
         asynchronously until the cooldown expires, ensuring API compliance
         and preventing 499 cooldown errors during action execution.
         """
-        try:
-            # Check if character is ready via cooldown manager
-            if self.cooldown_manager.is_ready(character_name):
-                return
+        # Check if character is ready via cooldown manager
+        if self.cooldown_manager.is_ready(character_name):
+            return
 
-            # Get remaining cooldown time
-            remaining_time = self.cooldown_manager.get_remaining_time(character_name)
+        # Get remaining cooldown time
+        remaining_time = self.cooldown_manager.get_remaining_time(character_name)
 
-            if remaining_time > 0:
-                # Wait for the cooldown to expire, but cap at reasonable maximum
-                wait_time = min(remaining_time, 300)  # Max 5 minutes
-                await asyncio.sleep(wait_time)
+        if remaining_time > 0:
+            # Wait for the cooldown to expire, but cap at reasonable maximum
+            wait_time = min(remaining_time, 300)  # Max 5 minutes
+            await asyncio.sleep(wait_time)
 
-            # Use cooldown manager's async wait method if available
-            await self.cooldown_manager.wait_for_cooldown(character_name)
-
-        except Exception:
-            # Fallback: wait a short time if cooldown checking fails
-            await asyncio.sleep(1)
+        # Use cooldown manager's async wait method if available
+        await self.cooldown_manager.wait_for_cooldown(character_name)
 
     def validate_action_preconditions(self, action: BaseAction, current_state: CharacterGameState) -> bool:
         """Verify action preconditions are met before execution.
@@ -311,12 +259,8 @@ class ActionExecutor:
         preconditions required for the action, preventing failed execution
         attempts and ensuring optimal action planning efficiency.
         """
-        try:
-            # Use the BaseAction's built-in can_execute method
-            return action.can_execute(current_state)
-        except Exception:
-            # If precondition checking fails, be conservative and return False
-            return False
+        # Use the BaseAction's built-in can_execute method
+        return action.can_execute(current_state)
 
     async def handle_action_error(
         self, action: BaseAction, error: Exception, character_name: str
@@ -418,69 +362,59 @@ class ActionExecutor:
         format, extracting state changes, cooldown information, and execution
         status for consistent result handling throughout the system.
         """
-        try:
-            # Extract cooldown information
-            cooldown_seconds = 0
-            if hasattr(api_response, 'cooldown'):
-                cooldown_data = api_response.cooldown
-                if hasattr(cooldown_data, 'total_seconds'):
-                    cooldown_seconds = cooldown_data.total_seconds
-                elif hasattr(cooldown_data, 'remaining_seconds'):
-                    cooldown_seconds = cooldown_data.remaining_seconds
+        # Extract cooldown information
+        cooldown_seconds = 0
+        if hasattr(api_response, 'cooldown'):
+            cooldown_data = api_response.cooldown
+            if hasattr(cooldown_data, 'total_seconds'):
+                cooldown_seconds = cooldown_data.total_seconds
+            elif hasattr(cooldown_data, 'remaining_seconds'):
+                cooldown_seconds = cooldown_data.remaining_seconds
 
-            # Get expected effects from the action
-            expected_effects = action.get_effects()
+        # Get expected effects from the action
+        expected_effects = action.get_effects()
 
-            # Create state changes based on action effects and API response
-            state_changes = {}
+        # Create state changes based on action effects and API response
+        state_changes = {}
 
-            # Apply action effects
-            for state_key, effect_value in expected_effects.items():
-                state_changes[state_key] = effect_value
+        # Apply action effects
+        for state_key, effect_value in expected_effects.items():
+            state_changes[state_key] = effect_value
 
-            # Extract state changes from API response if character data is present
-            if hasattr(api_response, 'character') and api_response.character is not None:
-                # Get map content for location context
-                character = api_response.character
-                game_map = await self.api_client.get_map(character.x, character.y)
+        # Extract state changes from API response if character data is present
+        if hasattr(api_response, 'character') and api_response.character is not None:
+            # Get map content for location context
+            character = api_response.character
+            game_map = await self.api_client.get_map(character.x, character.y)
 
-                # Convert to internal state format
-                character_state = CharacterGameState.from_api_character(
-                    character, game_map.content, self.api_client.cooldown_manager
-                )
-                goap_state = character_state.to_goap_state()
-                typed_state = GameState.validate_state_dict(goap_state)
-
-                # Update state changes with actual character data
-                for state_key, value in typed_state.items():
-                    state_changes[state_key] = value
-
-            # Determine success status
-            success = not hasattr(api_response, 'error') and not hasattr(api_response, 'message') or \
-                     (hasattr(api_response, 'message') and 'failed' not in str(api_response.message).lower())
-
-            # Create result message
-            message = ""
-            if hasattr(api_response, 'message'):
-                message = str(api_response.message)
-            else:
-                message = f"Action {action.name} executed successfully"
-
-            return ActionResult(
-                success=success,
-                message=message,
-                state_changes=state_changes,
-                cooldown_seconds=cooldown_seconds
+            # Convert to internal state format
+            character_state = CharacterGameState.from_api_character(
+                character, game_map.content, self.api_client.cooldown_manager
             )
+            goap_state = character_state.to_goap_state()
+            typed_state = GameState.validate_state_dict(goap_state)
 
-        except Exception as e:
-            # Fallback result for processing errors
-            return ActionResult(
-                success=False,
-                message=f"Failed to process result for {action.name}: {str(e)}",
-                state_changes={},
-                cooldown_seconds=0
-            )
+            # Update state changes with actual character data
+            for state_key, value in typed_state.items():
+                state_changes[state_key] = value
+
+        # Determine success status
+        success = not hasattr(api_response, 'error') and not hasattr(api_response, 'message') or \
+                 (hasattr(api_response, 'message') and 'failed' not in str(api_response.message).lower())
+
+        # Create result message
+        message = ""
+        if hasattr(api_response, 'message'):
+            message = str(api_response.message)
+        else:
+            message = f"Action {action.name} executed successfully"
+
+        return ActionResult(
+            success=success,
+            message=message,
+            state_changes=state_changes,
+            cooldown_seconds=cooldown_seconds
+        )
 
     async def emergency_recovery(self, character_name: str, error_context: str) -> bool:
         """Perform emergency recovery actions (rest, move to safety).
@@ -496,62 +430,38 @@ class ActionExecutor:
         to safe locations, resting to recover HP, and clearing problematic
         states to restore AI player operation after critical errors.
         """
-        try:
-            # Get current character state
-            character = await self.api_client.get_character(character_name)
+        # Get current character state
+        character = await self.api_client.get_character(character_name)
 
-            # Check if HP is low and needs recovery
-            if character.hp < character.max_hp * 0.3:  # Less than 30% HP
-                try:
-                    # Move to spawn/safe location (0, 0) if not already there
-                    if character.x != 0 or character.y != 0:
-                        await self.api_client.move_character(character_name, 0, 0)
-                        await asyncio.sleep(2)  # Wait for movement cooldown
+        # Check if HP is low and needs recovery
+        if character.hp < character.max_hp * 0.3:  # Less than 30% HP
+            # Move to spawn/safe location (0, 0) if not already there
+            if character.x != 0 or character.y != 0:
+                await self.api_client.move_character(character_name, 0, 0)
+                await asyncio.sleep(2)  # Wait for movement cooldown
 
-                    # Rest to recover HP
-                    rest_attempts = 0
-                    max_rest_attempts = 10
+            # Rest to recover HP
+            rest_attempts = 0
+            max_rest_attempts = 10
 
-                    while character.hp < character.max_hp * 0.8 and rest_attempts < max_rest_attempts:
-                        try:
-                            await self.api_client.rest_character(character_name)
-                            await asyncio.sleep(5)  # Wait for rest cooldown
+            while character.hp < character.max_hp * 0.8 and rest_attempts < max_rest_attempts:
+                await self.api_client.rest_character(character_name)
+                await asyncio.sleep(5)  # Wait for rest cooldown
 
-                            # Refresh character state
-                            character = await self.api_client.get_character(character_name)
-                            rest_attempts += 1
+                # Refresh character state
+                character = await self.api_client.get_character(character_name)
+                rest_attempts += 1
 
-                        except Exception:
-                            if rest_attempts >= max_rest_attempts - 1:
-                                return False
-                            await asyncio.sleep(2)
-                            rest_attempts += 1
+            return True
 
-                    return True
-
-                except Exception:
-                    # If movement or resting fails, try just resting in place
-                    try:
-                        await self.api_client.rest_character(character_name)
-                        return True
-                    except Exception:
-                        return False
-
-            # If HP is fine, try basic recovery (move to safe location)
-            try:
-                if character.x != 0 or character.y != 0:
-                    await self.api_client.move_character(character_name, 0, 0)
-                    return True
-                else:
-                    # Already at safe location, just wait a moment
-                    await asyncio.sleep(1)
-                    return True
-            except Exception:
-                return False
-
-        except Exception:
-            # If we can't even get character state, recovery failed
-            return False
+        # If HP is fine, try basic recovery (move to safe location)
+        if character.x != 0 or character.y != 0:
+            await self.api_client.move_character(character_name, 0, 0)
+            return True
+        else:
+            # Already at safe location, just wait a moment
+            await asyncio.sleep(1)
+            return True
 
     async def get_action_by_name(self, action_name: str, current_state: CharacterGameState) -> BaseAction | None:
         """Get action instance by name from registry using actual game state.
@@ -613,8 +523,8 @@ class ActionExecutor:
 
             return api_call_time + cooldown_time + current_cooldown
 
-        except Exception:
-            # Fallback estimate
+        except (AttributeError, TypeError):
+            # Handle missing attributes or type issues
             return 10.0
 
     async def verify_action_success(self, action: BaseAction, result: ActionResult, character_name: str) -> bool:
@@ -632,34 +542,29 @@ class ActionExecutor:
         state changes with actual results, ensuring action effects match
         expectations for reliable GOAP planning feedback.
         """
-        try:
-            # If the result already indicates failure, don't verify
-            if not result.success:
-                return False
-
-            # Get expected effects from the action
-            expected_effects = action.get_effects()
-
-            # Check if key expected effects are present in result
-            for expected_key, expected_value in expected_effects.items():
-                if expected_key in result.state_changes:
-                    actual_value = result.state_changes[expected_key]
-
-                    # For most states, exact match is expected
-                    # For position states, allow small variations due to pathfinding
-                    if expected_key in [GameState.CURRENT_X, GameState.CURRENT_Y]:
-                        if abs(actual_value - expected_value) > 1:
-                            return False
-                    else:
-                        if actual_value != expected_value:
-                            return False
-
-            # If we get here, verification passed
-            return True
-
-        except Exception:
-            # If verification fails due to error, be conservative
+        # If the result already indicates failure, don't verify
+        if not result.success:
             return False
+
+        # Get expected effects from the action
+        expected_effects = action.get_effects()
+
+        # Check if key expected effects are present in result
+        for expected_key, expected_value in expected_effects.items():
+            if expected_key in result.state_changes:
+                actual_value = result.state_changes[expected_key]
+
+                # For most states, exact match is expected
+                # For position states, allow small variations due to pathfinding
+                if expected_key in [GameState.CURRENT_X, GameState.CURRENT_Y]:
+                    if abs(actual_value - expected_value) > 1:
+                        return False
+                else:
+                    if actual_value != expected_value:
+                        return False
+
+        # If we get here, verification passed
+        return True
 
     def handle_rate_limit(self, retry_after: int) -> None:
         """Handle API rate limiting with appropriate backoff.
@@ -674,28 +579,24 @@ class ActionExecutor:
         limiting including exponential backoff, jitter, and compliance with
         server-specified retry intervals to maintain API access.
         """
-        try:
-            # Cap the retry time at a reasonable maximum
-            capped_retry_after = min(retry_after, 300)  # Max 5 minutes
+        # Cap the retry time at a reasonable maximum
+        capped_retry_after = min(retry_after, 300)  # Max 5 minutes
 
-            # Add some jitter to avoid thundering herd
-            jitter = random.uniform(0.1, 0.3) * capped_retry_after
-            actual_wait_time = capped_retry_after + jitter
+        # Add some jitter to avoid thundering herd
+        jitter = random.uniform(0.1, 0.3) * capped_retry_after
+        actual_wait_time = capped_retry_after + jitter
 
-            # Store the rate limit info for future reference
-            # (In a real implementation, this might update some global state)
+        # Store the rate limit info for future reference
+        # (In a real implementation, this might update some global state)
 
-            # Note: This is a synchronous method but in practice might need to be async
-            # For now, we'll just set up the timing info
-            self._last_rate_limit_time = time.time()
-            self._rate_limit_wait_time = actual_wait_time
+        # Note: This is a synchronous method but in practice might need to be async
+        # For now, we'll just set up the timing info
+        self._last_rate_limit_time = time.time()
+        self._rate_limit_wait_time = actual_wait_time
 
-        except Exception:
-            # Fallback: set a default rate limit wait
-            self._last_rate_limit_time = time.time()
-            self._rate_limit_wait_time = 60.0
-
-    async def safe_execute(self, action: BaseAction, character_name: str, current_state: CharacterGameState) -> ActionResult:
+    async def safe_execute(
+        self, action: BaseAction, character_name: str, current_state: CharacterGameState
+    ) -> ActionResult:
         """Execute action with comprehensive error handling and retries.
 
         Parameters:
@@ -710,84 +611,53 @@ class ActionExecutor:
         including precondition validation, retry logic, error recovery,
         and result verification for maximum reliability.
         """
-        try:
-            # Pre-execution safety checks
-            if not self.validate_action_preconditions(action, current_state):
-                return ActionResult(
-                    success=False,
-                    message=f"Safe execution failed: {action.name} preconditions not met",
-                    state_changes={},
-                    cooldown_seconds=0
-                )
+        # Pre-execution safety checks
+        if not self.validate_action_preconditions(action, current_state):
+            return ActionResult(
+                success=False,
+                message=f"Safe execution failed: {action.name} preconditions not met",
+                state_changes={},
+                cooldown_seconds=0
+            )
 
-            # Enhanced execution with extended retry logic
-            max_safe_attempts = 5
-            for attempt in range(max_safe_attempts):
-                try:
-                    # Use the standard execute_action method which already has error handling
-                    result = await self.execute_action(action, character_name, current_state)
+        # Enhanced execution with extended retry logic
+        max_safe_attempts = 5
+        for attempt in range(max_safe_attempts):
+            # Use the standard execute_action method which already has error handling
+            result = await self.execute_action(action, character_name, current_state)
 
-                    if result.success:
-                        # Additional verification for safe execution
-                        verification_passed = await self.verify_action_success(action, result, character_name)
-                        if verification_passed:
-                            return result
-                        else:
-                            # Verification failed, but action claimed success
-                            if attempt < max_safe_attempts - 1:
-                                await asyncio.sleep(self.retry_delays[min(attempt, len(self.retry_delays) - 1)])
-                                continue
-                            else:
-                                return ActionResult(
-                                    success=False,
-                                    message=f"Safe execution: {action.name} verification failed after {max_safe_attempts} attempts",
-                                    state_changes={},
-                                    cooldown_seconds=0
-                                )
-                    else:
-                        # Action failed, try emergency recovery if it's a critical failure
-                        if "critical" in result.message.lower() or "hp" in result.message.lower():
-                            recovery_success = await self.emergency_recovery(character_name, f"Safe execution critical failure: {result.message}")
-                            if not recovery_success and attempt >= max_safe_attempts - 1:
-                                return result
-
-                        if attempt < max_safe_attempts - 1:
-                            await asyncio.sleep(self.retry_delays[min(attempt, len(self.retry_delays) - 1)])
-                            continue
-                        else:
-                            return result
-
-                except Exception as e:
-                    # Handle exceptions during safe execution
+            if result.success:
+                # Additional verification for safe execution
+                verification_passed = await self.verify_action_success(action, result, character_name)
+                if verification_passed:
+                    return result
+                else:
+                    # Verification failed, but action claimed success
                     if attempt < max_safe_attempts - 1:
-                        # Try emergency recovery for unexpected errors
-                        await self.emergency_recovery(character_name, f"Safe execution exception: {str(e)}")
                         await asyncio.sleep(self.retry_delays[min(attempt, len(self.retry_delays) - 1)])
                         continue
                     else:
                         return ActionResult(
                             success=False,
-                            message=f"Safe execution failed after {max_safe_attempts} attempts: {str(e)}",
+                            message=f"Safe execution: {action.name} verification failed after {max_safe_attempts}",
                             state_changes={},
                             cooldown_seconds=0
                         )
+            else:
+                # Action failed, try emergency recovery if it's a critical failure
+                if "critical" in result.message.lower() or "hp" in result.message.lower():
+                    recovery_success = await self.emergency_recovery(
+                        character_name, f"Safe execution critical failure: {result.message}"
+                    )
+                    if not recovery_success and attempt >= max_safe_attempts - 1:
+                        return result
 
-            # Fallback result (shouldn't be reached)
-            return ActionResult(
-                success=False,
-                message=f"Safe execution of {action.name} completed without definitive result",
-                state_changes={},
-                cooldown_seconds=0
-            )
+                if attempt < max_safe_attempts - 1:
+                    await asyncio.sleep(self.retry_delays[min(attempt, len(self.retry_delays) - 1)])
+                    continue
+                else:
+                    return result
 
-        except Exception as e:
-            # Final safety net
-            return ActionResult(
-                success=False,
-                message=f"Safe execution critical error for {action.name}: {str(e)}",
-                state_changes={},
-                cooldown_seconds=0
-            )
 
     # Enhanced methods for unified sub-goal architecture
 
@@ -877,13 +747,13 @@ class ActionExecutor:
                     # Log error and continue with remaining sub-goal requests
                     self.logger.warning(f"Sub-goal execution failed: {e}")
                     continue
-                except Exception as e:
-                    # Wrap unexpected errors in RecursiveSubGoalError
+                except (ConnectionError, TimeoutError, OSError) as e:
+                    # Wrap network errors in RecursiveSubGoalError
                     raise RecursiveSubGoalError(
                         type(action).__name__,
                         sub_goal_request.goal_type,
                         depth,
-                        str(e)
+                        f"Network error: {str(e)}"
                     )
 
         return result
@@ -979,19 +849,3 @@ class ActionExecutor:
                 error_message=str(e)
             )
 
-    async def get_action_by_name(self, action_name: str, current_state: CharacterGameState) -> BaseAction:
-        """Get action instance by name for execution using the action registry."""
-        if not self.cache_manager:
-            return None
-
-        # Get game data for action creation
-        game_data = await self.cache_manager.get_game_data()
-
-        # Use the action registry to get available actions and find matching one
-        available_actions = self.action_registry.get_available_actions(current_state, game_data)
-
-        for action in available_actions:
-            if action.name == action_name:
-                return action
-
-        return None

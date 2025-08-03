@@ -157,24 +157,21 @@ class TestActionMixin:
                 return False
 
         # Validate state usage
-        try:
-            preconditions = action.get_preconditions()
-            if not isinstance(preconditions, dict):
-                return False
-            for key in preconditions.keys():
-                if not isinstance(key, GameState):
-                    return False
-
-            effects = action.get_effects()
-            if not isinstance(effects, dict):
-                return False
-            for key in effects.keys():
-                if not isinstance(key, GameState):
-                    return False
-
-            return True
-        except Exception:
+        preconditions = action.get_preconditions()
+        if not isinstance(preconditions, dict):
             return False
+        for key in preconditions.keys():
+            if not isinstance(key, GameState):
+                return False
+
+        effects = action.get_effects()
+        if not isinstance(effects, dict):
+            return False
+        for key in effects.keys():
+            if not isinstance(key, GameState):
+                return False
+
+        return True
 
     @staticmethod
     def create_mock_api_response(success: bool = True, message: str = "Success", cooldown: int = 1) -> ActionResult:
@@ -468,11 +465,8 @@ class TestActionSystemCompatibility(TestActionMixin):
 
         for action in actions:
             # Should not raise exceptions when checking preconditions
-            try:
-                can_execute = action.can_execute(minimal_state)
-                assert isinstance(can_execute, bool)
-            except Exception as e:
-                pytest.fail(f"Action {action.__class__.__name__} raised exception with minimal state: {e}")
+            can_execute = action.can_execute(minimal_state)
+            assert isinstance(can_execute, bool)
 
     def test_actions_validate_state_types_correctly(self, base_game_state):
         """Test that actions correctly validate state value types"""
@@ -494,11 +488,8 @@ class TestActionSystemCompatibility(TestActionMixin):
             corrupted_state[GameState.COOLDOWN_READY] = "not_a_boolean"  # Should be bool
 
             # Should handle type mismatches gracefully
-            try:
-                invalid_result = action.can_execute(corrupted_state)
-                assert isinstance(invalid_result, bool)
-            except Exception as e:
-                pytest.fail(f"Action {action.__class__.__name__} did not handle type mismatch gracefully: {e}")
+            invalid_result = action.can_execute(corrupted_state)
+            assert isinstance(invalid_result, bool)
 
     def test_action_costs_scale_appropriately(self, mock_game_data):
         """Test that parameterized action costs scale appropriately with parameters"""

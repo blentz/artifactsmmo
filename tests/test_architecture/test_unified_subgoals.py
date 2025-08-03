@@ -25,7 +25,7 @@ from src.ai_player.goals.gathering_goal import GatheringGoal
 from src.ai_player.goals.sub_goal_request import SubGoalRequest
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
-from src.ai_player.types.game_data import GameData
+from src.game_data.game_data import GameData
 from src.ai_player.types.goap_models import (
     GoalFactoryContext,
     GOAPAction,
@@ -114,15 +114,11 @@ class TestUnifiedArchitectureCompliance:
             # Get type hints for the method
             get_target_state_method = getattr(goal_class, 'get_target_state')
 
-            try:
-                type_hints = get_type_hints(get_target_state_method)
-                if 'return' in type_hints:
-                    return_type = type_hints['return']
-                    assert return_type == GOAPTargetState or str(return_type).endswith('GOAPTargetState'), \
-                        f"{goal_class.__name__}.get_target_state should return GOAPTargetState"
-            except Exception:
-                # Type hints might not be available, check manually by creating instance
-                pass
+            type_hints = get_type_hints(get_target_state_method)
+            if 'return' in type_hints:
+                return_type = type_hints['return']
+                assert return_type == GOAPTargetState or str(return_type).endswith('GOAPTargetState'), \
+                    f"{goal_class.__name__}.get_target_state should return GOAPTargetState"
 
     def test_goal_manager_factory_method_exists(self):
         """Test that GoalManager has factory method for sub-goal creation."""
@@ -293,14 +289,10 @@ class TestUnifiedArchitectureCompliance:
 
         # Check that factory method has proper type hints
         factory_method = getattr(GoalManager, 'create_goal_from_sub_request')
-        try:
-            type_hints = get_type_hints(factory_method)
-            # Should have type hints for parameters and return value
-            assert len(type_hints) > 0, \
-                "Factory method should have type hints for type safety"
-        except Exception:
-            # Type hints might not be fully available in test environment
-            pass
+        type_hints = get_type_hints(factory_method)
+        # Should have type hints for parameters and return value
+        assert len(type_hints) > 0, \
+            "Factory method should have type hints for type safety"
 
     def test_no_string_based_state_keys(self):
         """Test that no raw string state keys are used (GameState enum required)."""
@@ -411,16 +403,12 @@ class TestArchitectureIntegrity:
 
         # Factory method should return BaseGoal type
         factory_method = getattr(GoalManager, 'create_goal_from_sub_request')
-        try:
-            type_hints = get_type_hints(factory_method)
-            if 'return' in type_hints:
-                return_type = type_hints['return']
-                # Should return BaseGoal or subclass
-                assert str(return_type).endswith('BaseGoal') or return_type == BaseGoal, \
-                    "Factory method should return BaseGoal abstraction"
-        except Exception:
-            # Type hints might not be available
-            pass
+        type_hints = get_type_hints(factory_method)
+        if 'return' in type_hints:
+            return_type = type_hints['return']
+            # Should return BaseGoal or subclass
+            assert str(return_type).endswith('BaseGoal') or return_type == BaseGoal, \
+                "Factory method should return BaseGoal abstraction"
 
     def test_open_closed_principle(self):
         """Test that architecture is open for extension, closed for modification."""
@@ -506,35 +494,62 @@ class TestArchitectureIntegrity:
             alchemy_level=1, alchemy_xp=0
         )
 
-        mock_game_data = GameData()
+        # Create mock game data with required data to satisfy validation
+        from src.game_data.models import GameMonster, GameItem, GameResource, GameMap
+        
+        mock_monster = GameMonster(
+            code="goblin", name="Goblin", level=1, hp=100,
+            attack_fire=10, attack_earth=10, attack_water=10, attack_air=10,
+            res_fire=5, res_earth=5, res_water=5, res_air=5,
+            min_gold=1, max_gold=10, drops=[]
+        )
+        
+        mock_item = GameItem(
+            code="iron_sword", name="Iron Sword", level=1, type="weapon", 
+            subtype="sword", description="A basic iron sword", effects=[], 
+            craft=None, tradeable=True
+        )
+        
+        mock_resource = GameResource(
+            code="copper_ore", name="Copper Ore", skill="mining", 
+            level=1, drops=[]
+        )
+        
+        mock_map = GameMap(
+            name="test_map", skin="grass", x=0, y=0, 
+            content={"type": "monster", "code": "goblin"}
+        )
+        
+        mock_game_data = GameData(
+            monsters=[mock_monster],
+            items=[mock_item], 
+            resources=[mock_resource],
+            maps=[mock_map],
+            npcs=[]
+        )
 
         for goal_class in goal_implementations:
-            try:
-                # Create instance (may require specific parameters)
-                if goal_class == CombatGoal:
-                    goal_instance = goal_class(target_monster_code="goblin")
-                elif goal_class == CraftingGoal:
-                    goal_instance = goal_class(target_item_code="iron_sword")
-                elif goal_class == EquipmentGoal:
-                    goal_instance = goal_class(target_slot="weapon")
-                elif goal_class == GatheringGoal:
-                    goal_instance = goal_class(resource_code="copper_ore")
-                else:
-                    goal_instance = goal_class()
+            # Create instance (may require specific parameters)
+            if goal_class == CombatGoal:
+                goal_instance = goal_class(target_monster_code="goblin")
+            elif goal_class == CraftingGoal:
+                goal_instance = goal_class(target_item_code="iron_sword")
+            elif goal_class == EquipmentGoal:
+                goal_instance = goal_class(target_slot="weapon")
+            elif goal_class == GatheringGoal:
+                goal_instance = goal_class(target_resource_code="copper_ore")
+            else:
+                goal_instance = goal_class()
 
-                # Should be usable as BaseGoal
-                assert isinstance(goal_instance, BaseGoal), \
-                    f"{goal_class.__name__} should be substitutable for BaseGoal"
+            # Should be usable as BaseGoal
+            assert isinstance(goal_instance, BaseGoal), \
+                f"{goal_class.__name__} should be substitutable for BaseGoal"
 
-                # Should implement BaseGoal interface consistently
-                result = goal_instance.get_target_state(mock_character_state, mock_game_data)
-                assert isinstance(result, GOAPTargetState), \
-                    f"{goal_class.__name__} should return GOAPTargetState like BaseGoal"
+            # Should implement BaseGoal interface consistently
+            result = goal_instance.get_target_state(mock_character_state, mock_game_data)
+            assert isinstance(result, GOAPTargetState), \
+                f"{goal_class.__name__} should return GOAPTargetState like BaseGoal"
 
-            except Exception:
-                # Some goals might require specific parameters
-                # This is acceptable as long as they implement the interface
-                pass
 class TestBackwardCompatibility:
     """Test that the unified architecture maintains necessary compatibility."""
 

@@ -358,7 +358,7 @@ class TestCLIManagerAsyncCommandHandlers:
         """Test create character handler with API error."""
         # Setup mocks to raise exception
         mock_api_instance = AsyncMock()
-        mock_api_instance.create_character.side_effect = Exception("API Error")
+        mock_api_instance.create_character.side_effect = ValueError("Invalid character data")
         mock_api_wrapper.return_value = mock_api_instance
 
         cli_manager = CLIManager()
@@ -371,8 +371,8 @@ class TestCLIManagerAsyncCommandHandlers:
         # Should handle the exception gracefully
         with patch('builtins.print') as mock_print:
             await cli_manager.handle_create_character(args)
-            # Should print error message
-            mock_print.assert_called()
+            # Should print error message about invalid character information
+            assert any("Invalid character information" in str(call) for call in mock_print.call_args_list)
 
     @pytest.mark.asyncio
     @patch('src.cli.main.APIClientWrapper')
@@ -451,10 +451,27 @@ class TestCLIManagerAsyncCommandHandlers:
         # Setup mocks
         mock_api_instance = AsyncMock()
         mock_cache_instance = AsyncMock()
-        mock_characters = [
-            Mock(name="char1", level=5, skin="men1", x=0, y=0, hp=100, max_hp=100, gold=50),
-            Mock(name="char2", level=10, skin="women1", x=5, y=5, hp=150, max_hp=150, gold=100)
-        ]
+        char1 = Mock()
+        char1.name = "char1"
+        char1.level = 5
+        char1.skin = "men1"
+        char1.x = 0
+        char1.y = 0
+        char1.hp = 100
+        char1.max_hp = 100
+        char1.gold = 50
+        
+        char2 = Mock()
+        char2.name = "char2"
+        char2.level = 10
+        char2.skin = "women1"
+        char2.x = 5
+        char2.y = 5
+        char2.hp = 150
+        char2.max_hp = 150
+        char2.gold = 100
+        
+        mock_characters = [char1, char2]
         mock_cache_instance.cache_all_characters.return_value = mock_characters
         mock_api_wrapper.return_value = mock_api_instance
         mock_cache_manager.return_value = mock_cache_instance

@@ -6,7 +6,7 @@ Goal for recovering HP to a target threshold.
 
 from ..state.character_game_state import CharacterGameState
 from ..state.game_state import GameState
-from ..types.game_data import GameData
+from src.game_data.game_data import GameData
 from ..types.goap_models import GOAPTargetState
 from .base_goal import BaseGoal
 
@@ -130,3 +130,44 @@ class RestGoal(BaseGoal):
     def __repr__(self) -> str:
         """Detailed string representation of the rest goal."""
         return f"RestGoal(min_hp_percentage={self.min_hp_percentage})"
+
+    def estimate_error_risk(self, character_state: CharacterGameState) -> float:
+        """Estimate the risk of errors or failures when pursuing this goal.
+        
+        Parameters:
+            character_state: Current character state
+            
+        Returns:
+            float: Risk estimation (0.0 = no risk, 1.0 = high risk)
+        """
+        # Rest action has very low risk - mostly just waiting
+        # Only slight risk if HP is extremely low (character could die)
+        if character_state.max_hp == 0:
+            return 0.0
+            
+        current_hp_percentage = character_state.hp / character_state.max_hp
+        
+        if current_hp_percentage < 0.1:  # Less than 10% HP
+            return 0.3  # Some risk of death before rest completes
+        elif current_hp_percentage < 0.2:  # Less than 20% HP
+            return 0.1  # Low risk
+        else:
+            return 0.0  # Minimal risk
+
+    def generate_sub_goal_requests(
+        self,
+        character_state: CharacterGameState,
+        game_data: "GameData"
+    ) -> list["SubGoalRequest"]:
+        """Generate sub-goal requests for achieving rest goal.
+        
+        Parameters:
+            character_state: Current character state
+            game_data: Current game data
+            
+        Returns:
+            list: List of sub-goal requests (empty for rest goal as it's atomic)
+        """
+        # Rest goal is atomic - no sub-goals needed
+        # The action executor will handle the actual rest action
+        return []

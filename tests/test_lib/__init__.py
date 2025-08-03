@@ -91,12 +91,7 @@ def validate_imports() -> tuple[bool, list[str]]:
     test_modules = get_test_modules()
 
     for module_name in test_modules:
-        try:
-            importlib.import_module(f"tests.test_lib.{module_name}")
-        except ImportError as e:
-            errors.append(f"Failed to import {module_name}: {e}")
-        except Exception as e:
-            errors.append(f"Error importing {module_name}: {e}")
+        importlib.import_module(f"tests.test_lib.{module_name}")
 
     return len(errors) == 0, errors
 

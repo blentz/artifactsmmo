@@ -7,6 +7,8 @@ and strategic goal orchestration for level 5 progression.
 
 from unittest.mock import Mock
 
+import pytest
+
 from src.ai_player.goal_selector import GoalWeightCalculator
 from src.game_data.models import GameItem, GameMap, GameMonster, GameNPC, GameResource
 from src.ai_player.goals.combat_goal import CombatGoal
@@ -15,7 +17,7 @@ from src.ai_player.goals.equipment_goal import EquipmentGoal
 from src.ai_player.goals.gathering_goal import GatheringGoal
 from src.ai_player.goals.sub_goal_request import SubGoalRequest
 from src.ai_player.state.character_game_state import CharacterGameState
-from src.ai_player.types.game_data import GameData
+from src.game_data.game_data import GameData
 
 
 def create_test_character():
@@ -89,11 +91,12 @@ class TestGoalWeightCalculator:
         """Test that GoalWeightCalculator initializes with all required goals."""
         calc = GoalWeightCalculator()
 
-        assert len(calc.goals) == 4
+        assert len(calc.goals) == 5
         assert any(isinstance(goal, CombatGoal) for goal in calc.goals)
         assert any(isinstance(goal, CraftingGoal) for goal in calc.goals)
         assert any(isinstance(goal, GatheringGoal) for goal in calc.goals)
         assert any(isinstance(goal, EquipmentGoal) for goal in calc.goals)
+        assert any(goal.__class__.__name__ == "RestGoal" for goal in calc.goals)
 
     def test_init_creates_performance_metrics(self):
         """Test that performance metrics tracking is initialized."""
@@ -145,7 +148,7 @@ class TestGoalWeightCalculator:
 
         priorities = calc.get_goal_priorities(char_state, game_data)
 
-        assert len(priorities) == 4
+        assert len(priorities) == 5
         for goal_name, weight, feasible in priorities:
             assert isinstance(goal_name, str)
             assert isinstance(weight, (int, float))
@@ -158,7 +161,7 @@ class TestGoalWeightCalculator:
         game_data = create_test_game_data()
 
         # Mock goals with different weights
-        weights = [3.0, 7.0, 1.0, 5.0]
+        weights = [3.0, 7.0, 1.0, 5.0, 4.0]
         for i, goal in enumerate(calc.goals):
             goal.calculate_weight = Mock(return_value=weights[i])
             goal.is_feasible = Mock(return_value=True)
@@ -250,10 +253,9 @@ class TestGoalWeightCalculator:
             goal.is_feasible = Mock(return_value=True)  # Allow feasibility check to pass
             goal.calculate_weight = Mock(side_effect=Exception("Test error"))  # Exception in weight calculation
 
-        selected_goal, sub_goals = calc.select_optimal_goal(char_state, game_data)
-
-        assert selected_goal is None
-        assert sub_goals == []
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Test error"):
+            calc.select_optimal_goal(char_state, game_data)
 
     def test_update_goal_performance_new_goal(self):
         """Test updating performance metrics for new goal."""

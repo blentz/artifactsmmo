@@ -51,28 +51,16 @@ class ActionDiagnostics:
         action_types = self.action_registry.get_all_action_types()
 
         for action_class in action_types:
-            try:
-                # Try to create an instance to test validation
-                try:
-                    action_instance = action_class()
+            # Create an instance to test validation
+            action_instance = action_class()
 
-                    # Validate preconditions
-                    if not action_instance.validate_preconditions():
-                        errors.append(f"Action {action_class.__name__} has invalid preconditions (non-GameState keys)")
+            # Validate preconditions
+            if not action_instance.validate_preconditions():
+                errors.append(f"Action {action_class.__name__} has invalid preconditions (non-GameState keys)")
 
-                    # Validate effects
-                    if not action_instance.validate_effects():
-                        errors.append(f"Action {action_class.__name__} has invalid effects (non-GameState keys)")
-
-                except TypeError:
-                    # Action requires parameters - can't validate instance without params
-                    # This is expected for parameterized actions
-                    continue
-                except Exception as e:
-                    errors.append(f"Action {action_class.__name__} validation failed: {str(e)}")
-
-            except Exception as e:
-                errors.append(f"Failed to validate action class {action_class.__name__}: {str(e)}")
+            # Validate effects
+            if not action_instance.validate_effects():
+                errors.append(f"Action {action_class.__name__} has invalid effects (non-GameState keys)")
 
         return errors
 
@@ -96,36 +84,31 @@ class ActionDiagnostics:
             "recommendations": []
         }
 
-        try:
-            preconditions = action.get_preconditions()
-            analysis["preconditions"] = {key.value if isinstance(key, GameState) else str(key): value
-                                        for key, value in preconditions.items()}
+        preconditions = action.get_preconditions()
+        analysis["preconditions"] = {key.value if isinstance(key, GameState) else str(key): value
+                                    for key, value in preconditions.items()}
 
-            # Check for proper GameState enum usage
-            for key, value in preconditions.items():
-                if not isinstance(key, GameState):
-                    analysis["valid"] = False
-                    analysis["issues"].append(f"Precondition key '{key}' is not a GameState enum")
+        # Check for proper GameState enum usage
+        for key, value in preconditions.items():
+            if not isinstance(key, GameState):
+                analysis["valid"] = False
+                analysis["issues"].append(f"Precondition key '{key}' is not a GameState enum")
 
-                # Check for logical precondition values
-                if key == GameState.CHARACTER_LEVEL and isinstance(value, int):
-                    if value < 1 or value > 45:
-                        analysis["issues"].append(f"Character level precondition {value} is out of range (1-45)")
+            # Check for logical precondition values
+            if key == GameState.CHARACTER_LEVEL and isinstance(value, int):
+                if value < 1 or value > 45:
+                    analysis["issues"].append(f"Character level precondition {value} is out of range (1-45)")
 
-                # Check for boolean preconditions that should use appropriate values
-                boolean_keys = {GameState.COOLDOWN_READY, GameState.CAN_FIGHT, GameState.CAN_GATHER}
-                if key in boolean_keys and not isinstance(value, bool):
-                    analysis["issues"].append(
-                        f"Boolean state '{key.value}' should have boolean value, got {type(value)}"
-                    )
+            # Check for boolean preconditions that should use appropriate values
+            boolean_keys = {GameState.COOLDOWN_READY, GameState.CAN_FIGHT, GameState.CAN_GATHER}
+            if key in boolean_keys and not isinstance(value, bool):
+                analysis["issues"].append(
+                    f"Boolean state '{key.value}' should have boolean value, got {type(value)}"
+                )
 
-            # Check for common missing preconditions
-            if GameState.COOLDOWN_READY not in preconditions:
-                analysis["recommendations"].append("Consider adding COOLDOWN_READY precondition for API actions")
-
-        except Exception as e:
-            analysis["valid"] = False
-            analysis["issues"].append(f"Failed to analyze preconditions: {str(e)}")
+        # Check for common missing preconditions
+        if GameState.COOLDOWN_READY not in preconditions:
+            analysis["recommendations"].append("Consider adding COOLDOWN_READY precondition for API actions")
 
         return analysis
 

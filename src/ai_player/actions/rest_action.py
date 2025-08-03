@@ -329,11 +329,8 @@ class RestAction(BaseAction):
         Return values:
             Boolean indicating whether all precondition keys are valid GameState enums
         """
-        try:
-            preconditions = self.get_preconditions()
-            return all(isinstance(key, GameState) for key in preconditions.keys())
-        except Exception:
-            return False
+        preconditions = self.get_preconditions()
+        return all(isinstance(key, GameState) for key in preconditions.keys())
 
     def validate_effects(self) -> bool:
         """Validate that all effects use valid GameState enum keys.
@@ -344,8 +341,5 @@ class RestAction(BaseAction):
         Return values:
             Boolean indicating whether all effect keys are valid GameState enums
         """
-        try:
-            effects = self.get_effects()
-            return all(isinstance(key, GameState) for key in effects.keys())
-        except Exception:
-            return False
+        effects = self.get_effects()
+        return all(isinstance(key, GameState) for key in effects.keys())

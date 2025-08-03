@@ -103,12 +103,8 @@ class TestCLIManagerBasic:
         cli_manager = CLIManager()
 
         # Test that setup_logging method exists and can be called without error
-        try:
-            cli_manager.setup_logging("DEBUG")
-            success = True
-        except Exception:
-            success = False
-
+        cli_manager.setup_logging("DEBUG")
+        success = True
         assert success
 
 

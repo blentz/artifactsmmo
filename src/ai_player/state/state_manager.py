@@ -13,6 +13,10 @@ throughout the AI player operation.
 import asyncio
 from typing import Any
 
+from ...lib.log import get_logger
+
+logger = get_logger(__name__)
+
 from ...game_data.api_client import APIClientWrapper
 from ...game_data.cache_manager import CacheManager
 from ...lib.yaml_data import YamlData
@@ -151,26 +155,9 @@ class StateManager:
         # Create a new CharacterGameState instance with updated data
         self._cached_state = CharacterGameState(**current_data)
 
-        # Update location flags if position changed
-        if position_changed:
-            self._update_location_flags_async()
+        # Location flags will be updated on next API sync to avoid race conditions
 
-        # Update cooldown state if action result indicates a cooldown
-        if action_result.cooldown_seconds > 0:
-            # Update model with cooldown effects
-            cooldown_data = self._cached_state.model_dump()
-            cooldown_data.update({
-                'cooldown_ready': False,
-                'can_fight': False,
-                'can_gather': False,
-                'can_craft': False,
-                'can_trade': False,
-                'can_move': False,
-                'can_rest': False,
-                'can_use_item': False,
-                'can_bank': False,
-            })
-            self._cached_state = CharacterGameState(**cooldown_data)
+        # Cooldown state will be updated from API sync to ensure consistency
 
     def _update_location_flags_async(self) -> None:
         """Update location flags based on current position - schedules async update.
@@ -205,45 +192,45 @@ class StateManager:
         the cached state with appropriate location flags for GOAP planning.
         """
 
+        # Get map content at the new position
         try:
-            # Get map content at the new position
             map_data = await self.api_client.get_map(x, y)
+        except KeyError as e:
+            logger.warning(f"Missing map data for location lookup: {e}")
+            # Location flags will be updated on next API sync
+            return
 
-            # Get current model data
-            current_data = self._cached_state.model_dump()
+        # Get current model data
+        current_data = self._cached_state.model_dump()
 
-            # Reset all location flags
-            current_data.update({
-                'at_monster_location': False,
-                'at_resource_location': False,
-                'at_safe_location': True,
-                'xp_source_available': False,
-            })
+        # Reset all location flags
+        current_data.update({
+            'at_monster_location': False,
+            'at_resource_location': False,
+            'at_safe_location': True,
+            'xp_source_available': False,
+        })
 
-            # Set appropriate flags based on map content
-            if map_data.content:
-                if map_data.content.type == "monster":
-                    current_data.update({
-                        'at_monster_location': True,
-                        'at_safe_location': False,
-                        'xp_source_available': True,
-                    })
-                elif map_data.content.type == "resource":
-                    current_data.update({
-                        'at_resource_location': True,
-                        'xp_source_available': True,
-                    })
-                elif map_data.content.type == "workshop":
-                    current_data.update({
-                        'xp_source_available': True,
-                    })
+        # Set appropriate flags based on map content
+        if map_data.content:
+            if map_data.content.type == "monster":
+                current_data.update({
+                    'at_monster_location': True,
+                    'at_safe_location': False,
+                    'xp_source_available': True,
+                })
+            elif map_data.content.type == "resource":
+                current_data.update({
+                    'at_resource_location': True,
+                    'xp_source_available': True,
+                })
+            elif map_data.content.type == "workshop":
+                current_data.update({
+                    'xp_source_available': True,
+                })
 
-            # Update the cached state with new model instance
-            self._cached_state = CharacterGameState(**current_data)
-
-        except Exception:
-            # If map lookup fails, location flags will be updated on next API sync
-            pass
+        # Update the cached state with new model instance
+        self._cached_state = CharacterGameState(**current_data)
 
     def get_cached_state(self) -> CharacterGameState | None:
         """Get locally cached state as CharacterGameState model.
@@ -284,90 +271,81 @@ class StateManager:
         if target_state is None:
             return False
 
-        try:
-            # Validate HP consistency
-            hp_current = target_state.get(GameState.HP_CURRENT)
-            hp_max = target_state.get(GameState.HP_MAX)
-            if hp_current is not None and hp_max is not None:
-                if hp_current < 0 or hp_current > hp_max:
+        # Validate HP consistency
+        hp_current = target_state.get(GameState.HP_CURRENT)
+        hp_max = target_state.get(GameState.HP_MAX)
+        if hp_current is not None and hp_max is not None:
+            if hp_current < 0 or hp_current > hp_max:
+                return False
+
+        # Validate levels are non-negative
+        level_keys = [
+            GameState.CHARACTER_LEVEL,
+            GameState.MINING_LEVEL,
+            GameState.WOODCUTTING_LEVEL,
+            GameState.FISHING_LEVEL,
+            GameState.WEAPONCRAFTING_LEVEL,
+            GameState.GEARCRAFTING_LEVEL,
+            GameState.JEWELRYCRAFTING_LEVEL,
+            GameState.COOKING_LEVEL,
+            GameState.ALCHEMY_LEVEL,
+        ]
+
+        for level_key in level_keys:
+            level_value = target_state.get(level_key)
+            if level_value is not None and level_value < 0:
+                return False
+
+        # Validate inventory consistency
+        inv_available = target_state.get(GameState.INVENTORY_SPACE_AVAILABLE)
+        inv_used = target_state.get(GameState.INVENTORY_SPACE_USED)
+        if inv_available is not None and inv_used is not None:
+            if inv_available < 0 or inv_used < 0:
+                return False
+
+        # Validate skill levels aren't unreasonably high compared to character level
+        char_level = target_state.get(GameState.CHARACTER_LEVEL)
+        if char_level is not None:
+            max_skill_level = char_level + 10  # Allow some buffer
+            for level_key in level_keys[1:]:  # Skip CHARACTER_LEVEL
+                skill_level = target_state.get(level_key)
+                if skill_level is not None and skill_level > max_skill_level:
                     return False
 
-            # Validate levels are non-negative
-            level_keys = [
-                GameState.CHARACTER_LEVEL,
-                GameState.MINING_LEVEL,
-                GameState.WOODCUTTING_LEVEL,
-                GameState.FISHING_LEVEL,
-                GameState.WEAPONCRAFTING_LEVEL,
-                GameState.GEARCRAFTING_LEVEL,
-                GameState.JEWELRYCRAFTING_LEVEL,
-                GameState.COOKING_LEVEL,
-                GameState.ALCHEMY_LEVEL,
-            ]
-
-            for level_key in level_keys:
-                level_value = target_state.get(level_key)
-                if level_value is not None and level_value < 0:
-                    return False
-
-            # Validate inventory consistency
-            inv_available = target_state.get(GameState.INVENTORY_SPACE_AVAILABLE)
-            inv_used = target_state.get(GameState.INVENTORY_SPACE_USED)
-            if inv_available is not None and inv_used is not None:
-                if inv_available < 0 or inv_used < 0:
-                    return False
-
-            # Validate skill levels aren't unreasonably high compared to character level
-            char_level = target_state.get(GameState.CHARACTER_LEVEL)
-            if char_level is not None:
-                max_skill_level = char_level + 10  # Allow some buffer
-                for level_key in level_keys[1:]:  # Skip CHARACTER_LEVEL
-                    skill_level = target_state.get(level_key)
-                    if skill_level is not None and skill_level > max_skill_level:
-                        return False
-
-            return True
-
-        except Exception:
-            # If validation fails, assume inconsistency
-            return False
+        return True
 
     async def _validate_cache_vs_api(self) -> bool:
         """Compare cached state with fresh API state for consistency."""
         if self._cached_state is None:
             return False
 
-        try:
-            # Save the current cached state
-            saved_cache = self._cached_state.copy()
+        # Save the current cached state
+        saved_cache = self._cached_state.copy()
 
-            # Clear cache temporarily to force API fetch
-            self._cached_state = None
+        # Clear cache temporarily to force API fetch
+        self._cached_state = None
 
-            # Get fresh state from API
-            fresh_state = await self.get_current_state()
+        # Get fresh state from API
+        fresh_state = await self.get_current_state()
 
-            # Restore the original cached state
-            self._cached_state = saved_cache
+        # Restore the original cached state
+        self._cached_state = saved_cache
 
-            # Compare critical state values (not all, to avoid minor fluctuations)
-            critical_keys = [
-                GameState.CHARACTER_LEVEL,
-                GameState.HP_CURRENT,
-                GameState.CURRENT_X,
-                GameState.CURRENT_Y,
-                GameState.CHARACTER_GOLD,
-                GameState.COOLDOWN_READY,
-            ]
+        # Compare critical state values (not all, to avoid minor fluctuations)
+        critical_keys = [
+            GameState.CHARACTER_LEVEL,
+            GameState.HP_CURRENT,
+            GameState.CURRENT_X,
+            GameState.CURRENT_Y,
+            GameState.CHARACTER_GOLD,
+            GameState.COOLDOWN_READY,
+        ]
 
-            for key in critical_keys:
-                if self._cached_state.get(key) != fresh_state.get(key):
-                    return False
+        for key in critical_keys:
+            if self._cached_state.get(key) != fresh_state.get(key):
+                return False
 
-            return True
-        except Exception:
-            # If API call fails, assume inconsistency
-            return False
+        return True
 
     async def force_refresh(self) -> CharacterGameState:
         """Force refresh state from API.

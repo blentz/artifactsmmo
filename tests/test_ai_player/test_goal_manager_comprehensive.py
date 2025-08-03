@@ -156,17 +156,16 @@ class TestGameDataRetrieval:
 
         goal_manager = GoalManager(action_registry, cooldown_manager, cache_manager)
 
-        with patch('builtins.print') as mock_print:
-            result = await goal_manager.get_game_data()
-
-        assert result is None
-        mock_print.assert_called_once()
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Cache error"):
+            await goal_manager.get_game_data()
 
 
 class TestMovementTargetSelection:
     """Test movement target selection functionality."""
 
-    def test_select_movement_target_basic(self):
+    @pytest.mark.asyncio
+    async def test_select_movement_target_basic(self):
         """Test basic movement target selection."""
         action_registry = Mock(spec=ActionRegistry)
         cooldown_manager = Mock(spec=CooldownManager)
@@ -180,36 +179,20 @@ class TestMovementTargetSelection:
         current_state.hp = 100
         current_state.max_hp = 100
 
-        result = goal_manager.select_movement_target(current_state, "combat")
+        # Should raise AttributeError when no cache manager following fail-fast principles
+        with pytest.raises(AttributeError):
+            await goal_manager.select_movement_target(current_state, "combat")
 
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], int)
-        assert isinstance(result[1], int)
-
-    def test_find_nearest_safe_location(self):
+    @pytest.mark.asyncio
+    async def test_find_nearest_safe_location(self):
         """Test finding nearest safe location."""
         action_registry = Mock(spec=ActionRegistry)
         cooldown_manager = Mock(spec=CooldownManager)
         goal_manager = GoalManager(action_registry, cooldown_manager)
 
-        result = goal_manager.find_nearest_safe_location(0, 0)
-
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-
-    def test_get_exploration_target(self):
-        """Test exploration target selection."""
-        action_registry = Mock(spec=ActionRegistry)
-        cooldown_manager = Mock(spec=CooldownManager)
-        goal_manager = GoalManager(action_registry, cooldown_manager)
-
-        result = goal_manager.get_exploration_target(0, 0)
-
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], int)
-        assert isinstance(result[1], int)
+        # Should raise AttributeError when no cache manager following fail-fast principles
+        with pytest.raises(AttributeError):
+            await goal_manager.find_nearest_safe_location(0, 0)
 
 
 class TestGoalSelection:

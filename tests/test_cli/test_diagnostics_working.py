@@ -55,17 +55,15 @@ class TestDiagnosticCommandsWorking:
 
     @pytest.mark.asyncio
     async def test_diagnose_state_with_api_error(self):
-        """Test state diagnosis when API client raises exception."""
+        """Test exception propagation following fail-fast principles."""
         mock_api_client = AsyncMock()
         mock_api_client.get_character.side_effect = Exception("API Error")
 
         diagnostic_commands = DiagnosticCommands(api_client=mock_api_client)
 
-        result = await diagnostic_commands.diagnose_state("test_char")
-
-        assert isinstance(result, dict)
-        assert "character_found" in result
-        assert result["character_found"] is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await diagnostic_commands.diagnose_state("test_char")
 
     def test_diagnose_state_data_basic(self):
         """Test state data diagnosis."""

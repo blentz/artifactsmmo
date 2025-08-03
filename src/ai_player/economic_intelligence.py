@@ -135,26 +135,22 @@ class MarketDataCollector:
         client = Client(base_url="https://api.artifactsmmo.com")
 
         for item_code in item_codes:
-            try:
-                orders_response = await get_ge_orders(client=client, code=item_code, page=1, size=50)
+            orders_response = await get_ge_orders(client=client, code=item_code, page=1, size=50)
 
-                if orders_response and orders_response.data:
-                    orders = orders_response.data
-                    if orders:
-                        best_sell_order = min(orders, key=lambda x: x.price)
+            if orders_response and orders_response.data:
+                orders = orders_response.data
+                if orders:
+                    best_sell_order = min(orders, key=lambda x: x.price)
 
-                        prices[item_code] = PriceData(
-                            item_code=item_code,
-                            timestamp=datetime.now(),
-                            buy_price=best_sell_order.price,
-                            sell_price=best_sell_order.price,
-                            quantity_available=sum(order.quantity for order in orders)
-                        )
+                    prices[item_code] = PriceData(
+                        item_code=item_code,
+                        timestamp=datetime.now(),
+                        buy_price=best_sell_order.price,
+                        sell_price=best_sell_order.price,
+                        quantity_available=sum(order.quantity for order in orders)
+                    )
 
-                        self.last_update[item_code] = datetime.now()
-
-            except Exception:
-                continue
+                    self.last_update[item_code] = datetime.now()
 
         return prices
 
@@ -163,24 +159,20 @@ class MarketDataCollector:
         history_data = []
         client = Client(base_url="https://api.artifactsmmo.com")
 
-        try:
-            history_response = await get_ge_history(client=client, code=item_code, page=1, size=100)
+        history_response = await get_ge_history(client=client, code=item_code, page=1, size=100)
 
-            if history_response and history_response.data:
-                cutoff_date = datetime.now() - timedelta(days=days)
+        if history_response and history_response.data:
+            cutoff_date = datetime.now() - timedelta(days=days)
 
-                for sale in history_response.data:
-                    if sale.sold_at >= cutoff_date:
-                        history_data.append(PriceData(
-                            item_code=item_code,
-                            timestamp=sale.sold_at,
-                            buy_price=sale.price,
-                            sell_price=sale.price,
-                            quantity_available=sale.quantity
-                        ))
-
-        except Exception:
-            pass
+            for sale in history_response.data:
+                if sale.sold_at >= cutoff_date:
+                    history_data.append(PriceData(
+                        item_code=item_code,
+                        timestamp=sale.sold_at,
+                        buy_price=sale.price,
+                        sell_price=sale.price,
+                        quantity_available=sale.quantity
+                    ))
 
         return sorted(history_data, key=lambda x: x.timestamp)
 

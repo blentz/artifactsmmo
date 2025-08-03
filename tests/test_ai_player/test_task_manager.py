@@ -490,36 +490,22 @@ class TestTaskManager:
 
     @pytest.mark.asyncio
     async def test_fetch_available_tasks_api_error_with_cache(self, task_manager, mock_api_client):
-        """Test API error falls back to cache"""
-        # Pre-populate cache
-        cached_task = Task(
-            code="cached_task",
-            name="Cached Task",
-            task_type=TaskType.KILL_MONSTERS,
-            description="",
-            requirements=TaskRequirement(1, {}, [], None),
-            rewards=TaskReward(0, 0, []),
-            estimated_duration=30,
-            priority=TaskPriority.MEDIUM
-        )
-        task_manager.task_cache["test_character"] = [cached_task]
-
+        """Test API error propagation following fail-fast principles"""
         # Simulate API error
         mock_api_client.get_all_tasks.side_effect = Exception("API Error")
 
-        tasks = await task_manager.fetch_available_tasks("test_character")
-
-        assert len(tasks) == 1
-        assert tasks[0].code == "cached_task"
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await task_manager.fetch_available_tasks("test_character")
 
     @pytest.mark.asyncio
     async def test_fetch_available_tasks_api_error_no_cache(self, task_manager, mock_api_client):
-        """Test API error with no cache returns empty list"""
+        """Test API error propagation following fail-fast principles"""
         mock_api_client.get_all_tasks.side_effect = Exception("API Error")
 
-        tasks = await task_manager.fetch_available_tasks("test_character")
-
-        assert len(tasks) == 0
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await task_manager.fetch_available_tasks("test_character")
 
     @pytest.mark.asyncio
     async def test_fetch_available_tasks_uses_cache(self, task_manager):
@@ -574,12 +560,12 @@ class TestTaskManager:
 
     @pytest.mark.asyncio
     async def test_get_character_tasks_api_error(self, task_manager, mock_api_client):
-        """Test get_character_tasks handles API errors gracefully"""
+        """Test API error propagation following fail-fast principles"""
         mock_api_client.get_character.side_effect = Exception("API Error")
 
-        active_tasks = await task_manager.get_character_tasks("test_character")
-
-        assert len(active_tasks) == 0
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await task_manager.get_character_tasks("test_character")
 
     def test_select_optimal_task(self, task_manager):
         """Test optimal task selection"""
@@ -688,12 +674,12 @@ class TestTaskManager:
 
     @pytest.mark.asyncio
     async def test_accept_task_failure(self, task_manager, mock_api_client):
-        """Test task acceptance failure"""
+        """Test API error propagation following fail-fast principles"""
         mock_api_client.action_accept_new_task.side_effect = Exception("API Error")
 
-        result = await task_manager.accept_task("test_character", "test_task")
-
-        assert result is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await task_manager.accept_task("test_character", "test_task")
 
     @pytest.mark.asyncio
     async def test_complete_task_success(self, task_manager, mock_api_client):
@@ -721,12 +707,12 @@ class TestTaskManager:
 
     @pytest.mark.asyncio
     async def test_complete_task_failure(self, task_manager, mock_api_client):
-        """Test task completion failure"""
+        """Test API error propagation following fail-fast principles"""
         mock_api_client.action_complete_task.side_effect = Exception("API Error")
 
-        result = await task_manager.complete_task("test_character")
-
-        assert result is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await task_manager.complete_task("test_character")
 
     @pytest.mark.asyncio
     async def test_complete_task_api_returns_false(self, task_manager, mock_api_client):

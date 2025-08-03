@@ -6,7 +6,7 @@ Simple goal for moving to a specific location.
 
 from ..state.character_game_state import CharacterGameState
 from ..state.game_state import GameState
-from ..types.game_data import GameData
+from src.game_data.game_data import GameData
 from ..types.goap_models import GOAPTargetState
 from .base_goal import BaseGoal
 

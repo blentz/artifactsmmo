@@ -12,7 +12,7 @@ from ..analysis.crafting_analysis import CraftingAnalysisModule
 from ..analysis.map_analysis import MapAnalysisModule
 from ..state.character_game_state import CharacterGameState
 from ..state.game_state import GameState
-from ..types.game_data import GameData
+from src.game_data.game_data import GameData
 from ..types.goap_models import GOAPTargetState
 from .base_goal import BaseGoal
 from .sub_goal_request import SubGoalRequest
@@ -113,7 +113,7 @@ class CraftingGoal(BaseGoal):
             # Return empty target state if no feasible crafting targets
             return GOAPTargetState(
                 target_states={},
-                priority=0,
+                priority=1,
                 timeout_seconds=None
             )
 
@@ -128,7 +128,7 @@ class CraftingGoal(BaseGoal):
             # No workshop available for this crafting skill
             return GOAPTargetState(
                 target_states={},
-                priority=0,
+                priority=1,
                 timeout_seconds=None
             )
 

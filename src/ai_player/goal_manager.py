@@ -28,7 +28,7 @@ from .goals.sub_goal_request import SubGoalRequest
 from .state.character_game_state import CharacterGameState
 from .state.game_state import GameState
 from .state.state_manager import StateManager
-from .types.game_data import GameData
+from src.game_data.game_data import GameData
 from .types.goap_models import GoalFactoryContext, GOAPAction, GOAPActionPlan, GOAPTargetState
 
 
@@ -105,55 +105,42 @@ class GoalManager:
 
             return game_data
 
-        except Exception as e:
-            print(f"Error loading game data: {e}")
-            return None
+        except ValueError as e:
+            # Game data validation failed
+            print(f"Game data validation failed: {e}")
+            raise
 
-    def select_movement_target(self, current_state: CharacterGameState, goal_type: str) -> tuple[int, int]:
+    async def select_movement_target(self, current_state: CharacterGameState, goal_type: str) -> tuple[int, int] | None:
         """Select intelligent movement target based on goals and game data.
 
         Parameters:
             current_state: Current character state with position and attributes
-            goal_type: Type of goal driving movement ('combat', 'rest', 'exploration', etc.)
+            goal_type: Type of goal driving movement ('combat', 'rest', 'gathering', etc.)
 
         Return values:
-            Tuple of (target_x, target_y) coordinates for movement
+            Tuple of (target_x, target_y) coordinates for movement, or None if no valid target
 
         This method selects movement targets using strategic game data analysis,
-        considering character needs, nearby content, and exploration patterns for
-        optimal character positioning and goal achievement.
+        considering character needs and nearby content for optimal positioning.
         """
         current_x = current_state.x
         current_y = current_state.y
 
-        # Try to get strategic locations from game data
-        if self.cache_manager:
-            try:
-                # For combat goals, find nearby monster locations
-                if goal_type == 'combat':
-                    target = self.find_nearest_content_location(current_x, current_y, 'monster')
-                    if target:
-                        return target
+        # For combat goals, find nearby monster locations
+        if goal_type == 'combat':
+            return await self.find_nearest_content_location(current_x, current_y, 'monster')
 
-                # For rest goals, find safe locations (no monsters)
-                elif goal_type == 'rest':
-                    target = self.find_nearest_safe_location(current_x, current_y)
-                    if target:
-                        return target
+        # For rest goals, find safe locations (no monsters)
+        elif goal_type == 'rest':
+            return await self.find_nearest_safe_location(current_x, current_y)
 
-                # For resource gathering, find resource locations
-                elif goal_type == 'gathering':
-                    target = self.find_nearest_content_location(current_x, current_y, 'resource')
-                    if target:
-                        return target
+        # For resource gathering, find resource locations
+        elif goal_type == 'gathering':
+            return await self.find_nearest_content_location(current_x, current_y, 'resource')
 
-            except Exception as e:
-                print(f"Warning: Could not access strategic locations: {e}")
+        return None
 
-        # Fallback: intelligent exploration pattern
-        return self.get_exploration_target(current_x, current_y)
-
-    def find_nearest_content_location(self, current_x: int, current_y: int, content_type: str) -> tuple[int, int] | None:
+    async def find_nearest_content_location(self, current_x: int, current_y: int, content_type: str) -> tuple[int, int] | None:
         """Find the nearest location with specified content type within movement range.
 
         Parameters:
@@ -167,10 +154,28 @@ class GoalManager:
         This method searches game data for the nearest location containing the
         specified content type within the movement action factory's generation range.
         """
-        # Fall back to simple exploration pattern - let movement action factory handle validation
-        return None
+        # Get all maps from cache
+        maps = await self.cache_manager.get_all_maps()
+        if not maps:
+            return None
+        
+        # Find locations with matching content type
+        matching_locations = []
+        for game_map in maps:
+            if game_map.content and game_map.content.type == content_type:
+                # Calculate distance from current position
+                distance = abs(game_map.x - current_x) + abs(game_map.y - current_y)
+                matching_locations.append((game_map.x, game_map.y, distance))
+        
+        if not matching_locations:
+            return None
+        
+        # Sort by distance and return the nearest
+        matching_locations.sort(key=lambda x: x[2])
+        nearest_x, nearest_y, _ = matching_locations[0]
+        return (nearest_x, nearest_y)
 
-    def find_nearest_safe_location(self, current_x: int, current_y: int) -> tuple[int, int] | None:
+    async def find_nearest_safe_location(self, current_x: int, current_y: int) -> tuple[int, int] | None:
         """Find the nearest safe location (no monsters) for resting.
 
         Parameters:
@@ -183,66 +188,27 @@ class GoalManager:
         This method identifies safe locations without monsters where the character
         can rest to recover HP, prioritizing nearby accessible positions.
         """
-        # For now, prioritize moving toward origin (0,0) as generally safer
-        # This is a simple heuristic that can be improved with actual game data
+        # Get all maps from cache
+        maps = await self.cache_manager.get_all_maps()
+        if not maps:
+            return (0, 0)  # Fallback to spawn
+        
+        # Find locations without monster content
+        safe_locations = []
+        for game_map in maps:
+            if not game_map.content or game_map.content.type != 'monster':
+                # Calculate distance from current position
+                distance = abs(game_map.x - current_x) + abs(game_map.y - current_y)
+                safe_locations.append((game_map.x, game_map.y, distance))
+        
+        if not safe_locations:
+            return (0, 0)  # Fallback to spawn
+        
+        # Sort by distance and return the nearest
+        safe_locations.sort(key=lambda x: x[2])
+        nearest_x, nearest_y, _ = safe_locations[0]
+        return (nearest_x, nearest_y)
 
-        if current_x > 0:
-            target_x = current_x - 1
-        elif current_x < 0:
-            target_x = current_x + 1
-        else:
-            target_x = current_x
-
-        if current_y > 0:
-            target_y = current_y - 1
-        elif current_y < 0:
-            target_y = current_y + 1
-        else:
-            target_y = current_y
-
-        # Ensure we don't stay in place
-        if target_x == current_x and target_y == current_y:
-            target_x = current_x + 1
-
-        return (target_x, target_y)
-
-    def get_exploration_target(self, current_x: int, current_y: int) -> tuple[int, int]:
-        """Get exploration target using systematic pattern.
-
-        Parameters:
-            current_x: Current X coordinate
-            current_y: Current Y coordinate
-
-        Return values:
-            Tuple of (x, y) coordinates for exploration movement
-
-        This method generates exploration targets using a systematic pattern
-        that ensures thorough map coverage while staying within the movement
-        action factory's generation range for guaranteed action availability.
-        """
-        # Use a simple spiral exploration pattern
-        # This ensures systematic exploration while staying within action range
-
-        # Start with cardinal directions for systematic exploration
-        exploration_offsets = [
-            (1, 0),   # East
-            (0, 1),   # North
-            (-1, 0),  # West
-            (0, -1),  # South
-            (1, 1),   # Northeast
-            (-1, 1),  # Northwest
-            (-1, -1), # Southwest
-            (1, -1),  # Southeast
-        ]
-
-        # Select based on current position to create a pattern
-        index = (abs(current_x) + abs(current_y)) % len(exploration_offsets)
-        offset_x, offset_y = exploration_offsets[index]
-
-        target_x = current_x + offset_x
-        target_y = current_y + offset_y
-
-        return (target_x, target_y)
 
     async def select_next_goal(self, current_state: CharacterGameState) -> 'GOAPTargetState':
         """Select next achievable goal using enhanced goal system, return GOAPTargetState directly."""
@@ -1244,7 +1210,7 @@ class GoalManager:
                 action_list.add_condition(name, **conditions)
                 action_list.add_reaction(name, **effects)
                 action_list.set_weight(name, weight)
-            except Exception as e:
+            except (AttributeError, KeyError, ValueError) as e:
                 print(f"Warning: Failed to convert action {action.name}: {e}")
                 continue
 

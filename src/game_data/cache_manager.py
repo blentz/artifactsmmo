@@ -17,9 +17,13 @@ from typing import Any
 from pydantic import BaseModel
 
 from ..lib.yaml_data import YamlData
+from ..lib.log import get_logger
 from .api_client import APIClientWrapper
 from .character import Character
+from .game_data import GameData
 from .models import GameItem, GameMap, GameMonster, GameNPC, GameResource
+
+logger = get_logger(__name__)
 
 
 class CacheMetadata(BaseModel):
@@ -91,15 +95,12 @@ class CacheManager:
         from the API including items, monsters, maps, resources, and NPCs,
         ensuring the AI player has current data for decision making.
         """
-        try:
-            await self.get_all_items(force_refresh=True)
-            await self.get_all_monsters(force_refresh=True)
-            await self.get_all_maps(force_refresh=True)
-            await self.get_all_resources(force_refresh=True)
-            await self.get_all_npcs(force_refresh=True)
-            return True
-        except Exception:
-            return False
+        await self.get_all_items(force_refresh=True)
+        await self.get_all_monsters(force_refresh=True)
+        await self.get_all_maps(force_refresh=True)
+        await self.get_all_resources(force_refresh=True)
+        await self.get_all_npcs(force_refresh=True)
+        return True
 
     async def get_all_items(self, force_refresh: bool = False) -> list['GameItem']:
         """Get all game items with caching.
@@ -337,7 +338,8 @@ class CacheManager:
                 else:
                     return raw_data
             return None
-        except Exception:
+        except FileNotFoundError:
+            logger.debug(f"Cache file not found: {cache_file}")
             return None
 
     def is_cache_valid(self, data_type: str) -> bool:
@@ -353,13 +355,10 @@ class CacheManager:
         and age thresholds to determine if cached data can be used or if
         fresh data should be fetched from the API.
         """
-        try:
-            metadata = self.get_cache_metadata()
-            if data_type not in metadata.data_sources:
-                return False
-            return not metadata.is_stale()
-        except Exception:
+        metadata = self.get_cache_metadata()
+        if data_type not in metadata.data_sources:
             return False
+        return not metadata.is_stale()
 
     def get_cache_metadata(self) -> CacheMetadata:
         """Get cache metadata and freshness information.
@@ -378,8 +377,12 @@ class CacheManager:
             yaml_data = YamlData(self.metadata_file)
             if yaml_data.data and "data" in yaml_data.data:
                 return CacheMetadata(**yaml_data.data["data"])
-        except Exception:
-            pass
+        except FileNotFoundError:
+            logger.debug(f"Cache metadata file not found: {self.metadata_file}")
+        except (KeyError, ValueError) as e:
+            logger.warning(f"Invalid cache metadata format in {self.metadata_file}: {e}")
+        except OSError as e:
+            logger.error(f"Failed to read cache metadata file {self.metadata_file}: {e}")
 
         return CacheMetadata(
             last_updated=datetime.now(),
@@ -668,7 +671,7 @@ class CacheManager:
             if yaml_data.data and "data" in yaml_data.data:
                 return yaml_data.data["data"]
             return None
-        except Exception:
+        except FileNotFoundError:
             return None
 
     def _get_cache_timestamp(self, file_path: str) -> datetime | None:
@@ -694,7 +697,7 @@ class CacheManager:
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
 
-    async def get_game_data(self) -> Any:
+    async def get_game_data(self) -> GameData:
         """Get comprehensive game data for action generation.
 
         Parameters:
@@ -707,25 +710,17 @@ class CacheManager:
         use in parameterized action generation, particularly movement actions that
         need to know valid locations and strategic targets.
         """
-        try:
-            # Create a simple game data object with all necessary information
-            class GameData:
-                def __init__(self):
-                    self.maps = []
-                    self.monsters = []
-                    self.resources = []
-                    self.npcs = []
-                    self.items = []
+        # Get all game data from cache manager
+        maps = await self.get_all_maps()
+        monsters = await self.get_all_monsters()
+        resources = await self.get_all_resources()
+        npcs = await self.get_all_npcs()
+        items = await self.get_all_items()
 
-            game_data = GameData()
-
-            # Get all game data from cache manager
-            game_data.maps = await self.get_all_maps()
-            game_data.monsters = await self.get_all_monsters()
-            game_data.resources = await self.get_all_resources()
-            game_data.npcs = await self.get_all_npcs()
-            game_data.items = await self.get_all_items()
-
-            return game_data
-        except Exception:
-            return None
+        return GameData(
+            maps=maps,
+            monsters=monsters,
+            resources=resources,
+            npcs=npcs,
+            items=items
+        )

@@ -455,12 +455,12 @@ class TestGatheringAction:
 
         assert isinstance(result, ActionResult)
         assert result.success is True
-        assert result.message == "Gathering successful"
+        assert result.message == "Gathered resources: None"
         assert result.cooldown_seconds == 25
 
     @pytest.mark.asyncio
     async def test_execute_api_error(self):
-        """Test execute method when API call fails"""
+        """Test execute method propagates API exceptions following fail-fast principles"""
         mock_api_client = AsyncMock()
         mock_api_client.gather_resource.side_effect = Exception("API error")
 
@@ -471,17 +471,12 @@ class TestGatheringAction:
             GameState.INVENTORY_SPACE_AVAILABLE: True,
         }
 
-        result = await action.execute("test_character", current_state)
-
-        assert isinstance(result, ActionResult)
-        assert result.success is False
-        assert "Gathering failed: API error" in result.message
-        assert result.state_changes == {}
-        assert result.cooldown_seconds == 0
+        with pytest.raises(Exception, match="API error"):
+            await action.execute("test_character", current_state)
 
     @pytest.mark.asyncio
-    async def test_execute_successful_gathering_missing_character_attributes(self):
-        """Test successful gathering when character has missing skill attributes"""
+    async def test_execute_missing_character_attributes_propagates_error(self):
+        """Test that missing character attributes propagate AttributeError following fail-fast principles"""
         # Create a mock character with only basic attributes and mining
         mock_character = Mock(spec=['level', 'xp', 'gold', 'x', 'y', 'hp', 'mining_xp', 'mining_level'])
         mock_character.level = 5
@@ -513,24 +508,13 @@ class TestGatheringAction:
             GameState.INVENTORY_SPACE_AVAILABLE: True,
         }
 
-        result = await action.execute("test_character", current_state)
-
-        assert isinstance(result, ActionResult)
-        assert result.success is True
-
-        # Should still include basic character updates
-        assert result.state_changes[GameState.CHARACTER_LEVEL] == 5
-        assert result.state_changes[GameState.CHARACTER_XP] == 1000
-        assert result.state_changes[GameState.MINING_XP] == 200
-        assert result.state_changes[GameState.MINING_LEVEL] == 2
-
-        # Should not have woodcutting or fishing updates since Mock spec doesn't include them
-        assert GameState.WOODCUTTING_XP not in result.state_changes
-        assert GameState.FISHING_XP not in result.state_changes
+        # Should propagate AttributeError when trying to access missing woodcutting_xp attribute
+        with pytest.raises(AttributeError, match="Mock object has no attribute 'woodcutting_xp'"):
+            await action.execute("test_character", current_state)
 
     @pytest.mark.asyncio
     async def test_execute_details_string_conversion_error(self):
-        """Test execute method when details string conversion fails"""
+        """Test execute method propagates string conversion errors following fail-fast principles"""
         mock_character = Mock()
         mock_character.xp = 1000
         mock_character.gold = 50
@@ -563,26 +547,24 @@ class TestGatheringAction:
             GameState.INVENTORY_SPACE_AVAILABLE: True,
         }
 
-        result = await action.execute("test_character", current_state)
-
-        assert isinstance(result, ActionResult)
-        assert result.success is True
-        # Should fall back to default message when string conversion fails
-        assert result.message == "Gathering successful"
-        assert result.cooldown_seconds == 25
+        # Should propagate the string conversion error instead of handling it gracefully
+        with pytest.raises(Exception, match="String conversion error"):
+            await action.execute("test_character", current_state)
 
     def test_validate_preconditions_exception(self):
-        """Test validate_preconditions when an exception occurs"""
+        """Test validate_preconditions propagates exceptions following fail-fast principles"""
         action = GatheringAction("gold")
 
         # Mock get_preconditions to raise an exception
         with patch.object(action, 'get_preconditions', side_effect=Exception("Precondition error")):
-            assert action.validate_preconditions() is False
+            with pytest.raises(Exception, match="Precondition error"):
+                action.validate_preconditions()
 
     def test_validate_effects_exception(self):
-        """Test validate_effects when an exception occurs"""
+        """Test validate_effects propagates exceptions following fail-fast principles"""
         action = GatheringAction("stone")
 
         # Mock get_effects to raise an exception
         with patch.object(action, 'get_effects', side_effect=Exception("Effects error")):
-            assert action.validate_effects() is False
+            with pytest.raises(Exception, match="Effects error"):
+                action.validate_effects()

@@ -23,7 +23,7 @@ from src.ai_player.goals.sub_goal_request import SubGoalRequest
 from src.ai_player.state.action_result import ActionResult
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
-from src.ai_player.types.game_data import GameData
+from src.game_data.game_data import GameData
 from src.ai_player.types.goap_models import (
     GoalFactoryContext,
     GOAPAction,
@@ -55,7 +55,7 @@ class MockAction(BaseAction):
     def get_effects(self):
         return {GameState.CHARACTER_XP: 100}
 
-    async def execute(self, character_name, current_state):
+    async def execute(self, character_name, current_state, api_client=None, cooldown_manager=None):
         if self.should_fail:
             return ActionResult(
                 success=False,
@@ -507,7 +507,7 @@ class TestRecursiveSubGoalExecution:
 
         # Should return original failure since sub-goal failed
         assert result.success is False
-        assert "failed after 3 attempts" in result.message
+        assert "Mock action failed" in result.message
 
     @pytest.mark.asyncio
     async def test_no_valid_goal_error_handling(self, mock_action_executor, mock_goal_manager, mock_state_manager):
@@ -556,7 +556,7 @@ class TestRecursiveSubGoalExecution:
 
         # Should handle the exception gracefully and return original failure
         assert result.success is False
-        assert "failed after 3 attempts" in result.message
+        assert "Mock action failed" in result.message
 
 
 class TestGoalFactoryIntegration:

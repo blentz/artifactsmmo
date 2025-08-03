@@ -163,12 +163,9 @@ class TestRequestThrottle:
         errors = []
 
         def make_request(thread_id):
-            try:
-                for _ in range(10):
-                    throttle.acquire()
-                    results.append(thread_id)
-            except Exception as e:
-                errors.append(e)
+            for _ in range(10):
+                throttle.acquire()
+                results.append(thread_id)
 
         # Create and start multiple threads
         threads = []

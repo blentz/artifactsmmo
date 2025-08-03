@@ -394,12 +394,13 @@ class TestRestAction:
         assert action.validate_preconditions() is True
 
     def test_validate_preconditions_with_exception(self):
-        """Test validate_preconditions method with exception"""
+        """Test validate_preconditions method propagates exceptions following fail-fast principles"""
         action = RestAction()
 
         # Mock get_preconditions to raise an exception
         with patch.object(action, 'get_preconditions', side_effect=Exception("Test error")):
-            assert action.validate_preconditions() is False
+            with pytest.raises(Exception, match="Test error"):
+                action.validate_preconditions()
 
     def test_validate_effects(self):
         """Test validate_effects method"""
@@ -407,9 +408,10 @@ class TestRestAction:
         assert action.validate_effects() is True
 
     def test_validate_effects_with_exception(self):
-        """Test validate_effects method with exception"""
+        """Test validate_effects method propagates exceptions following fail-fast principles"""
         action = RestAction()
 
         # Mock get_effects to raise an exception
         with patch.object(action, 'get_effects', side_effect=Exception("Test error")):
-            assert action.validate_effects() is False
+            with pytest.raises(Exception, match="Test error"):
+                action.validate_effects()

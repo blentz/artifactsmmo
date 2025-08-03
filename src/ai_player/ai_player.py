@@ -94,8 +94,8 @@ class AIPlayer:
 
         try:
             await self.main_loop()
-        except Exception as e:
-            self.logger.error(f"AI Player encountered fatal error: {e}")
+        except asyncio.CancelledError as e:
+            self.logger.info(f"AI Player cancelled: {e}")
             raise
         finally:
             self._running = False
@@ -132,8 +132,10 @@ class AIPlayer:
                 if current_state:
                     self.state_manager.save_state_to_cache(current_state)
                     self.logger.info("Character state saved to cache")
-            except Exception as e:
-                self.logger.error(f"Failed to save state to cache: {e}")
+            except (FileNotFoundError, PermissionError, OSError) as e:
+                self.logger.error(f"File system error saving state to cache: {e}")
+            except ValueError as e:
+                self.logger.error(f"Data serialization error saving state to cache: {e}")
 
         self.logger.info(f"AI Player cleanup completed for {self.character_name}")
 
@@ -167,7 +169,7 @@ class AIPlayer:
             # Check if character is on cooldown before planning
             if not current_state.cooldown_ready:
                 self.logger.info("Character on cooldown, waiting...")
-                await asyncio.sleep(2.0)  # Wait and check again
+                await self.action_executor.cooldown_manager.wait_for_cooldown(self.character_name)
                 continue
 
             # Check if we need to replan
@@ -303,8 +305,8 @@ class AIPlayer:
                 self._execution_stats["failed_actions"] += 1
             self._execution_stats["actions_executed"] += len(plan.actions)
             return success
-        except Exception as e:
-            self.logger.error(f"Plan execution failed: {e}")
+        except (ConnectionError, TimeoutError) as e:
+            self.logger.error(f"Network error during plan execution: {e}")
             self._execution_stats["failed_actions"] += 1
             return False
 
@@ -419,8 +421,10 @@ class AIPlayer:
                         await self.state_manager.force_refresh()
                         emergency_handled = True
                         self._execution_stats["emergency_interventions"] += 1
-                    except Exception as e:
-                        self.logger.error(f"Failed to refresh state during emergency: {e}")
+                    except (ConnectionError, TimeoutError) as e:
+                        self.logger.error(f"Network error during emergency state refresh: {e}")
+                    except (AttributeError, TypeError) as e:
+                        self.logger.error(f"Component error during emergency state refresh: {e}")
 
         if emergency_handled:
             self.logger.info("Emergency intervention completed")
@@ -463,8 +467,12 @@ class AIPlayer:
                         "cooldown_ready": cached_state.get(GameState.COOLDOWN_READY, False),
                         "gold": cached_state.get(GameState.CHARACTER_GOLD, 0)
                     }
-            except Exception as e:
-                status["character_state_error"] = str(e)
+            except (AttributeError, TypeError) as e:
+                status["character_state_error"] = f"Component error: {e}"
+            except (ConnectionError, TimeoutError) as e:
+                status["character_state_error"] = f"Network error: {e}"
+            except ValueError as e:
+                status["character_state_error"] = f"Data error: {e}"
         else:
             status["character_state"] = "StateManager not available"
 

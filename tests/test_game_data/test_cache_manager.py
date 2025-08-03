@@ -444,8 +444,9 @@ class TestCacheManager:
         # Make one API call fail
         mock_api_client.get_all_items.side_effect = Exception("API Error")
 
-        result = await cache_manager.refresh_all_cache()
-        assert result is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await cache_manager.refresh_all_cache()
 
     def test_validate_cached_data_valid(self, mock_api_client, temp_cache_dir):
         """Test validation of valid cached data"""
@@ -922,7 +923,7 @@ class TestCacheManager:
             cache_manager.save_cache_data("plain_items", plain_objects)
 
     def test_load_cache_data_malformed_yaml(self, mock_api_client, temp_cache_dir):
-        """Test loading cache data handles YAML errors gracefully"""
+        """Test loading cache data propagates YAML parsing errors following fail-fast principles"""
         cache_manager = CacheManager(mock_api_client, temp_cache_dir)
 
         # Create a malformed YAML file
@@ -931,9 +932,9 @@ class TestCacheManager:
         with open(cache_file, 'w') as f:
             f.write("data: [\n  invalid yaml structure")
 
-        # Should return None for malformed YAML
-        loaded_data = cache_manager.load_cache_data("malformed")
-        assert loaded_data is None
+        # Should propagate YAML parsing exception following fail-fast principles
+        with pytest.raises(Exception):  # YAML parsing error
+            cache_manager.load_cache_data("malformed")
 
     def test_is_cache_valid_stale_cache(self, mock_api_client, temp_cache_dir):
         """Test cache validity for stale cache"""
@@ -984,11 +985,9 @@ class TestCacheManager:
         with open(cache_manager.metadata_file, 'w') as f:
             f.write("corrupted yaml: [\n  invalid")
 
-        # Should return default metadata
-        metadata = cache_manager.get_cache_metadata()
-        assert isinstance(metadata, CacheMetadata)
-        assert metadata.cache_version == "1.0.0"
-        assert len(metadata.data_sources) == 0
+        # Should propagate YAML parsing exception following fail-fast principles
+        with pytest.raises(Exception):  # YAML parsing error
+            cache_manager.get_cache_metadata()
 
     def test_clear_character_cache_nonexistent(self, mock_api_client, temp_cache_dir):
         """Test clearing character cache when it doesn't exist"""
@@ -1053,9 +1052,9 @@ class TestCacheManager:
         # Mock get_cache_metadata to raise exception
         cache_manager.get_cache_metadata = Mock(side_effect=Exception("Metadata error"))
 
-        # Should return False when exception occurs
-        result = cache_manager.is_cache_valid("items")
-        assert result is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Metadata error"):
+            cache_manager.is_cache_valid("items")
 
     def test_load_character_state_exception_handling(self, mock_api_client, temp_cache_dir):
         """Test load_character_state exception handling"""
@@ -1071,9 +1070,9 @@ class TestCacheManager:
         with open(cache_file, 'w') as f:
             f.write("invalid: yaml: structure: [\n  unclosed")
 
-        # Should return None when exception occurs
-        result = cache_manager.load_character_state(character_name)
-        assert result is None
+        # Should propagate YAML parsing exception following fail-fast principles
+        with pytest.raises(Exception):  # YAML parsing error
+            cache_manager.load_character_state(character_name)
 
     def test_get_cache_metadata_yaml_without_data_key(self, mock_api_client, temp_cache_dir):
         """Test get_cache_metadata when YAML exists but doesn't have 'data' key"""
@@ -1158,9 +1157,9 @@ class TestCacheManager:
         with open(bad_file, 'w') as f:
             f.write("invalid: yaml: structure: [\n  unclosed")
 
-        # Should return None when exception occurs
-        result = cache_manager._load_yaml_data(bad_file)
-        assert result is None
+        # Should propagate YAML parsing exception following fail-fast principles
+        with pytest.raises(Exception):  # YAML parsing error
+            cache_manager._load_yaml_data(bad_file)
 
     def test_load_yaml_data_no_data_key(self, mock_api_client, temp_cache_dir):
         """Test _load_yaml_data when YAML has no 'data' key"""

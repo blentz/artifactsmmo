@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.ai_player.types.game_data import GameData
+from src.game_data.game_data import GameData
 from src.game_data.models import GameItem, GameMap, GameMonster, GameNPC, GameResource
 
 

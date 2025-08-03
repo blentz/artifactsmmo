@@ -251,23 +251,18 @@ class TestActionDiagnostics:
     def test_edge_cases(self, action_diagnostics):
         """Test edge cases and error handling"""
         # Test with None state
-        try:
-            action = MockAction()
-            analysis = action_diagnostics.check_action_executability(action, {})
-            assert analysis["executable"] is False
-        except Exception:
-            # Expected to handle gracefully
-            pass
+        action = MockAction()
+        analysis = action_diagnostics.check_action_executability(action, {})
+        assert analysis["executable"] is False
 
-        # Test with action that raises exceptions
+        # Test with action that raises exceptions - should propagate following fail-fast principles
         class ErrorAction(MockAction):
             def get_preconditions(self):
                 raise ValueError("Test error")
 
         error_action = ErrorAction()
-        analysis = action_diagnostics.analyze_action_preconditions(error_action)
-        assert analysis["valid"] is False
-        assert len(analysis["issues"]) > 0
+        with pytest.raises(ValueError, match="Test error"):
+            action_diagnostics.analyze_action_preconditions(error_action)
 
 
 class ParameterizedMockAction(BaseAction):
@@ -302,42 +297,6 @@ class ParameterizedMockAction(BaseAction):
         return ActionResult(success=True, message="Parameterized mock action", state_changes={}, cooldown_seconds=1)
 
 
-class ExceptionAction(BaseAction):
-    """Action that raises exceptions for testing error handling"""
-
-    def __init__(self, exception_type: str = "preconditions"):
-        self.exception_type = exception_type
-
-    @property
-    def name(self) -> str:
-        return "exception_action"
-
-    @property
-    def cost(self) -> int:
-        if self.exception_type == "cost":
-            raise ValueError("Cost error")
-        return -5  # Negative cost for testing
-
-    def get_preconditions(self) -> dict[GameState, Any]:
-        if self.exception_type == "preconditions":
-            raise ValueError("Preconditions error")
-        return {}
-
-    def get_effects(self) -> dict[GameState, Any]:
-        if self.exception_type == "effects":
-            raise ValueError("Effects error")
-        return {}
-
-    def can_execute(self, current_state: dict[GameState, Any]) -> bool:
-        if self.exception_type == "can_execute":
-            raise ValueError("Can execute error")
-        return False
-
-    async def execute(self, character_name: str, current_state: dict[GameState, Any]):
-        pass
-
-    async def _execute_api_call(self, character_name: str, current_state: dict[GameState, Any], api_client: Any, cooldown_manager: Any = None) -> ActionResult:
-        return ActionResult(success=True, message="Exception action", state_changes={}, cooldown_seconds=1)
 
 
 class EdgeCaseMockAction(BaseAction):
@@ -411,18 +370,6 @@ class TestActionDiagnosticsIntegration:
         conflicts = diagnostics.detect_action_conflicts()
         assert isinstance(conflicts, list)
 
-    def test_exception_handling_in_validate_registry(self):
-        """Test exception handling in validate_action_registry"""
-        registry = Mock(spec=ActionRegistry)
-        registry.get_all_action_types.return_value = [ExceptionAction, ParameterizedMockAction]
-
-        diagnostics = ActionDiagnostics(registry)
-        errors = diagnostics.validate_action_registry()
-
-        # Should handle exceptions gracefully
-        assert isinstance(errors, list)
-        error_text = " ".join(errors)
-        assert len(errors) > 0  # Should find some validation errors
 
     def test_edge_cases_in_precondition_analysis(self):
         """Test edge cases in analyze_action_preconditions"""
@@ -439,11 +386,6 @@ class TestActionDiagnosticsIntegration:
         analysis = diagnostics.analyze_action_preconditions(action)
         assert "boolean value" in " ".join(analysis["issues"])
 
-        # Test with exception in get_preconditions
-        action = ExceptionAction("preconditions")
-        analysis = diagnostics.analyze_action_preconditions(action)
-        assert analysis["valid"] is False
-        assert "Failed to analyze preconditions" in " ".join(analysis["issues"])
 
     def test_edge_cases_in_effects_analysis(self):
         """Test edge cases in analyze_action_effects"""
@@ -470,29 +412,13 @@ class TestActionDiagnosticsIntegration:
         analysis = diagnostics.analyze_action_effects(action)
         assert "boolean value" in " ".join(analysis["issues"])
 
-        # Test with exception in get_effects
-        action = ExceptionAction("effects")
-        analysis = diagnostics.analyze_action_effects(action)
-        assert analysis["valid"] is False
-        assert "Failed to analyze effects" in " ".join(analysis["issues"])
 
-    def test_exception_in_executability_check(self):
-        """Test exception handling in check_action_executability"""
-        registry = Mock(spec=ActionRegistry)
-        diagnostics = ActionDiagnostics(registry)
-
-        # Test with action that raises exception in can_execute
-        action = ExceptionAction("can_execute")
-        state = {GameState.CHARACTER_LEVEL: 10}
-
-        analysis = diagnostics.check_action_executability(action, state)
-        assert "Error checking executability" in " ".join(analysis["blocking_conditions"])
 
     def test_fallback_logic_in_get_available_actions(self):
         """Test fallback logic when generate_actions_for_state fails"""
         registry = Mock(spec=ActionRegistry)
         registry.generate_actions_for_state.side_effect = Exception("Generation failed")
-        registry.get_all_action_types.return_value = [MockAction, ParameterizedMockAction, ExceptionAction]
+        registry.get_all_action_types.return_value = [MockAction, ParameterizedMockAction]
 
         diagnostics = ActionDiagnostics(registry)
         state = {
@@ -504,25 +430,6 @@ class TestActionDiagnosticsIntegration:
         # Should use fallback and return some actions
         assert isinstance(available_actions, list)
 
-    def test_exception_handling_in_format_action_info(self):
-        """Test exception handling in format_action_info"""
-        registry = Mock(spec=ActionRegistry)
-        diagnostics = ActionDiagnostics(registry)
-
-        # Test with action that raises exception in get_preconditions
-        action = ExceptionAction("preconditions")
-        formatted = diagnostics.format_action_info(action)
-        assert "Error getting preconditions" in formatted
-
-        # Test with action that raises exception in get_effects
-        action = ExceptionAction("effects")
-        formatted = diagnostics.format_action_info(action)
-        assert "Error getting effects" in formatted
-
-        # Test validation error
-        action = InvalidMockAction()
-        formatted = diagnostics.format_action_info(action)
-        assert "Validation:" in formatted
 
     def test_edge_cases_in_validate_action_costs(self):
         """Test edge cases in validate_action_costs"""
@@ -532,7 +439,6 @@ class TestActionDiagnosticsIntegration:
             lambda: EdgeCaseMockAction("high_cost"),  # High cost
             lambda: EdgeCaseMockAction("zero_cost"),  # Zero cost
             ParameterizedMockAction,  # Requires parameters
-            ExceptionAction  # Raises exception
         ]
 
         diagnostics = ActionDiagnostics(registry)
@@ -558,7 +464,6 @@ class TestActionDiagnosticsIntegration:
             ConflictAction1,
             ConflictAction2,
             ParameterizedMockAction,  # Requires parameters
-            ExceptionAction  # Raises exception
         ]
 
         diagnostics = ActionDiagnostics(registry)
@@ -574,7 +479,7 @@ class TestActionDiagnosticsIntegration:
         registry = Mock(spec=ActionRegistry)
         diagnostics = ActionDiagnostics(registry)
 
-        # Test validate_action_registry with action class that raises exception during validation
+        # Test validate_action_registry with action class that raises exception during validation - should propagate
         class BadValidationAction(BaseAction):
             @property
             def name(self) -> str:
@@ -603,8 +508,8 @@ class TestActionDiagnosticsIntegration:
                 return ActionResult(success=False, message="Bad validation action", state_changes={})
 
         registry.get_all_action_types.return_value = [BadValidationAction]
-        errors = diagnostics.validate_action_registry()
-        assert len(errors) > 0
+        with pytest.raises(Exception, match="Validation error"):
+            diagnostics.validate_action_registry()
 
         # Test action with no movement recommendation needed
         class NoMovementAction(BaseAction):
@@ -696,8 +601,8 @@ class TestActionDiagnosticsIntegration:
         # Should handle exception gracefully and return empty list
         assert isinstance(conflicts, list)
 
-    def test_outer_exception_handling(self):
-        """Test outer exception handling in validate_action_registry"""
+    def test_outer_exception_propagation(self):
+        """Test exception propagation in validate_action_registry following fail-fast principles"""
         registry = Mock(spec=ActionRegistry)
 
         # Create a non-callable object that will raise an exception when accessed
@@ -708,12 +613,10 @@ class TestActionDiagnosticsIntegration:
         registry.get_all_action_types.return_value = [BadActionClass]
 
         diagnostics = ActionDiagnostics(registry)
-        errors = diagnostics.validate_action_registry()
-
-        # Should catch the exception
-        assert len(errors) > 0
-        error_text = " ".join(errors)
-        assert "validation failed" in error_text
+        
+        # Should propagate the exception instead of catching it
+        with pytest.raises(Exception, match="Cannot instantiate this class"):
+            diagnostics.validate_action_registry()
 
     def test_combat_action_recommendations(self):
         """Test combat action XP recommendation"""

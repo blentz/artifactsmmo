@@ -35,5 +35,5 @@ def rebuild_model():
     """Rebuild ActionResult to resolve SubGoalRequest forward reference."""
     try:
         ActionResult.model_rebuild()
-    except Exception:
+    except (AttributeError, ValueError):
         pass  # Ignore errors if dependencies aren't ready yet

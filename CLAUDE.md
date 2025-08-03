@@ -19,6 +19,7 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 - DO NOT use inline imports. Always put imports at the top of the file.
 - DO NOT create "simple" tests; use the test suite.
 - **ONE CLASS PER FILE**: Each Python file should contain only one class definition. This improves code organization, makes imports cleaner, and follows standard Python conventions.
+- **NEVER** use triple-dot ("...") imports. Use absolute imports instead.
 
 ## Testing Guidelines
 
@@ -34,3 +35,6 @@ This is the **artifactsmmo AI player** project - an AI player for operating a ch
 - This AI player can't function without game API data. No defaulting will overcome that.
 - Use only API data or fail with an error.
 - Multiple levels of error handling is always a bug.
+
+## Exception Handling Guidelines
+- **NEVER** catch Exception.

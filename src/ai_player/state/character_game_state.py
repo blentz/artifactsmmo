@@ -270,20 +270,20 @@ class CharacterGameState(BaseModel):
             enemy_nearby=enemy_nearby,  # Set based on map content
             resource_available=resource_available,  # Set based on map content
             # Equipment slots from API character
-            weapon_slot=getattr(character, 'weapon_slot', ''),
-            rune_slot=getattr(character, 'rune_slot', ''),
-            shield_slot=getattr(character, 'shield_slot', ''),
-            helmet_slot=getattr(character, 'helmet_slot', ''),
-            body_armor_slot=getattr(character, 'body_armor_slot', ''),
-            leg_armor_slot=getattr(character, 'leg_armor_slot', ''),
-            boots_slot=getattr(character, 'boots_slot', ''),
-            ring1_slot=getattr(character, 'ring1_slot', ''),
-            ring2_slot=getattr(character, 'ring2_slot', ''),
-            amulet_slot=getattr(character, 'amulet_slot', ''),
-            artifact1_slot=getattr(character, 'artifact1_slot', ''),
+            weapon_slot=character.weapon_slot,
+            rune_slot=character.rune_slot,
+            shield_slot=character.shield_slot,
+            helmet_slot=character.helmet_slot,
+            body_armor_slot=character.body_armor_slot,
+            leg_armor_slot=character.leg_armor_slot,
+            boots_slot=character.boots_slot,
+            ring1_slot=character.ring1_slot,
+            ring2_slot=character.ring2_slot,
+            amulet_slot=character.amulet_slot,
+            artifact1_slot=character.artifact1_slot,
             # Derived equipment states
             at_workshop_location=bool(map_content and map_content.type == "workshop"),
-            cooldown_expiration_utc=getattr(character, 'cooldown_expiration_utc', None),
+            cooldown_expiration_utc=character.cooldown_expiration_utc,
         )
 
     def get(self, key: GameState, default=None):

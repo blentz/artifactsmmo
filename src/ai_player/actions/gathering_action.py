@@ -177,76 +177,48 @@ class GatheringAction(BaseAction):
                 cooldown_seconds=0
             )
 
-        try:
-            # Execute gathering via API
-            gather_result = await self.api_client.gather_resource(character_name)
+        # Execute gathering via API
+        gather_result = await self.api_client.gather_resource(character_name)
 
-            # Extract state changes from gathering result
-            state_changes = {
-                GameState.COOLDOWN_READY: False,
-                GameState.CAN_FIGHT: False,
-                GameState.CAN_GATHER: False,
-                GameState.CAN_CRAFT: False,
-                GameState.CAN_TRADE: False,
-                GameState.CAN_MOVE: False,
-                GameState.CAN_REST: False,
-                GameState.CAN_USE_ITEM: False,
-                GameState.CAN_BANK: False,
-            }
+        # Extract state changes from gathering result
+        state_changes = {
+            GameState.COOLDOWN_READY: False,
+            GameState.CAN_FIGHT: False,
+            GameState.CAN_GATHER: False,
+            GameState.CAN_CRAFT: False,
+            GameState.CAN_TRADE: False,
+            GameState.CAN_MOVE: False,
+            GameState.CAN_REST: False,
+            GameState.CAN_USE_ITEM: False,
+            GameState.CAN_BANK: False,
+        }
 
-            # Update character state from API response
-            if hasattr(gather_result.data, 'character'):
-                character = gather_result.data.character
-                state_changes.update({
-                    GameState.CHARACTER_LEVEL: character.level,
-                    GameState.CHARACTER_XP: character.xp,
-                    GameState.CHARACTER_GOLD: character.gold,
-                    GameState.CURRENT_X: character.x,
-                    GameState.CURRENT_Y: character.y,
-                    GameState.HP_CURRENT: character.hp,
-                })
+        # Update character state from API response
+        character = gather_result.data.character
+        state_changes.update({
+            GameState.CHARACTER_LEVEL: character.level,
+            GameState.CHARACTER_XP: character.xp,
+            GameState.CHARACTER_GOLD: character.gold,
+            GameState.CURRENT_X: character.x,
+            GameState.CURRENT_Y: character.y,
+            GameState.HP_CURRENT: character.hp,
+            GameState.MINING_XP: character.mining_xp,
+            GameState.MINING_LEVEL: character.mining_level,
+            GameState.WOODCUTTING_XP: character.woodcutting_xp,
+            GameState.WOODCUTTING_LEVEL: character.woodcutting_level,
+            GameState.FISHING_XP: character.fishing_xp,
+            GameState.FISHING_LEVEL: character.fishing_level,
+        })
 
-                # Update relevant skill XP based on gathering type
-                # Update multiple skills as gathering might affect different ones
-                if hasattr(character, 'mining_xp'):
-                    state_changes[GameState.MINING_XP] = character.mining_xp
-                    state_changes[GameState.MINING_LEVEL] = character.mining_level
-                if hasattr(character, 'woodcutting_xp'):
-                    state_changes[GameState.WOODCUTTING_XP] = character.woodcutting_xp
-                    state_changes[GameState.WOODCUTTING_LEVEL] = character.woodcutting_level
-                if hasattr(character, 'fishing_xp'):
-                    state_changes[GameState.FISHING_XP] = character.fishing_xp
-                    state_changes[GameState.FISHING_LEVEL] = character.fishing_level
+        # Build success message
+        message = f"Gathered resources: {gather_result.data.details}"
 
-            # Build success message
-            message = "Gathering successful"
-            if hasattr(gather_result.data, 'details') and gather_result.data.details:
-                try:
-                    # Convert details to string, handling mock objects
-                    details_str = str(gather_result.data.details)
-                    if details_str and not details_str.startswith("<Mock"):
-                        message = f"Gathered resources: {details_str}"
-                except Exception:
-                    # If details conversion fails, use default message
-                    pass
-
-            return ActionResult(
-                success=True,
-                message=message,
-                state_changes=state_changes,
-                cooldown_seconds=(
-                    gather_result.data.cooldown.total_seconds
-                    if hasattr(gather_result.data, 'cooldown') else 0
-                )
-            )
-
-        except Exception as error:
-            return ActionResult(
-                success=False,
-                message=f"Gathering failed: {str(error)}",
-                state_changes={},
-                cooldown_seconds=0
-            )
+        return ActionResult(
+            success=True,
+            message=message,
+            state_changes=state_changes,
+            cooldown_seconds=gather_result.data.cooldown.total_seconds
+        )
 
     def has_required_tool(self, current_state: dict[GameState, Any]) -> bool:
         """Check if character has required tool equipped.
@@ -447,7 +419,7 @@ class GatheringAction(BaseAction):
         try:
             preconditions = self.get_preconditions()
             return all(isinstance(key, GameState) for key in preconditions.keys())
-        except Exception:
+        except (AttributeError, TypeError):
             return False
 
     def validate_effects(self) -> bool:
@@ -462,5 +434,5 @@ class GatheringAction(BaseAction):
         try:
             effects = self.get_effects()
             return all(isinstance(key, GameState) for key in effects.keys())
-        except Exception:
+        except (AttributeError, TypeError):
             return False

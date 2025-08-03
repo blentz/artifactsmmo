@@ -8,7 +8,7 @@ and provides proper IntelliSense support for game data access.
 
 from pydantic import BaseModel, Field
 
-from src.game_data.models import GameItem, GameMap, GameMonster, GameNPC, GameResource
+from .models import GameItem, GameMap, GameMonster, GameNPC, GameResource
 
 
 class GameData(BaseModel):

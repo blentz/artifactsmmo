@@ -221,10 +221,7 @@ class TestModuleInitialization:
         assert callable(initialize_ai_player_module)
 
         # Should not raise any exceptions
-        try:
-            initialize_ai_player_module()
-        except Exception as e:
-            pytest.fail(f"initialize_ai_player_module raised {e}")
+        initialize_ai_player_module()
 
     @patch('src.ai_player.initialize_ai_player_module')
     def test_module_initialization_on_import(self, mock_initialize):

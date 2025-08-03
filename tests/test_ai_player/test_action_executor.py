@@ -18,7 +18,7 @@ from src.ai_player.actions.base_action import BaseAction
 from src.ai_player.state.action_result import ActionResult
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
-from src.ai_player.types.game_data import GameData
+from src.game_data.game_data import GameData
 from src.game_data.api_client import APIClientWrapper, CooldownManager
 from src.game_data.cache_manager import CacheManager
 
@@ -223,7 +223,7 @@ def setup_character_mocks(action_executor):
     mock_character.x = 0
     mock_character.y = 0
     mock_character.cooldown = 0
-    # Add skill levels
+    # Add skill levels and XP
     mock_character.mining_level = 1
     mock_character.mining_xp = 0
     mock_character.woodcutting_level = 1
@@ -272,7 +272,18 @@ def action_executor(mock_api_client, mock_cooldown_manager, mock_cache_manager):
     with patch('src.ai_player.action_executor.get_global_registry') as mock_registry_fn:
         mock_registry = Mock()
         mock_registry_fn.return_value = mock_registry
-        executor = ActionExecutor(mock_api_client, mock_cooldown_manager, mock_cache_manager)
+        
+        # Create mock state manager
+        mock_state_manager = Mock()
+        mock_state_manager.apply_action_result = AsyncMock()
+        mock_state_manager.get_current_state = AsyncMock()
+        
+        executor = ActionExecutor(
+            mock_api_client, 
+            mock_cooldown_manager, 
+            mock_cache_manager,
+            state_manager=mock_state_manager
+        )
         executor.action_registry = mock_registry
         return executor
 
@@ -362,17 +373,14 @@ class TestExecuteAction:
 
     @pytest.mark.asyncio
     async def test_execute_action_exception_handling(self, action_executor):
-        """Test action execution with exception handling"""
+        """Test action execution propagates exceptions instead of defensive handling"""
         action = MockAction("test_action")
-        action.set_execute_exception(Exception("Test error"))
+        action.set_execute_exception(ConnectionError("Network connection failed"))
         current_state = create_test_character_state()
 
-        with patch.object(action_executor, 'handle_action_error', return_value=None) as mock_handle_error:
-            result = await action_executor.execute_action(action, "test_character", current_state)
-
-            assert result.success is False
-            assert "failed after 3 attempts" in result.message
-            assert mock_handle_error.call_count == 3
+        # Should propagate exception instead of returning defensive fallback result
+        with pytest.raises(ConnectionError, match="Network connection failed"):
+            await action_executor.execute_action(action, "test_character", current_state)
 
 
 class TestExecutePlan:
@@ -395,7 +403,7 @@ class TestExecutePlan:
         # Set up common mocks
         setup_character_mocks(action_executor)
 
-        with patch.object(action_executor, 'execute_action') as mock_execute:
+        with patch.object(action_executor, 'execute_action', new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value = ActionResult(
                 success=True, message="Success", state_changes={}, cooldown_seconds=0
             )
@@ -407,23 +415,25 @@ class TestExecutePlan:
 
     @pytest.mark.asyncio
     async def test_execute_plan_action_not_found(self, action_executor):
-        """Test plan execution with missing action"""
-        plan = [{"action": "nonexistent_action"}]
-        action_executor.action_registry.get_action_by_name = Mock(return_value=None)
+        """Test plan execution propagates exceptions from invalid action objects"""
+        # Create a mock action that will fail to execute properly
+        mock_action = Mock()
+        mock_action.name = "nonexistent_action"
+        plan = [mock_action]
+        setup_character_mocks(action_executor)
 
-        result = await action_executor.execute_plan(plan, "test_character")
-        assert result is False
+        # Should propagate TypeError instead of returning False
+        with pytest.raises(TypeError, match="object Mock can't be used in 'await' expression"):
+            await action_executor.execute_plan(plan, "test_character")
 
     @pytest.mark.asyncio
     async def test_execute_plan_with_emergency_recovery(self, action_executor):
         """Test plan execution with emergency recovery"""
-        plan = [{"action": "test_action"}]
+        mock_action = MockAction("test_action")
+        plan = [mock_action]
 
         # Set up common mocks
         setup_character_mocks(action_executor)
-
-        mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
 
         with patch.object(action_executor, 'execute_action') as mock_execute, \
              patch.object(action_executor, 'emergency_recovery') as mock_recovery:
@@ -470,14 +480,13 @@ class TestWaitForCooldown:
             mock_cooldown_manager.wait_for_cooldown.assert_called_once_with("test_character")
 
     @pytest.mark.asyncio
-    async def test_wait_for_cooldown_exception_fallback(self, action_executor, mock_cooldown_manager):
-        """Test wait with exception handling"""
+    async def test_wait_for_cooldown_exception_propagation(self, action_executor, mock_cooldown_manager):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         mock_cooldown_manager.is_ready.side_effect = Exception("Test error")
 
-        with patch('asyncio.sleep') as mock_sleep:
+        # The system should fail fast - exception should propagate
+        with pytest.raises(Exception, match="Test error"):
             await action_executor.wait_for_cooldown("test_character")
-
-            mock_sleep.assert_called_once_with(1)
 
 
 class TestValidateActionPreconditions:
@@ -499,13 +508,14 @@ class TestValidateActionPreconditions:
         result = action_executor.validate_action_preconditions(action, current_state)
         assert result is False
 
-    def test_validate_preconditions_exception(self, action_executor):
-        """Test precondition validation with exception"""
+    def test_validate_preconditions_exception_propagation(self, action_executor):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         action = MockAction("test_action")
 
         with patch.object(action, 'can_execute', side_effect=Exception("Test error")):
-            result = action_executor.validate_action_preconditions(action, {})
-            assert result is False
+            # The system should fail fast - exception should propagate
+            with pytest.raises(Exception, match="Test error"):
+                action_executor.validate_action_preconditions(action, {})
 
 
 class TestHandleActionError:
@@ -656,8 +666,8 @@ class TestProcessActionResult:
         mock_api_client.get_map.assert_called_once_with(1, 1)
         assert result.success is True
 
-    async def test_process_result_exception_handling(self, action_executor):
-        """Test processing result with exception"""
+    async def test_process_result_exception_propagation(self, action_executor):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         action = MockAction("test_action")
         api_response = Mock()
         api_response.character = Mock()
@@ -666,10 +676,9 @@ class TestProcessActionResult:
 
         # Mock get_map to raise an exception
         with patch.object(action_executor.api_client, 'get_map', side_effect=Exception("Test error")):
-            result = await action_executor.process_action_result(api_response, action)
-
-            assert result.success is False
-            assert "Failed to process result" in result.message
+            # The system should fail fast - exception should propagate
+            with pytest.raises(Exception, match="Test error"):
+                await action_executor.process_action_result(api_response, action)
 
 
 class TestEmergencyRecovery:
@@ -725,12 +734,13 @@ class TestEmergencyRecovery:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_emergency_recovery_failure(self, action_executor, mock_api_client):
-        """Test emergency recovery failure"""
+    async def test_emergency_recovery_exception_propagation(self, action_executor, mock_api_client):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         mock_api_client.get_character.side_effect = Exception("Cannot get character")
 
-        result = await action_executor.emergency_recovery("test_character", "Error")
-        assert result is False
+        # The system should fail fast - exception should propagate
+        with pytest.raises(Exception, match="Cannot get character"):
+            await action_executor.emergency_recovery("test_character", "Error")
 
 
 class TestGetActionByName:
@@ -740,8 +750,8 @@ class TestGetActionByName:
         """Test successful action retrieval by name"""
         mock_action = MockAction("test_action")
 
-        # Mock the action registry to return a list of actions including our target
-        action_executor.action_registry.get_available_actions.return_value = [mock_action]
+        # Mock the action registry to return the specific action
+        action_executor.action_registry.get_action_by_name.return_value = mock_action
         action_executor.cache_manager.get_game_data = AsyncMock(return_value=GameData())
 
         current_state = CharacterGameState(
@@ -757,13 +767,13 @@ class TestGetActionByName:
 
         assert result == mock_action
         action_executor.cache_manager.get_game_data.assert_called_once()
-        action_executor.action_registry.get_available_actions.assert_called_once()
+        action_executor.action_registry.get_action_by_name.assert_called_once()
 
     async def test_get_action_by_name_not_found(self, action_executor):
         """Test action retrieval when action not found"""
 
-        # Mock action registry to return empty list (no actions available)
-        action_executor.action_registry.get_available_actions.return_value = []
+        # Mock action registry to return None (action not found)
+        action_executor.action_registry.get_action_by_name.return_value = None
         action_executor.cache_manager.get_game_data = AsyncMock(return_value=GameData())
 
         current_state = CharacterGameState(
@@ -782,7 +792,7 @@ class TestGetActionByName:
         """Test action retrieval with exception"""
 
         action_executor.cache_manager.get_game_data = AsyncMock(return_value=GameData())
-        action_executor.action_registry.get_available_actions.side_effect = Exception("Test error")
+        action_executor.action_registry.get_action_by_name.side_effect = Exception("Test error")
 
         current_state = CharacterGameState(
             name="test_char", level=5, xp=1000, gold=100, hp=80, max_hp=100,
@@ -912,14 +922,15 @@ class TestVerifyActionSuccess:
         assert verification is False
 
     @pytest.mark.asyncio
-    async def test_verify_exception_handling(self, action_executor):
-        """Test verification with exception"""
+    async def test_verify_exception_propagation(self, action_executor):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         action = MockAction("test_action")
         result = ActionResult(success=True, message="Success", state_changes={}, cooldown_seconds=0)
 
         with patch.object(action, 'get_effects', side_effect=Exception("Test error")):
-            verification = await action_executor.verify_action_success(action, result, "test_character")
-            assert verification is False
+            # The system should fail fast - exception should propagate
+            with pytest.raises(Exception, match="Test error"):
+                await action_executor.verify_action_success(action, result, "test_character")
 
 
 class TestHandleRateLimit:
@@ -940,12 +951,12 @@ class TestHandleRateLimit:
 
         assert action_executor._rate_limit_wait_time <= 390  # 300 + 30% jitter
 
-    def test_handle_rate_limit_exception(self, action_executor):
-        """Test rate limit handling with exception"""
+    def test_handle_rate_limit_exception_propagation(self, action_executor):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         with patch('random.uniform', side_effect=Exception("Test error")):
-            action_executor.handle_rate_limit(60)
-
-            assert action_executor._rate_limit_wait_time == 60.0
+            # The system should fail fast - exception should propagate
+            with pytest.raises(Exception, match="Test error"):
+                action_executor.handle_rate_limit(60)
 
 
 class TestSafeExecute:
@@ -1021,20 +1032,15 @@ class TestSafeExecute:
             mock_recovery.assert_called()
 
     @pytest.mark.asyncio
-    async def test_safe_execute_exception_handling(self, action_executor):
-        """Test safe execution with exception handling"""
+    async def test_safe_execute_exception_propagation(self, action_executor):
+        """Test that exceptions are properly propagated (no defensive fallback)"""
         action = MockAction("test_action")
         current_state = create_test_character_state()
 
-        with patch.object(action_executor, 'execute_action', side_effect=Exception("Test error")) as mock_execute, \
-             patch.object(action_executor, 'emergency_recovery', return_value=False) as mock_recovery, \
-             patch('asyncio.sleep'):
-
-            result = await action_executor.safe_execute(action, "test_character", current_state)
-
-            assert result.success is False
-            assert "failed after 5 attempts" in result.message
-            assert mock_execute.call_count == 5
+        with patch.object(action_executor, 'execute_action', side_effect=Exception("Test error")):
+            # The system should fail fast - exception should propagate
+            with pytest.raises(Exception, match="Test error"):
+                await action_executor.safe_execute(action, "test_character", current_state)
 
 
 class TestAdditionalCoverage:
@@ -1054,78 +1060,71 @@ class TestAdditionalCoverage:
 
     @pytest.mark.asyncio
     async def test_execute_action_fallback_result_path(self, action_executor):
-        """Test execute_action fallback result path (shouldn't be reached normally)"""
+        """Test execute_action propagates exceptions instead of using fallback path"""
         action = MockAction("test_action")
         current_state = create_test_character_state()
 
-        # Mock to make all retry attempts fail in an unexpected way
-        action.execute = AsyncMock(side_effect=[
-            Exception("Fail 1"), Exception("Fail 2"), Exception("Fail 3")
-        ])
+        # Mock to make action execution fail
+        action.execute = AsyncMock(side_effect=Exception("Fail 1"))
 
-        with patch.object(action_executor, 'handle_action_error', return_value=None):
-            result = await action_executor.execute_action(action, "test_character", current_state)
-
-            assert result.success is False
-            # The exception path is actually triggered, not the fallback path
-            assert "failed after 3 attempts" in result.message
+        # Should propagate exception instead of returning fallback result
+        with pytest.raises(Exception, match="Fail 1"):
+            await action_executor.execute_action(action, "test_character", current_state)
 
     @pytest.mark.asyncio
     async def test_execute_plan_missing_action_name(self, action_executor):
-        """Test execute_plan with missing action name in plan"""
-        plan = [{"not_action": "test_action"}]  # Wrong key
+        """Test execute_plan propagates exceptions with invalid action object"""
+        # Create a dict without name attribute to simulate invalid action
+        invalid_action = {"not_name": "test_action"}  
+        plan = [invalid_action]
 
-        result = await action_executor.execute_plan(plan, "test_character")
-        assert result is False
+        setup_character_mocks(action_executor)
+        
+        # Should propagate exception from invalid action object
+        with pytest.raises(AttributeError, match="'dict' object has no attribute 'name'"):
+            await action_executor.execute_plan(plan, "test_character")
 
     @pytest.mark.asyncio
     async def test_execute_plan_emergency_recovery_during_exception(self, action_executor):
-        """Test execute_plan emergency recovery during action execution exception"""
-        plan = [{"action": "test_action"}]
-
+        """Test execute_plan propagates exceptions instead of emergency recovery"""
         mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
+        plan = [mock_action]
 
-        with patch.object(action_executor, 'execute_action', side_effect=Exception("Execution error")) as mock_execute, \
-             patch.object(action_executor, 'emergency_recovery', return_value=False) as mock_recovery:
+        setup_character_mocks(action_executor)
 
-            result = await action_executor.execute_plan(plan, "test_character")
-
-            mock_recovery.assert_called_once()
-            assert result is False
+        with patch.object(action_executor, 'execute_action', side_effect=Exception("Execution error")):
+            # Should propagate exception instead of doing emergency recovery
+            with pytest.raises(Exception, match="Execution error"):
+                await action_executor.execute_plan(plan, "test_character")
 
     @pytest.mark.asyncio
     async def test_execute_plan_final_emergency_recovery(self, action_executor):
-        """Test execute_plan final emergency recovery in outer exception handler"""
+        """Test execute_plan propagates exceptions from API calls"""
         plan = [{"action": "test_action"}]
 
-        with patch.object(action_executor.api_client, 'get_character', side_effect=Exception("Get character error")) as mock_get_char, \
-             patch.object(action_executor, 'emergency_recovery', return_value=False) as mock_recovery:
-
-            result = await action_executor.execute_plan(plan, "test_character")
-
-            mock_recovery.assert_called_once()
-            assert result is False
+        with patch.object(action_executor.api_client, 'get_character', side_effect=Exception("Get character error")):
+            # Should propagate exception instead of doing emergency recovery
+            with pytest.raises(Exception, match="Get character error"):
+                await action_executor.execute_plan(plan, "test_character")
 
     @pytest.mark.asyncio
     async def test_emergency_recovery_rest_failure_fallback(self, action_executor, mock_api_client):
-        """Test emergency recovery when rest fails but tries fallback"""
+        """Test emergency recovery propagates exceptions from rest failures"""
         mock_character = Mock()
         mock_character.hp = 20
         mock_character.max_hp = 100
         mock_character.x = 0
         mock_character.y = 0
         mock_api_client.get_character.return_value = mock_character
-        mock_api_client.rest_character.side_effect = [Exception("First rest fails"), Exception("Second rest fails")]
+        mock_api_client.rest_character.side_effect = Exception("First rest fails")
 
-        with patch('asyncio.sleep'):
-            result = await action_executor.emergency_recovery("test_character", "Low HP")
-
-            assert result is False
+        # Should propagate exception instead of defensive fallback
+        with pytest.raises(Exception, match="First rest fails"):
+            await action_executor.emergency_recovery("test_character", "Low HP")
 
     @pytest.mark.asyncio
     async def test_emergency_recovery_movement_fails_rest_succeeds(self, action_executor, mock_api_client):
-        """Test emergency recovery when movement fails but rest succeeds"""
+        """Test emergency recovery propagates exceptions from movement failures"""
         mock_character = Mock()
         mock_character.hp = 20
         mock_character.max_hp = 100
@@ -1134,11 +1133,9 @@ class TestAdditionalCoverage:
         mock_api_client.get_character.return_value = mock_character
         mock_api_client.move_character.side_effect = Exception("Move fails")
 
-        with patch('asyncio.sleep'):
-            result = await action_executor.emergency_recovery("test_character", "Low HP")
-
-            mock_api_client.rest_character.assert_called_once()
-            assert result is True
+        # Should propagate exception instead of continuing with rest
+        with pytest.raises(Exception, match="Move fails"):
+            await action_executor.emergency_recovery("test_character", "Low HP")
 
     @pytest.mark.asyncio
     async def test_handle_action_error_client_error_4xx(self, action_executor):
@@ -1296,65 +1293,44 @@ class TestAdditionalCoverageMissing:
         original_method = action_executor.execute_action
 
         async def patched_execute_action(action, character_name, current_state):
-            try:
-                # Validate preconditions
-                if not action_executor.validate_action_preconditions(action, current_state):
-                    return ActionResult(
-                        success=False,
-                        message=f"Action {action.name} preconditions not met",
-                        state_changes={},
-                        cooldown_seconds=0
-                    )
-
-                # Wait for cooldown if needed
-                await action_executor.wait_for_cooldown(character_name)
-
-                # Execute the action with retry logic - simulate completing without return
-                for attempt in range(action_executor.retry_attempts):
-                    try:
-                        result = await action.execute(character_name, current_state)
-                        if result.success:
-                            if await action_executor.verify_action_success(action, result, character_name):
-                                # Don't return here to test fallback
-                                pass
-                            else:
-                                # Don't return here to test fallback
-                                pass
-                        else:
-                            if attempt < action_executor.retry_attempts - 1:
-                                await asyncio.sleep(action_executor.retry_delays[attempt])
-                                continue
-                            else:
-                                # Don't return here to test fallback
-                                pass
-                    except Exception as e:
-                        recovery_result = await action_executor.handle_action_error(action, e, character_name)
-                        if recovery_result is not None:
-                            # Don't return here to test fallback
-                            pass
-                        if attempt < action_executor.retry_attempts - 1:
-                            await asyncio.sleep(action_executor.retry_delays[attempt])
-                            continue
-                        else:
-                            # Don't return here to test fallback
-                            pass
-
-                # This is the fallback return we want to test
+            # Validate preconditions
+            if not action_executor.validate_action_preconditions(action, current_state):
                 return ActionResult(
                     success=False,
-                    message=f"Action {action.name} execution completed without result",
+                    message=f"Action {action.name} preconditions not met",
                     state_changes={},
                     cooldown_seconds=0
                 )
 
-            except Exception as e:
-                # Handle unexpected errors
-                return ActionResult(
-                    success=False,
-                    message=f"Unexpected error executing {action.name}: {str(e)}",
-                    state_changes={},
-                    cooldown_seconds=0
-                )
+            # Wait for cooldown if needed
+            await action_executor.wait_for_cooldown(character_name)
+
+            # Execute the action with retry logic - simulate completing without return
+            for attempt in range(action_executor.retry_attempts):
+                result = await action.execute(character_name, current_state)
+                if result.success:
+                    if await action_executor.verify_action_success(action, result, character_name):
+                        # Don't return here to test fallback
+                        pass
+                    else:
+                        # Don't return here to test fallback
+                        pass
+                else:
+                    if attempt < action_executor.retry_attempts - 1:
+                        await asyncio.sleep(action_executor.retry_delays[attempt])
+                        continue
+                    else:
+                        # Don't return here to test fallback
+                        pass
+
+            # This is the fallback return we want to test
+            return ActionResult(
+                success=False,
+                message=f"Action {action.name} execution completed without result",
+                state_changes={},
+                cooldown_seconds=0
+            )
+
 
         action_executor.execute_action = patched_execute_action
 
@@ -1368,31 +1344,24 @@ class TestAdditionalCoverageMissing:
 
     @pytest.mark.asyncio
     async def test_execute_plan_emergency_recovery_fails_critical(self, action_executor):
-        """Test execute_plan when emergency recovery fails for critical errors"""
-        plan = [{"action": "test_action"}]
-
+        """Test execute_plan propagates exceptions from action execution"""
         mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
+        plan = [mock_action]
 
-        with patch.object(action_executor, 'execute_action') as mock_execute, \
-             patch.object(action_executor, 'emergency_recovery', return_value=False) as mock_recovery:
+        setup_character_mocks(action_executor)
 
-            mock_execute.return_value = ActionResult(
-                success=False, message="Critical HP failure", state_changes={}, cooldown_seconds=0
-            )
-
-            result = await action_executor.execute_plan(plan, "test_character")
-
-            mock_recovery.assert_called_once()
-            assert result is False
+        with patch.object(action_executor, 'execute_action', side_effect=Exception("Critical execution error")):
+            # Should propagate exception instead of doing emergency recovery
+            with pytest.raises(Exception, match="Critical execution error"):
+                await action_executor.execute_plan(plan, "test_character")
 
     @pytest.mark.asyncio
     async def test_execute_plan_non_critical_failure(self, action_executor):
         """Test execute_plan with non-critical action failure"""
-        plan = [{"action": "test_action"}]
-
         mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
+        plan = [mock_action]
+
+        setup_character_mocks(action_executor)
 
         with patch.object(action_executor, 'execute_action') as mock_execute:
             mock_execute.return_value = ActionResult(
@@ -1446,7 +1415,7 @@ class TestAdditionalCoverageMissing:
 
     @pytest.mark.asyncio
     async def test_emergency_recovery_rest_exception_fallback(self, action_executor, mock_api_client):
-        """Test emergency recovery when rest raises exception in inner try block"""
+        """Test emergency recovery propagates exceptions from move operations"""
         mock_character = Mock()
         mock_character.hp = 20
         mock_character.max_hp = 100
@@ -1454,12 +1423,10 @@ class TestAdditionalCoverageMissing:
         mock_character.y = 5
         mock_api_client.get_character.return_value = mock_character
         mock_api_client.move_character.side_effect = Exception("Move fails")
-        mock_api_client.rest_character.side_effect = Exception("Rest fails")
 
-        with patch('asyncio.sleep'):
-            result = await action_executor.emergency_recovery("test_character", "Low HP")
-
-            assert result is False
+        # Should propagate exception instead of falling back
+        with pytest.raises(Exception, match="Move fails"):
+            await action_executor.emergency_recovery("test_character", "Low HP")
 
     @pytest.mark.asyncio
     async def test_emergency_recovery_healthy_at_origin(self, action_executor, mock_api_client):
@@ -1480,7 +1447,7 @@ class TestAdditionalCoverageMissing:
 
     @pytest.mark.asyncio
     async def test_emergency_recovery_healthy_move_fails(self, action_executor, mock_api_client):
-        """Test emergency recovery when healthy character move fails"""
+        """Test emergency recovery propagates exceptions from move operations"""
         mock_character = Mock()
         mock_character.hp = 80
         mock_character.max_hp = 100
@@ -1489,9 +1456,9 @@ class TestAdditionalCoverageMissing:
         mock_api_client.get_character.return_value = mock_character
         mock_api_client.move_character.side_effect = Exception("Move fails")
 
-        result = await action_executor.emergency_recovery("test_character", "Some error")
-
-        assert result is False
+        # Should propagate exception instead of returning False
+        with pytest.raises(Exception, match="Move fails"):
+            await action_executor.emergency_recovery("test_character", "Some error")
 
     def test_estimate_execution_time_craft_action(self, action_executor):
         """Test time estimation for craft action"""
@@ -1573,52 +1540,39 @@ class TestAdditionalCoverageMissing:
             result = await action_executor.safe_execute(action, "test_character", current_state)
 
             assert result.success is False
-            assert "verification failed after 5 attempts" in result.message
+            assert "verification failed after 5" in result.message
 
         action_executor.retry_delays = original_retry_delays
 
     @pytest.mark.asyncio
     async def test_execute_action_handle_error_returns_result(self, action_executor):
-        """Test execute_action when handle_action_error returns a recovery result"""
+        """Test execute_action propagates exceptions instead of defensive handling"""
         action = MockAction("test_action")
         current_state = create_test_character_state()
 
-        recovery_result = ActionResult(
-            success=False, message="Recovered from error", state_changes={}, cooldown_seconds=5
-        )
-
-        with patch.object(action, 'execute', side_effect=Exception("Test error")), \
-             patch.object(action_executor, 'handle_action_error', return_value=recovery_result):
-
-            result = await action_executor.execute_action(action, "test_character", current_state)
-
-            assert result == recovery_result
-            assert "Recovered from error" in result.message
+        with patch.object(action, 'execute', side_effect=Exception("Test error")):
+            with pytest.raises(Exception, match="Test error"):
+                await action_executor.execute_action(action, "test_character", current_state)
 
     @pytest.mark.asyncio
     async def test_execute_action_unexpected_exception(self, action_executor):
-        """Test execute_action with unexpected exception in outer try block"""
+        """Test execute_action propagates exceptions from precondition validation"""
         action = MockAction("test_action")
         current_state = create_test_character_state()
 
         # Mock validate_action_preconditions to throw an unexpected exception
         with patch.object(action_executor, 'validate_action_preconditions', side_effect=Exception("Unexpected error")):
-            result = await action_executor.execute_action(action, "test_character", current_state)
-
-            assert result.success is False
-            assert "Unexpected error executing" in result.message
-            assert "Unexpected error" in result.message
+            with pytest.raises(Exception, match="Unexpected error"):
+                await action_executor.execute_action(action, "test_character", current_state)
 
     @pytest.mark.asyncio
     async def test_execute_plan_state_update_with_changes(self, action_executor):
         """Test execute_plan properly updating state from action results"""
-        plan = [{"action": "test_action"}]
+        mock_action = MockAction("test_action")
+        plan = [mock_action]
 
         # Set up common mocks
         setup_character_mocks(action_executor)
-
-        mock_action = MockAction("test_action")
-        action_executor.action_registry.get_action_by_name = Mock(return_value=mock_action)
 
         state_changes = {GameState.CHARACTER_LEVEL: 5, GameState.CHARACTER_XP: 100}
 
@@ -1680,17 +1634,13 @@ class TestAdditionalCoverageMissing:
                 # Simulate the loop completing without any returns
                 max_safe_attempts = 1
                 for attempt in range(max_safe_attempts):
-                    try:
-                        result = await self.execute_action(action, character_name, current_state)
-                        if result.success:
-                            verification_passed = await self.verify_action_success(action, result, character_name)
-                            if verification_passed:
-                                return result
-                            # Don't return on verification failure, continue loop
-                        # Don't return on action failure, continue loop
-                    except Exception:
-                        # Don't return on exception, continue loop
-                        pass
+                    result = await self.execute_action(action, character_name, current_state)
+                    if result.success:
+                        verification_passed = await self.verify_action_success(action, result, character_name)
+                        if verification_passed:
+                            return result
+                        # Don't return on verification failure, continue loop
+                    # Don't return on action failure, continue loop
 
                 # This is the fallback we want to test
                 return ActionResult(
@@ -1710,14 +1660,11 @@ class TestAdditionalCoverageMissing:
 
     @pytest.mark.asyncio
     async def test_safe_execute_critical_exception_fallback(self, action_executor):
-        """Test safe_execute critical exception in outer try block"""
+        """Test safe_execute propagates exceptions from precondition validation"""
         action = MockAction("test_action")
         current_state = create_test_character_state()
 
         # Mock validate_action_preconditions to throw exception
         with patch.object(action_executor, 'validate_action_preconditions', side_effect=Exception("Critical error")):
-            result = await action_executor.safe_execute(action, "test_character", current_state)
-
-            assert result.success is False
-            assert "Safe execution critical error" in result.message
-            assert "Critical error" in result.message
+            with pytest.raises(Exception, match="Critical error"):
+                await action_executor.safe_execute(action, "test_character", current_state)

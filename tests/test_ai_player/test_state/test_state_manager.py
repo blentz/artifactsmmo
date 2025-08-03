@@ -618,18 +618,18 @@ class TestStateManagerIntegration:
             is_consistent_none = state_manager._validate_state_rules(None)
             assert is_consistent_none is False
 
-            # Test exception handling in _validate_state_rules
+            # Test exception propagation in _validate_state_rules following fail-fast principles
             invalid_state = Mock()
             invalid_state.get.side_effect = Exception("Mock exception")
-            is_consistent_exception = state_manager._validate_state_rules(invalid_state)
-            assert is_consistent_exception is False
+            with pytest.raises(Exception, match="Mock exception"):
+                state_manager._validate_state_rules(invalid_state)
 
     @pytest.mark.asyncio
     async def test_validate_state_consistency_cache_vs_api(self):
         """Test state consistency validation comparing cache vs API"""
         with patch('src.ai_player.state.state_manager.YamlData'):
-            mock_api_client = Mock()
-            mock_cache_manager = Mock()
+            mock_api_client = AsyncMock()
+            mock_cache_manager = AsyncMock()
 
             state_manager = StateManager("cache_api_test_char", mock_api_client, mock_cache_manager)
 

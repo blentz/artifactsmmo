@@ -43,7 +43,7 @@ class ThrottledTransport(httpx.HTTPTransport):
 
             return response
 
-        except Exception as e:
+        except httpx.RequestError as e:
             self.logger.error(f"❌ Error in throttled request {request.method} {request.url}: {e}")
             raise
 
@@ -52,7 +52,7 @@ class ThrottledTransport(httpx.HTTPTransport):
         try:
             self.logger.debug("🔒 Closing ThrottledTransport")
             super().close()
-        except Exception as e:
+        except OSError as e:
             self.logger.error(f"❌ Error closing ThrottledTransport: {e}")
             raise
 
@@ -92,7 +92,7 @@ class ThrottledAsyncTransport(httpx.AsyncHTTPTransport):
 
             return response
 
-        except Exception as e:
+        except (httpx.RequestError, asyncio.CancelledError) as e:
             self.logger.error(f"❌ Error in async throttled request {request.method} {request.url}: {e}")
             raise
 
@@ -101,6 +101,6 @@ class ThrottledAsyncTransport(httpx.AsyncHTTPTransport):
         try:
             self.logger.debug("🔒 Closing ThrottledAsyncTransport")
             await super().aclose()
-        except Exception as e:
+        except (OSError, asyncio.CancelledError) as e:
             self.logger.error(f"❌ Error closing ThrottledAsyncTransport: {e}")
             raise

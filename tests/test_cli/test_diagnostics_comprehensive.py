@@ -122,18 +122,15 @@ class TestStateDiagnostics:
 
     @pytest.mark.asyncio
     async def test_diagnose_state_character_not_found(self):
-        """Test state diagnosis when character is not found."""
+        """Test exception propagation following fail-fast principles."""
         mock_api_client = AsyncMock()
         mock_api_client.get_character.side_effect = Exception("Character not found")
 
         diagnostic_commands = DiagnosticCommands(api_client=mock_api_client)
 
-        result = await diagnostic_commands.diagnose_state("nonexistent_char")
-
-        assert result is not None
-        assert result["character_found"] is False
-        assert result["state_validation"]["valid"] is False
-        assert len(result["recommendations"]) > 0
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Character not found"):
+            await diagnostic_commands.diagnose_state("nonexistent_char")
 
     def test_diagnose_state_data_basic(self):
         """Test diagnosing state data directly."""
@@ -655,14 +652,12 @@ class TestDiagnosticCommandsIntegration:
 
     @pytest.mark.asyncio
     async def test_exception_propagation_handling(self):
-        """Test that exceptions are properly handled and converted to error results."""
+        """Test exception propagation following fail-fast principles."""
         mock_api_client = AsyncMock()
         mock_api_client.get_character.side_effect = Exception("Network error")
 
         diagnostic_commands = DiagnosticCommands(api_client=mock_api_client)
 
-        result = await diagnostic_commands.diagnose_state("test_char")
-
-        # Should return diagnostic info rather than letting exception propagate
-        assert result is not None
-        assert "api_available" in result or "character_name" in result
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Network error"):
+            await diagnostic_commands.diagnose_state("test_char")

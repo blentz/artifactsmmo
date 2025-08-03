@@ -87,13 +87,10 @@ def configure_logging(config_path: Path | None = None) -> dict[str, Any]:
     }
 
     if config_path and config_path.exists():
-        try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f)
-                if file_config:
-                    config.update(file_config)
-        except Exception as e:
-            logging.error(f"Failed to load logging config from {config_path}: {e}")
+        with open(config_path) as f:
+            file_config = yaml.safe_load(f)
+            if file_config:
+                config.update(file_config)
 
     _LOGGING_CONFIGURED = True
     return config
@@ -152,9 +149,6 @@ async def init_logger(config: dict[str, Any] | None = None) -> None:
 
     except asyncio.CancelledError:
         logging.info("Logger shutdown requested")
-        raise
-    except Exception as e:
-        logging.error(f"Logger error: {e}")
         raise
     finally:
         if _LISTENER:

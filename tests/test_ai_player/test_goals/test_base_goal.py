@@ -13,7 +13,7 @@ import pytest
 from src.ai_player.goals.base_goal import BaseGoal
 from src.ai_player.state.character_game_state import CharacterGameState
 from src.ai_player.state.game_state import GameState
-from src.ai_player.types.game_data import GameData
+from src.game_data.game_data import GameData
 from src.ai_player.types.goap_models import GOAPTargetState
 from src.game_data.models import GameItem, GameMap, GameMonster, GameNPC, GameResource
 

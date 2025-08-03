@@ -318,19 +318,15 @@ class TestDiagnoseStateMethods:
 
     @pytest.mark.asyncio
     async def test_diagnose_state_api_error(self):
-        """Test state diagnosis when API call fails"""
+        """Test API error propagation following fail-fast principles"""
         mock_api_client = Mock(spec=APIClientWrapper)
         mock_api_client.get_character = AsyncMock(side_effect=Exception("Character not found"))
 
         diagnostics = DiagnosticCommands(api_client=mock_api_client)
 
-        result = await diagnostics.diagnose_state("test_character")
-
-        assert isinstance(result, dict)
-        assert result["api_available"] is True
-        assert result["character_found"] is False
-        assert result["state_validation"]["valid"] is False
-        assert "Failed to fetch character data" in result["state_validation"]["issues"][0]
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Character not found"):
+            await diagnostics.diagnose_state("test_character")
 
     @pytest.mark.asyncio
     async def test_diagnose_state_with_validation(self):
@@ -455,16 +451,14 @@ class TestDiagnoseStateMethods:
         assert "Found 2 invalid enum keys" in result["state_validation"]["issues"]
 
     def test_diagnose_state_data_exception_handling(self):
-        """Test state data diagnosis exception handling"""
+        """Test exception propagation following fail-fast principles"""
         diagnostics = DiagnosticCommands()
 
         # Mock state diagnostics to raise an exception
         with patch.object(diagnostics.state_diagnostics, 'validate_state_completeness', side_effect=Exception("Test error")):
-            result = diagnostics.diagnose_state_data({GameState.CHARACTER_LEVEL: 5})
-
-        assert isinstance(result, dict)
-        assert result["state_validation"]["valid"] is False
-        assert "Diagnostic error: Test error" in result["state_validation"]["issues"]
+            # Should propagate exception following fail-fast principles
+            with pytest.raises(Exception, match="Test error"):
+                diagnostics.diagnose_state_data({GameState.CHARACTER_LEVEL: 5})
 
 
 class TestDiagnoseActionsMethods:
@@ -550,7 +544,7 @@ class TestDiagnoseActionsMethods:
 
     @pytest.mark.asyncio
     async def test_diagnose_actions_action_analysis_exception(self):
-        """Test action diagnosis when action analysis throws exception"""
+        """Test exception propagation following fail-fast principles"""
         mock_action_class = Mock()
         mock_action_class.side_effect = Exception("Action creation failed")
         mock_action_class.__name__ = "FailingAction"
@@ -562,24 +556,20 @@ class TestDiagnoseActionsMethods:
 
         with patch.object(diagnostics.action_diagnostics, 'validate_action_registry', return_value=[]):
             with patch.object(diagnostics.action_diagnostics, 'validate_action_costs', return_value=[]):
-                result = await diagnostics.diagnose_actions("test_character")
-
-        assert isinstance(result, dict)
-        # Should handle the exception and continue
-        assert "actions_analyzed" in result
+                # Should propagate exception following fail-fast principles
+                with pytest.raises(Exception, match="Action creation failed"):
+                    await diagnostics.diagnose_actions("test_character")
 
     @pytest.mark.asyncio
     async def test_diagnose_actions_general_exception(self):
-        """Test action diagnosis general exception handling"""
+        """Test exception propagation following fail-fast principles"""
         mock_registry = Mock(spec=ActionRegistry)
         diagnostics = DiagnosticCommands(action_registry=mock_registry)
 
         with patch.object(diagnostics.action_diagnostics, 'validate_action_registry', side_effect=Exception("Registry failed")):
-            result = await diagnostics.diagnose_actions("test_character")
-
-        assert isinstance(result, dict)
-        assert result["registry_validation"]["valid"] is False
-        assert "Diagnostic error: Registry failed" in result["registry_validation"]["errors"]
+            # Should propagate exception following fail-fast principles
+            with pytest.raises(Exception, match="Registry failed"):
+                await diagnostics.diagnose_actions("test_character")
 
 
 class TestDiagnosePlanMethods:
@@ -684,15 +674,14 @@ class TestDiagnosePlanMethods:
 
     @pytest.mark.asyncio
     async def test_diagnose_plan_exception_handling(self):
-        """Test plan diagnosis exception handling"""
+        """Test exception propagation following fail-fast principles"""
         mock_goal_manager = AsyncMock(spec=GoalManager)
         diagnostics = DiagnosticCommands(goal_manager=mock_goal_manager)
 
         with patch.object(diagnostics.planning_diagnostics, 'test_goal_reachability', new_callable=AsyncMock, side_effect=Exception("Planning failed")):
-            result = await diagnostics.diagnose_plan("test_character", "level_up")
-
-        assert isinstance(result, dict)
-        assert "Planning diagnostics error: Planning failed" in result["recommendations"]
+            # Should propagate exception following fail-fast principles
+            with pytest.raises(Exception, match="Planning failed"):
+                await diagnostics.diagnose_plan("test_character", "level_up")
 
 
 
@@ -973,18 +962,15 @@ class TestDiagnoseCooldownsMethod:
 
     @pytest.mark.asyncio
     async def test_diagnose_cooldowns_api_error(self):
-        """Test cooldown diagnosis when API call fails"""
+        """Test API error propagation following fail-fast principles"""
         mock_api_client = Mock(spec=APIClientWrapper)
         mock_api_client.get_character = AsyncMock(side_effect=Exception("API error"))
 
         diagnostics = DiagnosticCommands(api_client=mock_api_client)
 
-        result = await diagnostics.diagnose_cooldowns("test_character")
-
-        assert isinstance(result, dict)
-        assert result["character_found"] is False
-        assert result["cooldown_status"]["compliance_status"] == "error"
-        assert "Cooldown diagnostic error: API error" in result["recommendations"]
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API error"):
+            await diagnostics.diagnose_cooldowns("test_character")
 
     @pytest.mark.asyncio
     async def test_diagnose_cooldowns_low_hp_warning(self):
@@ -1178,23 +1164,17 @@ class TestDiagnosticIntegration:
         diagnostics = DiagnosticCommands()
 
         # State data diagnosis should handle invalid inputs gracefully
-        try:
-            result = diagnostics.diagnose_state_data({})
-            assert isinstance(result, dict)
-        except Exception as e:
-            pytest.fail(f"State diagnosis should handle empty input: {e}")
+        result = diagnostics.diagnose_state_data({})
+        assert isinstance(result, dict)
 
         # Format methods should handle empty inputs gracefully
-        try:
-            state_format = diagnostics.format_state_output({})
-            action_format = diagnostics.format_action_output({})
-            planning_format = diagnostics.format_planning_output({})
+        state_format = diagnostics.format_state_output({})
+        action_format = diagnostics.format_action_output({})
+        planning_format = diagnostics.format_planning_output({})
 
-            assert isinstance(state_format, str)
-            assert isinstance(action_format, str)
-            assert isinstance(planning_format, str)
-        except Exception as e:
-            pytest.fail(f"Format methods should handle empty inputs: {e}")
+        assert isinstance(state_format, str)
+        assert isinstance(action_format, str)
+        assert isinstance(planning_format, str)
 
     @pytest.mark.asyncio
     async def test_performance_with_complex_scenarios(self):

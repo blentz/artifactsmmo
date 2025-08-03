@@ -170,35 +170,13 @@ class ItemAnalyzer:
         if not self.task_manager:
             return False
 
-        try:
-            # Check if task manager has a method to check item requirements
-            if hasattr(self.task_manager, 'is_item_needed_for_tasks'):
-                return self.task_manager.is_item_needed_for_tasks(item_code, character_name)
-
-            # Fallback: check if item is mentioned in active task data
-            if hasattr(self.task_manager, 'get_active_task'):
-                active_task = self.task_manager.get_active_task(character_name)
-                if active_task and hasattr(active_task, 'requirements'):
-                    # Check if item is in task requirements
-                    for requirement in active_task.requirements:
-                        if hasattr(requirement, 'code') and requirement.code == item_code:
-                            return True
-                        if hasattr(requirement, 'item') and requirement.item == item_code:
-                            return True
-
-            return False
-        except Exception:
-            # If task manager interaction fails, err on the side of caution
-            return False
+        return self.task_manager.is_item_needed_for_tasks(item_code, character_name)
 
     def is_item_needed_for_crafting(self, item_code: str, character_state: dict[GameState, Any]) -> bool:
         """Check if item is needed for crafting progression"""
         # Check with economic intelligence if available
-        if self.economic_intelligence and hasattr(self.economic_intelligence, 'is_item_needed_for_crafting'):
-            try:
-                return self.economic_intelligence.is_item_needed_for_crafting(item_code, character_state)
-            except Exception:
-                pass
+        if self.economic_intelligence:
+            return self.economic_intelligence.is_item_needed_for_crafting(item_code, character_state)
 
         # Fallback: basic heuristics for common crafting materials
         crafting_materials = {

@@ -8,6 +8,8 @@ and functions correctly.
 import importlib
 import os
 import tempfile
+
+import pytest
 from unittest.mock import patch
 
 import tests.test_lib
@@ -152,22 +154,21 @@ class TestValidateImports:
         assert errors == []
 
     def test_validate_imports_import_error_handling(self):
-        """Test that validate_imports handles ImportError exceptions."""
+        """Test that validate_imports propagates ImportError exceptions following fail-fast principles."""
         # Temporarily replace get_test_modules to return a non-existent module
         original_get_test_modules = tests.test_lib.get_test_modules
         tests.test_lib.get_test_modules = lambda: ["nonexistent_test_module"]
 
         try:
-            success, errors = validate_imports()
-            assert success is False
-            assert len(errors) >= 1
-            assert any("Failed to import nonexistent_test_module" in error for error in errors)
+            # Should propagate ImportError exception following fail-fast principles
+            with pytest.raises(ModuleNotFoundError):
+                validate_imports()
         finally:
             # Restore original function
             tests.test_lib.get_test_modules = original_get_test_modules
 
     def test_validate_imports_general_exception_handling(self):
-        """Test that validate_imports handles general exceptions."""
+        """Test that validate_imports propagates general exceptions following fail-fast principles."""
         # Save originals
         original_get_test_modules = tests.test_lib.get_test_modules
         original_import_module = importlib.import_module
@@ -183,10 +184,9 @@ class TestValidateImports:
         importlib.import_module = mock_import_module
 
         try:
-            success, errors = validate_imports()
-            assert success is False
-            assert len(errors) >= 1
-            assert any("Error importing error_test_module" in error for error in errors)
+            # Should propagate ValueError exception following fail-fast principles
+            with pytest.raises(ValueError, match="Simulated error"):
+                validate_imports()
         finally:
             # Restore originals
             tests.test_lib.get_test_modules = original_get_test_modules

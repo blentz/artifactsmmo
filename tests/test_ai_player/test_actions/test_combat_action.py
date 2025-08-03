@@ -696,7 +696,7 @@ class TestCombatActionHelperMethods:
         assert result.cooldown_seconds == 0
 
     def test_combat_action_validate_methods_with_errors(self):
-        """Test validation methods handle exceptions gracefully"""
+        """Test validation methods propagate exceptions following fail-fast principles"""
         action = CombatAction("test_monster")
 
         # Monkey patch to cause errors
@@ -710,10 +710,12 @@ class TestCombatActionHelperMethods:
             raise Exception("Test error")
 
         action.get_preconditions = broken_preconditions
-        assert action.validate_preconditions() is False
+        with pytest.raises(Exception, match="Test error"):
+            action.validate_preconditions()
 
         action.get_effects = broken_effects
-        assert action.validate_effects() is False
+        with pytest.raises(Exception, match="Test error"):
+            action.validate_effects()
 
         # Restore original methods
         action.get_preconditions = original_get_preconditions

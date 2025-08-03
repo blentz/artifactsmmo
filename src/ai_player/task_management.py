@@ -8,6 +8,9 @@ discovery, tracking, and completion management.
 from datetime import datetime, timedelta
 from typing import Any
 
+from ..lib.log import get_logger
+
+logger = get_logger(__name__)
 from .state.game_state import GameState
 from .task_models import Task, TaskPriority, TaskProgress, TaskRequirement, TaskReward, TaskType
 
@@ -54,52 +57,46 @@ class TaskManager:
             current_time - self.last_cache_update > self.cache_duration or
             character_name not in self.task_cache):
 
-            try:
-                raw_tasks = await self.api_client.get_all_tasks()
+            raw_tasks = await self.api_client.get_all_tasks()
 
-                tasks = []
-                for task_data in raw_tasks:
-                    if hasattr(task_data, 'type') and task_data.type in [t.value for t in TaskType]:
-                        task_type = TaskType(task_data.type)
-                    else:
-                        task_type = TaskType.KILL_MONSTERS
+            tasks = []
+            for task_data in raw_tasks:
+                if hasattr(task_data, 'type') and task_data.type in [t.value for t in TaskType]:
+                    task_type = TaskType(task_data.type)
+                else:
+                    task_type = TaskType.KILL_MONSTERS
 
-                    requirements = TaskRequirement(
-                        min_level=getattr(task_data, 'level', 1),
-                        required_skills=getattr(task_data, 'skills', {}),
-                        required_items=getattr(task_data, 'items', []),
-                        required_location=None
-                    )
+                requirements = TaskRequirement(
+                    min_level=getattr(task_data, 'level', 1),
+                    required_skills=getattr(task_data, 'skills', {}),
+                    required_items=getattr(task_data, 'items', []),
+                    required_location=None
+                )
 
-                    rewards = TaskReward(
-                        xp=getattr(task_data, 'rewards_xp', 0),
-                        gold=getattr(task_data, 'rewards_gold', 0),
-                        items=getattr(task_data, 'rewards_items', [])
-                    )
+                rewards = TaskReward(
+                    xp=getattr(task_data, 'rewards_xp', 0),
+                    gold=getattr(task_data, 'rewards_gold', 0),
+                    items=getattr(task_data, 'rewards_items', [])
+                )
 
-                    priority = TaskPriority.MEDIUM
-                    if hasattr(task_data, 'priority') and task_data.priority in [p.value for p in TaskPriority]:
-                        priority = TaskPriority(task_data.priority)
+                priority = TaskPriority.MEDIUM
+                if hasattr(task_data, 'priority') and task_data.priority in [p.value for p in TaskPriority]:
+                    priority = TaskPriority(task_data.priority)
 
-                    task = Task(
-                        code=task_data.code,
-                        name=getattr(task_data, 'name', task_data.code),
-                        task_type=task_type,
-                        description=getattr(task_data, 'description', ''),
-                        requirements=requirements,
-                        rewards=rewards,
-                        estimated_duration=getattr(task_data, 'duration', 30),
-                        priority=priority
-                    )
-                    tasks.append(task)
+                task = Task(
+                    code=task_data.code,
+                    name=getattr(task_data, 'name', task_data.code),
+                    task_type=task_type,
+                    description=getattr(task_data, 'description', ''),
+                    requirements=requirements,
+                    rewards=rewards,
+                    estimated_duration=getattr(task_data, 'duration', 30),
+                    priority=priority
+                )
+                tasks.append(task)
 
-                self.task_cache[character_name] = tasks
-                self.last_cache_update = current_time
-
-            except Exception:
-                if character_name in self.task_cache:
-                    return self.task_cache[character_name]
-                return []
+            self.task_cache[character_name] = tasks
+            self.last_cache_update = current_time
 
         return self.task_cache.get(character_name, [])
 
@@ -116,27 +113,23 @@ class TaskManager:
         progress tracking, completion status, and estimated completion times for
         planning and prioritization purposes.
         """
-        try:
-            character = await self.api_client.get_character(character_name)
+        character = await self.api_client.get_character(character_name)
 
-            active_tasks = []
+        active_tasks = []
 
-            if hasattr(character, 'task') and character.task:
-                task_progress = TaskProgress(
-                    task_code=character.task,
-                    character_name=character_name,
-                    progress=getattr(character, 'task_progress', 0),
-                    target=getattr(character, 'task_total', 1),
-                    completed=False,
-                    started_at=datetime.now()
-                )
-                active_tasks.append(task_progress)
+        if hasattr(character, 'task') and character.task:
+            task_progress = TaskProgress(
+                task_code=character.task,
+                character_name=character_name,
+                progress=getattr(character, 'task_progress', 0),
+                target=getattr(character, 'task_total', 1),
+                completed=False,
+                started_at=datetime.now()
+            )
+            active_tasks.append(task_progress)
 
-            self.active_tasks[character_name] = active_tasks
-            return active_tasks
-
-        except Exception:
-            return self.active_tasks.get(character_name, [])
+        self.active_tasks[character_name] = active_tasks
+        return active_tasks
 
     def select_optimal_task(self, character_state: dict[GameState, Any],
                            available_tasks: list[Task]) -> Task | None:
@@ -168,30 +161,28 @@ class TaskManager:
 
     async def accept_task(self, character_name: str, task_code: str) -> bool:
         """Accept a task for the character"""
-        try:
-            response = await self.api_client.action_accept_new_task(character_name, code=task_code)
-            return bool(response and hasattr(response, 'data') and response.data)
-        except Exception:
-            return False
+        response = await self.api_client.action_accept_new_task(character_name, code=task_code)
+        result = bool(response and hasattr(response, 'data') and response.data)
+        if not result:
+            logger.warning(f"Failed to accept task {task_code} for {character_name}")
+        return result
 
     async def complete_task(self, character_name: str) -> bool:
         """Complete current task for the character"""
-        try:
-            response = await self.api_client.action_complete_task(character_name)
-            if response and hasattr(response, 'data') and response.data:
-                self.completed_tasks.add(f"{character_name}:current_task")
-                return True
-            return False
-        except Exception:
-            return False
+        response = await self.api_client.action_complete_task(character_name)
+        if response and hasattr(response, 'data') and response.data:
+            self.completed_tasks.add(f"{character_name}:current_task")
+            return True
+        logger.warning(f"Failed to complete task for {character_name}")
+        return False
 
     async def exchange_task(self, character_name: str) -> bool:
         """Exchange current task for a new random one"""
-        try:
-            response = await self.api_client.action_task_exchange(character_name)
-            return bool(response and hasattr(response, 'data') and response.data)
-        except Exception:
-            return False
+        response = await self.api_client.action_task_exchange(character_name)
+        result = bool(response and hasattr(response, 'data') and response.data)
+        if not result:
+            logger.warning(f"Failed to exchange task for {character_name}")
+        return result
 
     def get_task_recommendations(self, character_state: dict[GameState, Any]) -> list[str]:
         """Get task recommendations based on character state"""

@@ -6,8 +6,11 @@ tracking throughout the AI player system.
 """
 
 from datetime import datetime
+import logging
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class CooldownInfo(BaseModel):
@@ -35,8 +38,8 @@ class CooldownInfo(BaseModel):
         try:
             expiration_time = datetime.fromisoformat(self.expiration.replace('Z', '+00:00'))
             return datetime.now(expiration_time.tzinfo) >= expiration_time
-        except Exception:
-            # If parsing fails, use remaining_seconds
+        except ValueError as e:
+            logger.warning(f"Failed to parse cooldown expiration time '{self.expiration}': {e}. Using remaining_seconds fallback.")
             return self.remaining_seconds <= 0
 
     @property
@@ -58,6 +61,6 @@ class CooldownInfo(BaseModel):
             current_time = datetime.now(expiration_time.tzinfo)
             remaining = (expiration_time - current_time).total_seconds()
             return max(0.0, round(remaining, 6))
-        except Exception:
-            # If parsing fails, use remaining_seconds
+        except ValueError as e:
+            logger.warning(f"Failed to parse cooldown expiration time '{self.expiration}': {e}. Using remaining_seconds fallback.")
             return max(0.0, float(self.remaining_seconds))

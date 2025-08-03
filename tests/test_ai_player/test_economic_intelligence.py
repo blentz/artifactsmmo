@@ -1172,7 +1172,7 @@ class TestAdditionalCoverage:
         assert not analysis.is_good_sell_opportunity()
 
     def test_fetch_current_prices_exception(self):
-        """Test fetch current prices with exception handling"""
+        """Test that fetch current prices exceptions propagate following fail-fast principles"""
 
         api_client = Mock()
         collector = MarketDataCollector(api_client)
@@ -1180,13 +1180,13 @@ class TestAdditionalCoverage:
         async def run_test():
             with patch('src.ai_player.economic_intelligence.get_ge_orders', side_effect=Exception("API Error")):
                 with patch('src.ai_player.economic_intelligence.Client'):
-                    prices = await collector.fetch_current_prices(['copper_ore'])
-                    assert prices == {}
+                    with pytest.raises(Exception, match="API Error"):
+                        await collector.fetch_current_prices(['copper_ore'])
 
         asyncio.run(run_test())
 
     def test_fetch_market_history_exception(self):
-        """Test fetch market history with exception handling"""
+        """Test that fetch market history exceptions propagate following fail-fast principles"""
 
         api_client = Mock()
         collector = MarketDataCollector(api_client)
@@ -1194,8 +1194,8 @@ class TestAdditionalCoverage:
         async def run_test():
             with patch('src.ai_player.economic_intelligence.get_ge_history', side_effect=Exception("API Error")):
                 with patch('src.ai_player.economic_intelligence.Client'):
-                    history = await collector.fetch_market_history('copper_ore')
-                    assert history == []
+                    with pytest.raises(Exception, match="API Error"):
+                        await collector.fetch_market_history('copper_ore')
 
         asyncio.run(run_test())
 

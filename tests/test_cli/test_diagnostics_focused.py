@@ -64,17 +64,15 @@ class TestStateDiagnosticsBasic:
 
     @pytest.mark.asyncio
     async def test_diagnose_state_with_exception(self):
-        """Test state diagnosis when API call fails."""
+        """Test exception propagation following fail-fast principles."""
         mock_api_client = AsyncMock()
         mock_api_client.get_character.side_effect = Exception("API Error")
 
         diagnostic_commands = DiagnosticCommands(api_client=mock_api_client)
 
-        result = await diagnostic_commands.diagnose_state("test_char")
-
-        assert result is not None
-        assert result["character_found"] is False
-        assert result["state_validation"]["valid"] is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="API Error"):
+            await diagnostic_commands.diagnose_state("test_char")
 
     def test_diagnose_state_data_basic(self):
         """Test state data diagnosis."""
@@ -309,17 +307,15 @@ class TestDiagnosticCommandsErrorHandling:
 
     @pytest.mark.asyncio
     async def test_exception_handling_in_diagnose_state(self):
-        """Test that exceptions are handled gracefully."""
+        """Test exception propagation following fail-fast principles."""
         mock_api_client = AsyncMock()
         mock_api_client.get_character.side_effect = Exception("Network error")
 
         diagnostic_commands = DiagnosticCommands(api_client=mock_api_client)
 
-        # Should not raise exception
-        result = await diagnostic_commands.diagnose_state("test_char")
-
-        assert result is not None
-        assert result["character_found"] is False
+        # Should propagate exception following fail-fast principles
+        with pytest.raises(Exception, match="Network error"):
+            await diagnostic_commands.diagnose_state("test_char")
 
     def test_str_representation(self):
         """Test string representation."""

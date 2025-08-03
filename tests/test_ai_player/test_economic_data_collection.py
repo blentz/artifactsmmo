@@ -72,15 +72,14 @@ class TestMarketDataCollector:
     @patch('src.ai_player.economic_data_collection.get_ge_orders')
     @patch('src.ai_player.economic_data_collection.Client')
     async def test_fetch_current_prices_exception(self, mock_client, mock_get_orders):
-        """Test handling API exceptions"""
+        """Test that API exceptions propagate following fail-fast principles"""
         mock_get_orders.side_effect = Exception("API Error")
 
         api_client = Mock()
         collector = MarketDataCollector(api_client)
 
-        result = await collector.fetch_current_prices(['copper_ore'])
-
-        assert result == {}
+        with pytest.raises(Exception, match="API Error"):
+            await collector.fetch_current_prices(['copper_ore'])
 
     @pytest.mark.asyncio
     @patch('src.ai_player.economic_data_collection.get_ge_history')
@@ -136,15 +135,14 @@ class TestMarketDataCollector:
     @patch('src.ai_player.economic_data_collection.get_ge_history')
     @patch('src.ai_player.economic_data_collection.Client')
     async def test_fetch_market_history_exception(self, mock_client, mock_get_history):
-        """Test handling API exceptions in history fetch"""
+        """Test that API exceptions propagate following fail-fast principles"""
         mock_get_history.side_effect = Exception("API Error")
 
         api_client = Mock()
         collector = MarketDataCollector(api_client)
 
-        result = await collector.fetch_market_history('copper_ore')
-
-        assert result == []
+        with pytest.raises(Exception, match="API Error"):
+            await collector.fetch_market_history('copper_ore')
 
     def test_store_price_data_new_item(self):
         """Test storing price data for new item"""

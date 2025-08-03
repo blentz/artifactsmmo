@@ -771,16 +771,14 @@ class TestAIPlayerStatus:
         assert character_state["cooldown_ready"] is True
         assert character_state["gold"] == 1500
 
-    def test_get_status_handles_state_manager_errors(self, ai_player_with_state_manager: AIPlayer) -> None:
-        """Test that get_status handles state manager errors gracefully"""
+    def test_get_status_propagates_state_manager_errors(self, ai_player_with_state_manager: AIPlayer) -> None:
+        """Test that get_status propagates state manager errors following fail-fast principles"""
         ai_player = ai_player_with_state_manager
 
         ai_player.state_manager.get_cached_state.side_effect = Exception("State error")  # type: ignore
 
-        status = ai_player.get_status()
-
-        assert "character_state_error" in status
-        assert status["character_state_error"] == "State error"
+        with pytest.raises(Exception, match="State error"):
+            ai_player.get_status()
 
     def test_get_status_without_state_manager(self) -> None:
         """Test that get_status works without state manager"""
@@ -1036,9 +1034,9 @@ class TestAIPlayerExceptionHandling:
         ai_player = ai_player_with_mocks
         ai_player._running = True
 
-        # Mock state manager to have state but fail on save
+        # Mock state manager to have state but fail on save with a handled exception type
         ai_player.state_manager.get_cached_state.return_value = {GameState.CHARACTER_LEVEL: 1}  # type: ignore
-        ai_player.state_manager.save_state_to_cache.side_effect = Exception("Save failed")  # type: ignore
+        ai_player.state_manager.save_state_to_cache.side_effect = PermissionError("Save failed")  # type: ignore
 
         # Simulate stopping after brief delay
         async def mock_stop() -> None:
@@ -1212,8 +1210,8 @@ class TestAIPlayerExceptionHandling:
         # Should have attempted execution and handled failure
         assert execution_attempts >= 1
 
-    async def test_execute_plan_handles_action_executor_exception(self, ai_player_with_mocks: AIPlayer) -> None:
-        """Test that execute_plan handles exceptions from ActionExecutor"""
+    async def test_execute_plan_propagates_action_executor_exception(self, ai_player_with_mocks: AIPlayer) -> None:
+        """Test that execute_plan propagates exceptions from ActionExecutor following fail-fast principles"""
         ai_player = ai_player_with_mocks
 
         actions = [GOAPAction(name="test", action_type="test")]
@@ -1227,13 +1225,11 @@ class TestAIPlayerExceptionHandling:
         with patch.object(GOAPActionPlan, 'to_base_actions', return_value=base_actions):
             ai_player.action_executor.execute_plan = AsyncMock(side_effect=Exception("Executor failed"))  # type: ignore
 
-            result = await ai_player.execute_plan(plan)
+            with pytest.raises(Exception, match="Executor failed"):
+                await ai_player.execute_plan(plan)
 
-        assert result is False
-        assert ai_player._execution_stats["failed_actions"] == 1
-
-    async def test_handle_emergency_state_refresh_exception(self, ai_player_with_mocks: AIPlayer) -> None:
-        """Test that handle_emergency handles exceptions during state refresh"""
+    async def test_handle_emergency_propagates_state_refresh_exception(self, ai_player_with_mocks: AIPlayer) -> None:
+        """Test that handle_emergency propagates exceptions during state refresh following fail-fast principles"""
         ai_player = ai_player_with_mocks
 
         # Character appears stuck - no actions available
@@ -1275,7 +1271,5 @@ class TestAIPlayerExceptionHandling:
         # Make force_refresh raise an exception
         ai_player.state_manager.force_refresh = AsyncMock(side_effect=Exception("Refresh failed"))  # type: ignore
 
-        await ai_player.handle_emergency(current_state)
-
-        # Should have attempted refresh despite exception
-        ai_player.state_manager.force_refresh.assert_called_once()  # type: ignore
+        with pytest.raises(Exception, match="Refresh failed"):
+            await ai_player.handle_emergency(current_state)

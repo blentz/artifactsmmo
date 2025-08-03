@@ -8,11 +8,11 @@ market data from the Grand Exchange API.
 from datetime import datetime, timedelta
 
 from artifactsmmo_api_client.api.grand_exchange.get_ge_sell_history_grandexchange_history_code_get import (
-    asyncio as get_ge_history,
-)
+        asyncio as get_ge_history,
+        )
 from artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get import (
-    asyncio as get_ge_orders,
-)
+        asyncio as get_ge_orders,
+        )
 from artifactsmmo_api_client.client import Client
 
 from .economic_models import PriceData
@@ -32,26 +32,23 @@ class MarketDataCollector:
         client = Client(base_url="https://api.artifactsmmo.com")
 
         for item_code in item_codes:
-            try:
-                orders_response = await get_ge_orders(client=client, code=item_code, page=1, size=50)
+            orders_response = await get_ge_orders(client=client, code=item_code, page=1, size=50)
 
-                if orders_response and orders_response.data:
-                    orders = orders_response.data
-                    if orders:
-                        best_sell_order = min(orders, key=lambda x: x.price)
+            if orders_response and orders_response.data:
+                orders = orders_response.data
+                if orders:
+                    best_sell_order = min(orders, key=lambda x: x.price)
 
-                        prices[item_code] = PriceData(
+                    prices[item_code] = PriceData(
                             item_code=item_code,
                             timestamp=datetime.now(),
                             buy_price=best_sell_order.price,
                             sell_price=best_sell_order.price,
                             quantity_available=sum(order.quantity for order in orders)
-                        )
+                            )
 
-                        self.last_update[item_code] = datetime.now()
+                    self.last_update[item_code] = datetime.now()
 
-            except Exception:
-                continue
 
         return prices
 
@@ -60,24 +57,20 @@ class MarketDataCollector:
         history_data = []
         client = Client(base_url="https://api.artifactsmmo.com")
 
-        try:
-            history_response = await get_ge_history(client=client, code=item_code, page=1, size=100)
+        history_response = await get_ge_history(client=client, code=item_code, page=1, size=100)
 
-            if history_response and history_response.data:
-                cutoff_date = datetime.now() - timedelta(days=days)
+        if history_response and history_response.data:
+            cutoff_date = datetime.now() - timedelta(days=days)
 
-                for sale in history_response.data:
-                    if sale.sold_at >= cutoff_date:
-                        history_data.append(PriceData(
-                            item_code=item_code,
-                            timestamp=sale.sold_at,
-                            buy_price=sale.price,
-                            sell_price=sale.price,
-                            quantity_available=sale.quantity
+            for sale in history_response.data:
+                if sale.sold_at >= cutoff_date:
+                    history_data.append(PriceData(
+                        item_code=item_code,
+                        timestamp=sale.sold_at,
+                        buy_price=sale.price,
+                        sell_price=sale.price,
+                        quantity_available=sale.quantity
                         ))
-
-        except Exception:
-            pass
 
         return sorted(history_data, key=lambda x: x.timestamp)
 
@@ -102,9 +95,9 @@ class MarketDataCollector:
         cutoff_time = datetime.now() - timedelta(hours=hours)
 
         return [
-            price_data for price_data in self.price_history[item_code]
-            if price_data.timestamp >= cutoff_time
-        ]
+                price_data for price_data in self.price_history[item_code]
+                if price_data.timestamp >= cutoff_time
+                ]
 
     def cleanup_old_data(self, max_age_days: int = 30) -> None:
         """Remove old price data to manage memory"""
@@ -112,9 +105,9 @@ class MarketDataCollector:
 
         for item_code in list(self.price_history.keys()):
             self.price_history[item_code] = [
-                price_data for price_data in self.price_history[item_code]
-                if price_data.timestamp >= cutoff_time
-            ]
+                    price_data for price_data in self.price_history[item_code]
+                    if price_data.timestamp >= cutoff_time
+                    ]
 
             if not self.price_history[item_code]:
                 del self.price_history[item_code]

@@ -123,17 +123,15 @@ class TestConfigureLogging:
         assert config["level"] == "DEBUG"
 
     def test_configure_logging_invalid_yaml(self):
-        """Test handling of invalid YAML."""
+        """Test handling of invalid YAML following fail-fast principles."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             f.write("invalid: yaml: content: [")
             config_path = Path(f.name)
 
         try:
-            with patch('src.lib.log.logging.error') as mock_error:
-                config = configure_logging(config_path)
-                # Should return default config and log error
-                assert config["level"] == "DEBUG"
-                mock_error.assert_called_once()
+            # Should propagate YAML parsing exception following fail-fast principles
+            with pytest.raises(Exception):  # YAML parsing error
+                configure_logging(config_path)
         finally:
             config_path.unlink()
 

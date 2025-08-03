@@ -124,10 +124,28 @@ class TestCLIManagerReal:
         mock_api_wrapper.return_value = mock_api_client
 
         mock_cache_instance = AsyncMock()
-        mock_characters = [
-            Mock(name="char1", level=5, x=0, y=0, skin="men1", hp=100, max_hp=100, gold=0),
-            Mock(name="char2", level=10, x=1, y=1, skin="men2", hp=150, max_hp=150, gold=50)
-        ]
+        # Create character mocks with proper attributes
+        char1 = Mock()
+        char1.name = "char1"
+        char1.level = 5
+        char1.x = 0
+        char1.y = 0
+        char1.skin = "men1"
+        char1.hp = 100
+        char1.max_hp = 100
+        char1.gold = 0
+        
+        char2 = Mock()
+        char2.name = "char2"
+        char2.level = 10
+        char2.x = 1
+        char2.y = 1
+        char2.skin = "men2"
+        char2.hp = 150
+        char2.max_hp = 150
+        char2.gold = 50
+        
+        mock_characters = [char1, char2]
         mock_cache_instance.cache_all_characters.return_value = mock_characters
         mock_cache_manager.return_value = mock_cache_instance
 
