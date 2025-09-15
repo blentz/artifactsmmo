@@ -7,7 +7,7 @@ and organization for the inventory system.
 
 from typing import Any
 
-from ..lib.log import get_logger
+from src.lib.log import get_logger
 
 logger = get_logger(__name__)
 from .inventory_models import BankState, OptimizationRecommendation
@@ -31,14 +31,10 @@ class BankManager:
                 continue
 
             # Use API client to deposit item
-            response = await self.api_client.action_bank_deposit_item(
-                character_name,
-                code=item_code,
-                quantity=quantity
-            )
+            response = await self.api_client.action_bank_deposit_item(character_name, code=item_code, quantity=quantity)
 
             # Check if deposit was successful
-            if not hasattr(response, 'data') or not response.data:
+            if not hasattr(response, "data") or not response.data:
                 logger.error(f"Failed to deposit {quantity} {item_code} to bank for {character_name}")
                 return False
 
@@ -68,6 +64,8 @@ class BankManager:
         """Suggest if bank expansion would be beneficial"""
         pass
 
-    def optimize_bank_contents(self, bank_state: BankState, character_state: dict[GameState, Any]) -> list[OptimizationRecommendation]:
+    def optimize_bank_contents(
+        self, bank_state: BankState, character_state: dict[GameState, Any]
+    ) -> list[OptimizationRecommendation]:
         """Optimize what items are stored in bank"""
         pass

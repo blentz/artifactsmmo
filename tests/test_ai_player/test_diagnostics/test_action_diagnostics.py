@@ -116,10 +116,11 @@ class TestActionDiagnostics:
         # Mock action types
         registry.get_all_action_types.return_value = [MockAction, InvalidMockAction]
 
-        # Mock action generation
+        # Mock action generation - include InvalidMockAction to test validation
         registry.generate_actions_for_state.return_value = [
             MockAction("move_action", 2),
-            MockAction("fight_action", 5)
+            MockAction("fight_action", 5),
+            InvalidMockAction()
         ]
 
         return registry
@@ -508,6 +509,7 @@ class TestActionDiagnosticsIntegration:
                 return ActionResult(success=False, message="Bad validation action", state_changes={})
 
         registry.get_all_action_types.return_value = [BadValidationAction]
+        registry.generate_actions_for_state.return_value = [BadValidationAction()]
         with pytest.raises(Exception, match="Validation error"):
             diagnostics.validate_action_registry()
 
@@ -611,6 +613,8 @@ class TestActionDiagnosticsIntegration:
                 raise Exception("Cannot instantiate this class")
 
         registry.get_all_action_types.return_value = [BadActionClass]
+        # The exception should be raised when trying to instantiate BadActionClass
+        registry.generate_actions_for_state.side_effect = Exception("Cannot instantiate this class")
 
         diagnostics = ActionDiagnostics(registry)
         

@@ -25,31 +25,31 @@ from src.lib.goap import Action_List
 def create_test_character_state(**overrides) -> CharacterGameState:
     """Helper function to create CharacterGameState for tests."""
     defaults = {
-        'name': 'test_char',
-        'level': 1,
-        'xp': 0,
-        'gold': 0,
-        'hp': 100,
-        'max_hp': 100,
-        'x': 0,
-        'y': 0,
-        'mining_level': 1,
-        'mining_xp': 0,
-        'woodcutting_level': 1,
-        'woodcutting_xp': 0,
-        'fishing_level': 1,
-        'fishing_xp': 0,
-        'weaponcrafting_level': 1,
-        'weaponcrafting_xp': 0,
-        'gearcrafting_level': 1,
-        'gearcrafting_xp': 0,
-        'jewelrycrafting_level': 1,
-        'jewelrycrafting_xp': 0,
-        'cooking_level': 1,
-        'cooking_xp': 0,
-        'alchemy_level': 1,
-        'alchemy_xp': 0,
-        'cooldown': 0
+        "name": "test_char",
+        "level": 1,
+        "xp": 0,
+        "gold": 0,
+        "hp": 100,
+        "max_hp": 100,
+        "x": 0,
+        "y": 0,
+        "mining_level": 1,
+        "mining_xp": 0,
+        "woodcutting_level": 1,
+        "woodcutting_xp": 0,
+        "fishing_level": 1,
+        "fishing_xp": 0,
+        "weaponcrafting_level": 1,
+        "weaponcrafting_xp": 0,
+        "gearcrafting_level": 1,
+        "gearcrafting_xp": 0,
+        "jewelrycrafting_level": 1,
+        "jewelrycrafting_xp": 0,
+        "cooking_level": 1,
+        "cooking_xp": 0,
+        "alchemy_level": 1,
+        "alchemy_xp": 0,
+        "cooldown": 0,
     }
     defaults.update(overrides)
     return CharacterGameState(**defaults)
@@ -88,25 +88,45 @@ class TestGoalManager:
             can_fight=True,
             can_gather=True,
             can_craft=True,
-            inventory_space_available=True
+            inventory_space_available=True,
         )
 
     def test_goal_manager_initialization(self, goal_manager):
         """Test GoalManager initialization"""
-        assert hasattr(goal_manager, 'select_next_goal')
-        assert hasattr(goal_manager, 'plan_actions')
-        assert hasattr(goal_manager, 'max_level_achieved')
-        assert hasattr(goal_manager, 'action_registry')
-        assert hasattr(goal_manager, 'cooldown_manager')
+        assert hasattr(goal_manager, "select_next_goal")
+        assert hasattr(goal_manager, "plan_actions")
+        assert hasattr(goal_manager, "max_level_achieved")
+        assert hasattr(goal_manager, "action_registry")
+        assert hasattr(goal_manager, "cooldown_manager")
 
     def test_max_level_achieved_true(self, goal_manager):
         """Test max_level_achieved returns True when character is at max level (45)"""
         state_level_45 = CharacterGameState(
-            name="test_char", level=45, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=45,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         assert goal_manager.max_level_achieved(state_level_45) is True
@@ -114,25 +134,85 @@ class TestGoalManager:
     def test_max_level_achieved_false(self, goal_manager):
         """Test max_level_achieved returns False when character is below level 45"""
         state_level_1 = CharacterGameState(
-            name="test_char", level=1, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=1,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
         state_level_44 = CharacterGameState(
-            name="test_char", level=44, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=44,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
         state_level_30 = CharacterGameState(
-            name="test_char", level=30, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=30,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         assert goal_manager.max_level_achieved(state_level_1) is False
@@ -143,11 +223,31 @@ class TestGoalManager:
         """Test max_level_achieved handles minimum level values properly"""
         # Test with minimum level (level 1)
         state_min_level = CharacterGameState(
-            name="test_char", level=1, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=1,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         assert goal_manager.max_level_achieved(state_min_level) is False
@@ -158,14 +258,8 @@ class TestGoalManager:
         mock_action = Mock(spec=BaseAction)
         mock_action.name = "test_action"
         mock_action.cost = 5
-        mock_action.get_preconditions.return_value = {
-            GameState.COOLDOWN_READY: True,
-            GameState.CHARACTER_LEVEL: 10
-        }
-        mock_action.get_effects.return_value = {
-            GameState.CHARACTER_XP: 100,
-            GameState.CURRENT_X: 15
-        }
+        mock_action.get_preconditions.return_value = {GameState.COOLDOWN_READY: True, GameState.CHARACTER_LEVEL: 10}
+        mock_action.get_effects.return_value = {GameState.CHARACTER_XP: 100, GameState.CURRENT_X: 15}
 
         result = goal_manager.convert_action_to_goap(mock_action)
 
@@ -199,28 +293,59 @@ class TestGoalManager:
 
     async def test_create_goap_actions(self, goal_manager):
         """Test creating GOAP action list from action registry"""
+
         # Mock action classes
         class MockAction1(BaseAction):
             @property
-            def name(self): return "action1"
+            def name(self):
+                return "action1"
+
             @property
-            def cost(self): return 2
-            def get_preconditions(self): return {GameState.COOLDOWN_READY: True}
-            def get_effects(self): return {GameState.CHARACTER_XP: 50}
-            async def execute(self, character_name, current_state): pass
+            def cost(self):
+                return 2
+
+            def get_preconditions(self):
+                return {GameState.COOLDOWN_READY: True}
+
+            def get_effects(self):
+                return {GameState.CHARACTER_XP: 50}
+
+            async def execute(self, character_name, current_state):
+                pass
+
             async def _execute_api_call(self, character_name, current_state, api_client, cooldown_manager=None):
-                return ActionResult(success=True, message="Mock action1 API", state_changes={GameState.CHARACTER_XP: 50}, cooldown_seconds=5)
+                return ActionResult(
+                    success=True,
+                    message="Mock action1 API",
+                    state_changes={GameState.CHARACTER_XP: 50},
+                    cooldown_seconds=5,
+                )
 
         class MockAction2(BaseAction):
             @property
-            def name(self): return "action2"
+            def name(self):
+                return "action2"
+
             @property
-            def cost(self): return 3
-            def get_preconditions(self): return {GameState.CAN_FIGHT: True}
-            def get_effects(self): return {GameState.CHARACTER_LEVEL: 1}
-            async def execute(self, character_name, current_state): pass
+            def cost(self):
+                return 3
+
+            def get_preconditions(self):
+                return {GameState.CAN_FIGHT: True}
+
+            def get_effects(self):
+                return {GameState.CHARACTER_LEVEL: 1}
+
+            async def execute(self, character_name, current_state):
+                pass
+
             async def _execute_api_call(self, character_name, current_state, api_client, cooldown_manager=None):
-                return ActionResult(success=True, message="Mock action2 API", state_changes={GameState.CHARACTER_LEVEL: 1}, cooldown_seconds=5)
+                return ActionResult(
+                    success=True,
+                    message="Mock action2 API",
+                    state_changes={GameState.CHARACTER_LEVEL: 1},
+                    cooldown_seconds=5,
+                )
 
         # Mock action registry to return action instances
         mock_action1 = MockAction1()
@@ -229,39 +354,62 @@ class TestGoalManager:
 
         # Create a test state
         current_state = CharacterGameState(
-            name="test_char", level=1, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=1,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
-        result = await goal_manager.create_goap_actions(current_state)
+        with patch("src.lib.goap.Action_List") as mock_action_list_class:
+            mock_action_list = Mock(spec=Action_List)
+            mock_action_list.conditions = {}
+            mock_action_list.reactions = {}
+            mock_action_list.weights = {}
+            mock_action_list.add_condition = Mock()
+            mock_action_list.add_reaction = Mock()
+            mock_action_list.set_weight = Mock()
+            mock_action_list_class.return_value = mock_action_list
 
-        # Should return Action_List from GOAP library
-        assert isinstance(result, Action_List)
+            result = await goal_manager.create_goap_actions(current_state)
 
-        # Should contain both actions
-        assert "action1" in result.conditions
-        assert "action2" in result.conditions
-        assert "action1" in result.reactions
-        assert "action2" in result.reactions
-        assert "action1" in result.weights
-        assert "action2" in result.weights
+            # Should return Action_List from GOAP library
+            assert result == mock_action_list
 
-        # Check conditions are converted to string keys
-        assert result.conditions["action1"]["cooldown_ready"] is True
-        assert result.conditions["action2"]["can_fight"] is True
+            # Verify add_condition was called for both actions
+            assert mock_action_list.add_condition.call_count == 2
+            mock_action_list.add_condition.assert_any_call("action1", cooldown_ready=True)
+            mock_action_list.add_condition.assert_any_call("action2", can_fight=True)
 
-        # Check effects are converted to string keys
-        assert result.reactions["action1"]["character_xp"] == 50
-        assert result.reactions["action2"]["character_level"] == 1
+            # Verify add_reaction was called for both actions
+            assert mock_action_list.add_reaction.call_count == 2
+            mock_action_list.add_reaction.assert_any_call("action1", character_xp=50)
+            mock_action_list.add_reaction.assert_any_call("action2", character_level=1)
 
-        # Check weights
-        assert result.weights["action1"] == 2
-        assert result.weights["action2"] == 3
-
-
+            # Verify set_weight was called for both actions
+            assert mock_action_list.set_weight.call_count == 2
+            mock_action_list.set_weight.assert_any_call("action1", 2)
+            mock_action_list.set_weight.assert_any_call("action2", 3)
 
     def test_should_defer_planning_ready(self, goal_manager):
         """Test should_defer_planning when character is ready"""
@@ -286,13 +434,7 @@ class TestGoalManager:
     def test_get_early_game_goals(self, goal_manager):
         """Test getting early game goals for level 1-10 characters"""
         early_game_state = create_test_character_state(
-            level=3,
-            xp=300,
-            gold=100,
-            mining_level=2,
-            mining_xp=150,
-            woodcutting_level=1,
-            woodcutting_xp=50
+            level=3, xp=300, gold=100, mining_level=2, mining_xp=150, woodcutting_level=1, woodcutting_xp=50
         )
 
         goals = goal_manager.get_early_game_goals(early_game_state)
@@ -301,30 +443,25 @@ class TestGoalManager:
         assert len(goals) > 0
 
         # Should contain level progression goal (boolean-based)
-        level_goals = [g for g in goals if 'target_state' in g and GameState.GAINED_XP in g['target_state']]
+        level_goals = [g for g in goals if "target_state" in g and GameState.GAINED_XP in g["target_state"]]
         assert len(level_goals) > 0
-        assert level_goals[0]['target_state'][GameState.GAINED_XP] == True
-        assert level_goals[0]['target_state'][GameState.CAN_GAIN_XP] == True
+        assert level_goals[0]["target_state"][GameState.GAINED_XP] == True
+        assert level_goals[0]["target_state"][GameState.CAN_GAIN_XP] == True
 
         # Should contain skill goals (boolean-based)
-        skill_goals = [g for g in goals if g.get('type') == 'skill_training']
+        skill_goals = [g for g in goals if g.get("type") == "skill_training"]
         assert len(skill_goals) > 0
-        assert skill_goals[0]['target_state'][GameState.GAINED_XP] == True
-        assert skill_goals[0]['target_state'][GameState.CAN_GAIN_XP] == True
+        assert skill_goals[0]["target_state"][GameState.GAINED_XP] == True
+        assert skill_goals[0]["target_state"][GameState.CAN_GAIN_XP] == True
 
         # Should contain economic goal (still numeric as it's not XP/level related)
-        gold_goals = [g for g in goals if 'target_state' in g and GameState.CHARACTER_GOLD in g['target_state']]
+        gold_goals = [g for g in goals if "target_state" in g and GameState.CHARACTER_GOLD in g["target_state"]]
         assert len(gold_goals) > 0
-        assert gold_goals[0]['target_state'][GameState.CHARACTER_GOLD] == 600  # Current + 500
+        assert gold_goals[0]["target_state"][GameState.CHARACTER_GOLD] == 600  # Current + 500
 
     def test_get_early_game_goals_high_level(self, goal_manager):
         """Test early game goals don't include level goals for level 10+"""
-        high_level_state = create_test_character_state(
-            level=15,
-            xp=5000,
-            mining_level=8,
-            woodcutting_level=8
-        )
+        high_level_state = create_test_character_state(level=15, xp=5000, mining_level=8, woodcutting_level=8)
 
         goals = goal_manager.get_early_game_goals(high_level_state)
 
@@ -336,11 +473,31 @@ class TestGoalManager:
     async def test_select_next_goal_max_level(self, goal_manager):
         """Test select_next_goal returns empty for max level character"""
         max_level_state = CharacterGameState(
-            name="test_char", level=45, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=45,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         goal = await goal_manager.select_next_goal(max_level_state)
@@ -356,23 +513,18 @@ class TestGoalManager:
             xp=1000,
             gold=100,
             hp=10,  # Critical HP
-            max_hp=100
+            max_hp=100,
         )
 
         # Mock goal weight calculator to return a health recovery goal
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={
-                GameState.HP_LOW: False,
-                GameState.CURRENT_X: 5,
-                GameState.CURRENT_Y: 5
-            },
-            priority=9
+            target_states={GameState.HP_LOW: False, GameState.CURRENT_X: 5, GameState.CURRENT_Y: 5}, priority=9
         )
 
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'HealthRecoveryGoal'
+        type(mock_goal).__name__ = "HealthRecoveryGoal"
 
         goal = await goal_manager.select_next_goal(critical_hp_state)
 
@@ -391,27 +543,17 @@ class TestGoalManager:
     @pytest.mark.asyncio
     async def test_select_next_goal_early_game(self, goal_manager):
         """Test select_next_goal for early game character"""
-        early_game_state = create_test_character_state(
-            level=5,
-            xp=500,
-            hp=80,
-            max_hp=100,
-            mining_level=3
-        )
+        early_game_state = create_test_character_state(level=5, xp=500, hp=80, max_hp=100, mining_level=3)
 
         # Mock goal weight calculator to return a combat goal for early game
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={
-                GameState.CHARACTER_LEVEL: 6,
-                GameState.GAINED_XP: True
-            },
-            priority=7
+            target_states={GameState.CHARACTER_LEVEL: 6, GameState.GAINED_XP: True}, priority=7
         )
 
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'CombatGoal'
+        type(mock_goal).__name__ = "CombatGoal"
 
         goal = await goal_manager.select_next_goal(early_game_state)
 
@@ -430,15 +572,11 @@ class TestGoalManager:
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={
-                GameState.GAINED_XP: True,
-                GameState.COOLDOWN_READY: True
-            },
-            priority=6
+            target_states={GameState.GAINED_XP: True, GameState.COOLDOWN_READY: True}, priority=6
         )
 
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'GatheringGoal'
+        type(mock_goal).__name__ = "GatheringGoal"
 
         # Early game character (level 5)
         goal = await goal_manager.select_next_goal(mock_current_state)
@@ -462,22 +600,18 @@ class TestGoalManager:
             woodcutting_level=12,
             can_fight=True,
             can_craft=True,
-            gold=5000
+            gold=5000,
         )
 
         # Mock goal weight calculator to return a crafting goal for mid game
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={
-                GameState.GAINED_XP: True,
-                GameState.READY_FOR_UPGRADE: True
-            },
-            priority=8
+            target_states={GameState.GAINED_XP: True, GameState.READY_FOR_UPGRADE: True}, priority=8
         )
 
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'CraftingGoal'
+        type(mock_goal).__name__ = "CraftingGoal"
 
         goal = await goal_manager.select_next_goal(mid_game_state)
 
@@ -495,22 +629,18 @@ class TestGoalManager:
             max_hp=100,
             cooldown_ready=True,
             can_rest=True,
-            at_safe_location=True
+            at_safe_location=True,
         )
 
         # Mock goal weight calculator to return an emergency rest goal
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={
-                GameState.HP_LOW: False,
-                GameState.COOLDOWN_READY: True
-            },
-            priority=10
+            target_states={GameState.HP_LOW: False, GameState.COOLDOWN_READY: True}, priority=10
         )
 
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'EmergencyRestGoal'
+        type(mock_goal).__name__ = "EmergencyRestGoal"
 
         goal = await goal_manager.select_next_goal(emergency_state)
 
@@ -528,26 +658,19 @@ class TestGoalManager:
     async def test_select_next_goal_inventory_full(self, goal_manager):
         """Test goal selection when inventory is full"""
         full_inventory_state = create_test_character_state(
-            level=8,
-            inventory_space_available=False,
-            can_move=True,
-            cooldown_ready=True
+            level=8, inventory_space_available=False, can_move=True, cooldown_ready=True
         )
 
         # Mock goal weight calculator to return an inventory management goal
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={
-                GameState.INVENTORY_SPACE_AVAILABLE: True,
-                GameState.CURRENT_X: 0,
-                GameState.CURRENT_Y: 0
-            },
-            priority=7
+            target_states={GameState.INVENTORY_SPACE_AVAILABLE: True, GameState.CURRENT_X: 0, GameState.CURRENT_Y: 0},
+            priority=7,
         )
 
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'InventoryManagementGoal'
+        type(mock_goal).__name__ = "InventoryManagementGoal"
 
         goal = await goal_manager.select_next_goal(full_inventory_state)
 
@@ -558,28 +681,23 @@ class TestGoalManager:
     @pytest.mark.asyncio
     async def test_plan_actions_basic_goal(self, goal_manager, mock_current_state):
         """Test action planning for basic goal"""
-        goal = GOAPTargetState(
-            target_states={
-                GameState.CHARACTER_LEVEL: 6,
-                GameState.CHARACTER_XP: 1500
-            },
-            priority=7
-        )
+        goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 6, GameState.CHARACTER_XP: 1500}, priority=7)
 
         # Mock GOAP planner
         mock_plan = [
-            {'name': 'move_to_forest', 'cost': 2},
-            {'name': 'fight_goblin', 'cost': 5},
-            {'name': 'fight_goblin', 'cost': 5},
-            {'name': 'rest', 'cost': 1}
+            {"name": "move_to_forest", "cost": 2},
+            {"name": "fight_goblin", "cost": 5},
+            {"name": "fight_goblin", "cost": 5},
+            {"name": "rest", "cost": 1},
         ]
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner, \
-             patch.object(goal_manager, 'create_goap_actions') as mock_create_actions:
-
+        with (
+            patch.object(goal_manager, "_create_goap_planner") as mock_create_planner,
+            patch.object(goal_manager, "create_goap_actions") as mock_create_actions,
+        ):
             # Mock action list with conditions
             mock_action_list = Mock()
-            mock_action_list.conditions = {'move_to_forest': {}, 'fight_goblin': {}, 'rest': {}}
+            mock_action_list.conditions = {"move_to_forest": {}, "fight_goblin": {}, "rest": {}}
             mock_create_actions.return_value = mock_action_list
 
             # Mock planner
@@ -591,8 +709,8 @@ class TestGoalManager:
 
             assert isinstance(plan, GOAPActionPlan)
             assert len(plan.actions) == 4
-            assert plan.actions[0].name == 'move_to_forest'
-            assert plan.actions[-1].name == 'rest'
+            assert plan.actions[0].name == "move_to_forest"
+            assert plan.actions[-1].name == "rest"
 
     @pytest.mark.asyncio
     async def test_plan_actions_no_plan_found(self, goal_manager, mock_current_state):
@@ -600,12 +718,12 @@ class TestGoalManager:
         impossible_goal = GOAPTargetState(
             target_states={
                 GameState.CHARACTER_LEVEL: 100,  # Impossible jump
-                GameState.HP_CURRENT: -1  # Invalid state
+                GameState.HP_CURRENT: -1,  # Invalid state
             },
-            priority=5
+            priority=5,
         )
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
             mock_planner = Mock()
             mock_planner.calculate.return_value = []  # No plan found
             mock_create_planner.return_value = mock_planner
@@ -620,37 +738,44 @@ class TestGoalManager:
         goal = GOAPTargetState(
             target_states={
                 GameState.ITEM_QUANTITY: 10,  # Gather 10 items
-                GameState.MINING_LEVEL: 4
+                GameState.MINING_LEVEL: 4,
             },
-            priority=6
+            priority=6,
         )
 
         # Mock action registry
         mock_actions = [
-            Mock(name='move_to_mine', cost=2,
-                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                 get_effects=Mock(return_value={GameState.AT_RESOURCE_LOCATION: True})),
-            Mock(name='gather_copper', cost=3,
-                 get_preconditions=Mock(return_value={GameState.CAN_GATHER: True}),
-                 get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}))
+            Mock(
+                name="move_to_mine",
+                cost=2,
+                get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                get_effects=Mock(return_value={GameState.AT_RESOURCE_LOCATION: True}),
+            ),
+            Mock(
+                name="gather_copper",
+                cost=3,
+                get_preconditions=Mock(return_value={GameState.CAN_GATHER: True}),
+                get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}),
+            ),
         ]
 
-        with patch.object(goal_manager, 'create_goap_actions') as mock_create_actions, \
-             patch('src.ai_player.goal_manager.Planner') as mock_planner_class:
-
+        with (
+            patch.object(goal_manager, "create_goap_actions") as mock_create_actions,
+            patch("src.ai_player.goal_manager.Planner") as mock_planner_class,
+        ):
             # Configure action registry to return mock actions (this gets called by create_goap_actions)
             goal_manager.action_registry.generate_actions_for_state.return_value = mock_actions
 
             # Mock the create_goap_actions to still call the action registry but return a mock Action_List
             mock_action_list = Mock()
-            mock_action_list.conditions = {'move_to_mine': {}, 'gather_copper': {}}
+            mock_action_list.conditions = {"move_to_mine": {}, "gather_copper": {}}
             mock_create_actions.return_value = mock_action_list
 
             # Configure the GOAP Planner mock
             mock_planner_instance = Mock()
             mock_planner_instance.calculate.return_value = [
-                {'name': 'move_to_mine', 'cost': 2},
-                {'name': 'gather_copper', 'cost': 3}
+                {"name": "move_to_mine", "cost": 2},
+                {"name": "gather_copper", "cost": 3},
             ]
             mock_planner_class.return_value = mock_planner_instance
 
@@ -664,12 +789,7 @@ class TestGoalManager:
 
     def test_update_goal_priorities_based_on_state(self, goal_manager, mock_current_state):
         """Test updating goal priorities based on current state"""
-        initial_priorities = {
-            'level_up': 8,
-            'resource_gathering': 6,
-            'equipment_upgrade': 4,
-            'exploration': 2
-        }
+        initial_priorities = {"level_up": 8, "resource_gathering": 6, "equipment_upgrade": 4, "exploration": 2}
 
         updated_priorities = goal_manager.update_goal_priorities(mock_current_state, initial_priorities)
 
@@ -686,19 +806,15 @@ class TestGoalManager:
             level=10,
             hp=15,  # Very low HP
             max_hp=100,
-            can_rest=True
+            can_rest=True,
         )
 
-        initial_priorities = {
-            'level_up': 8,
-            'survival': 5,
-            'resource_gathering': 6
-        }
+        initial_priorities = {"level_up": 8, "survival": 5, "resource_gathering": 6}
 
         updated_priorities = goal_manager.update_goal_priorities(low_hp_state, initial_priorities)
 
         # Survival goals should get higher priority
-        assert updated_priorities['survival'] > initial_priorities['survival']
+        assert updated_priorities["survival"] > initial_priorities["survival"]
 
     def test_get_available_goals_early_game(self, goal_manager, mock_current_state):
         """Test getting available goals for early game"""
@@ -709,9 +825,9 @@ class TestGoalManager:
 
         for goal in available_goals:
             assert isinstance(goal, dict)
-            assert 'type' in goal
-            assert 'priority' in goal
-            assert 'requirements_met' in goal
+            assert "type" in goal
+            assert "priority" in goal
+            assert "requirements_met" in goal
 
     def test_get_available_goals_filtering(self, goal_manager):
         """Test goal filtering based on character capabilities"""
@@ -721,29 +837,26 @@ class TestGoalManager:
             can_fight=False,  # Cannot fight
             can_gather=True,
             can_craft=False,  # Cannot craft
-            cooldown_ready=True
+            cooldown_ready=True,
         )
 
         available_goals = goal_manager.get_available_goals(limited_state)
 
         # Should only include goals that character can pursue
         for goal in available_goals:
-            if goal['type'] == 'combat_training':
-                assert goal['requirements_met'] is False
-            elif goal['type'] == 'resource_gathering':
-                assert goal['requirements_met'] is True
+            if goal["type"] == "combat_training":
+                assert goal["requirements_met"] is False
+            elif goal["type"] == "resource_gathering":
+                assert goal["requirements_met"] is True
 
     def test_evaluate_goal_feasibility(self, goal_manager, mock_current_state):
         """Test goal feasibility evaluation"""
         feasible_goal = {
-            'type': 'skill_training',
-            'target_state': {
+            "type": "skill_training",
+            "target_state": {
                 GameState.MINING_LEVEL: 4  # Achievable from level 3
             },
-            'requirements': {
-                GameState.CAN_GATHER: True,
-                GameState.TOOL_EQUIPPED: 'pickaxe'
-            }
+            "requirements": {GameState.CAN_GATHER: True, GameState.TOOL_EQUIPPED: "pickaxe"},
         }
 
         is_feasible = goal_manager.evaluate_goal_feasibility(mock_current_state, feasible_goal)
@@ -752,13 +865,13 @@ class TestGoalManager:
     def test_evaluate_goal_feasibility_impossible(self, goal_manager, mock_current_state):
         """Test goal feasibility evaluation for impossible goals"""
         impossible_goal = {
-            'type': 'impossible_skill_jump',
-            'target_state': {
+            "type": "impossible_skill_jump",
+            "target_state": {
                 GameState.MINING_LEVEL: 50  # Huge jump from level 3
             },
-            'requirements': {
+            "requirements": {
                 GameState.CHARACTER_LEVEL: 45  # Character is only level 5
-            }
+            },
         }
 
         is_feasible = goal_manager.evaluate_goal_feasibility(mock_current_state, impossible_goal)
@@ -767,34 +880,31 @@ class TestGoalManager:
     def test_evaluate_goal_feasibility_detailed_analysis(self, goal_manager, mock_current_state):
         """Test detailed goal feasibility analysis"""
         complex_goal = {
-            'type': 'complex_progression',
-            'target_state': {
+            "type": "complex_progression",
+            "target_state": {
                 GameState.CHARACTER_LEVEL: 10,  # Jump from 5 to 10
                 GameState.MINING_LEVEL: 5,  # Jump from 3 to 5
-                GameState.CHARACTER_GOLD: 1000  # Jump from 150 to 1000
-            }
+                GameState.CHARACTER_GOLD: 1000,  # Jump from 150 to 1000
+            },
         }
 
         # Test detailed analysis
         feasibility = goal_manager.evaluate_goal_feasibility(mock_current_state, complex_goal, simple=False)
 
         assert isinstance(feasibility, dict)
-        assert 'feasible' in feasibility
-        assert 'estimated_actions' in feasibility
-        assert 'estimated_time' in feasibility
-        assert 'confidence' in feasibility
-        assert isinstance(feasibility['estimated_actions'], int)
-        assert isinstance(feasibility['estimated_time'], (int, float))
+        assert "feasible" in feasibility
+        assert "estimated_actions" in feasibility
+        assert "estimated_time" in feasibility
+        assert "confidence" in feasibility
+        assert isinstance(feasibility["estimated_actions"], int)
+        assert isinstance(feasibility["estimated_time"], (int, float))
 
     @pytest.mark.asyncio
     async def test_select_next_goal_exception_handling(self, goal_manager):
         """Test exception handling in select_next_goal"""
         # Mock max_level_achieved to raise exception
-        with patch.object(goal_manager, 'max_level_achieved', side_effect=Exception("Level check failed")):
-            problematic_state = create_test_character_state(
-                level=10,
-                hp=50
-            )
+        with patch.object(goal_manager, "max_level_achieved", side_effect=Exception("Level check failed")):
+            problematic_state = create_test_character_state(level=10, hp=50)
 
             # Should raise the exception from max_level_achieved
             with pytest.raises(Exception, match="Level check failed"):
@@ -806,7 +916,7 @@ class TestGoalManager:
         # Test with goal that has empty target states
         invalid_goal = GOAPTargetState(
             target_states={},  # Empty target states
-            priority=5
+            priority=5,
         )
 
         # Should raise RuntimeError when no actions can be generated for the goal
@@ -816,10 +926,7 @@ class TestGoalManager:
     @pytest.mark.asyncio
     async def test_plan_actions_empty_action_registry(self, goal_manager, mock_current_state):
         """Test plan_actions when action registry returns empty list"""
-        goal = GOAPTargetState(
-            target_states={GameState.CHARACTER_LEVEL: 6},
-            priority=5
-        )
+        goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 6}, priority=5)
 
         # Configure action registry to return empty list
         goal_manager.action_registry.generate_actions_for_state.return_value = []
@@ -835,11 +942,31 @@ class TestGoalManager:
 
         # Create a test state
         current_state = CharacterGameState(
-            name="test_char", level=1, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=1,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         # Should raise the exception from the registry
@@ -848,6 +975,7 @@ class TestGoalManager:
 
     async def test_create_goap_actions_action_instantiation_error(self, goal_manager):
         """Test create_goap_actions with action instantiation errors"""
+
         # Mock action class that requires parameters
         class RequiresParamsAction:
             def __init__(self, required_param):
@@ -857,52 +985,66 @@ class TestGoalManager:
 
         # Create a test state
         current_state = CharacterGameState(
-            name="test_char", level=1, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=1,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         action_list = await goal_manager.create_goap_actions(current_state)
 
         # Should handle TypeError for actions requiring parameters
-        assert hasattr(action_list, 'conditions')
+        assert hasattr(action_list, "conditions")
 
     def test_get_late_game_goals(self, goal_manager):
         """Test late game goals generation"""
-        late_game_state = create_test_character_state(
-            level=35,
-            xp=60000
-        )
+        late_game_state = create_test_character_state(level=35, xp=60000)
 
         goals = goal_manager.get_late_game_goals(late_game_state)
 
         assert isinstance(goals, list)
         assert len(goals) > 0
         # Should contain level progression goal for late game
-        level_goals = [g for g in goals if g.get('type') == 'level_up']
+        level_goals = [g for g in goals if g.get("type") == "level_up"]
         assert len(level_goals) > 0
 
     def test_get_mid_game_goals(self, goal_manager):
         """Test mid game goals generation"""
-        mid_game_state = create_test_character_state(
-            level=20,
-            xp=25000
-        )
+        mid_game_state = create_test_character_state(level=20, xp=25000)
 
         goals = goal_manager.get_mid_game_goals(mid_game_state)
 
         assert isinstance(goals, list)
         assert len(goals) > 0
         # Should contain level progression goal for mid game
-        level_goals = [g for g in goals if g.get('type') == 'level_up']
+        level_goals = [g for g in goals if g.get("type") == "level_up"]
         assert len(level_goals) > 0
 
     def test_estimate_goal_cost_exception_handling(self, goal_manager, mock_current_state):
         """Test exception handling in estimate_goal_cost"""
         invalid_goal = {
-            'target_state': None  # This should cause an exception
+            "target_state": None  # This should cause an exception
         }
 
         # Should raise AttributeError when trying to call .items() on None
@@ -919,11 +1061,7 @@ class TestGoalManager:
 
     def test_prioritize_goals_single_goal(self, goal_manager, mock_current_state):
         """Test prioritize_goals with single goal"""
-        single_goal = [{
-            'type': 'test_goal',
-            'priority': 5,
-            'target_state': {GameState.CHARACTER_LEVEL: 6}
-        }]
+        single_goal = [{"type": "test_goal", "priority": 5, "target_state": {GameState.CHARACTER_LEVEL: 6}}]
 
         result = goal_manager.prioritize_goals(single_goal, mock_current_state)
 
@@ -931,17 +1069,13 @@ class TestGoalManager:
 
     def test_convert_state_for_goap_non_enum_keys(self, goal_manager):
         """Test convert_state_for_goap with non-enum keys"""
-        mixed_state = {
-            GameState.CHARACTER_LEVEL: 10,
-            'string_key': 'value',
-            42: 'numeric_key'
-        }
+        mixed_state = {GameState.CHARACTER_LEVEL: 10, "string_key": "value", 42: "numeric_key"}
 
         goap_state = goal_manager.convert_state_for_goap(mixed_state)
 
-        assert 'character_level' in goap_state
-        assert 'string_key' in goap_state
-        assert '42' in goap_state
+        assert "character_level" in goap_state
+        assert "string_key" in goap_state
+        assert "42" in goap_state
 
 
 class TestGoalManagerGOAPIntegration:
@@ -965,15 +1099,35 @@ class TestGoalManagerGOAPIntegration:
 
         # Create a test state
         current_state = CharacterGameState(
-            name="test_char", level=1, xp=0, gold=0, hp=100, max_hp=100, cooldown=0,
-            x=0, y=0, mining_level=1, mining_xp=0, woodcutting_level=1, woodcutting_xp=0,
-            fishing_level=1, fishing_xp=0, weaponcrafting_level=1, weaponcrafting_xp=0,
-            gearcrafting_level=1, gearcrafting_xp=0, jewelrycrafting_level=1, jewelrycrafting_xp=0,
-            cooking_level=1, cooking_xp=0, alchemy_level=1, alchemy_xp=0
+            name="test_char",
+            level=1,
+            xp=0,
+            gold=0,
+            hp=100,
+            max_hp=100,
+            cooldown=0,
+            x=0,
+            y=0,
+            mining_level=1,
+            mining_xp=0,
+            woodcutting_level=1,
+            woodcutting_xp=0,
+            fishing_level=1,
+            fishing_xp=0,
+            weaponcrafting_level=1,
+            weaponcrafting_xp=0,
+            gearcrafting_level=1,
+            gearcrafting_xp=0,
+            jewelrycrafting_level=1,
+            jewelrycrafting_xp=0,
+            cooking_level=1,
+            cooking_xp=0,
+            alchemy_level=1,
+            alchemy_xp=0,
         )
 
         # Test that the method returns an Action_List instance
-        with patch('src.ai_player.goal_manager.Action_List') as mock_action_list_class:
+        with patch("src.ai_player.goal_manager.Action_List") as mock_action_list_class:
             mock_action_list = Mock()
             # Configure the mock to have the necessary attributes
             mock_action_list.conditions = {}  # Empty dict for len() call
@@ -986,12 +1140,7 @@ class TestGoalManagerGOAPIntegration:
 
     def test_convert_state_for_goap(self, goal_manager):
         """Test state conversion for GOAP compatibility"""
-        game_state = create_test_character_state(
-            level=10,
-            cooldown_ready=True,
-            hp=85,
-            can_fight=False
-        ).to_goap_state()
+        game_state = create_test_character_state(level=10, cooldown_ready=True, hp=85, can_fight=False).to_goap_state()
 
         goap_state = goal_manager.convert_state_for_goap(game_state)
 
@@ -1002,29 +1151,35 @@ class TestGoalManagerGOAPIntegration:
             assert isinstance(key, str)
 
         # Should preserve values with proper type conversion
-        assert goap_state['character_level'] == 10
-        assert goap_state['cooldown_ready'] == 1  # Boolean to int
-        assert goap_state['hp_current'] == 85
-        assert goap_state['can_fight'] == 0  # Boolean to int
+        assert goap_state["character_level"] == 10
+        assert goap_state["cooldown_ready"] == 1  # Boolean to int
+        assert goap_state["hp_current"] == 85
+        assert goap_state["can_fight"] == 0  # Boolean to int
 
     def test_convert_actions_for_goap(self, goal_manager):
         """Test action conversion for GOAP system"""
         mock_actions = [
-            Mock(name='move_action', cost=2,
-                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                 get_effects=Mock(return_value={GameState.CURRENT_X: 10})),
-            Mock(name='fight_action', cost=5,
-                 get_preconditions=Mock(return_value={GameState.CAN_FIGHT: True}),
-                 get_effects=Mock(return_value={GameState.CHARACTER_XP: 100}))
+            Mock(
+                name="move_action",
+                cost=2,
+                get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                get_effects=Mock(return_value={GameState.CURRENT_X: 10}),
+            ),
+            Mock(
+                name="fight_action",
+                cost=5,
+                get_preconditions=Mock(return_value={GameState.CAN_FIGHT: True}),
+                get_effects=Mock(return_value={GameState.CHARACTER_XP: 100}),
+            ),
         ]
 
         action_list = goal_manager._convert_actions_for_goap(mock_actions)
 
         # Should return a proper Action_List with the converted actions
         assert action_list is not None
-        assert hasattr(action_list, 'conditions')
-        assert hasattr(action_list, 'reactions')
-        assert hasattr(action_list, 'weights')
+        assert hasattr(action_list, "conditions")
+        assert hasattr(action_list, "reactions")
+        assert hasattr(action_list, "weights")
 
         # Should have entries for each action
         assert len(action_list.conditions) == len(mock_actions)
@@ -1035,48 +1190,52 @@ class TestGoalManagerGOAPIntegration:
     async def test_goap_planning_with_complex_goal(self, goal_manager):
         """Test GOAP planning with complex multi-step goal"""
         current_state = create_test_character_state(
-            level=8,
-            mining_level=5,
-            x=0,
-            y=0,
-            cooldown_ready=True,
-            inventory_space_available=True
+            level=8, mining_level=5, x=0, y=0, cooldown_ready=True, inventory_space_available=True
         )
 
         complex_goal = GOAPTargetState(
             target_states={
                 GameState.ITEM_QUANTITY: 5,  # Need 5 specific items
-                GameState.MINING_LEVEL: 7,   # Need higher skill
-                GameState.CHARACTER_XP: 3000 # Need more experience
+                GameState.MINING_LEVEL: 7,  # Need higher skill
+                GameState.CHARACTER_XP: 3000,  # Need more experience
             },
-            priority=8
+            priority=8,
         )
 
         # Mock complex action sequence
         complex_plan = [
-            {'name': 'move_to_mine', 'cost': 3},
-            {'name': 'gather_ore', 'cost': 4},
-            {'name': 'gather_ore', 'cost': 4},
-            {'name': 'move_to_smelter', 'cost': 2},
-            {'name': 'smelt_ingot', 'cost': 6},
-            {'name': 'smelt_ingot', 'cost': 6}
+            {"name": "move_to_mine", "cost": 3},
+            {"name": "gather_ore", "cost": 4},
+            {"name": "gather_ore", "cost": 4},
+            {"name": "move_to_smelter", "cost": 2},
+            {"name": "smelt_ingot", "cost": 6},
+            {"name": "smelt_ingot", "cost": 6},
         ]
 
         # Mock some actions for the GOAP action list creation
         mock_actions = [
-            Mock(name='move_to_mine', cost=3,
-                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                 get_effects=Mock(return_value={GameState.AT_RESOURCE_LOCATION: True})),
-            Mock(name='gather_ore', cost=4,
-                 get_preconditions=Mock(return_value={GameState.CAN_GATHER: True}),
-                 get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1})),
-            Mock(name='smelt_ingot', cost=6,
-                 get_preconditions=Mock(return_value={GameState.CAN_CRAFT: True}),
-                 get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}))
+            Mock(
+                name="move_to_mine",
+                cost=3,
+                get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                get_effects=Mock(return_value={GameState.AT_RESOURCE_LOCATION: True}),
+            ),
+            Mock(
+                name="gather_ore",
+                cost=4,
+                get_preconditions=Mock(return_value={GameState.CAN_GATHER: True}),
+                get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}),
+            ),
+            Mock(
+                name="smelt_ingot",
+                cost=6,
+                get_preconditions=Mock(return_value={GameState.CAN_CRAFT: True}),
+                get_effects=Mock(return_value={GameState.ITEM_QUANTITY: 1}),
+            ),
         ]
         goal_manager.action_registry.generate_actions_for_state.return_value = mock_actions
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
             mock_planner = Mock()
             mock_planner.calculate.return_value = complex_plan
             mock_create_planner.return_value = mock_planner
@@ -1085,8 +1244,8 @@ class TestGoalManagerGOAPIntegration:
 
             assert isinstance(plan, GOAPActionPlan)
             assert len(plan.actions) == 6
-            assert plan.actions[0].name == 'move_to_mine'
-            assert plan.actions[-1].name == 'smelt_ingot'
+            assert plan.actions[0].name == "move_to_mine"
+            assert plan.actions[-1].name == "smelt_ingot"
 
             # Verify total cost calculation
             assert plan.total_cost == 25
@@ -1094,35 +1253,36 @@ class TestGoalManagerGOAPIntegration:
     def test_goap_optimization_with_action_costs(self, goal_manager):
         """Test GOAP optimization considering action costs"""
         # Test that GOAP selects lower-cost paths when multiple options exist
-        current_state = create_test_character_state(
-            x=0,
-            y=0,
-            cooldown_ready=True
-        )
+        current_state = create_test_character_state(x=0, y=0, cooldown_ready=True)
 
-        goal_state = {
-            GameState.CURRENT_X: 10,
-            GameState.CURRENT_Y: 10
-        }
+        goal_state = {GameState.CURRENT_X: 10, GameState.CURRENT_Y: 10}
 
         # Mock actions with different costs for same effect
         mock_actions = [
-            Mock(name='expensive_teleport', cost=20,
-                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                 get_effects=Mock(return_value={GameState.CURRENT_X: 10, GameState.CURRENT_Y: 10})),
-            Mock(name='cheap_walk', cost=5,
-                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                 get_effects=Mock(return_value={GameState.CURRENT_X: 10, GameState.CURRENT_Y: 10}))
+            Mock(
+                name="expensive_teleport",
+                cost=20,
+                get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                get_effects=Mock(return_value={GameState.CURRENT_X: 10, GameState.CURRENT_Y: 10}),
+            ),
+            Mock(
+                name="cheap_walk",
+                cost=5,
+                get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                get_effects=Mock(return_value={GameState.CURRENT_X: 10, GameState.CURRENT_Y: 10}),
+            ),
         ]
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
             mock_planner = Mock()
             # GOAP should prefer lower cost option
-            mock_planner.calculate.return_value = [{'name': 'cheap_walk', 'cost': 5}]
+            mock_planner.calculate.return_value = [{"name": "cheap_walk", "cost": 5}]
             mock_create_planner.return_value = mock_planner
 
-            with patch.object(goal_manager.action_registry, 'generate_actions_for_state', return_value=mock_actions):
-                with patch.object(goal_manager, '_create_goap_planner', return_value=mock_planner) as mock_create_planner:
+            with patch.object(goal_manager.action_registry, "generate_actions_for_state", return_value=mock_actions):
+                with patch.object(
+                    goal_manager, "_create_goap_planner", return_value=mock_planner
+                ) as mock_create_planner:
                     # The method returns a mock planner, so we just verify it was called
                     assert mock_create_planner is not None
                     # We can't easily test the actual return value in this context
@@ -1135,6 +1295,7 @@ class TestGoalManagerDynamicPriorities:
     def goal_manager(self):
         """Create GoalManager for priority testing"""
         from unittest.mock import Mock
+
         mock_action_registry = Mock()
         mock_cooldown_manager = Mock()
 
@@ -1147,17 +1308,14 @@ class TestGoalManagerDynamicPriorities:
         """Test survival priority calculation based on HP"""
         test_cases = [
             # (current_hp, max_hp, expected_priority_range)
-            (5, 100, (9, 10)),    # Critical HP - highest priority
-            (30, 100, (7, 9)),    # Low HP - high priority
-            (70, 100, (3, 6)),    # Moderate HP - medium priority
-            (95, 100, (1, 3)),    # High HP - low priority
+            (5, 100, (9, 10)),  # Critical HP - highest priority
+            (30, 100, (7, 9)),  # Low HP - high priority
+            (70, 100, (3, 6)),  # Moderate HP - medium priority
+            (95, 100, (1, 3)),  # High HP - low priority
         ]
 
         for current_hp, max_hp, (min_priority, max_priority) in test_cases:
-            state = create_test_character_state(
-                hp=current_hp,
-                max_hp=max_hp
-            )
+            state = create_test_character_state(hp=current_hp, max_hp=max_hp)
 
             priority = goal_manager._calculate_survival_priority(state)
 
@@ -1167,17 +1325,14 @@ class TestGoalManagerDynamicPriorities:
         """Test progression priority based on character level"""
         test_cases = [
             # (level, xp, xp_to_next, expected_priority_range)
-            (1, 0, 100, (8, 10)),      # New character - high priority
-            (5, 800, 200, (6, 8)),     # Early game - good priority
-            (20, 15000, 5000, (4, 6)), # Mid game - moderate priority
-            (40, 80000, 20000, (2, 4)), # Late game - lower priority
+            (1, 0, 100, (8, 10)),  # New character - high priority
+            (5, 800, 200, (6, 8)),  # Early game - good priority
+            (20, 15000, 5000, (4, 6)),  # Mid game - moderate priority
+            (40, 80000, 20000, (2, 4)),  # Late game - lower priority
         ]
 
         for level, xp, xp_to_next, (min_priority, max_priority) in test_cases:
-            state = create_test_character_state(
-                level=level,
-                xp=xp
-            )
+            state = create_test_character_state(level=level, xp=xp)
 
             priority = goal_manager._calculate_progression_priority(state)
 
@@ -1187,17 +1342,14 @@ class TestGoalManagerDynamicPriorities:
         """Test economic priority based on gold and inventory"""
         test_cases = [
             # (gold, inventory_full, expected_priority_range)
-            (0, True, (1, 10)),     # No gold, full inventory - urgent (widened range)
-            (50, True, (1, 8)),     # Little gold, full inventory - high (widened range)
-            (500, False, (1, 8)),   # Some gold, space available - moderate (widened range)
+            (0, True, (1, 10)),  # No gold, full inventory - urgent (widened range)
+            (50, True, (1, 8)),  # Little gold, full inventory - high (widened range)
+            (500, False, (1, 8)),  # Some gold, space available - moderate (widened range)
             (5000, False, (1, 8)),  # Rich, space available - low (widened range)
         ]
 
         for gold, inventory_full, (min_priority, max_priority) in test_cases:
-            state = create_test_character_state(
-                gold=gold,
-                inventory_space_available=not inventory_full
-            )
+            state = create_test_character_state(gold=gold, inventory_space_available=not inventory_full)
 
             priority = goal_manager._calculate_economic_priority(state)
 
@@ -1207,22 +1359,14 @@ class TestGoalManagerDynamicPriorities:
         """Test adaptive priority adjustment over time"""
         # Simulate goal priorities changing based on recent actions
         recent_actions = [
-            {'name': 'fight_monster', 'result': 'success', 'xp_gained': 150},
-            {'name': 'fight_monster', 'result': 'success', 'xp_gained': 150},
-            {'name': 'rest', 'result': 'success', 'hp_recovered': 50}
+            {"name": "fight_monster", "result": "success", "xp_gained": 150},
+            {"name": "fight_monster", "result": "success", "xp_gained": 150},
+            {"name": "rest", "result": "success", "hp_recovered": 50},
         ]
 
-        initial_priorities = {
-            'combat_training': 7,
-            'skill_training': 5,
-            'survival': 8
-        }
+        initial_priorities = {"combat_training": 7, "skill_training": 5, "survival": 8}
 
-        current_state = create_test_character_state(
-            level=8,
-            hp=90,
-            max_hp=100
-        )
+        current_state = create_test_character_state(level=8, hp=90, max_hp=100)
 
         adjusted_priorities = goal_manager._adjust_priorities_based_on_history(
             initial_priorities, recent_actions, current_state
@@ -1239,29 +1383,27 @@ class TestGoalManagerDynamicPriorities:
         """Test priority balancing to prevent single-goal focus"""
         # Test that priority system encourages diverse goals
         unbalanced_priorities = {
-            'level_up': 10,      # Maxed out
-            'skill_training': 1,  # Minimal
-            'economic': 1,        # Minimal
-            'survival': 1         # Minimal
+            "level_up": 10,  # Maxed out
+            "skill_training": 1,  # Minimal
+            "economic": 1,  # Minimal
+            "survival": 1,  # Minimal
         }
 
         current_state = create_test_character_state(
             level=10,
-            mining_level=2,    # Behind character level
-            gold=10, # Very low
-            hp=85
+            mining_level=2,  # Behind character level
+            gold=10,  # Very low
+            hp=85,
         )
 
-        balanced_priorities = goal_manager._balance_goal_priorities(
-            unbalanced_priorities, current_state
-        )
+        balanced_priorities = goal_manager._balance_goal_priorities(unbalanced_priorities, current_state)
 
         # Should boost neglected areas
-        assert balanced_priorities['skill_training'] > unbalanced_priorities['skill_training']
-        assert balanced_priorities['economic'] > unbalanced_priorities['economic']
+        assert balanced_priorities["skill_training"] > unbalanced_priorities["skill_training"]
+        assert balanced_priorities["economic"] > unbalanced_priorities["economic"]
 
         # Should slightly reduce over-prioritized goal
-        assert balanced_priorities['level_up'] <= unbalanced_priorities['level_up']
+        assert balanced_priorities["level_up"] <= unbalanced_priorities["level_up"]
 
 
 class TestGoalManagerConfiguration:
@@ -1281,19 +1423,15 @@ class TestGoalManagerConfiguration:
     def test_load_goal_configuration(self):
         """Test loading goal configuration from YAML"""
         mock_config = {
-            'goal_priorities': {
-                'survival': {'base_priority': 10, 'hp_threshold': 0.3},
-                'progression': {'base_priority': 8, 'xp_multiplier': 1.2},
-                'economic': {'base_priority': 6, 'gold_threshold': 1000}
+            "goal_priorities": {
+                "survival": {"base_priority": 10, "hp_threshold": 0.3},
+                "progression": {"base_priority": 8, "xp_multiplier": 1.2},
+                "economic": {"base_priority": 6, "gold_threshold": 1000},
             },
-            'goal_weights': {
-                'level_up': 1.5,
-                'skill_training': 1.0,
-                'resource_gathering': 0.8
-            }
+            "goal_weights": {"level_up": 1.5, "skill_training": 1.0, "resource_gathering": 0.8},
         }
 
-        with patch('src.lib.yaml_data.YamlData') as mock_yaml_data:
+        with patch("src.lib.yaml_data.YamlData") as mock_yaml_data:
             mock_yaml_instance = Mock()
             mock_yaml_instance.load_data.return_value = mock_config
             mock_yaml_data.return_value = mock_yaml_instance
@@ -1303,8 +1441,8 @@ class TestGoalManagerConfiguration:
             goal_manager = GoalManager(mock_action_registry, mock_cooldown_manager)
 
             # Should initialize successfully with required components
-            assert hasattr(goal_manager, 'action_registry')
-            assert hasattr(goal_manager, 'cooldown_manager')
+            assert hasattr(goal_manager, "action_registry")
+            assert hasattr(goal_manager, "cooldown_manager")
 
     def test_custom_goal_registration(self, goal_manager):
         """Test goal availability and selection functionality"""
@@ -1319,37 +1457,25 @@ class TestGoalManagerConfiguration:
         # Each goal should be a dictionary with proper structure
         for goal in available_goals:
             assert isinstance(goal, dict)
-            assert 'type' in goal
-            assert 'priority' in goal
-            assert 'target_state' in goal
+            assert "type" in goal
+            assert "priority" in goal
+            assert "target_state" in goal
 
             # target_state should have GameState keys
-            if goal['target_state']:
-                for key in goal['target_state'].keys():
+            if goal["target_state"]:
+                for key in goal["target_state"].keys():
                     assert isinstance(key, GameState)
 
     @pytest.mark.asyncio
     async def test_goal_manager_with_different_strategies(self, goal_manager):
         """Test goal manager with different planning strategies"""
-        strategies = ['aggressive', 'balanced', 'conservative', 'economic']
+        strategies = ["aggressive", "balanced", "conservative", "economic"]
 
         # Test different character states to see appropriate goal selection
         test_scenarios = [
-            create_test_character_state(
-                level=1,
-                hp=100,
-                gold=0
-            ),
-            create_test_character_state(
-                level=15,
-                hp=80,
-                gold=500
-            ),
-            create_test_character_state(
-                level=25,
-                hp=50,
-                gold=1000
-            )
+            create_test_character_state(level=1, hp=100, gold=0),
+            create_test_character_state(level=15, hp=80, gold=500),
+            create_test_character_state(level=25, hp=50, gold=1000),
         ]
 
         # Mock goal weight calculator to return different goals for different scenarios
@@ -1358,16 +1484,19 @@ class TestGoalManagerConfiguration:
             mock_goal = Mock()
             if character_state.level == 1:
                 mock_goal.get_target_state.return_value = GOAPTargetState(
-                    target_states={GameState.GAINED_XP: True}, priority=5)
-                type(mock_goal).__name__ = 'GatheringGoal'
+                    target_states={GameState.GAINED_XP: True}, priority=5
+                )
+                type(mock_goal).__name__ = "GatheringGoal"
             elif character_state.level == 15:
                 mock_goal.get_target_state.return_value = GOAPTargetState(
-                    target_states={GameState.READY_FOR_UPGRADE: True}, priority=7)
-                type(mock_goal).__name__ = 'CraftingGoal'
+                    target_states={GameState.READY_FOR_UPGRADE: True}, priority=7
+                )
+                type(mock_goal).__name__ = "CraftingGoal"
             else:  # level 25
                 mock_goal.get_target_state.return_value = GOAPTargetState(
-                    target_states={GameState.HP_LOW: False}, priority=9)
-                type(mock_goal).__name__ = 'HealthRecoveryGoal'
+                    target_states={GameState.HP_LOW: False}, priority=9
+                )
+                type(mock_goal).__name__ = "HealthRecoveryGoal"
             return (mock_goal, [])
 
         goal_manager.goal_weight_calculator.select_optimal_goal = mock_select_goal
@@ -1396,10 +1525,11 @@ class TestGoalManagerIntegration:
     @pytest.mark.asyncio
     async def test_full_goal_planning_workflow(self):
         """Test complete goal planning workflow"""
-        with patch('src.lib.goap.Planner'), \
-             patch('src.lib.goap.Action_List'), \
-             patch('src.ai_player.goal_manager.GoalManager.get_game_data', return_value={}):
-
+        with (
+            patch("src.lib.goap.Planner"),
+            patch("src.lib.goap.Action_List"),
+            patch("src.ai_player.goal_manager.GoalManager.get_game_data", return_value={}),
+        ):
             mock_action_registry = Mock()
             mock_cooldown_manager = Mock()
 
@@ -1409,22 +1539,16 @@ class TestGoalManagerIntegration:
             goal_manager = GoalManager(mock_action_registry, mock_cooldown_manager)
 
             # Simulate complete workflow
-            current_state = create_test_character_state(
-                level=5,
-                hp=80,
-                cooldown_ready=True,
-                can_fight=True
-            )
+            current_state = create_test_character_state(level=5, hp=80, cooldown_ready=True, can_fight=True)
 
             # Mock goal weight calculator to return a combat goal for workflow test
 
             mock_goal = Mock()
             mock_goal.get_target_state.return_value = GOAPTargetState(
-                target_states={GameState.GAINED_XP: True, GameState.AT_TARGET_LOCATION: True},
-                priority=8
+                target_states={GameState.GAINED_XP: True, GameState.AT_TARGET_LOCATION: True}, priority=8
             )
             goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-            type(mock_goal).__name__ = 'CombatGoal'
+            type(mock_goal).__name__ = "CombatGoal"
 
             # 1. Select goal
             goal = await goal_manager.select_next_goal(current_state)
@@ -1434,20 +1558,26 @@ class TestGoalManagerIntegration:
             # 2. Plan actions
             # Mock some actions for the GOAP action list creation
             mock_actions = [
-                Mock(name='move_to_target', cost=2,
-                     get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                     get_effects=Mock(return_value={GameState.AT_TARGET_LOCATION: True})),
-                Mock(name='execute_goal_action', cost=5,
-                     get_preconditions=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
-                     get_effects=Mock(return_value={GameState.CHARACTER_XP: 100}))
+                Mock(
+                    name="move_to_target",
+                    cost=2,
+                    get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                    get_effects=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
+                ),
+                Mock(
+                    name="execute_goal_action",
+                    cost=5,
+                    get_preconditions=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
+                    get_effects=Mock(return_value={GameState.CHARACTER_XP: 100}),
+                ),
             ]
             mock_action_registry.generate_actions_for_state.return_value = mock_actions
 
-            with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+            with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
                 mock_planner = Mock()
                 mock_planner.calculate.return_value = [
-                    {'name': 'move_to_target', 'cost': 2},
-                    {'name': 'execute_goal_action', 'cost': 5}
+                    {"name": "move_to_target", "cost": 2},
+                    {"name": "execute_goal_action", "cost": 5},
                 ]
                 mock_create_planner.return_value = mock_planner
 
@@ -1470,37 +1600,29 @@ class TestGoalManagerIntegration:
         # Mock goal weight calculator to return goals for error handling tests
 
         mock_goal = Mock()
-        mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={GameState.HP_LOW: False},
-            priority=6
-        )
+        mock_goal.get_target_state.return_value = GOAPTargetState(target_states={GameState.HP_LOW: False}, priority=6)
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'RestGoal'
+        type(mock_goal).__name__ = "RestGoal"
 
         # Test handling of various error conditions
         error_scenarios = [
             # Invalid state
             (create_test_character_state(), "Empty state should be handled gracefully"),
-
             # Invalid goal
             (create_test_character_state(), "Invalid goal format should be handled"),
-
             # GOAP planning failure
-            (create_test_character_state(level=5), "GOAP failures should be handled")
+            (create_test_character_state(level=5), "GOAP failures should be handled"),
         ]
 
         for scenario_data, description in error_scenarios:
-            if hasattr(scenario_data, 'level') and scenario_data.level == 5:
+            if hasattr(scenario_data, "level") and scenario_data.level == 5:
                 # Test planning failure
-                with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+                with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
                     mock_planner = Mock()
                     mock_planner.calculate.side_effect = Exception("GOAP planning failed")
                     mock_create_planner.return_value = mock_planner
 
-                    goal = GOAPTargetState(
-                        target_states={GameState.CHARACTER_LEVEL: 6},
-                        priority=5
-                    )
+                    goal = GOAPTargetState(target_states={GameState.CHARACTER_LEVEL: 6}, priority=5)
                     # Should raise exception when GOAP planning fails
                     with pytest.raises(Exception, match="GOAP planning failed"):
                         await goal_manager.plan_actions(scenario_data, goal)
@@ -1522,11 +1644,10 @@ class TestGoalManagerIntegration:
 
         mock_goal = Mock()
         mock_goal.get_target_state.return_value = GOAPTargetState(
-            target_states={GameState.READY_FOR_UPGRADE: True, GameState.GAINED_XP: True},
-            priority=9
+            target_states={GameState.READY_FOR_UPGRADE: True, GameState.GAINED_XP: True}, priority=9
         )
         goal_manager.goal_weight_calculator.select_optimal_goal = Mock(return_value=(mock_goal, []))
-        type(mock_goal).__name__ = 'CraftingGoal'
+        type(mock_goal).__name__ = "CraftingGoal"
 
         # Test with comprehensive state
         large_state = create_test_character_state(
@@ -1544,7 +1665,7 @@ class TestGoalManagerIntegration:
             gearcrafting_level=10,
             jewelrycrafting_level=8,
             cooking_level=6,
-            alchemy_level=4
+            alchemy_level=4,
         )
 
         # Should handle large state efficiently
@@ -1614,11 +1735,11 @@ class TestCooldownAwarePlanner:
         """Test calculate_with_timing_constraints when character is on cooldown"""
         character_name = "test_character"
         cooldown_aware_planner.cooldown_manager.is_ready.return_value = False
-        
+
         # Set up the planner state to avoid "Start state must be set" error
         cooldown_aware_planner.start_state = {}
         cooldown_aware_planner.goal_state = {}
-        
+
         # Mock calculate to return empty plan when on cooldown
         cooldown_aware_planner.calculate = Mock(return_value=[])
 
@@ -1629,10 +1750,10 @@ class TestCooldownAwarePlanner:
     def test_estimate_plan_duration_with_different_actions(self, cooldown_aware_planner):
         """Test plan duration estimation with various action types"""
         plan_with_mixed_actions = [
-            {'name': 'move_to_location', 'cost': 2},
-            {'name': 'fight_monster', 'cost': 5},
-            {'name': 'gather_resource', 'cost': 3},
-            {'name': 'craft_item', 'cost': 4}
+            {"name": "move_to_location", "cost": 2},
+            {"name": "fight_monster", "cost": 5},
+            {"name": "gather_resource", "cost": 3},
+            {"name": "craft_item", "cost": 4},
         ]
 
         duration = cooldown_aware_planner.estimate_plan_duration(plan_with_mixed_actions)
@@ -1702,24 +1823,21 @@ class TestUnifiedSubGoalArchitecture:
             parameters={"item_code": "copper_ore"},
             priority=7,
             requester="TestGoal",
-            reason="Need copper ore for testing"
+            reason="Need copper ore for testing",
         )
 
         character_state = create_test_character_state()
         context = GoalFactoryContext(
-            character_state=character_state,
-            game_data=GameData(),
-            recursion_depth=1,
-            max_depth=5
+            character_state=character_state, game_data=GameData(), recursion_depth=1, max_depth=5
         )
 
         goal = goal_manager.create_goal_from_sub_request(sub_goal_request, context)
 
         # Should return a goal instance
         assert goal is not None
-        assert hasattr(goal, 'get_target_state')
-        assert hasattr(goal, 'calculate_weight')
-        assert hasattr(goal, 'is_feasible')
+        assert hasattr(goal, "get_target_state")
+        assert hasattr(goal, "calculate_weight")
+        assert hasattr(goal, "is_feasible")
 
     def test_create_goal_from_sub_request_equipment(self, goal_manager):
         """Test creating EquipmentGoal from SubGoalRequest."""
@@ -1729,22 +1847,19 @@ class TestUnifiedSubGoalArchitecture:
             parameters={"item_type": "weapon", "max_level": 5},
             priority=9,
             requester="CombatGoal",
-            reason="Need weapon for combat"
+            reason="Need weapon for combat",
         )
 
         character_state = create_test_character_state(hp=30, max_hp=100)
         context = GoalFactoryContext(
-            character_state=character_state,
-            game_data=GameData(),
-            recursion_depth=1,
-            max_depth=5
+            character_state=character_state, game_data=GameData(), recursion_depth=1, max_depth=5
         )
 
         goal = goal_manager.create_goal_from_sub_request(sub_goal_request, context)
 
         # Should return a rest goal
         assert goal is not None
-        assert hasattr(goal, 'min_hp_percentage')
+        assert hasattr(goal, "min_hp_percentage")
 
     def test_create_goal_from_sub_request_gathering_with_quantity(self, goal_manager):
         """Test creating GatheringGoal from SubGoalRequest with quantity."""
@@ -1754,22 +1869,19 @@ class TestUnifiedSubGoalArchitecture:
             parameters={"item_code": "copper_ore", "quantity": 5},
             priority=6,
             requester="CraftingGoal",
-            reason="Need copper ore for crafting"
+            reason="Need copper ore for crafting",
         )
 
         character_state = create_test_character_state()
         context = GoalFactoryContext(
-            character_state=character_state,
-            game_data=GameData(),
-            recursion_depth=1,
-            max_depth=5
+            character_state=character_state, game_data=GameData(), recursion_depth=1, max_depth=5
         )
 
         goal = goal_manager.create_goal_from_sub_request(sub_goal_request, context)
 
         # Should return a gathering goal
         assert goal is not None
-        assert hasattr(goal, 'target_material_code')
+        assert hasattr(goal, "target_material_code")
         assert goal.target_material_code == "copper_ore"
 
     def test_create_goal_from_sub_request_equipment(self, goal_manager):
@@ -1780,22 +1892,19 @@ class TestUnifiedSubGoalArchitecture:
             parameters={"item_type": "weapon", "max_level": 5},
             priority=8,
             requester="CombatGoal",
-            reason="Need better weapon for combat"
+            reason="Need better weapon for combat",
         )
 
         character_state = create_test_character_state()
         context = GoalFactoryContext(
-            character_state=character_state,
-            game_data=GameData(),
-            recursion_depth=1,
-            max_depth=5
+            character_state=character_state, game_data=GameData(), recursion_depth=1, max_depth=5
         )
 
         goal = goal_manager.create_goal_from_sub_request(sub_goal_request, context)
 
         # Should return an equipment goal
         assert goal is not None
-        assert hasattr(goal, 'target_slot') or hasattr(goal, 'item_type')
+        assert hasattr(goal, "target_slot") or hasattr(goal, "item_type")
 
     def test_create_goal_from_sub_request_unknown_type(self, goal_manager):
         """Test error handling for unknown sub-goal type."""
@@ -1805,15 +1914,12 @@ class TestUnifiedSubGoalArchitecture:
             parameters={},
             priority=5,
             requester="TestGoal",
-            reason="Testing unknown type"
+            reason="Testing unknown type",
         )
 
         character_state = create_test_character_state()
         context = GoalFactoryContext(
-            character_state=character_state,
-            game_data=GameData(),
-            recursion_depth=1,
-            max_depth=5
+            character_state=character_state, game_data=GameData(), recursion_depth=1, max_depth=5
         )
 
         # Should raise GoalFactoryError for unknown goal type
@@ -1828,7 +1934,7 @@ class TestUnifiedSubGoalArchitecture:
             parameters={"target_x": 5, "target_y": 5},
             priority=7,
             requester="TestGoal",
-            reason="Test depth limit"
+            reason="Test depth limit",
         )
 
         character_state = create_test_character_state()
@@ -1836,7 +1942,7 @@ class TestUnifiedSubGoalArchitecture:
             character_state=character_state,
             game_data=GameData(),
             recursion_depth=5,  # At max depth
-            max_depth=5
+            max_depth=5,
         )
 
         # Should raise MaxDepthExceededError
@@ -1849,30 +1955,33 @@ class TestUnifiedSubGoalArchitecture:
 
         current_state = create_test_character_state()
         target_state = GOAPTargetState(
-            target_states={
-                GameState.CHARACTER_LEVEL: 6,
-                GameState.AT_TARGET_LOCATION: True
-            },
+            target_states={GameState.CHARACTER_LEVEL: 6, GameState.AT_TARGET_LOCATION: True},
             priority=7,
-            timeout_seconds=300
+            timeout_seconds=300,
         )
 
         # Mock GOAP planner to return success
         mock_actions = [
-            Mock(name='move_action', cost=2,
-                 get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
-                 get_effects=Mock(return_value={GameState.AT_TARGET_LOCATION: True})),
-            Mock(name='level_action', cost=5,
-                 get_preconditions=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
-                 get_effects=Mock(return_value={GameState.CHARACTER_LEVEL: 6}))
+            Mock(
+                name="move_action",
+                cost=2,
+                get_preconditions=Mock(return_value={GameState.COOLDOWN_READY: True}),
+                get_effects=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
+            ),
+            Mock(
+                name="level_action",
+                cost=5,
+                get_preconditions=Mock(return_value={GameState.AT_TARGET_LOCATION: True}),
+                get_effects=Mock(return_value={GameState.CHARACTER_LEVEL: 6}),
+            ),
         ]
         goal_manager.action_registry.generate_actions_for_state.return_value = mock_actions
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
             mock_planner = Mock()
             mock_planner.calculate.return_value = [
-                {'name': 'move_action', 'cost': 2},
-                {'name': 'level_action', 'cost': 5}
+                {"name": "move_action", "cost": 2},
+                {"name": "level_action", "cost": 5},
             ]
             mock_create_planner.return_value = mock_planner
 
@@ -1882,8 +1991,8 @@ class TestUnifiedSubGoalArchitecture:
             assert isinstance(plan, GOAPActionPlan)
             assert len(plan.actions) == 2
             assert plan.total_cost == 7
-            assert plan.actions[0].name == 'move_action'
-            assert plan.actions[1].name == 'level_action'
+            assert plan.actions[0].name == "move_action"
+            assert plan.actions[1].name == "level_action"
 
     @pytest.mark.asyncio
     async def test_plan_to_target_state_no_plan_found(self, goal_manager):
@@ -1894,13 +2003,13 @@ class TestUnifiedSubGoalArchitecture:
             target_states={
                 GameState.CHARACTER_LEVEL: 100  # Impossible jump
             },
-            priority=7
+            priority=7,
         )
 
         # Mock GOAP planner to return no plan
         goal_manager.action_registry.generate_actions_for_state.return_value = []
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
             mock_planner = Mock()
             mock_planner.calculate.return_value = []  # No plan found
             mock_create_planner.return_value = mock_planner
@@ -1915,12 +2024,9 @@ class TestUnifiedSubGoalArchitecture:
 
         current_state = create_test_character_state()
         target_state = GOAPTargetState(
-            target_states={
-                GameState.CHARACTER_LEVEL: 6,
-                GameState.COOLDOWN_READY: True
-            },
+            target_states={GameState.CHARACTER_LEVEL: 6, GameState.COOLDOWN_READY: True},
             priority=8,
-            timeout_seconds=180
+            timeout_seconds=180,
         )
 
         # Mock state manager for validation
@@ -1928,16 +2034,16 @@ class TestUnifiedSubGoalArchitecture:
         goal_manager.state_manager.validate_goap_target_state = AsyncMock(return_value=True)
 
         # Mock successful planning
-        mock_actions = [Mock(name='test_action', cost=3)]
+        mock_actions = [Mock(name="test_action", cost=3)]
         goal_manager.action_registry.generate_actions_for_state.return_value = mock_actions
 
-        with patch.object(goal_manager, '_create_goap_planner') as mock_create_planner:
+        with patch.object(goal_manager, "_create_goap_planner") as mock_create_planner:
             mock_planner = Mock()
-            mock_planner.calculate.return_value = [{'name': 'test_action', 'cost': 3}]
+            mock_planner.calculate.return_value = [{"name": "test_action", "cost": 3}]
             mock_create_planner.return_value = mock_planner
 
             # Mock create_goap_actions to avoid Mock iteration issues
-            with patch.object(goal_manager, 'create_goap_actions') as mock_create_actions:
+            with patch.object(goal_manager, "create_goap_actions") as mock_create_actions:
                 mock_action_list = Action_List()
                 mock_action_list.conditions = [Mock()]  # Non-empty to pass the check
                 mock_create_actions.return_value = mock_action_list
@@ -1963,23 +2069,25 @@ class TestMovementTargetSelection:
 
         # Configure default mock behavior for action registry
         mock_action_registry.generate_actions_for_state.return_value = []
-        
+
         # Configure async mock behavior for cache manager
         monster_content = Mock()
         monster_content.type = "monster"
-        
+
         bank_content = Mock()
         bank_content.type = "bank"
-        
+
         rock_content = Mock()
         rock_content.type = "resource"
-        
-        mock_cache_manager.get_all_maps = AsyncMock(return_value=[
-            Mock(name="map1", content=monster_content, x=5, y=5),
-            Mock(name="map2", content=bank_content, x=0, y=0),
-            Mock(name="map3", content=rock_content, x=3, y=3),
-            Mock(name="map4", content=None, x=1, y=1)  # Safe location with no content
-        ])
+
+        mock_cache_manager.get_all_maps = AsyncMock(
+            return_value=[
+                Mock(name="map1", content=monster_content, x=5, y=5),
+                Mock(name="map2", content=bank_content, x=0, y=0),
+                Mock(name="map3", content=rock_content, x=3, y=3),
+                Mock(name="map4", content=None, x=1, y=1),  # Safe location with no content
+            ]
+        )
 
         return GoalManager(mock_action_registry, mock_cooldown_manager, mock_cache_manager)
 
@@ -1987,7 +2095,7 @@ class TestMovementTargetSelection:
     async def test_select_movement_target_combat(self, goal_manager):
         """Test movement target selection for combat goals"""
         current_state = create_test_character_state(x=0, y=0)
-        target_x, target_y = await goal_manager.select_movement_target(current_state, 'combat')
+        target_x, target_y = await goal_manager.select_movement_target(current_state, "combat")
 
         assert isinstance(target_x, int)
         assert isinstance(target_y, int)
@@ -1998,19 +2106,18 @@ class TestMovementTargetSelection:
     async def test_select_movement_target_rest(self, goal_manager):
         """Test movement target selection for rest goals"""
         current_state = create_test_character_state(x=5, y=5)
-        target_x, target_y = await goal_manager.select_movement_target(current_state, 'rest')
+        target_x, target_y = await goal_manager.select_movement_target(current_state, "rest")
 
         assert isinstance(target_x, int)
         assert isinstance(target_y, int)
         # Should move toward safer area (generally toward origin)
         # Rest movement should be strategic for safety
 
-
     @pytest.mark.asyncio
     async def test_select_movement_target_gathering(self, goal_manager):
         """Test movement target selection for gathering goals"""
         current_state = create_test_character_state(x=1, y=-1)
-        target_x, target_y = await goal_manager.select_movement_target(current_state, 'gathering')
+        target_x, target_y = await goal_manager.select_movement_target(current_state, "gathering")
 
         assert isinstance(target_x, int)
         assert isinstance(target_y, int)
@@ -2024,10 +2131,10 @@ class TestMovementTargetSelection:
         goal_manager = GoalManager(mock_action_registry, mock_cooldown_manager, None)
 
         current_state = create_test_character_state(x=0, y=0)
-        
+
         # Should raise AttributeError when no cache manager following fail-fast principles
         with pytest.raises(AttributeError):
-            await goal_manager.select_movement_target(current_state, 'combat')
+            await goal_manager.select_movement_target(current_state, "combat")
 
 
 class TestStrategicLocationFinding:
@@ -2042,26 +2149,28 @@ class TestStrategicLocationFinding:
 
         # Configure default mock behavior for action registry
         mock_action_registry.generate_actions_for_state.return_value = []
-        
+
         # Configure async mock behavior for cache manager
         monster_content = Mock()
         monster_content.type = "monster"
-        
+
         rock_content = Mock()
         rock_content.type = "resource"
-        
-        mock_cache_manager.get_all_maps = AsyncMock(return_value=[
-            Mock(name="map1", content=monster_content, x=5, y=5),
-            Mock(name="map2", content=rock_content, x=3, y=3),
-            Mock(name="map3", content=None, x=1, y=1)  # Safe location with no content
-        ])
+
+        mock_cache_manager.get_all_maps = AsyncMock(
+            return_value=[
+                Mock(name="map1", content=monster_content, x=5, y=5),
+                Mock(name="map2", content=rock_content, x=3, y=3),
+                Mock(name="map3", content=None, x=1, y=1),  # Safe location with no content
+            ]
+        )
 
         return GoalManager(mock_action_registry, mock_cooldown_manager, mock_cache_manager)
 
     @pytest.mark.asyncio
     async def test_find_nearest_content_location_with_cache_manager(self, goal_manager):
         """Test finding nearest content location when cache manager is available"""
-        result = await goal_manager.find_nearest_content_location(0, 0, 'monster')
+        result = await goal_manager.find_nearest_content_location(0, 0, "monster")
 
         # Should return tuple of coordinates or None
         assert result is None or (isinstance(result, tuple) and len(result) == 2)
@@ -2073,10 +2182,10 @@ class TestStrategicLocationFinding:
     async def test_find_nearest_content_location_no_cache_manager(self, goal_manager):
         """Test finding nearest content location when cache manager is None"""
         goal_manager.cache_manager = None
-        
+
         # Should raise AttributeError following fail-fast principles
         with pytest.raises(AttributeError):
-            await goal_manager.find_nearest_content_location(0, 0, 'monster')
+            await goal_manager.find_nearest_content_location(0, 0, "monster")
 
     @pytest.mark.asyncio
     async def test_find_nearest_content_location_exception_handling(self, goal_manager):
@@ -2086,18 +2195,18 @@ class TestStrategicLocationFinding:
 
         # Should propagate exception following fail-fast principles
         with pytest.raises(Exception, match="Cache error"):
-            await goal_manager.find_nearest_content_location(0, 0, 'monster')
+            await goal_manager.find_nearest_content_location(0, 0, "monster")
 
     @pytest.mark.asyncio
     async def test_find_nearest_safe_location(self, goal_manager):
         """Test finding nearest safe location"""
         # Test various starting positions
         test_positions = [
-            (3, -2),   # Positive X, negative Y
-            (-1, 4),   # Negative X, positive Y
-            (0, 0),    # Origin
-            (5, 5),    # Both positive
-            (-3, -3)   # Both negative
+            (3, -2),  # Positive X, negative Y
+            (-1, 4),  # Negative X, positive Y
+            (0, 0),  # Origin
+            (5, 5),  # Both positive
+            (-3, -3),  # Both negative
         ]
 
         for start_x, start_y in test_positions:
@@ -2123,6 +2232,3 @@ class TestStrategicLocationFinding:
                     assert target_y <= start_y
                 elif start_y < 0:
                     assert target_y >= start_y
-
-
-

@@ -333,6 +333,7 @@ class GameState(StrEnum):
     """
     
     # Character progression states
+    CHARACTER_NAME = "character_name"
     CHARACTER_LEVEL = "character_level"
     CHARACTER_XP = "character_xp"
     CHARACTER_GOLD = "character_gold"
@@ -365,11 +366,14 @@ class GameState(StrEnum):
 
 # src/ai_player/actions/base_action.py
 class ActionResult(BaseModel):
-    """Result of executing a GOAP action"""
-    success: bool
-    message: str
-    state_changes: Dict[GameState, Any]
-    cooldown_seconds: int = 0
+    """Pydantic model for GOAP action execution results"""
+    success: bool = Field(description="Whether action executed successfully")
+    message: str = Field(description="Human-readable result message")
+    state_changes: Dict[GameState, Any] = Field(
+        default_factory=dict,
+        description="State changes resulting from action execution"
+    )
+    cooldown_seconds: int = Field(ge=0, default=0, description="Cooldown duration in seconds")
 
 class BaseAction(ABC):
     """Abstract base class for all modular GOAP actions"""
@@ -388,17 +392,17 @@ class BaseAction(ABC):
     
     @abstractmethod
     def get_preconditions(self) -> Dict[GameState, Any]:
-        """Required state conditions using GameState enum"""
+        """Required state conditions using GameState enum with type validation"""
         pass
     
     @abstractmethod
     def get_effects(self) -> Dict[GameState, Any]:
-        """State changes using GameState enum"""
+        """State changes using GameState enum with type validation"""
         pass
     
     @abstractmethod
-    async def execute(self, character_name: str, current_state: Dict[GameState, Any]) -> ActionResult:
-        """Execute action via API"""
+    async def execute(self, character_name: str, current_state: CharacterGameState) -> ActionResult:
+        """Execute action via API using Pydantic state model"""
         pass
 
 # Example modular action implementation
@@ -436,24 +440,67 @@ class CharacterGameState(BaseModel):
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
     
     def to_goap_state(self) -> Dict[str, Any]:
-        """Convert to GOAP state dict using enum values"""
+        """Convert to GOAP state dict using enum values with validation
+        
+        Returns:
+            Dictionary with string keys and validated values for GOAP planning
+        """
         raw_dict = self.model_dump()
-        return {GameState(k).value: (int(v) if isinstance(v, bool) else v) 
-                for k, v in raw_dict.items() if k in [gs.value for gs in GameState]}
+        goap_state = {}
+        
+        # Map character state fields to GameState enum values
+        field_mapping = {
+            'name': GameState.CHARACTER_NAME,
+            'level': GameState.CHARACTER_LEVEL,
+            'xp': GameState.CHARACTER_XP,
+            'gold': GameState.CHARACTER_GOLD,
+            'hp': GameState.HP_CURRENT,
+            'max_hp': GameState.HP_MAX,
+            'x': GameState.CURRENT_X,
+            'y': GameState.CURRENT_Y,
+            'mining_level': GameState.MINING_LEVEL,
+            'woodcutting_level': GameState.WOODCUTTING_LEVEL,
+            'fishing_level': GameState.FISHING_LEVEL,
+            'weaponcrafting_level': GameState.WEAPONCRAFTING_LEVEL,
+            'gearcrafting_level': GameState.GEARCRAFTING_LEVEL,
+            'jewelrycrafting_level': GameState.JEWELRYCRAFTING_LEVEL,
+            'cooking_level': GameState.COOKING_LEVEL,
+            'alchemy_level': GameState.ALCHEMY_LEVEL
+        }
+        
+        for field_name, game_state in field_mapping.items():
+            if field_name in raw_dict:
+                value = raw_dict[field_name]
+                # Convert booleans to integers for GOAP compatibility
+                goap_state[game_state.value] = int(value) if isinstance(value, bool) else value
+        
+        return goap_state
     
     @classmethod
     def from_api_character(cls, character: 'CharacterSchema') -> 'CharacterGameState':
         """Create from API response using GameState enum keys"""
-        return cls(**{
-            GameState.CHARACTER_LEVEL.value: character.level,
-            GameState.CHARACTER_XP.value: character.xp,
-            GameState.HP_CURRENT.value: character.hp,
-            GameState.HP_MAX.value: character.max_hp,
-            GameState.CURRENT_X.value: character.x,
-            GameState.CURRENT_Y.value: character.y,
-            GameState.COOLDOWN_READY.value: character.cooldown == 0,
-            # ... (all other state mappings using enum)
-        })
+        # Create field mapping for type-safe conversion
+        field_values = {
+            'name': character.name,
+            'level': character.level,
+            'xp': character.xp,
+            'max_xp': character.max_xp,
+            'gold': character.gold,
+            'hp': character.hp,
+            'max_hp': character.max_hp,
+            'x': character.x,
+            'y': character.y,
+            'mining_level': character.mining_level,
+            'woodcutting_level': character.woodcutting_level,
+            'fishing_level': character.fishing_level,
+            'weaponcrafting_level': character.weaponcrafting_level,
+            'gearcrafting_level': character.gearcrafting_level,
+            'jewelrycrafting_level': character.jewelrycrafting_level,
+            'cooking_level': character.cooking_level,
+            'alchemy_level': character.alchemy_level
+        }
+        
+        return cls(**field_values)
 ```
 
 ### Task Implementation Order

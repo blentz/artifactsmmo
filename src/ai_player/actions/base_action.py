@@ -51,27 +51,24 @@ class BaseAction(ABC):
         self,
         character_name: str,
         current_state: dict[GameState, Any],
-        api_client: Optional['APIClientWrapper'] = None,
-        cooldown_manager: Optional['CooldownManager'] = None
+        api_client: Optional["APIClientWrapper"] = None,
+        cooldown_manager: Optional["CooldownManager"] = None,
     ) -> ActionResult:
         """Execute action with optional API integration.
-        
+
         Parameters:
             character_name: Name of the character executing the action
             current_state: Current game state dictionary
             api_client: Optional API client for making game calls
             cooldown_manager: Optional cooldown manager for tracking cooldowns
-            
+
         Returns:
             ActionResult with success status, message, and state changes
         """
         # Check preconditions first
         if not self._check_preconditions_dict(current_state):
             return ActionResult(
-                success=False,
-                message=f"Preconditions not met for {self.name}",
-                state_changes={},
-                cooldown_seconds=0
+                success=False, message=f"Preconditions not met for {self.name}", state_changes={}, cooldown_seconds=0
             )
 
         # If API client is provided, execute with API
@@ -86,11 +83,11 @@ class BaseAction(ABC):
         self,
         character_name: str,
         current_state: dict[GameState, Any],
-        api_client: 'APIClientWrapper',
-        cooldown_manager: Optional['CooldownManager']
+        api_client: "APIClientWrapper",
+        cooldown_manager: Optional["CooldownManager"],
     ) -> ActionResult:
         """Subclasses implement actual API interaction.
-        
+
         This method should:
         1. Make the appropriate API call using api_client
         2. Handle the response and any errors
@@ -101,14 +98,14 @@ class BaseAction(ABC):
 
     def _get_simulated_result(self) -> ActionResult:
         """Get simulated result for planning/testing without API.
-        
+
         Returns expected effects as if the action succeeded.
         """
         return ActionResult(
             success=True,
             message=f"{self.name} completed (simulated)",
             state_changes=self.get_effects(),
-            cooldown_seconds=5  # Default simulated cooldown
+            cooldown_seconds=5,  # Default simulated cooldown
         )
 
     def _check_preconditions_dict(self, current_state: dict[GameState, Any]) -> bool:
@@ -165,19 +162,39 @@ class BaseAction(ABC):
         # For numeric states that represent minimums (HP, levels, quantities, etc.)
         # the current value should be >= the required value
         minimum_comparison_states = {
-            GameState.HP_CURRENT, GameState.CHARACTER_LEVEL, GameState.CHARACTER_XP,
-            GameState.CHARACTER_GOLD, GameState.MINING_LEVEL, GameState.MINING_XP,
-            GameState.WOODCUTTING_LEVEL, GameState.WOODCUTTING_XP, GameState.FISHING_LEVEL,
-            GameState.FISHING_XP, GameState.WEAPONCRAFTING_LEVEL, GameState.WEAPONCRAFTING_XP,
-            GameState.GEARCRAFTING_LEVEL, GameState.GEARCRAFTING_XP, GameState.JEWELRYCRAFTING_LEVEL,
-            GameState.JEWELRYCRAFTING_XP, GameState.COOKING_LEVEL, GameState.COOKING_XP,
-            GameState.ALCHEMY_LEVEL, GameState.ALCHEMY_XP, GameState.INVENTORY_SPACE_AVAILABLE,
-            GameState.BANK_SPACE_AVAILABLE, GameState.BANK_GOLD, GameState.TASK_PROGRESS,
-            GameState.PORTFOLIO_VALUE, GameState.ITEM_QUANTITY
+            GameState.HP_CURRENT,
+            GameState.CHARACTER_LEVEL,
+            GameState.CHARACTER_XP,
+            GameState.CHARACTER_GOLD,
+            GameState.MINING_LEVEL,
+            GameState.MINING_XP,
+            GameState.WOODCUTTING_LEVEL,
+            GameState.WOODCUTTING_XP,
+            GameState.FISHING_LEVEL,
+            GameState.FISHING_XP,
+            GameState.WEAPONCRAFTING_LEVEL,
+            GameState.WEAPONCRAFTING_XP,
+            GameState.GEARCRAFTING_LEVEL,
+            GameState.GEARCRAFTING_XP,
+            GameState.JEWELRYCRAFTING_LEVEL,
+            GameState.JEWELRYCRAFTING_XP,
+            GameState.COOKING_LEVEL,
+            GameState.COOKING_XP,
+            GameState.ALCHEMY_LEVEL,
+            GameState.ALCHEMY_XP,
+            GameState.INVENTORY_SPACE_AVAILABLE,
+            GameState.BANK_SPACE_AVAILABLE,
+            GameState.BANK_GOLD,
+            GameState.TASK_PROGRESS,
+            GameState.PORTFOLIO_VALUE,
+            GameState.ITEM_QUANTITY,
         }
 
         if state_key in minimum_comparison_states:
             # For these states, current value should be >= required value
+            # If either value is None, the precondition cannot be satisfied
+            if current_value is None or required_value is None:
+                return False
             try:
                 current_float = float(current_value)
                 required_float = float(required_value)
@@ -229,54 +246,54 @@ class BaseAction(ABC):
 
     def _extract_character_state(self, character: Any) -> dict[GameState, Any]:
         """Extract comprehensive state from character API response.
-        
+
         Parameters:
             character: API character object with character data
-            
+
         Return values:
             Dictionary with GameState enum keys and extracted values
-            
+
         This helper method extracts all relevant state information from
         API character responses to ensure comprehensive state updates.
         """
         state_changes = {}
 
         # Core character stats
-        if hasattr(character, 'level'):
+        if hasattr(character, "level"):
             state_changes[GameState.CHARACTER_LEVEL] = character.level
-        if hasattr(character, 'xp'):
+        if hasattr(character, "xp"):
             state_changes[GameState.CHARACTER_XP] = character.xp
-        if hasattr(character, 'gold'):
+        if hasattr(character, "gold"):
             state_changes[GameState.CHARACTER_GOLD] = character.gold
-        if hasattr(character, 'hp'):
+        if hasattr(character, "hp"):
             state_changes[GameState.HP_CURRENT] = character.hp
-        if hasattr(character, 'max_hp'):
+        if hasattr(character, "max_hp"):
             state_changes[GameState.HP_MAX] = character.max_hp
 
         # Position
-        if hasattr(character, 'x'):
+        if hasattr(character, "x"):
             state_changes[GameState.CURRENT_X] = character.x
-        if hasattr(character, 'y'):
+        if hasattr(character, "y"):
             state_changes[GameState.CURRENT_Y] = character.y
 
         # All skill levels and XP
         skill_attributes = [
-            ('mining_level', GameState.MINING_LEVEL),
-            ('mining_xp', GameState.MINING_XP),
-            ('woodcutting_level', GameState.WOODCUTTING_LEVEL),
-            ('woodcutting_xp', GameState.WOODCUTTING_XP),
-            ('fishing_level', GameState.FISHING_LEVEL),
-            ('fishing_xp', GameState.FISHING_XP),
-            ('weaponcrafting_level', GameState.WEAPONCRAFTING_LEVEL),
-            ('weaponcrafting_xp', GameState.WEAPONCRAFTING_XP),
-            ('gearcrafting_level', GameState.GEARCRAFTING_LEVEL),
-            ('gearcrafting_xp', GameState.GEARCRAFTING_XP),
-            ('jewelrycrafting_level', GameState.JEWELRYCRAFTING_LEVEL),
-            ('jewelrycrafting_xp', GameState.JEWELRYCRAFTING_XP),
-            ('cooking_level', GameState.COOKING_LEVEL),
-            ('cooking_xp', GameState.COOKING_XP),
-            ('alchemy_level', GameState.ALCHEMY_LEVEL),
-            ('alchemy_xp', GameState.ALCHEMY_XP),
+            ("mining_level", GameState.MINING_LEVEL),
+            ("mining_xp", GameState.MINING_XP),
+            ("woodcutting_level", GameState.WOODCUTTING_LEVEL),
+            ("woodcutting_xp", GameState.WOODCUTTING_XP),
+            ("fishing_level", GameState.FISHING_LEVEL),
+            ("fishing_xp", GameState.FISHING_XP),
+            ("weaponcrafting_level", GameState.WEAPONCRAFTING_LEVEL),
+            ("weaponcrafting_xp", GameState.WEAPONCRAFTING_XP),
+            ("gearcrafting_level", GameState.GEARCRAFTING_LEVEL),
+            ("gearcrafting_xp", GameState.GEARCRAFTING_XP),
+            ("jewelrycrafting_level", GameState.JEWELRYCRAFTING_LEVEL),
+            ("jewelrycrafting_xp", GameState.JEWELRYCRAFTING_XP),
+            ("cooking_level", GameState.COOKING_LEVEL),
+            ("cooking_xp", GameState.COOKING_XP),
+            ("alchemy_level", GameState.ALCHEMY_LEVEL),
+            ("alchemy_xp", GameState.ALCHEMY_XP),
         ]
 
         for attr_name, game_state in skill_attributes:
@@ -285,15 +302,15 @@ class BaseAction(ABC):
 
         # Equipment states
         equipment_slots = [
-            ('weapon_slot', GameState.WEAPON_EQUIPPED),
-            ('helmet_slot', GameState.ARMOR_EQUIPPED),
-            ('body_armor_slot', GameState.ARMOR_EQUIPPED),
-            ('leg_armor_slot', GameState.ARMOR_EQUIPPED),
-            ('boots_slot', GameState.ARMOR_EQUIPPED),
-            ('shield_slot', GameState.SHIELD_EQUIPPED),
-            ('amulet_slot', GameState.AMULET_EQUIPPED),
-            ('ring1_slot', GameState.RING_EQUIPPED),
-            ('ring2_slot', GameState.RING_EQUIPPED),
+            ("weapon_slot", GameState.WEAPON_EQUIPPED),
+            ("helmet_slot", GameState.HELMET_EQUIPPED),
+            ("body_armor_slot", GameState.BODY_ARMOR_EQUIPPED),
+            ("leg_armor_slot", GameState.LEG_ARMOR_EQUIPPED),
+            ("boots_slot", GameState.BOOTS_EQUIPPED),
+            ("shield_slot", GameState.SHIELD_EQUIPPED),
+            ("amulet_slot", GameState.AMULET_EQUIPPED),
+            ("ring1_slot", GameState.RING1_EQUIPPED),
+            ("ring2_slot", GameState.RING2_EQUIPPED),
         ]
 
         for slot_name, game_state in equipment_slots:
@@ -304,16 +321,16 @@ class BaseAction(ABC):
                     state_changes[game_state] = bool(slot_value and slot_value != "")
 
         # Tool equipped check - weapon can be a tool
-        if hasattr(character, 'weapon_slot'):
-            weapon = getattr(character, 'weapon_slot')
+        if hasattr(character, "weapon_slot"):
+            weapon = getattr(character, "weapon_slot")
             # Simple heuristic: if weapon name contains tool words, it's a tool
-            if weapon and any(tool in str(weapon).lower() for tool in ['axe', 'pickaxe', 'fishing_rod']):
+            if weapon and any(tool in str(weapon).lower() for tool in ["axe", "pickaxe", "fishing_rod"]):
                 state_changes[GameState.TOOL_EQUIPPED] = True
             else:
                 state_changes[GameState.TOOL_EQUIPPED] = bool(weapon and weapon != "")
 
         # Inventory space
-        if hasattr(character, 'inventory_max_items') and hasattr(character, 'inventory'):
+        if hasattr(character, "inventory_max_items") and hasattr(character, "inventory"):
             max_items = character.inventory_max_items
             inventory = character.inventory if character.inventory else []
             used_space = len(inventory)

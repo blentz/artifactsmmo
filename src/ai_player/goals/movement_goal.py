@@ -67,7 +67,7 @@ class MovementGoal(BaseGoal):
             timeout_seconds=60  # 1 minute timeout for movement
         )
 
-    def get_progression_value(self, character_state: CharacterGameState) -> float:
+    def get_progression_value(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate contribution to character progression.
         
         Movement itself doesn't contribute to progression, but enables other goals.

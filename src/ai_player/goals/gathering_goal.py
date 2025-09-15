@@ -58,14 +58,13 @@ class GatheringGoal(BaseGoal):
         feasibility = self._calculate_gathering_feasibility(character_state, game_data)
 
         # Calculate progression value (20% weight)
-        progression = self.get_progression_value(character_state)
+        progression = self.get_progression_value(character_state, game_data)
 
         # Calculate stability (10% weight) - gathering is generally stable
         stability = 0.9  # High stability - resource gathering has predictable outcomes
 
         # Combine factors with PRP-specified weights
-        final_weight = (necessity * 0.4 + feasibility * 0.3 +
-                       progression * 0.2 + stability * 0.1)
+        final_weight = necessity * 0.4 + feasibility * 0.3 + progression * 0.2 + stability * 0.1
 
         return min(10.0, final_weight * 10.0)  # Scale to 0-10 range
 
@@ -86,13 +85,9 @@ class GatheringGoal(BaseGoal):
 
         return False
 
-    def get_target_state(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
-    ) -> GOAPTargetState:
+    def get_target_state(self, character_state: CharacterGameState, game_data: GameData) -> GOAPTargetState:
         """Return GOAP target state for gathering goal.
-        
+
         This method defines the desired state conditions for successful gathering:
         1. Character must be at a resource location where gathering is possible
         2. Character must have appropriate gathering tool equipped
@@ -101,25 +96,31 @@ class GatheringGoal(BaseGoal):
         """
         self.validate_game_data(game_data)
 
-        # Select optimal resource target
+        # For Level 1-2 characters, use a much simpler target state
+        if character_state.level <= 2:
+            # Simple XP-gaining goal for low-level characters
+            target_states = {
+                GameState.GAINED_XP: True,
+                GameState.CAN_GATHER: True,
+            }
+
+            return GOAPTargetState(
+                target_states=target_states,
+                priority=6,  # Moderate priority for simple XP gain
+                timeout_seconds=120,  # 2 minute timeout
+            )
+
+        # Select optimal resource target for higher-level characters
         resource_result = self._select_optimal_resource(character_state, game_data)
         if not resource_result:
             # Return empty target state if no feasible gathering targets
-            return GOAPTargetState(
-                target_states={},
-                priority=1,
-                timeout_seconds=None
-            )
+            return GOAPTargetState(target_states={}, priority=1, timeout_seconds=None)
 
         target_resource, target_locations = resource_result
 
         # Get best location for gathering
         if not target_locations:
-            return GOAPTargetState(
-                target_states={},
-                priority=1,
-                timeout_seconds=None
-            )
+            return GOAPTargetState(target_states={}, priority=1, timeout_seconds=None)
 
         # Find nearest location
         current_pos = (character_state.x, character_state.y)
@@ -128,30 +129,25 @@ class GatheringGoal(BaseGoal):
         )
         if distances:
             best_pos = max(distances.keys(), key=lambda pos: distances[pos])
-            target_location = next(loc for loc in target_locations
-                                 if (loc.x, loc.y) == best_pos)
+            target_location = next(loc for loc in target_locations if (loc.x, loc.y) == best_pos)
         else:
             target_location = target_locations[0]
 
-        # Define target state conditions for gathering success
+        # Define target state conditions for gathering success (Level 3+)
         target_states = {
             # Must be at resource location for gathering
             GameState.AT_RESOURCE_LOCATION: True,
             GameState.CURRENT_X: target_location.x,
             GameState.CURRENT_Y: target_location.y,
-
             # Must have appropriate tool equipped
             GameState.TOOL_EQUIPPED: True,
             GameState.CAN_GATHER: True,
-
             # Must gain resources and XP
             GameState.GAINED_XP: True,
             GameState.HAS_REQUIRED_ITEMS: True,
             GameState.RESOURCE_AVAILABLE: True,
-
             # Inventory management
             GameState.INVENTORY_SPACE_AVAILABLE: True,
-
             # Action readiness
             GameState.COOLDOWN_READY: True,
         }
@@ -159,16 +155,15 @@ class GatheringGoal(BaseGoal):
         return GOAPTargetState(
             target_states=target_states,
             priority=6,  # Medium-high priority for progression support
-            timeout_seconds=600  # 10 minute timeout for gathering chains
+            timeout_seconds=600,  # 10 minute timeout for gathering chains
         )
 
-    def get_progression_value(self, character_state: CharacterGameState) -> float:
+    def get_progression_value(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate contribution to reaching level 5 with appropriate gear."""
         # Gathering contributes to progression by:
         # 1. Providing materials for crafting level-appropriate equipment
         # 2. Providing gathering skill XP
         # 3. Enabling economic activities (selling materials for gold)
-
 
         # Higher value for characters who need materials for crafting
         material_need = self._assess_material_need(character_state)
@@ -177,7 +172,7 @@ class GatheringGoal(BaseGoal):
         gathering_skills = [
             character_state.mining_level,
             character_state.woodcutting_level,
-            character_state.fishing_level
+            character_state.fishing_level,
         ]
         avg_gathering_skill = sum(gathering_skills) / len(gathering_skills)
         skill_development_value = max(0.2, (5 - avg_gathering_skill) / 4.0)
@@ -198,7 +193,7 @@ class GatheringGoal(BaseGoal):
         gathering_skills = [
             character_state.mining_level,
             character_state.woodcutting_level,
-            character_state.fishing_level
+            character_state.fishing_level,
         ]
         min_skill = min(gathering_skills)
         skill_risk = max(0.0, (2 - min_skill) * 0.1)
@@ -206,9 +201,7 @@ class GatheringGoal(BaseGoal):
         return min(1.0, base_risk + tool_risk + skill_risk)
 
     def generate_sub_goal_requests(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, character_state: CharacterGameState, game_data: GameData
     ) -> list[SubGoalRequest]:
         """Generate sub-goal requests for gathering dependencies."""
         sub_goals: list[SubGoalRequest] = []
@@ -229,26 +222,29 @@ class GatheringGoal(BaseGoal):
 
             if distances:
                 best_pos = max(distances.keys(), key=lambda pos: distances[pos])
-                sub_goals.append(SubGoalRequest.move_to_location(
-                    best_pos[0],
-                    best_pos[1],
-                    "GatheringGoal",
-                    f"Move to {target_resource.name} resource location"
-                ))
+                sub_goals.append(
+                    SubGoalRequest.move_to_location(
+                        best_pos[0], best_pos[1], "GatheringGoal", f"Move to {target_resource.name} resource location"
+                    )
+                )
 
         # Request appropriate tool if needed
         required_tool_type = self._get_required_tool_type(target_resource.skill)
         if required_tool_type and not self._has_appropriate_tool(character_state, required_tool_type):
-            sub_goals.append(SubGoalRequest.equip_item_type(
-                required_tool_type,
-                5,  # Max level 5 tools for progression goal
-                "GatheringGoal",
-                f"Need {required_tool_type} for {target_resource.skill}"
-            ))
+            sub_goals.append(
+                SubGoalRequest.equip_item_type(
+                    required_tool_type,
+                    5,  # Max level 5 tools for progression goal
+                    "GatheringGoal",
+                    f"Need {required_tool_type} for {target_resource.skill}",
+                )
+            )
 
         return sub_goals
 
-    def _find_available_resources(self, character_state: CharacterGameState, game_data: GameData) -> dict[str, tuple[GameResource, list[GameMap]]]:
+    def _find_available_resources(
+        self, character_state: CharacterGameState, game_data: GameData
+    ) -> dict[str, tuple[GameResource, list[GameMap]]]:
         """Find available resources that character can potentially gather."""
         available_resources = {}
 
@@ -258,9 +254,7 @@ class GatheringGoal(BaseGoal):
 
             if char_skill_level >= resource.level - 1:  # Allow slightly under-leveled
                 # Find locations for this resource
-                resource_locations = self.map_analysis.find_content_by_code(
-                    "resource", resource.code, game_data.maps
-                )
+                resource_locations = self.map_analysis.find_content_by_code("resource", resource.code, game_data.maps)
 
                 if resource_locations:
                     available_resources[resource.code] = (resource, resource_locations)
@@ -275,9 +269,7 @@ class GatheringGoal(BaseGoal):
             # Use specific resource if requested
             for resource in game_data.resources:
                 if resource.code == self.target_resource_code:
-                    locations = self.map_analysis.find_content_by_code(
-                        "resource", resource.code, game_data.maps
-                    )
+                    locations = self.map_analysis.find_content_by_code("resource", resource.code, game_data.maps)
                     if locations and self._can_gather_resource(character_state, resource):
                         return resource, locations
 
@@ -289,9 +281,7 @@ class GatheringGoal(BaseGoal):
 
             for location, resource in material_sources:
                 if self._can_gather_resource(character_state, resource):
-                    all_locations = self.map_analysis.find_content_by_code(
-                        "resource", resource.code, game_data.maps
-                    )
+                    all_locations = self.map_analysis.find_content_by_code("resource", resource.code, game_data.maps)
                     return resource, all_locations
 
         # Find optimal resource based on character needs and capabilities
@@ -350,9 +340,9 @@ class GatheringGoal(BaseGoal):
     def _get_character_skill_level(self, character_state: CharacterGameState, skill_name: str) -> int:
         """Get character's skill level for the specified skill."""
         skill_mapping = {
-            'mining': character_state.mining_level,
-            'woodcutting': character_state.woodcutting_level,
-            'fishing': character_state.fishing_level,
+            "mining": character_state.mining_level,
+            "woodcutting": character_state.woodcutting_level,
+            "fishing": character_state.fishing_level,
         }
 
         return skill_mapping.get(skill_name.lower(), 1)
@@ -366,7 +356,7 @@ class GatheringGoal(BaseGoal):
         gathering_skills = [
             character_state.mining_level,
             character_state.woodcutting_level,
-            character_state.fishing_level
+            character_state.fishing_level,
         ]
         avg_gathering_skill = sum(gathering_skills) / len(gathering_skills)
         skill_lag = max(0.0, character_state.level - avg_gathering_skill)
@@ -382,7 +372,7 @@ class GatheringGoal(BaseGoal):
         gathering_skills = [
             character_state.mining_level,
             character_state.woodcutting_level,
-            character_state.fishing_level
+            character_state.fishing_level,
         ]
         avg_skill = sum(gathering_skills) / len(gathering_skills)
         skill_feasibility = min(1.0, avg_skill / 5.0)  # Normalize to level 5
@@ -422,11 +412,7 @@ class GatheringGoal(BaseGoal):
 
     def _get_required_tool_type(self, skill_name: str) -> str | None:
         """Get the tool type required for a gathering skill."""
-        tool_mapping = {
-            'mining': 'pickaxe',
-            'woodcutting': 'axe',
-            'fishing': 'fishing_rod'
-        }
+        tool_mapping = {"mining": "pickaxe", "woodcutting": "axe", "fishing": "fishing_rod"}
 
         return tool_mapping.get(skill_name.lower())
 

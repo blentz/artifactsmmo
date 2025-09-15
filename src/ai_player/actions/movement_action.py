@@ -75,10 +75,7 @@ class MovementAction(BaseAction):
         readiness, valid target location, and path accessibility using GameState
         enum keys for type-safe condition checking.
         """
-        return {
-            GameState.COOLDOWN_READY: True,
-            GameState.CAN_MOVE: True
-        }
+        return {GameState.COOLDOWN_READY: True, GameState.CAN_MOVE: True}
 
     def can_execute(self, current_state: dict[GameState, Any]) -> bool:
         """Override can_execute to include location check.
@@ -102,7 +99,7 @@ class MovementAction(BaseAction):
         current_y = current_state.get(GameState.CURRENT_Y, 0)
 
         # Only allow movement if we're not already at the target
-        is_not_at_target = (current_x != self.target_x or current_y != self.target_y)
+        is_not_at_target = current_x != self.target_x or current_y != self.target_y
 
         return is_not_at_target
 
@@ -123,28 +120,21 @@ class MovementAction(BaseAction):
             GameState.CURRENT_X: self.target_x,
             GameState.CURRENT_Y: self.target_y,
             GameState.COOLDOWN_READY: False,
-            GameState.CAN_FIGHT: False,
-            GameState.CAN_GATHER: False,
-            GameState.CAN_CRAFT: False,
-            GameState.CAN_TRADE: False,
-            GameState.CAN_MOVE: False,
-            GameState.CAN_REST: False,
-            GameState.CAN_USE_ITEM: False,
-            GameState.CAN_BANK: False,
         }
 
         # Set location-specific flags based on target coordinates
         # These will be dynamically set by MovementActionFactory based on map content
-        if hasattr(self, '_location_type'):
-            if self._location_type == 'monster':
+        if hasattr(self, "_location_type"):
+            if self._location_type == "monster":
                 effects[GameState.AT_MONSTER_LOCATION] = True
                 effects[GameState.AT_SAFE_LOCATION] = False
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
                 effects[GameState.ENEMY_NEARBY] = True
-            elif self._location_type == 'resource':
+            elif self._location_type == "resource":
                 effects[GameState.AT_RESOURCE_LOCATION] = True
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
-            elif self._location_type == 'workshop':
+            elif self._location_type == "workshop":
+                effects[GameState.AT_WORKSHOP_LOCATION] = True
                 effects[GameState.XP_SOURCE_AVAILABLE] = True
 
         return effects
@@ -153,8 +143,8 @@ class MovementAction(BaseAction):
         self,
         character_name: str,
         current_state: dict[GameState, Any],
-        api_client: 'APIClientWrapper',
-        cooldown_manager: Optional['CooldownManager']
+        api_client: "APIClientWrapper",
+        cooldown_manager: Optional["CooldownManager"],
     ) -> ActionResult:
         """Execute movement via API client.
 
@@ -173,7 +163,7 @@ class MovementAction(BaseAction):
         # Make the actual API call
         movement_result = await api_client.move_character(character_name, self.target_x, self.target_y)
 
-        if movement_result.success:
+        if movement_result:
             # Update cooldown if manager provided
             if cooldown_manager and movement_result.cooldown:
                 cooldown_manager.update_cooldown(character_name, movement_result.cooldown)
@@ -194,22 +184,22 @@ class MovementAction(BaseAction):
             }
 
             # Set location-specific flags if available
-            if hasattr(self, '_location_type'):
-                if self._location_type == 'monster':
+            if hasattr(self, "_location_type"):
+                if self._location_type == "monster":
                     state_changes[GameState.AT_MONSTER_LOCATION] = True
                     state_changes[GameState.AT_SAFE_LOCATION] = False
                     state_changes[GameState.XP_SOURCE_AVAILABLE] = True
-                elif self._location_type == 'resource':
+                elif self._location_type == "resource":
                     state_changes[GameState.AT_RESOURCE_LOCATION] = True
                     state_changes[GameState.XP_SOURCE_AVAILABLE] = True
-                elif self._location_type == 'workshop':
+                elif self._location_type == "workshop":
                     state_changes[GameState.XP_SOURCE_AVAILABLE] = True
 
             return ActionResult(
                 success=True,
                 message=f"Successfully moved to ({self.target_x}, {self.target_y})",
                 state_changes=state_changes,
-                cooldown_seconds=movement_result.cooldown.total_seconds if movement_result.cooldown else 0
+                cooldown_seconds=movement_result.cooldown.total_seconds if movement_result.cooldown else 0,
             )
         else:
             # Movement failed
@@ -217,7 +207,7 @@ class MovementAction(BaseAction):
                 success=False,
                 message=f"Failed to move: {movement_result.message}",
                 state_changes={},
-                cooldown_seconds=0
+                cooldown_seconds=0,
             )
 
     def calculate_distance(self, current_x: int, current_y: int) -> int:

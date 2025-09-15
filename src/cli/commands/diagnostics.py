@@ -14,22 +14,27 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ...ai_player.actions import ActionRegistry
-from ...ai_player.diagnostics.action_diagnostics import ActionDiagnostics
-from ...ai_player.diagnostics.planning_diagnostics import PlanningDiagnostics
-from ...ai_player.diagnostics.state_diagnostics import StateDiagnostics
-from ...ai_player.goal_manager import GoalManager
-from ...ai_player.state.character_game_state import CharacterGameState
-from ...ai_player.state.game_state import GameState
-from ...game_data.api_client import APIClientWrapper, CooldownManager
+from src.ai_player.actions import ActionRegistry
+from src.ai_player.diagnostics.action_diagnostics import ActionDiagnostics
+from src.ai_player.diagnostics.planning_diagnostics import PlanningDiagnostics
+from src.ai_player.diagnostics.state_diagnostics import StateDiagnostics
+from src.ai_player.goal_manager import GoalManager
+from src.ai_player.state.game_state import GameState
+from src.ai_player.types.goap_models import GOAPTargetState
+from src.ai_player.state.character_game_state import CharacterGameState
+from src.ai_player.state.game_state import GameState
+from src.game_data.api_client import APIClientWrapper, CooldownManager
 
 
 class DiagnosticCommands:
     """CLI diagnostic command implementations"""
 
-    def __init__(self, action_registry: ActionRegistry | None = None,
-                 goal_manager: GoalManager | None = None,
-                 api_client: APIClientWrapper | None = None):
+    def __init__(
+        self,
+        action_registry: ActionRegistry | None = None,
+        goal_manager: GoalManager | None = None,
+        api_client: APIClientWrapper | None = None,
+    ):
         """Initialize diagnostic commands with utility instances.
 
         Parameters:
@@ -63,7 +68,6 @@ class DiagnosticCommands:
         self.api_client = api_client
         self.cooldown_manager = CooldownManager() if api_client else None
 
-
     async def diagnose_state(self, character_name: str, validate_enum: bool = False) -> dict[str, Any]:
         """Diagnose current character state and validation.
 
@@ -87,11 +91,11 @@ class DiagnosticCommands:
                 "issues": [],
                 "invalid_keys": [],
                 "missing_required_keys": [],
-                "invalid_values": []
+                "invalid_values": [],
             },
             "state_statistics": {},
             "consistency_check": {},
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
@@ -132,7 +136,7 @@ class DiagnosticCommands:
                 "gold": character_data.gold,
                 "hp": character_data.hp,
                 "max_hp": character_data.max_hp,
-                "position": {"x": character_data.x, "y": character_data.y}
+                "position": {"x": character_data.x, "y": character_data.y},
             }
 
             # Add cooldown information if available
@@ -142,25 +146,27 @@ class DiagnosticCommands:
                     diagnosis["cooldown_status"] = {
                         "on_cooldown": not cooldown_info.is_ready,
                         "remaining_seconds": cooldown_info.remaining_seconds,
-                        "reason": cooldown_info.reason
+                        "reason": cooldown_info.reason,
                     }
                 else:
-                    diagnosis["cooldown_status"] = {
-                        "on_cooldown": False,
-                        "remaining_seconds": 0,
-                        "reason": None
-                    }
+                    diagnosis["cooldown_status"] = {"on_cooldown": False, "remaining_seconds": 0, "reason": None}
 
         except (ConnectionError, TimeoutError) as e:
             diagnosis["state_validation"]["valid"] = False
-            diagnosis["state_validation"]["issues"].append(f"Network error fetching character data: {type(e).__name__}: {str(e)}")
+            diagnosis["state_validation"]["issues"].append(
+                f"Network error fetching character data: {type(e).__name__}: {str(e)}"
+            )
             diagnosis["character_found"] = False
-            diagnosis["recommendations"].append(f"Network connectivity issue: Cannot retrieve character '{character_name}' - check internet connection")
+            diagnosis["recommendations"].append(
+                f"Network connectivity issue: Cannot retrieve character '{character_name}' - check internet connection"
+            )
         except ValueError as e:
             diagnosis["state_validation"]["valid"] = False
             diagnosis["state_validation"]["issues"].append(f"Data validation error: {str(e)}")
             diagnosis["character_found"] = False
-            diagnosis["recommendations"].append(f"Invalid character data received for '{character_name}' - this may indicate API changes")
+            diagnosis["recommendations"].append(
+                f"Invalid character data received for '{character_name}' - this may indicate API changes"
+            )
 
         return diagnosis
 
@@ -185,11 +191,11 @@ class DiagnosticCommands:
                 "issues": [],
                 "invalid_keys": [],
                 "missing_required_keys": [],
-                "invalid_values": []
+                "invalid_values": [],
             },
             "state_statistics": {},
             "consistency_check": {},
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
@@ -216,8 +222,9 @@ class DiagnosticCommands:
             # Enum validation if requested
             if validate_enum:
                 # Convert to string keys for enum validation
-                str_state = {key.value if isinstance(key, GameState) else str(key): value
-                           for key, value in state_data.items()}
+                str_state = {
+                    key.value if isinstance(key, GameState) else str(key): value for key, value in state_data.items()
+                }
                 invalid_keys = self.state_diagnostics.validate_state_enum_usage(str_state)
                 diagnosis["state_validation"]["invalid_keys"] = invalid_keys
                 if invalid_keys:
@@ -236,8 +243,12 @@ class DiagnosticCommands:
 
         except (AttributeError, TypeError) as e:
             diagnosis["state_validation"]["valid"] = False
-            diagnosis["state_validation"]["issues"].append(f"Component error during state analysis: {type(e).__name__}: {str(e)}")
-            diagnosis["recommendations"].append("System component issue detected - this may indicate a configuration problem")
+            diagnosis["state_validation"]["issues"].append(
+                f"Component error during state analysis: {type(e).__name__}: {str(e)}"
+            )
+            diagnosis["recommendations"].append(
+                "System component issue detected - this may indicate a configuration problem"
+            )
         except ValueError as e:
             diagnosis["state_validation"]["valid"] = False
             diagnosis["state_validation"]["issues"].append(f"Data validation error during analysis: {str(e)}")
@@ -245,10 +256,13 @@ class DiagnosticCommands:
 
         return diagnosis
 
-    async def diagnose_actions(self, character_name: str | None = None,
-                             show_costs: bool = False,
-                             list_all: bool = False,
-                             show_preconditions: bool = False) -> dict[str, Any]:
+    async def diagnose_actions(
+        self,
+        character_name: str | None = None,
+        show_costs: bool = False,
+        list_all: bool = False,
+        show_preconditions: bool = False,
+    ) -> dict[str, Any]:
         """Diagnose available actions and their properties.
 
         Parameters:
@@ -269,18 +283,14 @@ class DiagnosticCommands:
             "diagnostic_time": "",
             "registry_available": self.action_diagnostics is not None,
             "actions_analyzed": [],
-            "registry_validation": {
-                "valid": True,
-                "errors": [],
-                "warnings": []
-            },
+            "registry_validation": {"valid": True, "errors": [], "warnings": []},
             "summary": {
                 "total_actions": 0,
                 "executable_actions": 0,
                 "cost_range": {"min": 0, "max": 0},
-                "action_types": {}
+                "action_types": {},
             },
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
@@ -307,12 +317,14 @@ class DiagnosticCommands:
 
             # Get current character state using the proper application components
             current_state = {}
-            if character_name and self.goal_manager and hasattr(self.goal_manager, 'state_manager'):
+            if character_name and self.goal_manager and hasattr(self.goal_manager, "state_manager"):
                 try:
                     # Use the state manager that was properly initialized by CLI
                     current_state = await self.goal_manager.state_manager.get_current_state()
                 except (AttributeError, TypeError) as e:
-                    diagnosis["recommendations"].append(f"Component error getting character state: {type(e).__name__}: {e}")
+                    diagnosis["recommendations"].append(
+                        f"Component error getting character state: {type(e).__name__}: {e}"
+                    )
                 except ValueError as e:
                     diagnosis["recommendations"].append(f"Invalid character state data: {e}")
 
@@ -333,11 +345,8 @@ class DiagnosticCommands:
                             "executable": False,
                             "preconditions": {},
                             "effects": {},
-                            "validation": {
-                                "preconditions_valid": False,
-                                "effects_valid": False
-                            },
-                            "issues": []
+                            "validation": {"preconditions_valid": False, "effects_valid": False},
+                            "issues": [],
                         }
 
                         # Test executability with current character state
@@ -346,7 +355,9 @@ class DiagnosticCommands:
                             if action_info["executable"]:
                                 diagnosis["summary"]["executable_actions"] += 1
                         except (AttributeError, TypeError) as e:
-                            action_info["issues"].append(f"Executability check failed - component error: {type(e).__name__}: {e}")
+                            action_info["issues"].append(
+                                f"Executability check failed - component error: {type(e).__name__}: {e}"
+                            )
                         except ValueError as e:
                             action_info["issues"].append(f"Executability check failed - invalid data: {e}")
 
@@ -361,7 +372,9 @@ class DiagnosticCommands:
                                     for key, value in preconditions.items()
                                 }
                             except (AttributeError, TypeError) as e:
-                                action_info["issues"].append(f"Failed to get preconditions - component error: {type(e).__name__}: {e}")
+                                action_info["issues"].append(
+                                    f"Failed to get preconditions - component error: {type(e).__name__}: {e}"
+                                )
                             except ValueError as e:
                                 action_info["issues"].append(f"Failed to get preconditions - invalid data: {e}")
 
@@ -372,7 +385,9 @@ class DiagnosticCommands:
                                     for key, value in effects.items()
                                 }
                             except (AttributeError, TypeError) as e:
-                                action_info["issues"].append(f"Failed to get effects - component error: {type(e).__name__}: {e}")
+                                action_info["issues"].append(
+                                    f"Failed to get effects - component error: {type(e).__name__}: {e}"
+                                )
                             except ValueError as e:
                                 action_info["issues"].append(f"Failed to get effects - invalid data: {e}")
 
@@ -381,7 +396,9 @@ class DiagnosticCommands:
                             action_info["validation"]["preconditions_valid"] = action_instance.validate_preconditions()
                             action_info["validation"]["effects_valid"] = action_instance.validate_effects()
                         except (AttributeError, TypeError) as e:
-                            action_info["issues"].append(f"Validation failed - component error: {type(e).__name__}: {e}")
+                            action_info["issues"].append(
+                                f"Validation failed - component error: {type(e).__name__}: {e}"
+                            )
                         except ValueError as e:
                             action_info["issues"].append(f"Validation failed - invalid data: {e}")
 
@@ -394,17 +411,21 @@ class DiagnosticCommands:
                         diagnosis["actions_analyzed"].append(action_info)
 
                     except (AttributeError, TypeError) as e:
-                        diagnosis["actions_analyzed"].append({
-                            "name": f"{action_instance.name} (component error)",
-                            "class": action_instance.__class__.__name__,
-                            "issues": [f"Analysis failed - component error: {type(e).__name__}: {str(e)}"]
-                        })
+                        diagnosis["actions_analyzed"].append(
+                            {
+                                "name": f"{action_instance.name} (component error)",
+                                "class": action_instance.__class__.__name__,
+                                "issues": [f"Analysis failed - component error: {type(e).__name__}: {str(e)}"],
+                            }
+                        )
                     except ValueError as e:
-                        diagnosis["actions_analyzed"].append({
-                            "name": f"{action_instance.name} (data error)",
-                            "class": action_instance.__class__.__name__,
-                            "issues": [f"Analysis failed - invalid data: {str(e)}"]
-                        })
+                        diagnosis["actions_analyzed"].append(
+                            {
+                                "name": f"{action_instance.name} (data error)",
+                                "class": action_instance.__class__.__name__,
+                                "issues": [f"Analysis failed - invalid data: {str(e)}"],
+                            }
+                        )
             else:
                 # Fallback to action types when no state/goal manager available
                 action_types = self.action_registry.get_all_action_types()
@@ -421,7 +442,7 @@ class DiagnosticCommands:
                                 "class": action_class.__name__,
                                 "cost": action_instance.cost,
                                 "executable": "Unknown (no character state)",
-                                "issues": []
+                                "issues": [],
                             }
                             costs.append(action_instance.cost)
                             diagnosis["actions_analyzed"].append(action_info)
@@ -431,21 +452,25 @@ class DiagnosticCommands:
                                 "class": action_class.__name__,
                                 "cost": "Variable",
                                 "executable": "Requires parameters and state",
-                                "issues": ["Parameterized action - use --character to see generated instances"]
+                                "issues": ["Parameterized action - use --character to see generated instances"],
                             }
                             diagnosis["actions_analyzed"].append(action_info)
                     except (AttributeError, TypeError) as e:
-                        diagnosis["actions_analyzed"].append({
-                            "name": f"{action_class.__name__} (component error)",
-                            "class": action_class.__name__,
-                            "issues": [f"Analysis failed - component error: {type(e).__name__}: {str(e)}"]
-                        })
+                        diagnosis["actions_analyzed"].append(
+                            {
+                                "name": f"{action_class.__name__} (component error)",
+                                "class": action_class.__name__,
+                                "issues": [f"Analysis failed - component error: {type(e).__name__}: {str(e)}"],
+                            }
+                        )
                     except ValueError as e:
-                        diagnosis["actions_analyzed"].append({
-                            "name": f"{action_class.__name__} (data error)",
-                            "class": action_class.__name__,
-                            "issues": [f"Analysis failed - invalid data: {str(e)}"]
-                        })
+                        diagnosis["actions_analyzed"].append(
+                            {
+                                "name": f"{action_class.__name__} (data error)",
+                                "class": action_class.__name__,
+                                "issues": [f"Analysis failed - invalid data: {str(e)}"],
+                            }
+                        )
 
             # Calculate cost statistics
             if costs:
@@ -464,7 +489,9 @@ class DiagnosticCommands:
 
         except (AttributeError, TypeError) as e:
             diagnosis["registry_validation"]["valid"] = False
-            diagnosis["registry_validation"]["errors"].append(f"Component error during action analysis: {type(e).__name__}: {str(e)}")
+            diagnosis["registry_validation"]["errors"].append(
+                f"Component error during action analysis: {type(e).__name__}: {str(e)}"
+            )
             diagnosis["recommendations"].append("System component issue detected during action analysis")
         except ValueError as e:
             diagnosis["registry_validation"]["valid"] = False
@@ -473,10 +500,9 @@ class DiagnosticCommands:
 
         return diagnosis
 
-    async def diagnose_plan(self, character_name: str,
-                          goal: str,
-                          verbose: bool = False,
-                          show_steps: bool = False) -> dict[str, Any]:
+    async def diagnose_plan(
+        self, character_name: str, goal: str, verbose: bool = False, show_steps: bool = False
+    ) -> dict[str, Any]:
         """Diagnose GOAP planning process for specific goal.
 
         Parameters:
@@ -501,7 +527,7 @@ class DiagnosticCommands:
             "plan_efficiency": {},
             "bottlenecks": [],
             "performance_metrics": {},
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
@@ -522,14 +548,20 @@ class DiagnosticCommands:
                     game_map = await self.api_client.get_map(character_state.x, character_state.y)
 
                     # Convert to internal state format
-                    char_state = CharacterGameState.from_api_character(character_state, game_map.content, self.api_client.cooldown_manager)
+                    char_state = CharacterGameState.from_api_character(
+                        character_state, game_map.content, self.api_client.cooldown_manager
+                    )
                     typed_state = char_state.to_goap_state()
                     GameState.validate_state_dict(typed_state)
                 except (ConnectionError, TimeoutError) as e:
-                    diagnosis["recommendations"].append(f"Network error getting character state: {type(e).__name__}: {str(e)}")
+                    diagnosis["recommendations"].append(
+                        f"Network error getting character state: {type(e).__name__}: {str(e)}"
+                    )
                     return diagnosis
                 except (AttributeError, TypeError) as e:
-                    diagnosis["recommendations"].append(f"Component error getting character state: {type(e).__name__}: {str(e)}")
+                    diagnosis["recommendations"].append(
+                        f"Component error getting character state: {type(e).__name__}: {str(e)}"
+                    )
                     return diagnosis
                 except ValueError as e:
                     diagnosis["recommendations"].append(f"Invalid character state data: {str(e)}")
@@ -562,22 +594,28 @@ class DiagnosticCommands:
                     alchemy_level=1,
                     alchemy_xp=0,
                     cooldown=0,
-                    cooldown_ready=True
+                    cooldown_ready=True,
                 )
 
-            # Use goal manager's intelligent goal selection based on character state
-            # The goal parameter is used for diagnostic labeling but goal selection is handled by the goal manager
-            selected_goal = await self.goal_manager.select_next_goal(char_state)
-            goal_state = selected_goal.target_states if selected_goal else {}
+            # Create goal based on user input for diagnostic testing
+            if goal.lower() == "gain xp":
+                # Create simple XP gain goal - use proper GameState enum
+                selected_goal = GOAPTargetState()
+                selected_goal.target_states = {GameState.GAINED_XP: True}
+                goal_state = selected_goal
+            else:
+                # Use goal manager's intelligent goal selection for other goals
+                selected_goal = await self.goal_manager.select_next_goal(char_state)
+                goal_state = selected_goal if selected_goal else GOAPTargetState()
 
             # Now use the actual goal manager to plan
-            plan = await self.goal_manager.plan_actions(char_state, selected_goal)
+            plan = await self.goal_manager.plan_actions(char_state, goal_state)
 
             diagnosis["planning_analysis"] = {
                 "planning_successful": not plan.is_empty,
                 "goal_reachable": not plan.is_empty,
                 "total_cost": plan.total_cost,
-                "planning_time": 0.1  # Placeholder
+                "planning_time": 0.1,  # Placeholder
             }
 
             # Add detailed information if verbose
@@ -591,19 +629,19 @@ class DiagnosticCommands:
 
                     # Test goal reachability
                     goal_reachable = await self.planning_diagnostics.test_goal_reachability(
-                        char_state, goal_state
+                        char_state, goal_state.target_states
                     )
                     diagnosis["planning_analysis"]["goal_reachable"] = goal_reachable
 
                     # Identify bottlenecks
                     bottlenecks = await self.planning_diagnostics.identify_planning_bottlenecks(
-                        char_state, goal_state
+                        char_state, goal_state.target_states
                     )
                     diagnosis["bottlenecks"] = bottlenecks
 
                     # Measure performance
                     performance = await self.planning_diagnostics.measure_planning_performance(
-                        char_state, goal_state
+                        char_state, goal_state.target_states
                     )
                     diagnosis["performance_metrics"] = performance
 
@@ -613,7 +651,9 @@ class DiagnosticCommands:
                         diagnosis["plan_efficiency"] = efficiency
 
                 except (AttributeError, TypeError) as e:
-                    diagnosis["recommendations"].append(f"Component error during planning diagnostics: {type(e).__name__}: {str(e)}")
+                    diagnosis["recommendations"].append(
+                        f"Component error during planning diagnostics: {type(e).__name__}: {str(e)}"
+                    )
                 except ValueError as e:
                     diagnosis["recommendations"].append(f"Invalid data during planning diagnostics: {str(e)}")
 
@@ -631,19 +671,23 @@ class DiagnosticCommands:
                 diagnosis["recommendations"].append(f"Found {len(diagnosis['bottlenecks'])} bottlenecks to address")
 
         except (AttributeError, TypeError) as e:
-            diagnosis["recommendations"].append(f"Component error during planning analysis: {type(e).__name__}: {str(e)}")
+            diagnosis["recommendations"].append(
+                f"Component error during planning analysis: {type(e).__name__}: {str(e)}"
+            )
         except ValueError as e:
             diagnosis["recommendations"].append(f"Invalid data during planning analysis: {str(e)}")
 
         return diagnosis
 
-
-    async def test_planning(self, mock_state_file: str | None = None,
-                          character: str | None = None,
-                          goal: str | None = None,
-                          start_level: int | None = None,
-                          goal_level: int | None = None,
-                          dry_run: bool = False) -> dict[str, Any]:
+    async def test_planning(
+        self,
+        mock_state_file: str | None = None,
+        character: str | None = None,
+        goal: str | None = None,
+        start_level: int | None = None,
+        goal_level: int | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
         """Test planning with mock scenarios and custom goals.
 
         Parameters:
@@ -668,16 +712,14 @@ class DiagnosticCommands:
             "overall_success": True,
             "performance_summary": {},
             "issues": [],
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
         test_results["test_time"] = datetime.now().isoformat()
 
         if not self.planning_diagnostics:
-            test_results["recommendations"].append(
-                "Planning test unavailable - GoalManager required for testing"
-            )
+            test_results["recommendations"].append("Planning test unavailable - GoalManager required for testing")
             test_results["overall_success"] = False
             return test_results
 
@@ -688,7 +730,7 @@ class DiagnosticCommands:
                 try:
                     state_file = Path(mock_state_file)
                     if state_file.exists():
-                        with state_file.open('r') as f:
+                        with state_file.open("r") as f:
                             state_data = json.load(f)
 
                         # Convert string keys to GameState enums
@@ -718,7 +760,7 @@ class DiagnosticCommands:
                     GameState.HP_MAX: 100,
                     GameState.CURRENT_X: 0,
                     GameState.CURRENT_Y: 0,
-                    GameState.COOLDOWN_READY: True
+                    GameState.COOLDOWN_READY: True,
                 }
 
             # Handle custom character and goal testing
@@ -733,20 +775,18 @@ class DiagnosticCommands:
                         )
 
                         # Test planning with real character state and custom goal
-                        planning_result = await self.diagnose_plan(
-                            character_name=character,
-                            goal=goal,
-                            verbose=False
-                        )
+                        planning_result = await self.diagnose_plan(character_name=character, goal=goal, verbose=False)
 
-                        test_results["scenarios_tested"].append({
-                            "name": f"Custom Goal Test: {character} -> {goal}",
-                            "success": planning_result.get("planning_successful", False),
-                            "cost": planning_result.get("total_cost", 0),
-                            "time": planning_result.get("planning_time", 0),
-                            "character": character,
-                            "goal": goal
-                        })
+                        test_results["scenarios_tested"].append(
+                            {
+                                "name": f"Custom Goal Test: {character} -> {goal}",
+                                "success": planning_result.get("planning_successful", False),
+                                "cost": planning_result.get("total_cost", 0),
+                                "time": planning_result.get("planning_time", 0),
+                                "character": character,
+                                "goal": goal,
+                            }
+                        )
 
                         # Update overall success
                         if not planning_result.get("planning_successful", False):
@@ -757,7 +797,9 @@ class DiagnosticCommands:
                         test_results["overall_success"] = False
 
                 except (AttributeError, TypeError) as e:
-                    test_results["issues"].append(f"Component error during custom goal test: {type(e).__name__}: {str(e)}")
+                    test_results["issues"].append(
+                        f"Component error during custom goal test: {type(e).__name__}: {str(e)}"
+                    )
                     test_results["overall_success"] = False
                 except ValueError as e:
                     test_results["issues"].append(f"Invalid goal configuration: {str(e)}")
@@ -768,25 +810,31 @@ class DiagnosticCommands:
 
             # Scenario 1: Level progression
             if goal_level:
-                scenarios.append({
-                    "name": "Level Progression",
-                    "goal_state": {GameState.CHARACTER_LEVEL: goal_level},
-                    "description": f"Increase character level from {start_state.get(GameState.CHARACTER_LEVEL, 1)} to {goal_level}"
-                })
+                scenarios.append(
+                    {
+                        "name": "Level Progression",
+                        "goal_state": {GameState.CHARACTER_LEVEL: goal_level},
+                        "description": f"Increase character level from {start_state.get(GameState.CHARACTER_LEVEL, 1)} to {goal_level}",
+                    }
+                )
 
             # Scenario 2: Gold accumulation
-            scenarios.append({
-                "name": "Gold Accumulation",
-                "goal_state": {GameState.CHARACTER_GOLD: 1000},
-                "description": "Accumulate 1000 gold"
-            })
+            scenarios.append(
+                {
+                    "name": "Gold Accumulation",
+                    "goal_state": {GameState.CHARACTER_GOLD: 1000},
+                    "description": "Accumulate 1000 gold",
+                }
+            )
 
             # Scenario 3: Position movement
-            scenarios.append({
-                "name": "Position Movement",
-                "goal_state": {GameState.CURRENT_X: 5, GameState.CURRENT_Y: 5},
-                "description": "Move to position (5, 5)"
-            })
+            scenarios.append(
+                {
+                    "name": "Position Movement",
+                    "goal_state": {GameState.CURRENT_X: 5, GameState.CURRENT_Y: 5},
+                    "description": "Move to position (5, 5)",
+                }
+            )
 
             # Test each scenario
             total_planning_time = 0.0
@@ -800,7 +848,7 @@ class DiagnosticCommands:
                     "planning_time": 0.0,
                     "plan_length": 0,
                     "reachable": False,
-                    "issues": []
+                    "issues": [],
                 }
 
                 try:
@@ -812,9 +860,7 @@ class DiagnosticCommands:
                     )
 
                     # Measure planning performance
-                    performance = await self.planning_diagnostics.measure_planning_performance(
-                        start_state, goal_state
-                    )
+                    performance = await self.planning_diagnostics.measure_planning_performance(start_state, goal_state)
 
                     scenario_result["planning_time"] = performance.get("planning_time_seconds", 0.0)
                     scenario_result["plan_length"] = performance.get("plan_length", 0)
@@ -829,7 +875,9 @@ class DiagnosticCommands:
                         successful_scenarios += 1
 
                 except (AttributeError, TypeError) as e:
-                    scenario_result["issues"].append(f"Component error during scenario test: {type(e).__name__}: {str(e)}")
+                    scenario_result["issues"].append(
+                        f"Component error during scenario test: {type(e).__name__}: {str(e)}"
+                    )
                 except ValueError as e:
                     scenario_result["issues"].append(f"Invalid scenario configuration: {str(e)}")
 
@@ -841,7 +889,7 @@ class DiagnosticCommands:
                 "successful_scenarios": successful_scenarios,
                 "success_rate": (successful_scenarios / len(scenarios) * 100) if scenarios else 0,
                 "total_planning_time": total_planning_time,
-                "average_planning_time": (total_planning_time / len(scenarios)) if scenarios else 0
+                "average_planning_time": (total_planning_time / len(scenarios)) if scenarios else 0,
             }
 
             # Overall success assessment
@@ -851,7 +899,9 @@ class DiagnosticCommands:
             if successful_scenarios == 0:
                 test_results["recommendations"].append("No scenarios succeeded - check planning implementation")
             elif successful_scenarios < len(scenarios):
-                test_results["recommendations"].append(f"Only {successful_scenarios}/{len(scenarios)} scenarios succeeded - investigate failures")
+                test_results["recommendations"].append(
+                    f"Only {successful_scenarios}/{len(scenarios)} scenarios succeeded - investigate failures"
+                )
 
             if total_planning_time > 5.0:
                 test_results["recommendations"].append("Planning is slow - consider optimization")
@@ -888,15 +938,11 @@ class DiagnosticCommands:
                 "total_actions_analyzed": 0,
                 "cost_distribution": {},
                 "cost_statistics": {},
-                "outliers": []
+                "outliers": [],
             },
-            "configuration_validation": {
-                "valid": True,
-                "warnings": [],
-                "errors": []
-            },
+            "configuration_validation": {"valid": True, "warnings": [], "errors": []},
             "optimization_opportunities": [],
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
@@ -905,9 +951,7 @@ class DiagnosticCommands:
         if not self.action_diagnostics:
             diagnosis["configuration_validation"]["valid"] = False
             diagnosis["configuration_validation"]["errors"].append("ActionRegistry not available for weight analysis")
-            diagnosis["recommendations"].append(
-                "Weight diagnostics unavailable - ActionRegistry required for analysis"
-            )
+            diagnosis["recommendations"].append("Weight diagnostics unavailable - ActionRegistry required for analysis")
             return diagnosis
 
         try:
@@ -937,23 +981,22 @@ class DiagnosticCommands:
                     cost_by_type[action_type].append(cost)
 
                     if show_action_costs:
-                        action_details.append({
-                            "name": action_name,
-                            "type": action_type,
-                            "cost": cost,
-                            "class": action_class.__name__
-                        })
+                        action_details.append(
+                            {"name": action_name, "type": action_type, "cost": cost, "class": action_class.__name__}
+                        )
 
                 except TypeError:
                     # Parameterized action
                     action_type = action_class.__name__.replace("Action", "")
                     if show_action_costs:
-                        action_details.append({
-                            "name": f"{action_class.__name__} (parameterized)",
-                            "type": action_type,
-                            "cost": "Variable",
-                            "class": action_class.__name__
-                        })
+                        action_details.append(
+                            {
+                                "name": f"{action_class.__name__} (parameterized)",
+                                "type": action_type,
+                                "cost": "Variable",
+                                "class": action_class.__name__,
+                            }
+                        )
                 except (AttributeError, TypeError) as e:
                     diagnosis["configuration_validation"]["errors"].append(
                         f"Component error analyzing {action_class.__name__}: {type(e).__name__}: {str(e)}"
@@ -975,7 +1018,7 @@ class DiagnosticCommands:
                     "max_cost": max(costs),
                     "average_cost": sum(costs) / len(costs),
                     "median_cost": sorted(costs)[len(costs) // 2],
-                    "cost_range": max(costs) - min(costs)
+                    "cost_range": max(costs) - min(costs),
                 }
 
                 # Analyze cost distribution by type
@@ -985,7 +1028,7 @@ class DiagnosticCommands:
                         "count": len(type_costs),
                         "average": sum(type_costs) / len(type_costs),
                         "min": min(type_costs),
-                        "max": max(type_costs)
+                        "max": max(type_costs),
                     }
 
                 # Identify cost outliers
@@ -996,11 +1039,13 @@ class DiagnosticCommands:
                     try:
                         action_instance = action_class()
                         if action_instance.cost > outlier_threshold:
-                            diagnosis["cost_analysis"]["outliers"].append({
-                                "name": action_instance.name,
-                                "cost": action_instance.cost,
-                                "multiplier": action_instance.cost / avg_cost
-                            })
+                            diagnosis["cost_analysis"]["outliers"].append(
+                                {
+                                    "name": action_instance.name,
+                                    "cost": action_instance.cost,
+                                    "multiplier": action_instance.cost / avg_cost,
+                                }
+                            )
                     except TypeError:
                         continue
                     except (AttributeError, TypeError, ValueError):
@@ -1014,9 +1059,13 @@ class DiagnosticCommands:
                     diagnosis["configuration_validation"]["warnings"].extend(conflicts)
                     diagnosis["configuration_validation"]["valid"] = False
             except (AttributeError, TypeError) as e:
-                diagnosis["configuration_validation"]["errors"].append(f"Component error during conflict detection: {type(e).__name__}: {str(e)}")
+                diagnosis["configuration_validation"]["errors"].append(
+                    f"Component error during conflict detection: {type(e).__name__}: {str(e)}"
+                )
             except ValueError as e:
-                diagnosis["configuration_validation"]["errors"].append(f"Invalid data during conflict detection: {str(e)}")
+                diagnosis["configuration_validation"]["errors"].append(
+                    f"Invalid data during conflict detection: {str(e)}"
+                )
 
             # Generate optimization opportunities
             stats = diagnosis["cost_analysis"]["cost_statistics"]
@@ -1070,10 +1119,14 @@ class DiagnosticCommands:
                 )
 
         except (AttributeError, TypeError) as e:
-            diagnosis["configuration_validation"]["errors"].append(f"Component error during weight analysis: {type(e).__name__}: {str(e)}")
+            diagnosis["configuration_validation"]["errors"].append(
+                f"Component error during weight analysis: {type(e).__name__}: {str(e)}"
+            )
             diagnosis["configuration_validation"]["valid"] = False
         except ValueError as e:
-            diagnosis["configuration_validation"]["errors"].append(f"Data validation error during weight analysis: {str(e)}")
+            diagnosis["configuration_validation"]["errors"].append(
+                f"Data validation error during weight analysis: {str(e)}"
+            )
             diagnosis["configuration_validation"]["valid"] = False
 
         return diagnosis
@@ -1101,15 +1154,15 @@ class DiagnosticCommands:
                 "ready": None,
                 "estimated_ready_time": None,
                 "last_action_time": None,
-                "compliance_status": "unknown"
+                "compliance_status": "unknown",
             },
             "timing_analysis": {
                 "api_cooldown_seconds": 30,  # Standard ArtifactsMMO cooldown
                 "precision_issues": [],
-                "timing_warnings": []
+                "timing_warnings": [],
             },
             "monitoring_data": [],
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Add timestamp
@@ -1123,11 +1176,13 @@ class DiagnosticCommands:
             # If monitoring is requested, provide placeholder monitoring data
             if monitor:
                 current_time = datetime.now()
-                diagnosis["monitoring_data"] = [{
-                    "timestamp": current_time.isoformat(),
-                    "status": "monitoring_started",
-                    "notes": "Continuous monitoring would track cooldown state changes over time"
-                }]
+                diagnosis["monitoring_data"] = [
+                    {
+                        "timestamp": current_time.isoformat(),
+                        "status": "monitoring_started",
+                        "notes": "Continuous monitoring would track cooldown state changes over time",
+                    }
+                ]
 
                 diagnosis["recommendations"].append(
                     "Monitoring mode requires background task to track cooldown state changes"
@@ -1175,7 +1230,7 @@ class DiagnosticCommands:
                 )
 
             # Additional character-specific analysis
-            if hasattr(character_data, 'speed') and character_data.speed:
+            if hasattr(character_data, "speed") and character_data.speed:
                 diagnosis["timing_analysis"]["character_speed"] = character_data.speed
                 if character_data.speed < 1:
                     diagnosis["timing_analysis"]["timing_warnings"].append(
@@ -1185,15 +1240,17 @@ class DiagnosticCommands:
             # If monitoring is requested, set up real monitoring data
             if monitor:
                 current_time = datetime.now()
-                diagnosis["monitoring_data"] = [{
-                    "timestamp": current_time.isoformat(),
-                    "status": "active_monitoring",
-                    "cooldown_ready": is_ready,
-                    "remaining_seconds": remaining_time,
-                    "character_level": character_data.level,
-                    "character_hp": character_data.hp,
-                    "character_position": {"x": character_data.x, "y": character_data.y}
-                }]
+                diagnosis["monitoring_data"] = [
+                    {
+                        "timestamp": current_time.isoformat(),
+                        "status": "active_monitoring",
+                        "cooldown_ready": is_ready,
+                        "remaining_seconds": remaining_time,
+                        "character_level": character_data.level,
+                        "character_hp": character_data.hp,
+                        "character_position": {"x": character_data.x, "y": character_data.y},
+                    }
+                ]
 
                 # For real monitoring, we would set up a background task
                 # For now, provide the current snapshot
@@ -1208,19 +1265,21 @@ class DiagnosticCommands:
                 )
 
             if character_data.hp < character_data.max_hp * 0.3:
-                diagnosis["recommendations"].append(
-                    "Low HP detected - consider rest action before combat activities"
-                )
+                diagnosis["recommendations"].append("Low HP detected - consider rest action before combat activities")
 
         except (ConnectionError, TimeoutError) as e:
             diagnosis["character_found"] = False
             diagnosis["cooldown_status"]["compliance_status"] = "network_error"
-            diagnosis["recommendations"].append(f"Network error during cooldown diagnostics: {type(e).__name__}: {str(e)}")
+            diagnosis["recommendations"].append(
+                f"Network error during cooldown diagnostics: {type(e).__name__}: {str(e)}"
+            )
             diagnosis["timing_analysis"]["precision_issues"].append(f"API access failed due to network issue: {str(e)}")
         except (AttributeError, TypeError) as e:
             diagnosis["character_found"] = False
             diagnosis["cooldown_status"]["compliance_status"] = "component_error"
-            diagnosis["recommendations"].append(f"Component error during cooldown diagnostics: {type(e).__name__}: {str(e)}")
+            diagnosis["recommendations"].append(
+                f"Component error during cooldown diagnostics: {type(e).__name__}: {str(e)}"
+            )
             diagnosis["timing_analysis"]["precision_issues"].append(f"System component issue: {str(e)}")
         except ValueError as e:
             diagnosis["character_found"] = False
@@ -1256,7 +1315,7 @@ class DiagnosticCommands:
             lines.append(f"XP: {char_data.get('xp', 'N/A')}")
             lines.append(f"Gold: {char_data.get('gold', 'N/A')}")
             lines.append(f"HP: {char_data.get('hp', 'N/A')}/{char_data.get('max_hp', 'N/A')}")
-            position = char_data.get('position', {})
+            position = char_data.get("position", {})
             lines.append(f"Position: ({position.get('x', 'N/A')}, {position.get('y', 'N/A')})")
             lines.append(f"Skin: {char_data.get('skin', 'N/A')}")
 
@@ -1297,7 +1356,7 @@ class DiagnosticCommands:
             lines.append("\n=== COOLDOWN STATUS ===")
             lines.append(f"On cooldown: {cooldown.get('on_cooldown', 'Unknown')}")
             lines.append(f"Remaining seconds: {cooldown.get('remaining_seconds', 'N/A')}")
-            if cooldown.get('reason'):
+            if cooldown.get("reason"):
                 lines.append(f"Reason: {cooldown['reason']}")
 
         # Recommendations
@@ -1372,30 +1431,30 @@ class DiagnosticCommands:
         if actions_analyzed:
             lines.append(f"\n=== INDIVIDUAL ACTIONS ({len(actions_analyzed)}) ===")
             for i, action_info in enumerate(actions_analyzed):
-                lines.append(f"\n[{i+1}] Action: {action_info.get('name', 'Unknown')}")
+                lines.append(f"\n[{i + 1}] Action: {action_info.get('name', 'Unknown')}")
                 lines.append(f"    Class: {action_info.get('class', 'Unknown')}")
                 lines.append(f"    Cost: {action_info.get('cost', 'N/A')}")
                 lines.append(f"    Executable: {action_info.get('executable', 'Unknown')}")
 
-                if 'preconditions' in action_info and action_info['preconditions']:
+                if "preconditions" in action_info and action_info["preconditions"]:
                     lines.append("    Preconditions:")
-                    for key, value in action_info['preconditions'].items():
+                    for key, value in action_info["preconditions"].items():
                         lines.append(f"      {key}: {value}")
 
-                if 'effects' in action_info and action_info['effects']:
+                if "effects" in action_info and action_info["effects"]:
                     lines.append("    Effects:")
-                    for key, value in action_info['effects'].items():
+                    for key, value in action_info["effects"].items():
                         lines.append(f"      {key}: {value}")
 
-                validation_info = action_info.get('validation', {})
+                validation_info = action_info.get("validation", {})
                 if validation_info:
-                    precond_valid = validation_info.get('preconditions_valid', 'Unknown')
-                    effects_valid = validation_info.get('effects_valid', 'Unknown')
+                    precond_valid = validation_info.get("preconditions_valid", "Unknown")
+                    effects_valid = validation_info.get("effects_valid", "Unknown")
                     lines.append(f"    Validation: preconditions={precond_valid}, effects={effects_valid}")
 
-                if 'issues' in action_info and action_info['issues']:
+                if "issues" in action_info and action_info["issues"]:
                     lines.append("    Issues:")
-                    for issue in action_info['issues']:
+                    for issue in action_info["issues"]:
                         lines.append(f"      • {issue}")
 
         # Recommendations
@@ -1439,51 +1498,51 @@ class DiagnosticCommands:
         analysis = diagnostic_result.get("planning_analysis", {})
         if analysis:
             lines.append("\n=== PLANNING ANALYSIS ===")
-            success = analysis.get('planning_successful', False)
+            success = analysis.get("planning_successful", False)
             lines.append(f"Planning successful: {success}")
 
-            goal_reachable = analysis.get('goal_reachable', 'Unknown')
+            goal_reachable = analysis.get("goal_reachable", "Unknown")
             lines.append(f"Goal reachable: {goal_reachable}")
 
             # Basic metrics
-            total_cost = analysis.get('total_cost', 0)
-            planning_time = analysis.get('planning_time', 0.0)
+            total_cost = analysis.get("total_cost", 0)
+            planning_time = analysis.get("planning_time", 0.0)
             lines.append(f"Total cost: {total_cost}")
             lines.append(f"Planning time: {planning_time:.3f} seconds")
 
             # Issues
-            issues = analysis.get('issues', [])
+            issues = analysis.get("issues", [])
             if issues:
                 lines.append(f"\nIssues ({len(issues)}):")
                 for issue in issues:
                     lines.append(f"  • {issue}")
 
             # Plan steps
-            steps = analysis.get('steps', [])
+            steps = analysis.get("steps", [])
             if steps:
                 lines.append(f"\nPlan steps ({len(steps)} actions):")
                 for i, step in enumerate(steps):
-                    step_name = step.get('name', f'Step {i+1}')
-                    step_cost = step.get('cost', 1)
-                    lines.append(f"  [{i+1}] {step_name} (cost: {step_cost})")
+                    step_name = step.get("name", f"Step {i + 1}")
+                    step_cost = step.get("cost", 1)
+                    lines.append(f"  [{i + 1}] {step_name} (cost: {step_cost})")
 
             # State transitions
-            transitions = analysis.get('state_transitions', [])
+            transitions = analysis.get("state_transitions", [])
             if transitions:
                 lines.append(f"\nState Transitions ({len(transitions)}):")
                 for transition in transitions:
-                    step_num = transition.get('step', '?')
-                    action_name = transition.get('action', 'Unknown')
+                    step_num = transition.get("step", "?")
+                    action_name = transition.get("action", "Unknown")
                     lines.append(f"  Step {step_num}: {action_name}")
 
         # Plan efficiency
         efficiency = diagnostic_result.get("plan_efficiency", {})
         if efficiency:
             lines.append("\n=== PLAN EFFICIENCY ===")
-            efficiency_score = efficiency.get('efficiency_score', 0)
+            efficiency_score = efficiency.get("efficiency_score", 0)
             lines.append(f"Efficiency score: {efficiency_score:.2f}")
 
-            suggestions = efficiency.get('optimization_suggestions', [])
+            suggestions = efficiency.get("optimization_suggestions", [])
             if suggestions:
                 lines.append("Optimization suggestions:")
                 for suggestion in suggestions:
@@ -1500,14 +1559,14 @@ class DiagnosticCommands:
         performance = diagnostic_result.get("performance_metrics", {})
         if performance:
             lines.append("\n=== PERFORMANCE METRICS ===")
-            planning_time = performance.get('planning_time_seconds', 0)
-            success = performance.get('success', False)
-            performance_class = performance.get('performance_class', 'unknown')
+            planning_time = performance.get("planning_time_seconds", 0)
+            success = performance.get("success", False)
+            performance_class = performance.get("performance_class", "unknown")
             lines.append(f"Planning time: {planning_time:.3f}s")
             lines.append(f"Success: {success}")
             lines.append(f"Performance class: {performance_class}")
 
-            if 'error' in performance:
+            if "error" in performance:
                 lines.append(f"Error: {performance['error']}")
 
         # Recommendations

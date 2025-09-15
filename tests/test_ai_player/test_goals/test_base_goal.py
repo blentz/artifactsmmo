@@ -208,7 +208,7 @@ class TestBaseGoal:
         # Check get_progression_value signature
         sig = inspect.signature(BaseGoal.get_progression_value)
         params = list(sig.parameters.keys())
-        assert params == ['self', 'character_state']
+        assert params == ['self', 'character_state', 'game_data']
 
         # Check estimate_error_risk signature
         sig = inspect.signature(BaseGoal.estimate_error_risk)

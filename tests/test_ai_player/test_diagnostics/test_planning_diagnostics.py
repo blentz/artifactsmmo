@@ -30,19 +30,16 @@ class TestPlanningDiagnostics:
         self.mock_char_state.to_goap_state.return_value = {
             GameState.CHARACTER_LEVEL.value: 10,
             GameState.CHARACTER_XP.value: 1000,
-            GameState.COOLDOWN_READY.value: True
+            GameState.COOLDOWN_READY.value: True,
         }
         self.mock_char_state.get.side_effect = lambda key: {
             GameState.CHARACTER_LEVEL: 10,
             GameState.CHARACTER_XP: 1000,
-            GameState.COOLDOWN_READY: True
+            GameState.COOLDOWN_READY: True,
         }.get(key)
 
         # Sample goal state
-        self.sample_goal_state = {
-            GameState.CHARACTER_LEVEL: 15,
-            GameState.CHARACTER_XP: 2000
-        }
+        self.sample_goal_state = {GameState.CHARACTER_LEVEL: 15, GameState.CHARACTER_XP: 2000}
 
     def test_init(self):
         """Test PlanningDiagnostics initialization"""
@@ -55,20 +52,14 @@ class TestPlanningDiagnostics:
     async def test_analyze_planning_steps_successful_plan(self):
         """Test analysis of successful planning steps"""
         # Mock successful plan
-        mock_plan = [
-            {"name": "move_to_location", "cost": 2},
-            {"name": "gather_resource", "cost": 3}
-        ]
+        mock_plan = [{"name": "move_to_location", "cost": 2}, {"name": "gather_resource", "cost": 3}]
         self.mock_goal_manager.plan_actions = AsyncMock(return_value=mock_plan)
 
-        result = await self.diagnostics.analyze_planning_steps(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        result = await self.diagnostics.analyze_planning_steps(self.mock_char_state, self.sample_goal_state)
 
         assert result["planning_successful"] is True
         assert result["steps"] == mock_plan
-        assert result["total_cost"] == 2
+        assert result["total_cost"] == 5  # 2 + 3 from the action costs
         assert len(result["state_transitions"]) == 2
         assert isinstance(result["planning_time"], float)
         assert result["issues"] == []
@@ -78,10 +69,7 @@ class TestPlanningDiagnostics:
         """Test analysis when no plan is found"""
         self.mock_goal_manager.plan_actions = AsyncMock(return_value=None)
 
-        result = await self.diagnostics.analyze_planning_steps(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        result = await self.diagnostics.analyze_planning_steps(self.mock_char_state, self.sample_goal_state)
 
         assert result["planning_successful"] is False
         assert "No plan found - goal may be unreachable" in result["issues"]
@@ -94,10 +82,7 @@ class TestPlanningDiagnostics:
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("Planning error"))
 
         with pytest.raises(Exception, match="Planning error"):
-            await self.diagnostics.analyze_planning_steps(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            await self.diagnostics.analyze_planning_steps(self.mock_char_state, self.sample_goal_state)
 
     @pytest.mark.asyncio
     async def test_analyze_planning_steps_analysis_exception(self):
@@ -108,39 +93,36 @@ class TestPlanningDiagnostics:
         self.mock_char_state.to_goap_state.side_effect = Exception("State error")
 
         with pytest.raises(Exception, match="State error"):
-            await self.diagnostics.analyze_planning_steps(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            await self.diagnostics.analyze_planning_steps(self.mock_char_state, self.sample_goal_state)
 
     @pytest.mark.asyncio
     async def test_test_goal_reachability_with_goal_manager_method(self):
         """Test goal reachability when goal manager has is_goal_achievable method"""
         self.mock_goal_manager.is_goal_achievable = Mock(return_value=True)
 
-        result = await self.diagnostics.test_goal_reachability(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        result = await self.diagnostics.test_goal_reachability(self.mock_char_state, self.sample_goal_state)
 
         assert result is True
+        # The implementation converts CharacterGameState to dict via to_goap_state(), then converts to GameState enum dict
+        expected_current_state = {
+            GameState.CHARACTER_LEVEL: 10,
+            GameState.CHARACTER_XP: 1000,
+            GameState.COOLDOWN_READY: True,
+        }
         self.mock_goal_manager.is_goal_achievable.assert_called_once_with(
-            self.sample_goal_state, self.mock_char_state
+            self.sample_goal_state, expected_current_state
         )
 
     @pytest.mark.asyncio
     async def test_test_goal_reachability_level_cannot_decrease(self):
         """Test that goal reachability fails when trying to decrease character level"""
         # Remove is_goal_achievable method to test heuristic checks
-        if hasattr(self.mock_goal_manager, 'is_goal_achievable'):
-            delattr(self.mock_goal_manager, 'is_goal_achievable')
+        if hasattr(self.mock_goal_manager, "is_goal_achievable"):
+            delattr(self.mock_goal_manager, "is_goal_achievable")
 
         goal_state = {GameState.CHARACTER_LEVEL: 5}  # Lower than current level of 10
 
-        result = await self.diagnostics.test_goal_reachability(
-            self.mock_char_state,
-            goal_state
-        )
+        result = await self.diagnostics.test_goal_reachability(self.mock_char_state, goal_state)
 
         assert result is False
 
@@ -148,15 +130,12 @@ class TestPlanningDiagnostics:
     async def test_test_goal_reachability_xp_cannot_decrease(self):
         """Test that goal reachability fails when trying to decrease XP"""
         # Remove is_goal_achievable method to test heuristic checks
-        if hasattr(self.mock_goal_manager, 'is_goal_achievable'):
-            delattr(self.mock_goal_manager, 'is_goal_achievable')
+        if hasattr(self.mock_goal_manager, "is_goal_achievable"):
+            delattr(self.mock_goal_manager, "is_goal_achievable")
 
         goal_state = {GameState.CHARACTER_XP: 500}  # Lower than current XP of 1000
 
-        result = await self.diagnostics.test_goal_reachability(
-            self.mock_char_state,
-            goal_state
-        )
+        result = await self.diagnostics.test_goal_reachability(self.mock_char_state, goal_state)
 
         assert result is False
 
@@ -164,13 +143,10 @@ class TestPlanningDiagnostics:
     async def test_test_goal_reachability_with_planning_attempt(self):
         """Test goal reachability using planning attempt"""
         # Remove is_goal_achievable method to test planning fallback
-        delattr(self.mock_goal_manager, 'is_goal_achievable')
+        delattr(self.mock_goal_manager, "is_goal_achievable")
         self.mock_goal_manager.plan_actions = AsyncMock(return_value=[{"name": "test_action"}])
 
-        result = await self.diagnostics.test_goal_reachability(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        result = await self.diagnostics.test_goal_reachability(self.mock_char_state, self.sample_goal_state)
 
         assert result is True
 
@@ -178,13 +154,10 @@ class TestPlanningDiagnostics:
     async def test_test_goal_reachability_planning_fails(self):
         """Test goal reachability when planning fails"""
         # Remove is_goal_achievable method
-        delattr(self.mock_goal_manager, 'is_goal_achievable')
+        delattr(self.mock_goal_manager, "is_goal_achievable")
         self.mock_goal_manager.plan_actions = AsyncMock(return_value=None)
 
-        result = await self.diagnostics.test_goal_reachability(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        result = await self.diagnostics.test_goal_reachability(self.mock_char_state, self.sample_goal_state)
 
         assert result is False
 
@@ -192,14 +165,11 @@ class TestPlanningDiagnostics:
     async def test_test_goal_reachability_exception_propagates(self):
         """Test that exceptions in reachability testing propagate following fail-fast principles"""
         # Remove is_goal_achievable method
-        delattr(self.mock_goal_manager, 'is_goal_achievable')
+        delattr(self.mock_goal_manager, "is_goal_achievable")
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("Planning error"))
 
         with pytest.raises(Exception, match="Planning error"):
-            await self.diagnostics.test_goal_reachability(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            await self.diagnostics.test_goal_reachability(self.mock_char_state, self.sample_goal_state)
 
     def test_visualize_plan_empty_plan(self):
         """Test visualization of empty plan"""
@@ -211,7 +181,7 @@ class TestPlanningDiagnostics:
         """Test visualization of plan with actions"""
         plan = [
             {"name": "move_to_location", "cost": 2, "preconditions": {"at_bank": True}, "effects": {"at_mine": True}},
-            {"name": "gather_resource", "cost": 3}
+            {"name": "gather_resource", "cost": 3},
         ]
 
         result = self.diagnostics.visualize_plan(plan)
@@ -227,12 +197,7 @@ class TestPlanningDiagnostics:
     def test_estimate_state_after_action_with_effects(self):
         """Test state estimation after action with effects"""
         current_state = {GameState.CHARACTER_LEVEL: 10, GameState.CHARACTER_XP: 1000}
-        action = {
-            "effects": {
-                GameState.CHARACTER_LEVEL: 11,
-                GameState.CHARACTER_XP: 1100
-            }
-        }
+        action = {"effects": {GameState.CHARACTER_LEVEL: 11, GameState.CHARACTER_XP: 1100}}
 
         result = self.diagnostics._estimate_state_after_action(current_state, action)
 
@@ -245,7 +210,7 @@ class TestPlanningDiagnostics:
         action = {
             "effects": {
                 "character_level": 11,  # String key
-                "invalid_key": 999     # Invalid key
+                "invalid_key": 999,  # Invalid key
             }
         }
 
@@ -272,7 +237,7 @@ class TestPlanningDiagnostics:
             GOAPAction(name="move_to_location", action_type="movement", cost=2),
             GOAPAction(name="gather_copper", action_type="gathering", cost=3),
             GOAPAction(name="gather_copper", action_type="gathering", cost=3),  # Duplicate
-            GOAPAction(name="craft_item", action_type="crafting", cost=1)
+            GOAPAction(name="craft_item", action_type="crafting", cost=1),
         ]
         plan = GOAPActionPlan(actions=actions, total_cost=9, estimated_duration=4.0, plan_id="test")
 
@@ -297,7 +262,9 @@ class TestPlanningDiagnostics:
 
         # Single action type plan
         single_actions = [GOAPAction(name="move_action", action_type="move", cost=1) for _ in range(3)]
-        single_type_plan = GOAPActionPlan(actions=single_actions, total_cost=3, estimated_duration=3.0, plan_id="single")
+        single_type_plan = GOAPActionPlan(
+            actions=single_actions, total_cost=3, estimated_duration=3.0, plan_id="single"
+        )
         result = self.diagnostics.analyze_plan_efficiency(single_type_plan)
         assert any("only one action type" in suggestion for suggestion in result["optimization_suggestions"])
 
@@ -307,7 +274,7 @@ class TestPlanningDiagnostics:
             {
                 "name": "test_action",
                 "preconditions": {GameState.CHARACTER_LEVEL: 10},
-                "effects": {GameState.CHARACTER_XP: 1100}
+                "effects": {GameState.CHARACTER_XP: 1100},
             }
         ]
         start_state = {GameState.CHARACTER_LEVEL: 10, GameState.CHARACTER_XP: 1000}
@@ -325,7 +292,7 @@ class TestPlanningDiagnostics:
             {
                 "name": "test_action",
                 "preconditions": {GameState.CHARACTER_LEVEL: 15},  # Higher than current
-                "effects": {GameState.CHARACTER_XP: 1100}
+                "effects": {GameState.CHARACTER_XP: 1100},
             }
         ]
         start_state = {GameState.CHARACTER_LEVEL: 10, GameState.CHARACTER_XP: 1000}
@@ -342,7 +309,7 @@ class TestPlanningDiagnostics:
             {
                 "name": "test_action",
                 "preconditions": {"character_level": 10},  # String key
-                "effects": {"character_xp": 1100}          # String key
+                "effects": {"character_xp": 1100},  # String key
             }
         ]
         start_state = {GameState.CHARACTER_LEVEL: 10, GameState.CHARACTER_XP: 1000}
@@ -354,13 +321,7 @@ class TestPlanningDiagnostics:
 
     def test_simulate_plan_execution_invalid_keys(self):
         """Test simulation with invalid keys propagates exception following fail-fast principles"""
-        plan = [
-            {
-                "name": "test_action",
-                "preconditions": {"invalid_key": 10},
-                "effects": {"another_invalid_key": 1100}
-            }
-        ]
+        plan = [{"name": "test_action", "preconditions": {"invalid_key": 10}, "effects": {"another_invalid_key": 1100}}]
         start_state = {GameState.CHARACTER_LEVEL: 10}
 
         # Should propagate ValueError for invalid GameState enum value
@@ -371,10 +332,9 @@ class TestPlanningDiagnostics:
     async def test_identify_planning_bottlenecks_unreachable_goal(self):
         """Test identification of unreachable goal bottleneck"""
         # Mock unreachable goal
-        with patch.object(self.diagnostics, 'test_goal_reachability', return_value=False):
+        with patch.object(self.diagnostics, "test_goal_reachability", return_value=False):
             bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                self.sample_goal_state
+                self.mock_char_state, self.sample_goal_state
             )
 
         assert any("unreachable" in bottleneck for bottleneck in bottlenecks)
@@ -394,18 +354,13 @@ class TestPlanningDiagnostics:
             GameState.JEWELRYCRAFTING_XP: 1000,
             GameState.COOKING_XP: 1000,
             GameState.ALCHEMY_XP: 1000,
-            GameState.COOLDOWN_READY: True
+            GameState.COOLDOWN_READY: True,
         }
         # Mock large start state too
-        self.mock_char_state.to_goap_state.return_value = {
-            f"state_{i}": i for i in range(15)
-        }
+        self.mock_char_state.to_goap_state.return_value = {f"state_{i}": i for i in range(15)}
 
-        with patch.object(self.diagnostics, 'test_goal_reachability', return_value=True):
-            bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                large_goal_state
-            )
+        with patch.object(self.diagnostics, "test_goal_reachability", return_value=True):
+            bottlenecks = await self.diagnostics.identify_planning_bottlenecks(self.mock_char_state, large_goal_state)
 
         assert any("Large state space" in bottleneck for bottleneck in bottlenecks)
 
@@ -414,11 +369,8 @@ class TestPlanningDiagnostics:
         """Test identification of large value gap bottleneck"""
         goal_state = {GameState.CHARACTER_LEVEL: 150}  # Much higher than current 10
 
-        with patch.object(self.diagnostics, 'test_goal_reachability', return_value=True):
-            bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                goal_state
-            )
+        with patch.object(self.diagnostics, "test_goal_reachability", return_value=True):
+            bottlenecks = await self.diagnostics.identify_planning_bottlenecks(self.mock_char_state, goal_state)
 
         assert any("Large gap" in bottleneck for bottleneck in bottlenecks)
 
@@ -427,10 +379,9 @@ class TestPlanningDiagnostics:
         """Test identification of no actions bottleneck"""
         self.mock_goal_manager.create_goap_actions = AsyncMock(return_value=None)
 
-        with patch.object(self.diagnostics, 'test_goal_reachability', return_value=True):
+        with patch.object(self.diagnostics, "test_goal_reachability", return_value=True):
             bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                self.sample_goal_state
+                self.mock_char_state, self.sample_goal_state
             )
 
         assert any("No actions available" in bottleneck for bottleneck in bottlenecks)
@@ -441,10 +392,7 @@ class TestPlanningDiagnostics:
         self.mock_goal_manager.create_goap_actions = AsyncMock(side_effect=Exception("Access error"))
 
         with pytest.raises(Exception, match="Access error"):
-            await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            await self.diagnostics.identify_planning_bottlenecks(self.mock_char_state, self.sample_goal_state)
 
     @pytest.mark.asyncio
     async def test_identify_planning_bottlenecks_missing_required_keys(self):
@@ -455,10 +403,9 @@ class TestPlanningDiagnostics:
             # Missing CHARACTER_LEVEL and COOLDOWN_READY
         }
 
-        with patch.object(self.diagnostics, 'test_goal_reachability', return_value=True):
+        with patch.object(self.diagnostics, "test_goal_reachability", return_value=True):
             bottlenecks = await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                self.sample_goal_state
+                self.mock_char_state, self.sample_goal_state
             )
 
         assert any("Missing required state keys" in bottleneck for bottleneck in bottlenecks)
@@ -469,10 +416,7 @@ class TestPlanningDiagnostics:
         self.mock_char_state.to_goap_state.side_effect = Exception("State error")
 
         with pytest.raises(Exception, match="State error"):
-            await self.diagnostics.identify_planning_bottlenecks(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            await self.diagnostics.identify_planning_bottlenecks(self.mock_char_state, self.sample_goal_state)
 
     @pytest.mark.asyncio
     async def test_measure_planning_performance_success(self):
@@ -480,10 +424,7 @@ class TestPlanningDiagnostics:
         mock_plan = [{"name": "test_action"}]
         self.mock_goal_manager.plan_actions = AsyncMock(return_value=mock_plan)
 
-        metrics = await self.diagnostics.measure_planning_performance(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        metrics = await self.diagnostics.measure_planning_performance(self.mock_char_state, self.sample_goal_state)
 
         assert metrics["success"] is True
         assert metrics["plan_length"] == 1
@@ -496,10 +437,7 @@ class TestPlanningDiagnostics:
         """Test performance measurement when no plan is found"""
         self.mock_goal_manager.plan_actions = AsyncMock(return_value=None)
 
-        metrics = await self.diagnostics.measure_planning_performance(
-            self.mock_char_state,
-            self.sample_goal_state
-        )
+        metrics = await self.diagnostics.measure_planning_performance(self.mock_char_state, self.sample_goal_state)
 
         assert metrics["success"] is False
         assert metrics["plan_length"] == 0
@@ -511,26 +449,20 @@ class TestPlanningDiagnostics:
         self.mock_goal_manager.plan_actions = AsyncMock(side_effect=Exception("Planning error"))
 
         with pytest.raises(Exception, match="Planning error"):
-            await self.diagnostics.measure_planning_performance(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            await self.diagnostics.measure_planning_performance(self.mock_char_state, self.sample_goal_state)
 
     @pytest.mark.asyncio
     async def test_measure_planning_performance_classes(self):
         """Test performance classification"""
         # Mock fast planning
-        with patch('src.ai_player.diagnostics.planning_diagnostics.datetime') as mock_datetime:
+        with patch("src.ai_player.diagnostics.planning_diagnostics.datetime") as mock_datetime:
             start_time = datetime.now()
             end_time = start_time + timedelta(microseconds=50000)  # 0.05 seconds
             mock_datetime.now.side_effect = [start_time, end_time]
 
             self.mock_goal_manager.plan_actions = AsyncMock(return_value=[{"name": "test"}])
 
-            metrics = await self.diagnostics.measure_planning_performance(
-                self.mock_char_state,
-                self.sample_goal_state
-            )
+            metrics = await self.diagnostics.measure_planning_performance(self.mock_char_state, self.sample_goal_state)
 
             assert metrics["performance_class"] == "fast"
 
@@ -546,12 +478,12 @@ class TestPlanningDiagnostics:
             {
                 "name": "test_action",
                 "preconditions": {GameState.CHARACTER_LEVEL: 10},
-                "effects": {GameState.CHARACTER_XP: 1100}
+                "effects": {GameState.CHARACTER_XP: 1100},
             }
         ]
         start_state = {GameState.CHARACTER_LEVEL: 10, GameState.CHARACTER_XP: 1000}
 
-        with patch.object(self.diagnostics, 'simulate_plan_execution') as mock_simulate:
+        with patch.object(self.diagnostics, "simulate_plan_execution") as mock_simulate:
             mock_simulate.return_value = {"success": True, "issues": []}
 
             issues = self.diagnostics.validate_plan_feasibility(plan, start_state)
@@ -564,11 +496,8 @@ class TestPlanningDiagnostics:
         plan = [{"name": "test_action"}]
         start_state = {GameState.CHARACTER_LEVEL: 10}
 
-        with patch.object(self.diagnostics, 'simulate_plan_execution') as mock_simulate:
-            mock_simulate.return_value = {
-                "success": False,
-                "issues": ["Precondition not met"]
-            }
+        with patch.object(self.diagnostics, "simulate_plan_execution") as mock_simulate:
+            mock_simulate.return_value = {"success": False, "issues": ["Precondition not met"]}
 
             issues = self.diagnostics.validate_plan_feasibility(plan, start_state)
 
@@ -580,7 +509,7 @@ class TestPlanningDiagnostics:
         plan = [{"cost": 1}]  # Missing name
         start_state = {GameState.CHARACTER_LEVEL: 10}
 
-        with patch.object(self.diagnostics, 'simulate_plan_execution') as mock_simulate:
+        with patch.object(self.diagnostics, "simulate_plan_execution") as mock_simulate:
             mock_simulate.return_value = {"success": True, "issues": []}
 
             issues = self.diagnostics.validate_plan_feasibility(plan, start_state)
@@ -589,15 +518,10 @@ class TestPlanningDiagnostics:
 
     def test_validate_plan_feasibility_invalid_effect_keys(self):
         """Test validation with invalid effect keys"""
-        plan = [
-            {
-                "name": "test_action",
-                "effects": {"invalid_key": 100}
-            }
-        ]
+        plan = [{"name": "test_action", "effects": {"invalid_key": 100}}]
         start_state = {GameState.CHARACTER_LEVEL: 10}
 
-        with patch.object(self.diagnostics, 'simulate_plan_execution') as mock_simulate:
+        with patch.object(self.diagnostics, "simulate_plan_execution") as mock_simulate:
             mock_simulate.return_value = {"success": True, "issues": []}
 
             issues = self.diagnostics.validate_plan_feasibility(plan, start_state)
@@ -610,12 +534,12 @@ class TestPlanningDiagnostics:
             {
                 "name": "test_action",
                 "preconditions": {GameState.CHARACTER_LEVEL: 10},
-                "effects": {GameState.CHARACTER_LEVEL: 10}  # Same as precondition
+                "effects": {GameState.CHARACTER_LEVEL: 10},  # Same as precondition
             }
         ]
         start_state = {GameState.CHARACTER_LEVEL: 10}
 
-        with patch.object(self.diagnostics, 'simulate_plan_execution') as mock_simulate:
+        with patch.object(self.diagnostics, "simulate_plan_execution") as mock_simulate:
             mock_simulate.return_value = {"success": True, "issues": []}
 
             issues = self.diagnostics.validate_plan_feasibility(plan, start_state)

@@ -38,14 +38,14 @@ class EquipmentGoal(BaseGoal):
 
         # Define equipment slots for level 5 progression goal
         self.equipment_slots = {
-            'weapon': 'weapon_slot',
-            'helmet': 'helmet_slot',
-            'body_armor': 'body_armor_slot',
-            'leg_armor': 'leg_armor_slot',
-            'boots': 'boots_slot',
-            'ring1': 'ring1_slot',
-            'ring2': 'ring2_slot',
-            'amulet': 'amulet_slot'
+            "weapon": "weapon_slot",
+            "helmet": "helmet_slot",
+            "body_armor": "body_armor_slot",
+            "leg_armor": "leg_armor_slot",
+            "boots": "boots_slot",
+            "ring1": "ring1_slot",
+            "ring2": "ring2_slot",
+            "amulet": "amulet_slot",
         }
 
     def calculate_weight(self, character_state: CharacterGameState, game_data: GameData) -> float:
@@ -66,14 +66,13 @@ class EquipmentGoal(BaseGoal):
         feasibility = self._calculate_equipment_feasibility(character_state, game_data)
 
         # Calculate progression value (20% weight)
-        progression = self.get_progression_value(character_state)
+        progression = self.get_progression_value(character_state, game_data)
 
         # Calculate stability (10% weight) - equipment upgrades are generally stable
         stability = 0.85  # High stability - equipment acquisition has predictable outcomes
 
         # Combine factors with PRP-specified weights
-        final_weight = (necessity * 0.4 + feasibility * 0.3 +
-                       progression * 0.2 + stability * 0.1)
+        final_weight = necessity * 0.4 + feasibility * 0.3 + progression * 0.2 + stability * 0.1
 
         return min(10.0, final_weight * 10.0)  # Scale to 0-10 range
 
@@ -86,13 +85,9 @@ class EquipmentGoal(BaseGoal):
 
         return len(available_upgrades) > 0
 
-    def get_target_state(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
-    ) -> GOAPTargetState:
+    def get_target_state(self, character_state: CharacterGameState, game_data: GameData) -> GOAPTargetState:
         """Return GOAP target state for equipment goal.
-        
+
         This method defines the desired state conditions for successful equipment acquisition:
         1. Character must have optimal equipment for their level
         2. Equipment must be properly equipped in appropriate slots
@@ -105,18 +100,13 @@ class EquipmentGoal(BaseGoal):
         target_equipment = self._select_optimal_equipment_upgrade(character_state, game_data)
         if not target_equipment:
             # Return empty target state if no equipment upgrades needed
-            return GOAPTargetState(
-                target_states={},
-                priority=1,
-                timeout_seconds=None
-            )
+            return GOAPTargetState(target_states={}, priority=1, timeout_seconds=None)
 
         # Define target state conditions for equipment success
         target_states = {
             # Must have better equipment equipped
             GameState.READY_FOR_UPGRADE: False,  # Should no longer need upgrades
             GameState.HAS_REQUIRED_ITEMS: True,  # Must have the target equipment
-
             # Equipment-specific states based on target slot
             GameState.WEAPON_EQUIPPED: True,
             GameState.HELMET_EQUIPPED: True,
@@ -126,10 +116,8 @@ class EquipmentGoal(BaseGoal):
             GameState.RING1_EQUIPPED: True,
             GameState.RING2_EQUIPPED: True,
             GameState.AMULET_EQUIPPED: True,
-
             # Inventory management
             GameState.INVENTORY_SPACE_AVAILABLE: True,
-
             # Action readiness
             GameState.COOLDOWN_READY: True,
         }
@@ -137,10 +125,10 @@ class EquipmentGoal(BaseGoal):
         return GOAPTargetState(
             target_states=target_states,
             priority=5,  # Medium priority - supports other goals
-            timeout_seconds=1800  # 30 minute timeout for equipment acquisition chains
+            timeout_seconds=1800,  # 30 minute timeout for equipment acquisition chains
         )
 
-    def get_progression_value(self, character_state: CharacterGameState) -> float:
+    def get_progression_value(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate contribution to reaching level 5 with appropriate gear."""
         # Equipment directly contributes to the primary success criteria:
         # "Level 5 with all equipment slots filled with level ≤ 5 items"
@@ -156,7 +144,7 @@ class EquipmentGoal(BaseGoal):
             return 0.9
 
         # Moderate value if character needs equipment for current level
-        level_appropriate_coverage = self._calculate_level_appropriate_coverage(character_state)
+        level_appropriate_coverage = self._calculate_level_appropriate_coverage(character_state, game_data)
         coverage_factor = 1.0 - level_appropriate_coverage
 
         return min(1.0, base_progression + coverage_factor * 0.2)
@@ -173,15 +161,13 @@ class EquipmentGoal(BaseGoal):
 
         # Increase risk if inventory is nearly full
         inventory_risk = 0.0
-        if hasattr(character_state, 'inventory_space_available') and character_state.inventory_space_available < 3:
+        if hasattr(character_state, "inventory_space_count") and character_state.inventory_space_count < 3:
             inventory_risk += 0.15
 
         return min(1.0, base_risk + gold_risk + inventory_risk)
 
     def generate_sub_goal_requests(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, character_state: CharacterGameState, game_data: GameData
     ) -> list[SubGoalRequest]:
         """Generate sub-goal requests for equipment acquisition dependencies."""
         sub_goals: list[SubGoalRequest] = []
@@ -194,31 +180,35 @@ class EquipmentGoal(BaseGoal):
         item, acquisition_method = target_equipment
 
         # Generate sub-goals based on acquisition method
-        if acquisition_method == 'monster_drop':
+        if acquisition_method == "monster_drop":
             # Find monsters that drop this item
             dropping_monsters = self._find_monsters_dropping_item(item.code, game_data)
             if dropping_monsters:
                 # Request combat for item acquisition
                 monster, _ = dropping_monsters[0]
-                sub_goals.append(SubGoalRequest(
-                    goal_type="combat_for_item",
-                    parameters={"target_monster": monster.code, "target_item": item.code},
-                    priority=7,
-                    requester="EquipmentGoal",
-                    reason=f"Fight {monster.name} for {item.name}"
-                ))
+                sub_goals.append(
+                    SubGoalRequest(
+                        goal_type="combat_for_item",
+                        parameters={"target_monster": monster.code, "target_item": item.code},
+                        priority=7,
+                        requester="EquipmentGoal",
+                        reason=f"Fight {monster.name} for {item.name}",
+                    )
+                )
 
-        elif acquisition_method == 'crafting':
+        elif acquisition_method == "crafting":
             # Request crafting for this item
-            sub_goals.append(SubGoalRequest(
-                goal_type="craft_item",
-                parameters={"item_code": item.code},
-                priority=6,
-                requester="EquipmentGoal",
-                reason=f"Craft {item.name} for equipment upgrade"
-            ))
+            sub_goals.append(
+                SubGoalRequest(
+                    goal_type="craft_item",
+                    parameters={"item_code": item.code},
+                    priority=6,
+                    requester="EquipmentGoal",
+                    reason=f"Craft {item.name} for equipment upgrade",
+                )
+            )
 
-        elif acquisition_method == 'npc_purchase':
+        elif acquisition_method == "npc_purchase":
             # Find NPC that sells this item
             selling_npcs = self._find_npcs_selling_item(item.code, game_data)
             if selling_npcs:
@@ -227,22 +217,26 @@ class EquipmentGoal(BaseGoal):
                 npc_locations = self.map_analysis.find_content_by_code("npc", npc.code, game_data.maps)
                 if npc_locations:
                     target_npc_location = npc_locations[0]
-                    sub_goals.append(SubGoalRequest.move_to_location(
-                        target_npc_location.x,
-                        target_npc_location.y,
-                        "EquipmentGoal",
-                        f"Move to {npc.name} to buy {item.name}"
-                    ))
+                    sub_goals.append(
+                        SubGoalRequest.move_to_location(
+                            target_npc_location.x,
+                            target_npc_location.y,
+                            "EquipmentGoal",
+                            f"Move to {npc.name} to buy {item.name}",
+                        )
+                    )
 
         # Request inventory space if needed
-        if hasattr(character_state, 'inventory_space_available') and character_state.inventory_space_available < 2:
-            sub_goals.append(SubGoalRequest(
-                goal_type="manage_inventory",
-                parameters={"required_space": 2},
-                priority=5,
-                requester="EquipmentGoal",
-                reason="Need inventory space for equipment acquisition"
-            ))
+        if hasattr(character_state, "inventory_space_count") and character_state.inventory_space_count < 2:
+            sub_goals.append(
+                SubGoalRequest(
+                    goal_type="manage_inventory",
+                    parameters={"required_space": 2},
+                    priority=5,
+                    requester="EquipmentGoal",
+                    reason="Need inventory space for equipment acquisition",
+                )
+            )
 
         return sub_goals
 
@@ -254,9 +248,12 @@ class EquipmentGoal(BaseGoal):
 
         # Filter items to level-appropriate equipment
         level_appropriate_equipment = [
-            item for item in game_data.items
-            if (item.level <= self.max_item_level and
-                item.type in ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet'])
+            item
+            for item in game_data.items
+            if (
+                item.level <= self.max_item_level
+                and item.type in ["weapon", "helmet", "body_armor", "leg_armor", "boots", "ring", "amulet"]
+            )
         ]
 
         # Check each equipment slot for potential upgrades
@@ -264,11 +261,14 @@ class EquipmentGoal(BaseGoal):
             if self.target_slot and slot_name != self.target_slot:
                 continue
 
-            current_item = getattr(character_state, slot_attr, None)
+            current_item_code = getattr(character_state, slot_attr, None)
             current_item_level = 0
 
-            if current_item and hasattr(current_item, 'level'):
-                current_item_level = current_item.level
+            # If character has equipment in this slot, look up its level from game data
+            if current_item_code:
+                current_item_obj = next((item for item in game_data.items if item.code == current_item_code), None)
+                if current_item_obj:
+                    current_item_level = current_item_obj.level
 
             # Find better items for this slot
             slot_items = [item for item in level_appropriate_equipment if self._item_fits_slot(item, slot_name)]
@@ -319,9 +319,9 @@ class EquipmentGoal(BaseGoal):
 
         # Prefer items with good acquisition methods
         method_scores = {
-            'npc_purchase': 0.3,  # Most reliable
-            'crafting': 0.2,      # Moderately reliable
-            'monster_drop': 0.1   # Least reliable
+            "npc_purchase": 0.3,  # Most reliable
+            "crafting": 0.2,  # Moderately reliable
+            "monster_drop": 0.1,  # Least reliable
         }
         score += method_scores.get(method, 0.0)
 
@@ -338,7 +338,7 @@ class EquipmentGoal(BaseGoal):
         coverage_necessity = 1.0 - equipment_coverage
 
         # Higher necessity if character level is high but equipment is low-level
-        level_equipment_gap = self._calculate_level_equipment_gap(character_state)
+        level_equipment_gap = self._calculate_level_equipment_gap(character_state, game_data)
 
         return min(1.0, coverage_necessity * 0.6 + level_equipment_gap * 0.4)
 
@@ -357,7 +357,7 @@ class EquipmentGoal(BaseGoal):
 
         # Inventory space (20% of feasibility)
         inventory_score = 1.0
-        if hasattr(character_state, 'inventory_space_available'):
+        if hasattr(character_state, "inventory_space_available"):
             inventory_score = min(1.0, character_state.inventory_space_available / 5.0)
         feasibility_score += inventory_score * 0.2
 
@@ -378,27 +378,34 @@ class EquipmentGoal(BaseGoal):
 
         return equipped_slots / total_slots
 
-    def _calculate_level_appropriate_coverage(self, character_state: CharacterGameState) -> float:
+    def _calculate_level_appropriate_coverage(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate coverage of level-appropriate equipment."""
         appropriate_slots = 0
         total_slots = len(self.equipment_slots)
 
         for slot_name, slot_attr in self.equipment_slots.items():
-            equipped_item = getattr(character_state, slot_attr, None)
-            if equipped_item and hasattr(equipped_item, 'level'):
-                if equipped_item.level <= self.max_item_level:
+            equipped_item_code = getattr(character_state, slot_attr, None)
+            if equipped_item_code:
+                # Look up item in game data to check its level
+                equipped_item = next((item for item in game_data.items if item.code == equipped_item_code), None)
+                if equipped_item and equipped_item.level <= self.max_item_level:
                     appropriate_slots += 1
 
         return appropriate_slots / total_slots
 
-    def _calculate_level_equipment_gap(self, character_state: CharacterGameState) -> float:
+    def _calculate_level_equipment_gap(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate gap between character level and equipment levels."""
         equipment_levels = []
 
         for slot_name, slot_attr in self.equipment_slots.items():
-            equipped_item = getattr(character_state, slot_attr, None)
-            if equipped_item and hasattr(equipped_item, 'level'):
-                equipment_levels.append(equipped_item.level)
+            equipped_item_code = getattr(character_state, slot_attr, None)
+            if equipped_item_code:
+                # Look up item in game data to get its level
+                equipped_item = next((item for item in game_data.items if item.code == equipped_item_code), None)
+                if equipped_item:
+                    equipment_levels.append(equipped_item.level)
+                else:
+                    equipment_levels.append(1)  # Assume level 1 for unknown items
             else:
                 equipment_levels.append(1)  # Assume level 1 for empty slots
 
@@ -413,14 +420,14 @@ class EquipmentGoal(BaseGoal):
     def _item_fits_slot(self, item: Any, slot_name: str) -> bool:
         """Check if item fits the specified equipment slot."""
         slot_type_mapping = {
-            'weapon': ['weapon'],
-            'helmet': ['helmet'],
-            'body_armor': ['body_armor', 'chest'],
-            'leg_armor': ['leg_armor', 'legs'],
-            'boots': ['boots'],
-            'ring1': ['ring'],
-            'ring2': ['ring'],
-            'amulet': ['amulet']
+            "weapon": ["weapon"],
+            "helmet": ["helmet"],
+            "body_armor": ["body_armor", "chest"],
+            "leg_armor": ["leg_armor", "legs"],
+            "boots": ["boots"],
+            "ring1": ["ring"],
+            "ring2": ["ring"],
+            "amulet": ["amulet"],
         }
 
         accepted_types = slot_type_mapping.get(slot_name, [])
@@ -432,15 +439,15 @@ class EquipmentGoal(BaseGoal):
         """Determine how this item can be acquired."""
         # Check if item is craftable
         if item.craft:
-            return 'crafting'
+            return "crafting"
 
         # Check if NPCs sell this item (simplified)
         if self._find_npcs_selling_item(item.code, game_data):
-            return 'npc_purchase'
+            return "npc_purchase"
 
         # Check if monsters drop this item
         if self._find_monsters_dropping_item(item.code, game_data):
-            return 'monster_drop'
+            return "monster_drop"
 
         return None
 
@@ -455,7 +462,7 @@ class EquipmentGoal(BaseGoal):
 
         for monster in game_data.monsters:
             for drop in monster.drops:
-                if isinstance(drop, dict) and drop.get('code') == item_code:
+                if isinstance(drop, dict) and drop.get("code") == item_code:
                     dropping_monsters.append((monster, drop))
 
         return dropping_monsters

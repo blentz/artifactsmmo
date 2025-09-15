@@ -103,12 +103,54 @@ class TestStateDiagnostics:
         mock_character = Mock()
         mock_character.name = "test_char"
         mock_character.level = 5
+        mock_character.xp = 1000
+        mock_character.gold = 100
         mock_character.x = 10
         mock_character.y = 15
         mock_character.hp = 100
         mock_character.max_hp = 100
+        mock_character.cooldown = 0
+        mock_character.mining_level = 1
+        mock_character.mining_xp = 0
+        mock_character.woodcutting_level = 1
+        mock_character.woodcutting_xp = 0
+        mock_character.fishing_level = 1
+        mock_character.fishing_xp = 0
+        mock_character.weaponcrafting_level = 1
+        mock_character.weaponcrafting_xp = 0
+        mock_character.gearcrafting_level = 1
+        mock_character.gearcrafting_xp = 0
+        mock_character.jewelrycrafting_level = 1
+        mock_character.jewelrycrafting_xp = 0
+        mock_character.cooking_level = 1
+        mock_character.cooking_xp = 0
+        mock_character.alchemy_level = 1
+        mock_character.alchemy_xp = 0
+        mock_character.inventory = []
+        mock_character.inventory_max_items = 20
+        mock_character.task = ""
+        mock_character.task_progress = 0
+        mock_character.task_total = 0
+        mock_character.weapon_slot = ""
+        mock_character.shield_slot = ""
+        mock_character.helmet_slot = ""
+        mock_character.body_armor_slot = ""
+        mock_character.leg_armor_slot = ""
+        mock_character.boots_slot = ""
+        mock_character.ring1_slot = ""
+        mock_character.ring2_slot = ""
+        mock_character.amulet_slot = ""
+        mock_character.artifact1_slot = ""
+        mock_character.cooldown_expiration_utc = None
+        mock_character.cooldown_expiration = None
 
         mock_api_client.get_character.return_value = mock_character
+        
+        # Setup map mock
+        mock_map = Mock()
+        mock_map.content = None
+        mock_api_client.get_map.return_value = mock_map
+        
         mock_api_wrapper.return_value = mock_api_client
 
         diagnostic_commands = DiagnosticCommands(api_client=mock_api_client)

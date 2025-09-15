@@ -12,8 +12,8 @@ import logging
 import sys
 from typing import Any
 
-from ..lib import log
-from ..lib.log import configure_logging
+from src.lib import log
+from src.lib.log import configure_logging
 
 
 class CLIManager:
@@ -47,15 +47,9 @@ class CLIManager:
         all subcommands for character management, AI player control, and
         diagnostic operations, including global options like logging levels.
         """
-        parser = argparse.ArgumentParser(
-            description="ArtifactsMMO AI Player CLI",
-            prog="artifactsmmo-ai-player"
-        )
+        parser = argparse.ArgumentParser(description="ArtifactsMMO AI Player CLI", prog="artifactsmmo-ai-player")
         parser.add_argument(
-            "--log-level",
-            choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-            default="INFO",
-            help="Set logging level"
+            "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="Set logging level"
         )
 
         subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -334,8 +328,7 @@ class CLIManager:
             handler = logging.StreamHandler()
             handler.setLevel(numeric_level)
             formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S"
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
             )
             handler.setFormatter(formatter)
             root_logger.addHandler(handler)
@@ -378,7 +371,7 @@ async def async_main(cli_manager: CLIManager, args: argparse.Namespace) -> None:
     enabling proper async/await handling for API calls, AI player operations,
     and other asynchronous components in the system.
     """
-    if not hasattr(args, 'command') or args.command is None:
+    if not hasattr(args, "command") or args.command is None:
         print("No command specified. Use --help for available commands.")
         return
 
@@ -422,11 +415,9 @@ __version__ = "2.0.0"
 __all__ = [
     # Core CLI Components
     "CLIManager",
-
     # Entry Points
     "main",
     "async_main",
-
     # Convenience Functions
     "run_cli",
     "create_cli_manager",
@@ -493,11 +484,7 @@ def run_cli(args: list[str] | None = None) -> None:
             sys.argv = original_argv
 
 
-async def run_character_cli(
-    character_name: str,
-    command: str,
-    options: dict[str, Any] | None = None
-) -> None:
+async def run_character_cli(character_name: str, command: str, options: dict[str, Any] | None = None) -> None:
     """Run character-related CLI commands programmatically.
 
     Parameters:
@@ -541,9 +528,7 @@ async def run_character_cli(
 
 
 async def run_diagnostic_cli(
-    diagnostic_type: str,
-    character_name: str | None = None,
-    options: dict[str, Any] | None = None
+    diagnostic_type: str, character_name: str | None = None, options: dict[str, Any] | None = None
 ) -> None:
     """Run diagnostic CLI commands programmatically.
 

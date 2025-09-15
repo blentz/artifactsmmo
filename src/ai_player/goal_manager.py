@@ -14,9 +14,9 @@ import logging
 import time
 from typing import Any
 
-from ..lib.goap import Action_List, Planner
+from src.lib.goap import Action_List, Planner
 from .actions import ActionRegistry, BaseAction
-from .cooldown_aware_planner import CooldownAwarePlanner
+from src.ai_player.cooldown_aware_planner import CooldownAwarePlanner
 from .exceptions import GoalFactoryError, MaxDepthExceededError, NoValidGoalError
 from .goal_selector import GoalWeightCalculator
 from .goals.base_goal import BaseGoal
@@ -35,7 +35,9 @@ from .types.goap_models import GoalFactoryContext, GOAPAction, GOAPActionPlan, G
 class GoalManager:
     """Manages dynamic goal selection and cooldown-aware GOAP planning"""
 
-    def __init__(self, action_registry: ActionRegistry, cooldown_manager, cache_manager=None, state_manager: StateManager = None):
+    def __init__(
+        self, action_registry: ActionRegistry, cooldown_manager, cache_manager=None, state_manager: StateManager = None
+    ):
         """Initialize GoalManager with enhanced goal selection and analysis capabilities.
 
         Parameters:
@@ -66,7 +68,6 @@ class GoalManager:
         # Initialize logger
         self.logger = logging.getLogger(__name__)
 
-
     async def get_game_data(self) -> Any:
         """Get comprehensive game data for action generation.
 
@@ -93,11 +94,7 @@ class GoalManager:
 
             # Create properly typed GameData instance
             game_data = GameData(
-                maps=all_maps,
-                monsters=all_monsters,
-                resources=all_resources,
-                npcs=all_npcs,
-                items=all_items
+                maps=all_maps, monsters=all_monsters, resources=all_resources, npcs=all_npcs, items=all_items
             )
 
             # Validate that essential game data is present
@@ -127,20 +124,22 @@ class GoalManager:
         current_y = current_state.y
 
         # For combat goals, find nearby monster locations
-        if goal_type == 'combat':
-            return await self.find_nearest_content_location(current_x, current_y, 'monster')
+        if goal_type == "combat":
+            return await self.find_nearest_content_location(current_x, current_y, "monster")
 
         # For rest goals, find safe locations (no monsters)
-        elif goal_type == 'rest':
+        elif goal_type == "rest":
             return await self.find_nearest_safe_location(current_x, current_y)
 
         # For resource gathering, find resource locations
-        elif goal_type == 'gathering':
-            return await self.find_nearest_content_location(current_x, current_y, 'resource')
+        elif goal_type == "gathering":
+            return await self.find_nearest_content_location(current_x, current_y, "resource")
 
         return None
 
-    async def find_nearest_content_location(self, current_x: int, current_y: int, content_type: str) -> tuple[int, int] | None:
+    async def find_nearest_content_location(
+        self, current_x: int, current_y: int, content_type: str
+    ) -> tuple[int, int] | None:
         """Find the nearest location with specified content type within movement range.
 
         Parameters:
@@ -158,7 +157,7 @@ class GoalManager:
         maps = await self.cache_manager.get_all_maps()
         if not maps:
             return None
-        
+
         # Find locations with matching content type
         matching_locations = []
         for game_map in maps:
@@ -166,10 +165,10 @@ class GoalManager:
                 # Calculate distance from current position
                 distance = abs(game_map.x - current_x) + abs(game_map.y - current_y)
                 matching_locations.append((game_map.x, game_map.y, distance))
-        
+
         if not matching_locations:
             return None
-        
+
         # Sort by distance and return the nearest
         matching_locations.sort(key=lambda x: x[2])
         nearest_x, nearest_y, _ = matching_locations[0]
@@ -192,33 +191,30 @@ class GoalManager:
         maps = await self.cache_manager.get_all_maps()
         if not maps:
             return (0, 0)  # Fallback to spawn
-        
+
         # Find locations without monster content
         safe_locations = []
         for game_map in maps:
-            if not game_map.content or game_map.content.type != 'monster':
+            if not game_map.content or game_map.content.type != "monster":
                 # Calculate distance from current position
                 distance = abs(game_map.x - current_x) + abs(game_map.y - current_y)
                 safe_locations.append((game_map.x, game_map.y, distance))
-        
+
         if not safe_locations:
             return (0, 0)  # Fallback to spawn
-        
+
         # Sort by distance and return the nearest
         safe_locations.sort(key=lambda x: x[2])
         nearest_x, nearest_y, _ = safe_locations[0]
         return (nearest_x, nearest_y)
 
-
-    async def select_next_goal(self, current_state: CharacterGameState) -> 'GOAPTargetState':
+    async def select_next_goal(self, current_state: CharacterGameState) -> "GOAPTargetState":
         """Select next achievable goal using enhanced goal system, return GOAPTargetState directly."""
         if self.max_level_achieved(current_state):
             return GOAPTargetState()
 
         game_data = await self.get_game_data()
-        selected_goal, sub_goal_requests = self.goal_weight_calculator.select_optimal_goal(
-            current_state, game_data
-        )
+        selected_goal, sub_goal_requests = self.goal_weight_calculator.select_optimal_goal(current_state, game_data)
 
         if sub_goal_requests:
             self.active_sub_goals.extend(sub_goal_requests)
@@ -234,7 +230,7 @@ class GoalManager:
                     game_data=game_data,
                     parent_goal_type=type(selected_goal).__name__ if selected_goal else None,
                     recursion_depth=0,
-                    max_depth=10
+                    max_depth=10,
                 )
 
                 try:
@@ -256,35 +252,38 @@ class GoalManager:
 
         # Use unified architecture - get target state from goal's get_target_state method
         target_state_obj = selected_goal.get_target_state(current_state, game_data)
-        target_state_dict = target_state_obj.to_goap_dict()
 
         # Map goal class names to expected test types
         goal_type = type(selected_goal).__name__
         goal_type_mapping = {
-            'CombatGoal': 'combat_goal',
-            'GatheringGoal': 'gathering_goal',
-            'CraftingGoal': 'crafting_goal',
-            'EquipmentGoal': 'equipment_goal',
-            'RestGoal': 'rest',
-            'HealthRecoveryGoal': 'health_recovery',
-            'EmergencyRestGoal': 'emergency_rest',
-            'SurvivalGoal': 'survival',
-            'InventoryManagementGoal': 'inventory_management'
+            "CombatGoal": "combat_goal",
+            "GatheringGoal": "gathering_goal",
+            "CraftingGoal": "crafting_goal",
+            "EquipmentGoal": "equipment_goal",
+            "RestGoal": "rest",
+            "HealthRecoveryGoal": "health_recovery",
+            "EmergencyRestGoal": "emergency_rest",
+            "SurvivalGoal": "survival",
+            "InventoryManagementGoal": "inventory_management",
         }
 
         # Return the GOAPTargetState object directly as per unified architecture
         return target_state_obj
 
-
     async def plan_actions(self, current_state: CharacterGameState, goal: GOAPTargetState) -> GOAPActionPlan:
         """Generate action sequence using cooldown-aware GOAP planner.
-        
+
         Raises:
             PlanningError: If no valid plan can be found
         """
         return await self.plan_to_target_state(current_state, goal)
 
-    async def plan_with_cooldown_awareness(self, character_name: str, current_state: CharacterGameState, goal_state: dict[GameState, bool | int | float | str]) -> GOAPActionPlan:
+    async def plan_with_cooldown_awareness(
+        self,
+        character_name: str,
+        current_state: CharacterGameState,
+        goal_state: dict[GameState, bool | int | float | str],
+    ) -> GOAPActionPlan:
         """Generate plan considering current cooldown state and timing.
 
         Parameters:
@@ -323,7 +322,6 @@ class GoalManager:
         """
         return not self.cooldown_manager.is_ready(character_name)
 
-
     async def create_goap_actions(self, current_state: CharacterGameState) -> Action_List:
         """Convert modular actions to GOAP Action_List format using ActionRegistry."""
         action_list = Action_List()
@@ -345,9 +343,6 @@ class GoalManager:
         print(f"DEBUG: Created GOAP action list with {len(action_list.conditions)} actions")
         return action_list
 
-
-
-
     def get_early_game_goals(self, current_state: dict[GameState, Any]) -> list[dict[GameState, Any]]:
         """Get goals for levels 1-10.
 
@@ -366,48 +361,54 @@ class GoalManager:
 
         # Level progression goal (always important in early game)
         if current_level < 10:
-            goals.append({
-                'type': 'level_up',
-                'priority': 1,
-                'target_state': {
-                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
-                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
+            goals.append(
+                {
+                    "type": "level_up",
+                    "priority": 1,
+                    "target_state": {
+                        GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                        GameState.CAN_GAIN_XP: True,  # Boolean: Character can gain XP
+                    },
                 }
-            })
+            )
 
         # Skill development goals
         mining_level = current_state.get(GameState.MINING_LEVEL, 1)
         if mining_level < 5:
-            goals.append({
-                'type': 'skill_training',
-                'priority': 2,
-                'target_state': {
-                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
-                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP (via gathering)
+            goals.append(
+                {
+                    "type": "skill_training",
+                    "priority": 2,
+                    "target_state": {
+                        GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                        GameState.CAN_GAIN_XP: True,  # Boolean: Character can gain XP (via gathering)
+                    },
                 }
-            })
+            )
 
         woodcutting_level = current_state.get(GameState.WOODCUTTING_LEVEL, 1)
         if woodcutting_level < 5:
-            goals.append({
-                'type': 'skill_training',
-                'priority': 2,
-                'target_state': {
-                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
-                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP (via gathering)
+            goals.append(
+                {
+                    "type": "skill_training",
+                    "priority": 2,
+                    "target_state": {
+                        GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                        GameState.CAN_GAIN_XP: True,  # Boolean: Character can gain XP (via gathering)
+                    },
                 }
-            })
+            )
 
         # Basic economic goal
         current_gold = current_state.get(GameState.CHARACTER_GOLD, 0)
         if current_gold < 1000:
-            goals.append({
-                'type': 'resource_gathering',
-                'priority': 3,
-                'target_state': {
-                    GameState.CHARACTER_GOLD: current_gold + 500
+            goals.append(
+                {
+                    "type": "resource_gathering",
+                    "priority": 3,
+                    "target_state": {GameState.CHARACTER_GOLD: current_gold + 500},
                 }
-            })
+            )
 
         return goals
 
@@ -429,14 +430,16 @@ class GoalManager:
 
         # Mid-game level progression
         if current_level < 30:
-            goals.append({
-                'type': 'level_up',
-                'priority': 1,
-                'target_state': {
-                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
-                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
+            goals.append(
+                {
+                    "type": "level_up",
+                    "priority": 1,
+                    "target_state": {
+                        GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                        GameState.CAN_GAIN_XP: True,  # Boolean: Character can gain XP
+                    },
                 }
-            })
+            )
 
         return goals
 
@@ -458,18 +461,22 @@ class GoalManager:
 
         # Late-game level progression to max
         if current_level < 45:
-            goals.append({
-                'type': 'level_up',
-                'priority': 1,
-                'target_state': {
-                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
-                    GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
+            goals.append(
+                {
+                    "type": "level_up",
+                    "priority": 1,
+                    "target_state": {
+                        GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                        GameState.CAN_GAIN_XP: True,  # Boolean: Character can gain XP
+                    },
                 }
-            })
+            )
 
         return goals
 
-    def prioritize_goals(self, available_goals: list[dict[GameState, Any]], current_state: dict[GameState, Any]) -> dict[GameState, Any]:
+    def prioritize_goals(
+        self, available_goals: list[dict[GameState, Any]], current_state: dict[GameState, Any]
+    ) -> dict[GameState, Any]:
         """Select highest priority goal from available options.
 
         Parameters:
@@ -493,27 +500,29 @@ class GoalManager:
         scored_goals = []
 
         for goal in available_goals:
-            base_priority = goal.get('priority', 5)
-            goal_type = goal.get('type', 'unknown')
+            base_priority = goal.get("priority", 5)
+            goal_type = goal.get("type", "unknown")
 
             # Calculate context-sensitive priority adjustments
             priority_adjustments = 0
 
             # Survival goals get highest priority when HP is low
-            if goal_type in ['emergency_rest', 'health_recovery', 'survival']:
+            if goal_type in ["emergency_rest", "health_recovery", "survival"]:
                 priority_adjustments += self._calculate_survival_priority(current_state)
 
             # Progression goals priority based on character level
-            elif goal_type in ['level_up', 'skill_training']:
+            elif goal_type in ["level_up", "skill_training"]:
                 priority_adjustments += self._calculate_progression_priority(current_state)
 
             # Economic goals priority based on gold and inventory
-            elif goal_type in ['resource_gathering', 'trading', 'economic_optimization']:
+            elif goal_type in ["resource_gathering", "trading", "economic_optimization"]:
                 priority_adjustments += self._calculate_economic_priority(current_state)
 
             # Calculate feasibility score
             feasibility = self.evaluate_goal_feasibility(current_state, goal, simple=False)
-            feasibility_score = feasibility.get('confidence', 0.5) if isinstance(feasibility, dict) else (1.0 if feasibility else 0.1)
+            feasibility_score = (
+                feasibility.get("confidence", 0.5) if isinstance(feasibility, dict) else (1.0 if feasibility else 0.1)
+            )
 
             # Calculate estimated effort (inverse of efficiency)
             estimated_cost = self.estimate_goal_cost(goal, current_state)
@@ -543,14 +552,20 @@ class GoalManager:
         goal selection and preventing impossible planning attempts.
         """
         # Extract target state from goal
-        target_state = goal.get('target_state', goal)
+        target_state = goal.get("target_state", goal)
 
         # Basic feasibility checks
         for state_key, target_value in target_state.items():
             current_value = current_state.get(state_key, 0)
 
             # Check if goal is reasonable (not too far from current state)
-            if isinstance(target_value, int | float) and isinstance(current_value, int | float):
+            # Skip this check for boolean values (booleans are subclass of int in Python)
+            if (
+                isinstance(target_value, (int, float))
+                and isinstance(current_value, (int, float))
+                and not isinstance(target_value, bool)
+                and not isinstance(current_value, bool)
+            ):
                 if target_value > current_value * 10:  # Arbitrary threshold
                     return False
 
@@ -572,7 +587,7 @@ class GoalManager:
         """
         # Basic cost estimation based on state differences
         total_cost = 0
-        target_state = goal.get('target_state', goal)
+        target_state = goal.get("target_state", goal)
 
         for state_key, target_value in target_state.items():
             current_value = current_state.get(state_key, 0)
@@ -618,26 +633,27 @@ class GoalManager:
 
         # Critical HP - need immediate recovery (use boolean states the rest action provides)
         if current_hp <= max_hp * 0.2:  # 20% or less HP
-            goals.append({
-                'type': 'emergency_rest',
-                'priority': 10,
-                'target_state': {
-                    GameState.HP_LOW: False,
-                    GameState.HP_CRITICAL: False,
-                    GameState.SAFE_TO_FIGHT: True
+            goals.append(
+                {
+                    "type": "emergency_rest",
+                    "priority": 10,
+                    "target_state": {
+                        GameState.HP_LOW: False,
+                        GameState.HP_CRITICAL: False,
+                        GameState.SAFE_TO_FIGHT: True,
+                    },
                 }
-            })
+            )
 
         # Low HP - should rest soon
         elif current_hp <= max_hp * 0.5:  # 50% or less HP
-            goals.append({
-                'type': 'health_recovery',
-                'priority': 9,
-                'target_state': {
-                    GameState.HP_LOW: False,
-                    GameState.SAFE_TO_FIGHT: True
+            goals.append(
+                {
+                    "type": "health_recovery",
+                    "priority": 9,
+                    "target_state": {GameState.HP_LOW: False, GameState.SAFE_TO_FIGHT: True},
                 }
-            })
+            )
 
         return goals
 
@@ -658,14 +674,16 @@ class GoalManager:
         current_state.get(GameState.CHARACTER_LEVEL, 1)
 
         # Basic progression goal
-        goals.append({
-            'type': 'level_up',
-            'priority': 1,
-            'target_state': {
-                GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
-                GameState.CAN_GAIN_XP: True  # Boolean: Character can gain XP
+        goals.append(
+            {
+                "type": "level_up",
+                "priority": 1,
+                "target_state": {
+                    GameState.GAINED_XP: True,  # Boolean: XP was gained this cycle
+                    GameState.CAN_GAIN_XP: True,  # Boolean: Character can gain XP
+                },
             }
-        })
+        )
 
         return goals
 
@@ -692,47 +710,47 @@ class GoalManager:
         if inventory_full or inventory_space <= 2:
             if at_bank:
                 # If at bank, banking is the priority
-                goals.append({
-                    'type': 'banking',
-                    'priority': 9,
-                    'target_state': {
-                        GameState.INVENTORY_SPACE_AVAILABLE: 15,
-                        GameState.INVENTORY_FULL: False
-                    },
-                    'requirements_met': True
-                })
+                goals.append(
+                    {
+                        "type": "banking",
+                        "priority": 9,
+                        "target_state": {GameState.INVENTORY_SPACE_AVAILABLE: 15, GameState.INVENTORY_FULL: False},
+                        "requirements_met": True,
+                    }
+                )
             else:
                 # If not at bank, need to move or sell items
-                goals.append({
-                    'type': 'inventory_management',
-                    'priority': 8,
-                    'target_state': {
-                        GameState.INVENTORY_SPACE_AVAILABLE: 10,
-                        GameState.INVENTORY_FULL: False
-                    },
-                    'requirements_met': True
-                })
+                goals.append(
+                    {
+                        "type": "inventory_management",
+                        "priority": 8,
+                        "target_state": {GameState.INVENTORY_SPACE_AVAILABLE: 10, GameState.INVENTORY_FULL: False},
+                        "requirements_met": True,
+                    }
+                )
 
                 # Also add item selling as an option
-                goals.append({
-                    'type': 'item_selling',
-                    'priority': 7,
-                    'target_state': {
-                        GameState.CHARACTER_GOLD: current_gold + 500,
-                        GameState.INVENTORY_SPACE_AVAILABLE: 10
-                    },
-                    'requirements_met': True
-                })
+                goals.append(
+                    {
+                        "type": "item_selling",
+                        "priority": 7,
+                        "target_state": {
+                            GameState.CHARACTER_GOLD: current_gold + 500,
+                            GameState.INVENTORY_SPACE_AVAILABLE: 10,
+                        },
+                        "requirements_met": True,
+                    }
+                )
 
         # Economic goal: accumulate more gold (lower priority when inventory issues exist)
         base_priority = 3 if not (inventory_full or inventory_space <= 2) else 1
-        goals.append({
-            'type': 'resource_gathering',
-            'priority': base_priority,
-            'target_state': {
-                GameState.CHARACTER_GOLD: current_gold + 1000
+        goals.append(
+            {
+                "type": "resource_gathering",
+                "priority": base_priority,
+                "target_state": {GameState.CHARACTER_GOLD: current_gold + 1000},
             }
-        })
+        )
 
         return goals
 
@@ -799,27 +817,32 @@ class GoalManager:
         hp_ratio = current_hp / max_hp if max_hp > 0 else 1.0
 
         if hp_ratio <= 0.2:
-            updated_priorities['emergency_rest'] = 10
-            updated_priorities['health_recovery'] = 9
-            if 'survival' in updated_priorities:
-                updated_priorities['survival'] = max(updated_priorities['survival'] + 5, 10)
+            updated_priorities["emergency_rest"] = 10
+            updated_priorities["health_recovery"] = 9
+            if "survival" in updated_priorities:
+                updated_priorities["survival"] = max(updated_priorities["survival"] + 5, 10)
         elif hp_ratio <= 0.5:
-            updated_priorities['health_recovery'] = 8
-            if 'survival' in updated_priorities:
-                updated_priorities['survival'] = max(updated_priorities['survival'] + 2, 8)
+            updated_priorities["health_recovery"] = 8
+            if "survival" in updated_priorities:
+                updated_priorities["survival"] = max(updated_priorities["survival"] + 2, 8)
 
         # Adjust progression priorities based on level
         character_level = current_state.get(GameState.CHARACTER_LEVEL, 1)
         if character_level < 10:
-            updated_priorities['level_up'] = 6
-            updated_priorities['skill_training'] = 5
+            updated_priorities["level_up"] = 6
+            updated_priorities["skill_training"] = 5
         elif character_level < 30:
-            updated_priorities['level_up'] = 7
-            updated_priorities['skill_training'] = 4
+            updated_priorities["level_up"] = 7
+            updated_priorities["skill_training"] = 4
 
         return updated_priorities
 
-    async def _create_goap_planner(self, current_state: CharacterGameState, goal_state: dict[GameState, bool | int | float | str], character_name: str | None = None) -> 'Planner':
+    async def _create_goap_planner(
+        self,
+        current_state: CharacterGameState,
+        goal_state: dict[GameState, bool | int | float | str],
+        character_name: str | None = None,
+    ) -> "Planner":
         """Create GOAP planner instance with current state and goals."""
         self.logger.debug(f"Creating GOAP planner for character: {character_name}")
 
@@ -835,7 +858,9 @@ class GoalManager:
 
         # Action list should never be empty - if it is, that's a bug that needs to be fixed
         if not action_list.conditions:
-            raise RuntimeError(f"Action list is empty for character {character_name}. This indicates a bug in action generation - factories should always produce actions.")
+            raise RuntimeError(
+                f"Action list is empty for character {character_name}. This indicates a bug in action generation - factories should always produce actions."
+            )
 
         # Extract state keys for planner initialization
         all_keys = set(goap_current_state.keys()) | set(goap_goal_state.keys())
@@ -854,7 +879,9 @@ class GoalManager:
         print("DEBUG: GOAP planner created successfully")
         return planner
 
-    def get_available_goals(self, current_state: dict[GameState, Any], filters: dict[str, Any] | None = None) -> list[dict[GameState, Any]]:
+    def get_available_goals(
+        self, current_state: dict[GameState, Any], filters: dict[str, Any] | None = None
+    ) -> list[dict[GameState, Any]]:
         """Get all available goals with optional filtering.
 
         Parameters:
@@ -885,7 +912,7 @@ class GoalManager:
 
         # Add requirements_met field to all goals
         for goal in all_goals:
-            goal['requirements_met'] = self._check_goal_requirements(goal, current_state)
+            goal["requirements_met"] = self._check_goal_requirements(goal, current_state)
 
         # Apply filters if provided
         if filters:
@@ -893,13 +920,13 @@ class GoalManager:
             for goal in all_goals:
                 include_goal = True
                 for filter_key, filter_value in filters.items():
-                    if filter_key == 'type' and goal.get('type') != filter_value:
+                    if filter_key == "type" and goal.get("type") != filter_value:
                         include_goal = False
                         break
-                    elif filter_key == 'min_priority' and goal.get('priority', 0) < filter_value:
+                    elif filter_key == "min_priority" and goal.get("priority", 0) < filter_value:
                         include_goal = False
                         break
-                    elif filter_key == 'max_priority' and goal.get('priority', 999) > filter_value:
+                    elif filter_key == "max_priority" and goal.get("priority", 999) > filter_value:
                         include_goal = False
                         break
                 if include_goal:
@@ -910,22 +937,22 @@ class GoalManager:
 
     def _check_goal_requirements(self, goal: dict, current_state: dict[GameState, Any]) -> bool:
         """Check if character meets requirements to pursue this goal."""
-        goal_type = goal.get('type', '')
+        goal_type = goal.get("type", "")
 
         # Combat goals require ability to fight
-        if 'combat' in goal_type and not current_state.get(GameState.CAN_FIGHT, False):
+        if "combat" in goal_type and not current_state.get(GameState.CAN_FIGHT, False):
             return False
 
         # Gathering goals require ability to gather
-        if 'gather' in goal_type and not current_state.get(GameState.CAN_GATHER, False):
+        if "gather" in goal_type and not current_state.get(GameState.CAN_GATHER, False):
             return False
 
         # Crafting goals require ability to craft
-        if 'craft' in goal_type and not current_state.get(GameState.CAN_CRAFT, False):
+        if "craft" in goal_type and not current_state.get(GameState.CAN_CRAFT, False):
             return False
 
         # Check any explicit requirements in the goal
-        requirements = goal.get('requirements', {})
+        requirements = goal.get("requirements", {})
         for req_key, req_value in requirements.items():
             current_value = current_state.get(req_key)
             if current_value != req_value:
@@ -933,7 +960,9 @@ class GoalManager:
 
         return True
 
-    def evaluate_goal_feasibility(self, current_state: dict[GameState, Any], goal: dict[GameState, Any], simple: bool = True) -> bool | dict[str, Any]:
+    def evaluate_goal_feasibility(
+        self, current_state: dict[GameState, Any], goal: dict[GameState, Any], simple: bool = True
+    ) -> bool | dict[str, Any]:
         """Evaluate whether a goal is feasible and estimate effort.
 
         Parameters:
@@ -947,8 +976,8 @@ class GoalManager:
         action availability, and estimated completion time to enable intelligent
         goal selection and planning optimization.
         """
-        target_state = goal.get('target_state', {})
-        requirements = goal.get('requirements', {})
+        target_state = goal.get("target_state", {})
+        requirements = goal.get("requirements", {})
 
         # Check requirements first
         for req_key, req_value in requirements.items():
@@ -992,16 +1021,16 @@ class GoalManager:
 
         # For detailed analysis, return full report
         feasibility = {
-            'feasible': feasible,
-            'estimated_actions': estimated_actions,
-            'estimated_time': estimated_time,
-            'missing_requirements': missing_requirements,
-            'confidence': 1.0
+            "feasible": feasible,
+            "estimated_actions": estimated_actions,
+            "estimated_time": estimated_time,
+            "missing_requirements": missing_requirements,
+            "confidence": 1.0,
         }
 
         # Reduce confidence if many actions required
         if estimated_actions > 10:
-            feasibility['confidence'] = max(0.3, 1.0 - (estimated_actions - 10) * 0.1)
+            feasibility["confidence"] = max(0.3, 1.0 - (estimated_actions - 10) * 0.1)
 
         return feasibility
 
@@ -1122,7 +1151,9 @@ class GoalManager:
         else:  # Rich character, low economic priority
             return 1
 
-    def _adjust_priorities_based_on_history(self, priorities: dict[str, int], recent_actions: list[dict[str, Any]], current_state: dict[GameState, Any]) -> dict[str, int]:
+    def _adjust_priorities_based_on_history(
+        self, priorities: dict[str, int], recent_actions: list[dict[str, Any]], current_state: dict[GameState, Any]
+    ) -> dict[str, int]:
         """Adjust priorities based on recent action history and outcomes.
 
         Parameters:
@@ -1142,20 +1173,22 @@ class GoalManager:
         # Count recent action types
         action_counts = {}
         for action in recent_actions:
-            action_type = action.get('name', 'unknown')
+            action_type = action.get("name", "unknown")
             action_counts[action_type] = action_counts.get(action_type, 0) + 1
 
         # Reduce priority for over-used actions
         for action_type, count in action_counts.items():
             if count > 3:  # If same action repeated many times
-                if 'combat' in action_type.lower() and 'combat_training' in adjusted_priorities:
-                    adjusted_priorities['combat_training'] = max(1, adjusted_priorities['combat_training'] - 1)
-                elif 'gather' in action_type.lower() and 'resource_gathering' in adjusted_priorities:
-                    adjusted_priorities['resource_gathering'] = max(1, adjusted_priorities['resource_gathering'] - 1)
+                if "combat" in action_type.lower() and "combat_training" in adjusted_priorities:
+                    adjusted_priorities["combat_training"] = max(1, adjusted_priorities["combat_training"] - 1)
+                elif "gather" in action_type.lower() and "resource_gathering" in adjusted_priorities:
+                    adjusted_priorities["resource_gathering"] = max(1, adjusted_priorities["resource_gathering"] - 1)
 
         return adjusted_priorities
 
-    def _balance_goal_priorities(self, priorities: dict[str, int], current_state: dict[GameState, Any]) -> dict[str, int]:
+    def _balance_goal_priorities(
+        self, priorities: dict[str, int], current_state: dict[GameState, Any]
+    ) -> dict[str, int]:
         """Balance goal priorities to prevent single-goal focus.
 
         Parameters:
@@ -1189,7 +1222,7 @@ class GoalManager:
 
         return balanced_priorities
 
-    def convert_actions_for_goap(self, actions: list['BaseAction']) -> 'Action_List':
+    def convert_actions_for_goap(self, actions: list["BaseAction"]) -> "Action_List":
         """Convert BaseAction list to GOAP Action_List format.
 
         Parameters:
@@ -1216,26 +1249,22 @@ class GoalManager:
 
         return action_list
 
-    def _convert_actions_for_goap(self, actions: list['BaseAction']) -> 'Action_List':
+    def _convert_actions_for_goap(self, actions: list["BaseAction"]) -> "Action_List":
         """Alias for convert_actions_for_goap for backward compatibility with tests."""
         return self.convert_actions_for_goap(actions)
 
     # Enhanced methods for unified sub-goal architecture
 
-    def create_goal_from_sub_request(
-        self,
-        sub_goal_request: SubGoalRequest,
-        context: GoalFactoryContext
-    ) -> BaseGoal:
+    def create_goal_from_sub_request(self, sub_goal_request: SubGoalRequest, context: GoalFactoryContext) -> BaseGoal:
         """Factory method to convert SubGoalRequest to appropriate Goal instance.
-        
+
         Parameters:
             sub_goal_request: Pydantic model with sub-goal requirements
             context: GoalFactoryContext with character state, game data, and depth info
-            
+
         Return values:
             BaseGoal: Concrete goal instance that uses GOAP facilities
-            
+
         Raises:
             GoalFactoryError: If sub_goal_request.goal_type is not supported
             MaxDepthExceededError: If recursion depth exceeds maximum
@@ -1250,42 +1279,62 @@ class GoalManager:
 
         if sub_goal_request.goal_type == "move_to_location":
             return MovementGoal(
-                target_x=sub_goal_request.parameters["target_x"],
-                target_y=sub_goal_request.parameters["target_y"]
+                target_x=sub_goal_request.parameters["target_x"], target_y=sub_goal_request.parameters["target_y"]
             )
 
         elif sub_goal_request.goal_type == "reach_hp_threshold":
-            return RestGoal(
-                min_hp_percentage=sub_goal_request.parameters.get("min_hp_percentage", 0.8)
-            )
+            return RestGoal(min_hp_percentage=sub_goal_request.parameters.get("min_hp_percentage", 0.8))
 
         elif sub_goal_request.goal_type == "obtain_item":
-            return GatheringGoal(
-                target_material_code=sub_goal_request.parameters["item_code"]
-            )
+            return GatheringGoal(target_material_code=sub_goal_request.parameters["item_code"])
 
         elif sub_goal_request.goal_type == "equip_item_type":
             return EquipmentGoal(
                 target_slot=sub_goal_request.parameters["item_type"],
-                max_item_level=sub_goal_request.parameters["max_level"]
+                max_item_level=sub_goal_request.parameters["max_level"],
             )
+
+        # New crafting sub-goal types
+        elif sub_goal_request.goal_type == "gather_material":
+            from .goals.material_gathering_goal import MaterialGatheringGoal
+
+            return MaterialGatheringGoal(
+                material_code=sub_goal_request.parameters["material_code"],
+                quantity=sub_goal_request.parameters["quantity"],
+            )
+
+        elif sub_goal_request.goal_type == "move_to_workshop":
+            from .goals.workshop_movement_goal import WorkshopMovementGoal
+
+            return WorkshopMovementGoal(
+                workshop_x=sub_goal_request.parameters["workshop_x"],
+                workshop_y=sub_goal_request.parameters["workshop_y"],
+                workshop_type=sub_goal_request.parameters["workshop_type"],
+            )
+
+        elif sub_goal_request.goal_type == "execute_craft":
+            from .goals.craft_execution_goal import CraftExecutionGoal
+
+            return CraftExecutionGoal(
+                recipe_code=sub_goal_request.parameters["recipe_code"],
+                workshop_type=sub_goal_request.parameters["workshop_type"],
+            )
+
         else:
             raise GoalFactoryError(sub_goal_request.goal_type, f"Unknown sub-goal type: {sub_goal_request.goal_type}")
 
     async def plan_to_target_state(
-        self,
-        current_state: CharacterGameState,
-        target_state: GOAPTargetState
+        self, current_state: CharacterGameState, target_state: GOAPTargetState
     ) -> GOAPActionPlan:
         """Plan actions to reach target state using GOAP with state validation.
-        
+
         Parameters:
             current_state: Pydantic model with current character state
             target_state: Pydantic model with target state requirements
-            
+
         Return values:
             GOAPActionPlan: Pydantic model with ordered action sequence
-            
+
         Raises:
             PlanningError: If no valid plan can be found
             NoValidGoalError: If GOAP planner could not find valid action sequence
@@ -1317,11 +1366,11 @@ class GoalManager:
         for action in raw_plan:
             # Convert action dictionary to GOAPAction
             goap_action = {
-                "name": action.get('name', 'unknown_action'),
-                "action_type": action.get('action_type', 'UnknownAction'),
-                "parameters": action.get('parameters', {}),
-                "cost": action.get('cost', 1),
-                "estimated_duration": action.get('estimated_duration', 1.0)
+                "name": action.get("name", "unknown_action"),
+                "action_type": action.get("action_type", "UnknownAction"),
+                "parameters": action.get("parameters", {}),
+                "cost": action.get("cost", 1),
+                "estimated_duration": action.get("estimated_duration", 1.0),
             }
 
             # Create GOAPAction from the action
@@ -1334,5 +1383,5 @@ class GoalManager:
             actions=goap_actions,
             total_cost=total_cost,
             estimated_duration=estimated_duration,
-            plan_id=f"plan_{current_state.name}_{time.time()}"
+            plan_id=f"plan_{current_state.name}_{time.time()}",
         )

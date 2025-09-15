@@ -11,7 +11,7 @@ and emergency recovery within the modular action system.
 
 from typing import Any, Optional
 
-from ...game_data.api_client import APIClientWrapper
+from src.game_data.api_client_wrapper import APIClientWrapper
 from ..state.action_result import ActionResult, GameState
 from ..state.character_game_state import CharacterGameState
 from .base_action import BaseAction
@@ -118,7 +118,6 @@ class RestAction(BaseAction):
             GameState.CAN_USE_ITEM: False,
             GameState.CAN_BANK: False,
         }
-
 
     def needs_rest(self, current_state: dict[GameState, Any]) -> bool:
         """Check if character HP is below threshold.
@@ -237,20 +236,20 @@ class RestAction(BaseAction):
         self,
         character_name: str,
         current_state: dict[GameState, Any],
-        api_client: 'APIClientWrapper',
-        cooldown_manager: Optional['CooldownManager']
+        api_client: "APIClientWrapper",
+        cooldown_manager: Optional["CooldownManager"],
     ) -> ActionResult:
         """Execute rest via API client.
-        
+
         Parameters:
             character_name: Name of the character to rest
             current_state: Dictionary with GameState enum keys and current values
             api_client: API client for making the rest call
             cooldown_manager: Optional cooldown manager for tracking cooldowns
-            
+
         Return values:
             ActionResult with actual rest result from API
-            
+
         This method makes the actual API call to rest and handles
         the response, updating cooldowns and returning the real state changes.
         """
@@ -259,7 +258,7 @@ class RestAction(BaseAction):
 
         if rest_result:
             # Update cooldown if manager provided and cooldown data exists
-            if cooldown_manager and hasattr(rest_result, 'cooldown'):
+            if cooldown_manager and hasattr(rest_result, "cooldown"):
                 cooldown_manager.update_cooldown(character_name, rest_result.cooldown)
 
             # Build state changes based on successful rest
@@ -276,7 +275,7 @@ class RestAction(BaseAction):
             }
 
             # Update character state from API response
-            if hasattr(rest_result, 'character'):
+            if hasattr(rest_result, "character"):
                 character = rest_result.character
                 # Use comprehensive state extraction
                 character_states = self._extract_character_state(character)
@@ -284,26 +283,20 @@ class RestAction(BaseAction):
 
             # Get cooldown duration
             cooldown_seconds = 0
-            if hasattr(rest_result, 'cooldown'):
+            if hasattr(rest_result, "cooldown"):
                 cooldown_seconds = rest_result.cooldown.total_seconds
 
             # Build success message
             message = "Rest successful"
-            if hasattr(rest_result, 'character'):
+            if hasattr(rest_result, "character"):
                 message = f"Rest successful: HP restored to {rest_result.character.hp}/{rest_result.character.max_hp}"
 
             return ActionResult(
-                success=True,
-                message=message,
-                state_changes=state_changes,
-                cooldown_seconds=cooldown_seconds
+                success=True, message=message, state_changes=state_changes, cooldown_seconds=cooldown_seconds
             )
         else:
             return ActionResult(
-                success=False,
-                message="Rest failed: No response from API",
-                state_changes={},
-                cooldown_seconds=0
+                success=False, message="Rest failed: No response from API", state_changes={}, cooldown_seconds=0
             )
 
     def can_execute(self, current_state: CharacterGameState) -> bool:
@@ -316,9 +309,7 @@ class RestAction(BaseAction):
             Boolean indicating whether all preconditions are satisfied
         """
         preconditions = self.get_preconditions()
-        return all(
-            current_state.get(key) == value for key, value in preconditions.items()
-        )
+        return all(current_state.get(key) == value for key, value in preconditions.items())
 
     def validate_preconditions(self) -> bool:
         """Validate that all preconditions use valid GameState enum keys.

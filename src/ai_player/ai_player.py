@@ -57,15 +57,45 @@ class AIPlayer:
         self._stop_requested = False
         self._current_goal: GOAPTargetState | None = None
         self._current_plan: GOAPActionPlan | None = None
+        self._specific_goal_text: str | None = None  # CLI-specified goal
         self._execution_stats = {
             "actions_executed": 0,
             "successful_actions": 0,
             "failed_actions": 0,
             "replanning_count": 0,
-            "emergency_interventions": 0
+            "emergency_interventions": 0,
         }
 
         self.logger.info(f"AIPlayer initialized for character: {character_name}")
+
+    def set_specific_goal(self, goal_text: str) -> None:
+        """Set a specific goal from CLI parameter."""
+        self._specific_goal_text = goal_text
+        self.logger.info(f"Specific goal set: {goal_text}")
+
+    async def _create_goal_from_text(self, current_state, goal_text: str) -> GOAPTargetState:
+        """Create a GOAP target state from text goal like 'gain xp'."""
+        from src.ai_player.state.game_state import GameState
+
+        goal_text_lower = goal_text.lower()
+
+        if "gain xp" in goal_text_lower or "xp" in goal_text_lower:
+            # Simple XP gain goal
+            return GOAPTargetState(target_states={GameState.GAINED_XP: True}, priority=1, timeout_seconds=60)
+        elif "combat" in goal_text_lower or "fight" in goal_text_lower:
+            # Combat goal
+            return GOAPTargetState(
+                target_states={GameState.GAINED_XP: True, GameState.CAN_FIGHT: True}, priority=1, timeout_seconds=60
+            )
+        elif "gather" in goal_text_lower:
+            # Gathering goal
+            return GOAPTargetState(
+                target_states={GameState.GAINED_XP: True, GameState.CAN_GATHER: True}, priority=1, timeout_seconds=60
+            )
+        else:
+            # Default to XP gain for any unrecognized goal
+            self.logger.warning(f"Unknown goal '{goal_text}', defaulting to XP gain")
+            return GOAPTargetState(target_states={GameState.GAINED_XP: True}, priority=1, timeout_seconds=60)
 
     async def start(self) -> None:
         """Start the AI player main game loop.
@@ -186,10 +216,16 @@ class AIPlayer:
                     break
 
                 self.logger.debug("Calling select_next_goal")
-                goal = await self.goal_manager.select_next_goal(current_state)
-                self.logger.debug(f"Goal selected: {goal}")
+
+                # Use specific goal if provided, otherwise use automatic selection
+                if self._specific_goal_text:
+                    goal = await self._create_goal_from_text(current_state, self._specific_goal_text)
+                    self.logger.info(f"Using specific goal: {self._specific_goal_text}")
+                else:
+                    goal = await self.goal_manager.select_next_goal(current_state)
+                self.logger.info(f"Goal selected: {goal}")
                 self.logger.debug(f"Goal type: {type(goal)}")
-                if hasattr(goal, 'target_states'):
+                if hasattr(goal, "target_states"):
                     self.logger.debug(f"Goal has target states: {bool(goal.target_states)}")
                 else:
                     self.logger.debug(f"Goal is dict-like: {goal}")
@@ -197,7 +233,9 @@ class AIPlayer:
 
                 # Plan actions to achieve goal
                 if not goal:
-                    raise RuntimeError(f"Goal manager returned empty goal for character {self.character_name}. This is a bug in goal selection logic.")
+                    raise RuntimeError(
+                        f"Goal manager returned empty goal for character {self.character_name}. This is a bug in goal selection logic."
+                    )
 
                 plan = await self.plan_actions(current_state, goal)
                 self._execution_stats["replanning_count"] += 1
@@ -228,9 +266,7 @@ class AIPlayer:
 
         self.logger.info("Main game loop ended")
 
-    async def plan_actions(
-        self, current_state: CharacterGameState, goal: GOAPTargetState
-    ) -> GOAPActionPlan:
+    async def plan_actions(self, current_state: CharacterGameState, goal: GOAPTargetState) -> GOAPActionPlan:
         """Generate action sequence using GOAP planner.
 
         Parameters:
@@ -256,9 +292,7 @@ class AIPlayer:
         for state, value in goal.target_states.items():
             goal_state_dict[state] = value
 
-        plan = await self.goal_manager.plan_with_cooldown_awareness(
-            self.character_name, current_state, goal_state_dict
-        )
+        plan = await self.goal_manager.plan_with_cooldown_awareness(self.character_name, current_state, goal_state_dict)
         self.logger.debug(f"Plan result: {plan}")
         self.logger.debug(f"Generated cooldown-aware plan: {plan}")
         return plan
@@ -292,11 +326,7 @@ class AIPlayer:
             game_data = await self.goal_manager.get_game_data()
 
             # Convert GOAPActionPlan to list of BaseActions
-            base_actions = plan.to_base_actions(
-                self.action_registry,
-                current_state,
-                game_data
-            )
+            base_actions = plan.to_base_actions(self.action_registry, current_state, game_data)
 
             success = await self.action_executor.execute_plan(base_actions, self.character_name)
             if success:
@@ -378,9 +408,7 @@ class AIPlayer:
             self._current_plan = None
 
             # Set emergency goal for HP recovery
-            self._current_goal = GOAPTargetState(target_states={
-                GameState.HP_CURRENT: current_state.max_hp
-            })
+            self._current_goal = GOAPTargetState(target_states={GameState.HP_CURRENT: current_state.max_hp})
 
             emergency_handled = True
             self._execution_stats["emergency_interventions"] += 1
@@ -397,9 +425,11 @@ class AIPlayer:
                 self._current_plan = None
 
                 # Set recovery goal
-                self._current_goal = GOAPTargetState(target_states={
-                    GameState.HP_CURRENT: int(hp_max * 0.8)  # Recover to 80%
-                })
+                self._current_goal = GOAPTargetState(
+                    target_states={
+                        GameState.HP_CURRENT: int(hp_max * 0.8)  # Recover to 80%
+                    }
+                )
 
                 emergency_handled = True
                 self._execution_stats["emergency_interventions"] += 1
@@ -409,10 +439,16 @@ class AIPlayer:
             if not current_state.cooldown_ready:
                 # Character is on cooldown, this is normal
                 pass
-            elif not any([
-                current_state.can_fight, current_state.can_gather, current_state.can_craft,
-                current_state.can_trade, current_state.can_move, current_state.can_rest
-            ]):
+            elif not any(
+                [
+                    current_state.can_fight,
+                    current_state.can_gather,
+                    current_state.can_craft,
+                    current_state.can_trade,
+                    current_state.can_move,
+                    current_state.can_rest,
+                ]
+            ):
                 self.logger.warning("EMERGENCY: Character appears to be in invalid state (no actions available)")
 
                 # Force state refresh
@@ -450,7 +486,7 @@ class AIPlayer:
             "has_current_plan": self._current_plan is not None,
             "plan_length": len(self._current_plan.actions) if self._current_plan else 0,
             "execution_stats": self._execution_stats.copy(),
-            "dependencies_initialized": self._check_dependencies()
+            "dependencies_initialized": self._check_dependencies(),
         }
 
         # Add current state if available
@@ -463,9 +499,9 @@ class AIPlayer:
                         "level": cached_state.get(GameState.CHARACTER_LEVEL),
                         "hp": f"{cached_state.get(GameState.HP_CURRENT, 0)}/{cached_state.get(GameState.HP_MAX, 0)}",
                         "position": f"({cached_state.get(GameState.CURRENT_X, 0)}, "
-                                   f"{cached_state.get(GameState.CURRENT_Y, 0)})",
+                        f"{cached_state.get(GameState.CURRENT_Y, 0)})",
                         "cooldown_ready": cached_state.get(GameState.COOLDOWN_READY, False),
-                        "gold": cached_state.get(GameState.CHARACTER_GOLD, 0)
+                        "gold": cached_state.get(GameState.CHARACTER_GOLD, 0),
                     }
             except (AttributeError, TypeError) as e:
                 status["character_state_error"] = f"Component error: {e}"
@@ -547,8 +583,13 @@ class AIPlayer:
 
         return True
 
-    def initialize_dependencies(self, state_manager: 'StateManager', goal_manager: 'GoalManager',
-                              action_executor: 'ActionExecutor', action_registry: 'ActionRegistry') -> None:
+    def initialize_dependencies(
+        self,
+        state_manager: "StateManager",
+        goal_manager: "GoalManager",
+        action_executor: "ActionExecutor",
+        action_registry: "ActionRegistry",
+    ) -> None:
         """Initialize component dependencies.
 
         Parameters:

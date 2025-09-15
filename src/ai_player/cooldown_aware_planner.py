@@ -9,7 +9,7 @@ for realistic action sequencing.
 from datetime import datetime, timedelta
 from typing import Any
 
-from ..lib.goap import Action_List, Planner
+from src.lib.goap import Action_List, Planner
 
 
 class CooldownAwarePlanner(Planner):
@@ -100,12 +100,12 @@ class CooldownAwarePlanner(Planner):
 
         for action in plan:
             # Basic action execution time (varies by action type)
-            action_name = action.get('name', '')
-            if 'move' in action_name.lower():
+            action_name = action.get("name", "")
+            if "move" in action_name.lower():
                 total_seconds += 5  # Movement actions
-            elif 'fight' in action_name.lower():
+            elif "fight" in action_name.lower():
                 total_seconds += 10  # Combat actions
-            elif 'gather' in action_name.lower():
+            elif "gather" in action_name.lower():
                 total_seconds += 8  # Gathering actions
             else:
                 total_seconds += 3  # Default action time

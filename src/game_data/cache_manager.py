@@ -16,9 +16,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from ..lib.yaml_data import YamlData
-from ..lib.log import get_logger
-from .api_client import APIClientWrapper
+from src.lib.yaml_data import YamlData
+from src.lib.log import get_logger
+from .api_client_wrapper import APIClientWrapper
 from .character import Character
 from .game_data import GameData
 from .models import GameItem, GameMap, GameMonster, GameNPC, GameResource
@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 
 class CacheMetadata(BaseModel):
     """Metadata for cache management"""
+
     last_updated: datetime
     cache_version: str
     data_sources: dict[str, str]
@@ -102,7 +103,7 @@ class CacheManager:
         await self.get_all_npcs(force_refresh=True)
         return True
 
-    async def get_all_items(self, force_refresh: bool = False) -> list['GameItem']:
+    async def get_all_items(self, force_refresh: bool = False) -> list["GameItem"]:
         """Get all game items with caching.
 
         Parameters:
@@ -127,7 +128,7 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_monsters(self, force_refresh: bool = False) -> list['GameMonster']:
+    async def get_all_monsters(self, force_refresh: bool = False) -> list["GameMonster"]:
         """Get all monsters with caching.
 
         Parameters:
@@ -152,7 +153,7 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_maps(self, force_refresh: bool = False) -> list['GameMap']:
+    async def get_all_maps(self, force_refresh: bool = False) -> list["GameMap"]:
         """Get all maps with caching.
 
         Parameters:
@@ -197,7 +198,7 @@ class CacheManager:
         existing_coords = {(m.x, m.y) for m in current_maps}
 
         # Track coordinates that returned 404 (Resource not found) to avoid repeated requests
-        if not hasattr(self, '_invalid_coords'):
+        if not hasattr(self, "_invalid_coords"):
             self._invalid_coords = set()
 
         # Use a much smaller radius to reduce API load - just immediate neighbors
@@ -227,7 +228,7 @@ class CacheManager:
             self.save_cache_data("maps", enhanced_maps)
             self._update_metadata("maps")
 
-    async def get_all_resources(self, force_refresh: bool = False) -> list['GameResource']:
+    async def get_all_resources(self, force_refresh: bool = False) -> list["GameResource"]:
         """Get all resources with caching.
 
         Parameters:
@@ -252,7 +253,7 @@ class CacheManager:
         self._update_metadata(data_type)
         return fresh_data
 
-    async def get_all_npcs(self, force_refresh: bool = False) -> list['GameNPC']:
+    async def get_all_npcs(self, force_refresh: bool = False) -> list["GameNPC"]:
         """Get all NPCs with caching.
 
         Parameters:
@@ -296,9 +297,9 @@ class CacheManager:
         serialized_data = []
         for item in data:
             # All items must be internal Pydantic models with model_dump()
-            if hasattr(item, 'model_dump'):
+            if hasattr(item, "model_dump"):
                 # Use mode='json' to ensure datetime and enum serialization
-                serialized_data.append(item.model_dump(mode='json'))
+                serialized_data.append(item.model_dump(mode="json"))
             else:
                 raise ValueError(f"Cache data must be internal Pydantic models. Got {type(item)} for {data_type}")
 
@@ -384,11 +385,7 @@ class CacheManager:
         except OSError as e:
             logger.error(f"Failed to read cache metadata file {self.metadata_file}: {e}")
 
-        return CacheMetadata(
-            last_updated=datetime.now(),
-            cache_version="1.0.0",
-            data_sources={}
-        )
+        return CacheMetadata(last_updated=datetime.now(), cache_version="1.0.0", data_sources={})
 
     def clear_cache(self, data_type: str | None = None) -> None:
         """Clear specific or all cached data.
@@ -438,13 +435,15 @@ class CacheManager:
         raw_api_character = await self._api_client.get_character(character_name)
 
         # Convert to dictionary for caching
-        if hasattr(raw_api_character, 'model_dump'):
+        if hasattr(raw_api_character, "model_dump"):
             character_dict = raw_api_character.model_dump()
-        elif hasattr(raw_api_character, 'dict'):
+        elif hasattr(raw_api_character, "dict"):
             character_dict = raw_api_character.dict()
         else:
             # Fallback for plain objects
-            character_dict = raw_api_character.__dict__ if hasattr(raw_api_character, '__dict__') else dict(raw_api_character)
+            character_dict = (
+                raw_api_character.__dict__ if hasattr(raw_api_character, "__dict__") else dict(raw_api_character)
+            )
 
         cache_file = f"{self.cache_dir}/characters/{character_name}/data.yaml"
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -497,7 +496,7 @@ class CacheManager:
             return None
 
         for character in characters_data:
-            if character.get('name') == character_name:
+            if character.get("name") == character_name:
                 return character
         return None
 
@@ -519,7 +518,7 @@ class CacheManager:
             return False
 
         for i, character in enumerate(characters_data):
-            if character.get('name') == character_name:
+            if character.get("name") == character_name:
                 characters_data[i].update(character_data)
                 self.save_cache_data("characters", characters_data)
                 return True
@@ -550,10 +549,7 @@ class CacheManager:
 
     def get_cache_statistics(self) -> dict[str, Any]:
         """Get cache statistics."""
-        stats = {
-            "total_size": 0,
-            "data_types": {}
-        }
+        stats = {"total_size": 0, "data_types": {}}
 
         data_types = ["items", "monsters", "maps", "resources", "npcs"]
         for data_type in data_types:
@@ -561,15 +557,9 @@ class CacheManager:
             if os.path.exists(cache_file):
                 size = os.path.getsize(cache_file)
                 stats["total_size"] += size
-                stats["data_types"][data_type] = {
-                    "size": size,
-                    "exists": True
-                }
+                stats["data_types"][data_type] = {"size": size, "exists": True}
             else:
-                stats["data_types"][data_type] = {
-                    "size": 0,
-                    "exists": False
-                }
+                stats["data_types"][data_type] = {"size": 0, "exists": False}
 
         return stats
 
@@ -589,7 +579,7 @@ class CacheManager:
             "monsters": ["code", "name"],
             "maps": ["name"],
             "resources": ["code", "name"],
-            "npcs": ["code", "name"]
+            "npcs": ["code", "name"],
         }
 
         if data_type not in required_fields:
@@ -717,10 +707,4 @@ class CacheManager:
         npcs = await self.get_all_npcs()
         items = await self.get_all_items()
 
-        return GameData(
-            maps=maps,
-            monsters=monsters,
-            resources=resources,
-            npcs=npcs,
-            items=items
-        )
+        return GameData(maps=maps, monsters=monsters, resources=resources, npcs=npcs, items=items)

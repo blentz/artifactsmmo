@@ -27,7 +27,7 @@ class AIPlayerMockFactory:
         current_y: int = 0,
         hp_current: int = 100,
         hp_max: int = 100,
-        **kwargs
+        **kwargs,
     ) -> dict[GameState, Any]:
         """Create a mock game state dictionary with GameState enum keys"""
         state = {
@@ -36,23 +36,23 @@ class AIPlayerMockFactory:
             GameState.CURRENT_Y: current_y,
             GameState.HP_CURRENT: hp_current,
             GameState.HP_MAX: hp_max,
-            GameState.CHARACTER_XP: kwargs.get('character_xp', character_level * 250),
-            GameState.CHARACTER_GOLD: kwargs.get('character_gold', character_level * 100),
-            GameState.MINING_LEVEL: kwargs.get('mining_level', 1),
-            GameState.WOODCUTTING_LEVEL: kwargs.get('woodcutting_level', 1),
-            GameState.FISHING_LEVEL: kwargs.get('fishing_level', 1),
-            GameState.WEAPONCRAFTING_LEVEL: kwargs.get('weaponcrafting_level', 1),
-            GameState.GEARCRAFTING_LEVEL: kwargs.get('gearcrafting_level', 1),
-            GameState.JEWELRYCRAFTING_LEVEL: kwargs.get('jewelrycrafting_level', 1),
-            GameState.COOKING_LEVEL: kwargs.get('cooking_level', 1),
-            GameState.INVENTORY_SPACE_AVAILABLE: kwargs.get('inventory_space_available', 100),
-            GameState.INVENTORY_SPACE_USED: kwargs.get('inventory_space_used', 0),
-            GameState.RESOURCE_AVAILABLE: kwargs.get('resource_available', True),
+            GameState.CHARACTER_XP: kwargs.get("character_xp", character_level * 250),
+            GameState.CHARACTER_GOLD: kwargs.get("character_gold", character_level * 100),
+            GameState.MINING_LEVEL: kwargs.get("mining_level", 1),
+            GameState.WOODCUTTING_LEVEL: kwargs.get("woodcutting_level", 1),
+            GameState.FISHING_LEVEL: kwargs.get("fishing_level", 1),
+            GameState.WEAPONCRAFTING_LEVEL: kwargs.get("weaponcrafting_level", 1),
+            GameState.GEARCRAFTING_LEVEL: kwargs.get("gearcrafting_level", 1),
+            GameState.JEWELRYCRAFTING_LEVEL: kwargs.get("jewelrycrafting_level", 1),
+            GameState.COOKING_LEVEL: kwargs.get("cooking_level", 1),
+            GameState.INVENTORY_SPACE_AVAILABLE: kwargs.get("inventory_space_available", True),
+            GameState.INVENTORY_SPACE_USED: kwargs.get("inventory_space_used", 0),
+            GameState.RESOURCE_AVAILABLE: kwargs.get("resource_available", True),
         }
 
         # Add any additional state keys from kwargs
         for key, value in kwargs.items():
-            if key.startswith('character_') or key in ['current_map', 'available_monsters', 'available_resources']:
+            if key.startswith("character_") or key in ["current_map", "available_monsters", "available_resources"]:
                 continue
             if isinstance(key, GameState):
                 state[key] = value
@@ -65,7 +65,7 @@ class AIPlayerMockFactory:
         message: str = "Action completed successfully",
         data: dict[str, Any] | None = None,
         cooldown_seconds: int = 0,
-        **kwargs
+        **kwargs,
     ) -> ActionResult:
         """Create a mock ActionResult object"""
         result = Mock(spec=ActionResult)
@@ -73,9 +73,9 @@ class AIPlayerMockFactory:
         result.message = message
         result.data = data or {}
         result.cooldown_seconds = cooldown_seconds
-        result.timestamp = kwargs.get('timestamp', datetime.now())
-        result.action_type = kwargs.get('action_type', "test_action")
-        result.character_state = kwargs.get('character_state', {})
+        result.timestamp = kwargs.get("timestamp", datetime.now())
+        result.action_type = kwargs.get("action_type", "test_action")
+        result.character_state = kwargs.get("character_state", {})
         return result
 
     @staticmethod
@@ -84,7 +84,7 @@ class AIPlayerMockFactory:
         preconditions: dict[GameState, Any] | None = None,
         effects: dict[GameState, Any] | None = None,
         cost: int = 1,
-        **kwargs
+        **kwargs,
     ) -> Mock:
         """Create a mock BaseAction object"""
         action = Mock()
@@ -92,8 +92,8 @@ class AIPlayerMockFactory:
         action.preconditions = preconditions or {}
         action.effects = effects or {}
         action.cost = cost
-        action.priority = kwargs.get('priority', 1)
-        action.cooldown = kwargs.get('cooldown', 0)
+        action.priority = kwargs.get("priority", 1)
+        action.cooldown = kwargs.get("cooldown", 0)
         action.is_valid = Mock(return_value=True)
         action.execute = AsyncMock(return_value=AIPlayerMockFactory.create_action_result_mock())
         action.get_preconditions = Mock(return_value=action.preconditions)
@@ -103,10 +103,7 @@ class AIPlayerMockFactory:
 
     @staticmethod
     def create_goal_mock(
-        name: str = "test_goal",
-        target_state: dict[GameState, Any] | None = None,
-        priority: int = 1,
-        **kwargs
+        name: str = "test_goal", target_state: dict[GameState, Any] | None = None, priority: int = 1, **kwargs
     ) -> Mock:
         """Create a mock Goal object"""
         goal = Mock()
@@ -116,20 +113,16 @@ class AIPlayerMockFactory:
         goal.is_achievable = Mock(return_value=True)
         goal.is_achieved = Mock(return_value=False)
         goal.get_distance_to_goal = Mock(return_value=1)
-        goal.description = kwargs.get('description', f"Goal: {name}")
+        goal.description = kwargs.get("description", f"Goal: {name}")
         return goal
 
     @staticmethod
-    def create_plan_mock(
-        actions: list[Mock] | None = None,
-        cost: int = 1,
-        **kwargs
-    ) -> Mock:
+    def create_plan_mock(actions: list[Mock] | None = None, cost: int = 1, **kwargs) -> Mock:
         """Create a mock GOAP plan object"""
         plan = Mock()
         plan.actions = actions if actions is not None else [AIPlayerMockFactory.create_base_action_mock()]
         plan.total_cost = cost
-        plan.estimated_time = kwargs.get('estimated_time', 10.0)
+        plan.estimated_time = kwargs.get("estimated_time", 10.0)
         plan.is_valid = Mock(return_value=True)
         plan.get_next_action = Mock(return_value=plan.actions[0] if plan.actions else None)
         return plan
@@ -160,9 +153,7 @@ class AIPlayerMockFactory:
     def create_action_executor_mock() -> Mock:
         """Create a mock ActionExecutor object"""
         action_executor = Mock()
-        action_executor.execute_action = AsyncMock(
-            return_value=AIPlayerMockFactory.create_action_result_mock()
-        )
+        action_executor.execute_action = AsyncMock(return_value=AIPlayerMockFactory.create_action_result_mock())
         action_executor.validate_action = Mock(return_value=True)
         action_executor.get_action_cooldown = Mock(return_value=0)
         return action_executor
@@ -188,20 +179,14 @@ class AIPlayerTestAssertions:
     """Assertion helpers specific to AI Player testing"""
 
     @staticmethod
-    def assert_game_state_keys(
-        state: dict[GameState, Any],
-        expected_keys: list[GameState]
-    ):
+    def assert_game_state_keys(state: dict[GameState, Any], expected_keys: list[GameState]):
         """Assert that game state contains expected GameState enum keys"""
         for key in expected_keys:
             assert key in state, f"GameState key {key} not found in state"
             assert isinstance(key, GameState), f"Key {key} is not a GameState enum"
 
     @staticmethod
-    def assert_action_result_success(
-        result: ActionResult,
-        expected_message: str | None = None
-    ):
+    def assert_action_result_success(result: ActionResult, expected_message: str | None = None):
         """Assert that an ActionResult indicates success"""
         assert result.success, f"Action failed: {result.message}"
         if expected_message:
@@ -210,54 +195,35 @@ class AIPlayerTestAssertions:
             )
 
     @staticmethod
-    def assert_action_result_failure(
-        result: ActionResult,
-        expected_error: str | None = None
-    ):
+    def assert_action_result_failure(result: ActionResult, expected_error: str | None = None):
         """Assert that an ActionResult indicates failure"""
         assert not result.success, f"Expected action failure but got success: {result.message}"
         if expected_error:
-            assert expected_error in result.message, (
-                f"Expected error '{expected_error}' not in '{result.message}'"
-            )
+            assert expected_error in result.message, f"Expected error '{expected_error}' not in '{result.message}'"
 
     @staticmethod
-    def assert_plan_validity(
-        plan: Mock,
-        min_actions: int = 1,
-        max_cost: int | None = None
-    ):
+    def assert_plan_validity(plan: Mock, min_actions: int = 1, max_cost: int | None = None):
         """Assert that a GOAP plan is valid and meets criteria"""
         assert plan.is_valid(), "Plan is not valid"
         assert len(plan.actions) >= min_actions, (
             f"Plan has {len(plan.actions)} actions, expected at least {min_actions}"
         )
         if max_cost is not None:
-            assert plan.total_cost <= max_cost, (
-                f"Plan cost {plan.total_cost} exceeds maximum {max_cost}"
-            )
+            assert plan.total_cost <= max_cost, f"Plan cost {plan.total_cost} exceeds maximum {max_cost}"
 
     @staticmethod
-    def assert_goal_state_achievable(
-        goal: Mock,
-        current_state: dict[GameState, Any]
-    ):
+    def assert_goal_state_achievable(goal: Mock, current_state: dict[GameState, Any]):
         """Assert that a goal is achievable from current state"""
         assert goal.is_achievable(), f"Goal {goal.name} is not achievable"
         distance = goal.get_distance_to_goal()
         assert distance >= 0, f"Goal distance {distance} should be non-negative"
 
     @staticmethod
-    def assert_action_preconditions_met(
-        action: Mock,
-        current_state: dict[GameState, Any]
-    ):
+    def assert_action_preconditions_met(action: Mock, current_state: dict[GameState, Any]):
         """Assert that action preconditions are met by current state"""
         preconditions = action.get_preconditions()
         for state_key, required_value in preconditions.items():
-            assert state_key in current_state, (
-                f"State missing required key {state_key} for action {action.name}"
-            )
+            assert state_key in current_state, f"State missing required key {state_key} for action {action.name}"
             actual_value = current_state[state_key]
             assert actual_value >= required_value, (
                 f"State {state_key} value {actual_value} does not meet "
@@ -270,9 +236,7 @@ class AIPlayerTestHelpers:
 
     @staticmethod
     def create_progression_scenario(
-        start_level: int = 1,
-        target_level: int = 2,
-        steps: int = 5
+        start_level: int = 1, target_level: int = 2, steps: int = 5
     ) -> list[dict[GameState, Any]]:
         """Create a progression scenario with multiple game states"""
         states = []
@@ -283,45 +247,31 @@ class AIPlayerTestHelpers:
             state = AIPlayerMockFactory.create_game_state_mock(
                 character_level=int(current_level),
                 character_xp=int(current_level * 250),
-                character_gold=int(current_level * 100)
+                character_gold=int(current_level * 100),
             )
             states.append(state)
 
         return states
 
     @staticmethod
-    def create_combat_scenario(
-        player_hp: int = 100,
-        monster_hp: int = 50,
-        player_damage: int = 20
-    ) -> dict[str, Any]:
+    def create_combat_scenario(player_hp: int = 100, monster_hp: int = 50, player_damage: int = 20) -> dict[str, Any]:
         """Create a combat scenario with player and monster stats"""
         return {
-            'player_state': AIPlayerMockFactory.create_game_state_mock(
-                hp_current=player_hp,
-                hp_max=100
-            ),
-            'monster': {
-                'hp': monster_hp,
-                'max_hp': monster_hp,
-                'damage': 15,
-                'level': 1
-            },
-            'expected_damage': player_damage,
-            'estimated_turns': max(1, monster_hp // player_damage)
+            "player_state": AIPlayerMockFactory.create_game_state_mock(hp_current=player_hp, hp_max=100),
+            "monster": {"hp": monster_hp, "max_hp": monster_hp, "damage": 15, "level": 1},
+            "expected_damage": player_damage,
+            "estimated_turns": max(1, monster_hp // player_damage),
         }
 
     @staticmethod
     def create_gathering_scenario(
-        resource_type: str = "iron_ore",
-        skill_level: int = 1,
-        required_level: int = 1
+        resource_type: str = "iron_ore", skill_level: int = 1, required_level: int = 1
     ) -> dict[str, Any]:
         """Create a gathering scenario with resource and skill requirements"""
         skill_map = {
-            'iron_ore': GameState.MINING_LEVEL,
-            'wood': GameState.WOODCUTTING_LEVEL,
-            'fish': GameState.FISHING_LEVEL
+            "iron_ore": GameState.MINING_LEVEL,
+            "wood": GameState.WOODCUTTING_LEVEL,
+            "fish": GameState.FISHING_LEVEL,
         }
 
         state = AIPlayerMockFactory.create_game_state_mock()
@@ -329,21 +279,19 @@ class AIPlayerTestHelpers:
         state[skill_key] = skill_level
 
         return {
-            'player_state': state,
-            'resource': {
-                'type': resource_type,
-                'skill_required': skill_key,
-                'level_required': required_level,
-                'location': {'x': 0, 'y': 0}
+            "player_state": state,
+            "resource": {
+                "type": resource_type,
+                "skill_required": skill_key,
+                "level_required": required_level,
+                "location": {"x": 0, "y": 0},
             },
-            'can_gather': skill_level >= required_level
+            "can_gather": skill_level >= required_level,
         }
 
     @staticmethod
     async def simulate_action_execution(
-        action: Mock,
-        state: dict[GameState, Any],
-        expected_result: bool = True
+        action: Mock, state: dict[GameState, Any], expected_result: bool = True
     ) -> ActionResult:
         """Simulate executing an action and return result"""
         if action.is_valid(state):
@@ -351,16 +299,10 @@ class AIPlayerTestHelpers:
             result.success = expected_result
             return result
         else:
-            return AIPlayerMockFactory.create_action_result_mock(
-                success=False,
-                message="Action preconditions not met"
-            )
+            return AIPlayerMockFactory.create_action_result_mock(success=False, message="Action preconditions not met")
 
     @staticmethod
-    def validate_action_chain(
-        actions: list[Mock],
-        initial_state: dict[GameState, Any]
-    ) -> bool:
+    def validate_action_chain(actions: list[Mock], initial_state: dict[GameState, Any]) -> bool:
         """Validate that a chain of actions can be executed sequentially"""
         current_state = initial_state.copy()
 

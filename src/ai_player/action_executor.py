@@ -15,9 +15,9 @@ import random
 import time
 from typing import Any
 
-from ..game_data.api_client_wrapper import APIClientWrapper
-from ..game_data.cache_manager import CacheManager
-from ..game_data.cooldown_manager import CooldownManager
+from src.game_data.api_client_wrapper import APIClientWrapper
+from src.game_data.cache_manager import CacheManager
+from src.game_data.cooldown_manager import CooldownManager
 from .actions import get_global_registry
 from .actions.base_action import BaseAction
 from .exceptions import MaxDepthExceededError, NoValidGoalError, RecursiveSubGoalError, StateConsistencyError
@@ -38,7 +38,7 @@ class ActionExecutor:
         cache_manager: CacheManager,
         goal_manager: GoalManager = None,
         state_manager: StateManager = None,
-        max_subgoal_depth: int = 10
+        max_subgoal_depth: int = 10,
     ):
         """Initialize ActionExecutor with API client and unified sub-goal support.
 
@@ -98,7 +98,7 @@ class ActionExecutor:
                 success=False,
                 message=f"Action {action.name} preconditions not met",
                 state_changes={},
-                cooldown_seconds=0
+                cooldown_seconds=0,
             )
 
         # Execute the action with retry logic
@@ -109,10 +109,7 @@ class ActionExecutor:
 
             # Pass API client and cooldown manager to action
             result = await action.execute(
-                character_name,
-                typed_state,
-                api_client=self.api_client,
-                cooldown_manager=self.cooldown_manager
+                character_name, typed_state, api_client=self.api_client, cooldown_manager=self.cooldown_manager
             )
 
             # Process and validate the result
@@ -128,7 +125,7 @@ class ActionExecutor:
                         success=False,
                         message=f"Action {action.name} execution verification failed",
                         state_changes={},
-                        cooldown_seconds=0
+                        cooldown_seconds=0,
                     )
             else:
                 # Handle failed execution - check if it's a cooldown error
@@ -141,7 +138,6 @@ class ActionExecutor:
                     continue
                 else:
                     return result
-
 
     async def execute_plan(self, plan: list[BaseAction], character_name: str) -> bool:
         """Execute entire action plan with state updates.
@@ -182,7 +178,7 @@ class ActionExecutor:
 
         self.logger.info(f"ActionExecutor: Starting for loop with {len(plan)} actions")
         for i, action in enumerate(plan):
-            self.logger.info(f"ActionExecutor: Processing plan step {i+1}: {action.name}")
+            self.logger.info(f"ActionExecutor: Processing plan step {i + 1}: {action.name}")
             self.logger.debug(f"Executing action '{action.name}'...")
 
             # Execute all actions through the proper execute_action method
@@ -194,7 +190,7 @@ class ActionExecutor:
                 # Try emergency recovery for critical failures
                 if "critical" in result.message.lower() or "hp" in result.message.lower():
                     recovery_success = await self.emergency_recovery(
-                        character_name, f"Plan step {i+1} failed: {result.message}"
+                        character_name, f"Plan step {i + 1} failed: {result.message}"
                     )
                     if not recovery_success:
                         return False
@@ -215,7 +211,6 @@ class ActionExecutor:
                 await asyncio.sleep(min(result.cooldown_seconds, 30))  # Cap wait time
 
         return True
-
 
     async def wait_for_cooldown(self, character_name: str) -> None:
         """Wait for character cooldown to expire before action execution.
@@ -283,7 +278,7 @@ class ActionExecutor:
         type(error).__name__
 
         # Handle specific error types
-        if hasattr(error, 'status_code'):
+        if hasattr(error, "status_code"):
             status_code = error.status_code
 
             # Handle cooldown errors (499)
@@ -292,7 +287,7 @@ class ActionExecutor:
                     success=False,
                     message=f"Character {character_name} is on cooldown",
                     state_changes={GameState.COOLDOWN_READY: False},
-                    cooldown_seconds=5
+                    cooldown_seconds=5,
                 )
 
             # Handle "already at map location" (490) - treat as successful movement
@@ -301,18 +296,18 @@ class ActionExecutor:
                     success=True,
                     message=f"Character {character_name} already at target location",
                     state_changes={},  # No state changes needed - already at destination
-                    cooldown_seconds=0  # No cooldown for non-movement
+                    cooldown_seconds=0,  # No cooldown for non-movement
                 )
 
             # Handle rate limiting (429)
             elif status_code == 429:
-                retry_after = getattr(error, 'retry_after', 60)
+                retry_after = getattr(error, "retry_after", 60)
                 self.handle_rate_limit(retry_after)
                 return ActionResult(
                     success=False,
                     message=f"Rate limited, retry after {retry_after} seconds",
                     state_changes={},
-                    cooldown_seconds=retry_after
+                    cooldown_seconds=retry_after,
                 )
 
             # Handle insufficient resources/items (4xx errors)
@@ -321,7 +316,7 @@ class ActionExecutor:
                     success=False,
                     message=f"Action {action.name} failed: {error_message}",
                     state_changes={},
-                    cooldown_seconds=0
+                    cooldown_seconds=0,
                 )
 
         # Handle HP-related errors
@@ -333,7 +328,7 @@ class ActionExecutor:
                     success=False,
                     message=f"HP recovery initiated for {character_name}",
                     state_changes={GameState.HP_LOW: True},
-                    cooldown_seconds=0
+                    cooldown_seconds=0,
                 )
 
         # Handle connection/network errors
@@ -342,7 +337,7 @@ class ActionExecutor:
                 success=False,
                 message=f"Network error during {action.name}: {error_message}",
                 state_changes={},
-                cooldown_seconds=5  # Short delay before retry
+                cooldown_seconds=5,  # Short delay before retry
             )
 
         # For unhandled errors, return None to indicate no recovery possible
@@ -364,11 +359,11 @@ class ActionExecutor:
         """
         # Extract cooldown information
         cooldown_seconds = 0
-        if hasattr(api_response, 'cooldown'):
+        if hasattr(api_response, "cooldown"):
             cooldown_data = api_response.cooldown
-            if hasattr(cooldown_data, 'total_seconds'):
+            if hasattr(cooldown_data, "total_seconds"):
                 cooldown_seconds = cooldown_data.total_seconds
-            elif hasattr(cooldown_data, 'remaining_seconds'):
+            elif hasattr(cooldown_data, "remaining_seconds"):
                 cooldown_seconds = cooldown_data.remaining_seconds
 
         # Get expected effects from the action
@@ -382,7 +377,7 @@ class ActionExecutor:
             state_changes[state_key] = effect_value
 
         # Extract state changes from API response if character data is present
-        if hasattr(api_response, 'character') and api_response.character is not None:
+        if hasattr(api_response, "character") and api_response.character is not None:
             # Get map content for location context
             character = api_response.character
             game_map = await self.api_client.get_map(character.x, character.y)
@@ -399,21 +394,21 @@ class ActionExecutor:
                 state_changes[state_key] = value
 
         # Determine success status
-        success = not hasattr(api_response, 'error') and not hasattr(api_response, 'message') or \
-                 (hasattr(api_response, 'message') and 'failed' not in str(api_response.message).lower())
+        success = (
+            not hasattr(api_response, "error")
+            and not hasattr(api_response, "message")
+            or (hasattr(api_response, "message") and "failed" not in str(api_response.message).lower())
+        )
 
         # Create result message
         message = ""
-        if hasattr(api_response, 'message'):
+        if hasattr(api_response, "message"):
             message = str(api_response.message)
         else:
             message = f"Action {action.name} executed successfully"
 
         return ActionResult(
-            success=success,
-            message=message,
-            state_changes=state_changes,
-            cooldown_seconds=cooldown_seconds
+            success=success, message=message, state_changes=state_changes, cooldown_seconds=cooldown_seconds
         )
 
     async def emergency_recovery(self, character_name: str, error_context: str) -> bool:
@@ -503,15 +498,15 @@ class ActionExecutor:
             cooldown_time = 0.0
             action_name = action.name.lower()
 
-            if 'move' in action_name:
+            if "move" in action_name:
                 cooldown_time = 5.0
-            elif 'fight' in action_name or 'combat' in action_name:
+            elif "fight" in action_name or "combat" in action_name:
                 cooldown_time = 10.0
-            elif 'gather' in action_name or 'mine' in action_name or 'fish' in action_name:
+            elif "gather" in action_name or "mine" in action_name or "fish" in action_name:
                 cooldown_time = 8.0
-            elif 'craft' in action_name:
+            elif "craft" in action_name:
                 cooldown_time = 15.0
-            elif 'rest' in action_name:
+            elif "rest" in action_name:
                 cooldown_time = 3.0
             else:
                 cooldown_time = 5.0  # Default
@@ -617,7 +612,7 @@ class ActionExecutor:
                 success=False,
                 message=f"Safe execution failed: {action.name} preconditions not met",
                 state_changes={},
-                cooldown_seconds=0
+                cooldown_seconds=0,
             )
 
         # Enhanced execution with extended retry logic
@@ -641,7 +636,7 @@ class ActionExecutor:
                             success=False,
                             message=f"Safe execution: {action.name} verification failed after {max_safe_attempts}",
                             state_changes={},
-                            cooldown_seconds=0
+                            cooldown_seconds=0,
                         )
             else:
                 # Action failed, try emergency recovery if it's a critical failure
@@ -658,27 +653,22 @@ class ActionExecutor:
                 else:
                     return result
 
-
     # Enhanced methods for unified sub-goal architecture
 
     async def execute_action_with_subgoals(
-        self,
-        action: BaseAction,
-        character_name: str,
-        current_state: CharacterGameState,
-        depth: int = 0
+        self, action: BaseAction, character_name: str, current_state: CharacterGameState, depth: int = 0
     ) -> ActionResult:
         """Execute action with recursive sub-goal handling and state consistency validation.
-        
+
         Parameters:
             action: BaseAction instance to execute
             character_name: Character identifier
             current_state: Pydantic model with current character state
             depth: Current recursion depth (0 = top level)
-            
+
         Return values:
             ActionResult: Pydantic model with execution outcome
-            
+
         Raises:
             MaxDepthExceededError: If depth > max_subgoal_depth
             RecursiveSubGoalError: If sub-goal chain fails
@@ -707,27 +697,21 @@ class ActionExecutor:
                     context = self.state_manager.create_goal_factory_context(
                         parent_goal_type=type(action).__name__,
                         recursion_depth=depth + 1,
-                        max_depth=self.max_subgoal_depth
+                        max_depth=self.max_subgoal_depth,
                     )
 
                     # Use GoalManager factory to create Goal instance
-                    sub_goal = self.goal_manager.create_goal_from_sub_request(
-                        sub_goal_request, context
-                    )
+                    sub_goal = self.goal_manager.create_goal_from_sub_request(sub_goal_request, context)
 
                     # Get target state using same facility as regular goals
                     target_state = sub_goal.get_target_state(context.character_state, context.game_data)
 
                     # Use GOAP planning (same facility as regular goals) - validation happens inside
-                    sub_plan = await self.goal_manager.plan_to_target_state(
-                        context.character_state, target_state
-                    )
+                    sub_plan = await self.goal_manager.plan_to_target_state(context.character_state, target_state)
 
                     if not sub_plan.is_empty:
                         # Execute sub-plan recursively
-                        sub_result = await self.execute_plan_recursive(
-                            sub_plan, character_name, depth + 1
-                        )
+                        sub_result = await self.execute_plan_recursive(sub_plan, character_name, depth + 1)
 
                         if sub_result.success:
                             # Force refresh state after sub-goal completion
@@ -750,30 +734,24 @@ class ActionExecutor:
                 except (ConnectionError, TimeoutError, OSError) as e:
                     # Wrap network errors in RecursiveSubGoalError
                     raise RecursiveSubGoalError(
-                        type(action).__name__,
-                        sub_goal_request.goal_type,
-                        depth,
-                        f"Network error: {str(e)}"
+                        type(action).__name__, sub_goal_request.goal_type, depth, f"Network error: {str(e)}"
                     )
 
         return result
 
     async def execute_plan_recursive(
-        self,
-        plan: GOAPActionPlan,
-        character_name: str,
-        depth: int
+        self, plan: GOAPActionPlan, character_name: str, depth: int
     ) -> SubGoalExecutionResult:
         """Execute plan with recursive sub-goal support and state consistency tracking.
-        
+
         Parameters:
             plan: Pydantic model with ordered action sequence
-            character_name: Character identifier  
+            character_name: Character identifier
             depth: Current recursion depth
-            
+
         Return values:
             SubGoalExecutionResult: Pydantic model with execution results
-            
+
         Raises:
             MaxDepthExceededError: If depth > max_subgoal_depth
         """
@@ -801,7 +779,7 @@ class ActionExecutor:
                         depth_reached=depth,
                         actions_executed=actions_executed,
                         execution_time=time.time() - start_time,
-                        error_message=f"Action '{goap_action.name}' not found"
+                        error_message=f"Action '{goap_action.name}' not found",
                     )
 
                 # Get current state for this action
@@ -811,9 +789,7 @@ class ActionExecutor:
                     current_state = initial_state
 
                 # Execute with recursive sub-goal handling
-                result = await self.execute_action_with_subgoals(
-                    action, character_name, current_state, depth
-                )
+                result = await self.execute_action_with_subgoals(action, character_name, current_state, depth)
 
                 actions_executed += 1
 
@@ -823,7 +799,7 @@ class ActionExecutor:
                         depth_reached=depth,
                         actions_executed=actions_executed,
                         execution_time=time.time() - start_time,
-                        error_message=result.message
+                        error_message=result.message,
                     )
 
             # Get final state after all actions
@@ -837,7 +813,7 @@ class ActionExecutor:
                 depth_reached=depth,
                 actions_executed=actions_executed,
                 execution_time=time.time() - start_time,
-                final_state=final_state
+                final_state=final_state,
             )
 
         except (MaxDepthExceededError, StateConsistencyError, NoValidGoalError) as e:
@@ -846,6 +822,5 @@ class ActionExecutor:
                 depth_reached=depth,
                 actions_executed=actions_executed,
                 execution_time=time.time() - start_time,
-                error_message=str(e)
+                error_message=str(e),
             )
-

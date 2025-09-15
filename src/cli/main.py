@@ -19,14 +19,14 @@ from typing import Any
 
 import src.lib.log as log_module
 
-from ..ai_player.action_executor import ActionExecutor
-from ..ai_player.actions import get_global_registry
-from ..ai_player.ai_player import AIPlayer
-from ..ai_player.goal_manager import GoalManager
-from ..ai_player.state.state_manager import StateManager
-from ..game_data.api_client import APIClientWrapper
-from ..game_data.cache_manager import CacheManager
-from ..lib.log import LogManager
+from src.ai_player.action_executor import ActionExecutor
+from src.ai_player.actions import get_global_registry
+from src.ai_player.ai_player import AIPlayer
+from src.ai_player.goal_manager import GoalManager
+from src.ai_player.state.state_manager import StateManager
+from src.game_data.api_client import APIClientWrapper
+from src.game_data.cache_manager import CacheManager
+from src.lib.log import LogManager
 from .commands.diagnostics import DiagnosticCommands
 
 
@@ -44,13 +44,13 @@ def generate_random_character_name() -> str:
     as required by the ArtifactsMMO API validation rules.
     """
     # Characters allowed by API: alphanumeric, underscore, hyphen (no periods)
-    allowed_chars = string.ascii_letters + string.digits + '_-'
+    allowed_chars = string.ascii_letters + string.digits + "_-"
 
     # Random length between 6 and 10 characters
     name_length = random.randint(6, 10)
 
     # Generate random name
-    random_name = ''.join(random.choice(allowed_chars) for _ in range(name_length))
+    random_name = "".join(random.choice(allowed_chars) for _ in range(name_length))
 
     return random_name
 
@@ -103,9 +103,7 @@ class CLIManager:
         goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager, cache_manager)
 
         return DiagnosticCommands(
-            action_registry=action_registry,
-            goal_manager=goal_manager,
-            api_client=self.api_client
+            action_registry=action_registry, goal_manager=goal_manager, api_client=self.api_client
         )
 
     def create_parser(self) -> argparse.ArgumentParser:
@@ -123,7 +121,7 @@ class CLIManager:
         """
         parser = argparse.ArgumentParser(
             description="ArtifactsMMO AI Player - Autonomous character control system",
-            formatter_class=argparse.RawDescriptionHelpFormatter
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
 
         # Global options
@@ -131,12 +129,10 @@ class CLIManager:
             "--log-level",
             choices=["DEBUG", "INFO", "WARNING", "ERROR"],
             default="INFO",
-            help="Set logging level (default: INFO)"
+            help="Set logging level (default: INFO)",
         )
         parser.add_argument(
-            "--token-file",
-            default="TOKEN",
-            help="Path to file containing ArtifactsMMO API token (default: TOKEN)"
+            "--token-file", default="TOKEN", help="Path to file containing ArtifactsMMO API token (default: TOKEN)"
         )
 
         # Create subparsers for command groups
@@ -163,69 +159,38 @@ class CLIManager:
         respective arguments and validation requirements.
         """
         # Create character command
-        create_parser = subparsers.add_parser(
-            "create-character",
-            help="Create a new character"
-        )
+        create_parser = subparsers.add_parser("create-character", help="Create a new character")
         create_parser.add_argument(
-            "skin",
-            choices=["men1", "men2", "men3", "women1", "women2", "women3"],
-            help="Character skin/appearance"
+            "skin", choices=["men1", "men2", "men3", "women1", "women2", "women3"], help="Character skin/appearance"
         )
         create_parser.add_argument(
             "--name",
-            help="Character name (3-12 characters, alphanumeric and underscore only). If not provided, a random name will be generated."
+            help="Character name (3-12 characters, alphanumeric and underscore only). If not provided, a random name will be generated.",
         )
         create_parser.set_defaults(func=self.handle_create_character)
 
         # Delete character command
-        delete_parser = subparsers.add_parser(
-            "delete-character",
-            help="Delete an existing character"
-        )
-        delete_parser.add_argument(
-            "name",
-            help="Character name to delete"
-        )
-        delete_parser.add_argument(
-            "--confirm",
-            action="store_true",
-            help="Skip confirmation prompt"
-        )
+        delete_parser = subparsers.add_parser("delete-character", help="Delete an existing character")
+        delete_parser.add_argument("name", help="Character name to delete")
+        delete_parser.add_argument("--confirm", action="store_true", help="Skip confirmation prompt")
         delete_parser.set_defaults(func=self.handle_delete_character)
 
         # List characters command
-        list_parser = subparsers.add_parser(
-            "list-characters",
-            help="List all characters on the account"
-        )
-        list_parser.add_argument(
-            "--detailed",
-            action="store_true",
-            help="Show detailed character information"
-        )
+        list_parser = subparsers.add_parser("list-characters", help="List all characters on the account")
+        list_parser.add_argument("--detailed", action="store_true", help="Show detailed character information")
         list_parser.set_defaults(func=self.handle_list_characters)
 
         # Load game data command
-        load_data_parser = subparsers.add_parser(
-            "load-data",
-            help="Load and cache all game data from API"
-        )
-        load_data_parser.add_argument(
-            "--force",
-            action="store_true",
-            help="Force refresh all cached data"
-        )
+        load_data_parser = subparsers.add_parser("load-data", help="Load and cache all game data from API")
+        load_data_parser.add_argument("--force", action="store_true", help="Force refresh all cached data")
         load_data_parser.add_argument(
             "--data-type",
             choices=["all", "items", "monsters", "maps", "resources", "npcs", "characters"],
             default="all",
-            help="Specific data type to load (default: all)"
+            help="Specific data type to load (default: all)",
         )
         load_data_parser.add_argument(
-            "--init",
-            action="store_true",
-            help="Initialize all game data for first-time setup"
+            "--init", action="store_true", help="Initialize all game data for first-time setup"
         )
         load_data_parser.set_defaults(func=self.handle_load_data)
 
@@ -243,61 +208,25 @@ class CLIManager:
         respective arguments and operational parameters.
         """
         # Run character command
-        run_parser = subparsers.add_parser(
-            "run-character",
-            help="Start autonomous AI player for a character"
-        )
+        run_parser = subparsers.add_parser("run-character", help="Start autonomous AI player for a character")
+        run_parser.add_argument("name", help="Character name to run autonomously")
+        run_parser.add_argument("--goal", help="Specific goal to pursue (optional)")
+        run_parser.add_argument("--max-runtime", type=int, help="Maximum runtime in minutes (optional)")
         run_parser.add_argument(
-            "name",
-            help="Character name to run autonomously"
-        )
-        run_parser.add_argument(
-            "--goal",
-            help="Specific goal to pursue (optional)"
-        )
-        run_parser.add_argument(
-            "--max-runtime",
-            type=int,
-            help="Maximum runtime in minutes (optional)"
-        )
-        run_parser.add_argument(
-            "--save-interval",
-            type=int,
-            default=300,
-            help="State save interval in seconds (default: 300)"
+            "--save-interval", type=int, default=300, help="State save interval in seconds (default: 300)"
         )
         run_parser.set_defaults(func=self.handle_run_character)
 
         # Stop character command
-        stop_parser = subparsers.add_parser(
-            "stop-character",
-            help="Stop autonomous AI player for a character"
-        )
-        stop_parser.add_argument(
-            "name",
-            help="Character name to stop"
-        )
-        stop_parser.add_argument(
-            "--force",
-            action="store_true",
-            help="Force immediate stop without graceful shutdown"
-        )
+        stop_parser = subparsers.add_parser("stop-character", help="Stop autonomous AI player for a character")
+        stop_parser.add_argument("name", help="Character name to stop")
+        stop_parser.add_argument("--force", action="store_true", help="Force immediate stop without graceful shutdown")
         stop_parser.set_defaults(func=self.handle_stop_character)
 
         # Character status command
-        status_parser = subparsers.add_parser(
-            "status-character",
-            help="Show character and AI player status"
-        )
-        status_parser.add_argument(
-            "name",
-            help="Character name to check status"
-        )
-        status_parser.add_argument(
-            "--monitor",
-            action="store_true",
-            help="Continuous monitoring mode"
-        )
+        status_parser = subparsers.add_parser("status-character", help="Show character and AI player status")
+        status_parser.add_argument("name", help="Character name to check status")
+        status_parser.add_argument("--monitor", action="store_true", help="Continuous monitoring mode")
         status_parser.set_defaults(func=self.handle_character_status)
 
     def setup_diagnostic_commands(self, subparsers) -> None:
@@ -314,134 +243,56 @@ class CLIManager:
         system configuration troubleshooting for AI player debugging.
         """
         # Diagnose state command
-        state_parser = subparsers.add_parser(
-            "diagnose-state",
-            help="Diagnose character state and validation"
-        )
-        state_parser.add_argument(
-            "name",
-            help="Character name to diagnose"
-        )
-        state_parser.add_argument(
-            "--validate-enum",
-            action="store_true",
-            help="Perform GameState enum validation"
-        )
+        state_parser = subparsers.add_parser("diagnose-state", help="Diagnose character state and validation")
+        state_parser.add_argument("name", help="Character name to diagnose")
+        state_parser.add_argument("--validate-enum", action="store_true", help="Perform GameState enum validation")
         state_parser.set_defaults(func=self.handle_diagnose_state)
 
         # Diagnose actions command
-        actions_parser = subparsers.add_parser(
-            "diagnose-actions",
-            help="Diagnose available actions and properties"
+        actions_parser = subparsers.add_parser("diagnose-actions", help="Diagnose available actions and properties")
+        actions_parser.add_argument("--character", help="Character name for state-specific analysis")
+        actions_parser.add_argument("--show-costs", action="store_true", help="Include GOAP action costs in output")
+        actions_parser.add_argument(
+            "--list-all", action="store_true", help="List all actions regardless of character state"
         )
         actions_parser.add_argument(
-            "--character",
-            help="Character name for state-specific analysis"
-        )
-        actions_parser.add_argument(
-            "--show-costs",
-            action="store_true",
-            help="Include GOAP action costs in output"
-        )
-        actions_parser.add_argument(
-            "--list-all",
-            action="store_true",
-            help="List all actions regardless of character state"
-        )
-        actions_parser.add_argument(
-            "--show-preconditions",
-            action="store_true",
-            help="Display action preconditions and effects"
+            "--show-preconditions", action="store_true", help="Display action preconditions and effects"
         )
         actions_parser.set_defaults(func=self.handle_diagnose_actions)
 
         # Diagnose planning command
-        plan_parser = subparsers.add_parser(
-            "diagnose-plan",
-            help="Diagnose GOAP planning process"
-        )
-        plan_parser.add_argument(
-            "name",
-            help="Character name for planning analysis"
-        )
-        plan_parser.add_argument(
-            "goal",
-            help="Goal to analyze planning for"
-        )
-        plan_parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="Include detailed planning algorithm steps"
-        )
-        plan_parser.add_argument(
-            "--show-steps",
-            action="store_true",
-            help="Display each step in the generated plan"
-        )
+        plan_parser = subparsers.add_parser("diagnose-plan", help="Diagnose GOAP planning process")
+        plan_parser.add_argument("name", help="Character name for planning analysis")
+        plan_parser.add_argument("goal", help="Goal to analyze planning for")
+        plan_parser.add_argument("--verbose", action="store_true", help="Include detailed planning algorithm steps")
+        plan_parser.add_argument("--show-steps", action="store_true", help="Display each step in the generated plan")
         plan_parser.set_defaults(func=self.handle_diagnose_plan)
 
         # Test planning command
-        test_parser = subparsers.add_parser(
-            "test-planning",
-            help="Test planning with mock scenarios"
-        )
+        test_parser = subparsers.add_parser("test-planning", help="Test planning with mock scenarios")
+        test_parser.add_argument("--mock-state-file", help="Path to JSON file containing mock character state")
+        test_parser.add_argument("--character", type=str, help="Character name for testing")
         test_parser.add_argument(
-            "--mock-state-file",
-            help="Path to JSON file containing mock character state"
+            "--goal", type=str, help="Custom goal for testing (e.g. 'move to (1,1)', 'gain xp', 'mine copper')"
         )
-        test_parser.add_argument(
-            "--character",
-            type=str,
-            help="Character name for testing"
-        )
-        test_parser.add_argument(
-            "--goal",
-            type=str,
-            help="Custom goal for testing (e.g. 'move to (1,1)', 'gain xp', 'mine copper')"
-        )
-        test_parser.add_argument(
-            "--start-level",
-            type=int,
-            help="Starting character level for simulation"
-        )
-        test_parser.add_argument(
-            "--goal-level",
-            type=int,
-            help="Target level for planning simulation"
-        )
-        test_parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="Simulate without API calls"
-        )
+        test_parser.add_argument("--start-level", type=int, help="Starting character level for simulation")
+        test_parser.add_argument("--goal-level", type=int, help="Target level for planning simulation")
+        test_parser.add_argument("--dry-run", action="store_true", help="Simulate without API calls")
         test_parser.set_defaults(func=self.handle_test_planning)
 
         # Diagnose weights command
         weights_parser = subparsers.add_parser(
-            "diagnose-weights",
-            help="Diagnose action weights and GOAP configuration"
+            "diagnose-weights", help="Diagnose action weights and GOAP configuration"
         )
         weights_parser.add_argument(
-            "--show-action-costs",
-            action="store_true",
-            help="Display detailed action cost breakdowns"
+            "--show-action-costs", action="store_true", help="Display detailed action cost breakdowns"
         )
         weights_parser.set_defaults(func=self.handle_diagnose_weights)
 
         # Diagnose cooldowns command
-        cooldowns_parser = subparsers.add_parser(
-            "diagnose-cooldowns",
-            help="Diagnose cooldown management and timing"
-        )
-        cooldowns_parser.add_argument(
-            "name",
-            help="Character name to monitor cooldown status"
-        )
-        cooldowns_parser.add_argument(
-            "--monitor",
-            action="store_true",
-            help="Provide continuous cooldown monitoring"
-        )
+        cooldowns_parser = subparsers.add_parser("diagnose-cooldowns", help="Diagnose cooldown management and timing")
+        cooldowns_parser.add_argument("name", help="Character name to monitor cooldown status")
+        cooldowns_parser.add_argument("--monitor", action="store_true", help="Provide continuous cooldown monitoring")
         cooldowns_parser.set_defaults(func=self.handle_diagnose_cooldowns)
 
     async def handle_create_character(self, args) -> None:
@@ -474,7 +325,7 @@ class CLIManager:
                 return
 
             # Updated validation to match API requirements: alphanumeric, underscore, hyphen only
-            allowed_chars = set(string.ascii_letters + string.digits + '_-')
+            allowed_chars = set(string.ascii_letters + string.digits + "_-")
             if not all(c in allowed_chars for c in character_name):
                 print("Error: Character name can only contain alphanumeric characters, underscores, and hyphens")
                 return
@@ -518,7 +369,7 @@ class CLIManager:
             # Confirmation prompt (unless --confirm flag is used)
             if not args.confirm:
                 response = input(f"Are you sure you want to delete character '{args.name}'? (y/N): ")
-                if response.lower() not in ['y', 'yes']:
+                if response.lower() not in ["y", "yes"]:
                     print("Character deletion cancelled.")
                     return
 
@@ -698,7 +549,6 @@ class CLIManager:
             print("\nGame data loading complete!")
             print("All cached data is stored in the 'data/' directory")
 
-
     async def handle_run_character(self, args) -> None:
         """Handle AI player run command.
 
@@ -730,14 +580,17 @@ class CLIManager:
             state_manager = StateManager(args.name, self.api_client, cache_manager)
             action_registry = get_global_registry()
             goal_manager = GoalManager(action_registry, self.api_client.cooldown_manager, cache_manager)
-            action_executor = ActionExecutor(self.api_client, self.api_client.cooldown_manager, cache_manager)
+            action_executor = ActionExecutor(
+                self.api_client, self.api_client.cooldown_manager, cache_manager, goal_manager, state_manager
+            )
 
             # Initialize AI player dependencies
             ai_player.initialize_dependencies(state_manager, goal_manager, action_executor, action_registry)
 
-            # TODO: Set specific goal if provided
+            # Set specific goal if provided
             if args.goal:
                 print(f"Setting goal: {args.goal}")
+                ai_player.set_specific_goal(args.goal)
 
             # Track the running player
             self.running_players[args.name] = ai_player
@@ -842,7 +695,7 @@ class CLIManager:
 
             # Get character data from API
             characters = await self.api_client.get_characters()
-            character = next((c for c in characters if c.get('name') == args.name), None)
+            character = next((c for c in characters if c.get("name") == args.name), None)
 
             if not character:
                 print(f"Character '{args.name}' not found.")
@@ -906,10 +759,7 @@ class CLIManager:
 
             print(f"Running state diagnostics for character '{args.name}'...")
 
-            result = await diagnostic_commands.diagnose_state(
-                args.name,
-                validate_enum=args.validate_enum
-            )
+            result = await diagnostic_commands.diagnose_state(args.name, validate_enum=args.validate_enum)
 
             # Format and display the diagnostic results
             output = diagnostic_commands.format_state_output(result)
@@ -955,7 +805,7 @@ class CLIManager:
                 character_name=args.character,
                 show_costs=args.show_costs,
                 list_all=args.list_all,
-                show_preconditions=args.show_preconditions
+                show_preconditions=args.show_preconditions,
             )
 
             # Format and display the diagnostic results
@@ -992,10 +842,7 @@ class CLIManager:
             print(f"Running planning diagnostics for character '{args.name}' with goal '{args.goal}'...")
 
             result = await diagnostic_commands.diagnose_plan(
-                args.name,
-                args.goal,
-                verbose=args.verbose,
-                show_steps=args.show_steps
+                args.name, args.goal, verbose=args.verbose, show_steps=args.show_steps
             )
 
             # Format and display the diagnostic results
@@ -1033,11 +880,11 @@ class CLIManager:
 
             result = await diagnostic_commands.test_planning(
                 mock_state_file=args.mock_state_file,
-                character=getattr(args, 'character', None),
-                goal=getattr(args, 'goal', None),
+                character=getattr(args, "character", None),
+                goal=getattr(args, "goal", None),
                 start_level=args.start_level,
                 goal_level=args.goal_level,
-                dry_run=args.dry_run
+                dry_run=args.dry_run,
             )
 
             # Display the test results
@@ -1074,9 +921,7 @@ class CLIManager:
 
             print("Running weight and configuration diagnostics...")
 
-            result = await diagnostic_commands.diagnose_weights(
-                show_action_costs=args.show_action_costs
-            )
+            result = await diagnostic_commands.diagnose_weights(show_action_costs=args.show_action_costs)
 
             # Format and display the diagnostic results
             output = self.format_weights_output(result)
@@ -1111,10 +956,7 @@ class CLIManager:
 
             print(f"Running cooldown diagnostics for character '{args.name}'...")
 
-            result = await diagnostic_commands.diagnose_cooldowns(
-                args.name,
-                monitor=args.monitor
-            )
+            result = await diagnostic_commands.diagnose_cooldowns(args.name, monitor=args.monitor)
 
             # Format and display the diagnostic results
             output = self.format_cooldowns_output(result)
@@ -1178,7 +1020,9 @@ class CLIManager:
         if outliers:
             lines.append(f"\nHigh-cost outliers ({len(outliers)}):")
             for outlier in outliers:
-                lines.append(f"  • {outlier.get('name', 'Unknown')}: {outlier.get('cost', 0)} (x{outlier.get('multiplier', 0):.1f})")
+                lines.append(
+                    f"  • {outlier.get('name', 'Unknown')}: {outlier.get('cost', 0)} (x{outlier.get('multiplier', 0):.1f})"
+                )
 
         # Optimization opportunities
         opportunities = weights_data.get("optimization_opportunities", [])
@@ -1297,16 +1141,14 @@ class CLIManager:
             "DEBUG": logging.DEBUG,
             "INFO": logging.INFO,
             "WARNING": logging.WARNING,
-            "ERROR": logging.ERROR
+            "ERROR": logging.ERROR,
         }
 
         level = level_mapping.get(log_level.upper(), logging.INFO)
 
         # Configure root logger
         logging.basicConfig(
-            level=level,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
 
         # Update LogManager's LOG_LEVEL
@@ -1358,7 +1200,7 @@ async def async_main() -> None:
     cli_manager.setup_logging(args.log_level)
 
     # Check if a command was provided
-    if not hasattr(args, 'func'):
+    if not hasattr(args, "func"):
         parser.print_help()
         return
 

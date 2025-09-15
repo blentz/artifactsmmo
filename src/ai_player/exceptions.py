@@ -2,7 +2,8 @@
 Unified Sub-Goal Architecture Exceptions
 
 This module defines custom exception classes for the unified sub-goal architecture,
-providing type-safe error handling for recursive sub-goal execution and GOAP planning.
+providing type-safe error handling for recursive sub-goal execution, GOAP planning,
+and trading operations.
 """
 
 
@@ -84,7 +85,28 @@ class RecursiveSubGoalError(Exception):
         self.sub_goal_type = sub_goal_type
         self.depth = depth
         self.message = message
-        super().__init__(
-            f"Recursive sub-goal error: {parent_action} -> {sub_goal_type} "
-            f"at depth {depth}: {message}"
-        )
+        super().__init__(f"Recursive sub-goal error: {parent_action} -> {sub_goal_type} at depth {depth}: {message}")
+
+
+class InsufficientFundsError(Exception):
+    """Raised when there are insufficient funds for a trade"""
+
+    def __init__(self, message: str = "Insufficient funds available for trade"):
+        self.message = message
+        super().__init__(message)
+
+
+class InvalidOrderError(Exception):
+    """Raised when trade order parameters are invalid"""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+class OrderNotFoundError(Exception):
+    """Raised when attempting to access a non-existent order"""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)

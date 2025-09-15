@@ -6,7 +6,6 @@ monsters for optimal XP progression toward level 5, using data-driven analysis a
 strategic monster selection without hardcoded values.
 """
 
-
 from ..analysis.level_targeting import LevelAppropriateTargeting
 from ..analysis.map_analysis import MapAnalysisModule
 from ..state.character_game_state import CharacterGameState
@@ -61,15 +60,14 @@ class CombatGoal(BaseGoal):
         feasibility = self._calculate_combat_feasibility(character_state, game_data)
 
         # Calculate progression value (20% weight)
-        progression = self.get_progression_value(character_state)
+        progression = self.get_progression_value(character_state, game_data)
 
         # Calculate stability (10% weight)
         error_risk = self.estimate_error_risk(character_state)
         stability = 1.0 - error_risk
 
         # Combine factors with PRP-specified weights
-        final_weight = (necessity * 0.4 + feasibility * 0.3 +
-                       progression * 0.2 + stability * 0.1)
+        final_weight = necessity * 0.4 + feasibility * 0.3 + progression * 0.2 + stability * 0.1
 
         return min(10.0, final_weight * 10.0)  # Scale to 0-10 range
 
@@ -84,21 +82,14 @@ class CombatGoal(BaseGoal):
 
         # Check for available level-appropriate monsters
         optimal_monsters = self.level_targeting.find_optimal_monsters(
-            character_state.level,
-            (character_state.x, character_state.y),
-            game_data.monsters,
-            game_data.maps
+            character_state.level, (character_state.x, character_state.y), game_data.monsters, game_data.maps
         )
 
         return len(optimal_monsters) > 0
 
-    def get_target_state(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
-    ) -> GOAPTargetState:
+    def get_target_state(self, character_state: CharacterGameState, game_data: GameData) -> GOAPTargetState:
         """Return GOAP target state for combat goal.
-        
+
         This method defines the desired state conditions for successful combat:
         1. Character must be at a monster location where combat is possible
         2. Character must gain XP through combat actions
@@ -107,7 +98,21 @@ class CombatGoal(BaseGoal):
         """
         self.validate_game_data(game_data)
 
-        # Find optimal monster target using analysis module
+        # For Level 1-2 characters, use a much simpler target state
+        if character_state.level <= 2:
+            # Simple XP-gaining goal for low-level characters
+            target_states = {
+                GameState.GAINED_XP: True,
+                GameState.CAN_FIGHT: True,
+            }
+
+            return GOAPTargetState(
+                target_states=target_states,
+                priority=6,  # Moderate priority for simple XP gain
+                timeout_seconds=120,  # 2 minute timeout
+            )
+
+        # Find optimal monster target using analysis module for higher-level characters
         current_pos = (character_state.x, character_state.y)
 
         if self.target_monster_code:
@@ -131,8 +136,7 @@ class CombatGoal(BaseGoal):
                     )
                     if distances:
                         best_pos = max(distances.keys(), key=lambda pos: distances[pos])
-                        target_location = next(loc for loc in monster_locations
-                                             if (loc.x, loc.y) == best_pos)
+                        target_location = next(loc for loc in monster_locations if (loc.x, loc.y) == best_pos)
         else:
             # Use analysis module to find optimal monster
             target_monster = None
@@ -147,27 +151,17 @@ class CombatGoal(BaseGoal):
 
         if not target_monster or not target_location:
             # Return empty target state if no feasible combat targets
-            return GOAPTargetState(
-                target_states={},
-                priority=0,
-                timeout_seconds=None
-            )
+            return GOAPTargetState(target_states={}, priority=0, timeout_seconds=None)
 
-        # Define target state conditions for combat success
+        # Define target state conditions for combat success (Level 3+)
         target_states = {
             # Must be at monster location for combat
             GameState.AT_MONSTER_LOCATION: True,
             GameState.CURRENT_X: target_location.x,
             GameState.CURRENT_Y: target_location.y,
-
-            # Must gain XP through combat
-            GameState.GAINED_XP: True,
-            GameState.CAN_GAIN_XP: True,
-
             # Safety conditions
             GameState.HP_CURRENT: int(character_state.max_hp * self.min_hp_percentage),
             GameState.SAFE_TO_FIGHT: True,
-
             # Combat readiness
             GameState.CAN_FIGHT: True,
             GameState.COOLDOWN_READY: True,
@@ -176,10 +170,10 @@ class CombatGoal(BaseGoal):
         return GOAPTargetState(
             target_states=target_states,
             priority=8,  # High priority for progression
-            timeout_seconds=300  # 5 minute timeout
+            timeout_seconds=300,  # 5 minute timeout
         )
 
-    def get_progression_value(self, character_state: CharacterGameState) -> float:
+    def get_progression_value(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate contribution to reaching level 5 with appropriate gear."""
         current_level = character_state.level
 
@@ -208,9 +202,7 @@ class CombatGoal(BaseGoal):
         return min(1.0, total_risk)
 
     def generate_sub_goal_requests(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, character_state: CharacterGameState, game_data: GameData
     ) -> list[SubGoalRequest]:
         """Generate sub-goal requests for combat dependencies.
 
@@ -224,30 +216,29 @@ class CombatGoal(BaseGoal):
         # Check HP requirement
         hp_ratio = character_state.hp / max(1, character_state.max_hp)
         if hp_ratio < self.min_hp_percentage:
-            sub_goals.append(SubGoalRequest.reach_hp_threshold(
-                self.min_hp_percentage,
-                "CombatGoal",
-                f"Need {self.min_hp_percentage:.0%} HP for safe combat"
-            ))
+            sub_goals.append(
+                SubGoalRequest.reach_hp_threshold(
+                    self.min_hp_percentage, "CombatGoal", f"Need {self.min_hp_percentage:.0%} HP for safe combat"
+                )
+            )
 
         # Check if at monster location (simplified check)
         if not character_state.at_monster_location:
             # Find optimal monster location
             optimal_monsters = self.level_targeting.find_optimal_monsters(
-                character_state.level,
-                (character_state.x, character_state.y),
-                game_data.monsters,
-                game_data.maps
+                character_state.level, (character_state.x, character_state.y), game_data.monsters, game_data.maps
             )
 
             if optimal_monsters:
                 target_monster, target_location, _ = optimal_monsters[0]
-                sub_goals.append(SubGoalRequest.move_to_location(
-                    target_location.x,
-                    target_location.y,
-                    "CombatGoal",
-                    f"Move to {target_monster.name} location for combat"
-                ))
+                sub_goals.append(
+                    SubGoalRequest.move_to_location(
+                        target_location.x,
+                        target_location.y,
+                        "CombatGoal",
+                        f"Move to {target_monster.name} location for combat",
+                    )
+                )
 
         return sub_goals
 
@@ -262,10 +253,7 @@ class CombatGoal(BaseGoal):
 
         # Monster availability (30% of feasibility score)
         optimal_monsters = self.level_targeting.find_optimal_monsters(
-            character_state.level,
-            (character_state.x, character_state.y),
-            game_data.monsters,
-            game_data.maps
+            character_state.level, (character_state.x, character_state.y), game_data.monsters, game_data.maps
         )
         monster_availability = min(1.0, len(optimal_monsters) / 3.0)  # Normalize
         feasibility_score += monster_availability * 0.3

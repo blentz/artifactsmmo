@@ -34,7 +34,7 @@ class PlanningDiagnostics:
         self.goal_manager = goal_manager
 
     async def analyze_planning_steps(
-        self, start_state: 'CharacterGameState', goal_state: dict[GameState, Any]
+        self, start_state: "CharacterGameState", goal_state: dict[GameState, Any]
     ) -> dict[str, Any]:
         """Analyze step-by-step GOAP planning process.
 
@@ -55,28 +55,60 @@ class PlanningDiagnostics:
             "total_cost": 0,
             "planning_time": 0.0,
             "issues": [],
-            "state_transitions": []
+            "state_transitions": [],
         }
 
         start_time = datetime.now()
 
         # Use the goal manager's planning functionality with CharacterGameState
-        plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
+        from ..types.goap_models import GOAPTargetState
 
-        if plan:
+        target_state = GOAPTargetState(target_states=goal_state)
+        plan = await self.goal_manager.plan_actions(start_state, target_state)
+
+        # Handle both GOAPActionPlan and list types for compatibility
+        is_empty = False
+        if hasattr(plan, "is_empty"):
+            is_empty = plan.is_empty
+        elif isinstance(plan, list):
+            is_empty = len(plan) == 0
+        else:
+            is_empty = plan is None
+
+        if plan and not is_empty:
             analysis["planning_successful"] = True
-            analysis["steps"] = plan
-            analysis["total_cost"] = len(plan)  # Simplified cost calculation
+
+            # Handle both GOAPActionPlan and legacy list formats
+            if hasattr(plan, "to_legacy_plan"):
+                # GOAPActionPlan format
+                analysis["steps"] = plan.to_legacy_plan()
+                analysis["total_cost"] = plan.total_cost
+                actions = plan.actions
+            else:
+                # Legacy list format
+                analysis["steps"] = plan
+                analysis["total_cost"] = sum(action.get("cost", 1) for action in plan)
+                actions = plan
 
             # Analyze state transitions - start_state must be CharacterGameState
             current_state = start_state.to_goap_state()
-            for i, action in enumerate(plan):
-                analysis["state_transitions"].append({
-                    "step": i + 1,
-                    "action": action.get("name", "unknown"),
-                    "state_before": dict(current_state),
-                    "estimated_state_after": self._estimate_state_after_action(current_state, action)
-                })
+            for i, action in enumerate(actions):
+                # Handle both GOAPAction objects and dict formats
+                if hasattr(action, "name"):
+                    action_name = action.name
+                    action_dict = action.to_dict() if hasattr(action, "to_dict") else {"name": action_name}
+                else:
+                    action_name = action.get("name", f"action_{i}")
+                    action_dict = action
+
+                analysis["state_transitions"].append(
+                    {
+                        "step": i + 1,
+                        "action": action_name,
+                        "state_before": dict(current_state),
+                        "estimated_state_after": self._estimate_state_after_action(current_state, action_dict),
+                    }
+                )
         else:
             analysis["issues"].append("No plan found - goal may be unreachable")
 
@@ -100,8 +132,19 @@ class PlanningDiagnostics:
         goals before attempting expensive planning operations.
         """
         # Check if the goal manager can determine reachability
-        if hasattr(self.goal_manager, 'is_goal_achievable'):
-            return self.goal_manager.is_goal_achievable(goal_state, start_state)
+        if hasattr(self.goal_manager, "is_goal_achievable"):
+            # Handle both CharacterGameState objects and dictionary states
+            if hasattr(start_state, "to_goap_state"):
+                # Convert CharacterGameState to dict format that GoalManager expects
+                current_state_dict = start_state.to_goap_state()
+                # Convert string keys back to GameState enums
+                current_state_enum_dict = {
+                    GameState(k): v for k, v in current_state_dict.items() if k in [gs.value for gs in GameState]
+                }
+            else:
+                # start_state is already a dictionary with GameState enum keys
+                current_state_enum_dict = start_state
+            return self.goal_manager.is_goal_achievable(goal_state, current_state_enum_dict)
 
         # Simple heuristic checks for obviously unreachable goals
         for goal_key, goal_value in goal_state.items():
@@ -114,17 +157,37 @@ class PlanningDiagnostics:
                         return False
 
             # XP cannot decrease
-            xp_keys = {GameState.CHARACTER_XP, GameState.MINING_XP, GameState.WOODCUTTING_XP,
-                      GameState.FISHING_XP, GameState.WEAPONCRAFTING_XP, GameState.GEARCRAFTING_XP,
-                      GameState.JEWELRYCRAFTING_XP, GameState.COOKING_XP, GameState.ALCHEMY_XP}
+            xp_keys = {
+                GameState.CHARACTER_XP,
+                GameState.MINING_XP,
+                GameState.WOODCUTTING_XP,
+                GameState.FISHING_XP,
+                GameState.WEAPONCRAFTING_XP,
+                GameState.GEARCRAFTING_XP,
+                GameState.JEWELRYCRAFTING_XP,
+                GameState.COOKING_XP,
+                GameState.ALCHEMY_XP,
+            }
             if goal_key in xp_keys:
                 if isinstance(current_value, int) and isinstance(goal_value, int):
                     if goal_value < current_value:
                         return False
 
         # Try a quick planning attempt
-        plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
-        return plan is not None and len(plan) > 0
+        from ..types.goap_models import GOAPTargetState
+
+        target_state = GOAPTargetState(target_states=goal_state)
+        plan = await self.goal_manager.plan_actions(start_state, target_state)
+
+        # Handle both GOAPActionPlan and list types for compatibility
+        if plan is None:
+            return False
+        if hasattr(plan, "is_empty"):
+            return not plan.is_empty
+        elif isinstance(plan, list):
+            return len(plan) > 0
+        else:
+            return False
 
     def visualize_plan(self, plan: list[dict[str, Any]]) -> str:
         """Create visual representation of action plan.
@@ -148,7 +211,7 @@ class PlanningDiagnostics:
         lines.append("")
 
         for i, action in enumerate(plan):
-            action_name = action.get("name", f"Action_{i+1}")
+            action_name = action.get("name", f"Action_{i + 1}")
             action_cost = action.get("cost", 1)
 
             # Create visual step indicator
@@ -157,7 +220,7 @@ class PlanningDiagnostics:
 
             lines.append("  |")
             lines.append("  v")
-            lines.append(f"[{i+1}] {action_name} (cost: {action_cost})")
+            lines.append(f"[{i + 1}] {action_name} (cost: {action_cost})")
 
             # Add any additional action details if available
             if "preconditions" in action:
@@ -193,7 +256,7 @@ class PlanningDiagnostics:
 
         return new_state
 
-    def analyze_plan_efficiency(self, plan: 'GOAPActionPlan') -> dict[str, Any]:
+    def analyze_plan_efficiency(self, plan: "GOAPActionPlan") -> dict[str, Any]:
         """Analyze plan for efficiency and optimization opportunities.
 
         Parameters:
@@ -207,32 +270,60 @@ class PlanningDiagnostics:
         to improve GOAP planning performance and execution time.
         """
         analysis: dict[str, Any] = {
-            "total_actions": len(plan.actions),
-            "total_cost": plan.total_cost,
+            "total_actions": 0,  # Will be set below
+            "total_cost": 0,  # Will be set below
             "efficiency_score": 0.0,
             "redundant_actions": [],
             "optimization_suggestions": [],
-            "action_types": {}
+            "action_types": {},
         }
 
-        if plan.is_empty:
+        # Check if plan is empty using compatibility approach
+        is_empty = False
+        if hasattr(plan, "is_empty"):
+            is_empty = plan.is_empty
+        elif isinstance(plan, list):
+            is_empty = len(plan) == 0
+        else:
+            is_empty = plan is None
+
+        if is_empty:
             return analysis
 
-        # Calculate total cost and action type distribution
-        for action in plan.actions:
-            # Total cost is already computed in the GOAPActionPlan
-            action_name = action.name
+        # Get actions list - handle both formats
+        if hasattr(plan, "actions"):
+            actions = plan.actions
+            total_cost = plan.total_cost
+        else:
+            actions = plan
+            total_cost = sum(action.get("cost", 1) for action in plan)
+
+        analysis["total_actions"] = len(actions)
+        analysis["total_cost"] = total_cost
+
+        # Calculate action type distribution
+        for action in actions:
+            # Handle both GOAPAction objects and dict formats
+            if hasattr(action, "name"):
+                action_name = action.name
+            else:
+                action_name = action.get("name", "unknown")
+
             action_type = action_name.split("_")[0] if "_" in action_name else action_name
             analysis["action_types"][action_type] = analysis["action_types"].get(action_type, 0) + 1
 
         # Look for redundant sequences
-        for i in range(len(plan.actions) - 1):
-            current_action = plan.actions[i].name
-            next_action = plan.actions[i + 1].name
+        for i in range(len(actions) - 1):
+            if hasattr(actions[i], "name"):
+                current_action = actions[i].name
+                next_action = actions[i + 1].name
+            else:
+                current_action = actions[i].get("name", "unknown")
+                next_action = actions[i + 1].get("name", "unknown")
 
             # Check for repeated actions
             if current_action == next_action:
-                analysis["redundant_actions"].append(f"Repeated action at steps {i+1}-{i+2}: {current_action}")
+                analysis["redundant_actions"].append(f"Repeated action at steps {i + 1}-{i + 2}: {current_action}")
 
         # Calculate efficiency score (higher is better)
         if analysis["total_cost"] > 0:
@@ -268,7 +359,7 @@ class PlanningDiagnostics:
             "success": True,
             "final_state": start_state.copy(),
             "execution_steps": [],
-            "issues": []
+            "issues": [],
         }
 
         current_state = start_state.copy()
@@ -279,7 +370,7 @@ class PlanningDiagnostics:
                 "action": action.get("name", "unknown"),
                 "state_before": dict(current_state),
                 "executed": False,
-                "issues": []
+                "issues": [],
             }
 
             # Check if action preconditions would be met
@@ -364,7 +455,7 @@ class PlanningDiagnostics:
 
         # Check if actions are available
         # Try to get some actions from goal manager
-        actions = await self.goal_manager.create_goap_actions()
+        actions = await self.goal_manager.create_goap_actions(start_state)
         if not actions or len(actions.conditions) == 0:
             bottlenecks.append("No actions available for planning")
 
@@ -392,25 +483,75 @@ class PlanningDiagnostics:
         time, memory usage, nodes explored, and algorithm efficiency for
         optimization and troubleshooting planning performance issues.
         """
-        metrics: dict[str, Any] = {
-            "planning_time_seconds": 0.0,
-            "plan_length": 0,
-            "success": False,
-            "error": None
-        }
+        metrics: dict[str, Any] = {"planning_time_seconds": 0.0, "plan_length": 0, "success": False, "error": None}
 
         start_time = datetime.now()
 
-        # Measure memory before planning
-        start_state_dict = start_state.to_goap_state()
+        # Measure memory before planning - handle both CharacterGameState objects and dictionaries
+        if hasattr(start_state, "to_goap_state"):
+            start_state_dict = start_state.to_goap_state()
+        else:
+            # start_state is already a dictionary
+            start_state_dict = start_state
         initial_memory = sys.getsizeof(start_state_dict) + sys.getsizeof(goal_state)
 
         # Attempt planning
-        plan = await self.goal_manager.plan_actions(start_state, {"target_state": goal_state})
+        from ..types.goap_models import GOAPTargetState
 
-        if plan:
+        target_state = GOAPTargetState(target_states=goal_state)
+
+        # Convert dictionary state to CharacterGameState if needed
+        if not hasattr(start_state, "to_goap_state"):
+            # Create a CharacterGameState from the dictionary
+            from ..state.character_game_state import CharacterGameState
+
+            # Extract values from the state dictionary with defaults
+            start_state_obj = CharacterGameState(
+                name="test_character",
+                level=start_state.get(GameState.CHARACTER_LEVEL, 1),
+                xp=start_state.get(GameState.CHARACTER_XP, 0),
+                gold=start_state.get(GameState.CHARACTER_GOLD, 0),
+                hp=start_state.get(GameState.HP_CURRENT, 100),
+                max_hp=start_state.get(GameState.HP_MAX, 100),
+                x=start_state.get(GameState.CURRENT_X, 0),
+                y=start_state.get(GameState.CURRENT_Y, 0),
+                mining_level=start_state.get(GameState.MINING_LEVEL, 1),
+                mining_xp=start_state.get(GameState.MINING_XP, 0),
+                woodcutting_level=start_state.get(GameState.WOODCUTTING_LEVEL, 1),
+                woodcutting_xp=start_state.get(GameState.WOODCUTTING_XP, 0),
+                fishing_level=start_state.get(GameState.FISHING_LEVEL, 1),
+                fishing_xp=start_state.get(GameState.FISHING_XP, 0),
+                weaponcrafting_level=start_state.get(GameState.WEAPONCRAFTING_LEVEL, 1),
+                weaponcrafting_xp=start_state.get(GameState.WEAPONCRAFTING_XP, 0),
+                gearcrafting_level=start_state.get(GameState.GEARCRAFTING_LEVEL, 1),
+                gearcrafting_xp=start_state.get(GameState.GEARCRAFTING_XP, 0),
+                jewelrycrafting_level=start_state.get(GameState.JEWELRYCRAFTING_LEVEL, 1),
+                jewelrycrafting_xp=start_state.get(GameState.JEWELRYCRAFTING_XP, 0),
+                cooking_level=start_state.get(GameState.COOKING_LEVEL, 1),
+                cooking_xp=start_state.get(GameState.COOKING_XP, 0),
+                alchemy_level=start_state.get(GameState.ALCHEMY_LEVEL, 1),
+                alchemy_xp=start_state.get(GameState.ALCHEMY_XP, 0),
+                cooldown=0,
+            )
+        else:
+            start_state_obj = start_state
+
+        plan = await self.goal_manager.plan_actions(start_state_obj, target_state)
+
+        # Check plan success with compatibility approach
+        is_empty = False
+        if plan is None:
+            is_empty = True
+        elif hasattr(plan, "is_empty"):
+            is_empty = plan.is_empty
+        elif isinstance(plan, list):
+            is_empty = len(plan) == 0
+        else:
+            is_empty = True
+
+        if plan and not is_empty:
             metrics["success"] = True
-            metrics["plan_length"] = len(plan)
+            metrics["plan_length"] = len(plan.actions) if hasattr(plan, "actions") else len(plan)
         else:
             metrics["success"] = False
             metrics["plan_length"] = 0
@@ -462,11 +603,11 @@ class PlanningDiagnostics:
         current_state = start_state.copy()
 
         for i, action in enumerate(plan):
-            action_name = action.get("name", f"Action_{i+1}")
+            action_name = action.get("name", f"Action_{i + 1}")
 
             # Check for invalid action structure
             if "name" not in action:
-                issues.append(f"Action at step {i+1} missing name")
+                issues.append(f"Action at step {i + 1} missing name")
 
             # Check for unrealistic state transitions
             preconditions = action.get("preconditions", {})

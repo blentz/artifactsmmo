@@ -356,6 +356,7 @@ class TestCharacterGameState:
         mock_character.amulet_slot = ""
         mock_character.artifact1_slot = ""
         mock_character.cooldown_expiration_utc = None
+        mock_character.cooldown_expiration = None
         mock_character.inventory = ["item1", "item2"]
         mock_character.inventory_max_items = 20
 

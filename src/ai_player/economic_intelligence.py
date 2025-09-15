@@ -25,6 +25,7 @@ from artifactsmmo_api_client.client import Client
 
 class MarketTrend(Enum):
     """Market trend indicators"""
+
     RISING = "rising"
     FALLING = "falling"
     STABLE = "stable"
@@ -33,6 +34,7 @@ class MarketTrend(Enum):
 
 class TradeDecisionType(Enum):
     """Types of trade decisions"""
+
     BUY = "buy"
     SELL = "sell"
     HOLD = "hold"
@@ -42,6 +44,7 @@ class TradeDecisionType(Enum):
 @dataclass
 class PriceData:
     """Historical price data for an item"""
+
     item_code: str
     timestamp: datetime
     buy_price: int
@@ -62,6 +65,7 @@ class PriceData:
 @dataclass
 class MarketAnalysis:
     """Market analysis for a specific item"""
+
     item_code: str
     current_price: PriceData
     trend: MarketTrend
@@ -97,6 +101,7 @@ class MarketAnalysis:
 @dataclass
 class TradeDecision:
     """Represents a trading decision"""
+
     item_code: str
     decision_type: TradeDecisionType
     target_price: int
@@ -114,6 +119,7 @@ class TradeDecision:
 @dataclass
 class EconomicStrategy:
     """Economic strategy configuration"""
+
     risk_tolerance: float  # 0.0 = very conservative, 1.0 = very aggressive
     profit_margin_threshold: float  # Minimum profit margin to consider trades
     max_investment_percentage: float  # Max % of gold to invest in single trade
@@ -147,7 +153,7 @@ class MarketDataCollector:
                         timestamp=datetime.now(),
                         buy_price=best_sell_order.price,
                         sell_price=best_sell_order.price,
-                        quantity_available=sum(order.quantity for order in orders)
+                        quantity_available=sum(order.quantity for order in orders),
                     )
 
                     self.last_update[item_code] = datetime.now()
@@ -166,13 +172,15 @@ class MarketDataCollector:
 
             for sale in history_response.data:
                 if sale.sold_at >= cutoff_date:
-                    history_data.append(PriceData(
-                        item_code=item_code,
-                        timestamp=sale.sold_at,
-                        buy_price=sale.price,
-                        sell_price=sale.price,
-                        quantity_available=sale.quantity
-                    ))
+                    history_data.append(
+                        PriceData(
+                            item_code=item_code,
+                            timestamp=sale.sold_at,
+                            buy_price=sale.price,
+                            sell_price=sale.price,
+                            quantity_available=sale.quantity,
+                        )
+                    )
 
         return sorted(history_data, key=lambda x: x.timestamp)
 
@@ -196,10 +204,7 @@ class MarketDataCollector:
 
         cutoff_time = datetime.now() - timedelta(hours=hours)
 
-        return [
-            price_data for price_data in self.price_history[item_code]
-            if price_data.timestamp >= cutoff_time
-        ]
+        return [price_data for price_data in self.price_history[item_code] if price_data.timestamp >= cutoff_time]
 
     def cleanup_old_data(self, max_age_days: int = 30) -> None:
         """Remove old price data to manage memory"""
@@ -207,8 +212,7 @@ class MarketDataCollector:
 
         for item_code in list(self.price_history.keys()):
             self.price_history[item_code] = [
-                price_data for price_data in self.price_history[item_code]
-                if price_data.timestamp >= cutoff_time
+                price_data for price_data in self.price_history[item_code] if price_data.timestamp >= cutoff_time
             ]
 
             if not self.price_history[item_code]:
@@ -254,8 +258,14 @@ class MarketAnalyzer:
 
         volume = sum(p.quantity_available for p in price_history[-24:])  # Last 24 hours
 
-        avg_7d = sum(p.buy_price for p in price_history[-168:]) / len(price_history[-168:]) if price_history[-168:] else current_price.buy_price
-        avg_30d = sum(p.buy_price for p in price_history) / len(price_history) if price_history else current_price.buy_price
+        avg_7d = (
+            sum(p.buy_price for p in price_history[-168:]) / len(price_history[-168:])
+            if price_history[-168:]
+            else current_price.buy_price
+        )
+        avg_30d = (
+            sum(p.buy_price for p in price_history) / len(price_history) if price_history else current_price.buy_price
+        )
 
         pred_1h = self.predict_future_price(price_history, 1)
         pred_24h = self.predict_future_price(price_history, 24)
@@ -272,7 +282,7 @@ class MarketAnalyzer:
             average_price_30d=avg_30d,
             predicted_price_1h=pred_1h,
             predicted_price_24h=pred_24h,
-            confidence=confidence
+            confidence=confidence,
         )
 
     def detect_trend(self, price_history: list[PriceData]) -> MarketTrend:
@@ -311,7 +321,7 @@ class MarketAnalyzer:
         mean_price = sum(prices) / len(prices)
 
         variance = sum((price - mean_price) ** 2 for price in prices) / len(prices)
-        std_dev = variance ** 0.5
+        std_dev = variance**0.5
 
         return std_dev / mean_price if mean_price > 0 else 0.0
 
@@ -350,8 +360,9 @@ class MarketAnalyzer:
 
         return max(1, predicted_price)  # Ensure price is at least 1
 
-    def identify_arbitrage_opportunities(self, ge_prices: dict[str, PriceData],
-                                       npc_prices: dict[str, int]) -> list[TradeDecision]:
+    def identify_arbitrage_opportunities(
+        self, ge_prices: dict[str, PriceData], npc_prices: dict[str, int]
+    ) -> list[TradeDecision]:
         """Identify arbitrage opportunities between GE and NPCs"""
         opportunities = []
 
@@ -363,16 +374,18 @@ class MarketAnalyzer:
                 # Check if we can buy from GE and sell to NPC for profit
                 if npc_price > ge_price.buy_price * 1.1:  # 10% minimum profit margin
                     profit = npc_price - ge_price.buy_price
-                    opportunities.append(TradeDecision(
-                        item_code=item_code,
-                        decision_type=TradeDecisionType.BUY,
-                        target_price=ge_price.buy_price,
-                        target_quantity=min(ge_price.quantity_available, 100),
-                        confidence=0.9,
-                        reasoning=f"Arbitrage: Buy GE {ge_price.buy_price}, sell NPC {npc_price}",
-                        expected_profit=profit,
-                        risk_level=0.1
-                    ))
+                    opportunities.append(
+                        TradeDecision(
+                            item_code=item_code,
+                            decision_type=TradeDecisionType.BUY,
+                            target_price=ge_price.buy_price,
+                            target_quantity=min(ge_price.quantity_available, 100),
+                            confidence=0.9,
+                            reasoning=f"Arbitrage: Buy GE {ge_price.buy_price}, sell NPC {npc_price}",
+                            expected_profit=profit,
+                            risk_level=0.1,
+                        )
+                    )
 
         return opportunities
 
@@ -382,48 +395,50 @@ class MarketAnalyzer:
 
         # Get character's crafting levels to determine available recipes
         char_levels = {
-            'weaponcrafting': character_state.get('weaponcrafting_level', 1),
-            'gearcrafting': character_state.get('gearcrafting_level', 1),
-            'jewelrycrafting': character_state.get('jewelrycrafting_level', 1),
-            'cooking': character_state.get('cooking_level', 1),
-            'alchemy': character_state.get('alchemy_level', 1)
+            "weaponcrafting": character_state.get("weaponcrafting_level", 1),
+            "gearcrafting": character_state.get("gearcrafting_level", 1),
+            "jewelrycrafting": character_state.get("jewelrycrafting_level", 1),
+            "cooking": character_state.get("cooking_level", 1),
+            "alchemy": character_state.get("alchemy_level", 1),
         }
 
         # Common profitable crafting patterns based on skill levels
         crafting_opportunities = [
             {
-                'skill': 'cooking',
-                'min_level': 1,
-                'materials': ['raw_beef', 'cooked_beef'],
-                'profit_margin': 0.15,
-                'craft_item': 'cooked_beef'
+                "skill": "cooking",
+                "min_level": 1,
+                "materials": ["raw_beef", "cooked_beef"],
+                "profit_margin": 0.15,
+                "craft_item": "cooked_beef",
             },
             {
-                'skill': 'weaponcrafting',
-                'min_level': 5,
-                'materials': ['copper_ore', 'ash_wood'],
-                'profit_margin': 0.25,
-                'craft_item': 'copper_sword'
+                "skill": "weaponcrafting",
+                "min_level": 5,
+                "materials": ["copper_ore", "ash_wood"],
+                "profit_margin": 0.25,
+                "craft_item": "copper_sword",
             },
             {
-                'skill': 'gearcrafting',
-                'min_level': 3,
-                'materials': ['wolf_hair', 'cowhide'],
-                'profit_margin': 0.20,
-                'craft_item': 'leather_armor'
-            }
+                "skill": "gearcrafting",
+                "min_level": 3,
+                "materials": ["wolf_hair", "cowhide"],
+                "profit_margin": 0.20,
+                "craft_item": "leather_armor",
+            },
         ]
 
         for opportunity in crafting_opportunities:
-            skill_level = char_levels.get(opportunity['skill'], 0)
-            if skill_level >= opportunity['min_level']:
-                opportunities.append({
-                    'craft_item': opportunity['craft_item'],
-                    'materials_needed': opportunity['materials'],
-                    'estimated_profit_margin': opportunity['profit_margin'],
-                    'required_skill': opportunity['skill'],
-                    'required_level': opportunity['min_level']
-                })
+            skill_level = char_levels.get(opportunity["skill"], 0)
+            if skill_level >= opportunity["min_level"]:
+                opportunities.append(
+                    {
+                        "craft_item": opportunity["craft_item"],
+                        "materials_needed": opportunity["materials"],
+                        "estimated_profit_margin": opportunity["profit_margin"],
+                        "required_skill": opportunity["skill"],
+                        "required_level": opportunity["min_level"],
+                    }
+                )
 
         return opportunities
 
@@ -435,13 +450,7 @@ class MarketAnalyzer:
         price_history = self.data_collector.get_price_history(item_code, hours=720)  # 30 days
 
         if len(price_history) < 10:
-            return {
-                'weekly_variance': 0.0,
-                'daily_variance': 0.0,
-                'peak_hour': 12,
-                'low_hour': 6,
-                'confidence': 0.1
-            }
+            return {"weekly_variance": 0.0, "daily_variance": 0.0, "peak_hour": 12, "low_hour": 6, "confidence": 0.1}
 
         # Analyze price patterns by hour and day
         hourly_prices = {}
@@ -460,8 +469,8 @@ class MarketAnalyzer:
             daily_prices[day].append(price_data.buy_price)
 
         # Calculate average prices by hour and day
-        hourly_averages = {h: sum(prices)/len(prices) for h, prices in hourly_prices.items()}
-        daily_averages = {d: sum(prices)/len(prices) for d, prices in daily_prices.items()}
+        hourly_averages = {h: sum(prices) / len(prices) for h, prices in hourly_prices.items()}
+        daily_averages = {d: sum(prices) / len(prices) for d, prices in daily_prices.items()}
 
         # Find peak and low periods
         peak_hour = max(hourly_averages.keys(), key=lambda h: hourly_averages[h]) if hourly_averages else 12
@@ -476,18 +485,18 @@ class MarketAnalyzer:
 
         if daily_averages:
             daily_variance = sum((avg - mean_price) ** 2 for avg in daily_averages.values()) / len(daily_averages)
-            daily_variance = (daily_variance ** 0.5) / mean_price if mean_price > 0 else 0.0
+            daily_variance = (daily_variance**0.5) / mean_price if mean_price > 0 else 0.0
 
         if hourly_averages:
             weekly_variance = sum((avg - mean_price) ** 2 for avg in hourly_averages.values()) / len(hourly_averages)
-            weekly_variance = (weekly_variance ** 0.5) / mean_price if mean_price > 0 else 0.0
+            weekly_variance = (weekly_variance**0.5) / mean_price if mean_price > 0 else 0.0
 
         patterns = {
-            'weekly_variance': weekly_variance,
-            'daily_variance': daily_variance,
-            'peak_hour': peak_hour,
-            'low_hour': low_hour,
-            'confidence': min(0.9, len(price_history) / 100.0)
+            "weekly_variance": weekly_variance,
+            "daily_variance": daily_variance,
+            "peak_hour": peak_hour,
+            "low_hour": low_hour,
+            "confidence": min(0.9, len(price_history) / 100.0),
         }
 
         return patterns
@@ -513,17 +522,13 @@ class MarketAnalyzer:
         if len(volumes) > 1:
             avg_volume = sum(volumes) / len(volumes)
             volume_variance = sum((v - avg_volume) ** 2 for v in volumes) / len(volumes)
-            volume_std = volume_variance ** 0.5
+            volume_std = volume_variance**0.5
             volume_consistency = max(0.0, 1.0 - (volume_std / avg_volume)) if avg_volume > 0 else 0.5
         else:
             volume_consistency = 0.5
 
         # Weighted efficiency score
-        efficiency = (
-            stability_score * 0.4 +
-            spread_efficiency * 0.4 +
-            volume_consistency * 0.2
-        )
+        efficiency = stability_score * 0.4 + spread_efficiency * 0.4 + volume_consistency * 0.2
 
         return max(0.0, min(1.0, efficiency))
 
@@ -535,12 +540,13 @@ class TradingStrategy:
         self.market_analyzer = market_analyzer
         self.strategy = strategy
 
-    def generate_trade_decisions(self, character_state: dict[str, Any],
-                               available_items: list[str]) -> list[TradeDecision]:
+    def generate_trade_decisions(
+        self, character_state: dict[str, Any], available_items: list[str]
+    ) -> list[TradeDecision]:
         """Generate trading decisions based on current market conditions"""
         decisions = []
 
-        available_gold = character_state.get('character_gold', 0)
+        available_gold = character_state.get("character_gold", 0)
         max_investment = int(available_gold * self.strategy.max_investment_percentage)
 
         if max_investment < 100:  # Need minimum gold to trade
@@ -552,7 +558,7 @@ class TradingStrategy:
                 self.momentum_trading_strategy,
                 self.mean_reversion_strategy,
                 self.value_investing_strategy,
-                self.seasonal_strategy
+                self.seasonal_strategy,
             ]
 
             for strategy_func in strategies:
@@ -592,7 +598,7 @@ class TradingStrategy:
                     confidence=analysis.confidence,
                     reasoning=f"Momentum: Rising trend, predicted +{profit_estimate} in 1h",
                     expected_profit=profit_estimate,
-                    risk_level=1.0 - analysis.confidence
+                    risk_level=1.0 - analysis.confidence,
                 )
 
         elif analysis.trend == MarketTrend.FALLING and analysis.confidence > 0.6:
@@ -607,7 +613,7 @@ class TradingStrategy:
                 confidence=analysis.confidence,
                 reasoning=f"Momentum: Falling trend, avoid loss of {predicted_loss}",
                 expected_profit=predicted_loss,
-                risk_level=1.0 - analysis.confidence
+                risk_level=1.0 - analysis.confidence,
             )
 
         return None
@@ -634,7 +640,7 @@ class TradingStrategy:
                 confidence=min(0.8, analysis.confidence + 0.2),
                 reasoning=f"Mean reversion: {current_price} below 7d avg {avg_7d:.0f}",
                 expected_profit=profit_estimate,
-                risk_level=0.3
+                risk_level=0.3,
             )
 
         # Sell if current price is significantly above 7-day average
@@ -649,7 +655,7 @@ class TradingStrategy:
                 confidence=min(0.8, analysis.confidence + 0.2),
                 reasoning=f"Mean reversion: {current_price} above 7d avg {avg_7d:.0f}",
                 expected_profit=profit_estimate,
-                risk_level=0.2
+                risk_level=0.2,
             )
 
         return None
@@ -671,10 +677,7 @@ class TradingStrategy:
         avg_30d = analysis.average_price_30d
 
         # Look for items trading well below 30-day average with low volatility
-        if (current_price < avg_30d * 0.8 and
-            analysis.volatility < 0.2 and
-            analysis.confidence > 0.7):
-
+        if current_price < avg_30d * 0.8 and analysis.volatility < 0.2 and analysis.confidence > 0.7:
             profit_estimate = int((avg_30d - current_price) * 15)
 
             return TradeDecision(
@@ -685,7 +688,7 @@ class TradingStrategy:
                 confidence=analysis.confidence,
                 reasoning=f"Value: {current_price} vs 30d avg {avg_30d:.0f}, low volatility",
                 expected_profit=profit_estimate,
-                risk_level=0.1
+                risk_level=0.1,
             )
 
         return None
@@ -694,7 +697,7 @@ class TradingStrategy:
         """Trade based on seasonal patterns"""
         patterns = self.market_analyzer.analyze_seasonal_patterns(item_code)
 
-        if patterns['confidence'] < 0.5:
+        if patterns["confidence"] < 0.5:
             return None
 
         try:
@@ -705,32 +708,32 @@ class TradingStrategy:
         current_hour = datetime.now().hour
 
         # Buy near low hours, sell near peak hours
-        if abs(current_hour - patterns['low_hour']) <= 2:
-            profit_estimate = int(analysis.current_price.buy_price * patterns['daily_variance'] * 10)
+        if abs(current_hour - patterns["low_hour"]) <= 2:
+            profit_estimate = int(analysis.current_price.buy_price * patterns["daily_variance"] * 10)
 
             return TradeDecision(
                 item_code=item_code,
                 decision_type=TradeDecisionType.BUY,
                 target_price=analysis.current_price.buy_price,
                 target_quantity=min(15, analysis.current_price.quantity_available),
-                confidence=patterns['confidence'],
+                confidence=patterns["confidence"],
                 reasoning=f"Seasonal: Near low hour {patterns['low_hour']}, current {current_hour}",
                 expected_profit=profit_estimate,
-                risk_level=0.4
+                risk_level=0.4,
             )
 
-        elif abs(current_hour - patterns['peak_hour']) <= 2:
-            profit_estimate = int(analysis.current_price.sell_price * patterns['daily_variance'] * 10)
+        elif abs(current_hour - patterns["peak_hour"]) <= 2:
+            profit_estimate = int(analysis.current_price.sell_price * patterns["daily_variance"] * 10)
 
             return TradeDecision(
                 item_code=item_code,
                 decision_type=TradeDecisionType.SELL,
                 target_price=analysis.current_price.sell_price,
                 target_quantity=10,
-                confidence=patterns['confidence'],
+                confidence=patterns["confidence"],
                 reasoning=f"Seasonal: Near peak hour {patterns['peak_hour']}, current {current_hour}",
                 expected_profit=profit_estimate,
-                risk_level=0.3
+                risk_level=0.3,
             )
 
         return None
@@ -752,16 +755,18 @@ class TradingStrategy:
                 # Recommend selling some of this item
                 sell_quantity = int(value * 0.3)  # Sell 30% of holding
 
-                decisions.append(TradeDecision(
-                    item_code=item_code,
-                    decision_type=TradeDecisionType.SELL,
-                    target_price=0,  # Use market price
-                    target_quantity=sell_quantity,
-                    confidence=0.8,
-                    reasoning=f"Diversification: Reduce {concentration:.1%} concentration",
-                    expected_profit=0,
-                    risk_level=0.1
-                ))
+                decisions.append(
+                    TradeDecision(
+                        item_code=item_code,
+                        decision_type=TradeDecisionType.SELL,
+                        target_price=0,  # Use market price
+                        target_quantity=sell_quantity,
+                        confidence=0.8,
+                        reasoning=f"Diversification: Reduce {concentration:.1%} concentration",
+                        expected_profit=0,
+                        risk_level=0.1,
+                    )
+                )
 
         return decisions
 
@@ -778,6 +783,161 @@ class EconomicIntelligence:
         self.portfolio = {}
         self.trade_history = []
 
+    async def analyze_market_trend(self, price_history: list[PriceData]) -> MarketTrend:
+        """Analyze market trend from price history"""
+        if len(price_history) < 3:
+            return MarketTrend.STABLE
+
+        prices = [p.buy_price for p in price_history[-10:]]  # Look at last 10 data points
+        if len(prices) < 3:
+            return MarketTrend.STABLE
+
+        # Calculate moving averages
+        short_ma = sum(prices[-3:]) / 3
+        long_ma = sum(prices) / len(prices)
+
+        # Calculate price changes
+        recent_change = (prices[-1] - prices[0]) / prices[0] if prices[0] > 0 else 0
+        volatility = self.calculate_volatility(price_history[-10:])
+
+        if volatility > 0.3:
+            return MarketTrend.VOLATILE
+        elif short_ma > long_ma * 1.05 and recent_change > 0.05:
+            return MarketTrend.RISING
+        elif short_ma < long_ma * 0.95 and recent_change < -0.05:
+            return MarketTrend.FALLING
+        else:
+            return MarketTrend.STABLE
+
+    def calculate_volatility(self, price_history: list[PriceData]) -> float:
+        """Calculate price volatility"""
+        if len(price_history) < 2:
+            return 0.0
+
+        prices = [p.buy_price for p in price_history]
+        mean_price = sum(prices) / len(prices)
+
+        variance = sum((price - mean_price) ** 2 for price in prices) / len(prices)
+        std_dev = variance**0.5
+
+        return std_dev / mean_price if mean_price > 0 else 0.0
+
+    def calculate_demand_score(self, price_history: list[PriceData]) -> float:
+        """Calculate demand score based on price history"""
+        if not price_history:
+            return 0.0
+
+        # Calculate average quantity
+        quantities = [p.quantity_available for p in price_history]
+        avg_quantity = sum(quantities) / len(quantities) if quantities else 0
+
+        if avg_quantity == 0:
+            return 0.0
+
+        # Calculate price trend
+        prices = [p.buy_price for p in price_history]
+        price_trend = (prices[-1] - prices[0]) / prices[0] if prices and prices[0] > 0 else 0
+
+        # Calculate volume trend
+        volume_trend = (quantities[-1] - quantities[0]) / quantities[0] if quantities and quantities[0] > 0 else 0
+
+        # Combine factors into demand score
+        demand_score = (price_trend + volume_trend) / 2
+        return max(0.0, min(1.0, demand_score + 0.5))  # Normalize to 0-1 range
+
+    async def get_profitable_crafting_opportunities(self) -> list[dict[str, Any]]:
+        """Get profitable crafting opportunities"""
+        opportunities = []
+
+        # Get current prices
+        current_prices = await self.data_collector.fetch_current_prices([])
+        if not current_prices:
+            return opportunities
+
+        # TODO: Implement crafting opportunity analysis
+        return opportunities
+
+    def calculate_crafting_profit_margin(self, recipe: Any, current_prices: dict[str, PriceData]) -> float | None:
+        """Calculate profit margin for crafting recipe"""
+        # Check if all material prices are available
+        for material in recipe.items:
+            if material.code not in current_prices:
+                return None
+
+        # Check if recipe output price is available
+        if recipe.code not in current_prices:
+            return None
+
+        # Calculate material costs
+        total_material_cost = sum(
+            current_prices[material.code].buy_price * material.quantity for material in recipe.items
+        )
+
+        # Calculate output value
+        output_value = current_prices[recipe.code].sell_price * recipe.quantity
+
+        # Calculate profit margin
+        if total_material_cost > 0:
+            profit_margin = (output_value - total_material_cost) / total_material_cost
+            return profit_margin
+        return None
+
+    def identify_market_manipulation(self, price_history: list[PriceData]) -> list[dict[str, Any]]:
+        """Identify potential market manipulation"""
+        if len(price_history) < 10:
+            return []
+
+        manipulation_patterns = []
+
+        # Calculate normal price range
+        prices = [p.buy_price for p in price_history]
+        mean_price = sum(prices) / len(prices)
+        std_dev = (sum((p - mean_price) ** 2 for p in prices) / len(prices)) ** 0.5
+
+        # Look for suspicious patterns
+        for i in range(1, len(price_history)):
+            price_change = abs(price_history[i].buy_price - price_history[i - 1].buy_price)
+            if price_change > std_dev * 3:  # More than 3 standard deviations
+                manipulation_patterns.append(
+                    {
+                        "timestamp": price_history[i].timestamp,
+                        "price_change": price_change,
+                        "confidence": min(1.0, price_change / (std_dev * 4)),
+                    }
+                )
+
+        return manipulation_patterns
+
+    def calculate_seasonal_adjustment(self, price_history: list[PriceData]) -> float:
+        """Calculate seasonal price adjustment factor"""
+        if len(price_history) < 7:  # Need at least a week of data
+            return 1.0
+
+        current_weekday = datetime.now().weekday()
+        current_hour = datetime.now().hour
+
+        # Get prices for same weekday and hour
+        relevant_prices = [
+            p.buy_price
+            for p in price_history
+            if p.timestamp.weekday() == current_weekday and abs(p.timestamp.hour - current_hour) <= 1
+        ]
+
+        if not relevant_prices:  # No data for current weekday/hour
+            return 1.0
+
+        # Calculate average price for this time
+        time_avg = sum(relevant_prices) / len(relevant_prices)
+
+        # Calculate overall average
+        all_prices = [p.buy_price for p in price_history]
+        overall_avg = sum(all_prices) / len(all_prices)
+
+        # Calculate adjustment factor
+        if overall_avg > 0:
+            return time_avg / overall_avg
+        return 1.0
+
     async def analyze_market_opportunities(self, character_state: dict[str, Any]) -> list[TradeDecision]:
         """Analyze current market for trading opportunities"""
 
@@ -785,8 +945,17 @@ class EconomicIntelligence:
         await self.data_collector.update_all_tracked_items()
 
         # Get commonly traded items for analysis
-        tracked_items = ['copper_ore', 'iron_ore', 'coal', 'ash_wood', 'spruce_wood',
-                        'raw_beef', 'cooked_beef', 'copper_sword', 'iron_sword']
+        tracked_items = [
+            "copper_ore",
+            "iron_ore",
+            "coal",
+            "ash_wood",
+            "spruce_wood",
+            "raw_beef",
+            "cooked_beef",
+            "copper_sword",
+            "iron_sword",
+        ]
 
         # Analyze each item for opportunities
         for item_code in tracked_items:
@@ -800,25 +969,20 @@ class EconomicIntelligence:
         decisions.extend(arbitrage_decisions)
 
         # Filter by risk tolerance
-        filtered_decisions = [
-            d for d in decisions
-            if d.risk_level <= self.strategy.risk_tolerance
-        ]
+        filtered_decisions = [d for d in decisions if d.risk_level <= self.strategy.risk_tolerance]
 
         return filtered_decisions
 
     def optimize_buy_sell_decisions(self, character_state: dict[str, Any]) -> list[TradeDecision]:
         """Generate optimized buy/sell decisions"""
-        available_gold = character_state.get('character_gold', 0)
+        available_gold = character_state.get("character_gold", 0)
 
         # Get all potential opportunities
         all_opportunities = []
         tracked_items = list(self.data_collector.price_history.keys())
 
         if tracked_items:
-            all_opportunities = self.trading_strategy.generate_trade_decisions(
-                character_state, tracked_items
-            )
+            all_opportunities = self.trading_strategy.generate_trade_decisions(character_state, tracked_items)
 
         # Optimize allocation
         allocation = self.calculate_investment_allocation(available_gold, all_opportunities)
@@ -836,8 +1000,9 @@ class EconomicIntelligence:
 
         return optimized_decisions
 
-    def calculate_investment_allocation(self, available_gold: int,
-                                      opportunities: list[TradeDecision]) -> dict[str, int]:
+    def calculate_investment_allocation(
+        self, available_gold: int, opportunities: list[TradeDecision]
+    ) -> dict[str, int]:
         """Calculate how to allocate gold across opportunities"""
         allocation = {}
 
@@ -872,23 +1037,17 @@ class EconomicIntelligence:
     def evaluate_trade_performance(self) -> dict[str, float]:
         """Evaluate historical trading performance"""
         if not self.trade_history:
-            return {
-                'total_trades': 0,
-                'win_rate': 0.0,
-                'average_profit': 0.0,
-                'total_profit': 0.0,
-                'sharpe_ratio': 0.0
-            }
+            return {"total_trades": 0, "win_rate": 0.0, "average_profit": 0.0, "total_profit": 0.0, "sharpe_ratio": 0.0}
 
-        profitable_trades = [t for t in self.trade_history if t.get('profit', 0) > 0]
-        total_profit = sum(t.get('profit', 0) for t in self.trade_history)
+        profitable_trades = [t for t in self.trade_history if t.get("profit", 0) > 0]
+        total_profit = sum(t.get("profit", 0) for t in self.trade_history)
 
         performance = {
-            'total_trades': len(self.trade_history),
-            'win_rate': len(profitable_trades) / len(self.trade_history),
-            'average_profit': total_profit / len(self.trade_history),
-            'total_profit': total_profit,
-            'sharpe_ratio': self._calculate_sharpe_ratio()
+            "total_trades": len(self.trade_history),
+            "win_rate": len(profitable_trades) / len(self.trade_history),
+            "average_profit": total_profit / len(self.trade_history),
+            "total_profit": total_profit,
+            "sharpe_ratio": self._calculate_sharpe_ratio(),
         }
 
         return performance
@@ -898,11 +1057,11 @@ class EconomicIntelligence:
         if len(self.trade_history) < 2:
             return 0.0
 
-        profits = [t.get('profit', 0) for t in self.trade_history]
+        profits = [t.get("profit", 0) for t in self.trade_history]
         mean_profit = sum(profits) / len(profits)
 
         variance = sum((p - mean_profit) ** 2 for p in profits) / len(profits)
-        std_dev = variance ** 0.5
+        std_dev = variance**0.5
 
         return mean_profit / std_dev if std_dev > 0 else 0.0
 
@@ -910,21 +1069,21 @@ class EconomicIntelligence:
         """Adjust strategy based on past performance"""
         performance = self.evaluate_trade_performance()
 
-        if performance['total_trades'] < 10:
+        if performance["total_trades"] < 10:
             return  # Need more data
 
         # Adjust risk tolerance based on win rate
-        if performance['win_rate'] < 0.4:
+        if performance["win_rate"] < 0.4:
             # Poor performance, reduce risk
             self.strategy.risk_tolerance = max(0.1, self.strategy.risk_tolerance * 0.9)
             self.strategy.max_investment_percentage = max(0.1, self.strategy.max_investment_percentage * 0.9)
-        elif performance['win_rate'] > 0.7:
+        elif performance["win_rate"] > 0.7:
             # Good performance, can increase risk slightly
             self.strategy.risk_tolerance = min(1.0, self.strategy.risk_tolerance * 1.05)
             self.strategy.max_investment_percentage = min(0.5, self.strategy.max_investment_percentage * 1.05)
 
         # Adjust profit margin threshold based on average profit
-        if performance['average_profit'] < 0:
+        if performance["average_profit"] < 0:
             self.strategy.profit_margin_threshold = min(0.5, self.strategy.profit_margin_threshold * 1.2)
 
     def get_economic_goals(self, character_state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -932,40 +1091,46 @@ class EconomicIntelligence:
         goals = []
 
         # Basic wealth building goal
-        current_gold = character_state.get('character_gold', 0)
+        current_gold = character_state.get("character_gold", 0)
         if current_gold < 10000:
-            goals.append({
-                'goal_name': 'accumulate_wealth',
-                'target_gold': min(current_gold * 2, 10000),
-                'priority': 0.7,
-                'method': 'trading'
-            })
+            goals.append(
+                {
+                    "goal_name": "accumulate_wealth",
+                    "target_gold": min(current_gold * 2, 10000),
+                    "priority": 0.7,
+                    "method": "trading",
+                }
+            )
 
         # Market access goal
-        at_ge = character_state.get('at_grand_exchange', False)
+        at_ge = character_state.get("at_grand_exchange", False)
         if not at_ge and current_gold > 1000:
-            goals.append({
-                'goal_name': 'access_market',
-                'target_location': 'grand_exchange',
-                'priority': 0.8,
-                'method': 'movement'
-            })
+            goals.append(
+                {
+                    "goal_name": "access_market",
+                    "target_location": "grand_exchange",
+                    "priority": 0.8,
+                    "method": "movement",
+                }
+            )
 
         # Profitable trading goal
         if at_ge and current_gold > 500:
-            goals.append({
-                'goal_name': 'execute_profitable_trades',
-                'min_profit_margin': self.strategy.profit_margin_threshold,
-                'priority': 0.9,
-                'method': 'trading'
-            })
+            goals.append(
+                {
+                    "goal_name": "execute_profitable_trades",
+                    "min_profit_margin": self.strategy.profit_margin_threshold,
+                    "priority": 0.9,
+                    "method": "trading",
+                }
+            )
 
         return goals
 
     def should_prioritize_economics(self, character_state: dict[str, Any]) -> bool:
         """Determine if economic activities should be prioritized"""
-        current_gold = character_state.get('character_gold', 0)
-        character_level = character_state.get('character_level', 1)
+        current_gold = character_state.get("character_gold", 0)
+        character_level = character_state.get("character_level", 1)
 
         # Prioritize economics if:
         # 1. Low on gold relative to level
@@ -975,7 +1140,7 @@ class EconomicIntelligence:
         if current_gold < character_level * 100:
             return True  # Need gold for level
 
-        at_ge = character_state.get('at_grand_exchange', False)
+        at_ge = character_state.get("at_grand_exchange", False)
         if at_ge and current_gold > 1000:
             return True  # Can trade profitably
 
@@ -986,15 +1151,15 @@ class EconomicIntelligence:
 
     def estimate_wealth_building_efficiency(self, method: str, character_state: dict[str, Any]) -> float:
         """Estimate efficiency of different wealth building methods"""
-        character_level = character_state.get('character_level', 1)
-        current_gold = character_state.get('character_gold', 0)
+        character_level = character_state.get("character_level", 1)
+        current_gold = character_state.get("character_gold", 0)
 
-        if method == 'trading':
+        if method == "trading":
             # Trading efficiency based on capital and market access
             if current_gold < 500:
                 return 0.2  # Not enough capital
 
-            at_ge = character_state.get('at_grand_exchange', False)
+            at_ge = character_state.get("at_grand_exchange", False)
             if not at_ge:
                 return 0.3  # Need to travel to market
 
@@ -1002,19 +1167,19 @@ class EconomicIntelligence:
             capital_factor = min(1.0, current_gold / 5000)
             return 0.5 + (capital_factor * 0.4)
 
-        elif method == 'gathering':
+        elif method == "gathering":
             # Gathering efficiency based on skill levels
-            gathering_skills = ['mining_level', 'woodcutting_level', 'fishing_level']
+            gathering_skills = ["mining_level", "woodcutting_level", "fishing_level"]
             avg_skill = sum(character_state.get(skill, 1) for skill in gathering_skills) / 3
             return min(0.8, 0.3 + (avg_skill / 45) * 0.5)
 
-        elif method == 'crafting':
+        elif method == "crafting":
             # Crafting efficiency based on crafting skills
-            crafting_skills = ['weaponcrafting_level', 'gearcrafting_level', 'cooking_level']
+            crafting_skills = ["weaponcrafting_level", "gearcrafting_level", "cooking_level"]
             avg_skill = sum(character_state.get(skill, 1) for skill in crafting_skills) / 3
             return min(0.7, 0.2 + (avg_skill / 45) * 0.5)
 
-        elif method == 'combat':
+        elif method == "combat":
             # Combat efficiency based on level and equipment
             combat_factor = min(1.0, character_level / 20)
             return 0.4 + (combat_factor * 0.3)
@@ -1029,57 +1194,55 @@ class PortfolioManager:
         self.holdings = {}
         self.transaction_history = []
 
-    def record_purchase(self, item_code: str, quantity: int, price_per_item: int,
-                       timestamp: datetime) -> None:
+    def record_purchase(self, item_code: str, quantity: int, price_per_item: int, timestamp: datetime) -> None:
         """Record item purchase"""
         if item_code not in self.holdings:
-            self.holdings[item_code] = {'quantity': 0, 'avg_cost': 0, 'transactions': []}
+            self.holdings[item_code] = {"quantity": 0, "avg_cost": 0, "transactions": []}
 
         # Update average cost using weighted average
         current_holding = self.holdings[item_code]
-        total_cost = (current_holding['quantity'] * current_holding['avg_cost']) + (quantity * price_per_item)
-        total_quantity = current_holding['quantity'] + quantity
+        total_cost = (current_holding["quantity"] * current_holding["avg_cost"]) + (quantity * price_per_item)
+        total_quantity = current_holding["quantity"] + quantity
 
-        current_holding['quantity'] = total_quantity
-        current_holding['avg_cost'] = total_cost / total_quantity if total_quantity > 0 else 0
+        current_holding["quantity"] = total_quantity
+        current_holding["avg_cost"] = total_cost / total_quantity if total_quantity > 0 else 0
 
         # Record transaction
         transaction = {
-            'type': 'buy',
-            'quantity': quantity,
-            'price': price_per_item,
-            'timestamp': timestamp,
-            'total_cost': quantity * price_per_item
+            "type": "buy",
+            "quantity": quantity,
+            "price": price_per_item,
+            "timestamp": timestamp,
+            "total_cost": quantity * price_per_item,
         }
-        current_holding['transactions'].append(transaction)
+        current_holding["transactions"].append(transaction)
         self.transaction_history.append(transaction)
 
-    def record_sale(self, item_code: str, quantity: int, price_per_item: int,
-                   timestamp: datetime) -> None:
+    def record_sale(self, item_code: str, quantity: int, price_per_item: int, timestamp: datetime) -> None:
         """Record item sale"""
         if item_code not in self.holdings:
-            self.holdings[item_code] = {'quantity': 0, 'avg_cost': 0, 'transactions': []}
+            self.holdings[item_code] = {"quantity": 0, "avg_cost": 0, "transactions": []}
 
         current_holding = self.holdings[item_code]
 
         # Calculate realized gain/loss
-        avg_cost = current_holding['avg_cost']
+        avg_cost = current_holding["avg_cost"]
         profit = (price_per_item - avg_cost) * quantity
 
         # Update holdings
-        current_holding['quantity'] = max(0, current_holding['quantity'] - quantity)
+        current_holding["quantity"] = max(0, current_holding["quantity"] - quantity)
 
         # Record transaction
         transaction = {
-            'type': 'sell',
-            'quantity': quantity,
-            'price': price_per_item,
-            'timestamp': timestamp,
-            'total_revenue': quantity * price_per_item,
-            'avg_cost': avg_cost,
-            'profit': profit
+            "type": "sell",
+            "quantity": quantity,
+            "price": price_per_item,
+            "timestamp": timestamp,
+            "total_revenue": quantity * price_per_item,
+            "avg_cost": avg_cost,
+            "profit": profit,
         }
-        current_holding['transactions'].append(transaction)
+        current_holding["transactions"].append(transaction)
         self.transaction_history.append(transaction)
 
     def calculate_portfolio_value(self, current_prices: dict[str, int]) -> int:
@@ -1087,8 +1250,8 @@ class PortfolioManager:
         total_value = 0
 
         for item_code, holding in self.holdings.items():
-            if holding['quantity'] > 0 and item_code in current_prices:
-                item_value = holding['quantity'] * current_prices[item_code]
+            if holding["quantity"] > 0 and item_code in current_prices:
+                item_value = holding["quantity"] * current_prices[item_code]
                 total_value += item_value
 
         return total_value
@@ -1098,19 +1261,19 @@ class PortfolioManager:
         unrealized_gains = {}
 
         for item_code, holding in self.holdings.items():
-            if holding['quantity'] > 0 and item_code in current_prices:
-                current_value = holding['quantity'] * current_prices[item_code]
-                cost_basis = holding['quantity'] * holding['avg_cost']
+            if holding["quantity"] > 0 and item_code in current_prices:
+                current_value = holding["quantity"] * current_prices[item_code]
+                cost_basis = holding["quantity"] * holding["avg_cost"]
 
                 if cost_basis > 0:
                     gain_loss = current_value - cost_basis
                     gain_loss_pct = (gain_loss / cost_basis) * 100
 
                     unrealized_gains[item_code] = {
-                        'absolute_gain': gain_loss,
-                        'percentage_gain': gain_loss_pct,
-                        'current_value': current_value,
-                        'cost_basis': cost_basis
+                        "absolute_gain": gain_loss,
+                        "percentage_gain": gain_loss_pct,
+                        "current_value": current_value,
+                        "cost_basis": cost_basis,
                     }
 
         return unrealized_gains
@@ -1122,9 +1285,7 @@ class PortfolioManager:
 
         # Calculate total portfolio value using average costs
         total_value = sum(
-            holding['quantity'] * holding['avg_cost']
-            for holding in self.holdings.values()
-            if holding['quantity'] > 0
+            holding["quantity"] * holding["avg_cost"] for holding in self.holdings.values() if holding["quantity"] > 0
         )
 
         if total_value == 0:
@@ -1133,13 +1294,13 @@ class PortfolioManager:
         # Calculate concentration ratios
         concentrations = []
         for holding in self.holdings.values():
-            if holding['quantity'] > 0:
-                item_value = holding['quantity'] * holding['avg_cost']
+            if holding["quantity"] > 0:
+                item_value = holding["quantity"] * holding["avg_cost"]
                 concentration = item_value / total_value
                 concentrations.append(concentration)
 
         # Calculate Herfindahl-Hirschman Index (HHI)
-        hhi = sum(c ** 2 for c in concentrations)
+        hhi = sum(c**2 for c in concentrations)
 
         # Convert to diversification score (1 = perfectly diversified, 0 = concentrated)
         diversification_score = 1.0 - hhi
@@ -1155,9 +1316,7 @@ class PortfolioManager:
 
         # Calculate current portfolio value
         total_value = sum(
-            holding['quantity'] * holding['avg_cost']
-            for holding in self.holdings.values()
-            if holding['quantity'] > 0
+            holding["quantity"] * holding["avg_cost"] for holding in self.holdings.values() if holding["quantity"] > 0
         )
 
         if total_value == 0:
@@ -1166,8 +1325,8 @@ class PortfolioManager:
         # Calculate current allocations
         current_allocations = {}
         for item_code, holding in self.holdings.items():
-            if holding['quantity'] > 0:
-                item_value = holding['quantity'] * holding['avg_cost']
+            if holding["quantity"] > 0:
+                item_value = holding["quantity"] * holding["avg_cost"]
                 current_allocations[item_code] = item_value / total_value
 
         # Identify rebalancing needs
@@ -1183,39 +1342,43 @@ class PortfolioManager:
 
                 if value_difference > 0:
                     # Need to buy more
-                    rebalancing_decisions.append(TradeDecision(
-                        item_code=item_code,
-                        decision_type=TradeDecisionType.BUY,
-                        target_price=0,  # Use market price
-                        target_quantity=int(abs(value_difference) / 100),  # Estimate quantity
-                        confidence=0.8,
-                        reasoning=f"Rebalance: {current_pct:.1%} -> {target_pct:.1%}",
-                        expected_profit=0,
-                        risk_level=0.2
-                    ))
+                    rebalancing_decisions.append(
+                        TradeDecision(
+                            item_code=item_code,
+                            decision_type=TradeDecisionType.BUY,
+                            target_price=0,  # Use market price
+                            target_quantity=int(abs(value_difference) / 100),  # Estimate quantity
+                            confidence=0.8,
+                            reasoning=f"Rebalance: {current_pct:.1%} -> {target_pct:.1%}",
+                            expected_profit=0,
+                            risk_level=0.2,
+                        )
+                    )
                 else:
                     # Need to sell some
-                    rebalancing_decisions.append(TradeDecision(
-                        item_code=item_code,
-                        decision_type=TradeDecisionType.SELL,
-                        target_price=0,  # Use market price
-                        target_quantity=int(abs(value_difference) / 100),  # Estimate quantity
-                        confidence=0.8,
-                        reasoning=f"Rebalance: {current_pct:.1%} -> {target_pct:.1%}",
-                        expected_profit=0,
-                        risk_level=0.2
-                    ))
+                    rebalancing_decisions.append(
+                        TradeDecision(
+                            item_code=item_code,
+                            decision_type=TradeDecisionType.SELL,
+                            target_price=0,  # Use market price
+                            target_quantity=int(abs(value_difference) / 100),  # Estimate quantity
+                            confidence=0.8,
+                            reasoning=f"Rebalance: {current_pct:.1%} -> {target_pct:.1%}",
+                            expected_profit=0,
+                            risk_level=0.2,
+                        )
+                    )
 
         return rebalancing_decisions
 
     def calculate_risk_metrics(self, price_history: dict[str, list[PriceData]]) -> dict[str, float]:
         """Calculate various risk metrics for portfolio"""
         metrics = {
-            'portfolio_volatility': 0.0,
-            'max_drawdown': 0.0,
-            'value_at_risk_95': 0.0,
-            'sharpe_ratio': 0.0,
-            'beta': 1.0
+            "portfolio_volatility": 0.0,
+            "max_drawdown": 0.0,
+            "value_at_risk_95": 0.0,
+            "sharpe_ratio": 0.0,
+            "beta": 1.0,
         }
 
         if not self.holdings or not price_history:
@@ -1228,10 +1391,10 @@ class PortfolioManager:
             daily_returns = []
 
             for i in range(1, len(self.transaction_history)):
-                current_profit = self.transaction_history[i].get('profit', 0)
+                current_profit = self.transaction_history[i].get("profit", 0)
                 if current_profit != 0:
                     # Calculate daily return
-                    prev_value = abs(self.transaction_history[i-1].get('total_cost', 1))
+                    prev_value = abs(self.transaction_history[i - 1].get("total_cost", 1))
                     daily_return = current_profit / prev_value
                     daily_returns.append(daily_return)
 
@@ -1239,16 +1402,18 @@ class PortfolioManager:
                 # Portfolio volatility (standard deviation of returns)
                 mean_return = sum(daily_returns) / len(daily_returns)
                 variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
-                metrics['portfolio_volatility'] = variance ** 0.5
+                metrics["portfolio_volatility"] = variance**0.5
 
                 # Sharpe ratio (assuming risk-free rate of 0)
-                metrics['sharpe_ratio'] = mean_return / metrics['portfolio_volatility'] if metrics['portfolio_volatility'] > 0 else 0
+                metrics["sharpe_ratio"] = (
+                    mean_return / metrics["portfolio_volatility"] if metrics["portfolio_volatility"] > 0 else 0
+                )
 
                 # Value at Risk (95% confidence)
                 sorted_returns = sorted(daily_returns)
                 var_index = int(len(sorted_returns) * 0.05)
                 if var_index < len(sorted_returns):
-                    metrics['value_at_risk_95'] = abs(sorted_returns[var_index])
+                    metrics["value_at_risk_95"] = abs(sorted_returns[var_index])
 
                 # Max drawdown
                 cumulative_returns = []
@@ -1266,7 +1431,7 @@ class PortfolioManager:
                         drawdown = (peak - cum_ret) / peak if peak != 0 else 0
                         max_dd = max(max_dd, drawdown)
 
-                    metrics['max_drawdown'] = max_dd
+                    metrics["max_drawdown"] = max_dd
 
         return metrics
 
@@ -1281,44 +1446,50 @@ class EconomicGoalGenerator:
         """Generate GOAP goals for trading activities"""
         goals = []
 
-        current_gold = character_state.get('character_gold', 0)
-        at_ge = character_state.get('at_grand_exchange', False)
+        current_gold = character_state.get("character_gold", 0)
+        at_ge = character_state.get("at_grand_exchange", False)
 
         # Goal: Get to Grand Exchange for trading
         if not at_ge and current_gold > 500:
-            goals.append({
-                'name': 'reach_grand_exchange',
-                'target_state': {'at_grand_exchange': True},
-                'priority': 0.8,
-                'estimated_duration': 300,  # 5 minutes
-                'requirements': {'can_move': True},
-                'method': 'movement'
-            })
+            goals.append(
+                {
+                    "name": "reach_grand_exchange",
+                    "target_state": {"at_grand_exchange": True},
+                    "priority": 0.8,
+                    "estimated_duration": 300,  # 5 minutes
+                    "requirements": {"can_move": True},
+                    "method": "movement",
+                }
+            )
 
         # Goal: Execute profitable trades
         if at_ge and current_gold > 1000:
-            goals.append({
-                'name': 'execute_profitable_trade',
-                'target_state': {
-                    'character_gold': current_gold + int(current_gold * 0.1),
-                    'profitable_trade_available': True
-                },
-                'priority': 0.9,
-                'estimated_duration': 120,  # 2 minutes per trade
-                'requirements': {'can_trade': True, 'market_access': True},
-                'method': 'trading'
-            })
+            goals.append(
+                {
+                    "name": "execute_profitable_trade",
+                    "target_state": {
+                        "character_gold": current_gold + int(current_gold * 0.1),
+                        "profitable_trade_available": True,
+                    },
+                    "priority": 0.9,
+                    "estimated_duration": 120,  # 2 minutes per trade
+                    "requirements": {"can_trade": True, "market_access": True},
+                    "method": "trading",
+                }
+            )
 
         # Goal: Monitor market prices
         if at_ge:
-            goals.append({
-                'name': 'update_market_data',
-                'target_state': {'market_data_fresh': True},
-                'priority': 0.6,
-                'estimated_duration': 60,  # 1 minute
-                'requirements': {'market_access': True},
-                'method': 'data_collection'
-            })
+            goals.append(
+                {
+                    "name": "update_market_data",
+                    "target_state": {"market_data_fresh": True},
+                    "priority": 0.6,
+                    "estimated_duration": 60,  # 1 minute
+                    "requirements": {"market_access": True},
+                    "method": "data_collection",
+                }
+            )
 
         return goals
 
@@ -1326,8 +1497,8 @@ class EconomicGoalGenerator:
         """Generate goals focused on wealth accumulation"""
         goals = []
 
-        current_gold = character_state.get('character_gold', 0)
-        character_level = character_state.get('character_level', 1)
+        current_gold = character_state.get("character_gold", 0)
+        character_level = character_state.get("character_level", 1)
 
         # Target gold based on character level
         target_gold = character_level * 1000
@@ -1336,45 +1507,55 @@ class EconomicGoalGenerator:
             # Wealth accumulation through different methods
             wealth_methods = [
                 {
-                    'method': 'trading',
-                    'efficiency': self.economic_intelligence.estimate_wealth_building_efficiency('trading', character_state),
-                    'requirements': {'market_access': True, 'character_gold': 500}
+                    "method": "trading",
+                    "efficiency": self.economic_intelligence.estimate_wealth_building_efficiency(
+                        "trading", character_state
+                    ),
+                    "requirements": {"market_access": True, "character_gold": 500},
                 },
                 {
-                    'method': 'gathering',
-                    'efficiency': self.economic_intelligence.estimate_wealth_building_efficiency('gathering', character_state),
-                    'requirements': {'can_gather': True, 'resource_available': True}
+                    "method": "gathering",
+                    "efficiency": self.economic_intelligence.estimate_wealth_building_efficiency(
+                        "gathering", character_state
+                    ),
+                    "requirements": {"can_gather": True, "resource_available": True},
                 },
                 {
-                    'method': 'crafting',
-                    'efficiency': self.economic_intelligence.estimate_wealth_building_efficiency('crafting', character_state),
-                    'requirements': {'can_craft': True, 'has_crafting_materials': True}
+                    "method": "crafting",
+                    "efficiency": self.economic_intelligence.estimate_wealth_building_efficiency(
+                        "crafting", character_state
+                    ),
+                    "requirements": {"can_craft": True, "has_crafting_materials": True},
                 },
                 {
-                    'method': 'combat',
-                    'efficiency': self.economic_intelligence.estimate_wealth_building_efficiency('combat', character_state),
-                    'requirements': {'can_fight': True, 'safe_to_fight': True}
-                }
+                    "method": "combat",
+                    "efficiency": self.economic_intelligence.estimate_wealth_building_efficiency(
+                        "combat", character_state
+                    ),
+                    "requirements": {"can_fight": True, "safe_to_fight": True},
+                },
             ]
 
             # Sort by efficiency
-            wealth_methods.sort(key=lambda x: x['efficiency'], reverse=True)
+            wealth_methods.sort(key=lambda x: x["efficiency"], reverse=True)
 
             # Generate goals for top methods
             for i, method_info in enumerate(wealth_methods[:2]):
-                method = method_info['method']
-                efficiency = method_info['efficiency']
+                method = method_info["method"]
+                efficiency = method_info["efficiency"]
 
                 if efficiency > 0.3:  # Only consider reasonably efficient methods
-                    goals.append({
-                        'name': f'wealth_building_{method}',
-                        'target_state': {'character_gold': target_gold},
-                        'priority': 0.7 + (efficiency * 0.2),
-                        'estimated_duration': int(600 / efficiency),  # Inverse relationship
-                        'requirements': method_info['requirements'],
-                        'method': method,
-                        'efficiency': efficiency
-                    })
+                    goals.append(
+                        {
+                            "name": f"wealth_building_{method}",
+                            "target_state": {"character_gold": target_gold},
+                            "priority": 0.7 + (efficiency * 0.2),
+                            "estimated_duration": int(600 / efficiency),  # Inverse relationship
+                            "requirements": method_info["requirements"],
+                            "method": method,
+                            "efficiency": efficiency,
+                        }
+                    )
 
         return goals
 
@@ -1383,51 +1564,55 @@ class EconomicGoalGenerator:
         goals = []
 
         for opportunity in opportunities:
-            if (opportunity.decision_type == TradeDecisionType.BUY and
-                opportunity.confidence > 0.8 and
-                opportunity.risk_level < 0.3):
-
+            if (
+                opportunity.decision_type == TradeDecisionType.BUY
+                and opportunity.confidence > 0.8
+                and opportunity.risk_level < 0.3
+            ):
                 # High-confidence, low-risk arbitrage opportunity
-                goals.append({
-                    'name': f'arbitrage_{opportunity.item_code}',
-                    'target_state': {
-                        'arbitrage_opportunity': True,
-                        'item_quantity': {opportunity.item_code: opportunity.target_quantity}
-                    },
-                    'priority': 0.95,  # Very high priority for arbitrage
-                    'estimated_duration': 180,  # 3 minutes
-                    'requirements': {
-                        'can_trade': True,
-                        'market_access': True,
-                        'character_gold': opportunity.target_price * opportunity.target_quantity
-                    },
-                    'method': 'arbitrage',
-                    'item_code': opportunity.item_code,
-                    'expected_profit': opportunity.expected_profit,
-                    'confidence': opportunity.confidence
-                })
+                goals.append(
+                    {
+                        "name": f"arbitrage_{opportunity.item_code}",
+                        "target_state": {
+                            "arbitrage_opportunity": True,
+                            "item_quantity": {opportunity.item_code: opportunity.target_quantity},
+                        },
+                        "priority": 0.95,  # Very high priority for arbitrage
+                        "estimated_duration": 180,  # 3 minutes
+                        "requirements": {
+                            "can_trade": True,
+                            "market_access": True,
+                            "character_gold": opportunity.target_price * opportunity.target_quantity,
+                        },
+                        "method": "arbitrage",
+                        "item_code": opportunity.item_code,
+                        "expected_profit": opportunity.expected_profit,
+                        "confidence": opportunity.confidence,
+                    }
+                )
 
         return goals
 
-    def prioritize_economic_goals(self, goals: list[dict[str, Any]],
-                                 character_state: dict[str, Any]) -> list[dict[str, Any]]:
+    def prioritize_economic_goals(
+        self, goals: list[dict[str, Any]], character_state: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Prioritize economic goals based on efficiency and risk"""
         if not goals:
             return goals
 
-        current_gold = character_state.get('character_gold', 0)
-        character_level = character_state.get('character_level', 1)
-        at_ge = character_state.get('at_grand_exchange', False)
+        current_gold = character_state.get("character_gold", 0)
+        character_level = character_state.get("character_level", 1)
+        at_ge = character_state.get("at_grand_exchange", False)
 
         # Score each goal based on multiple factors
         scored_goals = []
 
         for goal in goals:
-            base_priority = goal.get('priority', 0.5)
-            efficiency = goal.get('efficiency', 0.5)
-            expected_profit = goal.get('expected_profit', 0)
-            confidence = goal.get('confidence', 0.5)
-            estimated_duration = goal.get('estimated_duration', 300)
+            base_priority = goal.get("priority", 0.5)
+            efficiency = goal.get("efficiency", 0.5)
+            expected_profit = goal.get("expected_profit", 0)
+            confidence = goal.get("confidence", 0.5)
+            estimated_duration = goal.get("estimated_duration", 300)
 
             # Calculate composite score
             score = base_priority
@@ -1448,20 +1633,20 @@ class EconomicGoalGenerator:
             score -= duration_penalty * 0.1
 
             # Context-specific adjustments
-            method = goal.get('method', '')
+            method = goal.get("method", "")
 
-            if method == 'trading' and not at_ge:
+            if method == "trading" and not at_ge:
                 score -= 0.2  # Penalize trading goals if not at market
 
-            if method == 'movement' and current_gold < 100:
+            if method == "movement" and current_gold < 100:
                 score -= 0.1  # Penalize movement if very low on gold
 
             # Arbitrage gets bonus
-            if method == 'arbitrage':
+            if method == "arbitrage":
                 score += 0.2
 
             # Wealth building bonus if poor
-            if 'wealth_building' in goal.get('name', '') and current_gold < character_level * 500:
+            if "wealth_building" in goal.get("name", "") and current_gold < character_level * 500:
                 score += 0.15
 
             scored_goals.append((goal, max(0.0, min(1.0, score))))
@@ -1474,6 +1659,6 @@ class EconomicGoalGenerator:
 
         # Add score to goals for debugging
         for i, (goal, score) in enumerate(scored_goals):
-            prioritized_goals[i]['computed_priority'] = score
+            prioritized_goals[i]["computed_priority"] = score
 
         return prioritized_goals

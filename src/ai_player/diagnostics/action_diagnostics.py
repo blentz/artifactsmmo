@@ -47,20 +47,37 @@ class ActionDiagnostics:
         """
         errors = []
 
-        # Get all action types from the registry
-        action_types = self.action_registry.get_all_action_types()
+        # Use factory system instead of direct instantiation
+        mock_state = CharacterGameState(
+            name="validation_test",
+            level=1, xp=0, gold=0, hp=100, max_hp=100,
+            x=0, y=0,
+            mining_level=1, mining_xp=0,
+            woodcutting_level=1, woodcutting_xp=0,
+            fishing_level=1, fishing_xp=0,
+            weaponcrafting_level=1, weaponcrafting_xp=0,
+            gearcrafting_level=1, gearcrafting_xp=0,
+            jewelrycrafting_level=1, jewelrycrafting_xp=0,
+            cooking_level=1, cooking_xp=0,
+            alchemy_level=1, alchemy_xp=0,
+            cooldown=0
+        )
+        
+        # Generate sample actions using factories
+        sample_actions = self.action_registry.generate_actions_for_state(mock_state, {})
+        
+        # Validate each action type once
+        validated_types = set()
+        for action_instance in sample_actions:
+            action_type = type(action_instance)
+            if action_type not in validated_types:
+                validated_types.add(action_type)
+                
+                if not action_instance.validate_preconditions():
+                    errors.append(f"Action {action_type.__name__} has invalid preconditions (non-GameState keys)")
 
-        for action_class in action_types:
-            # Create an instance to test validation
-            action_instance = action_class()
-
-            # Validate preconditions
-            if not action_instance.validate_preconditions():
-                errors.append(f"Action {action_class.__name__} has invalid preconditions (non-GameState keys)")
-
-            # Validate effects
-            if not action_instance.validate_effects():
-                errors.append(f"Action {action_class.__name__} has invalid effects (non-GameState keys)")
+                if not action_instance.validate_effects():
+                    errors.append(f"Action {action_type.__name__} has invalid effects (non-GameState keys)")
 
         return errors
 

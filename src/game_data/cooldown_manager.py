@@ -30,7 +30,7 @@ class CooldownManager:
         """
         self.character_cooldowns: dict[str, CooldownInfo] = {}
 
-    def update_cooldown(self, character_name: str, cooldown_data: 'CooldownSchema') -> None:
+    def update_cooldown(self, character_name: str, cooldown_data: "CooldownSchema") -> None:
         """Update cooldown from API response.
 
         Parameters:
@@ -46,10 +46,12 @@ class CooldownManager:
         """
         cooldown_info = CooldownInfo(
             character_name=character_name,
-            expiration=cooldown_data.expiration.isoformat(),
+            expiration=cooldown_data.expiration.isoformat()
+            if hasattr(cooldown_data.expiration, "isoformat")
+            else str(cooldown_data.expiration),
             total_seconds=cooldown_data.total_seconds,
             remaining_seconds=cooldown_data.remaining_seconds,
-            reason=cooldown_data.reason.value
+            reason=cooldown_data.reason.value if hasattr(cooldown_data.reason, "value") else str(cooldown_data.reason),
         )
         self.character_cooldowns[character_name] = cooldown_info
 
@@ -62,13 +64,13 @@ class CooldownManager:
         Return values:
             None (updates internal state)
         """
-        if hasattr(character, 'cooldown_expiration') and character.cooldown_expiration:
+        if hasattr(character, "cooldown_expiration") and character.cooldown_expiration:
             cooldown_info = CooldownInfo(
                 character_name=character.name,
                 expiration=character.cooldown_expiration.isoformat(),
                 total_seconds=character.cooldown,
                 remaining_seconds=character.cooldown,
-                reason="unknown"
+                reason="unknown",
             )
             self.character_cooldowns[character.name] = cooldown_info
         elif character.cooldown > 0:
@@ -79,7 +81,7 @@ class CooldownManager:
                 expiration=expiration.isoformat(),
                 total_seconds=character.cooldown,
                 remaining_seconds=character.cooldown,
-                reason="unknown"
+                reason="unknown",
             )
             self.character_cooldowns[character.name] = cooldown_info
         else:
@@ -125,7 +127,7 @@ class CooldownManager:
         # Use the cooldown info's time_remaining property if available
         if character_name in self.character_cooldowns:
             cooldown_info = self.character_cooldowns[character_name]
-            if hasattr(cooldown_info, 'time_remaining'):
+            if hasattr(cooldown_info, "time_remaining"):
                 remaining_time = cooldown_info.time_remaining
             else:
                 remaining_time = self.get_remaining_time(character_name)
@@ -155,7 +157,7 @@ class CooldownManager:
         current_time = datetime.now(UTC)  # Use UTC timezone for consistent comparison
 
         try:
-            expiration = datetime.fromisoformat(cooldown_info.expiration.replace('Z', '+00:00'))
+            expiration = datetime.fromisoformat(cooldown_info.expiration.replace("Z", "+00:00"))
             remaining = (expiration - current_time).total_seconds()
             # Round to avoid floating point precision issues in tests
             return max(0.0, round(remaining, 6))
@@ -184,7 +186,7 @@ class CooldownManager:
         for character_name in expired_characters:
             del self.character_cooldowns[character_name]
 
-    def get_cooldown_info(self, character_name: str) -> Optional['CooldownInfo']:
+    def get_cooldown_info(self, character_name: str) -> Optional["CooldownInfo"]:
         """Get cooldown information for character.
 
         Parameters:

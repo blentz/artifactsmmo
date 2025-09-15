@@ -82,11 +82,12 @@ class BaseGoal(ABC):
         pass
 
     @abstractmethod
-    def get_progression_value(self, character_state: CharacterGameState) -> float:
+    def get_progression_value(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate contribution to reaching level 5 with appropriate gear.
 
         Parameters:
             character_state: Current character state with all attributes
+            game_data: Complete game data from cache manager
 
         Return values:
             Float value (0.0 to 1.0) indicating progression contribution

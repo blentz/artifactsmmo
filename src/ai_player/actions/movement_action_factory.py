@@ -35,11 +35,15 @@ class MovementActionFactory(ParameterizedActionFactory):
         current_x = getattr(current_state, 'x', 0)
         current_y = getattr(current_state, 'y', 0)
 
-        # Generate only nearby locations in a 3-tile radius
+        # Generate nearby locations and strategic locations
         nearby_locations = self.get_nearby_locations(current_x, current_y, radius=3)
+        strategic_locations = self.get_strategic_locations(game_data)
+        
+        # Combine nearby and strategic locations
+        all_locations = nearby_locations + strategic_locations
 
         # Filter out invalid coordinates based on known map data
-        filtered_locations = self.filter_valid_positions(nearby_locations, game_data)
+        filtered_locations = self.filter_valid_positions(all_locations, game_data)
 
         # Enhance locations with content information to enable proper GOAP planning
         # This allows the planner to understand that moving to monster/resource locations

@@ -72,6 +72,7 @@ class GameState(StrEnum):
     BODY_ARMOR_EQUIPPED = "body_armor_equipped"
     LEG_ARMOR_EQUIPPED = "leg_armor_equipped"
     BOOTS_EQUIPPED = "boots_equipped"
+    SHIELD_EQUIPPED = "shield_equipped"
     RING1_EQUIPPED = "ring1_equipped"
     RING2_EQUIPPED = "ring2_equipped"
     AMULET_EQUIPPED = "amulet_equipped"
@@ -102,6 +103,24 @@ class GameState(StrEnum):
     ITEM_QUANTITY = "item_quantity"
     RESOURCE_AVAILABLE = "resource_available"
     RESOURCE_DEPLETED = "resource_depleted"
+
+    # Recipe and crafting states
+    HAS_SELECTED_RECIPE = "has_selected_recipe"
+    RECIPE_ANALYZED = "recipe_analyzed"
+    MATERIAL_GATHERING_IN_PROGRESS = "material_gathering_in_progress"
+    CRAFTING_MATERIALS_READY = "crafting_materials_ready"
+    HAS_CRAFTED_ITEM = "has_crafted_item"
+    CRAFTING_COMPLETED = "crafting_completed"
+
+    # Material tracking states
+    HAS_MATERIAL_COPPER_ORE = "has_material_copper_ore"
+    HAS_MATERIAL_FEATHER = "has_material_feather"
+    HAS_MATERIAL_COPPER_BAR = "has_material_copper_bar"
+
+    # Inventory tracking states
+    INVENTORY_CONTAINS_COPPER_ORE = "inventory_contains_copper_ore"
+    INVENTORY_CONTAINS_FEATHER = "inventory_contains_feather"
+    INVENTORY_CONTAINS_COPPER_BAR = "inventory_contains_copper_bar"
 
     # Combat and safety states
     IN_COMBAT = "in_combat"
@@ -138,7 +157,7 @@ class GameState(StrEnum):
     MAINTENANCE_WINDOW = "maintenance_window"
 
     @classmethod
-    def validate_state_dict(cls, state_dict: dict[str, Any]) -> dict['GameState', Any]:
+    def validate_state_dict(cls, state_dict: dict[str, Any]) -> dict["GameState", Any]:
         """Validate and convert string keys to GameState enum values.
 
         Parameters:
@@ -163,7 +182,7 @@ class GameState(StrEnum):
         return validated_dict
 
     @classmethod
-    def to_goap_dict(cls, state_dict: dict['GameState', Any]) -> dict[str, Any]:
+    def to_goap_dict(cls, state_dict: dict["GameState", Any]) -> dict[str, Any]:
         """Convert enum-keyed state dict to string-keyed dict for GOAP.
 
         Parameters:
@@ -179,7 +198,4 @@ class GameState(StrEnum):
         return {key.value: value for key, value in state_dict.items()}
 
 
-__all__ = [
-    "GameState",
-    "CooldownInfo"
-]
+__all__ = ["GameState", "CooldownInfo"]

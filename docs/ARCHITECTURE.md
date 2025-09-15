@@ -207,6 +207,29 @@ The system includes specialized analysis modules for data-driven decision making
 
 ```python
 # src/ai_player/analysis/level_targeting.py
+from pydantic import BaseModel, Field
+
+class MonsterTargetOption(BaseModel):
+    """Pydantic model for monster targeting analysis results"""
+    monster: GameMonster = Field(description="Target monster data")
+    location: GameMap = Field(description="Monster location on map")
+    efficiency_score: float = Field(ge=0.0, description="Calculated efficiency score")
+    travel_distance: int = Field(ge=0, description="Manhattan distance to monster")
+    xp_potential: int = Field(ge=0, description="Expected XP gain")
+    gold_potential: float = Field(ge=0.0, description="Expected gold gain")
+
+class MonsterTargetingResult(BaseModel):
+    """Pydantic model for monster targeting analysis"""
+    character_level: int = Field(ge=1, le=45, description="Character level used for analysis")
+    available_targets: list[MonsterTargetOption] = Field(
+        default_factory=list,
+        description="Available monster targets sorted by efficiency"
+    )
+    best_target: MonsterTargetOption | None = Field(
+        default=None,
+        description="Highest efficiency target, if any available"
+    )
+
 class LevelAppropriateTargeting:
     def find_optimal_monsters(
         self, 
@@ -214,13 +237,16 @@ class LevelAppropriateTargeting:
         current_position: tuple[int, int],
         monsters: list[GameMonster],
         maps: list[GameMap]
-    ) -> list[tuple[GameMonster, GameMap, float]]:
+    ) -> MonsterTargetingResult:
         """Find monsters within character_level ± 1 with efficiency scoring.
         
         Uses real GameMonster data:
         - Filter by monster.level in [character_level-1, character_level+1]
         - Score by XP potential, gold rewards, and travel distance
         - Cross-reference with map data for locations
+        
+        Returns:
+            MonsterTargetingResult with sorted target options
         """
         pass
 ```
@@ -233,14 +259,18 @@ Actions are enhanced with factory patterns and sub-goal request capabilities:
 # src/ai_player/actions/base_action.py
 from abc import ABC, abstractmethod
 from typing import Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from ..state.game_state import GameState
 
 class ActionResult(BaseModel):
-    success: bool
-    message: str
-    state_changes: Dict[GameState, Any]
-    cooldown_seconds: int = 0
+    """Pydantic model for action execution results"""
+    success: bool = Field(description="Whether action executed successfully")
+    message: str = Field(description="Human-readable result message")
+    state_changes: Dict[GameState, Any] = Field(
+        default_factory=dict,
+        description="State changes resulting from action execution"
+    )
+    cooldown_seconds: int = Field(ge=0, default=0, description="Cooldown duration in seconds")
 
 class BaseAction(ABC):
     """Abstract base class for all GOAP actions"""
@@ -259,17 +289,17 @@ class BaseAction(ABC):
     
     @abstractmethod
     def get_preconditions(self) -> Dict[GameState, Any]:
-        """Required state conditions to execute this action"""
+        """Required state conditions to execute this action using Pydantic-validated types"""
         pass
     
     @abstractmethod
     def get_effects(self) -> Dict[GameState, Any]:
-        """State changes after successful execution"""
+        """State changes after successful execution using Pydantic-validated types"""
         pass
     
     @abstractmethod
-    async def execute(self, character_name: str, current_state: Dict[GameState, Any]) -> ActionResult:
-        """Execute the action via API call"""
+    async def execute(self, character_name: str, current_state: CharacterGameState) -> ActionResult:
+        """Execute the action via API call using Pydantic state model"""
         pass
 
 # src/ai_player/actions/movement_action.py
@@ -287,12 +317,14 @@ class MovementAction(BaseAction):
         return 1
     
     def get_preconditions(self) -> Dict[GameState, Any]:
+        """Return preconditions for movement action"""
         return {
             GameState.COOLDOWN_READY: True,
             GameState.AT_TARGET_LOCATION: False
         }
     
     def get_effects(self) -> Dict[GameState, Any]:
+        """Return effects of successful movement"""
         return {
             GameState.CURRENT_X: self.target_x,
             GameState.CURRENT_Y: self.target_y,
@@ -300,8 +332,9 @@ class MovementAction(BaseAction):
             GameState.COOLDOWN_READY: False
         }
     
-    async def execute(self, character_name: str, current_state: Dict[GameState, Any]) -> ActionResult:
-        # Implementation using API client
+    async def execute(self, character_name: str, current_state: CharacterGameState) -> ActionResult:
+        """Execute movement action using Pydantic state model"""
+        # Implementation using API client with type-safe state access
         pass
 ```
 
@@ -376,6 +409,7 @@ class GameState(StrEnum):
     """
     
     # Character progression states
+    CHARACTER_NAME = "character_name"
     CHARACTER_LEVEL = "character_level"
     CHARACTER_XP = "character_xp"
     CHARACTER_GOLD = "character_gold"
@@ -427,8 +461,20 @@ class GameState(StrEnum):
     
     @classmethod
     def to_goap_dict(cls, state_dict: Dict['GameState', Any]) -> Dict[str, Any]:
-        """Convert enum-keyed state dict to string-keyed dict for GOAP"""
-        return {state.value: value for state, value in state_dict.items()}
+        """Convert enum-keyed state dict to string-keyed dict for GOAP
+        
+        Args:
+            state_dict: Dictionary with GameState enum keys
+            
+        Returns:
+            Dictionary with string keys for GOAP compatibility
+        """
+        validated_dict = {}
+        for state, value in state_dict.items():
+            if not isinstance(state, GameState):
+                raise TypeError(f"All keys must be GameState enum values, got {type(state)}")
+            validated_dict[state.value] = value
+        return validated_dict
 
 class CharacterGameState(BaseModel):
     """Enhanced Pydantic model for character state with comprehensive validation"""
@@ -457,11 +503,42 @@ class CharacterGameState(BaseModel):
     cooking_level: int = Field(ge=1, le=45, description="Cooking skill level")
     alchemy_level: int = Field(ge=1, le=45, description="Alchemy skill level")
     
-    def to_goap_state(self) -> dict[str, Any]:
-        """Convert to GOAP state dictionary with GameState enum validation"""
+    def to_goap_state(self) -> Dict[str, Any]:
+        """Convert to GOAP state dictionary with GameState enum validation
+        
+        Returns:
+            Dictionary with string keys and validated values for GOAP planning
+        """
         raw_dict = self.model_dump()
-        return {GameState(k).value: (int(v) if isinstance(v, bool) else v) 
-                for k, v in raw_dict.items() if k in [gs.value for gs in GameState]}
+        goap_state = {}
+        
+        # Map character state fields to GameState enum values
+        field_mapping = {
+            'name': GameState.CHARACTER_NAME,
+            'level': GameState.CHARACTER_LEVEL,
+            'xp': GameState.CHARACTER_XP,
+            'gold': GameState.CHARACTER_GOLD,
+            'hp': GameState.HP_CURRENT,
+            'max_hp': GameState.HP_MAX,
+            'x': GameState.CURRENT_X,
+            'y': GameState.CURRENT_Y,
+            'mining_level': GameState.MINING_LEVEL,
+            'woodcutting_level': GameState.WOODCUTTING_LEVEL,
+            'fishing_level': GameState.FISHING_LEVEL,
+            'weaponcrafting_level': GameState.WEAPONCRAFTING_LEVEL,
+            'gearcrafting_level': GameState.GEARCRAFTING_LEVEL,
+            'jewelrycrafting_level': GameState.JEWELRYCRAFTING_LEVEL,
+            'cooking_level': GameState.COOKING_LEVEL,
+            'alchemy_level': GameState.ALCHEMY_LEVEL
+        }
+        
+        for field_name, game_state in field_mapping.items():
+            if field_name in raw_dict:
+                value = raw_dict[field_name]
+                # Convert booleans to integers for GOAP compatibility
+                goap_state[game_state.value] = int(value) if isinstance(value, bool) else value
+        
+        return goap_state
     
     @classmethod
     def from_api_character(cls, character: 'CharacterSchema') -> 'CharacterGameState':
@@ -660,8 +737,25 @@ class CraftingAnalysisModule:
         required_skill_level = craft_data.get('level', 1)
         skill_name = craft_data.get('skill', 'crafting')
         
-        # Check character skill level
-        character_skill_level = getattr(character_state, f"{skill_name}_level", 1)
+        # Check character skill level using Pydantic model field mapping
+        skill_level_mapping = {
+            'mining': character_state.mining_level,
+            'woodcutting': character_state.woodcutting_level,
+            'fishing': character_state.fishing_level,
+            'weaponcrafting': character_state.weaponcrafting_level,
+            'gearcrafting': character_state.gearcrafting_level,
+            'jewelrycrafting': character_state.jewelrycrafting_level,
+            'cooking': character_state.cooking_level,
+            'alchemy': character_state.alchemy_level
+        }
+        
+        if skill_name not in skill_level_mapping:
+            return CraftingAnalysis(
+                feasible=False,
+                reason=f"Unknown skill: {skill_name}"
+            )
+        
+        character_skill_level = skill_level_mapping[skill_name]
         
         if character_skill_level < required_skill_level:
             return CraftingAnalysis(
@@ -685,16 +779,36 @@ Location finding and travel optimization:
 ```python
 # src/ai_player/analysis/map_analysis.py
 class MapAnalysisModule:
+class MapLocationOption(BaseModel):
+    """Pydantic model for map location analysis results"""
+    map_location: GameMap = Field(description="Map location data")
+    distance: float = Field(ge=0.0, description="Manhattan distance to location")
+    content_level: int | None = Field(default=None, description="Content level if applicable")
+
+class MapSearchResult(BaseModel):
+    """Pydantic model for map search results"""
+    content_type: str = Field(description="Type of content searched for")
+    search_position: tuple[int, int] = Field(description="Position used as search origin")
+    matching_locations: list[MapLocationOption] = Field(
+        default_factory=list,
+        description="Found locations sorted by distance"
+    )
+    nearest_location: MapLocationOption | None = Field(
+        default=None,
+        description="Closest matching location, if any found"
+    )
+
+class MapAnalysisModule:
     def find_nearest_content(
         self,
         current_pos: tuple[int, int],
         content_type: str,
         maps: list[GameMap],
         level_filter: int | None = None
-    ) -> list[tuple[GameMap, float]]:
+    ) -> MapSearchResult:
         """Find nearest locations with specified content type.
         
-        Returns: List of (map, distance) sorted by proximity
+        Returns: MapSearchResult with sorted location options
         """
         matching_maps = []
         for game_map in maps:

@@ -56,20 +56,23 @@ class CraftingGoal(BaseGoal):
         feasibility = self._calculate_crafting_feasibility(character_state, game_data)
 
         # Calculate progression value (20% weight)
-        progression = self.get_progression_value(character_state)
+        progression = self.get_progression_value(character_state, game_data)
 
         # Calculate stability (10% weight) - crafting is generally stable
         stability = 0.8  # High stability - crafting has predictable outcomes
 
         # Combine factors with PRP-specified weights
-        final_weight = (necessity * 0.4 + feasibility * 0.3 +
-                       progression * 0.2 + stability * 0.1)
+        final_weight = necessity * 0.4 + feasibility * 0.3 + progression * 0.2 + stability * 0.1
 
         return min(10.0, final_weight * 10.0)  # Scale to 0-10 range
 
     def is_feasible(self, character_state: CharacterGameState, game_data: GameData) -> bool:
         """Check if crafting goal can be pursued with current character state."""
         self.validate_game_data(game_data)
+
+        # Level 1-2 characters should focus on simple XP-gaining activities, not complex crafting
+        if character_state.level <= 2:
+            return False
 
         # Find craftable recipes using analysis module
         craftable_recipes = self.crafting_analysis.find_level_appropriate_recipes(
@@ -79,102 +82,44 @@ class CraftingGoal(BaseGoal):
         if not craftable_recipes:
             return False
 
-        # Check if we have at least one feasible recipe
+        # Check if we have at least one feasible recipe with accessible materials
         for item, analysis in craftable_recipes:
             if analysis.feasible:
-                return True
+                # Additional check: verify character can actually obtain required materials
+                if self._can_obtain_materials(character_state, analysis, game_data):
+                    return True
 
             # Also consider recipes that are close to feasible
-            if (analysis.recipe_structure.skill_required and
-                self._get_character_skill_level(character_state, analysis.recipe_structure.skill_required) >=
-                analysis.recipe_structure.level_required - 1):
-                return True
+            if (
+                analysis.recipe_structure.skill_required
+                and self._get_character_skill_level(character_state, analysis.recipe_structure.skill_required)
+                >= analysis.recipe_structure.level_required - 1
+            ):
+                # Additional check for close-to-feasible recipes too
+                if self._can_obtain_materials(character_state, analysis, game_data):
+                    return True
 
         return False
 
-    def get_target_state(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
-    ) -> GOAPTargetState:
+    def get_target_state(self, character_state: CharacterGameState, game_data: GameData) -> GOAPTargetState:
         """Return GOAP target state for crafting goal.
-        
-        This method defines the desired state conditions for successful crafting:
-        1. Character must be at a workshop location where crafting is possible
-        2. Character must have all required materials for the recipe
-        3. Character must have sufficient skill level for the recipe
-        4. Character must gain crafting XP and create the target item
+
+        This method defines minimal target state for recipe selection and sub-goal generation.
+        The actual crafting process is broken down into sub-goals for:
+        1. Material gathering for each required material
+        2. Movement to appropriate workshop
+        3. Final crafting execution
         """
         self.validate_game_data(game_data)
 
-        # Select target recipe
-        target_recipe = self._select_optimal_recipe(character_state, game_data)
-        if not target_recipe:
-            # Return empty target state if no feasible crafting targets
-            return GOAPTargetState(
-                target_states={},
-                priority=1,
-                timeout_seconds=None
-            )
-
-        item, analysis = target_recipe
-
-        # Find appropriate workshop location
-        workshop_locations = self.map_analysis.find_content_by_code(
-            "workshop", analysis.recipe_structure.skill_required, game_data.maps
-        )
-
-        if not workshop_locations:
-            # No workshop available for this crafting skill
-            return GOAPTargetState(
-                target_states={},
-                priority=1,
-                timeout_seconds=None
-            )
-
-        # Find nearest workshop location
-        current_pos = (character_state.x, character_state.y)
-        distances = self.map_analysis.calculate_travel_efficiency(
-            current_pos, [(loc.x, loc.y) for loc in workshop_locations]
-        )
-        if distances:
-            best_pos = max(distances.keys(), key=lambda pos: distances[pos])
-            target_location = next(loc for loc in workshop_locations
-                                 if (loc.x, loc.y) == best_pos)
-        else:
-            target_location = workshop_locations[0]
-
-        # Define target state conditions for crafting success
-        target_states = {
-            # Must be at workshop location for crafting
-            GameState.AT_WORKSHOP_LOCATION: True,
-            GameState.CURRENT_X: target_location.x,
-            GameState.CURRENT_Y: target_location.y,
-
-            # Must have required materials
-            GameState.HAS_CRAFTING_MATERIALS: True,
-            GameState.HAS_REQUIRED_ITEMS: True,
-
-            # Must be able to craft
-            GameState.CAN_CRAFT: True,
-
-            # Must gain XP and create item
-            GameState.GAINED_XP: True,
-
-            # Inventory management
-            GameState.INVENTORY_SPACE_AVAILABLE: True,
-
-            # Action readiness
-            GameState.COOLDOWN_READY: True,
-        }
-
+        # Return minimal target state for recipe selection
         return GOAPTargetState(
-            target_states=target_states,
+            target_states={GameState.HAS_SELECTED_RECIPE: True, GameState.RECIPE_ANALYZED: True},
             priority=7,  # High priority for equipment creation
-            timeout_seconds=900  # 15 minute timeout for material gathering + crafting
+            timeout_seconds=60,  # Short timeout for recipe selection
         )
 
-    def get_progression_value(self, character_state: CharacterGameState) -> float:
+    def get_progression_value(self, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate contribution to reaching level 5 with appropriate gear."""
         # Crafting contributes to progression in multiple ways:
         # 1. Creates level-appropriate equipment for combat effectiveness
@@ -200,19 +145,23 @@ class CraftingGoal(BaseGoal):
 
         # Increase risk if character skill levels are borderline
         skill_risk = 0.0
-        if hasattr(character_state, 'weaponcrafting_level') and character_state.weaponcrafting_level < 3:
+        if hasattr(character_state, "weaponcrafting_level") and character_state.weaponcrafting_level < 3:
             skill_risk += 0.1
-        if hasattr(character_state, 'gearcrafting_level') and character_state.gearcrafting_level < 3:
+        if hasattr(character_state, "gearcrafting_level") and character_state.gearcrafting_level < 3:
             skill_risk += 0.1
 
         return min(1.0, base_risk + skill_risk)
 
     def generate_sub_goal_requests(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, character_state: CharacterGameState, game_data: GameData
     ) -> list[SubGoalRequest]:
-        """Generate sub-goal requests for crafting dependencies."""
+        """Generate hierarchical sub-goal requests for the complete crafting process.
+
+        This method breaks down crafting into sequential sub-goals:
+        1. Material gathering goals for each required material
+        2. Workshop movement goal to reach crafting location
+        3. Craft execution goal for the final crafting action
+        """
         sub_goals: list[SubGoalRequest] = []
 
         # Select target recipe
@@ -222,36 +171,63 @@ class CraftingGoal(BaseGoal):
 
         item, analysis = target_recipe
 
-        # Request materials that are missing
+        # Phase 1: Generate material gathering sub-goals
         for material_info in analysis.recipe_structure.materials_needed:
-            material_code = material_info.get('code', '')
-            quantity = material_info.get('quantity', 1)
+            material_code = material_info.get("code", "")
+            quantity = material_info.get("quantity", 1)
 
             if material_code:
-                sub_goals.append(SubGoalRequest.obtain_item(
-                    material_code,
-                    quantity,
-                    "CraftingGoal",
-                    f"Need {quantity}x {material_code} for crafting {item.name}"
-                ))
+                sub_goals.append(
+                    SubGoalRequest(
+                        goal_type="gather_material",
+                        parameters={"material_code": material_code, "quantity": quantity},
+                        priority=8,
+                        requester="CraftingGoal",
+                        reason=f"Need {quantity}x {material_code} to craft {item.name}",
+                    )
+                )
 
-        # Request movement to workshop if needed
-        if not character_state.at_workshop_location:
-            # Find nearest workshop location
-            workshop_locations = self.map_analysis.find_nearest_content(
-                (character_state.x, character_state.y),
-                "workshop",
-                game_data.maps
+        # Phase 2: Generate workshop movement sub-goal
+        workshop_locations = self.map_analysis.find_content_by_code(
+            "workshop", analysis.recipe_structure.skill_required, game_data.maps
+        )
+
+        if workshop_locations:
+            # Find nearest workshop
+            current_pos = (character_state.x, character_state.y)
+            distances = self.map_analysis.calculate_travel_efficiency(
+                current_pos, [(loc.x, loc.y) for loc in workshop_locations]
+            )
+            if distances:
+                best_pos = max(distances.keys(), key=lambda pos: distances[pos])
+                target_location = next(loc for loc in workshop_locations if (loc.x, loc.y) == best_pos)
+            else:
+                target_location = workshop_locations[0]
+
+            sub_goals.append(
+                SubGoalRequest(
+                    goal_type="move_to_workshop",
+                    parameters={
+                        "workshop_x": target_location.x,
+                        "workshop_y": target_location.y,
+                        "workshop_type": analysis.recipe_structure.skill_required,
+                    },
+                    priority=7,
+                    requester="CraftingGoal",
+                    reason=f"Need to reach {analysis.recipe_structure.skill_required} workshop to craft {item.name}",
+                )
             )
 
-            if workshop_locations:
-                target_workshop, _ = workshop_locations[0]
-                sub_goals.append(SubGoalRequest.move_to_location(
-                    target_workshop.x,
-                    target_workshop.y,
-                    "CraftingGoal",
-                    f"Move to workshop for crafting {item.name}"
-                ))
+            # Phase 3: Generate craft execution sub-goal
+            sub_goals.append(
+                SubGoalRequest(
+                    goal_type="execute_craft",
+                    parameters={"recipe_code": item.code, "workshop_type": analysis.recipe_structure.skill_required},
+                    priority=9,
+                    requester="CraftingGoal",
+                    reason=f"Ready to craft {item.name} at {analysis.recipe_structure.skill_required} workshop",
+                )
+            )
 
         return sub_goals
 
@@ -300,7 +276,7 @@ class CraftingGoal(BaseGoal):
         score = 0.0
 
         # Prefer equipment items
-        if item.type in ['weapon', 'helmet', 'body_armor', 'leg_armor', 'boots', 'ring', 'amulet']:
+        if item.type in ["weapon", "helmet", "body_armor", "leg_armor", "boots", "ring", "amulet"]:
             score += 0.5
 
         # Prefer items appropriate for current level
@@ -338,7 +314,7 @@ class CraftingGoal(BaseGoal):
         skill_levels = [
             character_state.weaponcrafting_level,
             character_state.gearcrafting_level,
-            character_state.jewelrycrafting_level
+            character_state.jewelrycrafting_level,
         ]
         avg_crafting_skill = sum(skill_levels) / len(skill_levels)
         skill_feasibility = min(1.0, avg_crafting_skill / 5.0)  # Normalize to level 5
@@ -388,14 +364,38 @@ class CraftingGoal(BaseGoal):
     def _get_character_skill_level(self, character_state: CharacterGameState, skill_name: str) -> int:
         """Get character's skill level for the specified skill."""
         skill_mapping = {
-            'mining': character_state.mining_level,
-            'woodcutting': character_state.woodcutting_level,
-            'fishing': character_state.fishing_level,
-            'weaponcrafting': character_state.weaponcrafting_level,
-            'gearcrafting': character_state.gearcrafting_level,
-            'jewelrycrafting': character_state.jewelrycrafting_level,
-            'cooking': character_state.cooking_level,
-            'alchemy': character_state.alchemy_level,
+            "mining": character_state.mining_level,
+            "woodcutting": character_state.woodcutting_level,
+            "fishing": character_state.fishing_level,
+            "weaponcrafting": character_state.weaponcrafting_level,
+            "gearcrafting": character_state.gearcrafting_level,
+            "jewelrycrafting": character_state.jewelrycrafting_level,
+            "cooking": character_state.cooking_level,
+            "alchemy": character_state.alchemy_level,
         }
 
         return skill_mapping.get(skill_name.lower(), 1)
+
+    def _can_obtain_materials(self, character_state: CharacterGameState, analysis: Any, game_data: GameData) -> bool:
+        """Check if character can actually obtain all required materials for crafting."""
+        for material_info in analysis.recipe_structure.materials_needed:
+            material_code = material_info.get("code", "")
+            if material_code and not self._can_obtain_material(material_code, character_state, game_data):
+                return False
+        return True
+
+    def _can_obtain_material(
+        self, material_code: str, character_state: CharacterGameState, game_data: GameData
+    ) -> bool:
+        """Check if a specific material can be obtained by the character."""
+        for resource in game_data.resources:
+            for drop in resource.drops:
+                if drop.code == material_code:
+                    character_skill_level = self._get_character_skill_level(character_state, resource.skill)
+                    if character_skill_level >= resource.level:
+                        resource_locations = self.map_analysis.find_content_by_code(
+                            "resource", resource.code, game_data.maps
+                        )
+                        if resource_locations:
+                            return True
+        return False

@@ -6,7 +6,6 @@ multiple specialized goals using weighted scoring to select optimal goals for
 character progression toward level 5 with appropriate gear.
 """
 
-
 import logging
 
 from .goals.base_goal import BaseGoal
@@ -33,24 +32,13 @@ class GoalWeightCalculator:
     def __init__(self):
         """Initialize the goal weight calculator with all specialized goals."""
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.goals = [
-            CombatGoal(),
-            CraftingGoal(),
-            GatheringGoal(),
-            EquipmentGoal(),
-            RestGoal()
-        ]
+        self.goals = [CombatGoal(), CraftingGoal(), GatheringGoal(), EquipmentGoal(), RestGoal()]
 
         # Track goal selection history for adaptation
         self.selection_history = []
         self.performance_metrics = {}
 
-    def calculate_final_weight(
-        self,
-        goal: BaseGoal,
-        character_state: CharacterGameState,
-        game_data: GameData
-    ) -> float:
+    def calculate_final_weight(self, goal: BaseGoal, character_state: CharacterGameState, game_data: GameData) -> float:
         """Calculate final weight for a goal using multi-factor scoring.
 
         Parameters:
@@ -72,9 +60,7 @@ class GoalWeightCalculator:
             base_weight = goal.calculate_weight(character_state, game_data)
 
             # Apply dynamic adjustments based on context
-            adjusted_weight = self._apply_dynamic_adjustments(
-                goal, base_weight, character_state, game_data
-            )
+            adjusted_weight = self._apply_dynamic_adjustments(goal, base_weight, character_state, game_data)
 
             return min(10.0, adjusted_weight)
 
@@ -88,9 +74,7 @@ class GoalWeightCalculator:
             return 0.1
 
     def select_optimal_goal(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, character_state: CharacterGameState, game_data: GameData
     ) -> tuple[BaseGoal | None, list[SubGoalRequest]]:
         """Select the optimal goal using weighted scoring and feasibility validation.
 
@@ -139,7 +123,7 @@ class GoalWeightCalculator:
                 scored_goals.append((goal, weight))
 
                 # Collect sub-goal requests for this goal
-                if hasattr(goal, 'generate_sub_goal_requests'):
+                if hasattr(goal, "generate_sub_goal_requests"):
                     sub_goals = goal.generate_sub_goal_requests(character_state, game_data)
                     all_sub_goal_requests.extend(sub_goals)
 
@@ -160,16 +144,13 @@ class GoalWeightCalculator:
         # Filter sub-goal requests for the selected goal
         selected_goal_type = type(selected_goal).__name__
         relevant_sub_goals = [
-            sg for sg in all_sub_goal_requests
-            if sg.requester == selected_goal_type.replace('Goal', 'Goal')
+            sg for sg in all_sub_goal_requests if sg.requester == selected_goal_type.replace("Goal", "Goal")
         ]
 
         return selected_goal, relevant_sub_goals
 
     def get_goal_priorities(
-        self,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, character_state: CharacterGameState, game_data: GameData
     ) -> list[tuple[str, float, bool]]:
         """Get priority scores for all goals for diagnostics and monitoring.
 
@@ -209,12 +190,7 @@ class GoalWeightCalculator:
 
         return goal_priorities
 
-    def update_goal_performance(
-        self,
-        goal: BaseGoal,
-        success: bool,
-        progress_made: float = 0.0
-    ) -> None:
+    def update_goal_performance(self, goal: BaseGoal, success: bool, progress_made: float = 0.0) -> None:
         """Update performance metrics for goal adaptation.
 
         Parameters:
@@ -229,27 +205,23 @@ class GoalWeightCalculator:
 
         if goal_name not in self.performance_metrics:
             self.performance_metrics[goal_name] = {
-                'successes': 0,
-                'attempts': 0,
-                'total_progress': 0.0,
-                'avg_progress': 0.0
+                "successes": 0,
+                "attempts": 0,
+                "total_progress": 0.0,
+                "avg_progress": 0.0,
             }
 
         metrics = self.performance_metrics[goal_name]
-        metrics['attempts'] += 1
+        metrics["attempts"] += 1
 
         if success:
-            metrics['successes'] += 1
+            metrics["successes"] += 1
 
-        metrics['total_progress'] += progress_made
-        metrics['avg_progress'] = metrics['total_progress'] / metrics['attempts']
+        metrics["total_progress"] += progress_made
+        metrics["avg_progress"] = metrics["total_progress"] / metrics["attempts"]
 
     def _apply_dynamic_adjustments(
-        self,
-        goal: BaseGoal,
-        base_weight: float,
-        character_state: CharacterGameState,
-        game_data: GameData
+        self, goal: BaseGoal, base_weight: float, character_state: CharacterGameState, game_data: GameData
     ) -> float:
         """Apply dynamic adjustments to goal weights based on context."""
         adjusted_weight = base_weight
@@ -281,25 +253,20 @@ class GoalWeightCalculator:
 
         return False
 
-    def _apply_emergency_adjustments(
-        self,
-        goal: BaseGoal,
-        weight: float,
-        character_state: CharacterGameState
-    ) -> float:
+    def _apply_emergency_adjustments(self, goal: BaseGoal, weight: float, character_state: CharacterGameState) -> float:
         """Apply emergency priority adjustments."""
         goal_type = type(goal).__name__
 
         # Boost equipment goals if severely undergeared
-        if goal_type == 'EquipmentGoal' and character_state.level >= 3 and not character_state.weapon_slot:
+        if goal_type == "EquipmentGoal" and character_state.level >= 3 and not character_state.weapon_slot:
             return weight * 2.0
 
         # Prioritize gathering/crafting for emergency equipment
-        if goal_type in ['GatheringGoal', 'CraftingGoal'] and character_state.level >= 3:
+        if goal_type in ["GatheringGoal", "CraftingGoal"] and character_state.level >= 3:
             return weight * 1.5
 
         # Reduce combat priority if HP is critical
-        if goal_type == 'CombatGoal' and character_state.hp < character_state.max_hp * 0.2:
+        if goal_type == "CombatGoal" and character_state.hp < character_state.max_hp * 0.2:
             return weight * 0.3
 
         return weight
@@ -308,11 +275,11 @@ class GoalWeightCalculator:
         """Calculate performance adjustment factor for a goal."""
         metrics = self.performance_metrics[goal_name]
 
-        if metrics['attempts'] < 3:
+        if metrics["attempts"] < 3:
             return 1.0  # Not enough data for adjustment
 
-        success_rate = metrics['successes'] / metrics['attempts']
-        avg_progress = metrics['avg_progress']
+        success_rate = metrics["successes"] / metrics["attempts"]
+        avg_progress = metrics["avg_progress"]
 
         # Boost well-performing goals, reduce poorly performing ones
         performance_score = (success_rate * 0.6) + (avg_progress * 0.4)
@@ -321,39 +288,44 @@ class GoalWeightCalculator:
         return 0.7 + (performance_score * 0.6)
 
     def _apply_situational_adjustments(
-        self,
-        goal: BaseGoal,
-        weight: float,
-        character_state: CharacterGameState
+        self, goal: BaseGoal, weight: float, character_state: CharacterGameState
     ) -> float:
         """Apply situational context adjustments."""
         goal_type = type(goal).__name__
 
         # Boost progression-focused goals when close to level 5
         if character_state.level >= 4:
-            if goal_type in ['CombatGoal', 'EquipmentGoal']:
+            if goal_type in ["CombatGoal", "EquipmentGoal"]:
                 weight *= 1.2
 
-        # Boost foundational goals for low-level characters
+        # For Level 1-2 characters: Focus on simple XP-gaining activities
         if character_state.level <= 2:
-            if goal_type in ['GatheringGoal', 'CraftingGoal']:
+            # Heavily boost simple XP-gaining goals
+            if goal_type in ["CombatGoal", "GatheringGoal"]:
+                weight *= 3.0  # Significantly boost simple XP goals
+            # Severely penalize complex crafting goals for low-level characters
+            elif goal_type in ["CraftingGoal", "CraftExecutionGoal", "WorkshopMovementGoal"]:
+                weight *= 0.1  # Nearly eliminate complex crafting goals for Level 1-2
+            # Moderate boost for equipment goals (basic gear)
+            elif goal_type == "EquipmentGoal":
+                weight *= 1.5  # Still useful for basic equipment
+
+        # For Level 3+: Allow more complex goals
+        elif character_state.level >= 3:
+            # Boost foundational goals for mid-level characters
+            if goal_type in ["GatheringGoal", "CraftingGoal"]:
                 weight *= 1.1
 
         return weight
 
-    def _record_goal_selection(
-        self,
-        goal: BaseGoal,
-        weight: float,
-        character_state: CharacterGameState
-    ) -> None:
+    def _record_goal_selection(self, goal: BaseGoal, weight: float, character_state: CharacterGameState) -> None:
         """Record goal selection for historical analysis."""
         selection_record = {
-            'goal_type': type(goal).__name__,
-            'weight': weight,
-            'character_level': character_state.level,
-            'character_hp_ratio': character_state.hp / max(1, character_state.max_hp),
-            'timestamp': None  # Would use datetime in full implementation
+            "goal_type": type(goal).__name__,
+            "weight": weight,
+            "character_level": character_state.level,
+            "character_hp_ratio": character_state.hp / max(1, character_state.max_hp),
+            "timestamp": None,  # Would use datetime in full implementation
         }
 
         self.selection_history.append(selection_record)

@@ -5,11 +5,12 @@ This module contains the main pathfinding service and high-level movement
 planning functionality for the AI player system.
 """
 
-from typing import Any
+from typing import Any, Set, Tuple
 
-from .actions.movement_action import MovementAction
-from .pathfinding_algorithms import AStarPathfinding, PathfindingAlgorithm
-from .pathfinding_models import PathfindingResult
+from ..actions.movement_action import MovementAction
+from .danger_zone_manager import DangerZoneManager
+from ..pathfinding_algorithms import AStarPathfinding, PathfindingAlgorithm
+from ..pathfinding_models import PathfindingResult
 
 
 class PathfindingService:
@@ -19,17 +20,33 @@ class PathfindingService:
         self.algorithm = algorithm or AStarPathfinding()
         self.map_cache: dict[int, tuple[int, int, int, int]] = {}
         self.obstacle_cache: dict[int, set[tuple[int, int]]] = {}
+        self.danger_zone_manager = DangerZoneManager()
+        self._current_path_goal: tuple[int, int] | None = None  # For danger zone handling
 
-    def find_path(self, start: tuple[int, int], goal: tuple[int, int],
-                  game_data: Any = None) -> PathfindingResult:
+    def find_path(self, start: tuple[int, int], goal: tuple[int, int], game_data: Any = None) -> PathfindingResult:
         """Find path using current algorithm and cached map data"""
+        self._current_path_goal = goal  # Store goal for danger zone handling
+
+        # First try with all danger zones
         obstacles = self.get_obstacles_from_game_data(game_data)
         bounds = self.get_map_bounds(game_data)
+        result = self.algorithm.find_path(start, goal, obstacles, bounds)
 
-        return self.algorithm.find_path(start, goal, obstacles, bounds)
+        # If path not found and either start or goal is in danger zone,
+        # try again with only high-danger zones
+        if not result.success:
+            self.danger_zone_manager.update_monster_positions(game_data)
+            danger_zones = self.danger_zone_manager.get_danger_zones()
+            if start in danger_zones or goal in danger_zones:
+                obstacles = self.get_obstacles_from_game_data(game_data)  # This will now use high_danger_only
+                result = self.algorithm.find_path(start, goal, obstacles, bounds)
 
-    def find_path_to_nearest(self, start: tuple[int, int], targets: list[tuple[int, int]],
-                            game_data: Any = None) -> PathfindingResult:
+        self._current_path_goal = None  # Clear stored goal
+        return result
+
+    def find_path_to_nearest(
+        self, start: tuple[int, int], targets: list[tuple[int, int]], game_data: Any = None
+    ) -> PathfindingResult:
         """Find path to nearest target from a list of possible destinations"""
         if not targets:
             return PathfindingResult(
@@ -38,11 +55,11 @@ class PathfindingService:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message="No targets provided"
+                message="No targets provided",
             )
 
         best_result = None
-        best_cost = float('inf')
+        best_cost = float("inf")
 
         for target in targets:
             result = self.find_path(start, target, game_data)
@@ -57,7 +74,7 @@ class PathfindingService:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message="No path found to any target"
+                message="No path found to any target",
             )
 
         return best_result
@@ -161,20 +178,36 @@ class PathfindingService:
 
         return True
 
-    def get_obstacles_from_game_data(self, game_data: Any) -> set[tuple[int, int]]:
-        """Extract obstacle positions from game data"""
-        obstacles: set[tuple[int, int]] = set()
+    def get_obstacles_from_game_data(self, game_data: Any) -> Set[Tuple[int, int]]:
+        """Extract obstacle positions from game data including danger zones"""
+        obstacles: Set[Tuple[int, int]] = set()
 
         if game_data is None:
             return obstacles
 
-        # For this game, we don't have explicit obstacle data
-        # Instead, we treat certain map locations as obstacles based on context
-        # For now, return an empty set since character movement isn't blocked by content
-        # In a real implementation, we might add obstacles for:
-        # - Impassable terrain
-        # - Other players (if multiplayer)
-        # - Dangerous areas to avoid
+        # Update danger zones
+        self.danger_zone_manager.update_monster_positions(game_data)
+
+        # First try with all danger zones as obstacles
+        danger_zones = self.danger_zone_manager.get_danger_zones()
+        all_obstacles = obstacles.union(danger_zones)
+
+        # If start or goal is in a danger zone, only use high-danger zones
+        start = (x, y) if "x" in locals() else None
+        goal = None
+        if hasattr(self, "_current_path_goal"):
+            goal = self._current_path_goal
+
+        if (start and start in danger_zones) or (goal and goal in danger_zones):
+            # Only block monster positions, allow movement through danger zones
+            high_danger_zones = self.danger_zone_manager.get_danger_zones(high_danger_only=True)
+            obstacles.update(high_danger_zones)
+        else:
+            # Use all danger zones as obstacles
+            obstacles.update(danger_zones)
+
+        # Add other obstacles here (terrain, etc.) when implemented
+        # For now, we just have danger zones
 
         return obstacles
 
@@ -184,38 +217,38 @@ class PathfindingService:
             # Default game bounds based on MovementAction validation
             return (-50, -50, 50, 50)
 
-        min_x, min_y = float('inf'), float('inf')
-        max_x, max_y = float('-inf'), float('-inf')
+        min_x, min_y = float("inf"), float("inf")
+        max_x, max_y = float("-inf"), float("-inf")
 
         # Check maps data for bounds
-        if hasattr(game_data, 'maps') and game_data.maps:
+        if hasattr(game_data, "maps") and game_data.maps:
             for map_data in game_data.maps:
-                if hasattr(map_data, 'x') and hasattr(map_data, 'y'):
+                if hasattr(map_data, "x") and hasattr(map_data, "y"):
                     min_x = min(min_x, map_data.x)
                     max_x = max(max_x, map_data.x)
                     min_y = min(min_y, map_data.y)
                     max_y = max(max_y, map_data.y)
 
         # Check resources data for bounds
-        if hasattr(game_data, 'resources') and game_data.resources:
+        if hasattr(game_data, "resources") and game_data.resources:
             for resource in game_data.resources:
-                if hasattr(resource, 'x') and hasattr(resource, 'y'):
+                if hasattr(resource, "x") and hasattr(resource, "y"):
                     min_x = min(min_x, resource.x)
                     max_x = max(max_x, resource.x)
                     min_y = min(min_y, resource.y)
                     max_y = max(max_y, resource.y)
 
         # Check monsters data for bounds
-        if hasattr(game_data, 'monsters') and game_data.monsters:
+        if hasattr(game_data, "monsters") and game_data.monsters:
             for monster in game_data.monsters:
-                if hasattr(monster, 'x') and hasattr(monster, 'y'):
+                if hasattr(monster, "x") and hasattr(monster, "y"):
                     min_x = min(min_x, monster.x)
                     max_x = max(max_x, monster.x)
                     min_y = min(min_y, monster.y)
                     max_y = max(max_y, monster.y)
 
         # If no data found, use default bounds
-        if min_x == float('inf'):
+        if min_x == float("inf"):
             return (-50, -50, 50, 50)
 
         # Add some padding to the bounds
@@ -250,7 +283,7 @@ class PathfindingService:
         bounds = self.get_map_bounds(game_data)
 
         # Use AStarPathfinding for position validation since it has the method
-        if hasattr(self.algorithm, 'is_valid_position'):
+        if hasattr(self.algorithm, "is_valid_position"):
             result = self.algorithm.is_valid_position(position[0], position[1], obstacles, bounds)
             return bool(result)
 
@@ -258,20 +291,42 @@ class PathfindingService:
         temp_algo = AStarPathfinding()
         return temp_algo.is_valid_position(position[0], position[1], obstacles, bounds)
 
-    def calculate_movement_cost(self, path: list[tuple[int, int]]) -> int:
-        """Calculate total movement cost for path"""
-        if len(path) <= 1:
-            return 0
+    def calculate_movement_cost(self, path: list[tuple[int, int]], game_data: Any = None) -> float:
+        """Calculate total movement cost for path including danger factors.
 
-        total_cost = 0
+        Parameters:
+            path: List of coordinates representing the path
+            game_data: Optional game data for danger calculations
+
+        Return values:
+            Float representing total movement cost including danger factors
+
+        This method calculates the total movement cost for a path, taking into
+        account both distance and danger levels from monsters, supporting safer
+        pathfinding by making dangerous routes more expensive.
+        """
+        if len(path) <= 1:
+            return 0.0
+
+        # Update danger zones if game data provided
+        if game_data is not None:
+            self.danger_zone_manager.update_monster_positions(game_data)
+
+        total_cost = 0.0
         for i in range(1, len(path)):
-            # Each step costs 1 (Manhattan distance of 1)
-            total_cost += 1
+            x, y = path[i]
+            # Base cost is 1.0 per step
+            step_cost = 1.0
+
+            # Apply danger multiplier
+            danger_multiplier = self.danger_zone_manager.get_movement_cost_multiplier(x, y)
+            total_cost += step_cost * danger_multiplier
 
         return total_cost
 
-    def find_safe_position_near(self, target: tuple[int, int], radius: int = 3,
-                               game_data: Any = None) -> tuple[int, int] | None:
+    def find_safe_position_near(
+        self, target: tuple[int, int], radius: int = 3, game_data: Any = None
+    ) -> tuple[int, int] | None:
         """Find safe position near target (useful for combat positioning).
 
         Parameters:
@@ -290,8 +345,9 @@ class PathfindingService:
         bounds = self.get_map_bounds(game_data)
 
         # Check target position itself first
-        if (hasattr(self.algorithm, 'is_valid_position') and
-            self.algorithm.is_valid_position(target[0], target[1], obstacles, bounds)):
+        if hasattr(self.algorithm, "is_valid_position") and self.algorithm.is_valid_position(
+            target[0], target[1], obstacles, bounds
+        ):
             return target
 
         # Search in expanding rings around the target
@@ -312,8 +368,9 @@ class PathfindingService:
                     candidate = (candidate_x, candidate_y)
 
                     # Check if position is valid
-                    if (hasattr(self.algorithm, 'is_valid_position') and
-                        self.algorithm.is_valid_position(candidate_x, candidate_y, obstacles, bounds)):
+                    if hasattr(self.algorithm, "is_valid_position") and self.algorithm.is_valid_position(
+                        candidate_x, candidate_y, obstacles, bounds
+                    ):
                         candidates.append(candidate)
 
             # If we found candidates, return the closest one to target center
@@ -333,8 +390,9 @@ class MovementPlanner:
     def __init__(self, pathfinding_service: PathfindingService):
         self.pathfinding_service = pathfinding_service
 
-    def plan_movement_to_resource(self, current_pos: tuple[int, int], resource_type: str,
-                                 game_data: Any) -> PathfindingResult:
+    def plan_movement_to_resource(
+        self, current_pos: tuple[int, int], resource_type: str, game_data: Any
+    ) -> PathfindingResult:
         """Plan movement to nearest resource of specified type.
 
         Parameters:
@@ -356,15 +414,15 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message="No game data provided"
+                message="No game data provided",
             )
 
         # Extract resource positions from game data
         resource_positions = []
 
-        if hasattr(game_data, 'resources') and game_data.resources:
+        if hasattr(game_data, "resources") and game_data.resources:
             for resource in game_data.resources:
-                if hasattr(resource, 'type') and hasattr(resource, 'x') and hasattr(resource, 'y'):
+                if hasattr(resource, "type") and hasattr(resource, "x") and hasattr(resource, "y"):
                     if resource.type == resource_type:
                         resource_positions.append((resource.x, resource.y))
 
@@ -375,14 +433,15 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message=f"No resources of type '{resource_type}' found"
+                message=f"No resources of type '{resource_type}' found",
             )
 
         # Find path to nearest resource
         return self.pathfinding_service.find_path_to_nearest(current_pos, resource_positions, game_data)
 
-    def plan_movement_to_monster(self, current_pos: tuple[int, int], monster_level_range: tuple[int, int],
-                                game_data: Any) -> PathfindingResult:
+    def plan_movement_to_monster(
+        self, current_pos: tuple[int, int], monster_level_range: tuple[int, int], game_data: Any
+    ) -> PathfindingResult:
         """Plan movement to suitable monster for combat.
 
         Parameters:
@@ -404,16 +463,20 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message="No game data provided"
+                message="No game data provided",
             )
 
         min_level, max_level = monster_level_range
         monster_positions = []
 
-        if hasattr(game_data, 'monsters') and game_data.monsters:
+        if hasattr(game_data, "monsters") and game_data.monsters:
             for monster in game_data.monsters:
-                if (hasattr(monster, 'level') and hasattr(monster, 'x') and
-                    hasattr(monster, 'y') and min_level <= monster.level <= max_level):
+                if (
+                    hasattr(monster, "level")
+                    and hasattr(monster, "x")
+                    and hasattr(monster, "y")
+                    and min_level <= monster.level <= max_level
+                ):
                     monster_positions.append((monster.x, monster.y))
 
         if not monster_positions:
@@ -423,14 +486,13 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message=f"No monsters found in level range {min_level}-{max_level}"
+                message=f"No monsters found in level range {min_level}-{max_level}",
             )
 
         # Find path to nearest suitable monster
         return self.pathfinding_service.find_path_to_nearest(current_pos, monster_positions, game_data)
 
-    def plan_movement_to_npc(self, current_pos: tuple[int, int], npc_type: str,
-                            game_data: Any) -> PathfindingResult:
+    def plan_movement_to_npc(self, current_pos: tuple[int, int], npc_type: str, game_data: Any) -> PathfindingResult:
         """Plan movement to specific NPC type.
 
         Parameters:
@@ -452,15 +514,14 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message="No game data provided"
+                message="No game data provided",
             )
 
         npc_positions = []
 
-        if hasattr(game_data, 'npcs') and game_data.npcs:
+        if hasattr(game_data, "npcs") and game_data.npcs:
             for npc in game_data.npcs:
-                if (hasattr(npc, 'type') and hasattr(npc, 'x') and
-                    hasattr(npc, 'y') and npc.type == npc_type):
+                if hasattr(npc, "type") and hasattr(npc, "x") and hasattr(npc, "y") and npc.type == npc_type:
                     npc_positions.append((npc.x, npc.y))
 
         if not npc_positions:
@@ -470,7 +531,7 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message=f"No NPCs of type '{npc_type}' found"
+                message=f"No NPCs of type '{npc_type}' found",
             )
 
         # Find path to nearest NPC of specified type
@@ -493,8 +554,7 @@ class MovementPlanner:
         # Banks are typically a specific type of NPC
         return self.plan_movement_to_npc(current_pos, "bank", game_data)
 
-    def plan_movement_to_grand_exchange(self, current_pos: tuple[int, int],
-                                       game_data: Any) -> PathfindingResult:
+    def plan_movement_to_grand_exchange(self, current_pos: tuple[int, int], game_data: Any) -> PathfindingResult:
         """Plan movement to Grand Exchange.
 
         Parameters:
@@ -511,8 +571,9 @@ class MovementPlanner:
         # Grand Exchange is typically a specific type of NPC or location
         return self.plan_movement_to_npc(current_pos, "grand_exchange", game_data)
 
-    def plan_escape_route(self, current_pos: tuple[int, int], danger_pos: tuple[int, int],
-                         game_data: Any) -> PathfindingResult:
+    def plan_escape_route(
+        self, current_pos: tuple[int, int], danger_pos: tuple[int, int], game_data: Any
+    ) -> PathfindingResult:
         """Plan escape route away from danger.
 
         Parameters:
@@ -548,10 +609,13 @@ class MovementPlanner:
                     candidate = (candidate_x, candidate_y)
 
                     # Check if position is valid and far from danger
-                    if (hasattr(self.pathfinding_service.algorithm, 'is_valid_position') and
-                        self.pathfinding_service.algorithm.is_valid_position(
-                            candidate_x, candidate_y, obstacles, bounds) and
-                        self._manhattan_distance(candidate, danger_pos) >= safe_distance):
+                    if (
+                        hasattr(self.pathfinding_service.algorithm, "is_valid_position")
+                        and self.pathfinding_service.algorithm.is_valid_position(
+                            candidate_x, candidate_y, obstacles, bounds
+                        )
+                        and self._manhattan_distance(candidate, danger_pos) >= safe_distance
+                    ):
                         candidates.append(candidate)
 
             # If we found candidates at this distance, use them
@@ -565,7 +629,7 @@ class MovementPlanner:
                 movement_actions=[],
                 total_cost=0,
                 total_distance=0,
-                message="No safe escape position found"
+                message="No safe escape position found",
             )
 
         # Find path to the nearest safe candidate
@@ -575,8 +639,9 @@ class MovementPlanner:
         """Calculate Manhattan distance between two positions"""
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
-    def get_strategic_positioning(self, current_pos: tuple[int, int], target_pos: tuple[int, int],
-                                 strategy: str, game_data: Any) -> PathfindingResult:
+    def get_strategic_positioning(
+        self, current_pos: tuple[int, int], target_pos: tuple[int, int], strategy: str, game_data: Any
+    ) -> PathfindingResult:
         """Get strategic position relative to target (combat, gathering, etc.).
 
         Parameters:
@@ -606,8 +671,9 @@ class MovementPlanner:
             # Default: move to target location
             return self.pathfinding_service.find_path(current_pos, target_pos, game_data)
 
-    def _find_adjacent_position(self, current_pos: tuple[int, int], target_pos: tuple[int, int],
-                               game_data: Any) -> PathfindingResult:
+    def _find_adjacent_position(
+        self, current_pos: tuple[int, int], target_pos: tuple[int, int], game_data: Any
+    ) -> PathfindingResult:
         """Find position adjacent to target for melee/gathering activities"""
         # Generate adjacent positions around target
         adjacent_positions = []
@@ -622,8 +688,9 @@ class MovementPlanner:
         # Find path to nearest adjacent position
         return self.pathfinding_service.find_path_to_nearest(current_pos, adjacent_positions, game_data)
 
-    def _find_ranged_position(self, current_pos: tuple[int, int], target_pos: tuple[int, int],
-                             game_data: Any) -> PathfindingResult:
+    def _find_ranged_position(
+        self, current_pos: tuple[int, int], target_pos: tuple[int, int], game_data: Any
+    ) -> PathfindingResult:
         """Find position at optimal range from target for ranged combat"""
         optimal_range = 3  # Optimal distance for ranged combat
 

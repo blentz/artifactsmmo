@@ -13,13 +13,13 @@ throughout the AI player operation.
 import asyncio
 from typing import Any
 
-from ...lib.log import get_logger
+from src.lib.log import get_logger
 
 logger = get_logger(__name__)
 
-from ...game_data.api_client import APIClientWrapper
-from ...game_data.cache_manager import CacheManager
-from ...lib.yaml_data import YamlData
+from src.game_data.api_client_wrapper import APIClientWrapper
+from src.game_data.cache_manager import CacheManager
+from src.lib.yaml_data import YamlData
 from ..exceptions import StateConsistencyError
 from ..types.goap_models import GoalFactoryContext, GOAPTargetState
 from .action_result import ActionResult
@@ -96,7 +96,9 @@ class StateManager:
             await self._cache_manager.load_nearby_maps(api_character.x, api_character.y, radius=5)
 
         # Transform to internal model at the boundary with location context
-        character_state = CharacterGameState.from_api_character(api_character, game_map.content, self.api_client.cooldown_manager)
+        character_state = CharacterGameState.from_api_character(
+            api_character, game_map.content, self.api_client.cooldown_manager
+        )
         return character_state
 
     def update_state_from_result(self, action_result: ActionResult) -> None:
@@ -115,8 +117,7 @@ class StateManager:
 
         # Check if position will change to update location flags
         position_changed = (
-            GameState.CURRENT_X in action_result.state_changes or
-            GameState.CURRENT_Y in action_result.state_changes
+            GameState.CURRENT_X in action_result.state_changes or GameState.CURRENT_Y in action_result.state_changes
         )
 
         # Apply all state changes from the action result by updating the model
@@ -124,26 +125,26 @@ class StateManager:
 
         # Map GameState enum keys back to model field names
         state_to_field = {
-            GameState.CHARACTER_LEVEL: 'level',
-            GameState.CHARACTER_XP: 'xp',
-            GameState.CHARACTER_GOLD: 'gold',
-            GameState.HP_CURRENT: 'hp',
-            GameState.HP_MAX: 'max_hp',
-            GameState.CURRENT_X: 'x',
-            GameState.CURRENT_Y: 'y',
-            GameState.COOLDOWN_READY: 'cooldown_ready',
-            GameState.CAN_FIGHT: 'can_fight',
-            GameState.CAN_GATHER: 'can_gather',
-            GameState.CAN_CRAFT: 'can_craft',
-            GameState.CAN_TRADE: 'can_trade',
-            GameState.CAN_MOVE: 'can_move',
-            GameState.CAN_REST: 'can_rest',
-            GameState.CAN_USE_ITEM: 'can_use_item',
-            GameState.CAN_BANK: 'can_bank',
-            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
-            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
-            GameState.AT_SAFE_LOCATION: 'at_safe_location',
-            GameState.GAINED_XP: 'gained_xp',
+            GameState.CHARACTER_LEVEL: "level",
+            GameState.CHARACTER_XP: "xp",
+            GameState.CHARACTER_GOLD: "gold",
+            GameState.HP_CURRENT: "hp",
+            GameState.HP_MAX: "max_hp",
+            GameState.CURRENT_X: "x",
+            GameState.CURRENT_Y: "y",
+            GameState.COOLDOWN_READY: "cooldown_ready",
+            GameState.CAN_FIGHT: "can_fight",
+            GameState.CAN_GATHER: "can_gather",
+            GameState.CAN_CRAFT: "can_craft",
+            GameState.CAN_TRADE: "can_trade",
+            GameState.CAN_MOVE: "can_move",
+            GameState.CAN_REST: "can_rest",
+            GameState.CAN_USE_ITEM: "can_use_item",
+            GameState.CAN_BANK: "can_bank",
+            GameState.AT_MONSTER_LOCATION: "at_monster_location",
+            GameState.AT_RESOURCE_LOCATION: "at_resource_location",
+            GameState.AT_SAFE_LOCATION: "at_safe_location",
+            GameState.GAINED_XP: "gained_xp",
         }
 
         # Apply state changes to the model data
@@ -204,30 +205,38 @@ class StateManager:
         current_data = self._cached_state.model_dump()
 
         # Reset all location flags
-        current_data.update({
-            'at_monster_location': False,
-            'at_resource_location': False,
-            'at_safe_location': True,
-            'xp_source_available': False,
-        })
+        current_data.update(
+            {
+                "at_monster_location": False,
+                "at_resource_location": False,
+                "at_safe_location": True,
+                "xp_source_available": False,
+            }
+        )
 
         # Set appropriate flags based on map content
         if map_data.content:
             if map_data.content.type == "monster":
-                current_data.update({
-                    'at_monster_location': True,
-                    'at_safe_location': False,
-                    'xp_source_available': True,
-                })
+                current_data.update(
+                    {
+                        "at_monster_location": True,
+                        "at_safe_location": False,
+                        "xp_source_available": True,
+                    }
+                )
             elif map_data.content.type == "resource":
-                current_data.update({
-                    'at_resource_location': True,
-                    'xp_source_available': True,
-                })
+                current_data.update(
+                    {
+                        "at_resource_location": True,
+                        "xp_source_available": True,
+                    }
+                )
             elif map_data.content.type == "workshop":
-                current_data.update({
-                    'xp_source_available': True,
-                })
+                current_data.update(
+                    {
+                        "xp_source_available": True,
+                    }
+                )
 
         # Update the cached state with new model instance
         self._cached_state = CharacterGameState(**current_data)
@@ -385,16 +394,18 @@ class StateManager:
         if self._cached_state.cooldown_ready:
             # Re-enable all action capabilities when cooldown is ready
             current_data = self._cached_state.model_dump()
-            current_data.update({
-                'can_fight': True,
-                'can_gather': True,
-                'can_craft': True,
-                'can_trade': True,
-                'can_move': True,
-                'can_rest': True,
-                'can_use_item': True,
-                'can_bank': True,
-            })
+            current_data.update(
+                {
+                    "can_fight": True,
+                    "can_gather": True,
+                    "can_craft": True,
+                    "can_trade": True,
+                    "can_move": True,
+                    "can_rest": True,
+                    "can_use_item": True,
+                    "can_bank": True,
+                }
+            )
             self._cached_state = CharacterGameState(**current_data)
 
     def save_state_to_cache(self, state: CharacterGameState) -> None:
@@ -414,10 +425,10 @@ class StateManager:
         serializable_state = state.model_dump()
 
         # Find and update character in centralized data
-        if self._characters_cache.data and 'data' in self._characters_cache.data:
-            characters = self._characters_cache.data['data']
+        if self._characters_cache.data and "data" in self._characters_cache.data:
+            characters = self._characters_cache.data["data"]
             for i, character in enumerate(characters):
-                if character.get('name') == self.character_name:
+                if character.get("name") == self.character_name:
                     # Update character data with new state
                     characters[i].update(serializable_state)
                     self._characters_cache.save()
@@ -440,15 +451,15 @@ class StateManager:
         format for use by the GOAP planning system.
         """
         # Load character data from centralized characters.yaml file
-        if not self._characters_cache.data or 'data' not in self._characters_cache.data:
+        if not self._characters_cache.data or "data" not in self._characters_cache.data:
             return None
 
-        characters = self._characters_cache.data['data']
+        characters = self._characters_cache.data["data"]
 
         # Find the character by name
         character_data = None
         for character in characters:
-            if character.get('name') == self.character_name:
+            if character.get("name") == self.character_name:
                 character_data = character
                 break
 
@@ -483,11 +494,9 @@ class StateManager:
             GameState.CHARACTER_GOLD: character.gold,
             GameState.HP_CURRENT: character.hp,
             GameState.HP_MAX: character.max_hp,
-
             # Position
             GameState.CURRENT_X: character.x,
             GameState.CURRENT_Y: character.y,
-
             # Skills
             GameState.MINING_LEVEL: character.mining_level,
             GameState.MINING_XP: character.mining_xp,
@@ -505,7 +514,6 @@ class StateManager:
             GameState.COOKING_XP: character.cooking_xp,
             GameState.ALCHEMY_LEVEL: character.alchemy_level,
             GameState.ALCHEMY_XP: character.alchemy_xp,
-
             # Equipment
             GameState.WEAPON_EQUIPPED: character.weapon_slot,
             GameState.HELMET_EQUIPPED: character.helmet_slot,
@@ -515,17 +523,17 @@ class StateManager:
             GameState.RING1_EQUIPPED: character.ring1_slot,
             GameState.RING2_EQUIPPED: character.ring2_slot,
             GameState.AMULET_EQUIPPED: character.amulet_slot,
-
             # Inventory and capacity
-            GameState.INVENTORY_SPACE_AVAILABLE: character.inventory_max_items - len(getattr(character, 'inventory', [])),
-            GameState.INVENTORY_SPACE_USED: len(getattr(character, 'inventory', [])),
-            GameState.INVENTORY_FULL: len(getattr(character, 'inventory', [])) >= character.inventory_max_items,
-
+            GameState.INVENTORY_SPACE_AVAILABLE: character.inventory_max_items
+            - len(getattr(character, "inventory", [])),
+            GameState.INVENTORY_SPACE_USED: len(getattr(character, "inventory", [])),
+            GameState.INVENTORY_FULL: len(getattr(character, "inventory", [])) >= character.inventory_max_items,
             # Tasks
             GameState.ACTIVE_TASK: character.task if character.task else "",
             GameState.TASK_PROGRESS: character.task_progress,
-            GameState.TASK_COMPLETED: character.task_progress >= character.task_total if character.task_total > 0 else False,
-
+            GameState.TASK_COMPLETED: character.task_progress >= character.task_total
+            if character.task_total > 0
+            else False,
             # Action availability
             GameState.COOLDOWN_READY: character.cooldown == 0,
             GameState.CAN_FIGHT: character.cooldown == 0 and character.hp > 0,
@@ -536,7 +544,6 @@ class StateManager:
             GameState.CAN_REST: character.cooldown == 0,
             GameState.CAN_USE_ITEM: character.cooldown == 0,
             GameState.CAN_BANK: character.cooldown == 0,
-
             # Combat and safety
             GameState.HP_LOW: character.hp < (character.max_hp * 0.3),
             GameState.HP_CRITICAL: character.hp < (character.max_hp * 0.1),
@@ -583,26 +590,26 @@ class StateManager:
 
         # Map GameState enum to field name and update the model (same as sync version)
         state_to_field = {
-            GameState.CHARACTER_LEVEL: 'level',
-            GameState.CHARACTER_XP: 'xp',
-            GameState.CHARACTER_GOLD: 'gold',
-            GameState.HP_CURRENT: 'hp',
-            GameState.HP_MAX: 'max_hp',
-            GameState.CURRENT_X: 'x',
-            GameState.CURRENT_Y: 'y',
-            GameState.COOLDOWN_READY: 'cooldown_ready',
-            GameState.CAN_FIGHT: 'can_fight',
-            GameState.CAN_GATHER: 'can_gather',
-            GameState.CAN_CRAFT: 'can_craft',
-            GameState.CAN_TRADE: 'can_trade',
-            GameState.CAN_MOVE: 'can_move',
-            GameState.CAN_REST: 'can_rest',
-            GameState.CAN_USE_ITEM: 'can_use_item',
-            GameState.CAN_BANK: 'can_bank',
-            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
-            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
-            GameState.AT_SAFE_LOCATION: 'at_safe_location',
-            GameState.GAINED_XP: 'gained_xp',
+            GameState.CHARACTER_LEVEL: "level",
+            GameState.CHARACTER_XP: "xp",
+            GameState.CHARACTER_GOLD: "gold",
+            GameState.HP_CURRENT: "hp",
+            GameState.HP_MAX: "max_hp",
+            GameState.CURRENT_X: "x",
+            GameState.CURRENT_Y: "y",
+            GameState.COOLDOWN_READY: "cooldown_ready",
+            GameState.CAN_FIGHT: "can_fight",
+            GameState.CAN_GATHER: "can_gather",
+            GameState.CAN_CRAFT: "can_craft",
+            GameState.CAN_TRADE: "can_trade",
+            GameState.CAN_MOVE: "can_move",
+            GameState.CAN_REST: "can_rest",
+            GameState.CAN_USE_ITEM: "can_use_item",
+            GameState.CAN_BANK: "can_bank",
+            GameState.AT_MONSTER_LOCATION: "at_monster_location",
+            GameState.AT_RESOURCE_LOCATION: "at_resource_location",
+            GameState.AT_SAFE_LOCATION: "at_safe_location",
+            GameState.GAINED_XP: "gained_xp",
         }
 
         field_name = state_to_field.get(state_key)
@@ -640,25 +647,50 @@ class StateManager:
                 # Create minimal default state for update
                 self._cached_state = CharacterGameState(
                     name=self.character_name,
-                    level=1, xp=0, gold=0, hp=1, max_hp=1,
-                    x=0, y=0,
-                    mining_level=1, mining_xp=0,
-                    woodcutting_level=1, woodcutting_xp=0,
-                    fishing_level=1, fishing_xp=0,
-                    weaponcrafting_level=1, weaponcrafting_xp=0,
-                    gearcrafting_level=1, gearcrafting_xp=0,
-                    jewelrycrafting_level=1, jewelrycrafting_xp=0,
-                    cooking_level=1, cooking_xp=0,
-                    alchemy_level=1, alchemy_xp=0,
-                    cooldown=0, cooldown_ready=True,
-                    can_fight=True, can_gather=True, can_craft=True,
-                    can_trade=True, can_move=True, can_rest=True,
-                    can_use_item=True, can_bank=True, can_gain_xp=True,
-                    xp_source_available=False, at_monster_location=False,
-                    at_resource_location=False, at_safe_location=True,
-                    safe_to_fight=True, hp_low=False, hp_critical=False,
-                    inventory_space_available=True, inventory_space_used=0,
-                    gained_xp=False
+                    level=1,
+                    xp=0,
+                    gold=0,
+                    hp=1,
+                    max_hp=1,
+                    x=0,
+                    y=0,
+                    mining_level=1,
+                    mining_xp=0,
+                    woodcutting_level=1,
+                    woodcutting_xp=0,
+                    fishing_level=1,
+                    fishing_xp=0,
+                    weaponcrafting_level=1,
+                    weaponcrafting_xp=0,
+                    gearcrafting_level=1,
+                    gearcrafting_xp=0,
+                    jewelrycrafting_level=1,
+                    jewelrycrafting_xp=0,
+                    cooking_level=1,
+                    cooking_xp=0,
+                    alchemy_level=1,
+                    alchemy_xp=0,
+                    cooldown=0,
+                    cooldown_ready=True,
+                    can_fight=True,
+                    can_gather=True,
+                    can_craft=True,
+                    can_trade=True,
+                    can_move=True,
+                    can_rest=True,
+                    can_use_item=True,
+                    can_bank=True,
+                    can_gain_xp=True,
+                    xp_source_available=False,
+                    at_monster_location=False,
+                    at_resource_location=False,
+                    at_safe_location=True,
+                    safe_to_fight=True,
+                    hp_low=False,
+                    hp_critical=False,
+                    inventory_space_available=True,
+                    inventory_space_used=0,
+                    gained_xp=False,
                 )
             else:
                 self._cached_state = cached_state
@@ -668,26 +700,26 @@ class StateManager:
 
         # Map GameState enum keys back to model field names
         state_to_field = {
-            GameState.CHARACTER_LEVEL: 'level',
-            GameState.CHARACTER_XP: 'xp',
-            GameState.CHARACTER_GOLD: 'gold',
-            GameState.HP_CURRENT: 'hp',
-            GameState.HP_MAX: 'max_hp',
-            GameState.CURRENT_X: 'x',
-            GameState.CURRENT_Y: 'y',
-            GameState.COOLDOWN_READY: 'cooldown_ready',
-            GameState.CAN_FIGHT: 'can_fight',
-            GameState.CAN_GATHER: 'can_gather',
-            GameState.CAN_CRAFT: 'can_craft',
-            GameState.CAN_TRADE: 'can_trade',
-            GameState.CAN_MOVE: 'can_move',
-            GameState.CAN_REST: 'can_rest',
-            GameState.CAN_USE_ITEM: 'can_use_item',
-            GameState.CAN_BANK: 'can_bank',
-            GameState.AT_MONSTER_LOCATION: 'at_monster_location',
-            GameState.AT_RESOURCE_LOCATION: 'at_resource_location',
-            GameState.AT_SAFE_LOCATION: 'at_safe_location',
-            GameState.GAINED_XP: 'gained_xp',
+            GameState.CHARACTER_LEVEL: "level",
+            GameState.CHARACTER_XP: "xp",
+            GameState.CHARACTER_GOLD: "gold",
+            GameState.HP_CURRENT: "hp",
+            GameState.HP_MAX: "max_hp",
+            GameState.CURRENT_X: "x",
+            GameState.CURRENT_Y: "y",
+            GameState.COOLDOWN_READY: "cooldown_ready",
+            GameState.CAN_FIGHT: "can_fight",
+            GameState.CAN_GATHER: "can_gather",
+            GameState.CAN_CRAFT: "can_craft",
+            GameState.CAN_TRADE: "can_trade",
+            GameState.CAN_MOVE: "can_move",
+            GameState.CAN_REST: "can_rest",
+            GameState.CAN_USE_ITEM: "can_use_item",
+            GameState.CAN_BANK: "can_bank",
+            GameState.AT_MONSTER_LOCATION: "at_monster_location",
+            GameState.AT_RESOURCE_LOCATION: "at_resource_location",
+            GameState.AT_SAFE_LOCATION: "at_safe_location",
+            GameState.GAINED_XP: "gained_xp",
         }
 
         # Apply state changes to the model data
@@ -827,22 +859,22 @@ class StateManager:
         """
         # Map GameState enum to field name and update the model
         state_to_field = {
-            GameState.CHARACTER_LEVEL: 'level',
-            GameState.CHARACTER_XP: 'xp',
-            GameState.CHARACTER_GOLD: 'gold',
-            GameState.HP_CURRENT: 'hp',
-            GameState.HP_MAX: 'max_hp',
-            GameState.CURRENT_X: 'x',
-            GameState.CURRENT_Y: 'y',
-            GameState.COOLDOWN_READY: 'cooldown_ready',
-            GameState.CAN_FIGHT: 'can_fight',
-            GameState.CAN_GATHER: 'can_gather',
-            GameState.CAN_CRAFT: 'can_craft',
-            GameState.CAN_TRADE: 'can_trade',
-            GameState.CAN_MOVE: 'can_move',
-            GameState.CAN_REST: 'can_rest',
-            GameState.CAN_USE_ITEM: 'can_use_item',
-            GameState.CAN_BANK: 'can_bank',
+            GameState.CHARACTER_LEVEL: "level",
+            GameState.CHARACTER_XP: "xp",
+            GameState.CHARACTER_GOLD: "gold",
+            GameState.HP_CURRENT: "hp",
+            GameState.HP_MAX: "max_hp",
+            GameState.CURRENT_X: "x",
+            GameState.CURRENT_Y: "y",
+            GameState.COOLDOWN_READY: "cooldown_ready",
+            GameState.CAN_FIGHT: "can_fight",
+            GameState.CAN_GATHER: "can_gather",
+            GameState.CAN_CRAFT: "can_craft",
+            GameState.CAN_TRADE: "can_trade",
+            GameState.CAN_MOVE: "can_move",
+            GameState.CAN_REST: "can_rest",
+            GameState.CAN_USE_ITEM: "can_use_item",
+            GameState.CAN_BANK: "can_bank",
         }
 
         field_name = state_to_field.get(state_key)
@@ -853,27 +885,21 @@ class StateManager:
 
     # Enhanced methods for unified sub-goal architecture
 
-    async def validate_goap_target_state(
-        self,
-        target_state: GOAPTargetState
-    ) -> bool:
+    async def validate_goap_target_state(self, target_state: GOAPTargetState) -> bool:
         """Validate GOAPTargetState Pydantic model against current game state and rules.
-        
+
         Parameters:
             target_state: Pydantic model with target state requirements
-            
+
         Return values:
             bool: True if target state is valid and achievable
-            
+
         Raises:
             StateConsistencyError: If target state validation fails
         """
         try:
             # Convert GOAPTargetState to internal GameState dict format
-            target_dict = {
-                GameState(key): value
-                for key, value in target_state.target_states.items()
-            }
+            target_dict = {GameState(key): value for key, value in target_state.target_states.items()}
 
             # Use existing validation logic with converted state
             return self._validate_state_rules(target_dict)
@@ -881,18 +907,15 @@ class StateManager:
         except (ValueError, KeyError) as e:
             raise StateConsistencyError(0, f"GOAPTargetState validation failed: {e}")
 
-    async def refresh_state_for_parent_action(
-        self,
-        depth: int
-    ) -> CharacterGameState:
+    async def refresh_state_for_parent_action(self, depth: int) -> CharacterGameState:
         """Force refresh state after sub-goal completion for parent action retry.
-        
+
         Parameters:
             depth: Current recursion depth for error context
-            
+
         Return values:
             CharacterGameState: Fresh state for parent action execution
-            
+
         Raises:
             StateConsistencyError: If state refresh fails
         """
@@ -910,21 +933,18 @@ class StateManager:
             raise StateConsistencyError(depth, f"Failed to refresh state: {e}")
 
     def create_goal_factory_context(
-        self,
-        parent_goal_type: str,
-        recursion_depth: int,
-        max_depth: int = 10
+        self, parent_goal_type: str, recursion_depth: int, max_depth: int = 10
     ) -> GoalFactoryContext:
         """Create context for sub-goal factory with current state and depth tracking.
-        
+
         Parameters:
             parent_goal_type: Type of goal that requested the sub-goal
             recursion_depth: Current recursion depth
             max_depth: Maximum allowed recursion depth
-            
+
         Return values:
             GoalFactoryContext: Pydantic model with factory context
-            
+
         Raises:
             StateConsistencyError: If cached state is not available
         """
@@ -941,25 +961,22 @@ class StateManager:
             game_data=game_data,
             parent_goal_type=parent_goal_type,
             recursion_depth=recursion_depth,
-            max_depth=max_depth
+            max_depth=max_depth,
         )
 
     async def validate_recursive_state_transition(
-        self,
-        pre_state: CharacterGameState,
-        post_state: CharacterGameState,
-        depth: int
+        self, pre_state: CharacterGameState, post_state: CharacterGameState, depth: int
     ) -> bool:
         """Validate state transition during recursive sub-goal execution.
-        
+
         Parameters:
             pre_state: State before sub-goal execution
-            post_state: State after sub-goal execution  
+            post_state: State after sub-goal execution
             depth: Recursion depth for error context
-            
+
         Return values:
             bool: True if state transition is valid
-            
+
         Raises:
             StateConsistencyError: If state transition validation fails
         """

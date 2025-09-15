@@ -63,6 +63,7 @@ class TestStateManager:
         mock_character.amulet_slot = ""
         mock_character.artifact1_slot = ""
         mock_character.cooldown_expiration_utc = None
+        mock_character.cooldown_expiration = None
 
         client.get_character = AsyncMock(return_value=mock_character)
         client.get_character_logs = AsyncMock()
