@@ -1,1 +1,0 @@
-# Architecture validation tests
