@@ -59,7 +59,7 @@ class TestTradeCommands:
     def test_ge_sell_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful GE sell command."""
         with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_sell_post.sync"
+            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -80,7 +80,7 @@ class TestTradeCommands:
     def test_ge_orders_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful GE orders list command."""
         with patch(
-            "artifactsmmo_api_client.api.my_account.get_ge_sell_orders_my_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -105,7 +105,7 @@ class TestTradeCommands:
     def test_ge_orders_empty(self, runner, mock_client_manager, mock_api_response):
         """Test GE orders list with no orders."""
         with patch(
-            "artifactsmmo_api_client.api.my_account.get_ge_sell_orders_my_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -120,7 +120,7 @@ class TestTradeCommands:
     def test_ge_cancel_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful GE cancel command."""
         with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_sell_order_my_name_action_grandexchange_cancel_post.sync"
+            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -180,7 +180,7 @@ class TestTradeCommands:
     def test_ge_sell_error_response(self, runner, mock_client_manager, mock_api_response):
         """Test GE sell command with error response."""
         with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_sell_post.sync"
+            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -210,7 +210,7 @@ class TestTradeCommands:
     def test_ge_cancel_error_response(self, runner, mock_client_manager, mock_api_response):
         """Test GE cancel command with error response."""
         with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_sell_order_my_name_action_grandexchange_cancel_post.sync"
+            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -225,7 +225,7 @@ class TestTradeCommands:
     def test_prices_command_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful prices command."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -249,7 +249,7 @@ class TestTradeCommands:
     def test_prices_command_no_orders(self, runner, mock_client_manager, mock_api_response):
         """Test prices command with no orders."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -267,7 +267,7 @@ class TestTradeCommands:
     def test_orders_command_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful orders command."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -294,7 +294,7 @@ class TestTradeCommands:
     def test_orders_command_with_filters(self, runner, mock_client_manager, mock_api_response):
         """Test orders command with filters."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -316,7 +316,7 @@ class TestTradeCommands:
     def test_history_command_personal(self, runner, mock_client_manager, mock_api_response):
         """Test personal history command."""
         with patch(
-            "artifactsmmo_api_client.api.my_account.get_ge_sell_history_my_grandexchange_history_get.sync"
+            "artifactsmmo_api_client.api.my_account.get_ge_history_my_grandexchange_history_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -344,7 +344,7 @@ class TestTradeCommands:
     def test_history_command_public(self, runner, mock_client_manager, mock_api_response):
         """Test public history command."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_history_grandexchange_history_code_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -371,10 +371,10 @@ class TestTradeCommands:
         """Test successful analyze command."""
         with (
             patch(
-                "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
             ) as mock_orders_api,
             patch(
-                "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_history_grandexchange_history_code_get.sync"
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
             ) as mock_history_api,
         ):
             mock_orders_api.return_value = mock_api_response
@@ -412,10 +412,10 @@ class TestTradeCommands:
         """Test analyze command with no market data."""
         with (
             patch(
-                "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
             ) as mock_orders_api,
             patch(
-                "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_history_grandexchange_history_code_get.sync"
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
             ) as mock_history_api,
         ):
             mock_orders_api.return_value = mock_api_response
@@ -432,7 +432,7 @@ class TestTradeCommands:
     def test_trending_command_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful trending command."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -460,7 +460,7 @@ class TestTradeCommands:
     def test_opportunities_command_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful opportunities command."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -486,7 +486,7 @@ class TestTradeCommands:
     def test_opportunities_command_no_opportunities(self, runner, mock_client_manager, mock_api_response):
         """Test opportunities command with no opportunities found."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -508,7 +508,7 @@ class TestTradeCommands:
     def test_spread_command_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful spread command."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -534,7 +534,7 @@ class TestTradeCommands:
     def test_spread_command_no_spreads(self, runner, mock_client_manager, mock_api_response):
         """Test spread command with no spreads found."""
         with patch(
-            "artifactsmmo_api_client.api.grand_exchange.get_ge_sell_orders_grandexchange_orders_get.sync"
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
             mock_api.return_value = mock_api_response
 

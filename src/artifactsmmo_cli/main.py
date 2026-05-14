@@ -7,6 +7,7 @@ from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.commands import account, action, bank, character, craft, info, task, trade
+from artifactsmmo_cli.commands.play import app as play_app
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.utils.formatters import format_error_message
 
@@ -26,6 +27,7 @@ app.add_typer(craft.app, name="craft", help="Crafting and recycling commands")
 app.add_typer(task.app, name="task", help="Task management commands")
 app.add_typer(info.app, name="info", help="Information and lookup commands")
 app.add_typer(account.app, name="account", help="Account management commands")
+app.add_typer(play_app, name="play", help="Run the autonomous AI player")
 
 
 @app.callback()

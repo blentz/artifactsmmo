@@ -779,6 +779,10 @@ def show_leaderboard(
 ) -> None:
     """Display leaderboards."""
     try:
+        if board_type.lower() not in ("characters", "accounts"):
+            console.print(format_error_message("Invalid leaderboard type. Use 'characters' or 'accounts'"))
+            raise typer.Exit(1)
+
         client = ClientManager().client
 
         if board_type.lower() == "characters":
@@ -795,10 +799,6 @@ def show_leaderboard(
             response = get_accounts_leaderboard_leaderboard_accounts_get.sync(
                 client=client, sort=sort, page=page, size=size
             )
-        else:
-            console.print(format_error_message("Invalid leaderboard type. Use 'characters' or 'accounts'"))
-            raise typer.Exit(1)
-
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
             leaderboard = cli_response.data
@@ -908,10 +908,11 @@ def map_info(
 
         if x is not None and y is not None:
             # Import the API function for specific coordinates
-            from artifactsmmo_api_client.api.maps import get_map_maps_x_y_get
+            from artifactsmmo_api_client.api.maps import get_map_by_position_maps_layer_x_y_get
+            from artifactsmmo_api_client.models.map_layer import MapLayer
 
             # Get specific map location
-            response = get_map_maps_x_y_get.sync(client=client, x=x, y=y)
+            response = get_map_by_position_maps_layer_x_y_get.sync(client=client, layer=MapLayer.OVERWORLD, x=x, y=y)
             cli_response = handle_api_response(response)
             if cli_response.success and cli_response.data:
                 map_data = cli_response.data

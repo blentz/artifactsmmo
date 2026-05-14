@@ -1,0 +1,314 @@
+"""GOAP AI player: main sense→plan→act loop."""
+
+import time
+from datetime import datetime, timezone
+
+from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
+from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
+from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import sync as get_bank_items
+
+from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
+from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskExchangeAction
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, FarmMonsterGoal
+from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.client_manager import ClientManager
+
+_STALE_AFTER_SECONDS = 60.0
+_BANK_TILE = None  # resolved from game_data at runtime
+_PLAN_PREVIEW = 5  # max distinct steps shown in verbose plan output
+
+
+def _format_plan(plan: list[Action]) -> str:
+    """Summarise a plan as 'A×N → B → C×M … (+K more)' instead of raw repetition."""
+    if not plan:
+        return ""
+    segments: list[str] = []
+    i = 0
+    while i < len(plan) and len(segments) < _PLAN_PREVIEW:
+        step = repr(plan[i])
+        count = 1
+        while i + count < len(plan) and repr(plan[i + count]) == step:
+            count += 1
+        segments.append(f"{step}×{count}" if count > 1 else step)
+        i += count
+    remaining = len(plan) - i
+    suffix = f" … (+{remaining} more)" if remaining > 0 else ""
+    return " → ".join(segments) + suffix
+
+
+class GamePlayer:
+    """Autonomous GOAP AI player for a single character."""
+
+    def __init__(self, character: str, verbose: bool = False, dry_run: bool = False) -> None:
+        self.character = character
+        self.verbose = verbose
+        self.dry_run = dry_run
+        self.planner = GOAPPlanner()
+        self.state: WorldState | None = None
+        self.game_data: GameData | None = None
+        self._last_action_time = time.monotonic()
+
+    def run(self) -> None:
+        """Main loop: sense → select goal → plan → act."""
+        client_manager = ClientManager()
+        client = client_manager.client
+
+        print(f"[{self._now()}] Loading game data...")
+        self.game_data = GameData.load(client)
+
+        print(f"[{self._now()}] Fetching character state...")
+        self.state = self._fetch_world_state(client)
+
+        actions = self._build_actions()
+
+        print(f"[{self._now()}] Starting play loop for {self.character}")
+
+        while True:
+            self.state = self._refresh_if_stale(client)
+            self._wait_for_cooldown()
+
+            goals = self._build_goals()
+            goals.sort(key=lambda g: g.priority(self.state, self.game_data), reverse=True)
+
+            plan: list[Action] = []
+            selected_goal: Goal | None = None
+
+            if self.verbose:
+                goal_summary = "  ".join(
+                    f"{g}={g.priority(self.state, self.game_data):.1f}" for g in goals
+                )
+                print(f"[{self._now()}] Goals: {goal_summary}")
+
+            for goal in goals:
+                if goal.priority(self.state, self.game_data) <= 0:
+                    break
+                plan = self.planner.plan(self.state, goal, actions, self.game_data)
+                if self.verbose and not plan:
+                    s = self.planner.last_stats
+                    print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
+                if plan:
+                    selected_goal = goal
+                    break
+
+            if not plan or selected_goal is None:
+                print(f"[{self._now()}] No plan found — waiting 10s")
+                time.sleep(10)
+                continue
+
+            if self.verbose:
+                plan_str = _format_plan(plan)
+                relevant = selected_goal.relevant_actions(actions, self.state, self.game_data)
+                applicable = [repr(a) for a in relevant if a.is_applicable(self.state, self.game_data)]
+                print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(self.state, self.game_data):.1f})  Plan: {plan_str}")
+                print(f"[{self._now()}] Applicable: {applicable}")
+
+            action = plan[0]
+            self._log_action(action, selected_goal, plan)
+
+            if self.dry_run:
+                self.state = action.apply(self.state, self.game_data)
+            else:
+                self.state = self._execute(action, client)
+
+    def _execute(self, action: Action, client: AuthenticatedClient) -> WorldState:
+        """Execute an action and return the updated WorldState."""
+        try:
+            new_state = action.execute(self.state, client)
+            self._last_action_time = time.monotonic()
+            # Re-sync bank state after visiting bank
+            if isinstance(action, (DepositAllAction, WithdrawItemAction)):
+                new_state = self._sync_bank(client, new_state)
+            return new_state
+        except RuntimeError as e:
+            msg = str(e)
+            if "HTTP 499" in msg:
+                print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
+            else:
+                print(f"[{self._now()}] Action failed: {msg} — refreshing state")
+            return self._fetch_world_state(client)
+
+    def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
+        """Query character state from the API."""
+        result = get_character(client=client, name=self.character)
+        if result is None or not hasattr(result, "data") or result.data is None:
+            raise RuntimeError(f"Could not fetch character '{self.character}'")
+
+        bank_items = self.state.bank_items if self.state else None
+        bank_gold = self.state.bank_gold if self.state else None
+        return WorldState.from_character_schema(result.data, bank_items=bank_items, bank_gold=bank_gold)
+
+    def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
+        """Re-fetch bank contents after a bank interaction."""
+        bank_items: dict[str, int] = {}
+        page = 1
+        while True:
+            result = get_bank_items(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for slot in result.data:
+                bank_items[slot.code] = bank_items.get(slot.code, 0) + slot.quantity
+            if len(result.data) < 100:
+                break
+            page += 1
+
+        bank_gold: int | None = None
+        details = get_bank_details(client=client)
+        if details is not None and hasattr(details, "data") and details.data is not None:
+            bank_gold = details.data.gold
+
+        return WorldState(
+            character=state.character,
+            level=state.level,
+            xp=state.xp,
+            max_xp=state.max_xp,
+            hp=state.hp,
+            max_hp=state.max_hp,
+            gold=state.gold,
+            skills=state.skills,
+            x=state.x,
+            y=state.y,
+            inventory=state.inventory,
+            inventory_max=state.inventory_max,
+            equipment=state.equipment,
+            cooldown_expires=state.cooldown_expires,
+            task_code=state.task_code,
+            task_type=state.task_type,
+            task_progress=state.task_progress,
+            task_total=state.task_total,
+            bank_items=bank_items,
+            bank_gold=bank_gold,
+        )
+
+    def _refresh_if_stale(self, client: AuthenticatedClient) -> WorldState:
+        """Re-query the API if state is too old."""
+        elapsed = time.monotonic() - self._last_action_time
+        if elapsed > _STALE_AFTER_SECONDS:
+            return self._fetch_world_state(client)
+        return self.state
+
+    def _wait_for_cooldown(self) -> None:
+        """Sleep until the character's cooldown expires."""
+        if self.state is None or self.state.cooldown_expires is None:
+            return
+        now = datetime.now(tz=timezone.utc)
+        remaining = (self.state.cooldown_expires - now).total_seconds()
+        if remaining > 0:
+            print(f"[{self._now()}] Cooldown: {remaining:.1f}s")
+            time.sleep(remaining + 0.1)
+
+    def _build_actions(self) -> list[Action]:
+        """Build the action list. Each action handles its own movement in execute() and cost()."""
+        assert self.game_data is not None
+
+        bank = self.game_data.bank_location()
+        taskmaster = self.game_data.taskmaster_location()
+
+        actions: list[Action] = [
+            RestAction(),
+            UseConsumableAction(_item_stats=self.game_data._item_stats),
+            DepositAllAction(bank_location=bank),
+            AcceptTaskAction(taskmaster_location=taskmaster),
+            CompleteTaskAction(taskmaster_location=taskmaster),
+            TaskExchangeAction(taskmaster_location=taskmaster),
+        ]
+
+        # Fight and gather actions carry their own locations — no separate move actions needed
+        for monster_code, locs in self.game_data._monster_locations.items():
+            actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))
+
+        for resource_code, locs in self.game_data._resource_locations.items():
+            actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))
+
+        # Craft, equip, and withdraw actions carry workshop/bank locations
+        materials_to_withdraw: dict[str, int] = {}
+        for item_code, recipe in self.game_data._crafting_recipes.items():
+            stats = self.game_data.item_stats(item_code)
+            if stats is None:
+                continue
+            workshop_loc = self.game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
+            actions.append(CraftAction(code=item_code, quantity=1, workshop_location=workshop_loc))
+            for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+                actions.append(EquipAction(code=item_code, slot=slot))
+            if ITEM_TYPE_TO_SLOTS.get(stats.type_):
+                # Allow withdrawing the crafted item from bank to equip it
+                actions.append(WithdrawItemAction(code=item_code, quantity=1, bank_location=bank))
+                for mat_code, mat_qty in recipe.items():
+                    if mat_qty > materials_to_withdraw.get(mat_code, 0):
+                        materials_to_withdraw[mat_code] = mat_qty
+
+        for mat_code, mat_qty in materials_to_withdraw.items():
+            actions.append(WithdrawItemAction(code=mat_code, quantity=mat_qty, bank_location=bank))
+
+        # Allow withdrawing task coins from bank for exchange
+        actions.append(WithdrawItemAction(code="tasks_coin", quantity=1, bank_location=bank))
+
+        return actions
+
+    def _build_goals(self) -> list[Goal]:
+        """Build goal list. FarmMonsterGoal targets the strongest monster the character can beat."""
+        assert self.game_data is not None
+        assert self.state is not None
+
+        # Pick a suitable monster to farm: highest level at or below character level
+        farm_target = "chicken"  # safe fallback
+        best_level = 0
+        for code, level in self.game_data._monster_level.items():
+            if level <= self.state.level and level > best_level:
+                best_level = level
+                farm_target = code
+
+        upgrade_goal = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
+        goals: list[Goal] = [
+            RestoreHPGoal(),
+            DepositInventoryGoal(),
+            CompleteTaskGoal(),
+            AcceptTaskGoal(),
+            TaskExchangeGoal(),
+            FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp),
+            upgrade_goal,
+        ]
+
+        if self.state.task_type == "items" and self.state.task_code:
+            goals.append(FarmItemsGoal())
+
+        # If upgrade needs materials, add a gather goal to drive material collection.
+        # Use the FULL recipe quantity (not remaining needed) so GatherMaterials and
+        # UpgradeEquipment both check the same threshold (inventory+bank >= recipe_qty).
+        # Using a partial quantity causes GatherMaterials to satisfy early when existing
+        # items were deposited to the bank, while UpgradeEquipment still sees insufficient
+        # total materials.
+        target = upgrade_goal.find_upgrade_target(self.state, self.game_data)
+        if target is not None:
+            item_code, _slot = target
+            recipe = self.game_data._crafting_recipes.get(item_code)
+            if recipe:
+                gm_goal = GatherMaterialsGoal(target_item=item_code, needed=dict(recipe))
+                if not gm_goal.is_satisfied(self.state):
+                    goals.append(gm_goal)
+
+        return goals
+
+    def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
+        assert self.state is not None
+        suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
+        print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now().strftime("%H:%M:%S")

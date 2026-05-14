@@ -1,0 +1,107 @@
+""" Contains some shared types for properties """
+
+from collections.abc import Mapping, MutableMapping
+from http import HTTPStatus
+from typing import BinaryIO, Generic, Literal, Optional, TypeVar, IO
+
+from attrs import define
+
+
+class Unset:
+    def __bool__(self) -> Literal[False]:
+        return False
+
+
+UNSET: Unset = Unset()
+
+# The types that `httpx.Client(files=)` can accept, copied from that library.
+FileContent = IO[bytes] | bytes | str
+FileTypes = (
+    # (filename, file (or bytes), content_type)
+    tuple[Optional[str], FileContent, Optional[str]]
+    # (filename, file (or bytes), content_type, headers)
+    | tuple[Optional[str], FileContent, Optional[str], Mapping[str, str]]
+)
+RequestFiles = list[tuple[str, FileTypes]]
+
+# Game-specific status codes not in the standard HTTPStatus enum
+_GAME_STATUS_PHRASES: dict[int, str] = {
+    461: "Transaction already in progress",
+    462: "Bank full",
+    471: "Item cannot be equipped",
+    472: "Slot already used",
+    473: "Slot is empty",
+    474: "Slot is empty",
+    475: "Item type is wrong",
+    476: "Character already has the max level of this item",
+    478: "Missing item or insufficient quantity",
+    479: "Recycling items level is too high",
+    480: "Ge item already listed",
+    481: "Item not found",
+    482: "No item to recycle",
+    483: "Item not recyclable",
+    484: "Ge order not found",
+    485: "Ge max quantity reached",
+    486: "Action already in progress",
+    487: "Unique item already equipped",
+    488: "Insufficient gold",
+    489: "Character has no task",
+    490: "Character already has a task",
+    491: "Task not completed",
+    492: "Task master not found at this location",
+    493: "Character level too low",
+    494: "Character already at destination",
+    495: "Slot not found",
+    496: "Skill level too low",
+    497: "Character full of items",
+    498: "Character not found",
+    499: "Character in cooldown",
+    598: "Server error",
+    599: "Malformed query",
+}
+
+
+class GameHTTPStatus(int):
+    """HTTP status code that accepts non-standard game-specific codes."""
+
+    def __new__(cls, value: int) -> "GameHTTPStatus":
+        return super().__new__(cls, value)
+
+    @property
+    def phrase(self) -> str:
+        try:
+            return HTTPStatus(int(self)).phrase
+        except ValueError:
+            return _GAME_STATUS_PHRASES.get(int(self), f"Game status {int(self)}")
+
+    def __repr__(self) -> str:
+        return f"GameHTTPStatus({int(self)})"
+
+
+@define
+class File:
+    """ Contains information for file uploads """
+
+    payload: BinaryIO
+    file_name: Optional[str] = None
+    mime_type: Optional[str] = None
+
+    def to_tuple(self) -> FileTypes:
+        """ Return a tuple representation that httpx will accept for multipart/form-data """
+        return self.file_name, self.payload, self.mime_type
+
+
+T = TypeVar("T")
+
+
+@define
+class Response(Generic[T]):
+    """ A response from an endpoint """
+
+    status_code: GameHTTPStatus
+    content: bytes
+    headers: MutableMapping[str, str]
+    parsed: Optional[T]
+
+
+__all__ = ["UNSET", "File", "FileTypes", "GameHTTPStatus", "RequestFiles", "Response", "Unset"]

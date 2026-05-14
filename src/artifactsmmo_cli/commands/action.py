@@ -1,6 +1,5 @@
 """Character action commands."""
 
-import signal
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -132,21 +131,6 @@ class BatchResults:
             table.add_row("Items Collected", items_str)
 
         return table
-
-
-# Global flag for interrupt handling
-_interrupted = False
-
-
-def _signal_handler(signum: int, frame: Any) -> None:
-    """Handle interrupt signals."""
-    global _interrupted
-    _interrupted = True
-    console.print("\n[yellow]⚠ Interrupt received. Finishing current action...[/yellow]")
-
-
-# Set up signal handler
-signal.signal(signal.SIGINT, _signal_handler)
 
 
 def execute_gather_action(character: str) -> CLIResponse[Any]:
@@ -457,9 +441,6 @@ def goto_location(
         action goto mychar "task master" # Go to nearest task master
         action goto mychar copper        # Go to nearest copper resource
     """
-    global _interrupted
-    _interrupted = False
-
     try:
         character = validate_character_name(character)
 
@@ -538,10 +519,6 @@ def goto_location(
             task = progress.add_task("Navigating", total=len(path_result.steps))
 
             for i, step in enumerate(path_result.steps):
-                if _interrupted:
-                    console.print("[yellow]⚠ Navigation interrupted by user[/yellow]")
-                    break
-
                 progress.update(task, description=f"Moving to ({step.x}, {step.y})")
 
                 # Execute move
@@ -568,26 +545,23 @@ def goto_location(
 
                             # Wait with countdown
                             for remaining in range(cooldown_seconds, 0, -1):
-                                if _interrupted:
-                                    break
                                 progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
                                 time.sleep(1)
 
-                            if not _interrupted:
-                                # Retry the move after cooldown
-                                progress.update(task, description=f"Moving to ({step.x}, {step.y})")
-                                response = api.action_move(name=character, body=destination_data)
-                                cli_response = handle_api_response(
-                                    response, f"Moved {character} to ({step.x}, {step.y})"
-                                )
+                            # Retry the move after cooldown
+                            progress.update(task, description=f"Moving to ({step.x}, {step.y})")
+                            response = api.action_move(name=character, body=destination_data)
+                            cli_response = handle_api_response(
+                                response, f"Moved {character} to ({step.x}, {step.y})"
+                            )
 
-                                if cli_response.success:
-                                    console.print(f"✅ Moved to ({step.x}, {step.y})")
-                                    progress.advance(task)
-                                else:
-                                    error_msg = cli_response.error or "Move failed after cooldown"
-                                    console.print(format_error_message(error_msg))
-                                    break
+                            if cli_response.success:
+                                console.print(f"✅ Moved to ({step.x}, {step.y})")
+                                progress.advance(task)
+                            else:
+                                error_msg = cli_response.error or "Move failed after cooldown"
+                                console.print(format_error_message(error_msg))
+                                break
                         else:
                             console.print(
                                 format_error_message(
@@ -613,35 +587,32 @@ def goto_location(
 
                             # Wait with countdown
                             for remaining in range(cooldown_seconds, 0, -1):
-                                if _interrupted:
-                                    break
                                 progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
                                 time.sleep(1)
 
-                            if not _interrupted:
-                                # Retry the move after cooldown
-                                progress.update(task, description=f"Moving to ({step.x}, {step.y})")
-                                try:
-                                    response = api.action_move(name=character, body=destination_data)
-                                    cli_response = handle_api_response(
-                                        response, f"Moved {character} to ({step.x}, {step.y})"
-                                    )
+                            # Retry the move after cooldown
+                            progress.update(task, description=f"Moving to ({step.x}, {step.y})")
+                            try:
+                                response = api.action_move(name=character, body=destination_data)
+                                cli_response = handle_api_response(
+                                    response, f"Moved {character} to ({step.x}, {step.y})"
+                                )
 
-                                    if cli_response.success:
-                                        console.print(f"✅ Moved to ({step.x}, {step.y})")
-                                        progress.advance(task)
-                                    else:
-                                        error_msg = cli_response.error or "Move failed after cooldown"
-                                        console.print(format_error_message(error_msg))
-                                        break
-                                except Exception as retry_e:
-                                    retry_cli_response = handle_api_error(retry_e)
-                                    console.print(
-                                        format_error_message(
-                                            retry_cli_response.error or f"Move failed after cooldown: {str(retry_e)}"
-                                        )
-                                    )
+                                if cli_response.success:
+                                    console.print(f"✅ Moved to ({step.x}, {step.y})")
+                                    progress.advance(task)
+                                else:
+                                    error_msg = cli_response.error or "Move failed after cooldown"
+                                    console.print(format_error_message(error_msg))
                                     break
+                            except Exception as retry_e:
+                                retry_cli_response = handle_api_error(retry_e)
+                                console.print(
+                                    format_error_message(
+                                        retry_cli_response.error or f"Move failed after cooldown: {str(retry_e)}"
+                                    )
+                                )
+                                break
                         else:
                             console.print(
                                 format_error_message(
@@ -654,24 +625,23 @@ def goto_location(
                         break
 
                 # Small delay between moves
-                if i < len(path_result.steps) - 1 and not _interrupted:
+                if i < len(path_result.steps) - 1:
                     time.sleep(0.5)
 
         # Final status
-        if not _interrupted:
-            try:
-                final_x, final_y = get_character_position(character)
-                if final_x == end_x and final_y == end_y:
-                    console.print(
-                        format_success_message(f"🎯 {character} successfully reached destination ({end_x}, {end_y})")
-                    )
-                else:
-                    console.print(
-                        f"[yellow]⚠ {character} stopped at ({final_x}, {final_y}), "
-                        f"target was ({end_x}, {end_y})[/yellow]"
-                    )
-            except Exception:
-                console.print("[yellow]⚠ Could not verify final position[/yellow]")
+        try:
+            final_x, final_y = get_character_position(character)
+            if final_x == end_x and final_y == end_y:
+                console.print(
+                    format_success_message(f"🎯 {character} successfully reached destination ({end_x}, {end_y})")
+                )
+            else:
+                console.print(
+                    f"[yellow]⚠ {character} stopped at ({final_x}, {final_y}), "
+                    f"target was ({end_x}, {end_y})[/yellow]"
+                )
+        except Exception:
+            console.print("[yellow]⚠ Could not verify final position[/yellow]")
 
     except Exception as e:
         if not isinstance(e, typer.Exit):
@@ -772,9 +742,6 @@ def batch_action(
     ),
 ) -> None:
     """Execute an action multiple times with progress tracking."""
-    global _interrupted
-    _interrupted = False
-
     try:
         # Validate inputs
         character = validate_character_name(character)
@@ -815,10 +782,6 @@ def batch_action(
             task = progress.add_task(f"Executing {action} actions", total=times)
 
             for i in range(times):
-                if _interrupted:
-                    console.print("[yellow]⚠ Operation interrupted by user[/yellow]")
-                    break
-
                 results.total_attempts += 1
                 progress.update(task, description=f"Executing {action} action {i + 1}/{times}")
 
@@ -863,47 +826,44 @@ def batch_action(
 
                         total_wait_seconds = math.ceil(cooldown_seconds) + 1
                         for remaining in range(total_wait_seconds, 0, -1):
-                            if _interrupted:
-                                break
                             progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
                             time.sleep(1)
 
-                        if not _interrupted:
-                            progress.update(task, description=f"Executing {action} action {i + 1}/{times}")
-                            # Retry the action after cooldown
-                            cli_response = action_executor(character)
+                        progress.update(task, description=f"Executing {action} action {i + 1}/{times}")
+                        # Retry the action after cooldown
+                        cli_response = action_executor(character)
 
-                            if cli_response.success:
-                                results.add_success(cli_response.data)
+                        if cli_response.success:
+                            results.add_success(cli_response.data)
 
-                                # Display action result
-                                if (
-                                    action == "fight"
-                                    and cli_response.data
-                                    and isinstance(cli_response.data, dict)
-                                    and "fight" in cli_response.data
-                                ):
-                                    console.print(format_combat_result(cli_response.data["fight"]))
-                                elif (
-                                    action == "gather"
-                                    and cli_response.data
-                                    and isinstance(cli_response.data, dict)
-                                    and "details" in cli_response.data
-                                ):
-                                    console.print(format_gathering_result(cli_response.data["details"]))
-                                else:
-                                    console.print(
-                                        format_success_message(
-                                            cli_response.message or f"{action.capitalize()} completed"
-                                        )
-                                    )
+                            # Display action result
+                            if (
+                                action == "fight"
+                                and cli_response.data
+                                and isinstance(cli_response.data, dict)
+                                and "fight" in cli_response.data
+                            ):
+                                console.print(format_combat_result(cli_response.data["fight"]))
+                            elif (
+                                action == "gather"
+                                and cli_response.data
+                                and isinstance(cli_response.data, dict)
+                                and "details" in cli_response.data
+                            ):
+                                console.print(format_gathering_result(cli_response.data["details"]))
                             else:
-                                error_msg = cli_response.error or "Action failed after cooldown"
-                                results.add_failure(error_msg)
-                                console.print(format_error_message(error_msg))
+                                console.print(
+                                    format_success_message(
+                                        cli_response.message or f"{action.capitalize()} completed"
+                                    )
+                                )
+                        else:
+                            error_msg = cli_response.error or "Action failed after cooldown"
+                            results.add_failure(error_msg)
+                            console.print(format_error_message(error_msg))
 
-                                if not continue_on_error:
-                                    break
+                            if not continue_on_error:
+                                break
                     else:
                         # Don't wait for cooldown, treat as failure
                         error_msg = f"Action on cooldown for {format_time_duration(cooldown_seconds)}"
@@ -924,7 +884,7 @@ def batch_action(
                 progress.advance(task)
 
                 # Small delay between actions to avoid overwhelming the API
-                if i < times - 1 and not _interrupted:
+                if i < times - 1:
                     time.sleep(0.5)
 
         # Display final summary
@@ -932,7 +892,7 @@ def batch_action(
         console.print(results.format_summary())
 
         # Exit with error code if there were failures and we're not continuing on error
-        if results.failed_actions > 0 and not continue_on_error and not _interrupted:
+        if results.failed_actions > 0 and not continue_on_error:
             raise typer.Exit(1)
 
     except Exception as e:

@@ -230,12 +230,12 @@ def sell_on_ge(
 
         # Import the GE order creation schema and API function
         from artifactsmmo_api_client.api.my_characters import (
-            action_ge_create_sell_order_my_name_action_grandexchange_sell_post,
+            action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post,
         )
         from artifactsmmo_api_client.models.ge_order_creationr_schema import GEOrderCreationrSchema
 
         sell_data = GEOrderCreationrSchema(code=item_code, quantity=quantity, price=price)
-        response = action_ge_create_sell_order_my_name_action_grandexchange_sell_post.sync(
+        response = action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync(
             client=client, name=character, body=sell_data
         )
 
@@ -266,9 +266,9 @@ def list_ge_orders() -> None:
         client = ClientManager().client
 
         # Import the API function
-        from artifactsmmo_api_client.api.my_account import get_ge_sell_orders_my_grandexchange_orders_get
+        from artifactsmmo_api_client.api.my_account import get_ge_orders_my_grandexchange_orders_get
 
-        response = get_ge_sell_orders_my_grandexchange_orders_get.sync(client=client)
+        response = get_ge_orders_my_grandexchange_orders_get.sync(client=client)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
@@ -313,12 +313,12 @@ def cancel_ge_order(
 
         # Import the GE cancel order schema and API function
         from artifactsmmo_api_client.api.my_characters import (
-            action_ge_cancel_sell_order_my_name_action_grandexchange_cancel_post,
+            action_ge_cancel_order_my_name_action_grandexchange_cancel_post,
         )
         from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
 
         cancel_data = GECancelOrderSchema(id=order_id)
-        response = action_ge_cancel_sell_order_my_name_action_grandexchange_cancel_post.sync(
+        response = action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync(
             client=client, name=character, body=cancel_data
         )
 
@@ -350,9 +350,9 @@ def show_item_prices(
         client = ClientManager().client
 
         # Import the API function for getting all orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_sell_orders_grandexchange_orders_get
+        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
-        response = get_ge_sell_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=50)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=50)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
@@ -402,9 +402,9 @@ def show_item_orders(
         client = ClientManager().client
 
         # Import the API function for getting all orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_sell_orders_grandexchange_orders_get
+        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
-        response = get_ge_sell_orders_grandexchange_orders_get.sync(
+        response = get_ge_orders_grandexchange_orders_get.sync(
             client=client, code=item, seller=seller, page=page, size=size
         )
 
@@ -479,9 +479,9 @@ def show_trading_history(
 
         if character:
             # Show personal trading history
-            from artifactsmmo_api_client.api.my_account import get_ge_sell_history_my_grandexchange_history_get
+            from artifactsmmo_api_client.api.my_account import get_ge_history_my_grandexchange_history_get
 
-            response = get_ge_sell_history_my_grandexchange_history_get.sync(
+            response = get_ge_history_my_grandexchange_history_get.sync(
                 client=client, code=item, page=page, size=size
             )
         else:
@@ -490,9 +490,9 @@ def show_trading_history(
                 console.print(format_error_message("Item code is required when not showing personal history"))
                 raise typer.Exit(1)
 
-            from artifactsmmo_api_client.api.grand_exchange import get_ge_sell_history_grandexchange_history_code_get
+            from artifactsmmo_api_client.api.grand_exchange import get_ge_history_grandexchange_history_code_get
 
-            response = get_ge_sell_history_grandexchange_history_code_get.sync(
+            response = get_ge_history_grandexchange_history_code_get.sync(
                 client=client, code=item, page=page, size=size
             )
 
@@ -561,15 +561,15 @@ def analyze_item_market(
 
         # Get current orders
         from artifactsmmo_api_client.api.grand_exchange import (
-            get_ge_sell_orders_grandexchange_orders_get,
-            get_ge_sell_history_grandexchange_history_code_get,
+            get_ge_orders_grandexchange_orders_get,
+            get_ge_history_grandexchange_history_code_get,
         )
 
         # Fetch current orders
-        orders_response = get_ge_sell_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=100)
+        orders_response = get_ge_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=100)
 
         # Fetch recent history
-        history_response = get_ge_sell_history_grandexchange_history_code_get.sync(
+        history_response = get_ge_history_grandexchange_history_code_get.sync(
             client=client, code=item_code, size=100
         )
 
@@ -641,9 +641,9 @@ def show_trending_items(
         client = ClientManager().client
 
         # Get all recent orders to analyze activity
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_sell_orders_grandexchange_orders_get
+        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
-        response = get_ge_sell_orders_grandexchange_orders_get.sync(client=client, size=100)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
@@ -699,9 +699,9 @@ def show_trade_opportunities(
         client = ClientManager().client
 
         # Get all current orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_sell_orders_grandexchange_orders_get
+        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
-        response = get_ge_sell_orders_grandexchange_orders_get.sync(client=client, size=100)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
@@ -739,9 +739,9 @@ def show_price_spreads(
         client = ClientManager().client
 
         # Get all current orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_sell_orders_grandexchange_orders_get
+        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
-        response = get_ge_sell_orders_grandexchange_orders_get.sync(client=client, size=100)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:

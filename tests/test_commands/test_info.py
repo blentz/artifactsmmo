@@ -480,7 +480,7 @@ class TestInfoCommands:
 
     def test_map_specific_coordinates(self, runner, mock_client_manager, mock_api_response):
         """Test map command for specific coordinates."""
-        with patch("artifactsmmo_api_client.api.maps.get_map_maps_x_y_get.sync") as mock_api:
+        with patch("artifactsmmo_api_client.api.maps.get_map_by_position_maps_layer_x_y_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
             mock_map = Mock()
@@ -498,7 +498,8 @@ class TestInfoCommands:
                 result = runner.invoke(app, ["map", "--x", "5", "--y", "10"])
 
                 assert result.exit_code == 0
-                mock_api.assert_called_once_with(client=mock_client_manager.client, x=5, y=10)
+                from artifactsmmo_api_client.models.map_layer import MapLayer
+                mock_api.assert_called_once_with(client=mock_client_manager.client, layer=MapLayer.OVERWORLD, x=5, y=10)
 
     def test_map_list_all(self, runner, mock_client_manager, mock_api_response):
         """Test map command for listing all maps."""
@@ -554,7 +555,7 @@ class TestInfoCommands:
 
     def test_map_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test map command when location not found."""
-        with patch("artifactsmmo_api_client.api.maps.get_map_maps_x_y_get.sync") as mock_api:
+        with patch("artifactsmmo_api_client.api.maps.get_map_by_position_maps_layer_x_y_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
             with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:

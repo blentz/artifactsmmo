@@ -757,27 +757,6 @@ class TestBatchCommand:
             assert "Items Collected" in result.stdout
             # Should show accumulated totals: 250 XP, 55 gold, 2x leather + 1x iron_ore
 
-    def test_batch_interrupt_handling(self, runner, mock_client_manager):
-        """Test batch command handles interrupts gracefully."""
-        # Mock the API client properly
-        mock_client_manager.api.action_gathering.return_value = Mock()
-
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
-            # Create a side effect that sets interrupted after first call
-            def set_interrupted_after_first_call(*args, **kwargs):
-                import artifactsmmo_cli.commands.action as action_module
-
-                action_module._interrupted = True
-                return CLIResponse.success_response({"details": {"xp": 50}}, "Gathering completed")
-
-            mock_handle.side_effect = set_interrupted_after_first_call
-
-            result = runner.invoke(app, ["batch", "testchar", "gather", "--times", "10"])
-
-            assert "Operation interrupted by user" in result.stdout
-
 
 class TestActionExecutors:
     """Test action executor functions."""
