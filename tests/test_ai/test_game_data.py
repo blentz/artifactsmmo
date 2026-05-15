@@ -361,6 +361,38 @@ class TestGameDataLoadMonsters:
         assert gd._monster_level == {}
 
 
+def test_load_npcs_captures_sell_prices(monkeypatch):
+    """_load_npcs should populate _npc_sell_prices from API responses."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeEntry:
+        def __init__(self, npc, code, buy_price, sell_price):
+            self.npc = npc
+            self.code = code
+            self.buy_price = buy_price
+            self.sell_price = sell_price
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, page, size):
+        if page == 1:
+            return FakeResult([
+                FakeEntry("cook", "cooked_chicken", buy_price=10, sell_price=5),
+                FakeEntry("cook", "stale_bread", buy_price=None, sell_price=2),
+                FakeEntry("smith", "iron_ore", buy_price=None, sell_price=8),
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_all_npc_items", fake_sync)
+    gd = GameData()
+    gd._load_npcs(client=None)
+
+    assert gd._npc_sell_prices == {"cook": {"cooked_chicken": 5, "stale_bread": 2},
+                                    "smith": {"iron_ore": 8}}
+
+
 class TestGameDataLoad:
     def test_load_calls_all_sub_loaders(self):
         client = MagicMock()

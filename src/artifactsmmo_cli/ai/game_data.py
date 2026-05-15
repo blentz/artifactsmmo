@@ -41,6 +41,7 @@ class GameData:
     _monster_level: dict[str, int] = field(default_factory=dict)
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
+    _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
@@ -228,17 +229,19 @@ class GameData:
             page += 1
 
     def _load_npcs(self, client: AuthenticatedClient) -> None:
-        """Fetch all NPC items and build a stock index: npc_code -> {item_code: buy_price}."""
+        """Fetch all NPC items and build buy and sell stock indexes."""
         page = 1
         while True:
             result = get_all_npc_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
             for entry in result.data:
-                price = entry.buy_price
-                if isinstance(price, Unset) or price is None:
-                    continue
-                self._npc_stock.setdefault(entry.npc, {})[entry.code] = price
+                buy_price = entry.buy_price
+                if not isinstance(buy_price, Unset) and buy_price is not None:
+                    self._npc_stock.setdefault(entry.npc, {})[entry.code] = buy_price
+                sell_price = entry.sell_price
+                if not isinstance(sell_price, Unset) and sell_price is not None:
+                    self._npc_sell_prices.setdefault(entry.npc, {})[entry.code] = sell_price
             if len(result.data) < 100:
                 break
             page += 1
