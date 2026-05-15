@@ -1,35 +1,48 @@
 """GOAP AI player: main sense→plan→act loop."""
 
+import re
 import time
 from datetime import datetime, timezone
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.achievements.get_achievement_achievements_code_get import sync as get_achievement
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
+from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import sync as get_bank_items
+from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
 
 from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction
+from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction, UnequipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskExchangeAction
+from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskCancelAction, TaskExchangeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, FarmMonsterGoal
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
+from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
 _STALE_AFTER_SECONDS = 60.0
+_BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
+_ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
 _PLAN_PREVIEW = 5  # max distinct steps shown in verbose plan output
 
@@ -63,6 +76,9 @@ class GamePlayer:
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
         self._last_action_time = time.monotonic()
+        self._bank_accessible: bool = True
+        self._bank_blocked_since: float | None = None
+        self._bank_unlock_monster: str | None = None
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -75,11 +91,10 @@ class GamePlayer:
         print(f"[{self._now()}] Fetching character state...")
         self.state = self._fetch_world_state(client)
 
-        actions = self._build_actions()
-
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
         while True:
+            actions = self._build_actions()
             self.state = self._refresh_if_stale(client)
             self._wait_for_cooldown()
 
@@ -134,11 +149,22 @@ class GamePlayer:
             # Re-sync bank state after visiting bank
             if isinstance(action, (DepositAllAction, WithdrawItemAction)):
                 new_state = self._sync_bank(client, new_state)
+            # Re-sync pending items after claiming one
+            if isinstance(action, ClaimPendingItemAction):
+                new_state = self._sync_pending(client, new_state)
             return new_state
         except RuntimeError as e:
             msg = str(e)
             if "HTTP 499" in msg:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
+            elif "HTTP 496" in msg and isinstance(action, (DepositAllAction, WithdrawItemAction)):
+                self._bank_accessible = False
+                self._bank_blocked_since = time.monotonic()
+                if self._bank_unlock_monster is None:
+                    match = _ACHIEVEMENT_CODE_RE.search(msg)
+                    if match:
+                        self._bank_unlock_monster = self._resolve_bank_unlock_monster(client, match.group(1))
+                print(f"[{self._now()}] Bank locked (HTTP 496) — fighting {self._bank_unlock_monster or '?'} to unlock; retrying in {_BANK_RETRY_SECONDS:.0f}s")
             else:
                 print(f"[{self._now()}] Action failed: {msg} — refreshing state")
             return self._fetch_world_state(client)
@@ -151,7 +177,8 @@ class GamePlayer:
 
         bank_items = self.state.bank_items if self.state else None
         bank_gold = self.state.bank_gold if self.state else None
-        return WorldState.from_character_schema(result.data, bank_items=bank_items, bank_gold=bank_gold)
+        pending_items = self.state.pending_items if self.state else None
+        return WorldState.from_character_schema(result.data, bank_items=bank_items, bank_gold=bank_gold, pending_items=pending_items)
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
         """Re-fetch bank contents after a bank interaction."""
@@ -193,6 +220,37 @@ class GamePlayer:
             task_total=state.task_total,
             bank_items=bank_items,
             bank_gold=bank_gold,
+            pending_items=state.pending_items,
+        )
+
+    def _sync_pending(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
+        """Re-fetch pending items after claiming one."""
+        result = get_pending_items(client=client)
+        pending: tuple[tuple[str, str], ...] | None = None
+        if result is not None and result.data:
+            pending = tuple((item.id, item.code) for item in result.data)
+        return WorldState(
+            character=state.character,
+            level=state.level,
+            xp=state.xp,
+            max_xp=state.max_xp,
+            hp=state.hp,
+            max_hp=state.max_hp,
+            gold=state.gold,
+            skills=state.skills,
+            x=state.x,
+            y=state.y,
+            inventory=state.inventory,
+            inventory_max=state.inventory_max,
+            equipment=state.equipment,
+            cooldown_expires=state.cooldown_expires,
+            task_code=state.task_code,
+            task_type=state.task_type,
+            task_progress=state.task_progress,
+            task_total=state.task_total,
+            bank_items=state.bank_items,
+            bank_gold=state.bank_gold,
+            pending_items=pending,
         )
 
     def _refresh_if_stale(self, client: AuthenticatedClient) -> WorldState:
@@ -212,6 +270,16 @@ class GamePlayer:
             print(f"[{self._now()}] Cooldown: {remaining:.1f}s")
             time.sleep(remaining + 0.1)
 
+    def _resolve_bank_unlock_monster(self, client: AuthenticatedClient, achievement_code: str) -> str | None:
+        """Fetch the first combat_kill objective target for an achievement."""
+        result = get_achievement(client=client, code=achievement_code)
+        if result is None or not hasattr(result, "data") or result.data is None:
+            return None
+        for obj in result.data.objectives:
+            if obj.type_ == AchievementType.COMBAT_KILL and obj.target:
+                return str(obj.target)
+        return None
+
     def _build_actions(self) -> list[Action]:
         """Build the action list. Each action handles its own movement in execute() and cost()."""
         assert self.game_data is not None
@@ -222,10 +290,12 @@ class GamePlayer:
         actions: list[Action] = [
             RestAction(),
             UseConsumableAction(_item_stats=self.game_data._item_stats),
-            DepositAllAction(bank_location=bank),
+            DepositAllAction(bank_location=bank, accessible=self._bank_accessible),
             AcceptTaskAction(taskmaster_location=taskmaster),
             CompleteTaskAction(taskmaster_location=taskmaster),
             TaskExchangeAction(taskmaster_location=taskmaster),
+            TaskCancelAction(taskmaster_location=taskmaster),
+            ClaimPendingItemAction(),
         ]
 
         # Fight and gather actions carry their own locations — no separate move actions needed
@@ -247,16 +317,56 @@ class GamePlayer:
                 actions.append(EquipAction(code=item_code, slot=slot))
             if ITEM_TYPE_TO_SLOTS.get(stats.type_):
                 # Allow withdrawing the crafted item from bank to equip it
-                actions.append(WithdrawItemAction(code=item_code, quantity=1, bank_location=bank))
+                actions.append(WithdrawItemAction(code=item_code, quantity=1, bank_location=bank, accessible=self._bank_accessible))
                 for mat_code, mat_qty in recipe.items():
                     if mat_qty > materials_to_withdraw.get(mat_code, 0):
                         materials_to_withdraw[mat_code] = mat_qty
 
         for mat_code, mat_qty in materials_to_withdraw.items():
-            actions.append(WithdrawItemAction(code=mat_code, quantity=mat_qty, bank_location=bank))
+            actions.append(WithdrawItemAction(code=mat_code, quantity=mat_qty, bank_location=bank, accessible=self._bank_accessible))
 
         # Allow withdrawing task coins from bank for exchange
-        actions.append(WithdrawItemAction(code="tasks_coin", quantity=1, bank_location=bank))
+        actions.append(WithdrawItemAction(code="tasks_coin", quantity=1, bank_location=bank, accessible=self._bank_accessible))
+
+        # Unequip actions: one per equipment slot
+        all_slots = {slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots}
+        for slot in all_slots:
+            actions.append(UnequipAction(slot=slot))
+
+        # Recycle actions: one per craftable equippable item
+        for item_code, recipe in self.game_data._crafting_recipes.items():
+            stats = self.game_data.item_stats(item_code)
+            if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
+                continue
+            workshop_loc = self.game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
+            actions.append(RecycleAction(code=item_code, quantity=1, workshop_location=workshop_loc))
+
+        # Delete actions: built from current inventory when bank is locked.
+        # Items not used as ingredients in any crafting recipe are deleted first (lowest cost).
+        # Everything else can also be deleted as a last resort (higher cost).
+        if not self._bank_accessible and self.state is not None:
+            all_ingredients: set[str] = set()
+            for recipe in self.game_data._crafting_recipes.values():
+                all_ingredients.update(recipe.keys())
+            equipped = set(self.state.equipment.values()) - {None}
+            for item_code, qty in self.state.inventory.items():
+                if qty <= 0 or item_code in equipped:
+                    continue
+                cost_weight = 2.0 if item_code not in all_ingredients else 10.0
+                actions.append(DeleteItemAction(code=item_code, quantity=1, cost_weight=cost_weight))
+
+        # NPC buy actions: one per (npc, item) pair for consumables
+        for npc_code, stock in self.game_data._npc_stock.items():
+            npc_loc = self.game_data.npc_location(npc_code)
+            for item_code in stock:
+                item_stats = self.game_data.item_stats(item_code)
+                if item_stats is not None and item_stats.hp_restore > 0:
+                    actions.append(NpcBuyAction(
+                        npc_code=npc_code,
+                        item_code=item_code,
+                        quantity=1,
+                        npc_location=npc_loc,
+                    ))
 
         return actions
 
@@ -264,6 +374,12 @@ class GamePlayer:
         """Build goal list. FarmMonsterGoal targets the strongest monster the character can beat."""
         assert self.game_data is not None
         assert self.state is not None
+
+        # Periodically retry bank access after an achievement gate failure (HTTP 496).
+        if not self._bank_accessible and self._bank_blocked_since is not None:
+            if time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS:
+                self._bank_accessible = True
+                self._bank_blocked_since = None
 
         # Pick a suitable monster to farm: highest level at or below character level
         farm_target = "chicken"  # safe fallback
@@ -276,10 +392,13 @@ class GamePlayer:
         upgrade_goal = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
         goals: list[Goal] = [
             RestoreHPGoal(),
-            DepositInventoryGoal(),
+            DepositInventoryGoal(bank_accessible=self._bank_accessible),
+            UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp, target_monster=self._bank_unlock_monster),
+            ClaimPendingGoal(),
             CompleteTaskGoal(),
             AcceptTaskGoal(),
             TaskExchangeGoal(),
+            TaskCancelGoal(),
             FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp),
             upgrade_goal,
         ]

@@ -18,9 +18,10 @@ class DepositAllAction(Action):
     """Move to bank and deposit all inventory items."""
 
     bank_location: tuple[int, int] = field(default=(0, 0), repr=False)
+    accessible: bool = True  # False when bank is gated behind an unmet achievement (HTTP 496)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return len(state.inventory) > 0
+        return self.accessible and len(state.inventory) > 0
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.bank_location
@@ -48,6 +49,7 @@ class DepositAllAction(Action):
             task_total=state.task_total,
             bank_items=new_bank,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -67,6 +69,7 @@ class DepositAllAction(Action):
                     result.data.character,
                     bank_items=last_state.bank_items,
                     bank_gold=last_state.bank_gold,
+                    pending_items=last_state.pending_items,
                 )
         return last_state
 
@@ -81,9 +84,10 @@ class WithdrawItemAction(Action):
     code: str
     quantity: int
     bank_location: tuple[int, int] = field(default=(0, 0), repr=False)
+    accessible: bool = True  # False when bank is gated behind an unmet achievement (HTTP 496)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        if state.bank_items is None:
+        if not self.accessible or state.bank_items is None:
             return False
         return state.bank_items.get(self.code, 0) >= self.quantity and state.inventory_free > 0
 
@@ -116,6 +120,7 @@ class WithdrawItemAction(Action):
             task_total=state.task_total,
             bank_items=new_bank,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -133,6 +138,7 @@ class WithdrawItemAction(Action):
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:

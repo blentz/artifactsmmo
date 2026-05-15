@@ -70,6 +70,7 @@ class UseConsumableAction(Action):
             task_total=state.task_total,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -86,6 +87,7 @@ class UseConsumableAction(Action):
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:

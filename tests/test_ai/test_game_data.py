@@ -369,5 +369,6 @@ class TestGameDataLoad:
             with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=empty_page):
                 with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty_page):
                     with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page):
-                        gd = GameData.load(client)
+                        with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
+                            gd = GameData.load(client)
         assert isinstance(gd, GameData)

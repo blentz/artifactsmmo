@@ -23,6 +23,18 @@ def make_minimal_game_data() -> GameData:
     return gd
 
 
+def _patch_game_data_load():
+    """Context manager stack that stubs out all GameData API calls."""
+    empty = MagicMock(data=[])
+    return (
+        patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=empty),
+        patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=empty),
+        patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty),
+        patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty),
+        patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty),
+    )
+
+
 class TestSyncBankPagination:
     def test_paginates_when_full_page_returned(self):
         player = GamePlayer(character="hero")
@@ -66,19 +78,17 @@ class TestPlayerRun:
             if call_count[0] > 1:
                 raise KeyboardInterrupt
 
+        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
-                        with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                        with patch.object(player, "_refresh_if_stale", return_value=make_state(hp=100, max_hp=150)):
-                                            with patch.object(player, "_build_actions", return_value=[]):
-                                                with patch("artifactsmmo_cli.ai.player.time.sleep"):
-                                                    with pytest.raises(KeyboardInterrupt):
-                                                        player.run()
+                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_refresh_if_stale", return_value=make_state(hp=100, max_hp=150)):
+                                with patch.object(player, "_build_actions", return_value=[]):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
 
     def test_run_dry_run_uses_apply_not_execute(self):
         """In dry_run mode, the player calls action.apply() instead of action.execute()."""
@@ -95,19 +105,17 @@ class TestPlayerRun:
 
         state_with_low_hp = make_state(hp=50, max_hp=150)
 
+        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
-                        with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                        with patch.object(player, "_refresh_if_stale", return_value=state_with_low_hp):
-                                            with patch.object(player, "_build_actions", return_value=[]):
-                                                with patch("artifactsmmo_cli.ai.player.time.sleep"):
-                                                    with pytest.raises(KeyboardInterrupt):
-                                                        player.run()
+                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_refresh_if_stale", return_value=state_with_low_hp):
+                                with patch.object(player, "_build_actions", return_value=[]):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
 
         # In dry_run, the state should be updated via apply() — RestAction would set hp to max_hp
         assert player.state is not None
@@ -129,19 +137,17 @@ class TestPlayerRun:
         # no actions will be applicable, so plan will be empty → sleep
         state = make_state(hp=150, max_hp=150)
 
+        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
-                        with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                        with patch.object(player, "_refresh_if_stale", return_value=state):
-                                            with patch.object(player, "_build_actions", return_value=[]):
-                                                with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
-                                                    with pytest.raises(KeyboardInterrupt):
-                                                        player.run()
+                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_refresh_if_stale", return_value=state):
+                                with patch.object(player, "_build_actions", return_value=[]):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
 
         mock_sleep.assert_called_with(10)
 
@@ -160,19 +166,17 @@ class TestPlayerRun:
 
         state = make_state(hp=150, max_hp=150)
 
+        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
-                        with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                        with patch.object(player, "_refresh_if_stale", return_value=state):
-                                            with patch.object(player, "_build_actions", return_value=[]):
-                                                with patch("artifactsmmo_cli.ai.player.time.sleep"):
-                                                    with pytest.raises(KeyboardInterrupt):
-                                                        player.run()
+                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_refresh_if_stale", return_value=state):
+                                with patch.object(player, "_build_actions", return_value=[]):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
 
         output = capsys.readouterr().out
         assert "No plan for" in output

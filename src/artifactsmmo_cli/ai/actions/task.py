@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post import sync as action_task_new
 from artifactsmmo_api_client.api.my_characters.action_complete_task_my_name_action_task_complete_post import sync as action_task_complete
+from artifactsmmo_api_client.api.my_characters.action_task_cancel_my_name_action_task_cancel_post import sync as action_task_cancel
 from artifactsmmo_api_client.api.my_characters.action_task_exchange_my_name_action_task_exchange_post import sync as action_task_exchange
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -49,6 +50,7 @@ class AcceptTaskAction(Action):
             task_total=1,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -66,6 +68,7 @@ class AcceptTaskAction(Action):
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:
@@ -104,6 +107,7 @@ class CompleteTaskAction(Action):
             task_total=0,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -121,6 +125,7 @@ class CompleteTaskAction(Action):
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:
@@ -164,6 +169,7 @@ class TaskExchangeAction(Action):
             task_total=state.task_total,
             bank_items=new_bank,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -181,7 +187,65 @@ class TaskExchangeAction(Action):
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:
         return "TaskExchange"
+
+
+@dataclass
+class TaskCancelAction(Action):
+    """Move to the taskmaster and cancel the current task (costs one task coin)."""
+
+    taskmaster_location: tuple[int, int]
+
+    def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
+        return bool(state.task_code) and state.task_total > 0
+
+    def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        dest = self.taskmaster_location
+        return WorldState(
+            character=state.character,
+            level=state.level,
+            xp=state.xp,
+            max_xp=state.max_xp,
+            hp=state.hp,
+            max_hp=state.max_hp,
+            gold=state.gold,
+            skills=state.skills,
+            x=dest[0],
+            y=dest[1],
+            inventory=state.inventory,
+            inventory_max=state.inventory_max,
+            equipment=state.equipment,
+            cooldown_expires=None,
+            task_code=None,
+            task_type=None,
+            task_progress=0,
+            task_total=0,
+            bank_items=state.bank_items,
+            bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
+        )
+
+    def cost(self, state: WorldState, game_data: GameData) -> float:
+        dest = self.taskmaster_location
+        dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        return 1.0 + dist
+
+    def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
+        dest = self.taskmaster_location
+        if (state.x, state.y) != dest:
+            state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
+        result = action_task_cancel(client=client, name=state.character)
+        Action._raise_for_error(result, "TaskCancel")
+        return WorldState.from_character_schema(
+            result.data.character,
+            bank_items=state.bank_items,
+            bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
+        )
+
+    def __repr__(self) -> str:
+        return "TaskCancel"

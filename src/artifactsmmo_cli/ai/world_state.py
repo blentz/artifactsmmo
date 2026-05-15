@@ -53,7 +53,7 @@ class WorldState:
     x: int
     y: int
     inventory: dict[str, int]        # item_code -> quantity
-    inventory_max: int               # max number of item stacks
+    inventory_max: int               # max total item quantity (not unique stacks)
     equipment: dict[str, str | None] # slot -> item_code | None
     cooldown_expires: datetime | None
     task_code: str | None
@@ -62,16 +62,17 @@ class WorldState:
     task_total: int
     bank_items: dict[str, int] | None  # None = not yet visited
     bank_gold: int | None
+    pending_items: tuple[tuple[str, str], ...] | None  # ((id, code), ...) | None = not yet fetched
 
     @property
     def inventory_used(self) -> int:
-        """Number of occupied inventory slots (unique item stacks)."""
-        return len(self.inventory)
+        """Total item count across all stacks."""
+        return sum(self.inventory.values())
 
     @property
     def inventory_free(self) -> int:
-        """Number of free inventory slots."""
-        return self.inventory_max - len(self.inventory)
+        """Remaining item capacity (inventory_max minus total item count)."""
+        return self.inventory_max - self.inventory_used
 
     @property
     def hp_percent(self) -> float:
@@ -86,6 +87,7 @@ class WorldState:
         char: CharacterSchema,
         bank_items: dict[str, int] | None = None,
         bank_gold: int | None = None,
+        pending_items: "tuple[tuple[str, str], ...] | None" = None,
     ) -> "WorldState":
         """Build WorldState from a CharacterSchema API response."""
         inventory: dict[str, int] = {}
@@ -128,4 +130,5 @@ class WorldState:
             task_total=char.task_total,
             bank_items=bank_items,
             bank_gold=bank_gold,
+            pending_items=pending_items,
         )

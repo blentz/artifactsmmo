@@ -6,6 +6,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items
 from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters
+from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
@@ -38,6 +39,8 @@ class GameData:
     _resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
     _resource_drops: dict[str, str] = field(default_factory=dict)  # resource_code -> primary drop item
     _monster_level: dict[str, int] = field(default_factory=dict)
+    _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
+    _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
@@ -96,6 +99,23 @@ class GameData:
                 best = (code, stats.hp_restore)
         return best
 
+    def npc_location(self, npc_code: str) -> tuple[int, int] | None:
+        """Location of a named NPC on the map."""
+        return self._npc_locations.get(npc_code)
+
+    def npc_sells_item(self, npc_code: str, item_code: str) -> int | None:
+        """Buy price of item_code from npc_code, or None if the NPC doesn't sell it."""
+        return self._npc_stock.get(npc_code, {}).get(item_code)
+
+    def npcs_selling_item(self, item_code: str) -> list[tuple[str, int]]:
+        """Return [(npc_code, price)] for all NPCs that sell item_code, cheapest first."""
+        results = [
+            (npc_code, stock[item_code])
+            for npc_code, stock in self._npc_stock.items()
+            if item_code in stock
+        ]
+        return sorted(results, key=lambda x: x[1])
+
     def nearest_location(self, x: int, y: int, locations: list[tuple[int, int]]) -> tuple[int, int] | None:
         """Find the nearest location to (x, y) by Manhattan distance."""
         if not locations:
@@ -110,6 +130,7 @@ class GameData:
         data._load_items(client)
         data._load_resources(client)
         data._load_monsters(client)
+        data._load_npcs(client)
         return data
 
     def _load_maps(self, client: AuthenticatedClient) -> None:
@@ -137,6 +158,8 @@ class GameData:
                     self._bank_location = loc
                 elif ct == MapContentType.TASKS_MASTER:
                     self._taskmaster_location = loc
+                elif ct == MapContentType.NPC:
+                    self._npc_locations[code] = loc
                 elif ct == MapContentType.WORKSHOP:
                     # code is workshop identifier — match to crafting skills by substring
                     for skill in ("mining", "woodcutting", "weaponcrafting", "gearcrafting",
@@ -200,6 +223,22 @@ class GameData:
                 if res.drops:
                     self._resource_drops[res.code] = min(res.drops, key=lambda d: d.rate).code
 
+            if len(result.data) < 100:
+                break
+            page += 1
+
+    def _load_npcs(self, client: AuthenticatedClient) -> None:
+        """Fetch all NPC items and build a stock index: npc_code -> {item_code: buy_price}."""
+        page = 1
+        while True:
+            result = get_all_npc_items(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for entry in result.data:
+                price = entry.buy_price
+                if isinstance(price, Unset) or price is None:
+                    continue
+                self._npc_stock.setdefault(entry.npc, {})[entry.code] = price
             if len(result.data) < 100:
                 break
             page += 1

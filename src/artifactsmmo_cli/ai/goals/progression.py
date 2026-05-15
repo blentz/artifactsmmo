@@ -89,10 +89,11 @@ class UpgradeEquipmentGoal(Goal):
         Lowest crafting_level first so skill progression is linear: craft basic items to
         level the skill, unlocking higher recipes over time.
         """
+        equipped = set(state.equipment.values()) - {None}
         best: tuple[str, str] | None = None
         best_craft_level = float("inf")
         for item_code in game_data._crafting_recipes:
-            if item_code in state.inventory:
+            if item_code in state.inventory or item_code in equipped:
                 continue
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
@@ -113,12 +114,13 @@ class UpgradeEquipmentGoal(Goal):
 
     def _find_craftable_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find the lowest-crafting-level upgrade whose materials are already available."""
+        equipped = set(state.equipment.values()) - {None}
         bank = state.bank_items or {}
         best: tuple[str, str] | None = None
         best_craft_level = float("inf")
         for item_code, recipe in game_data._crafting_recipes.items():
-            if item_code in state.inventory:
-                continue  # already handled by _find_inventory_upgrade
+            if item_code in state.inventory or item_code in equipped:
+                continue  # already handled by _find_inventory_upgrade or already equipped
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
                 continue

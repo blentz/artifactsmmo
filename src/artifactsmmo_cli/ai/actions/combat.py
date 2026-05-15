@@ -23,8 +23,10 @@ class FightAction(Action):
     monster_code: str
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)
 
+    _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        if not self.locations:
+        if not self.locations or state.inventory_free < self._MIN_FREE_SLOTS:
             return False
         monster_level = game_data.monster_level(self.monster_code)
         min_level = max(1, state.level - 1)
@@ -67,6 +69,7 @@ class FightAction(Action):
             task_total=state.task_total,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -84,6 +87,7 @@ class FightAction(Action):
             result.data.characters[0],
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:

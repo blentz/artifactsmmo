@@ -22,14 +22,16 @@ class GatherAction(Action):
     resource_code: str
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)
 
+    _MIN_FREE_SLOTS = 3  # gathering can produce ore + random bonus drops simultaneously
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.locations:
             return False
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is None:
-            return state.inventory_free > 0
+            return state.inventory_free >= self._MIN_FREE_SLOTS
         skill, level = skill_req
-        return state.skills.get(skill, 1) >= level and state.inventory_free > 0
+        return state.skills.get(skill, 1) >= level and state.inventory_free >= self._MIN_FREE_SLOTS
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = _nearest(self.locations, state)
@@ -62,6 +64,7 @@ class GatherAction(Action):
             task_total=state.task_total,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def cost(self, state: WorldState, game_data: GameData) -> float:
@@ -79,6 +82,7 @@ class GatherAction(Action):
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            pending_items=state.pending_items,
         )
 
     def __repr__(self) -> str:

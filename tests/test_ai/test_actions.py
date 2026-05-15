@@ -211,6 +211,14 @@ class TestGatherAction:
         gd = make_game_data(resource_locs={"copper": [(2, 0)]}, resource_skills={"copper": ("mining", 1)})
         assert action.is_applicable(state, gd) is False
 
+    def test_not_applicable_near_full_inventory(self):
+        # Requires at least 3 free slots to handle multi-drop scenarios
+        action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
+        inventory = {f"item_{i}": 1 for i in range(8)}  # 8/10 used = 2 free slots < 3
+        state = make_state(x=0, y=0, skills={"mining": 5}, inventory=inventory, inventory_max=10)
+        gd = make_game_data(resource_locs={"copper": [(2, 0)]}, resource_skills={"copper": ("mining", 1)})
+        assert action.is_applicable(state, gd) is False
+
     def test_not_applicable_empty_locations(self):
         action = GatherAction(resource_code="copper", locations=frozenset())
         state = make_state(x=0, y=0, skills={"mining": 5}, inventory={}, inventory_max=10)

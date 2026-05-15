@@ -7,9 +7,9 @@ from tests.test_ai.fixtures import make_state
 
 
 class TestWorldStateProperties:
-    def test_inventory_used_counts_unique_stacks(self):
+    def test_inventory_used_sums_quantities(self):
         state = make_state(inventory={"copper_ore": 5, "iron_ore": 3})
-        assert state.inventory_used == 2
+        assert state.inventory_used == 8
 
     def test_inventory_used_empty(self):
         state = make_state(inventory={})
@@ -17,7 +17,7 @@ class TestWorldStateProperties:
 
     def test_inventory_free(self):
         state = make_state(inventory={"copper_ore": 5}, inventory_max=10)
-        assert state.inventory_free == 9
+        assert state.inventory_free == 5
 
     def test_hp_percent_full(self):
         state = make_state(hp=150, max_hp=150)

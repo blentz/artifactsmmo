@@ -26,8 +26,11 @@ class RestoreHPGoal(Goal):
 class DepositInventoryGoal(Goal):
     """Deposit inventory to bank when it's nearly full."""
 
+    def __init__(self, bank_accessible: bool = True) -> None:
+        self._bank_accessible = bank_accessible
+
     def value(self, state: WorldState, game_data: GameData) -> float:
-        if state.inventory_max == 0:
+        if not self._bank_accessible or state.inventory_max == 0:
             return 0.0
         used_fraction = state.inventory_used / state.inventory_max
         return used_fraction * 80.0
