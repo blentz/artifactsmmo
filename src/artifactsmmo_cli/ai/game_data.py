@@ -175,8 +175,6 @@ class GameData:
 
     def _load_items(self, client: AuthenticatedClient) -> None:
         """Fetch all items and build stats + recipe indexes."""
-        from artifactsmmo_api_client.types import Unset
-
         page = 1
         while True:
             result = get_all_items(client=client, page=page, size=100)
