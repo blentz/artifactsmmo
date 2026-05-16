@@ -19,6 +19,17 @@ class UnlockBankGoal(Goal):
     def value(self, state: WorldState, game_data: GameData) -> float:
         if not self._bank_locked or state.xp > self._initial_xp:
             return 0.0
+        # If inventory is critical AND we have a faster way to free it (NPC sell),
+        # defer to SellInventoryGoal — selling is faster than grinding achievement.
+        if state.inventory_max > 0:
+            used_fraction = state.inventory_used / state.inventory_max
+            if used_fraction >= 0.85:
+                has_sellable = any(
+                    game_data.npcs_buying_item(code)
+                    for code, qty in state.inventory.items() if qty > 0
+                )
+                if has_sellable:
+                    return 30.0   # defer to SellInventoryGoal (caps at 100)
         return 90.0
 
     def is_satisfied(self, state: WorldState) -> bool:

@@ -22,7 +22,7 @@ class SellInventoryGoal(Goal):
         if not any(game_data.npcs_buying_item(code) for code in state.inventory if state.inventory[code] > 0):
             return 0.0
         used_fraction = state.inventory_used / state.inventory_max
-        return used_fraction * 70.0
+        return used_fraction * 100.0
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.inventory_free >= MIN_FREE_SLOTS

@@ -31,14 +31,14 @@ class TestSellInventoryGoal:
         goal = SellInventoryGoal(bank_accessible=False)
         gd = make_gd(npc_sell_prices={"cook": {"chicken": 5}})
         state = make_state(inventory={"chicken": 10}, inventory_max=20)
-        # used=10/max=20 = 0.5; * 70 = 35
-        assert goal.value(state, gd) == 35.0
+        # used=10/max=20 = 0.5; * 100 = 50
+        assert goal.value(state, gd) == 50.0
 
-    def test_value_caps_near_70_at_full(self):
+    def test_value_caps_at_100_at_full(self):
         goal = SellInventoryGoal(bank_accessible=False)
         gd = make_gd(npc_sell_prices={"cook": {"chicken": 5}})
         state = make_state(inventory={"chicken": 20}, inventory_max=20)
-        assert goal.value(state, gd) == 70.0
+        assert goal.value(state, gd) == 100.0
 
     def test_is_satisfied_when_min_free_slots_available(self):
         goal = SellInventoryGoal(bank_accessible=False)

@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from tests.test_ai.fixtures import make_state
 
 
@@ -707,3 +708,59 @@ class TestTaskExchangeGoal:
 
     def test_repr(self):
         assert repr(TaskExchangeGoal()) == "TaskExchange"
+
+
+class TestUnlockBankGoal:
+    def _make_gd_with_sellables(self) -> GameData:
+        gd = GameData()
+        gd._npc_sell_prices = {"cook": {"chicken": 5}}
+        return gd
+
+    def _make_gd_no_sellables(self) -> GameData:
+        gd = GameData()
+        gd._npc_sell_prices = {}
+        return gd
+
+    def test_value_90_when_bank_locked_no_inventory_pressure(self):
+        """Bank locked + low inventory → stay focused on unlock."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100, inventory={}, inventory_max=20)
+        assert goal.value(state, self._make_gd_with_sellables()) == 90.0
+
+    def test_value_90_when_bank_locked_below_threshold_with_sellables(self):
+        """Bank locked + inventory < 85% full + sellables → still 90, not deferred."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        # 5/20 = 25% full — well below 85%
+        state = make_state(xp=100, inventory={"chicken": 5}, inventory_max=20)
+        assert goal.value(state, self._make_gd_with_sellables()) == 90.0
+
+    def test_value_30_when_bank_locked_inventory_critical_and_sellables_exist(self):
+        """Bank locked + inventory ≥ 85% full + sellables → defer to SellInventory."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        # 17/20 = 85% full
+        state = make_state(xp=100, inventory={"chicken": 17}, inventory_max=20)
+        assert goal.value(state, self._make_gd_with_sellables()) == 30.0
+
+    def test_value_30_at_exactly_85_percent(self):
+        """Edge: exactly at 85% threshold triggers deferral."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100, inventory={"chicken": 17}, inventory_max=20)
+        assert goal.value(state, self._make_gd_with_sellables()) == 30.0
+
+    def test_value_90_when_bank_locked_inventory_critical_but_no_sellables(self):
+        """Bank locked + inventory ≥ 85% full + NO sellables → can't sell, stay at 90."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100, inventory={"useless_thing": 20}, inventory_max=20)
+        assert goal.value(state, self._make_gd_no_sellables()) == 90.0
+
+    def test_value_0_when_bank_not_locked(self):
+        """Bank already unlocked → value 0."""
+        goal = UnlockBankGoal(bank_locked=False, initial_xp=100)
+        state = make_state(xp=100, inventory={"chicken": 20}, inventory_max=20)
+        assert goal.value(state, self._make_gd_with_sellables()) == 0.0
+
+    def test_value_0_when_xp_advanced(self):
+        """XP past initial → achievement done → value 0."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=101, inventory={"chicken": 20}, inventory_max=20)
+        assert goal.value(state, self._make_gd_with_sellables()) == 0.0
