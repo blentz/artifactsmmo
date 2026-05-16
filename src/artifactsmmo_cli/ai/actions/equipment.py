@@ -95,7 +95,7 @@ class EquipAction(Action):
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = EquipSchema(code=self.code, slot=ItemSlot(self.slot.replace("_slot", "")))
         result = action_equip(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"Equip {self.code} to {self.slot}")
+        result = Action._raise_for_error(result, f"Equip {self.code} to {self.slot}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,
@@ -153,7 +153,7 @@ class UnequipAction(Action):
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = UnequipSchema(slot=ItemSlot(self.slot.replace("_slot", "")))
         result = action_unequip(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"Unequip {self.slot}")
+        result = Action._raise_for_error(result, f"Unequip {self.slot}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

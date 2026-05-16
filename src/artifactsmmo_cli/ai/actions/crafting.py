@@ -93,7 +93,7 @@ class CraftAction(Action):
             state = MoveAction(x=self.workshop_location[0], y=self.workshop_location[1]).execute(state, client)
         body = CraftingSchema(code=self.code, quantity=self.quantity)
         result = action_crafting(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"Craft {self.code}×{self.quantity}")
+        result = Action._raise_for_error(result, f"Craft {self.code}×{self.quantity}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

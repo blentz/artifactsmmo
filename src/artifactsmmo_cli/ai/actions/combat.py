@@ -82,7 +82,7 @@ class FightAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_fight(client=client, name=state.character, body=FightRequestSchema())
-        Action._raise_for_error(result, f"Fight {self.monster_code}")
+        result = Action._raise_for_error(result, f"Fight {self.monster_code}")
         return WorldState.from_character_schema(
             result.data.characters[0],
             bank_items=state.bank_items,

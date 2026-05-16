@@ -53,7 +53,7 @@ class MoveAction(Action):
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = DestinationSchema(x=self.x, y=self.y)
         result = action_move(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"Move to ({self.x},{self.y})")
+        result = Action._raise_for_error(result, f"Move to ({self.x},{self.y})")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

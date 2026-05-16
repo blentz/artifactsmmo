@@ -77,7 +77,7 @@ class GatherAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_gathering(client=client, name=state.character)
-        Action._raise_for_error(result, f"Gather {self.resource_code}")
+        result = Action._raise_for_error(result, f"Gather {self.resource_code}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

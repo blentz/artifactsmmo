@@ -72,7 +72,7 @@ class NpcBuyAction(Action):
             state = MoveAction(x=self.npc_location[0], y=self.npc_location[1]).execute(state, client)
         body = NpcMerchantBuySchema(code=self.item_code, quantity=self.quantity)
         result = action_npc_buy(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"NpcBuy {self.item_code}×{self.quantity} from {self.npc_code}")
+        result = Action._raise_for_error(result, f"NpcBuy {self.item_code}×{self.quantity} from {self.npc_code}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

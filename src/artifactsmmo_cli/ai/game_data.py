@@ -249,7 +249,7 @@ class GameData:
                 break
 
             for res in result.data:
-                self._resource_skill[res.code] = (res.skill.value, res.level)  # type: ignore[attr-defined]
+                self._resource_skill[res.code] = (res.skill.value, res.level)
                 # Pick the primary drop: most common (lowest rate value = 1/rate)
                 if res.drops:
                     self._resource_drops[res.code] = min(res.drops, key=lambda d: d.rate).code

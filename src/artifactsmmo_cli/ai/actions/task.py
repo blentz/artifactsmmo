@@ -63,7 +63,7 @@ class AcceptTaskAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_task_new(client=client, name=state.character)
-        Action._raise_for_error(result, "AcceptTask")
+        result = Action._raise_for_error(result, "AcceptTask")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,
@@ -120,7 +120,7 @@ class CompleteTaskAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_task_complete(client=client, name=state.character)
-        Action._raise_for_error(result, "CompleteTask")
+        result = Action._raise_for_error(result, "CompleteTask")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,
@@ -182,7 +182,7 @@ class TaskExchangeAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_task_exchange(client=client, name=state.character)
-        Action._raise_for_error(result, "TaskExchange")
+        result = Action._raise_for_error(result, "TaskExchange")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,
@@ -239,7 +239,7 @@ class TaskCancelAction(Action):
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_task_cancel(client=client, name=state.character)
-        Action._raise_for_error(result, "TaskCancel")
+        result = Action._raise_for_error(result, "TaskCancel")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

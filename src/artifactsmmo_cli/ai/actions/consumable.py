@@ -82,7 +82,7 @@ class UseConsumableAction(Action):
             raise RuntimeError("UseConsumable: no consumable in inventory at execute time")
         item_code, _ = best
         result = action_use_item(client=client, name=state.character, body=SimpleItemSchema(code=item_code, quantity=1))
-        Action._raise_for_error(result, f"UseConsumable({item_code})")
+        result = Action._raise_for_error(result, f"UseConsumable({item_code})")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

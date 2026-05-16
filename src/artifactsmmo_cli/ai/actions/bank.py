@@ -63,7 +63,7 @@ class DepositAllAction(Action):
         last_state = state
         for code, qty in list(state.inventory.items()):
             body = SimpleItemSchema(code=code, quantity=qty)
-            result = deposit_item(client=client, name=state.character, body=body)
+            result = deposit_item(client=client, name=state.character, body=[body])
             if result is not None and hasattr(result, "data") and result.data is not None:
                 last_state = WorldState.from_character_schema(
                     result.data.character,
@@ -132,8 +132,8 @@ class WithdrawItemAction(Action):
         if (state.x, state.y) != self.bank_location:
             state = MoveAction(x=self.bank_location[0], y=self.bank_location[1]).execute(state, client)
         body = SimpleItemSchema(code=self.code, quantity=self.quantity)
-        result = withdraw_item(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"Withdraw {self.code}×{self.quantity}")
+        result = withdraw_item(client=client, name=state.character, body=[body])
+        result = Action._raise_for_error(result, f"Withdraw {self.code}×{self.quantity}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

@@ -57,7 +57,7 @@ class DepositGoldAction(Action):
             state = MoveAction(x=self.bank_location[0], y=self.bank_location[1]).execute(state, client)
         body = DepositWithdrawGoldSchema(quantity=self.quantity)
         result = action_deposit_gold(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"DepositGold {self.quantity}")
+        result = Action._raise_for_error(result, f"DepositGold {self.quantity}")
         return WorldState.from_character_schema(
             result.data.character, bank_items=state.bank_items,
             bank_gold=state.bank_gold, pending_items=state.pending_items,
@@ -95,7 +95,7 @@ class WithdrawGoldAction(Action):
             state = MoveAction(x=self.bank_location[0], y=self.bank_location[1]).execute(state, client)
         body = DepositWithdrawGoldSchema(quantity=self.quantity)
         result = action_withdraw_gold(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"WithdrawGold {self.quantity}")
+        result = Action._raise_for_error(result, f"WithdrawGold {self.quantity}")
         return WorldState.from_character_schema(
             result.data.character, bank_items=state.bank_items,
             bank_gold=state.bank_gold, pending_items=state.pending_items,

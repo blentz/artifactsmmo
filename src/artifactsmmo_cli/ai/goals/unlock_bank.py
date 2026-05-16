@@ -40,13 +40,13 @@ class UnlockBankGoal(Goal):
         return {}
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
-        fight_actions = [a for a in actions if isinstance(a, FightAction)]
+        fight_actions: list[Action] = [a for a in actions if isinstance(a, FightAction)]
         if self._target_monster:
-            targeted = [a for a in fight_actions if a.monster_code == self._target_monster]
+            targeted: list[Action] = [a for a in fight_actions if isinstance(a, FightAction) and a.monster_code == self._target_monster]
             if targeted:
                 fight_actions = targeted
-        delete_actions = [a for a in actions if isinstance(a, DeleteItemAction)]
-        consume_actions = [a for a in actions if isinstance(a, UseConsumableAction)]
+        delete_actions: list[Action] = [a for a in actions if isinstance(a, DeleteItemAction)]
+        consume_actions: list[Action] = [a for a in actions if isinstance(a, UseConsumableAction)]
         return fight_actions + delete_actions + consume_actions
 
     def __repr__(self) -> str:

@@ -44,7 +44,7 @@ class RestAction(Action):
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         result = action_rest(client=client, name=state.character)
-        Action._raise_for_error(result, "Rest")
+        result = Action._raise_for_error(result, "Rest")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

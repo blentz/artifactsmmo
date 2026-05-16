@@ -59,7 +59,7 @@ class BuyBankExpansionAction(Action):
         if self.bank_location and (state.x, state.y) != self.bank_location:
             state = MoveAction(x=self.bank_location[0], y=self.bank_location[1]).execute(state, client)
         result = action_buy_bank_expansion(client=client, name=state.character)
-        Action._raise_for_error(result, "BuyBankExpansion")
+        result = Action._raise_for_error(result, "BuyBankExpansion")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

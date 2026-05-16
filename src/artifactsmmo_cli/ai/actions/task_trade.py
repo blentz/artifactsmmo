@@ -69,7 +69,7 @@ class TaskTradeAction(Action):
             state = MoveAction(x=self.taskmaster_location[0], y=self.taskmaster_location[1]).execute(state, client)
         body = SimpleItemSchema(code=self.code, quantity=self.quantity)
         result = action_task_trade(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"TaskTrade {self.code}×{self.quantity}")
+        result = Action._raise_for_error(result, f"TaskTrade {self.code}×{self.quantity}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

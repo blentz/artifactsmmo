@@ -23,7 +23,7 @@ class MapTransitionAction(Action):
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         result = action_transition(client=client, name=state.character)
-        Action._raise_for_error(result, "MapTransition")
+        result = Action._raise_for_error(result, "MapTransition")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

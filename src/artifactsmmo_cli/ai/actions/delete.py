@@ -57,7 +57,7 @@ class DeleteItemAction(Action):
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = SimpleItemSchema(code=self.code, quantity=self.quantity)
         result = action_delete(client=client, name=state.character, body=body)
-        Action._raise_for_error(result, f"Delete {self.code}×{self.quantity}")
+        result = Action._raise_for_error(result, f"Delete {self.code}×{self.quantity}")
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

@@ -63,7 +63,7 @@ class ClaimPendingItemAction(Action):
 
         item = pending.data[0]
         result = action_claim_item(client=client, name=state.character, id=item.id)
-        Action._raise_for_error(result, f"ClaimPendingItem({item.id})")
+        result = Action._raise_for_error(result, f"ClaimPendingItem({item.id})")
 
         remaining_ids = {entry.id for entry in pending.data[1:]}
         remaining = tuple(
