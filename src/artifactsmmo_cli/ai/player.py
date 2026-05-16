@@ -131,22 +131,27 @@ class GamePlayer:
                 self._maybe_periodic_refresh(client)
                 self._wait_for_cooldown()
 
+                assert self.state is not None
+                assert self.game_data is not None
+                state = self.state
+                game_data = self.game_data
+
                 goals = self._build_goals()
-                goals.sort(key=lambda g: g.priority(self.state, self.game_data), reverse=True)
+                goals.sort(key=lambda g: g.priority(state, game_data), reverse=True)
 
                 plan: list[Action] = []
                 selected_goal: Goal | None = None
 
                 if self.verbose:
                     goal_summary = "  ".join(
-                        f"{g}={g.priority(self.state, self.game_data):.1f}" for g in goals
+                        f"{g}={g.priority(state, game_data):.1f}" for g in goals
                     )
                     print(f"[{self._now()}] Goals: {goal_summary}")
 
                 for goal in goals:
-                    if goal.priority(self.state, self.game_data) <= 0:
+                    if goal.priority(state, game_data) <= 0:
                         break
-                    plan = self.planner.plan(self.state, goal, actions, self.game_data)
+                    plan = self.planner.plan(state, goal, actions, game_data)
                     if self.verbose and not plan:
                         s = self.planner.last_stats
                         print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
@@ -162,7 +167,7 @@ class GamePlayer:
                         goal_name="<none>",
                         action_name="<no_plan>",
                         planned_depth=0,
-                        planner_timed_out=self.planner.last_stats.timed_out if self.state else False,
+                        planner_timed_out=self.planner.last_stats.timed_out,
                         succeeded=False,
                     ))
                     self._emit_trace(
@@ -179,16 +184,16 @@ class GamePlayer:
 
                 if self.verbose:
                     plan_str = _format_plan(plan)
-                    relevant = selected_goal.relevant_actions(actions, self.state, self.game_data)
-                    applicable = [repr(a) for a in relevant if a.is_applicable(self.state, self.game_data)]
-                    print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(self.state, self.game_data):.1f})  Plan: {plan_str}")
+                    relevant = selected_goal.relevant_actions(actions, state, game_data)
+                    applicable = [repr(a) for a in relevant if a.is_applicable(state, game_data)]
+                    print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(state, game_data):.1f})  Plan: {plan_str}")
                     print(f"[{self._now()}] Applicable: {applicable}")
 
                 action = plan[0]
                 self._log_action(action, selected_goal, plan)
 
                 if self.dry_run:
-                    self.state = action.apply(self.state, self.game_data)
+                    self.state = action.apply(state, game_data)
                 else:
                     self.state = self._execute(action, client)
 
@@ -221,6 +226,7 @@ class GamePlayer:
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> WorldState:
         """Execute an action and return the updated WorldState."""
+        assert self.state is not None
         try:
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
@@ -421,7 +427,7 @@ class GamePlayer:
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 
-    def _handle_stuck(self, signal: StuckSignal, client) -> None:
+    def _handle_stuck(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
         """Apply recovery action for a stuck signal at its current escalation level."""
         level = self._recovery_level.get(signal, 0) + 1
         self._recovery_level[signal] = level

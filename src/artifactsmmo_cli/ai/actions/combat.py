@@ -33,8 +33,8 @@ class FightAction(Action):
         if not (state.hp_percent > 0.3 and min_level <= monster_level <= state.level + 2):
             return False
         best_eq = max(
-            (game_data.item_stats(code).level for code in state.equipment.values()
-             if code and game_data.item_stats(code)),
+            (s.level for code in state.equipment.values()
+             if code and (s := game_data.item_stats(code)) is not None),
             default=0,
         )
         return best_eq >= monster_level - 1
