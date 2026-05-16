@@ -106,6 +106,8 @@ class GamePlayer:
         self._suppressed_goals: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
         self._recovery_level: dict[StuckSignal, int] = {}
+        self._last_goal_name: str | None = None
+        self._wildcard_mode: bool = False
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -146,6 +148,7 @@ class GamePlayer:
                     print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
                 if plan:
                     selected_goal = goal
+                    self._last_goal_name = repr(selected_goal)
                     break
 
             if not plan or selected_goal is None:
@@ -351,7 +354,53 @@ class GamePlayer:
         )
 
     def _handle_stuck(self, signal: StuckSignal, client) -> None:
-        """Apply recovery action for a stuck signal. Filled in C7."""
+        """Apply recovery action for a stuck signal at its current escalation level."""
+        level = self._recovery_level.get(signal, 0) + 1
+        self._recovery_level[signal] = level
+
+        if signal == StuckSignal.STATE_FROZEN:
+            if level == 1:
+                print(f"[{self._now()}] [recovery] STATE_FROZEN L1: forcing full refresh")
+                self.state = self._fetch_world_state(client)
+            elif level == 2:
+                last = self._last_goal_name
+                if last:
+                    self._suppressed_goals[last] = 5
+                    print(f"[{self._now()}] [recovery] STATE_FROZEN L2: suppressing {last} for 5 cycles")
+            else:
+                # L3 — broaden suppression on already-suppressed goals
+                for name in list(self._suppressed_goals):
+                    self._suppressed_goals[name] = max(self._suppressed_goals[name], 10)
+                print(f"[{self._now()}] [recovery] STATE_FROZEN L3: broadened suppression to 10 cycles")
+
+        elif signal == StuckSignal.GOAL_OSCILLATION:
+            history = list(self._detector._history)[-8:]
+            distinct = {r.goal_name for r in history}
+            if level == 1:
+                suppress_cycles = 5
+                for name in distinct:
+                    self._suppressed_goals[name] = suppress_cycles
+                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L1: suppressing {distinct} for 5 cycles")
+            elif level == 2:
+                suppress_cycles = 15
+                for name in distinct:
+                    self._suppressed_goals[name] = suppress_cycles
+                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L2: suppressing {distinct} for 15 cycles")
+            else:
+                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L3: exiting (manual intervention)")
+                raise SystemExit(2)
+
+        elif signal == StuckSignal.NO_PROGRESS:
+            if level == 1:
+                print(f"[{self._now()}] [recovery] NO_PROGRESS L1: forcing full refresh")
+                self.state = self._fetch_world_state(client)
+            elif level == 2:
+                self._wildcard_mode = True
+                print(f"[{self._now()}] [recovery] NO_PROGRESS L2: switching to wildcard goals")
+            else:
+                print(f"[{self._now()}] [recovery] NO_PROGRESS L3: exiting (manual intervention)")
+                raise SystemExit(2)
+
         self._detector.acknowledge(signal)
 
     def _build_actions(self) -> list[Action]:
@@ -472,6 +521,11 @@ class GamePlayer:
         """Build goal list. FarmMonsterGoal targets the strongest monster the character can beat."""
         assert self.game_data is not None
         assert self.state is not None
+
+        if self._wildcard_mode:
+            # Wildcard mode: only the safest goals
+            self._wildcard_mode = False  # one-shot
+            return [RestoreHPGoal()]
 
         # Periodically retry bank access after an achievement gate failure (HTTP 496).
         if not self._bank_accessible and self._bank_blocked_since is not None:
