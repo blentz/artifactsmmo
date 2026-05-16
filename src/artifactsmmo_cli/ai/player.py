@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timezone
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.types import Unset
 from artifactsmmo_api_client.api.achievements.get_achievement_achievements_code_get import sync as get_achievement
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
 from artifactsmmo_api_client.models.achievement_type import AchievementType
@@ -304,7 +305,14 @@ class GamePlayer:
         result = get_pending_items(client=client)
         pending: tuple[tuple[str, str], ...] | None = None
         if result is not None and result.data:
-            pending = tuple((item.id, item.code) for item in result.data)
+            pairs: list[tuple[str, str]] = []
+            for pi in result.data:
+                items = pi.items
+                if isinstance(items, Unset) or not items:
+                    continue
+                for si in items:
+                    pairs.append((pi.id, si.code))
+            pending = tuple(pairs) if pairs else None
         return WorldState(
             character=state.character,
             level=state.level,

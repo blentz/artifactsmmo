@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+from artifactsmmo_api_client.types import UNSET
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -532,3 +534,68 @@ class TestLogAction:
         with redirect_stdout(buf):
             player._log_action(action, goal, [action])
         assert "Rest" in buf.getvalue()
+
+
+def test_sync_pending_iterates_items_list(monkeypatch):
+    """_sync_pending should produce (pending_id, item_code) pairs from PendingItemSchema.items."""
+
+    class FakeItem:
+        def __init__(self, code, quantity=1):
+            self.code = code
+            self.quantity = quantity
+
+    class FakePending:
+        def __init__(self, id_, items):
+            self.id = id_
+            self.items = items
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.player.get_pending_items",
+        lambda client: FakeResult([
+            FakePending("p1", [FakeItem("diamond"), FakeItem("ruby")]),
+            FakePending("p2", [FakeItem("emerald")]),
+        ]),
+    )
+
+    player = GamePlayer(character="testchar")
+    player.state = make_state()
+    new_state = player._sync_pending(client=None, state=player.state)
+    assert new_state.pending_items is not None
+    assert ("p1", "diamond") in new_state.pending_items
+    assert ("p1", "ruby") in new_state.pending_items
+    assert ("p2", "emerald") in new_state.pending_items
+    assert len(new_state.pending_items) == 3
+
+
+def test_sync_pending_handles_unset_items_list(monkeypatch):
+    """PendingItemSchema.items can be Unset — _sync_pending should skip such entries."""
+
+    class FakeItem:
+        def __init__(self, code):
+            self.code = code
+
+    class FakePending:
+        def __init__(self, id_, items):
+            self.id = id_
+            self.items = items
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.player.get_pending_items",
+        lambda client: FakeResult([
+            FakePending("p1", UNSET),
+            FakePending("p2", [FakeItem("diamond")]),
+        ]),
+    )
+
+    player = GamePlayer(character="testchar")
+    player.state = make_state()
+    new_state = player._sync_pending(client=None, state=player.state)
+    assert new_state.pending_items == (("p2", "diamond"),)
