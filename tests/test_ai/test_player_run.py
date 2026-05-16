@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
@@ -180,3 +182,31 @@ class TestPlayerRun:
 
         output = capsys.readouterr().out
         assert "No plan for" in output
+
+
+def test_player_builds_sell_actions_for_sellable_inventory():
+    """When bank is locked and inventory has sellable items, _build_actions should include NpcSell."""
+    player = GamePlayer(character="testchar", verbose=False, dry_run=True)
+    player.game_data = GameData()
+    player.game_data._npc_locations = {"cook": (2, 1)}
+    player.game_data._npc_sell_prices = {"cook": {"chicken": 5}}
+    player.game_data._bank_location = (4, 0)
+    player.game_data._taskmaster_location = (1, 2)
+    player._bank_accessible = False
+    player.state = make_state(inventory={"chicken": 5})
+
+    actions = player._build_actions()
+    sell_actions = [a for a in actions if isinstance(a, NpcSellAction)]
+    assert any(a.item_code == "chicken" and a.npc_code == "cook" for a in sell_actions)
+
+
+def test_player_includes_sell_inventory_goal_when_bank_locked():
+    """When bank is locked, _build_goals should include SellInventoryGoal."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    player.game_data._monster_level = {"chicken": 1}
+    player._bank_accessible = False
+    player.state = make_state()
+
+    goals = player._build_goals()
+    assert any(isinstance(g, SellInventoryGoal) for g in goals)

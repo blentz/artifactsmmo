@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction, UnequipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskCancelAction, TaskExchangeAction
@@ -32,6 +33,7 @@ from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, F
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
@@ -381,6 +383,17 @@ class GamePlayer:
                         npc_location=npc_loc,
                     ))
 
+        # NPC sell actions: one per (npc, item) pair where the NPC buys the item
+        for npc_code, sell_prices in self.game_data._npc_sell_prices.items():
+            npc_loc = self.game_data.npc_location(npc_code)
+            for item_code in sell_prices:
+                actions.append(NpcSellAction(
+                    npc_code=npc_code,
+                    item_code=item_code,
+                    quantity=1,
+                    npc_location=npc_loc,
+                ))
+
         return actions
 
     def _build_goals(self) -> list[Goal]:
@@ -406,6 +419,7 @@ class GamePlayer:
         goals: list[Goal] = [
             RestoreHPGoal(),
             DepositInventoryGoal(bank_accessible=self._bank_accessible),
+            SellInventoryGoal(bank_accessible=self._bank_accessible),
             UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp, target_monster=self._bank_unlock_monster),
             ClaimPendingGoal(),
             CompleteTaskGoal(),
