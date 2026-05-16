@@ -37,8 +37,31 @@ class StuckDetector:
         self._cycle_counter += 1
 
     def detect(self) -> StuckSignal | None:
-        """Return the first matching signal, or None. Detection rules added in later tasks."""
+        """Return the first matching signal, or None."""
+        if self._check_state_frozen():
+            return StuckSignal.STATE_FROZEN
         return None
+
+    def _check_state_frozen(self) -> bool:
+        cutoff = self._ack_index.get(StuckSignal.STATE_FROZEN, 0)
+        window = self._recent_since(cutoff, count=10)
+        if len(window) < 10:
+            return False
+        counts: dict[tuple, int] = {}
+        for rec in window:
+            counts[rec.state_key] = counts.get(rec.state_key, 0) + 1
+        return any(c >= 5 for c in counts.values())
+
+    def _recent_since(self, cutoff_cycle: int, count: int) -> list[CycleRecord]:
+        """Return up to `count` most-recent records added after `cutoff_cycle`."""
+        history_list = list(self._history)
+        # The most recent record was added at counter-1; oldest in buffer at counter - len(history).
+        start_idx = self._cycle_counter - len(history_list)
+        post_ack = [
+            rec for i, rec in enumerate(history_list)
+            if start_idx + i >= cutoff_cycle
+        ]
+        return post_ack[-count:]
 
     def acknowledge(self, signal: StuckSignal) -> None:
         """Mark this signal as handled — reset its detection window to the current cycle."""
