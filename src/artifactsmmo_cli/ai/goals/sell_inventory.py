@@ -18,6 +18,8 @@ class SellInventoryGoal(Goal):
     def value(self, state: WorldState, game_data: GameData) -> float:
         if self._bank_accessible or state.inventory_max == 0:
             return 0.0
+        if self.is_satisfied(state):
+            return 0.0
         # Any sellable item in inventory?
         if not any(game_data.npcs_buying_item(code) for code in state.inventory if state.inventory[code] > 0):
             return 0.0

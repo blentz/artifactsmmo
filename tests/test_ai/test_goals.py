@@ -80,6 +80,15 @@ class TestDepositInventoryGoal:
         state = make_state(inventory=inventory, inventory_max=20)
         assert goal.is_satisfied(state) is False
 
+    def test_value_returns_zero_when_satisfied_even_with_partial_fill(self):
+        """value() must respect is_satisfied: if free slots >= MIN_FREE_SLOTS, no urgency to deposit."""
+        goal = DepositInventoryGoal()
+        # 10/20 used → 50% fill, free=10 (>5 so satisfied). Old behavior: value=40. New: value=0.
+        inventory = {f"item_{i}": 1 for i in range(10)}
+        state = make_state(inventory=inventory, inventory_max=20)
+        assert goal.is_satisfied(state) is True
+        assert goal.value(state, make_game_data()) == 0.0
+
 
 class TestCompleteTaskGoal:
     def test_no_task_value_is_zero(self):

@@ -27,17 +27,24 @@ class TestSellInventoryGoal:
         state = make_state(inventory={"useless_thing": 20}, inventory_max=20)
         assert goal.value(state, gd) == 0.0
 
+    def test_value_zero_when_already_satisfied(self):
+        """Goal should return 0 when inventory_free >= MIN_FREE_SLOTS, even with sellables and bank locked."""
+        goal = SellInventoryGoal(bank_accessible=False)
+        gd = make_gd(npc_sell_prices={"cook": {"chicken": 5}})
+        state = make_state(inventory={"chicken": 10}, inventory_max=20)  # 10 free, satisfied
+        assert goal.value(state, gd) == 0.0
+
     def test_value_scales_with_inventory_fill_when_locked_and_has_sellable(self):
         goal = SellInventoryGoal(bank_accessible=False)
         gd = make_gd(npc_sell_prices={"cook": {"chicken": 5}})
-        state = make_state(inventory={"chicken": 10}, inventory_max=20)
-        # used=10/max=20 = 0.5; * 100 = 50
-        assert goal.value(state, gd) == 50.0
+        state = make_state(inventory={"chicken": 18}, inventory_max=20)  # 2 free, NOT satisfied
+        # used=18/max=20 = 0.9; * 100 = 90
+        assert goal.value(state, gd) == 90.0
 
     def test_value_caps_at_100_at_full(self):
         goal = SellInventoryGoal(bank_accessible=False)
         gd = make_gd(npc_sell_prices={"cook": {"chicken": 5}})
-        state = make_state(inventory={"chicken": 20}, inventory_max=20)
+        state = make_state(inventory={"chicken": 20}, inventory_max=20)  # 0 free, NOT satisfied
         assert goal.value(state, gd) == 100.0
 
     def test_is_satisfied_when_min_free_slots_available(self):

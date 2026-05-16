@@ -32,6 +32,8 @@ class DepositInventoryGoal(Goal):
     def value(self, state: WorldState, game_data: GameData) -> float:
         if not self._bank_accessible or state.inventory_max == 0:
             return 0.0
+        if self.is_satisfied(state):
+            return 0.0
         used_fraction = state.inventory_used / state.inventory_max
         return used_fraction * 80.0
 
