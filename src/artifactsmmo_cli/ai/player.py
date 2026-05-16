@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
@@ -101,6 +102,10 @@ class GamePlayer:
         self._bank_accessible: bool = True
         self._bank_blocked_since: float | None = None
         self._bank_unlock_monster: str | None = None
+        self._detector = StuckDetector(history_size=30)
+        self._suppressed_goals: dict[str, int] = {}
+        self._actions_since_full_refresh: int = 0
+        self._recovery_level: dict[StuckSignal, int] = {}
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -302,6 +307,12 @@ class GamePlayer:
                 return str(obj.target)
         return None
 
+    def _decrement_suppressions(self) -> None:
+        """Decrement each suppression counter; prune zero entries."""
+        self._suppressed_goals = {
+            name: n - 1 for name, n in self._suppressed_goals.items() if n > 1
+        }
+
     def _build_actions(self) -> list[Action]:
         """Build the action list. Each action handles its own movement in execute() and cost()."""
         assert self.game_data is not None
@@ -469,7 +480,7 @@ class GamePlayer:
                 if not gm_goal.is_satisfied(self.state):
                     goals.append(gm_goal)
 
-        return goals
+        return [g for g in goals if repr(g) not in self._suppressed_goals]
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
         assert self.state is not None
