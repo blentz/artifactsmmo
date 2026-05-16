@@ -64,7 +64,7 @@ class GatherMaterialsGoal(Goal):
         for mat in self._needed:
             collect(mat, visited)
 
-        result = []
+        result: list[Action] = []
         for action in actions:
             if isinstance(action, RestAction):
                 result.append(action)

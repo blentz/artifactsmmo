@@ -57,7 +57,7 @@ class FarmItemsGoal(Goal):
 
         collect(state.task_code, set())
 
-        result = []
+        result: list[Action] = []
         for action in actions:
             if isinstance(action, RestAction):
                 result.append(action)
