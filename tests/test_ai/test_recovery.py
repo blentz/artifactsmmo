@@ -103,3 +103,27 @@ class TestGoalOscillation:
             name = ["GoalA", "GoalB", "GoalC"][i % 3]
             det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
         assert det.detect() is None
+
+
+class TestNoProgress:
+    def test_fires_after_4_consecutive_no_plan(self):
+        det = StuckDetector()
+        for i in range(4):
+            det.record(make_record(action_name="<no_plan>", goal_name="<none>",
+                                    state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() == StuckSignal.NO_PROGRESS
+
+    def test_no_fire_after_3_no_plan(self):
+        det = StuckDetector()
+        for i in range(3):
+            det.record(make_record(action_name="<no_plan>", goal_name="<none>",
+                                    state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_no_fire_when_no_plan_interleaved_with_progress(self):
+        det = StuckDetector()
+        for i in range(5):
+            name = "<no_plan>" if i % 2 == 0 else "Fight"
+            det.record(make_record(action_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+        # Last 4 cycles: <no_plan>, Fight, <no_plan>, Fight → not all <no_plan>
+        assert det.detect() is None

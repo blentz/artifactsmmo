@@ -42,7 +42,16 @@ class StuckDetector:
             return StuckSignal.STATE_FROZEN
         if self._check_goal_oscillation():
             return StuckSignal.GOAL_OSCILLATION
+        if self._check_no_progress():
+            return StuckSignal.NO_PROGRESS
         return None
+
+    def _check_no_progress(self) -> bool:
+        cutoff = self._ack_index.get(StuckSignal.NO_PROGRESS, 0)
+        window = self._recent_since(cutoff, count=4)
+        if len(window) < 4:
+            return False
+        return all(r.action_name == "<no_plan>" for r in window)
 
     def _check_goal_oscillation(self) -> bool:
         cutoff = self._ack_index.get(StuckSignal.GOAL_OSCILLATION, 0)
