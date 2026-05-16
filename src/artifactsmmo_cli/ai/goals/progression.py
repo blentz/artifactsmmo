@@ -30,7 +30,7 @@ class UpgradeEquipmentGoal(Goal):
                 return True
         return False
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         upgrade = self._find_upgrade(state, game_data)
         if upgrade is None:
             return {}

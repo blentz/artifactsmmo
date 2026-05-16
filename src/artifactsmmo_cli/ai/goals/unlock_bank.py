@@ -1,5 +1,6 @@
 """UnlockBankGoal: fight to satisfy the achievement required to access the bank."""
 
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
@@ -35,10 +36,10 @@ class UnlockBankGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.xp > self._initial_xp
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {}
 
-    def relevant_actions(self, actions: list, state: WorldState, game_data: GameData) -> list:
+    def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         fight_actions = [a for a in actions if isinstance(a, FightAction)]
         if self._target_monster:
             targeted = [a for a in fight_actions if a.monster_code == self._target_monster]

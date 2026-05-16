@@ -46,7 +46,7 @@ class ExpandBankGoal(Goal):
         # the value() method uses the actual game_data._bank_capacity for triggering.)
         return used < 27
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"bank_capacity": game_data._bank_capacity + 1}
 
     def __repr__(self) -> str:

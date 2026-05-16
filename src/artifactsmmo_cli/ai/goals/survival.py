@@ -16,7 +16,7 @@ class RestoreHPGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.hp >= state.max_hp
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"hp": state.max_hp}
 
     def __repr__(self) -> str:
@@ -40,7 +40,7 @@ class DepositInventoryGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.inventory_free >= MIN_FREE_SLOTS
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory_free": MIN_FREE_SLOTS}
 
     def __repr__(self) -> str:

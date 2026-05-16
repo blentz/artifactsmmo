@@ -35,7 +35,7 @@ class FarmMonsterGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.xp > self._initial_xp
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"xp": self._initial_xp + 10}
 
     def __repr__(self) -> str:
@@ -53,7 +53,7 @@ class AcceptTaskGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return bool(state.task_code)
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_code": "__pending__"}
 
     def __repr__(self) -> str:
@@ -72,7 +72,7 @@ class CompleteTaskGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.task_progress >= state.task_total and state.task_total > 0
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_progress": state.task_total}
 
     def __repr__(self) -> str:

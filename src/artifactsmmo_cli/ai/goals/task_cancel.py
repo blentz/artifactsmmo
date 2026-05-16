@@ -20,7 +20,7 @@ class TaskCancelGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return not state.task_code or state.task_total == 0
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_code": None, "task_total": 0}
 
     def _task_is_too_hard(self, state: WorldState, game_data: GameData) -> bool:

@@ -33,7 +33,7 @@ class FarmItemsGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.task_total > 0 and state.task_progress >= state.task_total
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_progress": state.task_total}
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:

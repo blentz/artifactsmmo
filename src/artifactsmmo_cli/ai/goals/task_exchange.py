@@ -19,7 +19,7 @@ class TaskExchangeGoal(Goal):
         bank = state.bank_items or {}
         return state.inventory.get(_TASKS_COIN, 0) + bank.get(_TASKS_COIN, 0) == 0
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": {_TASKS_COIN: 0}}
 
     def __repr__(self) -> str:

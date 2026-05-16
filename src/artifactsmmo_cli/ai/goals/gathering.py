@@ -90,7 +90,7 @@ class GatherMaterialsGoal(Goal):
             for mat, qty in self._needed.items()
         )
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": self._needed}
 
     def __repr__(self) -> str:

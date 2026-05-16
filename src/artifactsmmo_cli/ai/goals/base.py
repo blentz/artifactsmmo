@@ -19,7 +19,7 @@ class Goal(ABC):
         """Return True when this goal has been achieved."""
 
     @abstractmethod
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         """Partial world state the planner targets."""
 
     def priority(self, state: WorldState, game_data: GameData) -> float:

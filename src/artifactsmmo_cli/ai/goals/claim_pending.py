@@ -16,7 +16,7 @@ class ClaimPendingGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return not state.pending_items
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"pending_items": None}
 
     def __repr__(self) -> str:

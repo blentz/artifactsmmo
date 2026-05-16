@@ -16,7 +16,7 @@ class StuckSignal(Enum):
 @dataclass(frozen=True)
 class CycleRecord:
     """One cycle of the player loop, for stuck-state analysis."""
-    state_key: tuple
+    state_key: tuple[object, ...]
     goal_name: str
     action_name: str          # "<no_plan>" when planning failed
     planned_depth: int
@@ -67,7 +67,7 @@ class StuckDetector:
         window = self._recent_since(cutoff, count=10)
         if len(window) < 10:
             return False
-        counts: dict[tuple, int] = {}
+        counts: dict[tuple[object, ...], int] = {}
         for rec in window:
             counts[rec.state_key] = counts.get(rec.state_key, 0) + 1
         return any(c >= 5 for c in counts.values())

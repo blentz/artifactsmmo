@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 _SEARCH_BUDGET_SECONDS = 2.0
 
 
-def _state_key(state: WorldState) -> tuple:
+def _state_key(state: WorldState) -> tuple[object, ...]:
     """Hashable key over the full WorldState for the visited set."""
     return (
         state.x, state.y,
@@ -63,7 +63,7 @@ class GOAPPlanner:
 
         h0 = goal.value(state, game_data)
         heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
-        visited: set[tuple] = set()
+        visited: set[tuple[object, ...]] = set()
         relevant = goal.relevant_actions(actions, state, game_data)
 
         while heap:

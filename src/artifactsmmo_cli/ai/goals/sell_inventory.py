@@ -29,7 +29,7 @@ class SellInventoryGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return state.inventory_free >= MIN_FREE_SLOTS
 
-    def desired_state(self, state: WorldState, game_data: GameData) -> dict:
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory_free": MIN_FREE_SLOTS}
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:

@@ -389,7 +389,7 @@ class GamePlayer:
         )
 
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
-                    planner_stats: dict, recovery: dict | None = None) -> None:
+                    planner_stats: dict[str, object], recovery: dict[str, object] | None = None) -> None:
         """Emit one per-cycle record to the tracer."""
         if self.state is None:
             return

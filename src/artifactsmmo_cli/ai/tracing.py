@@ -9,7 +9,7 @@ class Tracer(ABC):
     """Write per-cycle records for postmortem analysis."""
 
     @abstractmethod
-    def write_cycle(self, record: dict) -> None:
+    def write_cycle(self, record: dict[str, object]) -> None:
         """Write one cycle's record."""
 
     @abstractmethod
@@ -20,7 +20,7 @@ class Tracer(ABC):
 class NullTracer(Tracer):
     """No-op tracer — used when tracing is disabled."""
 
-    def write_cycle(self, record: dict) -> None:
+    def write_cycle(self, record: dict[str, object]) -> None:
         return
 
     def close(self) -> None:
@@ -34,7 +34,7 @@ class FileTracer(Tracer):
         self._path = path
         self._fp: IO[str] | None = open(path, "a", encoding="utf-8")
 
-    def write_cycle(self, record: dict) -> None:
+    def write_cycle(self, record: dict[str, object]) -> None:
         if self._fp is None:
             return
         self._fp.write(json.dumps(record, default=str) + "\n")
