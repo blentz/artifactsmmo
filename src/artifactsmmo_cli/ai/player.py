@@ -47,6 +47,21 @@ _BANK_TILE = None  # resolved from game_data at runtime
 _PLAN_PREVIEW = 5  # max distinct steps shown in verbose plan output
 
 
+def _delete_cost(item_code: str, game_data: "GameData") -> float:
+    """Cost weight for deleting an item.
+
+    Ingredient-first ordering: an item that's both a craft ingredient AND sellable
+    gets the harsher penalty (50.0), not the milder sellable penalty (25.0).
+    """
+    is_ingredient = any(item_code in recipe for recipe in game_data._crafting_recipes.values())
+    has_sell_price = bool(game_data.npcs_buying_item(item_code))
+    if is_ingredient:
+        return 50.0
+    if has_sell_price:
+        return 25.0
+    return 5.0
+
+
 def _format_plan(plan: list[Action]) -> str:
     """Summarise a plan as 'A×N → B → C×M … (+K more)' instead of raw repetition."""
     if not plan:
@@ -342,18 +357,16 @@ class GamePlayer:
             actions.append(RecycleAction(code=item_code, quantity=1, workshop_location=workshop_loc))
 
         # Delete actions: built from current inventory when bank is locked.
-        # Items not used as ingredients in any crafting recipe are deleted first (lowest cost).
-        # Everything else can also be deleted as a last resort (higher cost).
+        # Cost weights: ingredient=50 (harsher), sellable=25, worthless=5 (cheaper to delete).
         if not self._bank_accessible and self.state is not None:
-            all_ingredients: set[str] = set()
-            for recipe in self.game_data._crafting_recipes.values():
-                all_ingredients.update(recipe.keys())
             equipped = set(self.state.equipment.values()) - {None}
             for item_code, qty in self.state.inventory.items():
                 if qty <= 0 or item_code in equipped:
                     continue
-                cost_weight = 2.0 if item_code not in all_ingredients else 10.0
-                actions.append(DeleteItemAction(code=item_code, quantity=1, cost_weight=cost_weight))
+                actions.append(DeleteItemAction(
+                    code=item_code, quantity=1,
+                    cost_weight=_delete_cost(item_code, self.game_data),
+                ))
 
         # NPC buy actions: one per (npc, item) pair for consumables
         for npc_code, stock in self.game_data._npc_stock.items():
