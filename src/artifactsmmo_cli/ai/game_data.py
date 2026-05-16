@@ -118,11 +118,11 @@ class GameData:
         return sorted(results, key=lambda x: x[1])
 
     def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
-        """Sell price for item_code at npc_code, or None if the NPC doesn't buy it."""
+        """Price npc_code pays for item_code when the player sells it, or None if the NPC doesn't buy it."""
         return self._npc_sell_prices.get(npc_code, {}).get(item_code)
 
     def npcs_buying_item(self, item_code: str) -> list[tuple[str, int]]:
-        """Return [(npc_code, sell_price)] for all NPCs that buy item_code, highest price first."""
+        """Return [(npc_code, price)] for all NPCs that buy item_code from the player, highest price first."""
         results = [
             (npc_code, prices[item_code])
             for npc_code, prices in self._npc_sell_prices.items()
