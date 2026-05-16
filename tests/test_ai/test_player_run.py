@@ -14,7 +14,7 @@ from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_minimal_game_data() -> GameData:
@@ -74,7 +74,6 @@ class TestPlayerRun:
     def test_run_executes_one_action_then_stops(self):
         """Test run() executes the plan loop once then exits via KeyboardInterrupt."""
         player = GamePlayer(character="hero")
-        char = make_char_schema(hp=100, max_hp=150, xp=50, max_xp=500)
         client = MagicMock()
 
         # The run loop calls: GameData.load, _fetch_world_state, then loops
@@ -86,13 +85,14 @@ class TestPlayerRun:
             if call_count[0] > 1:
                 raise KeyboardInterrupt
 
+        initial_state = make_state(hp=100, max_hp=150)
         p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
-                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_refresh_if_stale", return_value=make_state(hp=100, max_hp=150)):
+                            with patch.object(player, "_maybe_periodic_refresh"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -101,7 +101,6 @@ class TestPlayerRun:
     def test_run_dry_run_uses_apply_not_execute(self):
         """In dry_run mode, the player calls action.apply() instead of action.execute()."""
         player = GamePlayer(character="hero", dry_run=True)
-        char = make_char_schema(hp=50, max_hp=150)  # low HP triggers RestoreHPGoal
         client = MagicMock()
 
         call_count = [0]
@@ -117,9 +116,9 @@ class TestPlayerRun:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
-                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                    with patch.object(player, "_fetch_world_state", return_value=state_with_low_hp):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_refresh_if_stale", return_value=state_with_low_hp):
+                            with patch.object(player, "_maybe_periodic_refresh"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -129,9 +128,8 @@ class TestPlayerRun:
         assert player.state is not None
 
     def test_run_no_plan_sleeps(self):
-        """When no plan is found, run() sleeps for 10s."""
+        """When no plan is found, run() sleeps for 5s."""
         player = GamePlayer(character="hero")
-        char = make_char_schema(hp=150, max_hp=150)  # full HP, no task, low value goals
         client = MagicMock()
 
         call_count = [0]
@@ -143,26 +141,24 @@ class TestPlayerRun:
 
         # State with full HP and no task — FarmMonsterGoal will plan but with empty game data
         # no actions will be applicable, so plan will be empty → sleep
-        state = make_state(hp=150, max_hp=150)
-
+        initial_state = make_state(hp=150, max_hp=150)
         p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
-                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_refresh_if_stale", return_value=state):
+                            with patch.object(player, "_maybe_periodic_refresh"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
 
-        mock_sleep.assert_called_with(10)
+        mock_sleep.assert_called_with(5)
 
     def test_run_verbose_logs_no_plan(self, capsys):
         """In verbose mode, run() logs 'No plan for' when a goal can't be planned."""
         player = GamePlayer(character="hero", verbose=True)
-        char = make_char_schema(hp=150, max_hp=150)
         client = MagicMock()
 
         call_count = [0]
@@ -172,15 +168,15 @@ class TestPlayerRun:
             if call_count[0] > 1:
                 raise KeyboardInterrupt
 
-        state = make_state(hp=150, max_hp=150)
+        initial_state = make_state(hp=150, max_hp=150)
 
         p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
-                    with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_refresh_if_stale", return_value=state):
+                            with patch.object(player, "_maybe_periodic_refresh"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -250,3 +246,56 @@ def test_player_includes_expand_bank_goal():
 
     goals = player._build_goals()
     assert any(isinstance(g, ExpandBankGoal) for g in goals)
+
+
+def test_refresh_if_stale_method_removed():
+    """The wall-clock _refresh_if_stale should be deleted entirely."""
+    assert not hasattr(GamePlayer, "_refresh_if_stale")
+
+
+def test_maybe_periodic_refresh_triggers_at_20_actions(monkeypatch):
+    """_maybe_periodic_refresh should call _full_refresh when counter >= 20, then reset."""
+    player = GamePlayer(character="testchar")
+    refresh_calls = []
+
+    def fake_full_refresh(c):
+        refresh_calls.append(True)
+        player._actions_since_full_refresh = 0
+
+    player._full_refresh = fake_full_refresh  # type: ignore
+
+    # At 19 — does not trigger
+    player._actions_since_full_refresh = 19
+    player._maybe_periodic_refresh(client=None)
+    assert refresh_calls == []
+    assert player._actions_since_full_refresh == 19
+
+    # At 20 — triggers, then counter resets
+    player._actions_since_full_refresh = 20
+    player._maybe_periodic_refresh(client=None)
+    assert refresh_calls == [True]
+    assert player._actions_since_full_refresh == 0
+
+
+def test_full_refresh_resets_counter(monkeypatch):
+    """_full_refresh itself should reset the action counter to 0."""
+    player = GamePlayer(character="testchar")
+    player.state = make_state()
+    player._actions_since_full_refresh = 15
+
+    # Stub out the underlying fetch/sync methods so we don't make real API calls
+    def fake_fetch(c):
+        return player.state
+
+    def fake_sync_bank(c, s):
+        return s
+
+    def fake_sync_pending(c, s):
+        return s
+
+    player._fetch_world_state = fake_fetch  # type: ignore
+    player._sync_bank = fake_sync_bank  # type: ignore
+    player._sync_pending = fake_sync_pending  # type: ignore
+
+    player._full_refresh(client=None)
+    assert player._actions_since_full_refresh == 0

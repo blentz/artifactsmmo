@@ -222,25 +222,29 @@ class TestWaitForCooldown:
             mock_sleep.assert_not_called()
 
 
-class TestRefreshIfStale:
-    def test_returns_current_state_when_fresh(self):
+class TestMaybePeriodicRefresh:
+    def test_does_not_refresh_below_threshold(self):
         player = GamePlayer(character="hero")
         player.state = make_state()
-        player._last_action_time = __import__("time").monotonic()  # just now
-        client = MagicMock()
-        result = player._refresh_if_stale(client)
-        assert result is player.state
+        player._actions_since_full_refresh = 19
+        refresh_calls = []
+        player._full_refresh = lambda c: refresh_calls.append(True)  # type: ignore
+        player._maybe_periodic_refresh(client=None)
+        assert refresh_calls == []
 
-    def test_fetches_new_state_when_stale(self):
-        import time
+    def test_refreshes_at_threshold(self):
         player = GamePlayer(character="hero")
         player.state = make_state()
-        player._last_action_time = time.monotonic() - 100  # stale
-        char = make_char_schema()
-        client = MagicMock()
-        with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-            result = player._refresh_if_stale(client)
-        assert result is not player.state
+        player._actions_since_full_refresh = 20
+        refresh_calls = []
+
+        def fake_full_refresh(c):
+            refresh_calls.append(True)
+            player._actions_since_full_refresh = 0
+
+        player._full_refresh = fake_full_refresh  # type: ignore
+        player._maybe_periodic_refresh(client=None)
+        assert refresh_calls == [True]
 
 
 class TestFetchWorldState:

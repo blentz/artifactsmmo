@@ -48,7 +48,6 @@ from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
-_STALE_AFTER_SECONDS = 60.0
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
@@ -98,7 +97,6 @@ class GamePlayer:
         self.planner = GOAPPlanner()
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
-        self._last_action_time = time.monotonic()
         self._bank_accessible: bool = True
         self._bank_blocked_since: float | None = None
         self._bank_unlock_monster: str | None = None
@@ -124,7 +122,7 @@ class GamePlayer:
 
         while True:
             actions = self._build_actions()
-            self.state = self._refresh_if_stale(client)
+            self._maybe_periodic_refresh(client)
             self._wait_for_cooldown()
 
             goals = self._build_goals()
@@ -152,7 +150,7 @@ class GamePlayer:
                     break
 
             if not plan or selected_goal is None:
-                print(f"[{self._now()}] No plan found — waiting 10s")
+                print(f"[{self._now()}] No plan found — waiting 5s")
                 # Record no-plan cycle for NO_PROGRESS detection
                 self._detector.record(self._make_cycle_record(
                     goal_name="<none>",
@@ -164,7 +162,7 @@ class GamePlayer:
                 signal = self._detector.detect()
                 if signal is not None:
                     self._handle_stuck(signal, client)
-                time.sleep(10)
+                time.sleep(5)
                 continue
 
             if self.verbose:
@@ -200,7 +198,6 @@ class GamePlayer:
         """Execute an action and return the updated WorldState."""
         try:
             new_state = action.execute(self.state, client)
-            self._last_action_time = time.monotonic()
             # Re-sync bank state after visiting bank
             if isinstance(action, (DepositAllAction, WithdrawItemAction)):
                 new_state = self._sync_bank(client, new_state)
@@ -308,12 +305,18 @@ class GamePlayer:
             pending_items=pending,
         )
 
-    def _refresh_if_stale(self, client: AuthenticatedClient) -> WorldState:
-        """Re-query the API if state is too old."""
-        elapsed = time.monotonic() - self._last_action_time
-        if elapsed > _STALE_AFTER_SECONDS:
-            return self._fetch_world_state(client)
-        return self.state
+    def _full_refresh(self, client: AuthenticatedClient) -> None:
+        """Force a complete state refresh: character, bank, pending items."""
+        self.state = self._fetch_world_state(client)
+        if self.state is not None:
+            self.state = self._sync_bank(client, self.state)
+            self.state = self._sync_pending(client, self.state)
+        self._actions_since_full_refresh = 0
+
+    def _maybe_periodic_refresh(self, client: AuthenticatedClient) -> None:
+        """Force a full refresh every 20 successful actions."""
+        if self._actions_since_full_refresh >= 20:
+            self._full_refresh(client)
 
     def _wait_for_cooldown(self) -> None:
         """Sleep until the character's cooldown expires."""
