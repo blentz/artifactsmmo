@@ -117,6 +117,19 @@ class GameData:
         ]
         return sorted(results, key=lambda x: x[1])
 
+    def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
+        """Sell price for item_code at npc_code, or None if the NPC doesn't buy it."""
+        return self._npc_sell_prices.get(npc_code, {}).get(item_code)
+
+    def npcs_buying_item(self, item_code: str) -> list[tuple[str, int]]:
+        """Return [(npc_code, sell_price)] for all NPCs that buy item_code, highest price first."""
+        results = [
+            (npc_code, prices[item_code])
+            for npc_code, prices in self._npc_sell_prices.items()
+            if item_code in prices
+        ]
+        return sorted(results, key=lambda x: -x[1])
+
     def nearest_location(self, x: int, y: int, locations: list[tuple[int, int]]) -> tuple[int, int] | None:
         """Find the nearest location to (x, y) by Manhattan distance."""
         if not locations:

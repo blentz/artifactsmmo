@@ -393,6 +393,28 @@ def test_load_npcs_captures_sell_prices(monkeypatch):
                                     "smith": {"iron_ore": 8}}
 
 
+def test_npc_buys_item_returns_price():
+    from artifactsmmo_cli.ai.game_data import GameData
+    gd = GameData()
+    gd._npc_sell_prices = {"cook": {"cooked_chicken": 5}}
+    assert gd.npc_buys_item("cook", "cooked_chicken") == 5
+    assert gd.npc_buys_item("cook", "unknown") is None
+    assert gd.npc_buys_item("nonexistent", "anything") is None
+
+
+def test_npcs_buying_item_returns_sorted_descending_by_price():
+    from artifactsmmo_cli.ai.game_data import GameData
+    gd = GameData()
+    gd._npc_sell_prices = {
+        "cook": {"cooked_chicken": 5, "iron_ore": 3},
+        "smith": {"iron_ore": 8},
+        "other": {"iron_ore": 6},
+    }
+    assert gd.npcs_buying_item("iron_ore") == [("smith", 8), ("other", 6), ("cook", 3)]
+    assert gd.npcs_buying_item("cooked_chicken") == [("cook", 5)]
+    assert gd.npcs_buying_item("unknown") == []
+
+
 class TestGameDataLoad:
     def test_load_calls_all_sub_loaders(self):
         client = MagicMock()
