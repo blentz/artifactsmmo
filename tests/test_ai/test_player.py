@@ -1,17 +1,21 @@
 """Tests for GamePlayer."""
 
+import time
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
+from artifactsmmo_cli.ai.recovery import StuckSignal
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
@@ -599,3 +603,400 @@ def test_sync_pending_handles_unset_items_list(monkeypatch):
     player.state = make_state()
     new_state = player._sync_pending(client=None, state=player.state)
     assert new_state.pending_items == (("p2", "diamond"),)
+
+
+class TestExecuteHttp496BankLock:
+    """Tests for HTTP 496 bank-lock path in _execute."""
+
+    def test_http496_on_deposit_sets_bank_inaccessible(self):
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=4, y=0, inventory={"copper_ore": 5})
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        action = DepositAllAction(bank_location=(4, 0))
+        char = make_char_schema()
+
+        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+                   side_effect=RuntimeError("HTTP 496 (locked bank_deposit achievement_unlocked)")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
+                    player._execute(action, client)
+
+        assert player._bank_accessible is False
+        assert player._bank_blocked_since is not None
+
+    def test_http496_without_achievement_code_leaves_unlock_monster_none(self):
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        action = DepositAllAction(bank_location=(4, 0))
+        char = make_char_schema()
+
+        # No achievement code in error message — no match for the regex
+        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+                   side_effect=RuntimeError("HTTP 496 bank access denied")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                player._execute(action, client)
+
+        assert player._bank_accessible is False
+        assert player._bank_unlock_monster is None
+
+    def test_http496_does_not_mark_inaccessible_for_non_bank_action(self):
+        player = GamePlayer(character="hero")
+        player.state = make_state()
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.movement import MoveAction
+        action = MoveAction(x=1, y=0)
+        char = make_char_schema()
+
+        # HTTP 496 on a non-bank action — bank_accessible must NOT be changed
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                   side_effect=RuntimeError("HTTP 496 some unrelated error")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                player._execute(action, client)
+
+        assert player._bank_accessible is True  # unchanged
+
+    def test_http496_with_achievement_code_calls_resolve(self):
+        """When achievement code is in the 496 error, _resolve_bank_unlock_monster is called."""
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        action = DepositAllAction(bank_location=(4, 0))
+        char = make_char_schema()
+
+        resolve_calls = []
+
+        def fake_resolve(c, code):
+            resolve_calls.append(code)
+            return "skeleton"
+
+        player._resolve_bank_unlock_monster = fake_resolve  # type: ignore
+
+        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+                   side_effect=RuntimeError("HTTP 496 (myach achievement_unlocked)")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                player._execute(action, client)
+
+        assert resolve_calls == ["myach"]
+        assert player._bank_unlock_monster == "skeleton"
+
+    def test_http496_skips_resolve_when_monster_already_set(self):
+        """Once bank_unlock_monster is set, _resolve_bank_unlock_monster is not called again."""
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
+        player.game_data = make_game_data_mock()
+        player._bank_unlock_monster = "chicken"  # already resolved
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        action = DepositAllAction(bank_location=(4, 0))
+        char = make_char_schema()
+
+        resolve_calls = []
+
+        def fake_resolve(c, code):
+            resolve_calls.append(code)
+            return "wolf"
+
+        player._resolve_bank_unlock_monster = fake_resolve  # type: ignore
+
+        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+                   side_effect=RuntimeError("HTTP 496 (newach achievement_unlocked)")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                player._execute(action, client)
+
+        # resolve should NOT be called since monster is already set
+        assert resolve_calls == []
+        assert player._bank_unlock_monster == "chicken"
+
+
+class TestExecuteClaimPendingSync:
+    """Test that ClaimPendingItemAction triggers _sync_pending in _execute."""
+
+    def test_execute_claim_pending_calls_sync_pending(self):
+        from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
+        player = GamePlayer(character="hero")
+        player.state = make_state(pending_items=(("id1", "copper_ore"),))
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        char = make_char_schema()
+        pending_item = MagicMock()
+        pending_item.id = "id1"
+        pending_item.code = "copper_ore"
+        pending_result = MagicMock()
+        pending_result.data = [pending_item]
+        final_pending = MagicMock()
+        final_pending.data = []
+
+        sync_calls = []
+        original_sync = player._sync_pending
+
+        def fake_sync(c, s):
+            sync_calls.append(True)
+            return s
+
+        player._sync_pending = fake_sync  # type: ignore
+
+        with patch("artifactsmmo_cli.ai.actions.claim.get_pending_items", return_value=pending_result):
+            with patch("artifactsmmo_cli.ai.actions.claim.action_claim_item", return_value=make_api_result(char)):
+                player._execute(ClaimPendingItemAction(), client)
+
+        assert sync_calls == [True]
+
+
+class TestResolveBankUnlockMonster:
+    """Tests for _resolve_bank_unlock_monster."""
+
+    def test_returns_none_when_api_returns_none(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
+            result = player._resolve_bank_unlock_monster(client, "some_achievement")
+        assert result is None
+
+    def test_returns_combat_kill_target(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+
+        obj = MagicMock()
+        obj.type_ = AchievementType.COMBAT_KILL
+        obj.target = "skeleton"
+
+        result_obj = MagicMock()
+        result_obj.data = MagicMock()
+        result_obj.data.objectives = [obj]
+
+        with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=result_obj):
+            result = player._resolve_bank_unlock_monster(client, "some_achievement")
+
+        assert result == "skeleton"
+
+    def test_returns_none_when_no_combat_kill_objective(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+
+        obj = MagicMock()
+        obj.type_ = MagicMock()  # some other achievement type, not COMBAT_KILL
+        obj.type_ = "craft"  # not AchievementType.COMBAT_KILL
+        obj.target = "some_item"
+
+        result_obj = MagicMock()
+        result_obj.data = MagicMock()
+        result_obj.data.objectives = [obj]
+
+        with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=result_obj):
+            result = player._resolve_bank_unlock_monster(client, "some_achievement")
+
+        assert result is None
+
+    def test_returns_none_when_result_has_no_data(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+
+        result_obj = MagicMock()
+        result_obj.data = None
+
+        with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=result_obj):
+            result = player._resolve_bank_unlock_monster(client, "some_achievement")
+
+        assert result is None
+
+
+class TestEmitTrace:
+    """Tests for _emit_trace."""
+
+    def test_returns_early_when_state_is_none(self):
+        player = GamePlayer(character="hero")
+        player.state = None
+        tracer = MagicMock()
+        player.tracer = tracer
+        # Should not raise and should not call tracer.write_cycle
+        player._emit_trace("Rest", "RestoreHP", "ok", {"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 1})
+        tracer.write_cycle.assert_not_called()
+
+    def test_computes_cooldown_remaining_when_cooldown_set(self):
+        from datetime import datetime, timezone, timedelta
+        player = GamePlayer(character="hero")
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=5.0)
+        player.state = make_state(cooldown_expires=future)
+        tracer = MagicMock()
+        player.tracer = tracer
+        player._emit_trace("Rest", "RestoreHP", "ok", {"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 1})
+        tracer.write_cycle.assert_called_once()
+        record = tracer.write_cycle.call_args[0][0]
+        assert record["cooldown_remaining_at_cycle_start"] > 0.0
+
+
+class TestHandleStuckExtended:
+    """Tests for additional _handle_stuck escalation levels."""
+
+    def test_state_frozen_level3_broadens_suppression(self):
+        player = GamePlayer(character="hero")
+        player._recovery_level[StuckSignal.STATE_FROZEN] = 2
+        player._suppressed_goals = {"GoalA": 3}
+
+        player._handle_stuck(StuckSignal.STATE_FROZEN, client=None)
+
+        # Should broaden GoalA from 3 to max(3, 10) = 10
+        assert player._suppressed_goals["GoalA"] == 10
+        assert player._recovery_level[StuckSignal.STATE_FROZEN] == 3
+
+    def test_goal_oscillation_level2_suppresses_for_15_cycles(self):
+        player = GamePlayer(character="hero")
+        from artifactsmmo_cli.ai.recovery import CycleRecord
+        for i in range(8):
+            name = "GoalA" if i % 2 == 0 else "GoalB"
+            player._detector.record(CycleRecord(
+                state_key=(i, 0, 5, (), (), None, 0, False),
+                goal_name=name, action_name="X", planned_depth=1,
+                planner_timed_out=False, succeeded=True,
+            ))
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 1
+
+        player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+
+        assert player._suppressed_goals.get("GoalA") == 15
+        assert player._suppressed_goals.get("GoalB") == 15
+        assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 2
+
+    def test_no_progress_level2_sets_wildcard_mode(self):
+        player = GamePlayer(character="hero")
+        player._recovery_level[StuckSignal.NO_PROGRESS] = 1
+
+        player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
+
+        assert player._wildcard_mode is True
+        assert player._recovery_level[StuckSignal.NO_PROGRESS] == 2
+
+    def test_no_progress_level3_exits(self):
+        player = GamePlayer(character="hero")
+        player._recovery_level[StuckSignal.NO_PROGRESS] = 2
+
+        with pytest.raises(SystemExit) as exc_info:
+            player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
+
+        assert exc_info.value.code == 2
+
+
+class TestBuildGoalsExtended:
+    def _make_minimal_player(self) -> GamePlayer:
+        player = GamePlayer(character="hero")
+        gd = GameData()
+        gd._monster_locations = {"chicken": [(1, 0)]}
+        gd._monster_level = {"chicken": 1}
+        gd._resource_locations = {}
+        gd._workshop_locations = {}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        gd._resource_skill = {}
+        player.game_data = gd
+        player.state = make_state()
+        return player
+
+    def test_wildcard_mode_returns_only_restore_hp(self):
+        player = self._make_minimal_player()
+        player._wildcard_mode = True
+        goals = player._build_goals()
+        assert len(goals) == 1
+        assert isinstance(goals[0], RestoreHPGoal)
+        # wildcard mode is one-shot: should be reset after call
+        assert player._wildcard_mode is False
+
+    def test_bank_retry_timer_resets_bank_accessible(self):
+        player = self._make_minimal_player()
+        player._bank_accessible = False
+        # Simulate that the block started more than _BANK_RETRY_SECONDS ago
+        player._bank_blocked_since = time.monotonic() - 61.0  # > 60s threshold
+
+        player._build_goals()
+
+        assert player._bank_accessible is True
+        assert player._bank_blocked_since is None
+
+    def test_bank_retry_timer_does_not_reset_before_timeout(self):
+        player = self._make_minimal_player()
+        player._bank_accessible = False
+        player._bank_blocked_since = time.monotonic() - 10.0  # only 10s ago
+
+        player._build_goals()
+
+        assert player._bank_accessible is False  # still locked
+
+
+class TestBuildActionsExtended:
+    def test_delete_actions_skip_equipped_items(self):
+        """Items in equipment slots must not get delete actions."""
+        player = GamePlayer(character="hero")
+        gd = GameData()
+        gd._monster_locations = {}
+        gd._resource_locations = {}
+        gd._workshop_locations = {}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        gd._resource_skill = {}
+        gd._monster_level = {}
+        player.game_data = gd
+        player._bank_accessible = False
+
+        equipment = {slot: None for slot in [
+            "weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
+            "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot",
+            "amulet_slot", "artifact1_slot", "artifact2_slot", "artifact3_slot",
+            "utility1_slot", "utility2_slot", "bag_slot", "rune_slot",
+        ]}
+        equipment["weapon_slot"] = "copper_dagger"
+        player.state = make_state(
+            inventory={"copper_dagger": 1, "iron_ore": 3},
+            equipment=equipment,
+        )
+
+        from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
+        actions = player._build_actions()
+        delete_codes = {a.code for a in actions if isinstance(a, DeleteItemAction)}
+
+        assert "iron_ore" in delete_codes
+        assert "copper_dagger" not in delete_codes  # equipped — must be skipped
+
+    def test_npc_buy_actions_include_consumables_only(self):
+        """NPC buy actions are only built for items with hp_restore > 0."""
+        player = GamePlayer(character="hero")
+        gd = GameData()
+        gd._monster_locations = {}
+        gd._resource_locations = {}
+        gd._workshop_locations = {}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        gd._item_stats = {
+            "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable", hp_restore=50),
+            "raw_iron": ItemStats(code="raw_iron", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        gd._resource_skill = {}
+        gd._monster_level = {}
+        gd._npc_locations = {"cook": (5, 0)}
+        gd._npc_stock = {"cook": ["cooked_chicken", "raw_iron"]}
+        player.game_data = gd
+        player.state = make_state()
+
+        from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+        actions = player._build_actions()
+        npc_buy_items = {a.item_code for a in actions if isinstance(a, NpcBuyAction)}
+
+        assert "cooked_chicken" in npc_buy_items
+        assert "raw_iron" not in npc_buy_items  # no hp_restore

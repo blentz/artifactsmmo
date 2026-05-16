@@ -7,12 +7,14 @@ import pytest
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
@@ -299,3 +301,99 @@ def test_full_refresh_resets_counter(monkeypatch):
 
     player._full_refresh(client=None)
     assert player._actions_since_full_refresh == 0
+
+
+def test_run_calls_handle_stuck_in_no_plan_path():
+    """Line 181: _handle_stuck is invoked inside the run() no-plan branch when detector fires.
+
+    Strategy: pre-seed the detector with 3 consecutive no-plan records so that adding a 4th
+    in the no-plan branch fires NO_PROGRESS → calls _handle_stuck → increments the level.
+    """
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+
+    # Pre-seed detector with 3 no-plan records (one short of the NO_PROGRESS threshold of 4)
+    for i in range(3):
+        player._detector.record(CycleRecord(
+            state_key=(0, 0, 5, (), (), None, 0, False),
+            goal_name="<none>",
+            action_name="<no_plan>",
+            planned_depth=0,
+            planner_timed_out=False,
+            succeeded=False,
+        ))
+
+    call_count = [0]
+
+    def fake_wait():
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise KeyboardInterrupt
+
+    initial_state = make_state(hp=150, max_hp=150)
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                        with patch.object(player, "_maybe_periodic_refresh"):
+                            # Empty action list → no plan possible → no-plan path
+                            with patch.object(player, "_build_actions", return_value=[]):
+                                with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                    with pytest.raises(KeyboardInterrupt):
+                                        player.run()
+
+    # NO_PROGRESS L1 should have been fired → level == 1
+    assert player._recovery_level.get(StuckSignal.NO_PROGRESS) == 1
+
+
+def test_run_calls_handle_stuck_after_successful_action():
+    """Line 223: _handle_stuck is invoked inside the run() post-action branch when detector fires.
+
+    Strategy: pre-seed the detector with records that are one step away from STATE_FROZEN
+    (9 identical state_key records, need 10 with >= 5 same), then after one successful action
+    with the same state key, detect() returns STATE_FROZEN → _handle_stuck is called.
+    """
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+
+    frozen_key = (0, 0, 5, (), (), None, 0, False)
+    # Pre-seed with 9 records with the same state_key (need >= 5 of 10 to trigger)
+    for i in range(9):
+        player._detector.record(CycleRecord(
+            state_key=frozen_key,
+            goal_name="RestoreHP",
+            action_name="Rest",
+            planned_depth=1,
+            planner_timed_out=False,
+            succeeded=True,
+        ))
+
+    call_count = [0]
+
+    def fake_wait():
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise KeyboardInterrupt
+
+    # Use low HP so RestoreHP goal with value > 0 is selected, RestAction is applicable
+    initial_state = make_state(hp=50, max_hp=150)
+
+    # _fetch_world_state is called by STATE_FROZEN L1 recovery — return the same state
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                        with patch.object(player, "_maybe_periodic_refresh"):
+                            # Return RestAction so a plan can be found; patch _execute to avoid HTTP call
+                            with patch.object(player, "_build_actions", return_value=[RestAction()]):
+                                with patch.object(player, "_execute", return_value=initial_state):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
+
+    # STATE_FROZEN L1 should have been invoked
+    assert player._recovery_level.get(StuckSignal.STATE_FROZEN) == 1

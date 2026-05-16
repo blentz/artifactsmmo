@@ -775,6 +775,88 @@ class TestUnlockBankGoal:
         state = make_state(xp=101, inventory={"chicken": 20}, inventory_max=20)
         assert goal.value(state, self._make_gd_with_sellables()) == 0.0
 
+    def test_is_satisfied_when_xp_advanced(self):
+        """is_satisfied returns True once xp exceeds initial_xp."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=101)
+        assert goal.is_satisfied(state) is True
+
+    def test_is_not_satisfied_at_initial_xp(self):
+        """is_satisfied returns False when xp has not advanced."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100)
+        assert goal.is_satisfied(state) is False
+
+    def test_desired_state_returns_empty_dict(self):
+        """desired_state returns {} — the goal is satisfied by XP, not a specific key."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        assert goal.desired_state(state, gd) == {}
+
+    def test_relevant_actions_returns_fight_actions(self):
+        """relevant_actions includes FightAction instances."""
+        from artifactsmmo_cli.ai.actions.combat import FightAction
+        from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
+        from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+        from artifactsmmo_cli.ai.actions.rest import RestAction
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        actions = [
+            FightAction(monster_code="chicken"),
+            FightAction(monster_code="wolf"),
+            RestAction(),
+            DeleteItemAction(code="iron_ore"),
+            UseConsumableAction(_item_stats={}),
+        ]
+        relevant = goal.relevant_actions(actions, state, gd)
+        relevant_reprs = [repr(a) for a in relevant]
+        assert "Fight(chicken)" in relevant_reprs
+        assert "Fight(wolf)" in relevant_reprs
+        assert "Rest" not in relevant_reprs
+        assert "Delete(iron_ore×1)" in relevant_reprs
+        assert "UseConsumable" in relevant_reprs
+
+    def test_relevant_actions_filters_by_target_monster(self):
+        """When target_monster is set, only that monster's fight action is returned."""
+        from artifactsmmo_cli.ai.actions.combat import FightAction
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        actions = [
+            FightAction(monster_code="chicken"),
+            FightAction(monster_code="wolf"),
+        ]
+        relevant = goal.relevant_actions(actions, state, gd)
+        relevant_reprs = [repr(a) for a in relevant]
+        assert "Fight(chicken)" in relevant_reprs
+        assert "Fight(wolf)" not in relevant_reprs
+
+    def test_relevant_actions_target_monster_falls_back_when_no_match(self):
+        """If target_monster set but no fight action matches, return all fight actions."""
+        from artifactsmmo_cli.ai.actions.combat import FightAction
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="dragon")
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        actions = [
+            FightAction(monster_code="chicken"),
+            FightAction(monster_code="wolf"),
+        ]
+        relevant = goal.relevant_actions(actions, state, gd)
+        relevant_reprs = [repr(a) for a in relevant]
+        # Falls back to all fight actions since "dragon" isn't in the list
+        assert "Fight(chicken)" in relevant_reprs
+        assert "Fight(wolf)" in relevant_reprs
+
+    def test_repr_with_no_target_monster(self):
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        assert repr(goal) == "UnlockBank(?)"
+
+    def test_repr_with_target_monster(self):
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="skeleton")
+        assert repr(goal) == "UnlockBank(skeleton)"
+
 
 def test_farm_items_goal_includes_task_trade_in_relevant_actions():
     """When task_type==items, FarmItemsGoal.relevant_actions must include TaskTradeAction."""

@@ -1,12 +1,15 @@
-"""Tests for TaskCancelAction, ClaimPendingItemAction, TaskCancelGoal, ClaimPendingGoal."""
+"""Tests for TaskCancelAction, ClaimPendingItemAction, TaskCancelGoal, ClaimPendingGoal,
+DeleteItemAction, and UseConsumableAction."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
+from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.task import TaskCancelAction
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from tests.test_ai.fixtures import make_state
@@ -112,6 +115,13 @@ class TestClaimPendingItemAction:
         new_state = action.apply(state, make_gd())
         assert new_state.inventory.get("copper_ore") == 1
         assert new_state.pending_items is None
+
+    def test_apply_returns_state_when_pending_items_is_none(self):
+        """Defensive guard: apply() returns state unchanged if pending_items is None."""
+        action = ClaimPendingItemAction()
+        state = make_state(pending_items=None)
+        result = action.apply(state, make_gd())
+        assert result is state
 
     def test_apply_removes_claimed_item_from_pending(self):
         action = ClaimPendingItemAction()
@@ -227,3 +237,148 @@ class TestClaimPendingGoal:
         goal = ClaimPendingGoal()
         ds = goal.desired_state(make_state(), make_gd())
         assert ds == {"pending_items": None}
+
+
+class TestDeleteItemAction:
+    def test_repr(self):
+        assert repr(DeleteItemAction(code="iron_ore", quantity=2)) == "Delete(iron_ore×2)"
+
+    def test_is_applicable_when_item_in_inventory(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        state = make_state(inventory={"iron_ore": 1})
+        assert action.is_applicable(state, make_gd()) is True
+
+    def test_is_applicable_when_inventory_meets_quantity(self):
+        action = DeleteItemAction(code="iron_ore", quantity=3)
+        state = make_state(inventory={"iron_ore": 3})
+        assert action.is_applicable(state, make_gd()) is True
+
+    def test_not_applicable_when_insufficient_quantity(self):
+        action = DeleteItemAction(code="iron_ore", quantity=2)
+        state = make_state(inventory={"iron_ore": 1})
+        assert action.is_applicable(state, make_gd()) is False
+
+    def test_not_applicable_when_item_absent(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        state = make_state(inventory={})
+        assert action.is_applicable(state, make_gd()) is False
+
+    def test_apply_removes_item_from_inventory(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        state = make_state(inventory={"iron_ore": 3, "copper_ore": 2})
+        new_state = action.apply(state, make_gd())
+        assert new_state.inventory["iron_ore"] == 2
+        assert new_state.inventory["copper_ore"] == 2
+
+    def test_apply_removes_key_when_quantity_reaches_zero(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        state = make_state(inventory={"iron_ore": 1})
+        new_state = action.apply(state, make_gd())
+        assert "iron_ore" not in new_state.inventory
+
+    def test_apply_removes_key_when_quantity_goes_below_zero(self):
+        # Should not happen in practice, but apply defensively removes the key
+        action = DeleteItemAction(code="iron_ore", quantity=2)
+        state = make_state(inventory={"iron_ore": 1})
+        new_state = action.apply(state, make_gd())
+        assert "iron_ore" not in new_state.inventory
+
+    def test_apply_preserves_other_state_fields(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        state = make_state(inventory={"iron_ore": 1}, gold=500, hp=80, x=3, y=4)
+        new_state = action.apply(state, make_gd())
+        assert new_state.gold == 500
+        assert new_state.hp == 80
+        assert new_state.x == 3
+        assert new_state.y == 4
+
+    def test_cost_returns_cost_weight(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1, cost_weight=25.0)
+        state = make_state()
+        assert action.cost(state, make_gd()) == pytest.approx(25.0)
+
+    def test_cost_default_weight(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        state = make_state()
+        assert action.cost(state, make_gd()) == pytest.approx(2.0)
+
+    def test_execute_calls_api_and_returns_updated_state(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        char = make_char_schema()
+        state = make_state(inventory={"iron_ore": 1}, bank_items={"gold": 5}, bank_gold=100)
+        client = MagicMock()
+        api_result = make_api_result(char)
+        with patch("artifactsmmo_cli.ai.actions.delete.action_delete", return_value=api_result) as mock_delete:
+            new_state = action.execute(state, client)
+        mock_delete.assert_called_once()
+        assert new_state is not None
+
+    def test_execute_preserves_bank_items(self):
+        action = DeleteItemAction(code="iron_ore", quantity=1)
+        char = make_char_schema()
+        state = make_state(inventory={"iron_ore": 1}, bank_items={"gold": 5}, bank_gold=100)
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.actions.delete.action_delete", return_value=make_api_result(char)):
+            new_state = action.execute(state, client)
+        assert new_state.bank_items == {"gold": 5}
+        assert new_state.bank_gold == 100
+
+
+class TestBestConsumableHelper:
+    """Tests for the _best_consumable module-level helper in consumable.py."""
+
+    def test_skips_items_with_zero_quantity(self):
+        from artifactsmmo_cli.ai.actions.consumable import _best_consumable
+        item_stats = {"bread": ItemStats(code="bread", level=1, type_="consumable", hp_restore=30)}
+        # Inventory has bread with qty=0 — must be skipped
+        result = _best_consumable({"bread": 0}, item_stats)
+        assert result is None
+
+    def test_returns_best_consumable_when_multiple_available(self):
+        from artifactsmmo_cli.ai.actions.consumable import _best_consumable
+        item_stats = {
+            "bread": ItemStats(code="bread", level=1, type_="consumable", hp_restore=20),
+            "chicken": ItemStats(code="chicken", level=1, type_="consumable", hp_restore=50),
+        }
+        result = _best_consumable({"bread": 1, "chicken": 1}, item_stats)
+        assert result == ("chicken", 50)
+
+
+class TestUseConsumableAction:
+    def _make_item_stats_with_food(self, code: str, hp: int) -> dict[str, ItemStats]:
+        return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp)}
+
+    def test_repr(self):
+        action = UseConsumableAction(_item_stats={})
+        assert repr(action) == "UseConsumable"
+
+    def test_execute_calls_api_and_returns_updated_state(self):
+        item_stats = self._make_item_stats_with_food("cooked_chicken", 50)
+        action = UseConsumableAction(_item_stats=item_stats)
+        char = make_char_schema(hp=150, max_hp=150)
+        state = make_state(hp=80, max_hp=150, inventory={"cooked_chicken": 2})
+        client = MagicMock()
+        api_result = make_api_result(char)
+        with patch("artifactsmmo_cli.ai.actions.consumable.action_use_item", return_value=api_result) as mock_use:
+            new_state = action.execute(state, client)
+        mock_use.assert_called_once()
+        assert new_state is not None
+
+    def test_execute_raises_when_no_consumable_at_execute_time(self):
+        action = UseConsumableAction(_item_stats={})
+        state = make_state(hp=80, max_hp=150, inventory={})
+        client = MagicMock()
+        with pytest.raises(RuntimeError, match="no consumable"):
+            action.execute(state, client)
+
+    def test_execute_preserves_bank_items(self):
+        item_stats = self._make_item_stats_with_food("bread", 30)
+        action = UseConsumableAction(_item_stats=item_stats)
+        char = make_char_schema(hp=150, max_hp=150)
+        state = make_state(hp=50, max_hp=150, inventory={"bread": 1},
+                           bank_items={"iron_ore": 10}, bank_gold=200)
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.actions.consumable.action_use_item", return_value=make_api_result(char)):
+            new_state = action.execute(state, client)
+        assert new_state.bank_items == {"iron_ore": 10}
+        assert new_state.bank_gold == 200
