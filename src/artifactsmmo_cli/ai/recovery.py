@@ -40,7 +40,18 @@ class StuckDetector:
         """Return the first matching signal, or None."""
         if self._check_state_frozen():
             return StuckSignal.STATE_FROZEN
+        if self._check_goal_oscillation():
+            return StuckSignal.GOAL_OSCILLATION
         return None
+
+    def _check_goal_oscillation(self) -> bool:
+        cutoff = self._ack_index.get(StuckSignal.GOAL_OSCILLATION, 0)
+        window = self._recent_since(cutoff, count=8)
+        if len(window) < 8:
+            return False
+        goals = [r.goal_name for r in window]
+        distinct = set(goals)
+        return len(distinct) == 2
 
     def _check_state_frozen(self) -> bool:
         cutoff = self._ack_index.get(StuckSignal.STATE_FROZEN, 0)

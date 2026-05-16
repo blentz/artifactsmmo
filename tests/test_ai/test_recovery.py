@@ -80,3 +80,26 @@ class TestStateFrozenDetection:
         for _ in range(7):
             det.record(make_record(state_key=repeated))
         assert det.detect() == StuckSignal.STATE_FROZEN
+
+
+class TestGoalOscillation:
+    def test_fires_on_strict_ABAB(self):
+        det = StuckDetector()
+        for i in range(8):
+            name = "GoalA" if i % 2 == 0 else "GoalB"
+            det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() == StuckSignal.GOAL_OSCILLATION
+
+    def test_fires_on_AABBAABB(self):
+        det = StuckDetector()
+        pattern = ["GoalA", "GoalA", "GoalB", "GoalB", "GoalA", "GoalA", "GoalB", "GoalB"]
+        for i, name in enumerate(pattern):
+            det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() == StuckSignal.GOAL_OSCILLATION
+
+    def test_no_fire_with_3_distinct_goals(self):
+        det = StuckDetector()
+        for i in range(8):
+            name = ["GoalA", "GoalB", "GoalC"][i % 3]
+            det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
