@@ -34,6 +34,7 @@ def _patch_game_data_load():
         patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty),
         patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty),
         patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty),
+        patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
     )
 
 
@@ -80,10 +81,10 @@ class TestPlayerRun:
             if call_count[0] > 1:
                 raise KeyboardInterrupt
 
-        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
+        p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
                     with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                             with patch.object(player, "_refresh_if_stale", return_value=make_state(hp=100, max_hp=150)):
@@ -107,10 +108,10 @@ class TestPlayerRun:
 
         state_with_low_hp = make_state(hp=50, max_hp=150)
 
-        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
+        p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
                     with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                             with patch.object(player, "_refresh_if_stale", return_value=state_with_low_hp):
@@ -139,10 +140,10 @@ class TestPlayerRun:
         # no actions will be applicable, so plan will be empty → sleep
         state = make_state(hp=150, max_hp=150)
 
-        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
+        p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
                     with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                             with patch.object(player, "_refresh_if_stale", return_value=state):
@@ -168,10 +169,10 @@ class TestPlayerRun:
 
         state = make_state(hp=150, max_hp=150)
 
-        p_maps, p_items, p_resources, p_monsters, p_npcs = _patch_game_data_load()
+        p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
-                with p_maps, p_items, p_resources, p_monsters, p_npcs:
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_bank:
                     with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                             with patch.object(player, "_refresh_if_stale", return_value=state):

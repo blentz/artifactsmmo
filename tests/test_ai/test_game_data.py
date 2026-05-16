@@ -424,5 +424,27 @@ class TestGameDataLoad:
                 with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty_page):
                     with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
-                            gd = GameData.load(client)
+                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                gd = GameData.load(client)
         assert isinstance(gd, GameData)
+
+
+def test_load_bank_metadata_captures_capacity_and_expansion_cost(monkeypatch):
+    """GameData.load should fetch and cache bank capacity + next expansion cost."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeBankDetails:
+        slots = 30
+        next_expansion_cost = 1000
+
+    class FakeResult:
+        data = FakeBankDetails()
+
+    def fake_get_bank_details(client):
+        return FakeResult()
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_bank_details", fake_get_bank_details)
+    gd = GameData()
+    gd._load_bank_metadata(client=None)
+    assert gd._bank_capacity == 30
+    assert gd._next_expansion_cost == 1000

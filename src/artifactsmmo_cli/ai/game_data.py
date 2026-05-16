@@ -6,6 +6,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items
 from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters
+from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.models.map_content_type import MapContentType
@@ -42,6 +43,9 @@ class GameData:
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
+    _bank_capacity: int = 0
+    _next_expansion_cost: int = 0
+    _slots_per_expansion: int = 0  # learned after the first expansion (response delta)
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
@@ -145,7 +149,16 @@ class GameData:
         data._load_resources(client)
         data._load_monsters(client)
         data._load_npcs(client)
+        data._load_bank_metadata(client)
         return data
+
+    def _load_bank_metadata(self, client: AuthenticatedClient) -> None:
+        """Fetch bank capacity and next expansion cost."""
+        result = get_bank_details(client=client)
+        if result is None or not hasattr(result, "data") or result.data is None:
+            return
+        self._bank_capacity = result.data.slots
+        self._next_expansion_cost = result.data.next_expansion_cost
 
     def _load_maps(self, client: AuthenticatedClient) -> None:
         """Fetch all map tiles and build content location indexes."""
