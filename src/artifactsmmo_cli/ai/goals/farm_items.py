@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -65,6 +66,8 @@ class FarmItemsGoal(Goal):
             elif isinstance(action, GatherAction) and action.resource_code in needed_resources:
                 result.append(action)
             elif isinstance(action, CraftAction) and action.code in craftable_mats:
+                result.append(action)
+            elif isinstance(action, TaskTradeAction) and action.code == state.task_code:
                 result.append(action)
         return result
 

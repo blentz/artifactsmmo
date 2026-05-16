@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, FarmMonsterGoal
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
@@ -773,3 +774,23 @@ class TestUnlockBankGoal:
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
         state = make_state(xp=101, inventory={"chicken": 20}, inventory_max=20)
         assert goal.value(state, self._make_gd_with_sellables()) == 0.0
+
+
+def test_farm_items_goal_includes_task_trade_in_relevant_actions():
+    """When task_type==items, FarmItemsGoal.relevant_actions must include TaskTradeAction."""
+    gd = GameData()
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._crafting_recipes = {}
+
+    actions = [
+        RestAction(),
+        GatherAction(resource_code="iron_rocks", locations=frozenset({(2, 3)})),
+        TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2)),
+        TaskTradeAction(code="other_item", quantity=1, taskmaster_location=(1, 2)),
+    ]
+    state = make_state(task_code="iron_ore", task_type="items", task_total=20, task_progress=5)
+    goal = FarmItemsGoal()
+    relevant = goal.relevant_actions(actions, state, gd)
+    names = [repr(a) for a in relevant]
+    assert any("TaskTrade(iron_ore" in n for n in names)
+    assert not any("TaskTrade(other_item" in n for n in names)
