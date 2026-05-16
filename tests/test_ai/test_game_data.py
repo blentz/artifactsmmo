@@ -448,3 +448,37 @@ def test_load_bank_metadata_captures_capacity_and_expansion_cost(monkeypatch):
     gd._load_bank_metadata(client=None)
     assert gd._bank_capacity == 30
     assert gd._next_expansion_cost == 1000
+
+
+def test_load_maps_captures_transition_tiles(monkeypatch):
+    """Tiles with non-null transition should be indexed in _transition_tiles."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeInteractions:
+        def __init__(self, content, transition):
+            self.content = content
+            self.transition = transition
+
+    class FakeTile:
+        def __init__(self, x, y, transition=None):
+            self.x = x
+            self.y = y
+            self.interactions = FakeInteractions(content=None, transition=transition)
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_get_all_maps(client, layer, page, size):
+        if page == 1:
+            return FakeResult([
+                FakeTile(0, 0, transition=None),
+                FakeTile(5, 5, transition="dungeon_a"),
+                FakeTile(7, 7, transition="zone_b"),
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_all_maps", fake_get_all_maps)
+    gd = GameData()
+    gd._load_maps(client=None)
+    assert gd._transition_tiles == {(5, 5), (7, 7)}

@@ -46,6 +46,7 @@ class GameData:
     _bank_capacity: int = 0
     _next_expansion_cost: int = 0
     _slots_per_expansion: int = 0  # learned after the first expansion (response delta)
+    _transition_tiles: set[tuple[int, int]] = field(default_factory=set)
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
@@ -169,11 +170,16 @@ class GameData:
                 break
 
             for tile in result.data:
+                loc = (tile.x, tile.y)
+
+                transition = tile.interactions.transition
+                if not isinstance(transition, Unset) and transition is not None:
+                    self._transition_tiles.add(loc)
+
                 content = tile.interactions.content
                 if isinstance(content, Unset) or content is None:
                     continue
 
-                loc = (tile.x, tile.y)
                 ct = content.type_
                 code = content.code
 
