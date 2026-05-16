@@ -4,8 +4,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
+from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -211,3 +216,37 @@ def test_player_includes_sell_inventory_goal_when_bank_locked():
 
     goals = player._build_goals()
     assert any(isinstance(g, SellInventoryGoal) for g in goals)
+
+
+def test_player_builds_phase_b_actions():
+    """All Phase B actions should appear in _build_actions output."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    player.game_data._bank_location = (4, 0)
+    player.game_data._taskmaster_location = (1, 2)
+    player.game_data._transition_tiles = {(5, 5)}
+    player.game_data._bank_capacity = 30
+    player.game_data._next_expansion_cost = 1000
+    player._bank_accessible = True
+    player.state = make_state(task_code="iron_ore", task_type="items")
+
+    actions = player._build_actions()
+    classes = {type(a).__name__ for a in actions}
+    assert "BuyBankExpansionAction" in classes
+    assert "MapTransitionAction" in classes
+    assert "DepositGoldAction" in classes
+    assert "WithdrawGoldAction" in classes
+    # TaskTradeAction is built per-task — present only when task is items-type
+    assert "TaskTradeAction" in classes
+
+
+def test_player_includes_expand_bank_goal():
+    """ExpandBankGoal should appear in _build_goals output."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    player.game_data._monster_level = {"chicken": 1}
+    player._bank_accessible = True
+    player.state = make_state()
+
+    goals = player._build_goals()
+    assert any(isinstance(g, ExpandBankGoal) for g in goals)

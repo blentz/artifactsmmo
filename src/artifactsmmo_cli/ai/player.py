@@ -13,6 +13,8 @@ from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get imp
 from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
 
 from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
+from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
+from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -26,18 +28,21 @@ from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskCancelAction, TaskExchangeAction
+from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, FarmMonsterGoal
+from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
-from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -394,6 +399,21 @@ class GamePlayer:
                     npc_location=npc_loc,
                 ))
 
+        # Phase B: bank expansion, transitions, gold management
+        actions.append(BuyBankExpansionAction(bank_location=bank, accessible=self._bank_accessible))
+        actions.append(MapTransitionAction())
+        # Gold deposit/withdraw with typical small quantities; let planner decide
+        for q in (50, 100, 500, 1000):
+            actions.append(DepositGoldAction(quantity=q, bank_location=bank, accessible=self._bank_accessible))
+            actions.append(WithdrawGoldAction(quantity=q, bank_location=bank, accessible=self._bank_accessible))
+        # Task trade is built only when current task is items-type
+        if self.state is not None and self.state.task_type == "items" and self.state.task_code:
+            actions.append(TaskTradeAction(
+                code=self.state.task_code,
+                quantity=1,
+                taskmaster_location=taskmaster,
+            ))
+
         return actions
 
     def _build_goals(self) -> list[Goal]:
@@ -420,6 +440,7 @@ class GamePlayer:
             RestoreHPGoal(),
             DepositInventoryGoal(bank_accessible=self._bank_accessible),
             SellInventoryGoal(bank_accessible=self._bank_accessible),
+            ExpandBankGoal(bank_accessible=self._bank_accessible),
             UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp, target_monster=self._bank_unlock_monster),
             ClaimPendingGoal(),
             CompleteTaskGoal(),
