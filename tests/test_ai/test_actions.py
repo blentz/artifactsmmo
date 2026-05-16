@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskExchangeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.player import _delete_cost
 from tests.test_ai.fixtures import make_state
 
 
@@ -584,7 +585,6 @@ class TestRaiseForError:
 
 def test_delete_cost_weight_rule():
     """Verify cost: ingredient first (50), then sellable (25), else worthless (5)."""
-    from artifactsmmo_cli.ai.player import _delete_cost
 
     class FakeGD:
         def __init__(self, recipes=None, sell_prices=None):
