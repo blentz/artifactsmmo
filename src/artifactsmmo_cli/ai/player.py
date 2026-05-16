@@ -43,7 +43,7 @@ from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGo
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -150,6 +150,17 @@ class GamePlayer:
 
             if not plan or selected_goal is None:
                 print(f"[{self._now()}] No plan found — waiting 10s")
+                # Record no-plan cycle for NO_PROGRESS detection
+                self._detector.record(self._make_cycle_record(
+                    goal_name="<none>",
+                    action_name="<no_plan>",
+                    planned_depth=0,
+                    planner_timed_out=self.planner.last_stats.timed_out if self.state else False,
+                    succeeded=False,
+                ))
+                signal = self._detector.detect()
+                if signal is not None:
+                    self._handle_stuck(signal, client)
                 time.sleep(10)
                 continue
 
@@ -167,6 +178,20 @@ class GamePlayer:
                 self.state = action.apply(self.state, self.game_data)
             else:
                 self.state = self._execute(action, client)
+
+            # After action.execute (or dry_run apply), record the cycle for stuck detection
+            self._detector.record(self._make_cycle_record(
+                goal_name=repr(selected_goal),
+                action_name=repr(action),
+                planned_depth=len(plan),
+                planner_timed_out=self.planner.last_stats.timed_out,
+                succeeded=True,
+            ))
+            self._actions_since_full_refresh += 1
+            self._decrement_suppressions()
+            signal = self._detector.detect()
+            if signal is not None:
+                self._handle_stuck(signal, client)
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> WorldState:
         """Execute an action and return the updated WorldState."""
@@ -312,6 +337,22 @@ class GamePlayer:
         self._suppressed_goals = {
             name: n - 1 for name, n in self._suppressed_goals.items() if n > 1
         }
+
+    def _make_cycle_record(self, goal_name: str, action_name: str,
+                           planned_depth: int, planner_timed_out: bool, succeeded: bool) -> CycleRecord:
+        """Build a CycleRecord from current state and given action/goal info."""
+        return CycleRecord(
+            state_key=_state_key(self.state) if self.state else (),
+            goal_name=goal_name,
+            action_name=action_name,
+            planned_depth=planned_depth,
+            planner_timed_out=planner_timed_out,
+            succeeded=succeeded,
+        )
+
+    def _handle_stuck(self, signal: StuckSignal, client) -> None:
+        """Apply recovery action for a stuck signal. Filled in C7."""
+        self._detector.acknowledge(signal)
 
     def _build_actions(self) -> list[Action]:
         """Build the action list. Each action handles its own movement in execute() and cost()."""
