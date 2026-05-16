@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
+from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
@@ -90,7 +91,8 @@ def _format_plan(plan: list[Action]) -> str:
 class GamePlayer:
     """Autonomous GOAP AI player for a single character."""
 
-    def __init__(self, character: str, verbose: bool = False, dry_run: bool = False) -> None:
+    def __init__(self, character: str, verbose: bool = False, dry_run: bool = False,
+                 tracer: Tracer | None = None) -> None:
         self.character = character
         self.verbose = verbose
         self.dry_run = dry_run
@@ -106,6 +108,8 @@ class GamePlayer:
         self._recovery_level: dict[StuckSignal, int] = {}
         self._last_goal_name: str | None = None
         self._wildcard_mode: bool = False
+        self.tracer: Tracer = tracer or NullTracer()
+        self._cycle_counter: int = 0
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -120,79 +124,99 @@ class GamePlayer:
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
-        while True:
-            actions = self._build_actions()
-            self._maybe_periodic_refresh(client)
-            self._wait_for_cooldown()
+        try:
+            while True:
+                actions = self._build_actions()
+                self._maybe_periodic_refresh(client)
+                self._wait_for_cooldown()
 
-            goals = self._build_goals()
-            goals.sort(key=lambda g: g.priority(self.state, self.game_data), reverse=True)
+                goals = self._build_goals()
+                goals.sort(key=lambda g: g.priority(self.state, self.game_data), reverse=True)
 
-            plan: list[Action] = []
-            selected_goal: Goal | None = None
+                plan: list[Action] = []
+                selected_goal: Goal | None = None
 
-            if self.verbose:
-                goal_summary = "  ".join(
-                    f"{g}={g.priority(self.state, self.game_data):.1f}" for g in goals
-                )
-                print(f"[{self._now()}] Goals: {goal_summary}")
+                if self.verbose:
+                    goal_summary = "  ".join(
+                        f"{g}={g.priority(self.state, self.game_data):.1f}" for g in goals
+                    )
+                    print(f"[{self._now()}] Goals: {goal_summary}")
 
-            for goal in goals:
-                if goal.priority(self.state, self.game_data) <= 0:
-                    break
-                plan = self.planner.plan(self.state, goal, actions, self.game_data)
-                if self.verbose and not plan:
-                    s = self.planner.last_stats
-                    print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
-                if plan:
-                    selected_goal = goal
-                    self._last_goal_name = repr(selected_goal)
-                    break
+                for goal in goals:
+                    if goal.priority(self.state, self.game_data) <= 0:
+                        break
+                    plan = self.planner.plan(self.state, goal, actions, self.game_data)
+                    if self.verbose and not plan:
+                        s = self.planner.last_stats
+                        print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
+                    if plan:
+                        selected_goal = goal
+                        self._last_goal_name = repr(selected_goal)
+                        break
 
-            if not plan or selected_goal is None:
-                print(f"[{self._now()}] No plan found — waiting 5s")
-                # Record no-plan cycle for NO_PROGRESS detection
+                if not plan or selected_goal is None:
+                    print(f"[{self._now()}] No plan found — waiting 5s")
+                    # Record no-plan cycle for NO_PROGRESS detection
+                    self._detector.record(self._make_cycle_record(
+                        goal_name="<none>",
+                        action_name="<no_plan>",
+                        planned_depth=0,
+                        planner_timed_out=self.planner.last_stats.timed_out if self.state else False,
+                        succeeded=False,
+                    ))
+                    self._emit_trace(
+                        action_name="<no_plan>",
+                        goal_name="<none>",
+                        outcome="no_plan",
+                        planner_stats={"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 0},
+                    )
+                    signal = self._detector.detect()
+                    if signal is not None:
+                        self._handle_stuck(signal, client)
+                    time.sleep(5)
+                    continue
+
+                if self.verbose:
+                    plan_str = _format_plan(plan)
+                    relevant = selected_goal.relevant_actions(actions, self.state, self.game_data)
+                    applicable = [repr(a) for a in relevant if a.is_applicable(self.state, self.game_data)]
+                    print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(self.state, self.game_data):.1f})  Plan: {plan_str}")
+                    print(f"[{self._now()}] Applicable: {applicable}")
+
+                action = plan[0]
+                self._log_action(action, selected_goal, plan)
+
+                if self.dry_run:
+                    self.state = action.apply(self.state, self.game_data)
+                else:
+                    self.state = self._execute(action, client)
+
+                # After action.execute (or dry_run apply), record the cycle for stuck detection
                 self._detector.record(self._make_cycle_record(
-                    goal_name="<none>",
-                    action_name="<no_plan>",
-                    planned_depth=0,
-                    planner_timed_out=self.planner.last_stats.timed_out if self.state else False,
-                    succeeded=False,
+                    goal_name=repr(selected_goal),
+                    action_name=repr(action),
+                    planned_depth=len(plan),
+                    planner_timed_out=self.planner.last_stats.timed_out,
+                    succeeded=True,
                 ))
+                self._actions_since_full_refresh += 1
+                self._decrement_suppressions()
+                self._emit_trace(
+                    action_name=repr(action),
+                    goal_name=repr(selected_goal),
+                    outcome="ok",
+                    planner_stats={
+                        "nodes": self.planner.last_stats.nodes_explored,
+                        "depth": self.planner.last_stats.max_depth_reached,
+                        "timed_out": self.planner.last_stats.timed_out,
+                        "plan_len": len(plan),
+                    },
+                )
                 signal = self._detector.detect()
                 if signal is not None:
                     self._handle_stuck(signal, client)
-                time.sleep(5)
-                continue
-
-            if self.verbose:
-                plan_str = _format_plan(plan)
-                relevant = selected_goal.relevant_actions(actions, self.state, self.game_data)
-                applicable = [repr(a) for a in relevant if a.is_applicable(self.state, self.game_data)]
-                print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(self.state, self.game_data):.1f})  Plan: {plan_str}")
-                print(f"[{self._now()}] Applicable: {applicable}")
-
-            action = plan[0]
-            self._log_action(action, selected_goal, plan)
-
-            if self.dry_run:
-                self.state = action.apply(self.state, self.game_data)
-            else:
-                self.state = self._execute(action, client)
-
-            # After action.execute (or dry_run apply), record the cycle for stuck detection
-            self._detector.record(self._make_cycle_record(
-                goal_name=repr(selected_goal),
-                action_name=repr(action),
-                planned_depth=len(plan),
-                planner_timed_out=self.planner.last_stats.timed_out,
-                succeeded=True,
-            ))
-            self._actions_since_full_refresh += 1
-            self._decrement_suppressions()
-            signal = self._detector.detect()
-            if signal is not None:
-                self._handle_stuck(signal, client)
+        finally:
+            self.tracer.close()
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> WorldState:
         """Execute an action and return the updated WorldState."""
@@ -355,6 +379,39 @@ class GamePlayer:
             planner_timed_out=planner_timed_out,
             succeeded=succeeded,
         )
+
+    def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
+                    planner_stats: dict, recovery: dict | None = None) -> None:
+        """Emit one per-cycle record to the tracer."""
+        if self.state is None:
+            return
+        cooldown_remaining = 0.0
+        if self.state.cooldown_expires is not None:
+            cooldown_remaining = max(0.0,
+                (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds())
+        record = {
+            "ts": datetime.now(tz=timezone.utc).isoformat(),
+            "cycle": self._cycle_counter,
+            "state": {
+                "x": self.state.x, "y": self.state.y,
+                "hp": self.state.hp, "max_hp": self.state.max_hp,
+                "gold": self.state.gold, "level": self.state.level,
+                "inventory_used": self.state.inventory_used,
+                "inventory_max": self.state.inventory_max,
+                "bank_accessible": self._bank_accessible,
+                "task_code": self.state.task_code, "task_type": self.state.task_type,
+                "task_progress": self.state.task_progress, "task_total": self.state.task_total,
+            },
+            "cooldown_remaining_at_cycle_start": cooldown_remaining,
+            "selected_goal": goal_name,
+            "planner": planner_stats,
+            "action": action_name,
+            "outcome": outcome,
+            "recovery": recovery,
+            "suppressed_goals": list(self._suppressed_goals.keys()),
+        }
+        self.tracer.write_cycle(record)
+        self._cycle_counter += 1
 
     def _handle_stuck(self, signal: StuckSignal, client) -> None:
         """Apply recovery action for a stuck signal at its current escalation level."""
