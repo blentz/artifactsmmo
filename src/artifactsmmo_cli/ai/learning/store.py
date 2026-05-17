@@ -136,5 +136,41 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+    def goal_avg_cycles_to_satisfy(self, goal_repr: str, window: int = 20) -> float | None:
+        """Median cycles-to-satisfy over last `window` completions. None if < 5 samples."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.cycles_to_satisfy)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.selected_goal == goal_repr,
+                        Cycle.cycles_to_satisfy.is_not(None),
+                    )
+                    .order_by(Cycle.ts.desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            if len(rows) < 5:
+                return None
+            return statistics.median(rows)
+        except SQLAlchemyError:
+            return None
+
+    def sample_count(self, action_repr: str) -> int:
+        """Number of cycles recorded for this action_repr and the store's character."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.id)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_repr == action_repr,
+                    )
+                )
+                return len(list(s.exec(stmt)))
+        except SQLAlchemyError:
+            return 0
+
     def close(self) -> None:
         self._engine.dispose()

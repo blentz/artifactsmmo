@@ -269,3 +269,45 @@ class TestActionEffect:
         _insert_cycles_with_deltas(store, "X", [{"delta_xp": 10}] * 5)
         assert store.action_effect("X", "nonexistent_field") is None
         store.close()
+
+
+def _insert_goal_satisfactions(store, goal_repr, cycle_deltas):
+    for i, cd in enumerate(cycle_deltas):
+        store.record_cycle(Cycle(
+            ts=f"2026-05-17T00:00:{i:02d}+00:00",
+            session_id="x", cycle_index=i, character="x", outcome="ok",
+            selected_goal=goal_repr,
+            cycles_to_satisfy=cd,
+        ))
+
+
+class TestGoalAvgCyclesToSatisfy:
+    def test_returns_none_when_fewer_than_5_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_goal_satisfactions(store, "FarmMonster(x)", [3, 5, 7])
+        assert store.goal_avg_cycles_to_satisfy("FarmMonster(x)") is None
+        store.close()
+
+    def test_returns_median_when_enough_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_goal_satisfactions(store, "FarmMonster(x)", [4, 5, 6, 7, 8])
+        assert store.goal_avg_cycles_to_satisfy("FarmMonster(x)") == 6.0
+        store.close()
+
+
+class TestSampleCount:
+    def test_returns_zero_for_unknown_action(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        assert store.sample_count("Nothing(x)") == 0
+        store.close()
+
+    def test_counts_only_matching_action_and_character(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 7)
+        _insert_cycles(store, "Fight(y)", [10.0] * 3)
+        assert store.sample_count("Fight(x)") == 7
+        assert store.sample_count("Fight(y)") == 3
+        store.close()
