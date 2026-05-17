@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from artifactsmmo_cli.ai.learning.models import Cycle, CycleBase, Session
+from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 
 class TestCycle:
@@ -80,3 +81,39 @@ class TestSession:
         )
         assert s.cycle_count == 42
         assert s.exit_reason == "normal"
+
+
+class TestActionStats:
+    def test_construction_and_immutability(self):
+        s = ActionStats(
+            action_repr="Fight(yellow_slime)",
+            sample_count=10,
+            median_cost_seconds=12.3,
+            success_rate=0.9,
+            median_delta_xp=15.0,
+            median_delta_gold=0.0,
+        )
+        assert s.action_repr == "Fight(yellow_slime)"
+        with pytest.raises(ValidationError):
+            s.action_repr = "changed"  # type: ignore[misc]
+
+
+class TestGoalStats:
+    def test_construction(self):
+        s = GoalStats(
+            goal_repr="FarmMonster(yellow_slime)",
+            sample_count=3,
+            avg_cycles_to_satisfy=12.5,
+            satisfaction_rate=0.66,
+        )
+        assert s.sample_count == 3
+        assert s.avg_cycles_to_satisfy == 12.5
+
+    def test_avg_cycles_can_be_none(self):
+        s = GoalStats(
+            goal_repr="X",
+            sample_count=0,
+            avg_cycles_to_satisfy=None,
+            satisfaction_rate=0.0,
+        )
+        assert s.avg_cycles_to_satisfy is None
