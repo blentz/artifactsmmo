@@ -89,5 +89,25 @@ class LearningStore:
         except SQLAlchemyError:
             return default
 
+    def success_rate(self, action_repr: str, window: int = 50) -> float:
+        """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.outcome)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_repr == action_repr,
+                    )
+                    .order_by(Cycle.ts.desc())
+                    .limit(window)
+                )
+                outcomes = list(s.exec(stmt))
+            if len(outcomes) < 5:
+                return 1.0
+            return sum(1 for o in outcomes if o == "ok") / len(outcomes)
+        except SQLAlchemyError:
+            return 1.0
+
     def close(self) -> None:
         self._engine.dispose()

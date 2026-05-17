@@ -193,3 +193,34 @@ class TestActionCost:
                        outcomes=["ok", "ok", "ok", "error:HTTP_497", "error:HTTP_497"])
         assert store.action_cost("Fight(x)", default=42.0) == 42.0
         store.close()
+
+
+class TestSuccessRate:
+    def test_returns_1_when_fewer_than_5_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 3, outcomes=["error:X"] * 3)
+        assert store.success_rate("Fight(x)") == 1.0
+        store.close()
+
+    def test_all_ok_returns_1(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 10, outcomes=["ok"] * 10)
+        assert store.success_rate("Fight(x)") == 1.0
+        store.close()
+
+    def test_all_error_returns_0(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 10, outcomes=["error:X"] * 10)
+        assert store.success_rate("Fight(x)") == 0.0
+        store.close()
+
+    def test_mixed_returns_fraction(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 10,
+                       outcomes=["ok"] * 7 + ["error:X"] * 3)
+        assert store.success_rate("Fight(x)") == 0.7
+        store.close()
