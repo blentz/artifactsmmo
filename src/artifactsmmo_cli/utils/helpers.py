@@ -6,6 +6,7 @@ import traceback
 
 import httpx
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 
 from artifactsmmo_cli.models.responses import CLIResponse
 
@@ -91,20 +92,24 @@ def get_error_message(code: int) -> str:
 
 
 def handle_api_response(response: Any, success_message: str | None = None) -> CLIResponse[Any]:
-    """Handle API response and convert to CLIResponse."""
-    try:
-        if response is None:
-            return CLIResponse.error_response("No response received from API")
+    """Handle API response and convert to CLIResponse.
 
-        # Check if response has data attribute (successful response)
-        if hasattr(response, "data"):
-            return CLIResponse.success_response(response.data, success_message)
+    Detects ErrorResponseSchema and returns an error CLIResponse with the
+    HTTP code + message so callers don't accidentally render error data
+    as if it were a successful response.
+    """
+    if response is None:
+        return CLIResponse.error_response("No response received from API")
 
-        # If response is the data itself
-        return CLIResponse.success_response(response, success_message)
+    if isinstance(response, ErrorResponseSchema):
+        code = response.error.code
+        message = response.error.message
+        return CLIResponse.error_response(f"HTTP {code}: {message}")
 
-    except Exception as e:
-        return CLIResponse.error_response(f"Unexpected error: {str(e)}")
+    # Successful response: prefer .data attribute, else return the response itself
+    if hasattr(response, "data"):
+        return CLIResponse.success_response(response.data, success_message)
+    return CLIResponse.success_response(response, success_message)
 
 
 def handle_api_error(error: Exception) -> CLIResponse[Any]:

@@ -6,6 +6,8 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
+from artifactsmmo_api_client.models.error_schema import ErrorSchema
 
 from artifactsmmo_cli.utils.helpers import (
     extract_character_data,
@@ -49,19 +51,20 @@ class TestHandleApiResponse:
         assert result.data == data
         assert result.message == "Success!"
 
-    def test_handle_response_with_exception(self):
-        """Test handling response that raises exception."""
-        # Create a mock that raises exception when the function tries to access it
-        mock_response = Mock()
-        mock_response.data = Mock()
-        # Make the CLIResponse.success_response call fail
-        with patch("artifactsmmo_cli.utils.helpers.CLIResponse.success_response") as mock_success:
-            mock_success.side_effect = Exception("Test error")
+    def test_handle_error_response_schema(self):
+        """ErrorResponseSchema should produce a CLIResponse error with HTTP code + message."""
+        err = ErrorResponseSchema(error=ErrorSchema(code=404, message="Character not found."))
+        result = handle_api_response(err)
+        assert result.success is False
+        assert "404" in result.error
+        assert "Character not found" in result.error
 
-            result = handle_api_response(mock_response)
-
-            assert not result.success
-            assert "Unexpected error: Test error" in result.error
+    def test_handle_error_response_schema_includes_http_prefix(self):
+        """ErrorResponseSchema error message should start with 'HTTP <code>'."""
+        err = ErrorResponseSchema(error=ErrorSchema(code=498, message="Character not found."))
+        result = handle_api_response(err)
+        assert result.success is False
+        assert result.error == "HTTP 498: Character not found."
 
 
 class TestHandleApiError:
