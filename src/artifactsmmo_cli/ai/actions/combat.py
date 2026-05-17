@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import sync as action_fight
 from artifactsmmo_api_client.models.fight_request_schema import FightRequestSchema
+from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
@@ -92,12 +93,18 @@ class FightAction(Action):
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_fight(client=client, name=state.character, body=FightRequestSchema())
         result = Action._raise_for_error(result, f"Fight {self.monster_code}")
-        return WorldState.from_character_schema(
+        new_state = WorldState.from_character_schema(
             result.data.characters[0],
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
         )
+        # Detect defeat: API returns 200 OK on loss; result.data.fight.result == LOSS.
+        # Raise so the player loop records outcome=error:fight_lost and learning
+        # doesn't fold near-death zero-XP cycles into action_cost/success_rate.
+        if result.data.fight.result == FightResult.LOSS:
+            raise RuntimeError(f"fight_lost: {self.monster_code} (turns={result.data.fight.turns})")
+        return new_state
 
     def __repr__(self) -> str:
         return f"Fight({self.monster_code})"
