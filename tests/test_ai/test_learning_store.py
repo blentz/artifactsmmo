@@ -147,3 +147,49 @@ def test_package_reexport():
     from artifactsmmo_cli.ai.learning import LearningStore as RootImport
     from artifactsmmo_cli.ai.learning.store import LearningStore as ModuleImport
     assert RootImport is ModuleImport
+
+
+def _insert_cycles(store, action_repr, cooldowns, outcomes=None):
+    """Helper: insert N cycles with given cooldowns and outcomes."""
+    outcomes = outcomes or ["ok"] * len(cooldowns)
+    for i, (cd, oc) in enumerate(zip(cooldowns, outcomes)):
+        store.record_cycle(Cycle(
+            ts=f"2026-05-17T00:00:{i:02d}+00:00",
+            session_id="x", cycle_index=i, character="x", outcome=oc,
+            action_repr=action_repr,
+            actual_cooldown_seconds=cd,
+        ))
+
+
+class TestActionCost:
+    def test_returns_default_when_fewer_than_5_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0, 11.0, 12.0])
+        assert store.action_cost("Fight(x)", default=99.0) == 99.0
+        store.close()
+
+    def test_returns_median_when_at_least_5_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0, 11.0, 12.0, 13.0, 14.0])
+        assert store.action_cost("Fight(x)", default=99.0) == 12.0
+        store.close()
+
+    def test_filters_by_action_repr(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 5)
+        _insert_cycles(store, "Fight(y)", [20.0] * 5)
+        assert store.action_cost("Fight(x)", default=99.0) == 10.0
+        assert store.action_cost("Fight(y)", default=99.0) == 20.0
+        store.close()
+
+    def test_ignores_failed_actions(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)",
+                       cooldowns=[10.0, 10.0, 10.0, 99.0, 99.0],
+                       outcomes=["ok", "ok", "ok", "error:HTTP_497", "error:HTTP_497"])
+        assert store.action_cost("Fight(x)", default=42.0) == 42.0
+        store.close()

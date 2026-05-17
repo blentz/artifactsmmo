@@ -1,12 +1,13 @@
 """SQLModel-backed learning store for autoregressive GOAP planning."""
 
+import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
-from sqlmodel import SQLModel, create_engine
+from sqlmodel import SQLModel, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 
@@ -65,6 +66,28 @@ class LearningStore:
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[learning] record_cycle failed: {e}")
+
+    def action_cost(self, action_repr: str, default: float, window: int = 50) -> float:
+        """Median actual_cooldown_seconds over last `window` ok cycles, or default if < 5 samples."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.actual_cooldown_seconds)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_repr == action_repr,
+                        Cycle.outcome == "ok",
+                        Cycle.actual_cooldown_seconds.is_not(None),
+                    )
+                    .order_by(Cycle.ts.desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            if len(rows) < 5:
+                return default
+            return statistics.median(rows)
+        except SQLAlchemyError:
+            return default
 
     def close(self) -> None:
         self._engine.dispose()
