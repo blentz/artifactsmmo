@@ -222,8 +222,9 @@ class GamePlayer:
                 prev_state_for_learning = self.state
                 if self.dry_run:
                     new_state = action.apply(state, game_data)
+                    outcome = "ok"
                 else:
-                    new_state = self._execute(action, client)
+                    new_state, outcome = self._execute(action, client)
 
                 now = datetime.now(tz=timezone.utc)
                 cooldown_remaining = 0.0
@@ -231,14 +232,14 @@ class GamePlayer:
                     cooldown_remaining = max(0.0, (new_state.cooldown_expires - now).total_seconds())
                 predicted = action.cost(prev_state_for_learning, game_data, self.history)
                 cycles_to_satisfy = None
-                if selected_goal.is_satisfied(new_state):
+                if outcome == "ok" and selected_goal.is_satisfied(new_state):
                     cycles_to_satisfy = self._compute_cycles_to_satisfy(repr(selected_goal), self._cycle_counter)
                 self._record_learning_cycle(
                     prev_state=prev_state_for_learning,
                     new_state=new_state,
                     action_repr=repr(action),
                     action_class=type(action).__name__,
-                    outcome="ok",
+                    outcome=outcome,
                     selected_goal=repr(selected_goal),
                     predicted_cost=predicted,
                     actual_cooldown_seconds=cooldown_remaining,
@@ -256,14 +257,14 @@ class GamePlayer:
                     action_name=repr(action),
                     planned_depth=len(plan),
                     planner_timed_out=self.planner.last_stats.timed_out,
-                    succeeded=True,
+                    succeeded=(outcome == "ok"),
                 ))
                 self._actions_since_full_refresh += 1
                 self._decrement_suppressions()
                 self._emit_trace(
                     action_name=repr(action),
                     goal_name=repr(selected_goal),
-                    outcome="ok",
+                    outcome=outcome,
                     planner_stats={
                         "nodes": self.planner.last_stats.nodes_explored,
                         "depth": self.planner.last_stats.max_depth_reached,
@@ -277,8 +278,13 @@ class GamePlayer:
         finally:
             self.tracer.close()
 
-    def _execute(self, action: Action, client: AuthenticatedClient) -> WorldState:
-        """Execute an action and return the updated WorldState."""
+    def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
+        """Execute an action. Returns (new_state, outcome_str).
+
+        outcome is "ok" on success, or "error:<kind>" on RuntimeError. Outcome is
+        what gets recorded by _record_learning_cycle so learned costs/success rates
+        don't conflate wins with losses.
+        """
         assert self.state is not None
         try:
             new_state = action.execute(self.state, client)
@@ -288,11 +294,12 @@ class GamePlayer:
             # Re-sync pending items after claiming one
             if isinstance(action, ClaimPendingItemAction):
                 new_state = self._sync_pending(client, new_state)
-            return new_state
+            return new_state, "ok"
         except RuntimeError as e:
             msg = str(e)
             if "HTTP 499" in msg:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
+                outcome = "error:cooldown"
             elif "HTTP 496" in msg and isinstance(action, (DepositAllAction, WithdrawItemAction)):
                 self._bank_accessible = False
                 self._bank_blocked_since = time.monotonic()
@@ -301,9 +308,20 @@ class GamePlayer:
                     if match:
                         self._bank_unlock_monster = self._resolve_bank_unlock_monster(client, match.group(1))
                 print(f"[{self._now()}] Bank locked (HTTP 496) — fighting {self._bank_unlock_monster or '?'} to unlock; retrying in {_BANK_RETRY_SECONDS:.0f}s")
+                outcome = "error:bank_locked"
+            elif msg.startswith("fight_lost"):
+                print(f"[{self._now()}] Fight lost: {msg} — refreshing state")
+                outcome = "error:fight_lost"
+            elif "HTTP " in msg:
+                # Pull the code out for finer-grained learning labels.
+                http_match = re.search(r"HTTP (\d+)", msg)
+                code = http_match.group(1) if http_match else "unknown"
+                print(f"[{self._now()}] Action failed: {msg} — refreshing state")
+                outcome = f"error:HTTP_{code}"
             else:
                 print(f"[{self._now()}] Action failed: {msg} — refreshing state")
-            return self._fetch_world_state(client)
+                outcome = "error:other"
+            return self._fetch_world_state(client), outcome
 
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""

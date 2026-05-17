@@ -196,6 +196,35 @@ class TestFightAction:
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3
 
+    def test_execute_raises_on_fight_loss(self):
+        """FightAction.execute must surface API-reported loss as a RuntimeError.
+
+        Regression: the API returns 200 OK on a loss but with fight.result == LOSS.
+        Without this raise, the player loop would record outcome=ok and learn that
+        Fight(monster) is a "successful" 0-xp 0-gold near-death action — polluting
+        action_cost/success_rate and trapping the bot in a loss loop.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from artifactsmmo_api_client.models.fight_result import FightResult
+        from artifactsmmo_cli.ai.actions.combat import FightAction
+
+        action = FightAction(monster_code="yellow_slime", locations=frozenset([(1, 0)]))
+        state = make_state(x=1, y=0, hp=100, max_hp=100, level=1)
+
+        char = make_char_schema(x=1, y=0)
+        fight_data = MagicMock()
+        fight_data.characters = [char]
+        fight_data.fight = MagicMock()
+        fight_data.fight.result = FightResult.LOSS
+        fight_data.fight.turns = 3
+        api_result = MagicMock()
+        api_result.data = fight_data
+
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight", return_value=api_result):
+            with pytest.raises(RuntimeError, match="fight_lost"):
+                action.execute(state, client=MagicMock())
+
 
 class TestGatherAction:
     def test_applicable_with_skill_and_locations(self):

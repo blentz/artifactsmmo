@@ -338,9 +338,10 @@ class TestExecute:
         char = make_char_schema(x=3, y=5)
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", return_value=make_api_result(char)):
-            new_state = player._execute(action, client)
+            new_state, outcome = player._execute(action, client)
 
         assert new_state.x == 3
+        assert outcome == "ok"
 
     def test_execute_api_error_refreshes_state(self):
         player = GamePlayer(character="hero")
@@ -354,9 +355,10 @@ class TestExecute:
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("fail")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                new_state = player._execute(action, client)
+                new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
+        assert outcome == "error:other"
 
     def test_execute_http_499_logs_server_cooldown(self):
         player = GamePlayer(character="hero")
@@ -374,9 +376,10 @@ class TestExecute:
         with redirect_stdout(buf):
             with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("HTTP 499: Character in cooldown")):
                 with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                    new_state = player._execute(action, client)
+                    new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
+        assert outcome == "error:cooldown"
         assert "Server cooldown (HTTP 499)" in buf.getvalue()
 
     def test_execute_bank_action_syncs_bank(self):
@@ -400,9 +403,28 @@ class TestExecute:
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item", return_value=make_api_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_result):
                 with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
-                    new_state = player._execute(action, client)
+                    new_state, outcome = player._execute(action, client)
 
         assert new_state.bank_items is not None
+        assert outcome == "ok"
+
+    def test_execute_fight_lost_outcome(self):
+        """FightAction raising 'fight_lost: ...' should yield outcome=error:fight_lost."""
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=1, y=1, hp=100, max_hp=100)
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.combat import FightAction
+        action = FightAction(monster_code="yellow_slime", locations=frozenset({(1, 1)}))
+        char = make_char_schema()
+
+        with patch.object(action, "execute", side_effect=RuntimeError("fight_lost: yellow_slime (turns=3)")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                new_state, outcome = player._execute(action, client)
+
+        assert outcome == "error:fight_lost"
+        assert isinstance(new_state, WorldState)
 
 
 class TestNow:

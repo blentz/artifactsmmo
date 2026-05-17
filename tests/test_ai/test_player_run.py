@@ -390,7 +390,7 @@ def test_run_calls_handle_stuck_after_successful_action():
                         with patch.object(player, "_maybe_periodic_refresh"):
                             # Return RestAction so a plan can be found; patch _execute to avoid HTTP call
                             with patch.object(player, "_build_actions", return_value=[RestAction()]):
-                                with patch.object(player, "_execute", return_value=initial_state):
+                                with patch.object(player, "_execute", return_value=(initial_state, "ok")):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
