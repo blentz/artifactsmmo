@@ -141,3 +141,9 @@ class TestRecordCycle:
         )
         store.record_cycle(cycle)
         store.close()
+
+
+def test_package_reexport():
+    from artifactsmmo_cli.ai.learning import LearningStore as RootImport
+    from artifactsmmo_cli.ai.learning.store import LearningStore as ModuleImport
+    assert RootImport is ModuleImport
