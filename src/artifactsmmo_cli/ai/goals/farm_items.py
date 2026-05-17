@@ -13,7 +13,17 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class FarmItemsGoal(Goal):
-    """Gather or craft the items required by the current items-type task."""
+    """Gather or craft the items required by the current items-type task.
+
+    Per-cycle horizon: satisfied when task_progress advances by at least one
+    submission from the value observed at goal construction. Keeps planner
+    plans short (gather + craft + trade) so the outer loop re-plans after
+    every submission and big tasks (e.g. 23 ash_planks) don't explode the
+    A* search space.
+    """
+
+    def __init__(self, initial_progress: int = 0) -> None:
+        self._initial_progress = initial_progress
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -23,7 +33,7 @@ class FarmItemsGoal(Goal):
             return 0.0
         remaining = state.task_total - state.task_progress
         fraction_remaining = remaining / state.task_total
-        return max(1.0, 28.0 * fraction_remaining)
+        return max(1.0, 35.0 * fraction_remaining)
 
     def priority(self, state: WorldState, game_data: GameData,
                  history: LearningStore | None = None) -> float:
@@ -31,13 +41,16 @@ class FarmItemsGoal(Goal):
             return 0.0
         if state.task_type != "items" or not state.task_code or state.task_total == 0:
             return 0.0
-        return 28.0
+        # Outranks FarmMonster base (30) so the active task is pursued first.
+        return 35.0
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return state.task_total > 0 and state.task_progress >= state.task_total
+        if state.task_total > 0 and state.task_progress >= state.task_total:
+            return True
+        return state.task_progress > self._initial_progress
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        return {"task_progress": state.task_total}
+        return {"task_progress": self._initial_progress + 1}
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         if not state.task_code:
@@ -76,7 +89,10 @@ class FarmItemsGoal(Goal):
 
     @property
     def max_depth(self) -> int:
-        return 200
+        # Per-cycle horizon is one submission worth of work: ~recipe-depth gathers
+        # + crafts + one TaskTrade. 25 gives recipe chains room without blowing
+        # up the search.
+        return 25
 
     def __repr__(self) -> str:
         return "FarmItems"

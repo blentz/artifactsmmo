@@ -1,0 +1,1047 @@
+Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[09:10:34] Loading game data...
+[09:10:40] Fetching character state...
+╭────────────────────────────────── Traceback (most recent call last) ───────────────────────────────────╮
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/commands/play.py:52 in play                         │
+│                                                                                                        │
+│   49 │   │   tracer=tracer, history=store,                                                             │
+│   50 │   )                                                                                             │
+│   51 │   try:                                                                                          │
+│ ❱ 52 │   │   player.run()                                                                              │
+│   53 │   finally:                                                                                      │
+│   54 │   │   if store is not None:                                                                     │
+│   55 │   │   │   store.end_session(exit_reason="normal")                                               │
+│                                                                                                        │
+│ ╭───────────────────────────────────────── locals ─────────────────────────────────────────╮           │
+│ │  character = 'Robby'                                                                     │           │
+│ │    db_path = '/home/blentz/.cache/artifactsmmo/learning.db'                              │           │
+│ │    dry_run = False                                                                       │           │
+│ │      learn = True                                                                        │           │
+│ │   learn_db = None                                                                        │           │
+│ │       path = './traces.jsonl'                                                            │           │
+│ │     player = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f2fbc470590>            │           │
+│ │      store = <artifactsmmo_cli.ai.learning.store.LearningStore object at 0x7f2fbc576510> │           │
+│ │      trace = True                                                                        │           │
+│ │ trace_file = './traces.jsonl'                                                            │           │
+│ │     tracer = <artifactsmmo_cli.ai.tracing.FileTracer object at 0x7f2fbc576660>           │           │
+│ │    verbose = True                                                                        │           │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────╯           │
+│                                                                                                        │
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/ai/player.py:135 in run                             │
+│                                                                                                        │
+│   132 │   │   self.game_data = GameData.load(client)                                                   │
+│   133 │   │                                                                                            │
+│   134 │   │   print(f"[{self._now()}] Fetching character state...")                                    │
+│ ❱ 135 │   │   self.state = self._fetch_world_state(client)                                             │
+│   136 │   │                                                                                            │
+│   137 │   │   print(f"[{self._now()}] Starting play loop for {self.character}")                        │
+│   138                                                                                                  │
+│                                                                                                        │
+│ ╭────────────────────────────────────────────── locals ──────────────────────────────────────────────╮ │
+│ │         client = AuthenticatedClient(                                                              │ │
+│ │                  │   raise_on_unexpected_status=False,                                             │ │
+│ │                  │   _base_url='https://api.artifactsmmo.com',                                     │ │
+│ │                  │   _cookies={},                                                                  │ │
+│ │                  │   _headers={                                                                    │ │
+│ │                  │   │   'Authorization': 'Bearer                                                  │ │
+│ │                  eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls'+84     │ │
+│ │                  │   },                                                                            │ │
+│ │                  │   _timeout=30,                                                                  │ │
+│ │                  │   _verify_ssl=True,                                                             │ │
+│ │                  │   _follow_redirects=False,                                                      │ │
+│ │                  │   _httpx_args={},                                                               │ │
+│ │                  │   _client=<httpx.Client object at 0x7f2fbc4712b0>,                              │ │
+│ │                  │   _async_client=None,                                                           │ │
+│ │                  │                                                                                 │ │
+│ │                  token='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls… │ │
+│ │                  │   prefix='Bearer',                                                              │ │
+│ │                  │   auth_header_name='Authorization'                                              │ │
+│ │                  )                                                                                 │ │
+│ │ client_manager = <artifactsmmo_cli.client_manager.ClientManager object at 0x7f2fbc576270>          │ │
+│ │           self = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f2fbc470590>                  │ │
+│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                        │
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/ai/player.py:311 in _fetch_world_state              │
+│                                                                                                        │
+│   308 │   │   """Query character state from the API."""                                                │
+│   309 │   │   result = get_character(client=client, name=self.character)                               │
+│   310 │   │   if result is None or not hasattr(result, "data") or result.data is None:                 │
+│ ❱ 311 │   │   │   raise RuntimeError(f"Could not fetch character '{self.character}'")                  │
+│   312 │   │                                                                                            │
+│   313 │   │   bank_items = self.state.bank_items if self.state else None                               │
+│   314 │   │   bank_gold = self.state.bank_gold if self.state else None                                 │
+│                                                                                                        │
+│ ╭────────────────────────────────────────────── locals ──────────────────────────────────────────────╮ │
+│ │ client = AuthenticatedClient(                                                                      │ │
+│ │          │   raise_on_unexpected_status=False,                                                     │ │
+│ │          │   _base_url='https://api.artifactsmmo.com',                                             │ │
+│ │          │   _cookies={},                                                                          │ │
+│ │          │   _headers={                                                                            │ │
+│ │          │   │   'Authorization': 'Bearer                                                          │ │
+│ │          eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls'+84             │ │
+│ │          │   },                                                                                    │ │
+│ │          │   _timeout=30,                                                                          │ │
+│ │          │   _verify_ssl=True,                                                                     │ │
+│ │          │   _follow_redirects=False,                                                              │ │
+│ │          │   _httpx_args={},                                                                       │ │
+│ │          │   _client=<httpx.Client object at 0x7f2fbc4712b0>,                                      │ │
+│ │          │   _async_client=None,                                                                   │ │
+│ │          │                                                                                         │ │
+│ │          token='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWlsLmNvbSI'… │ │
+│ │          │   prefix='Bearer',                                                                      │ │
+│ │          │   auth_header_name='Authorization'                                                      │ │
+│ │          )                                                                                         │ │
+│ │ result = ErrorResponseSchema(                                                                      │ │
+│ │          │   error=ErrorSchema(                                                                    │ │
+│ │          │   │   code=404,                                                                         │ │
+│ │          │   │   message='Character not found.',                                                   │ │
+│ │          │   │   data=<artifactsmmo_api_client.types.Unset object at 0x7f2fbdc59fd0>,              │ │
+│ │          │   │   additional_properties={}                                                          │ │
+│ │          │   ),                                                                                    │ │
+│ │          │   additional_properties={}                                                              │ │
+│ │          )                                                                                         │ │
+│ │   self = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f2fbc470590>                          │ │
+│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+RuntimeError: Could not fetch character 'Robby'
+Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[09:11:35] Loading game data...
+[09:11:43] Fetching character state...
+╭────────────────────────────────── Traceback (most recent call last) ───────────────────────────────────╮
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/commands/play.py:52 in play                         │
+│                                                                                                        │
+│   49 │   │   tracer=tracer, history=store,                                                             │
+│   50 │   )                                                                                             │
+│   51 │   try:                                                                                          │
+│ ❱ 52 │   │   player.run()                                                                              │
+│   53 │   finally:                                                                                      │
+│   54 │   │   if store is not None:                                                                     │
+│   55 │   │   │   store.end_session(exit_reason="normal")                                               │
+│                                                                                                        │
+│ ╭───────────────────────────────────────── locals ─────────────────────────────────────────╮           │
+│ │  character = 'Robby'                                                                     │           │
+│ │    db_path = '/home/blentz/.cache/artifactsmmo/learning.db'                              │           │
+│ │    dry_run = False                                                                       │           │
+│ │      learn = True                                                                        │           │
+│ │   learn_db = None                                                                        │           │
+│ │       path = './traces.jsonl'                                                            │           │
+│ │     player = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f69adf60590>            │           │
+│ │      store = <artifactsmmo_cli.ai.learning.store.LearningStore object at 0x7f69ae066510> │           │
+│ │      trace = True                                                                        │           │
+│ │ trace_file = './traces.jsonl'                                                            │           │
+│ │     tracer = <artifactsmmo_cli.ai.tracing.FileTracer object at 0x7f69ae066660>           │           │
+│ │    verbose = True                                                                        │           │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────╯           │
+│                                                                                                        │
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/ai/player.py:135 in run                             │
+│                                                                                                        │
+│   132 │   │   self.game_data = GameData.load(client)                                                   │
+│   133 │   │                                                                                            │
+│   134 │   │   print(f"[{self._now()}] Fetching character state...")                                    │
+│ ❱ 135 │   │   self.state = self._fetch_world_state(client)                                             │
+│   136 │   │                                                                                            │
+│   137 │   │   print(f"[{self._now()}] Starting play loop for {self.character}")                        │
+│   138                                                                                                  │
+│                                                                                                        │
+│ ╭────────────────────────────────────────────── locals ──────────────────────────────────────────────╮ │
+│ │         client = AuthenticatedClient(                                                              │ │
+│ │                  │   raise_on_unexpected_status=False,                                             │ │
+│ │                  │   _base_url='https://api.artifactsmmo.com',                                     │ │
+│ │                  │   _cookies={},                                                                  │ │
+│ │                  │   _headers={                                                                    │ │
+│ │                  │   │   'Authorization': 'Bearer                                                  │ │
+│ │                  eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls'+84     │ │
+│ │                  │   },                                                                            │ │
+│ │                  │   _timeout=30,                                                                  │ │
+│ │                  │   _verify_ssl=True,                                                             │ │
+│ │                  │   _follow_redirects=False,                                                      │ │
+│ │                  │   _httpx_args={},                                                               │ │
+│ │                  │   _client=<httpx.Client object at 0x7f69adf612b0>,                              │ │
+│ │                  │   _async_client=None,                                                           │ │
+│ │                  │                                                                                 │ │
+│ │                  token='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls… │ │
+│ │                  │   prefix='Bearer',                                                              │ │
+│ │                  │   auth_header_name='Authorization'                                              │ │
+│ │                  )                                                                                 │ │
+│ │ client_manager = <artifactsmmo_cli.client_manager.ClientManager object at 0x7f69ae066270>          │ │
+│ │           self = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f69adf60590>                  │ │
+│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                        │
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/ai/player.py:311 in _fetch_world_state              │
+│                                                                                                        │
+│   308 │   │   """Query character state from the API."""                                                │
+│   309 │   │   result = get_character(client=client, name=self.character)                               │
+│   310 │   │   if result is None or not hasattr(result, "data") or result.data is None:                 │
+│ ❱ 311 │   │   │   raise RuntimeError(f"Could not fetch character '{self.character}'")                  │
+│   312 │   │                                                                                            │
+│   313 │   │   bank_items = self.state.bank_items if self.state else None                               │
+│   314 │   │   bank_gold = self.state.bank_gold if self.state else None                                 │
+│                                                                                                        │
+│ ╭────────────────────────────────────────────── locals ──────────────────────────────────────────────╮ │
+│ │ client = AuthenticatedClient(                                                                      │ │
+│ │          │   raise_on_unexpected_status=False,                                                     │ │
+│ │          │   _base_url='https://api.artifactsmmo.com',                                             │ │
+│ │          │   _cookies={},                                                                          │ │
+│ │          │   _headers={                                                                            │ │
+│ │          │   │   'Authorization': 'Bearer                                                          │ │
+│ │          eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls'+84             │ │
+│ │          │   },                                                                                    │ │
+│ │          │   _timeout=30,                                                                          │ │
+│ │          │   _verify_ssl=True,                                                                     │ │
+│ │          │   _follow_redirects=False,                                                              │ │
+│ │          │   _httpx_args={},                                                                       │ │
+│ │          │   _client=<httpx.Client object at 0x7f69adf612b0>,                                      │ │
+│ │          │   _async_client=None,                                                                   │ │
+│ │          │                                                                                         │ │
+│ │          token='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWlsLmNvbSI'… │ │
+│ │          │   prefix='Bearer',                                                                      │ │
+│ │          │   auth_header_name='Authorization'                                                      │ │
+│ │          )                                                                                         │ │
+│ │ result = ErrorResponseSchema(                                                                      │ │
+│ │          │   error=ErrorSchema(                                                                    │ │
+│ │          │   │   code=404,                                                                         │ │
+│ │          │   │   message='Character not found.',                                                   │ │
+│ │          │   │   data=<artifactsmmo_api_client.types.Unset object at 0x7f69af749fd0>,              │ │
+│ │          │   │   additional_properties={}                                                          │ │
+│ │          │   ),                                                                                    │ │
+│ │          │   additional_properties={}                                                              │ │
+│ │          )                                                                                         │ │
+│ │   self = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f69adf60590>                          │ │
+│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+RuntimeError: Could not fetch character 'Robby'
+Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[09:19:13] Loading game data...
+[09:19:19] Fetching character state...
+[09:19:20] get_character returned HTTP 404 (Character not found.); retry 1/3 in 5s
+[09:19:25] get_character returned HTTP 404 (Character not found.); retry 2/3 in 10s
+╭────────────────────────────────── Traceback (most recent call last) ───────────────────────────────────╮
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/commands/play.py:53 in play                         │
+│                                                                                                        │
+│   50 │   )                                                                                             │
+│   51 │   exit_reason = "crash"                                                                         │
+│   52 │   try:                                                                                          │
+│ ❱ 53 │   │   player.run()                                                                              │
+│   54 │   │   exit_reason = "normal"                                                                    │
+│   55 │   except KeyboardInterrupt:                                                                     │
+│   56 │   │   exit_reason = "keyboard_interrupt"                                                        │
+│                                                                                                        │
+│ ╭───────────────────────────────────────── locals ──────────────────────────────────────────╮          │
+│ │   character = 'Robby'                                                                     │          │
+│ │     db_path = '/home/blentz/.cache/artifactsmmo/learning.db'                              │          │
+│ │     dry_run = False                                                                       │          │
+│ │ exit_reason = 'crash'                                                                     │          │
+│ │       learn = True                                                                        │          │
+│ │    learn_db = None                                                                        │          │
+│ │        path = './traces.jsonl'                                                            │          │
+│ │      player = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f775be786e0>            │          │
+│ │       store = <artifactsmmo_cli.ai.learning.store.LearningStore object at 0x7f775bf76660> │          │
+│ │       trace = True                                                                        │          │
+│ │  trace_file = './traces.jsonl'                                                            │          │
+│ │      tracer = <artifactsmmo_cli.ai.tracing.FileTracer object at 0x7f775bf767b0>           │          │
+│ │     verbose = True                                                                        │          │
+│ ╰───────────────────────────────────────────────────────────────────────────────────────────╯          │
+│                                                                                                        │
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/ai/player.py:136 in run                             │
+│                                                                                                        │
+│   133 │   │   self.game_data = GameData.load(client)                                                   │
+│   134 │   │                                                                                            │
+│   135 │   │   print(f"[{self._now()}] Fetching character state...")                                    │
+│ ❱ 136 │   │   self.state = self._fetch_world_state(client)                                             │
+│   137 │   │                                                                                            │
+│   138 │   │   print(f"[{self._now()}] Starting play loop for {self.character}")                        │
+│   139                                                                                                  │
+│                                                                                                        │
+│ ╭────────────────────────────────────────────── locals ──────────────────────────────────────────────╮ │
+│ │         client = AuthenticatedClient(                                                              │ │
+│ │                  │   raise_on_unexpected_status=False,                                             │ │
+│ │                  │   _base_url='https://api.artifactsmmo.com',                                     │ │
+│ │                  │   _cookies={},                                                                  │ │
+│ │                  │   _headers={                                                                    │ │
+│ │                  │   │   'Authorization': 'Bearer                                                  │ │
+│ │                  eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls'+84     │ │
+│ │                  │   },                                                                            │ │
+│ │                  │   _timeout=30,                                                                  │ │
+│ │                  │   _verify_ssl=True,                                                             │ │
+│ │                  │   _follow_redirects=False,                                                      │ │
+│ │                  │   _httpx_args={},                                                               │ │
+│ │                  │   _client=<httpx.Client object at 0x7f775be78d70>,                              │ │
+│ │                  │   _async_client=None,                                                           │ │
+│ │                  │                                                                                 │ │
+│ │                  token='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls… │ │
+│ │                  │   prefix='Bearer',                                                              │ │
+│ │                  │   auth_header_name='Authorization'                                              │ │
+│ │                  )                                                                                 │ │
+│ │ client_manager = <artifactsmmo_cli.client_manager.ClientManager object at 0x7f775bf763c0>          │ │
+│ │           self = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f775be786e0>                  │ │
+│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                        │
+│ /home/blentz/git/artifactsmmo/src/artifactsmmo_cli/ai/player.py:338 in _fetch_world_state              │
+│                                                                                                        │
+│   335 │   │   │   if isinstance(last_result, ErrorResponseSchema):                                     │
+│   336 │   │   │   │   code = str(last_result.error.code)                                               │
+│   337 │   │   │   │   msg = last_result.error.message                                                  │
+│ ❱ 338 │   │   │   raise RuntimeError(                                                                  │
+│   339 │   │   │   │   f"Could not fetch character '{self.character}' after 3 attempts "                │
+│   340 │   │   │   │   f"(last response: HTTP {code} - {msg}). "                                        │
+│   341 │   │   │   │   f"Verify the character exists at https://artifactsmmo.com/account and th         │
+│                                                                                                        │
+│ ╭────────────────────────────────────────────── locals ──────────────────────────────────────────────╮ │
+│ │     attempt = 3                                                                                    │ │
+│ │     backoff = 20.0                                                                                 │ │
+│ │      client = AuthenticatedClient(                                                                 │ │
+│ │               │   raise_on_unexpected_status=False,                                                │ │
+│ │               │   _base_url='https://api.artifactsmmo.com',                                        │ │
+│ │               │   _cookies={},                                                                     │ │
+│ │               │   _headers={                                                                       │ │
+│ │               │   │   'Authorization': 'Bearer                                                     │ │
+│ │               eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWls'+84        │ │
+│ │               │   },                                                                               │ │
+│ │               │   _timeout=30,                                                                     │ │
+│ │               │   _verify_ssl=True,                                                                │ │
+│ │               │   _follow_redirects=False,                                                         │ │
+│ │               │   _httpx_args={},                                                                  │ │
+│ │               │   _client=<httpx.Client object at 0x7f775be78d70>,                                 │ │
+│ │               │   _async_client=None,                                                              │ │
+│ │               │                                                                                    │ │
+│ │               token='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImJyZXR0LmxlbnR6QGdtYWlsLmN… │ │
+│ │               │   prefix='Bearer',                                                                 │ │
+│ │               │   auth_header_name='Authorization'                                                 │ │
+│ │               )                                                                                    │ │
+│ │        code = '404'                                                                                │ │
+│ │ last_result = ErrorResponseSchema(                                                                 │ │
+│ │               │   error=ErrorSchema(                                                               │ │
+│ │               │   │   code=404,                                                                    │ │
+│ │               │   │   message='Character not found.',                                              │ │
+│ │               │   │   data=<artifactsmmo_api_client.types.Unset object at 0x7f775d65a120>,         │ │
+│ │               │   │   additional_properties={}                                                     │ │
+│ │               │   ),                                                                               │ │
+│ │               │   additional_properties={}                                                         │ │
+│ │               )                                                                                    │ │
+│ │         msg = 'Character not found.'                                                               │ │
+│ │        self = <artifactsmmo_cli.ai.player.GamePlayer object at 0x7f775be786e0>                     │ │
+│ ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+RuntimeError: Could not fetch character 'Robby' after 3 attempts (last response: HTTP 404 - Character not 
+found.). Verify the character exists at https://artifactsmmo.com/account and that your API token belongs 
+to the same account.
+Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[09:20:52] Loading game data...
+[09:20:59] Fetching character state...
+[09:20:59] Starting play loop for Robby
+[09:20:59] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(chicken)=30.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:21:01]   No plan for GatherMaterials(copper_dagger): nodes=2111 depth=44 timeout=True
+[09:21:01] Goal: FarmMonster(chicken)(30.0)  Plan: Fight(chicken)
+[09:21:01] Applicable: ['AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Unequip(weapon_slot)']
+[09:21:01] → Fight(chicken)  (goal: FarmMonster(chicken))
+[09:21:04] Server cooldown (HTTP 499) — refreshing state
+[09:21:04] Cooldown: 3.3s
+[09:21:07] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(chicken)=30.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:21:09]   No plan for GatherMaterials(copper_dagger): nodes=2118 depth=44 timeout=True
+[09:21:09] Goal: FarmMonster(chicken)(30.0)  Plan: Fight(chicken)
+[09:21:09] Applicable: ['AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Unequip(weapon_slot)']
+[09:21:09] → Fight(chicken)  (goal: FarmMonster(chicken))
+[09:21:11] Cooldown: 57.3s
+[09:22:08] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=46.7  FarmMonster(chicken)=32.9  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:22:10]   No plan for GatherMaterials(copper_dagger): nodes=1912 depth=37 timeout=True
+[09:22:10] Goal: RestoreHP(46.7)  Plan: Rest
+[09:22:10] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:22:10] → Rest  (goal: RestoreHP)
+[09:22:11] Cooldown: 46.7s
+[09:22:58] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(chicken)=32.9  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:23:00]   No plan for GatherMaterials(copper_dagger): nodes=1977 depth=43 timeout=True
+[09:23:00] Goal: FarmMonster(chicken)(32.9)  Plan: Fight(chicken)
+[09:23:00] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:23:00] → Fight(chicken)  (goal: FarmMonster(chicken))
+[09:23:01] Cooldown: 57.7s
+[09:23:58] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=46.7  FarmMonster(chicken)=35.9  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:24:00]   No plan for GatherMaterials(copper_dagger): nodes=1899 depth=37 timeout=True
+[09:24:00] Goal: RestoreHP(46.7)  Plan: Rest
+[09:24:00] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:24:00] → Rest  (goal: RestoreHP)
+[09:24:01] Cooldown: 46.8s
+[09:24:48] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(chicken)=35.9  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:24:50]   No plan for GatherMaterials(copper_dagger): nodes=2149 depth=44 timeout=True
+[09:24:50] Goal: FarmMonster(chicken)(35.9)  Plan: Fight(chicken)
+[09:24:50] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:24:50] → Fight(chicken)  (goal: FarmMonster(chicken))
+[09:24:51] Cooldown: 57.7s
+[09:25:49] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=46.7  FarmMonster(chicken)=38.8  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:25:51]   No plan for GatherMaterials(copper_dagger): nodes=1965 depth=37 timeout=True
+[09:25:51] Goal: RestoreHP(46.7)  Plan: Rest
+[09:25:51] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:25:51] → Rest  (goal: RestoreHP)
+[09:25:52] Cooldown: 46.6s
+[09:26:38] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(chicken)=38.8  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:26:40]   No plan for GatherMaterials(copper_dagger): nodes=2200 depth=45 timeout=True
+[09:26:40] Goal: FarmMonster(chicken)(38.8)  Plan: Fight(chicken)
+[09:26:40] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:26:40] → Fight(chicken)  (goal: FarmMonster(chicken))
+[09:26:42] [recovery] GOAL_OSCILLATION L1: suppressing {'RestoreHP', 'FarmMonster(chicken)'} for 5 cycles
+[09:26:42] Cooldown: 57.8s
+[09:27:40] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:27:42]   No plan for GatherMaterials(copper_dagger): nodes=1938 depth=37 timeout=True
+[09:27:42] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[09:27:42] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:27:42] → AcceptTask  (goal: AcceptTask)
+[09:27:43] Server cooldown (HTTP 499) — refreshing state
+[09:27:43] Cooldown: 79.0s
+[09:29:02] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:29:04]   No plan for GatherMaterials(copper_dagger): nodes=1997 depth=37 timeout=True
+[09:29:04] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[09:29:04] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:29:04] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[09:29:06] Server cooldown (HTTP 499) — refreshing stateTracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[09:33:15] Loading game data...
+[09:33:21] Fetching character state...
+[09:33:21] Starting play loop for Robby
+[09:33:21] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:33:21] Goal: FarmMonster(chicken)(83.5)  Plan: Fight(yellow_slime)
+[09:33:21] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:33:21] → Fight(yellow_slime)  (goal: FarmMonster(chicken))
+[09:33:22] Server cooldown (HTTP 499) — refreshing state
+[09:33:23] Cooldown: 13.7s
+[09:33:36] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:33:37] Goal: FarmMonster(chicken)(83.5)  Plan: Fight(yellow_slime)
+[09:33:37] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:33:37] → Fight(yellow_slime)  (goal: FarmMonster(chicken))
+[09:33:37] Cooldown: 59.8s
+[09:34:37] Goals: RestoreHP=99.2  FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:34:37] Goal: RestoreHP(99.2)  Plan: Rest
+[09:34:37] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:34:37] → Rest  (goal: RestoreHP)
+[09:34:38] Cooldown: 99.7s
+[09:36:18] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:36:18] Goal: FarmMonster(chicken)(83.5)  Plan: Fight(yellow_slime)
+[09:36:18] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:36:18] → Fight(yellow_slime)  (goal: FarmMonster(chicken))
+[09:36:19] Server cooldown (HTTP 499) — refreshing state
+[09:36:19] Cooldown: 14.1s
+[09:36:33] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:36:35]   No plan for FarmMonster(chicken): nodes=376 depth=6 timeout=True
+[09:36:37]   No plan for GatherMaterials(copper_dagger): nodes=2127 depth=44 timeout=True
+[09:36:37] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[09:36:37] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:36:37] → AcceptTask  (goal: AcceptTask)
+[09:36:38] Server cooldown (HTTP 499) — refreshing state
+[09:36:39] Cooldown: 88.9s
+[09:38:08] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:38:10] Goal: FarmMonster(chicken)(83.5)  Plan: Fight(yellow_slime)
+[09:38:10] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:38:10] → Fight(yellow_slime)  (goal: FarmMonster(chicken))
+[09:38:11] Server cooldown (HTTP 499) — refreshing state
+[09:38:11] Cooldown: 69.1s
+[09:39:20] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:39:22]   No plan for FarmMonster(chicken): nodes=366 depth=6 timeout=True
+[09:39:24]   No plan for GatherMaterials(copper_dagger): nodes=2057 depth=44 timeout=True
+[09:39:24] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[09:39:24] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:39:24] → AcceptTask  (goal: AcceptTask)
+[09:39:25] Server cooldown (HTTP 499) — refreshing state
+[09:39:26] Cooldown: 69.1s
+[09:40:35] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:40:37]   No plan for FarmMonster(chicken): nodes=360 depth=6 timeout=True
+[09:40:39]   No plan for GatherMaterials(copper_dagger): nodes=1975 depth=43 timeout=True
+[09:40:39] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[09:40:39] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:40:39] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[09:40:41] Server cooldown (HTTP 499) — refreshing state
+[09:40:41] Cooldown: 8.7s
+[09:40:50] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:40:52]   No plan for FarmMonster(chicken): nodes=362 depth=7 timeout=True
+[09:40:54]   No plan for GatherMaterials(copper_dagger): nodes=1972 depth=43 timeout=True
+[09:40:54] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[09:40:54] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:40:54] → AcceptTask  (goal: AcceptTask)
+[09:40:55] Server cooldown (HTTP 499) — refreshing state
+[09:40:56] Cooldown: 8.8s
+[09:41:04] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:41:06]   No plan for FarmMonster(chicken): nodes=352 depth=6 timeout=True
+[09:41:08]   No plan for GatherMaterials(copper_dagger): nodes=1959 depth=43 timeout=True
+[09:41:08] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[09:41:08] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:41:08] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[09:41:10] Server cooldown (HTTP 499) — refreshing state
+[09:41:10] Cooldown: 9.1s
+[09:41:19] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:41:21]   No plan for FarmMonster(chicken): nodes=353 depth=7 timeout=True
+[09:41:23]   No plan for GatherMaterials(copper_dagger): nodes=1914 depth=43 timeout=True
+[09:41:23] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[09:41:23] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[09:41:23] → AcceptTask  (goal: AcceptTask)
+[09:41:24] Server cooldown (HTTP 499) — refreshing state
+[09:41:24] [recovery] GOAL_OSCILLATION L1: suppressing {'AcceptTask', 'FarmMonster(chicken)'} for 5 cycles
+[09:41:24] Cooldown: 9.1s
+[09:41:34] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:41:36]   No plan for GatherMaterials(copper_dagger): nodes=1928 depth=43 timeout=True
+[09:41:36] No plan found — waiting 5s
+[09:41:36] [recovery] STATE_FROZEN L1: forcing full refresh
+[09:41:41] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:41:43]   No plan for GatherMaterials(copper_dagger): nodes=1898 depth=43 timeout=True
+[09:41:43] No plan found — waiting 5s
+[09:41:48] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:41:50]   No plan for GatherMaterials(copper_dagger): nodes=1912 depth=43 timeout=True
+[09:41:50] No plan found — waiting 5s
+[09:41:55] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:41:57]   No plan for GatherMaterials(copper_dagger): nodes=1993 depth=43 timeout=True
+[09:41:57] No plan found — waiting 5s
+[09:41:57] [recovery] NO_PROGRESS L1: forcing full refresh
+[09:42:03] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:05]   No plan for GatherMaterials(copper_dagger): nodes=1977 depth=43 timeout=True
+[09:42:05] No plan found — waiting 5s
+[09:42:10] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:12]   No plan for GatherMaterials(copper_dagger): nodes=2015 depth=43 timeout=True
+[09:42:12] No plan found — waiting 5s
+[09:42:17] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:19]   No plan for GatherMaterials(copper_dagger): nodes=1943 depth=43 timeout=True
+[09:42:19] No plan found — waiting 5s
+[09:42:24] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:26]   No plan for GatherMaterials(copper_dagger): nodes=1947 depth=43 timeout=True
+[09:42:26] No plan found — waiting 5s
+[09:42:26] [recovery] NO_PROGRESS L2: switching to wildcard goals
+[09:42:31] Goals: RestoreHP=0.0
+[09:42:31] No plan found — waiting 5s
+[09:42:36] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:38]   No plan for GatherMaterials(copper_dagger): nodes=1946 depth=43 timeout=True
+[09:42:38] No plan found — waiting 5s
+[09:42:43] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:45]   No plan for GatherMaterials(copper_dagger): nodes=1994 depth=43 timeout=True
+[09:42:45] No plan found — waiting 5s
+[09:42:45] [recovery] STATE_FROZEN L2: suppressing AcceptTask for 5 cycles
+[09:42:50] Goals: GatherMaterials(copper_dagger)=50.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[09:42:52]   No plan for GatherMaterials(copper_dagger): nodes=1967 depth=43 timeout=True
+[09:42:52] No plan found — waiting 5s
+[09:42:52] [recovery] NO_PROGRESS L3: exiting (manual intervention)
+Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[10:33:33] Loading game data...
+[10:33:40] Fetching character state...
+[10:33:40] Starting play loop for Robby
+[10:33:40] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:33:40] Goal: FarmMonster(chicken)(83.5)  Plan: Fight(chicken)
+[10:33:40] Applicable: ['Fight(chicken)']
+[10:33:40] → Fight(chicken)  (goal: FarmMonster(chicken))
+[10:33:42] Server cooldown (HTTP 499) — refreshing state
+[10:33:42] Cooldown: 78.4s
+[10:35:01] Goals: FarmMonster(chicken)=83.5  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:35:01] Goal: FarmMonster(chicken)(83.5)  Plan: Fight(chicken)
+[10:35:01] Applicable: ['Fight(chicken)']
+[10:35:01] → Fight(chicken)  (goal: FarmMonster(chicken))
+[10:35:01] Cooldown: 57.7s
+[10:35:59] Goals: FarmMonster(chicken)=89.3  GatherMaterials(copper_dagger)=50.0  RestoreHP=46.7  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:35:59] Goal: FarmMonster(chicken)(89.3)  Plan: Fight(chicken)
+[10:35:59] Applicable: ['Rest', 'Fight(chicken)']
+[10:35:59] → Fight(chicken)  (goal: FarmMonster(chicken))
+[10:36:00] Cooldown: 57.8s
+[10:36:58] Goals: FarmMonster(chicken)=95.2  RestoreHP=93.3  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:36:58] Goal: FarmMonster(chicken)(95.2)  Plan: Rest → Fight(chicken)
+[10:36:58] Applicable: ['Rest']
+[10:36:58] → Rest  [Fight(chicken)]  (goal: FarmMonster(chicken))
+[10:36:58] Cooldown: 93.8s
+[10:38:32] Goals: FarmMonster(chicken)=95.2  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:38:32] Goal: FarmMonster(chicken)(95.2)  Plan: Fight(chicken)
+[10:38:32] Applicable: ['Fight(chicken)']
+[10:38:32] → Fight(chicken)  (goal: FarmMonster(chicken))
+[10:38:33] Cooldown: 57.6s
+[10:39:31] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:39:33]   No plan for GatherMaterials(copper_dagger): nodes=1850 depth=43 timeout=True
+[10:39:33] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[10:39:33] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:39:33] → AcceptTask  (goal: AcceptTask)
+[10:39:34] Server cooldown (HTTP 499) — refreshing state
+[10:39:34] Cooldown: 78.7s
+[10:40:53] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:40:55]   No plan for GatherMaterials(copper_dagger): nodes=1835 depth=42 timeout=True
+[10:40:55] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[10:40:55] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:40:55] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[10:40:57] Server cooldown (HTTP 499) — refreshing state
+[10:40:57] Cooldown: 8.7s
+[10:41:06] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:41:08]   No plan for GatherMaterials(copper_dagger): nodes=1894 depth=43 timeout=True
+[10:41:08] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[10:41:08] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:41:08] → AcceptTask  (goal: AcceptTask)
+[10:41:09] Server cooldown (HTTP 499) — refreshing state
+[10:41:10] [recovery] GOAL_OSCILLATION L1: suppressing {'AcceptTask', 'FarmMonster(chicken)'} for 5 cycles
+[10:41:10] Cooldown: 8.7s
+[10:41:18] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:41:20]   No plan for GatherMaterials(copper_dagger): nodes=1995 depth=43 timeout=True
+[10:41:20] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:41:20] Applicable: ['Fight(yellow_slime)']
+[10:41:20] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:41:23] Server cooldown (HTTP 499) — refreshing state
+[10:41:23] Cooldown: 68.6s
+[10:42:32] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:42:34]   No plan for GatherMaterials(copper_dagger): nodes=1922 depth=43 timeout=True
+[10:42:34] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:42:34] Applicable: ['Fight(yellow_slime)']
+[10:42:34] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:42:34] Cooldown: 63.8s
+[10:43:38] Goals: RestoreHP=99.2  GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:43:38] Goal: RestoreHP(99.2)  Plan: Rest
+[10:43:38] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:43:38] → Rest  (goal: RestoreHP)
+[10:43:39] Cooldown: 99.7s
+[10:45:19] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:45:21]   No plan for GatherMaterials(copper_dagger): nodes=1977 depth=43 timeout=True
+[10:45:21] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:45:21] Applicable: ['Fight(yellow_slime)']
+[10:45:21] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:45:23] Server cooldown (HTTP 499) — refreshing state
+[10:45:23] Cooldown: 13.6s
+[10:45:37] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:45:39]   No plan for GatherMaterials(copper_dagger): nodes=1983 depth=43 timeout=True
+[10:45:39] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:45:39] Applicable: ['Fight(yellow_slime)']
+[10:45:39] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:45:40] Cooldown: 63.8s
+[10:46:43] Goals: RestoreHP=99.2  GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:46:43] Goal: RestoreHP(99.2)  Plan: Rest
+[10:46:43] Applicable: ['Rest', 'DepositAll', 'AcceptTask', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:46:43] → Rest  (goal: RestoreHP)
+[10:46:45] Cooldown: 99.4s
+[10:48:24] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:48:26]   No plan for GatherMaterials(copper_dagger): nodes=1725 depth=42 timeout=True
+[10:48:26] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[10:48:26] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:48:26] → AcceptTask  (goal: AcceptTask)
+[10:48:27] Server cooldown (HTTP 499) — refreshing state
+[10:48:28] Cooldown: 84.0s
+[10:49:52] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:49:54]   No plan for GatherMaterials(copper_dagger): nodes=1659 depth=41 timeout=True
+[10:49:54] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[10:49:54] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:49:54] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[10:49:55] Server cooldown (HTTP 499) — refreshing state
+[10:49:56] Cooldown: 8.8s
+[10:50:04] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:50:06]   No plan for GatherMaterials(copper_dagger): nodes=1654 depth=41 timeout=True
+[10:50:06] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[10:50:06] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:50:06] → AcceptTask  (goal: AcceptTask)
+[10:50:08] Server cooldown (HTTP 499) — refreshing state
+[10:50:08] Cooldown: 9.1s
+[10:50:17] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:50:19]   No plan for GatherMaterials(copper_dagger): nodes=1628 depth=41 timeout=True
+[10:50:19] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[10:50:19] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:50:19] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[10:50:20] Server cooldown (HTTP 499) — refreshing state
+[10:50:20] Cooldown: 9.1s
+[10:50:30] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:50:32]   No plan for GatherMaterials(copper_dagger): nodes=1693 depth=42 timeout=True
+[10:50:32] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[10:50:32] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:50:32] → AcceptTask  (goal: AcceptTask)
+[10:50:33] Server cooldown (HTTP 499) — refreshing state
+[10:50:33] Cooldown: 9.0s
+[10:50:42] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:50:44]   No plan for GatherMaterials(copper_dagger): nodes=1712 depth=42 timeout=True
+[10:50:44] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[10:50:44] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:50:44] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[10:50:46] Server cooldown (HTTP 499) — refreshing state
+[10:50:48] Cooldown: 6.9s
+[10:50:55] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:50:57]   No plan for GatherMaterials(copper_dagger): nodes=1686 depth=42 timeout=True
+[10:50:57] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[10:50:57] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[10:50:57] → AcceptTask  (goal: AcceptTask)
+[10:50:59] Server cooldown (HTTP 499) — refreshing state
+[10:50:59] [recovery] GOAL_OSCILLATION L2: suppressing {'AcceptTask', 'RestoreHP'} for 15 cycles
+[10:50:59] Cooldown: 8.6s
+[10:51:08] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:51:10]   No plan for GatherMaterials(copper_dagger): nodes=1559 depth=41 timeout=True
+[10:51:10] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:51:10] Applicable: ['Fight(yellow_slime)']
+[10:51:10] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:51:11] Server cooldown (HTTP 499) — refreshing state
+[10:51:12] Cooldown: 68.6s
+[10:52:20] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:52:22]   No plan for GatherMaterials(copper_dagger): nodes=1634 depth=41 timeout=True
+[10:52:22] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:52:22] Applicable: ['Fight(yellow_slime)']
+[10:52:22] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:52:23] Cooldown: 63.7s
+[10:53:27] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:53:29]   No plan for GatherMaterials(copper_dagger): nodes=1463 depth=35 timeout=True
+[10:53:29] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Rest → Fight(yellow_slime)
+[10:53:29] Applicable: ['Rest']
+[10:53:29] → Rest  [Fight(yellow_slime)]  (goal: FarmMonster(yellow_slime))
+[10:53:30] Cooldown: 99.7s
+[10:55:09] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:55:11]   No plan for GatherMaterials(copper_dagger): nodes=1899 depth=43 timeout=True
+[10:55:11] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:55:11] Applicable: ['Fight(yellow_slime)']
+[10:55:11] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:55:13] Server cooldown (HTTP 499) — refreshing state
+[10:55:13] Cooldown: 13.9s
+[10:55:27] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:55:29]   No plan for GatherMaterials(copper_dagger): nodes=1947 depth=43 timeout=True
+[10:55:29] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:55:29] Applicable: ['Fight(yellow_slime)']
+[10:55:29] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:55:30] Cooldown: 63.6s
+[10:56:33] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:56:35]   No plan for GatherMaterials(copper_dagger): nodes=1731 depth=36 timeout=True
+[10:56:35] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Rest → Fight(yellow_slime)
+[10:56:35] Applicable: ['Rest']
+[10:56:35] → Rest  [Fight(yellow_slime)]  (goal: FarmMonster(yellow_slime))
+[10:56:36] Cooldown: 99.7s
+[10:58:16] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:58:18]   No plan for GatherMaterials(copper_dagger): nodes=1947 depth=43 timeout=True
+[10:58:18] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:58:18] Applicable: ['Fight(yellow_slime)']
+[10:58:18] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:58:19] Server cooldown (HTTP 499) — refreshing state
+[10:58:20] Cooldown: 13.6s
+[10:58:34] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:58:36]   No plan for GatherMaterials(copper_dagger): nodes=1923 depth=43 timeout=True
+[10:58:36] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[10:58:36] Applicable: ['Fight(yellow_slime)']
+[10:58:36] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[10:58:36] Cooldown: 63.8s
+[10:59:40] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[10:59:42]   No plan for GatherMaterials(copper_dagger): nodes=1688 depth=36 timeout=True
+[10:59:42] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Rest → Fight(yellow_slime)
+[10:59:42] Applicable: ['Rest']
+[10:59:42] → Rest  [Fight(yellow_slime)]  (goal: FarmMonster(yellow_slime))
+[10:59:43] Cooldown: 99.8s
+[11:01:23] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:01:25]   No plan for GatherMaterials(copper_dagger): nodes=1861 depth=43 timeout=True
+[11:01:25] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[11:01:25] Applicable: ['Fight(yellow_slime)']
+[11:01:25] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[11:01:27] Server cooldown (HTTP 499) — refreshing state
+[11:01:27] Cooldown: 13.9s
+[11:01:41] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:01:43]   No plan for GatherMaterials(copper_dagger): nodes=1964 depth=43 timeout=True
+[11:01:43] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[11:01:43] Applicable: ['Fight(yellow_slime)']
+[11:01:43] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[11:01:44] Cooldown: 63.7s
+[11:02:48] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:02:50]   No plan for GatherMaterials(copper_dagger): nodes=1710 depth=36 timeout=True
+[11:02:50] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Rest → Fight(yellow_slime)
+[11:02:50] Applicable: ['Rest']
+[11:02:50] → Rest  [Fight(yellow_slime)]  (goal: FarmMonster(yellow_slime))
+[11:02:51] Cooldown: 99.6s
+[11:04:30] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:04:32]   No plan for GatherMaterials(copper_dagger): nodes=1882 depth=43 timeout=True
+[11:04:32] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[11:04:32] Applicable: ['Fight(yellow_slime)']
+[11:04:32] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[11:04:34] Server cooldown (HTTP 499) — refreshing state
+[11:04:34] Cooldown: 14.0s
+[11:04:48] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:04:50]   No plan for GatherMaterials(copper_dagger): nodes=2006 depth=44 timeout=True
+[11:04:50] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[11:04:50] Applicable: ['Fight(yellow_slime)']
+[11:04:50] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[11:04:51] Cooldown: 63.7s
+[11:05:55] Goals: GatherMaterials(copper_dagger)=50.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:05:57]   No plan for GatherMaterials(copper_dagger): nodes=1846 depth=37 timeout=True
+[11:05:57] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Rest → Fight(yellow_slime)
+[11:05:57] Applicable: ['Rest']
+[11:05:57] → Rest  [Fight(yellow_slime)]  (goal: FarmMonster(yellow_slime))
+[11:05:57] Cooldown: 99.8s
+[11:07:37] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[11:07:39]   No plan for GatherMaterials(copper_dagger): nodes=1768 depth=42 timeout=True
+[11:07:39] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[11:07:39] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[11:07:39] → AcceptTask  (goal: AcceptTask)
+[11:07:42] Server cooldown (HTTP 499) — refreshing state
+[11:07:42] [recovery] GOAL_OSCILLATION L3: exiting (manual intervention)
+Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[12:54:09] Loading game data...
+[12:54:16] Fetching character state...
+[12:54:16] Starting play loop for Robby
+[12:54:16] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:54:18]   No plan for GatherMaterials(copper_dagger): nodes=1686 depth=42 timeout=True
+[12:54:18] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:54:18] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:54:18] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:54:20] Server cooldown (HTTP 499) — refreshing state
+[12:54:20] Cooldown: 8.4s
+[12:54:29] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:54:31]   No plan for GatherMaterials(copper_dagger): nodes=1731 depth=42 timeout=True
+[12:54:31] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:54:31] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:54:31] → AcceptTask  (goal: AcceptTask)
+[12:54:32] Server cooldown (HTTP 499) — refreshing state
+[12:54:32] Cooldown: 9.0s
+[12:54:41] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:54:43]   No plan for GatherMaterials(copper_dagger): nodes=1700 depth=42 timeout=True
+[12:54:43] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:54:43] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:54:43] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:54:45] Server cooldown (HTTP 499) — refreshing state
+[12:54:45] Cooldown: 8.8s
+[12:54:54] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:54:56]   No plan for GatherMaterials(copper_dagger): nodes=1682 depth=41 timeout=True
+[12:54:56] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:54:56] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:54:56] → AcceptTask  (goal: AcceptTask)
+[12:54:57] Server cooldown (HTTP 499) — refreshing state
+[12:54:57] Cooldown: 9.1s
+[12:55:06] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:55:08]   No plan for GatherMaterials(copper_dagger): nodes=1693 depth=42 timeout=True
+[12:55:08] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:55:08] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:55:08] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:55:09] Server cooldown (HTTP 499) — refreshing state
+[12:55:10] Cooldown: 9.1s
+[12:55:19] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:55:21]   No plan for GatherMaterials(copper_dagger): nodes=1734 depth=42 timeout=True
+[12:55:21] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:55:21] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:55:21] → AcceptTask  (goal: AcceptTask)
+[12:55:22] Server cooldown (HTTP 499) — refreshing state
+[12:55:23] Cooldown: 8.6s
+[12:55:31] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:55:33]   No plan for GatherMaterials(copper_dagger): nodes=1731 depth=42 timeout=True
+[12:55:33] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:55:33] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:55:33] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:55:35] Server cooldown (HTTP 499) — refreshing state
+[12:55:35] Cooldown: 8.7s
+[12:55:44] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:55:46]   No plan for GatherMaterials(copper_dagger): nodes=1741 depth=42 timeout=True
+[12:55:46] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:55:46] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:55:46] → AcceptTask  (goal: AcceptTask)
+[12:55:47] Server cooldown (HTTP 499) — refreshing state
+[12:55:47] Cooldown: 9.0s
+[12:55:57] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:55:59]   No plan for GatherMaterials(copper_dagger): nodes=1769 depth=42 timeout=True
+[12:55:59] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:55:59] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:55:59] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:56:00] Server cooldown (HTTP 499) — refreshing state
+[12:56:00] Cooldown: 9.0s
+[12:56:09] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:56:11]   No plan for GatherMaterials(copper_dagger): nodes=1762 depth=42 timeout=True
+[12:56:11] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:56:11] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:56:11] → AcceptTask  (goal: AcceptTask)
+[12:56:12] Server cooldown (HTTP 499) — refreshing state
+[12:56:13] [recovery] STATE_FROZEN L1: forcing full refresh
+[12:56:13] Cooldown: 8.4s
+[12:56:22] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:56:24]   No plan for GatherMaterials(copper_dagger): nodes=1794 depth=42 timeout=True
+[12:56:24] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:56:24] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:56:24] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:56:25] Server cooldown (HTTP 499) — refreshing state
+[12:56:25] Cooldown: 8.8s
+[12:56:34] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:56:36]   No plan for GatherMaterials(copper_dagger): nodes=1657 depth=41 timeout=True
+[12:56:36] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:56:36] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:56:36] → AcceptTask  (goal: AcceptTask)
+[12:56:38] Server cooldown (HTTP 499) — refreshing state
+[12:56:38] Cooldown: 8.9s
+[12:56:47] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:56:49]   No plan for GatherMaterials(copper_dagger): nodes=1672 depth=41 timeout=True
+[12:56:49] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:56:49] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:56:49] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:56:50] Server cooldown (HTTP 499) — refreshing state
+[12:56:51] Cooldown: 9.1s
+[12:57:00] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:57:02]   No plan for GatherMaterials(copper_dagger): nodes=1557 depth=41 timeout=True
+[12:57:02] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:57:02] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:57:02] → AcceptTask  (goal: AcceptTask)
+[12:57:03] Server cooldown (HTTP 499) — refreshing state
+[12:57:04] Cooldown: 9.0s
+[12:57:13] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:57:15]   No plan for GatherMaterials(copper_dagger): nodes=1584 depth=41 timeout=True
+[12:57:15] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:57:15] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:57:15] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:57:16] Server cooldown (HTTP 499) — refreshing state
+[12:57:17] Cooldown: 8.8s
+[12:57:25] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:57:27]   No plan for GatherMaterials(copper_dagger): nodes=1566 depth=41 timeout=True
+[12:57:27] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:57:27] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:57:27] → AcceptTask  (goal: AcceptTask)
+[12:57:29] Server cooldown (HTTP 499) — refreshing state
+[12:57:29] Cooldown: 9.0s
+[12:57:38] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:57:40]   No plan for GatherMaterials(copper_dagger): nodes=1725 depth=42 timeout=True
+[12:57:40] Goal: AcceptTask(20.0)  Plan: NpcBuy(corrupted_fruit×1@cultist_wizard) → AcceptTask
+[12:57:40] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:57:40] → NpcBuy(corrupted_fruit×1@cultist_wizard)  [AcceptTask]  (goal: AcceptTask)
+[12:57:42] Server cooldown (HTTP 499) — refreshing state
+[12:57:42] Cooldown: 8.8s
+[12:57:51] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:57:53]   No plan for GatherMaterials(copper_dagger): nodes=1587 depth=41 timeout=True
+[12:57:53] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:57:53] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:57:53] → AcceptTask  (goal: AcceptTask)
+[12:57:55] Server cooldown (HTTP 499) — refreshing state
+[12:57:55] Cooldown: 8.3s
+[12:58:04] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0Tracing to ./traces.jsonl
+Learning enabled - DB at /home/blentz/.cache/artifactsmmo/learning.db
+[12:59:03] Loading game data...
+[12:59:10] Fetching character state...
+[12:59:11] Starting play loop for Robby
+[12:59:11] Cooldown: 31.1s
+[12:59:42] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[12:59:44]   No plan for GatherMaterials(copper_dagger): nodes=1724 depth=42 timeout=True
+[12:59:44] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[12:59:44] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[12:59:44] → AcceptTask  (goal: AcceptTask)
+[12:59:45] Server cooldown (HTTP 499) — refreshing state
+[12:59:45] Cooldown: 69.1s
+[13:00:54] Goals: GatherMaterials(copper_dagger)=50.0  AcceptTask=20.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  CompleteTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:00:56]   No plan for GatherMaterials(copper_dagger): nodes=1711 depth=42 timeout=True
+[13:00:56] Goal: AcceptTask(20.0)  Plan: AcceptTask
+[13:00:56] Applicable: ['DepositAll', 'AcceptTask', 'Fight(yellow_slime)', 'Fight(chicken)', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[13:00:56] → AcceptTask  (goal: AcceptTask)
+[13:00:57] Cooldown: 2.7s
+[13:01:00] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:01:02]   No plan for CompleteTask: nodes=586 depth=12 timeout=True
+[13:01:04]   No plan for GatherMaterials(copper_dagger): nodes=1763 depth=42 timeout=True
+[13:01:06]   No plan for FarmItems: nodes=3588 depth=44 timeout=True
+[13:01:06] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[13:01:06] Applicable: ['Fight(yellow_slime)']
+[13:01:06] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[13:01:07] Server cooldown (HTTP 499) — refreshing state
+[13:01:08] Cooldown: 68.8s
+[13:02:17] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:02:19]   No plan for CompleteTask: nodes=580 depth=12 timeout=True
+[13:02:21]   No plan for GatherMaterials(copper_dagger): nodes=1696 depth=42 timeout=True
+[13:02:23]   No plan for FarmItems: nodes=3385 depth=43 timeout=True
+[13:02:23] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[13:02:23] Applicable: ['Fight(yellow_slime)']
+[13:02:23] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[13:02:23] Fight lost: fight_lost: yellow_slime (turns=32) — refreshing state
+[13:02:24] Cooldown: 63.4s
+[13:03:27] Goals: RestoreHP=99.2  CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:03:27] Goal: RestoreHP(99.2)  Plan: Rest
+[13:03:27] Applicable: ['Rest', 'DepositAll', 'TaskCancel', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[13:03:27] → Rest  (goal: RestoreHP)
+[13:03:28] Cooldown: 99.8s
+[13:05:08] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:05:10]   No plan for CompleteTask: nodes=672 depth=12 timeout=True
+[13:05:12]   No plan for GatherMaterials(copper_dagger): nodes=1933 depth=43 timeout=True
+[13:05:14]   No plan for FarmItems: nodes=3994 depth=44 timeout=True
+[13:05:14] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[13:05:14] Applicable: ['Fight(yellow_slime)']
+[13:05:14] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[13:05:15] Server cooldown (HTTP 499) — refreshing state
+[13:05:15] Cooldown: 14.0s
+[13:05:29] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:05:31]   No plan for CompleteTask: nodes=663 depth=12 timeout=True
+[13:05:33]   No plan for GatherMaterials(copper_dagger): nodes=1932 depth=43 timeout=True
+[13:05:35]   No plan for FarmItems: nodes=4046 depth=44 timeout=True
+[13:05:35] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[13:05:35] Applicable: ['Fight(yellow_slime)']
+[13:05:35] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[13:05:36] Fight lost: fight_lost: yellow_slime (turns=32) — refreshing state
+[13:05:36] Cooldown: 63.4s
+[13:06:40] Goals: RestoreHP=99.2  CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:06:40] Goal: RestoreHP(99.2)  Plan: Rest
+[13:06:40] Applicable: ['Rest', 'DepositAll', 'TaskCancel', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[13:06:40] → Rest  (goal: RestoreHP)
+[13:06:41] Cooldown: 99.6s
+[13:08:20] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:08:22]   No plan for CompleteTask: nodes=661 depth=12 timeout=True
+[13:08:24]   No plan for GatherMaterials(copper_dagger): nodes=1985 depth=43 timeout=True
+[13:08:26]   No plan for FarmItems: nodes=4051 depth=44 timeout=True
+[13:08:26] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[13:08:26] Applicable: ['Fight(yellow_slime)']
+[13:08:26] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[13:08:28] Server cooldown (HTTP 499) — refreshing state
+[13:08:28] Cooldown: 13.9s
+[13:08:42] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  FarmMonster(yellow_slime)=15.2  RestoreHP=0.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:08:44]   No plan for CompleteTask: nodes=674 depth=12 timeout=True
+[13:08:46]   No plan for GatherMaterials(copper_dagger): nodes=2030 depth=44 timeout=True
+[13:08:48]   No plan for FarmItems: nodes=3976 depth=44 timeout=True
+[13:08:48] Goal: FarmMonster(yellow_slime)(15.2)  Plan: Fight(yellow_slime)
+[13:08:48] Applicable: ['Fight(yellow_slime)']
+[13:08:48] → Fight(yellow_slime)  (goal: FarmMonster(yellow_slime))
+[13:08:49] Fight lost: fight_lost: yellow_slime (turns=32) — refreshing state
+[13:08:49] [recovery] GOAL_OSCILLATION L1: suppressing {'FarmMonster(yellow_slime)', 'RestoreHP'} for 5 cycles
+[13:08:49] Cooldown: 63.4s
+[13:09:52] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:09:54]   No plan for CompleteTask: nodes=794 depth=13 timeout=True
+[13:09:56]   No plan for GatherMaterials(copper_dagger): nodes=1808 depth=37 timeout=True
+[13:09:58]   No plan for FarmItems: nodes=4136 depth=39 timeout=True
+[13:09:58] No plan found — waiting 5s
+[13:10:03] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:10:05]   No plan for CompleteTask: nodes=813 depth=13 timeout=True
+[13:10:07]   No plan for GatherMaterials(copper_dagger): nodes=1798 depth=36 timeout=True
+[13:10:09]   No plan for FarmItems: nodes=3969 depth=38 timeout=True
+[13:10:09] No plan found — waiting 5s
+[13:10:09] [recovery] STATE_FROZEN L1: forcing full refresh
+[13:10:15] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:10:17]   No plan for CompleteTask: nodes=810 depth=13 timeout=True
+[13:10:19]   No plan for GatherMaterials(copper_dagger): nodes=1780 depth=36 timeout=True
+[13:10:21]   No plan for FarmItems: nodes=4025 depth=38 timeout=True
+[13:10:21] No plan found — waiting 5s
+[13:10:26] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:10:28]   No plan for CompleteTask: nodes=830 depth=13 timeout=True
+[13:10:30]   No plan for GatherMaterials(copper_dagger): nodes=1789 depth=36 timeout=True
+[13:10:32]   No plan for FarmItems: nodes=4084 depth=38 timeout=True
+[13:10:32] No plan found — waiting 5s
+[13:10:32] [recovery] NO_PROGRESS L1: forcing full refresh
+[13:10:38] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:10:40]   No plan for CompleteTask: nodes=799 depth=13 timeout=True
+[13:10:42]   No plan for GatherMaterials(copper_dagger): nodes=1829 depth=37 timeout=True
+[13:10:44]   No plan for FarmItems: nodes=4016 depth=38 timeout=True
+[13:10:44] No plan found — waiting 5s
+[13:10:49] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:10:51]   No plan for CompleteTask: nodes=802 depth=13 timeout=True
+[13:10:53]   No plan for GatherMaterials(copper_dagger): nodes=1806 depth=37 timeout=True
+[13:10:55]   No plan for FarmItems: nodes=4056 depth=38 timeout=True
+[13:10:55] No plan found — waiting 5s
+[13:11:00] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:11:02]   No plan for CompleteTask: nodes=775 depth=13 timeout=True
+[13:11:04]   No plan for GatherMaterials(copper_dagger): nodes=1797 depth=36 timeout=True
+[13:11:06]   No plan for FarmItems: nodes=4029 depth=38 timeout=True
+[13:11:06] No plan found — waiting 5s
+[13:11:11] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:11:13]   No plan for CompleteTask: nodes=809 depth=13 timeout=True
+[13:11:15]   No plan for GatherMaterials(copper_dagger): nodes=1876 depth=37 timeout=True
+[13:11:17]   No plan for FarmItems: nodes=3992 depth=38 timeout=True
+[13:11:17] No plan found — waiting 5s
+[13:11:17] [recovery] NO_PROGRESS L2: switching to wildcard goals
+[13:11:22] Goals: RestoreHP=99.2
+[13:11:22] Goal: RestoreHP(99.2)  Plan: Rest
+[13:11:22] Applicable: ['Rest', 'DepositAll', 'TaskCancel', 'Gather(ash_tree)', 'Gather(copper_rocks)', 'Gather(sunflower_field)', 'Gather(gudgeon_spot)', 'Craft(cooked_chicken×1)', 'Unequip(weapon_slot)', 'NpcBuy(corrupted_fruit×1@cultist_wizard)']
+[13:11:22] → Rest  (goal: RestoreHP)
+[13:11:22] [recovery] GOAL_OSCILLATION L2: suppressing {'<none>', 'RestoreHP'} for 15 cycles
+[13:11:22] Cooldown: 99.7s
+[13:13:02] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:13:04]   No plan for CompleteTask: nodes=689 depth=12 timeout=True
+[13:13:06]   No plan for GatherMaterials(copper_dagger): nodes=2029 depth=44 timeout=True
+[13:13:08]   No plan for FarmItems: nodes=4084 depth=44 timeout=True
+[13:13:08] No plan found — waiting 5s
+[13:13:13] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:13:15]   No plan for CompleteTask: nodes=674 depth=12 timeout=True
+[13:13:17]   No plan for GatherMaterials(copper_dagger): nodes=1958 depth=43 timeout=True
+[13:13:19]   No plan for FarmItems: nodes=3966 depth=44 timeout=True
+[13:13:19] No plan found — waiting 5s
+[13:13:24] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:13:26]   No plan for CompleteTask: nodes=681 depth=12 timeout=True
+[13:13:28]   No plan for GatherMaterials(copper_dagger): nodes=1975 depth=43 timeout=True
+[13:13:30]   No plan for FarmItems: nodes=4002 depth=44 timeout=True
+[13:13:30] No plan found — waiting 5s
+[13:13:30] [recovery] STATE_FROZEN L2: suppressing RestoreHP for 5 cycles
+[13:13:35] Goals: CompleteTask=50.0  GatherMaterials(copper_dagger)=50.0  FarmItems=28.0  DepositInventory=0.0  SellInventory=0.0  ExpandBank=0.0  UnlockBank(?)=0.0  ClaimPending=0.0  AcceptTask=0.0  TaskExchange=0.0  TaskCancel=0.0  UpgradeEquipment=0.0
+[13:13:37]   No plan for CompleteTask: nodes=674 depth=12 timeout=True
+[13:13:39]   No plan for GatherMaterials(copper_dagger): nodes=2012 depth=44 timeout=True
+[13:13:41]   No plan for FarmItems: nodes=3933 depth=44 timeout=True
+[13:13:41] No plan found — waiting 5s
+[13:13:41] [recovery] NO_PROGRESS L3: exiting (manual intervention)

@@ -632,24 +632,32 @@ class TestFarmItemsGoal:
         assert goal.is_satisfied(state) is True
 
     def test_not_satisfied_when_progress_below_total(self):
-        goal = FarmItemsGoal()
+        # Per-cycle horizon: still unsatisfied when no submission has occurred
+        # since goal construction (initial_progress=4, current progress=4).
+        goal = FarmItemsGoal(initial_progress=4)
         state = make_state(task_total=5, task_progress=4)
         assert goal.is_satisfied(state) is False
+
+    def test_satisfied_when_progress_advances_one_submission(self):
+        # Per-cycle horizon: one TaskTrade past initial counts as done.
+        goal = FarmItemsGoal(initial_progress=4)
+        state = make_state(task_total=10, task_progress=5)
+        assert goal.is_satisfied(state) is True
 
     def test_not_satisfied_when_no_task(self):
         goal = FarmItemsGoal()
         state = make_state(task_total=0, task_progress=0)
         assert goal.is_satisfied(state) is False
 
-    def test_desired_state_returns_task_total(self):
-        goal = FarmItemsGoal()
+    def test_desired_state_targets_one_more_submission(self):
+        goal = FarmItemsGoal(initial_progress=3)
         state = make_state(task_total=10, task_progress=3)
-        assert goal.desired_state(state, make_game_data()) == {"task_progress": 10}
+        assert goal.desired_state(state, make_game_data()) == {"task_progress": 4}
 
-    def test_priority_fixed_28_when_not_satisfied(self):
+    def test_priority_outranks_farm_monster_when_not_satisfied(self):
         goal = FarmItemsGoal()
         state = make_state(task_type="items", task_code="ash_wood", task_total=10, task_progress=0)
-        assert goal.priority(state, make_game_data()) == 28.0
+        assert goal.priority(state, make_game_data()) == 35.0
 
     def test_priority_zero_when_satisfied(self):
         goal = FarmItemsGoal()

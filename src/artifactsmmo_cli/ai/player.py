@@ -739,7 +739,7 @@ class GamePlayer:
         ]
 
         if self.state.task_type == "items" and self.state.task_code:
-            goals.append(FarmItemsGoal())
+            goals.append(FarmItemsGoal(initial_progress=self.state.task_progress))
 
         # If upgrade needs materials, add a gather goal to drive material collection.
         # Use the FULL recipe quantity (not remaining needed) so GatherMaterials and
