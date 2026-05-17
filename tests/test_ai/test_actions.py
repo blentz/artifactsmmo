@@ -694,3 +694,25 @@ def test_gather_action_cost_uses_history_when_provided():
     finally:
         if os.path.exists(path):
             os.unlink(path)
+
+
+def test_move_action_cost_uses_history_when_provided():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    try:
+        store = LearningStore(db_path=path, character="testchar")
+        store.start_session()
+        action = MoveAction(x=3, y=4)
+        repr_str = repr(action)
+        for i in range(5):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+                action_repr=repr_str, actual_cooldown_seconds=8.0,
+            ))
+        state = make_state(x=0, y=0)
+        assert action.cost(state, GameData(), history=store) == 8.0
+        store.close()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)

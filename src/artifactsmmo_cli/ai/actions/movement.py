@@ -50,7 +50,14 @@ class MoveAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         distance = abs(self.x - state.x) + abs(self.y - state.y)
-        return max(distance * 5.0, 1.0)
+        static = max(distance * 5.0, 1.0)
+        if history is None:
+            return static
+        learned = history.action_cost(repr(self), default=static, window=50)
+        rate = history.success_rate(repr(self), window=50)
+        if rate < 0.95:
+            return learned / max(rate, 0.1)
+        return learned
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = DestinationSchema(x=self.x, y=self.y)
