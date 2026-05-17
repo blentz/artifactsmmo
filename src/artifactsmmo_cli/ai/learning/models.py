@@ -66,3 +66,21 @@ class Cycle(CycleBase, table=True):
     __tablename__ = "cycles"
 
     id: int | None = Field(default=None, primary_key=True)
+
+
+class SessionBase(SQLModel):
+    """Non-table base: Pydantic validates all fields at construction."""
+
+    started_at: str
+    character: str = Field(index=True)
+    ended_at: str | None = None
+    cycle_count: int = 0
+    exit_reason: str | None = None
+
+
+class Session(SessionBase, table=True):
+    """ORM-persisted Session row, one per GamePlayer.run() invocation."""
+
+    __tablename__ = "sessions"
+
+    session_id: str = Field(primary_key=True)

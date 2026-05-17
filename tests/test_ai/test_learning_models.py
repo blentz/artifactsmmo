@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from artifactsmmo_cli.ai.learning.models import Cycle, CycleBase
+from artifactsmmo_cli.ai.learning.models import Cycle, CycleBase, Session
 
 
 class TestCycle:
@@ -55,3 +55,28 @@ class TestCycle:
         )
         assert c.x is None
         assert c.gold is None
+
+
+class TestSession:
+    def test_minimal_construction(self):
+        s = Session(
+            session_id="session-1",
+            started_at="2026-05-17T00:00:00+00:00",
+            character="testchar",
+        )
+        assert s.session_id == "session-1"
+        assert s.cycle_count == 0
+        assert s.ended_at is None
+        assert s.exit_reason is None
+
+    def test_with_exit_reason(self):
+        s = Session(
+            session_id="session-1",
+            started_at="2026-05-17T00:00:00+00:00",
+            character="testchar",
+            ended_at="2026-05-17T01:00:00+00:00",
+            cycle_count=42,
+            exit_reason="normal",
+        )
+        assert s.cycle_count == 42
+        assert s.exit_reason == "normal"
