@@ -2,6 +2,8 @@
 
 import os
 import tempfile
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,6 +22,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import _delete_cost
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
 
@@ -82,6 +85,37 @@ class TestMoveAction:
 
     def test_repr(self):
         assert repr(MoveAction(x=3, y=5)) == "Move(3,5)"
+
+    def test_execute_blocks_until_returned_cooldown_expires(self):
+        """MoveAction.execute must sleep until the server's post-move cooldown
+        clears, so composite callers (Gather/Fight/TaskTrade) don't HTTP 499
+        on the secondary call. Verifies time.sleep was invoked with
+        approximately the cooldown duration."""
+        action = MoveAction(x=4, y=13)
+        state = make_state(x=0, y=0)
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=2.0)
+        post_state = WorldState(
+            character=state.character, level=1, xp=0, max_xp=100,
+            hp=100, max_hp=100, gold=0, skills={}, x=4, y=13,
+            inventory={}, inventory_max=100, equipment={},
+            cooldown_expires=future,
+            task_code=None, task_type=None, task_progress=0, task_total=0,
+            bank_items={}, bank_gold=0, pending_items=(),
+        )
+        client = MagicMock()
+        with patch(
+            "artifactsmmo_cli.ai.actions.movement.action_move",
+            return_value=MagicMock(data=MagicMock(character=MagicMock())),
+        ), patch(
+            "artifactsmmo_cli.ai.actions.movement.WorldState.from_character_schema",
+            return_value=post_state,
+        ), patch(
+            "artifactsmmo_cli.ai.actions.movement.time.sleep"
+        ) as sleep:
+            action.execute(state, client)
+        assert sleep.called
+        slept = sleep.call_args[0][0]
+        assert 1.5 < slept < 3.0, f"expected ~2s sleep, got {slept}"
 
 
 class TestMoveToAction:

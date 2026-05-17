@@ -1,6 +1,8 @@
 """Movement action for GOAP planning."""
 
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post import sync as action_move
@@ -63,12 +65,22 @@ class MoveAction(Action):
         body = DestinationSchema(x=self.x, y=self.y)
         result = action_move(client=client, name=state.character, body=body)
         result = Action._raise_for_error(result, f"Move to ({self.x},{self.y})")
-        return WorldState.from_character_schema(
+        new_state = WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
         )
+        # Server applies a per-action cooldown to moves. Composite actions
+        # (Gather, Fight, NpcBuy, TaskTrade, etc.) call MoveAction.execute then
+        # immediately issue their secondary API call; without waiting here the
+        # secondary call gets HTTP 499 because the move cooldown is still
+        # active. Block until the cooldown the server just set has expired.
+        if new_state.cooldown_expires is not None:
+            remaining = (new_state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds()
+            if remaining > 0:
+                time.sleep(remaining + 0.1)
+        return new_state
 
     def __repr__(self) -> str:
         return f"Move({self.x},{self.y})"

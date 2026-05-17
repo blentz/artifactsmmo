@@ -75,3 +75,7 @@ TOKEN
 .claude
 **/*.log
 .openapi_bugfixes/
+
+# Runtime artifacts from the AI player
+logs.txt
+traces.jsonl
