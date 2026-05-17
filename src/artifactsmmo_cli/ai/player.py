@@ -1,5 +1,6 @@
 """GOAP AI player: main sense→plan→act loop."""
 
+import json
 import re
 import time
 from datetime import datetime, timezone
@@ -44,6 +45,7 @@ from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGo
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
@@ -663,6 +665,66 @@ class GamePlayer:
         assert self.state is not None
         suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
         print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
+
+    def _record_learning_cycle(
+        self,
+        prev_state: WorldState,
+        new_state: WorldState,
+        action_repr: str,
+        action_class: str,
+        outcome: str,
+        selected_goal: str,
+        predicted_cost: float,
+        actual_cooldown_seconds: float,
+        planner_nodes: int,
+        planner_depth: int,
+        planner_timed_out: bool,
+        plan_len: int,
+        cycles_to_satisfy: int | None = None,
+    ) -> None:
+        """Build a Cycle row and persist via LearningStore. No-op when history is None."""
+        if self.history is None:
+            return
+        drops = self._compute_drops(prev_state, new_state)
+        cycle = Cycle(
+            ts=datetime.now(tz=timezone.utc).isoformat(),
+            session_id="placeholder",
+            cycle_index=getattr(self, "_cycle_counter", 0),
+            character=self.character,
+            x=new_state.x, y=new_state.y,
+            hp=new_state.hp, max_hp=new_state.max_hp,
+            gold=new_state.gold, level=new_state.level, xp=new_state.xp,
+            inventory_used=new_state.inventory_used,
+            inventory_max=new_state.inventory_max,
+            bank_accessible=self._bank_accessible,
+            task_code=new_state.task_code, task_type=new_state.task_type,
+            task_progress=new_state.task_progress, task_total=new_state.task_total,
+            selected_goal=selected_goal,
+            action_repr=action_repr,
+            action_class=action_class,
+            outcome=outcome,
+            predicted_cost=predicted_cost,
+            actual_cooldown_seconds=actual_cooldown_seconds,
+            planner_nodes=planner_nodes, planner_depth=planner_depth,
+            planner_timed_out=planner_timed_out, plan_len=plan_len,
+            delta_gold=new_state.gold - prev_state.gold,
+            delta_xp=new_state.xp - prev_state.xp,
+            delta_hp=new_state.hp - prev_state.hp,
+            delta_inv_used=new_state.inventory_used - prev_state.inventory_used,
+            drops_json=json.dumps(drops) if drops else None,
+            cycles_to_satisfy=cycles_to_satisfy,
+        )
+        self.history.record_cycle(cycle)
+
+    @staticmethod
+    def _compute_drops(prev_state: WorldState, new_state: WorldState) -> dict[str, int]:
+        """Items that appeared (positive deltas only)."""
+        drops: dict[str, int] = {}
+        for code, qty in new_state.inventory.items():
+            prev_qty = prev_state.inventory.get(code, 0)
+            if qty > prev_qty:
+                drops[code] = qty - prev_qty
+        return drops
 
     @staticmethod
     def _now() -> str:
