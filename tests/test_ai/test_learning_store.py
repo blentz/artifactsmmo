@@ -224,3 +224,48 @@ class TestSuccessRate:
                        outcomes=["ok"] * 7 + ["error:X"] * 3)
         assert store.success_rate("Fight(x)") == 0.7
         store.close()
+
+
+def _insert_cycles_with_deltas(store, action_repr, deltas):
+    for i, d in enumerate(deltas):
+        store.record_cycle(Cycle(
+            ts=f"2026-05-17T00:00:{i:02d}+00:00",
+            session_id="x", cycle_index=i, character="x", outcome="ok",
+            action_repr=action_repr,
+            delta_xp=d.get("delta_xp"),
+            delta_gold=d.get("delta_gold"),
+            delta_hp=d.get("delta_hp"),
+            delta_inv_used=d.get("delta_inv_used"),
+        ))
+
+
+class TestActionEffect:
+    def test_returns_none_when_fewer_than_5_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles_with_deltas(store, "Fight(x)", [{"delta_xp": 10}] * 3)
+        assert store.action_effect("Fight(x)", "delta_xp") is None
+        store.close()
+
+    def test_returns_median_delta_xp(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles_with_deltas(store, "Fight(x)",
+            [{"delta_xp": v} for v in [10, 12, 14, 16, 18]])
+        assert store.action_effect("Fight(x)", "delta_xp") == 14.0
+        store.close()
+
+    def test_returns_median_delta_gold(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles_with_deltas(store, "Sell(x)",
+            [{"delta_gold": v} for v in [5, 5, 10, 10, 10]])
+        assert store.action_effect("Sell(x)", "delta_gold") == 10.0
+        store.close()
+
+    def test_unknown_field_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles_with_deltas(store, "X", [{"delta_xp": 10}] * 5)
+        assert store.action_effect("X", "nonexistent_field") is None
+        store.close()

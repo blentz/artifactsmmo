@@ -109,5 +109,32 @@ class LearningStore:
         except SQLAlchemyError:
             return 1.0
 
+    _ALLOWED_EFFECT_FIELDS = ("delta_gold", "delta_xp", "delta_hp", "delta_inv_used")
+
+    def action_effect(self, action_repr: str, field: str, window: int = 50) -> float | None:
+        """Median of `field` over recent ok cycles. Allowed fields: delta_gold/delta_xp/delta_hp/delta_inv_used."""
+        if field not in self._ALLOWED_EFFECT_FIELDS:
+            return None
+        col = getattr(Cycle, field)
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(col)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_repr == action_repr,
+                        Cycle.outcome == "ok",
+                        col.is_not(None),
+                    )
+                    .order_by(Cycle.ts.desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            if len(rows) < 5:
+                return None
+            return statistics.median(rows)
+        except SQLAlchemyError:
+            return None
+
     def close(self) -> None:
         self._engine.dispose()
