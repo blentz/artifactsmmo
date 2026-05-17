@@ -1,27 +1,18 @@
 """SQLModel definitions for the GOAP learning store.
 
-Each model is simultaneously a Pydantic model (validation at construction)
-and a SQLAlchemy ORM row (persistence).
+The two-model pattern: `CycleBase` is a non-table SQLModel (full Pydantic
+validation at construction). `Cycle(CycleBase, table=True)` adds persistence.
+
+Construct as `Cycle.model_validate(data)` or `Cycle(**CycleBase(...).model_dump())`
+to get validation; construct as `Cycle(...)` directly to skip validation (SQLModel's
+default for table models, optimised for ORM round-trips).
 """
 
-from typing import Any
-
-from pydantic import TypeAdapter
 from sqlmodel import Field, SQLModel
-from sqlmodel._compat import finish_init
-
-_FLOAT_FIELDS: frozenset[str] = frozenset(
-    {"predicted_cost", "actual_cooldown_seconds"}
-)
-_validate_float: TypeAdapter[float | None] = TypeAdapter(float | None)
 
 
-class Cycle(SQLModel, table=True):
-    """One row per player-loop cycle."""
-
-    __tablename__ = "cycles"
-
-    id: int | None = Field(default=None, primary_key=True)
+class CycleBase(SQLModel):
+    """Non-table base: Pydantic validates all fields at construction."""
 
     ts: str = Field(index=True)
     session_id: str = Field(index=True)
@@ -68,9 +59,10 @@ class Cycle(SQLModel, table=True):
     # Goal completion tracking
     cycles_to_satisfy: int | None = None
 
-    def __init__(self, **data: Any) -> None:
-        if finish_init.get():
-            for field in _FLOAT_FIELDS:
-                if field in data:
-                    _validate_float.validate_python(data[field])
-        super().__init__(**data)
+
+class Cycle(CycleBase, table=True):
+    """ORM-persisted Cycle. Inherits all fields from CycleBase."""
+
+    __tablename__ = "cycles"
+
+    id: int | None = Field(default=None, primary_key=True)
