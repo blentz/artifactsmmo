@@ -125,7 +125,8 @@ class TestDesiredStateMethods:
         state = make_state(task_code="chicken", task_total=10, task_progress=3)
         gd = make_gd()
         ds = goal.desired_state(state, gd)
-        assert ds == {"task_progress": 10}
+        # Goal targets the post-turn-in state (no active task).
+        assert ds == {"task_code": ""}
 
     def test_upgrade_equipment_desired_state_with_upgrade(self):
         goal = UpgradeEquipmentGoal()

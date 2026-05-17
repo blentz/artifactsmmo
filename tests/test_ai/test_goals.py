@@ -103,19 +103,26 @@ class TestCompleteTaskGoal:
         assert goal.value(state, make_game_data()) == 0.0
 
     def test_task_at_zero_progress_value(self):
+        # An in-flight task with no progress yet is not yet turn-in-able,
+        # so CompleteTaskGoal should stay out of the way (value 0). Other
+        # goals (FarmItems/FarmMonster) drive progress.
         goal = CompleteTaskGoal()
         state = make_state(task_code="chicken", task_total=10, task_progress=0)
-        assert abs(goal.value(state, make_game_data()) - 50.0) < 0.1
+        assert goal.value(state, make_game_data()) == 0.0
 
     def test_task_at_full_progress_value(self):
         goal = CompleteTaskGoal()
         state = make_state(task_code="chicken", task_total=10, task_progress=10)
         assert abs(goal.value(state, make_game_data()) - 90.0) < 0.1
 
-    def test_satisfied_when_complete(self):
+    def test_satisfied_when_task_already_turned_in(self):
+        # Goal models "no task held". The full-progress state still HAS
+        # a task — turn-in hasn't happened yet — so not satisfied.
         goal = CompleteTaskGoal()
-        state = make_state(task_code="chicken", task_total=10, task_progress=10)
-        assert goal.is_satisfied(state) is True
+        full_state = make_state(task_code="chicken", task_total=10, task_progress=10)
+        assert goal.is_satisfied(full_state) is False
+        cleared_state = make_state(task_code=None, task_total=0, task_progress=0)
+        assert goal.is_satisfied(cleared_state) is True
 
     def test_not_satisfied_when_in_progress(self):
         goal = CompleteTaskGoal()

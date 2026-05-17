@@ -91,20 +91,29 @@ class AcceptTaskGoal(Goal):
 
 
 class CompleteTaskGoal(Goal):
-    """Complete the current character task (monster kills, gathering, or crafting)."""
+    """Turn in the current task at the taskmaster once it's fully progressed.
+
+    Satisfied when the character has no active task (the post-turn-in state).
+    Value is only positive when a finished-but-not-turned-in task is held;
+    otherwise this goal stays out of the way.
+    """
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
+        if self.is_satisfied(state):
+            return 0.0
         if not state.task_code or state.task_total == 0:
             return 0.0
-        progress_fraction = state.task_progress / state.task_total
-        return 50.0 + progress_fraction * 40.0
+        if state.task_progress < state.task_total:
+            return 0.0
+        # Task is full; turning it in is the next move.
+        return 90.0
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return state.task_progress >= state.task_total and state.task_total > 0
+        return not state.task_code or state.task_total == 0
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        return {"task_progress": state.task_total}
+        return {"task_code": ""}
 
     def __repr__(self) -> str:
         return "CompleteTask"
