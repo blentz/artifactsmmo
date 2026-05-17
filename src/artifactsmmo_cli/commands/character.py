@@ -5,6 +5,9 @@ from datetime import datetime
 import typer
 from rich.console import Console
 
+from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
+from artifactsmmo_api_client.models.character_skin import CharacterSkin
+
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.utils.formatters import (
     format_character_table,
@@ -14,7 +17,7 @@ from artifactsmmo_cli.utils.formatters import (
     format_time_duration,
 )
 from artifactsmmo_cli.utils.helpers import handle_api_error, handle_api_response
-from artifactsmmo_cli.utils.validators import validate_character_name, validate_skin_code
+from artifactsmmo_cli.utils.validators import validate_character_name
 
 app = typer.Typer(help="Character management commands")
 console = Console()
@@ -40,21 +43,17 @@ def list_characters() -> None:
 
 @app.command("create")
 def create_character(
-    name: str = typer.Argument(..., help="Character name"), skin: str = typer.Option("human1", help="Character skin")
+    name: str = typer.Argument(..., help="Character name (4-12 chars, alphanumeric + underscores)"),
+    skin: CharacterSkin = typer.Argument(..., help="Character skin (required by API)"),
 ) -> None:
     """Create a new character."""
     try:
         # Validate inputs
         name = validate_character_name(name)
-        skin = validate_skin_code(skin)
 
         api = ClientManager().api
 
-        # Import the schema for character creation
-        from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
-        from artifactsmmo_api_client.models.character_skin import CharacterSkin
-
-        character_data = AddCharacterSchema(name=name, skin=CharacterSkin(skin))
+        character_data = AddCharacterSchema(name=name, skin=skin)
         response = api.create_character(character_data)
 
         if response:

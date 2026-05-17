@@ -93,7 +93,7 @@ class TestCreateCommand:
         """Test successful create command."""
         mock_client_manager.api.create_character.return_value = True
 
-        result = runner.invoke(app, ["create", "newchar", "--skin", "men1"])
+        result = runner.invoke(app, ["create", "newchar", "men1"])
 
         assert result.exit_code == 0
         assert "Character 'newchar' created successfully" in result.stdout
@@ -102,7 +102,7 @@ class TestCreateCommand:
         """Test create command with custom skin."""
         mock_client_manager.api.create_character.return_value = True
 
-        result = runner.invoke(app, ["create", "newchar", "--skin", "women2"])
+        result = runner.invoke(app, ["create", "newchar", "women2"])
 
         assert result.exit_code == 0
         assert "Character 'newchar' created successfully" in result.stdout
@@ -111,14 +111,24 @@ class TestCreateCommand:
         """Test create command failure."""
         mock_client_manager.api.create_character.return_value = False
 
-        result = runner.invoke(app, ["create", "newchar", "--skin", "men1"])
+        result = runner.invoke(app, ["create", "newchar", "men1"])
 
         assert result.exit_code == 1
         assert "Failed to create character" in result.stdout
 
+    def test_create_missing_skin_arg(self, runner):
+        """Skin is a required positional argument."""
+        result = runner.invoke(app, ["create", "newchar"])
+        assert result.exit_code != 0
+
+    def test_create_invalid_skin(self, runner):
+        """Invalid skin value rejected by typer enum validation."""
+        result = runner.invoke(app, ["create", "newchar", "human1"])
+        assert result.exit_code != 0
+
     def test_create_validation_error(self, runner):
-        """Test create command with validation error."""
-        result = runner.invoke(app, ["create", ""])
+        """Test create command with validation error on name."""
+        result = runner.invoke(app, ["create", "", "men1"])
         assert result.exit_code == 1
 
     def test_create_api_exception(self, runner, mock_client_manager):
@@ -128,7 +138,7 @@ class TestCreateCommand:
         with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
             mock_error.return_value = Mock(error="API Error")
 
-            result = runner.invoke(app, ["create", "newchar", "--skin", "men1"])
+            result = runner.invoke(app, ["create", "newchar", "men1"])
 
             assert result.exit_code == 1
             assert "API Error" in result.stdout
