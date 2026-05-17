@@ -5,6 +5,8 @@ import re
 import time
 from datetime import datetime, timezone
 
+import httpx
+
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.types import Unset
@@ -322,13 +324,27 @@ class GamePlayer:
                 print(f"[{self._now()}] Action failed: {msg} — refreshing state")
                 outcome = "error:other"
             return self._fetch_world_state(client), outcome
+        except httpx.HTTPError as e:
+            # Transport-level failure (DNS, timeout, connection reset). Treat
+            # as transient; refetch state (which also retries) and let the
+            # next cycle replan with current truth.
+            print(f"[{self._now()}] Network error during {action!r}: {e!r} — refreshing state")
+            return self._fetch_world_state(client), "error:network"
 
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""
         last_result = None
         backoff = 5.0
         for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
-            last_result = get_character(client=client, name=self.character)
+            try:
+                last_result = get_character(client=client, name=self.character)
+            except httpx.HTTPError as e:
+                last_result = None
+                if attempt < 3:
+                    print(f"[{self._now()}] get_character network error: {e!r}; retry {attempt}/3 in {backoff:.0f}s")
+                    time.sleep(backoff)
+                    backoff *= 2
+                continue
             if (last_result is not None
                     and not isinstance(last_result, ErrorResponseSchema)
                     and hasattr(last_result, "data")

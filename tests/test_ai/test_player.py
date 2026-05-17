@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch, call
 
+import httpx
 import pytest
 
 from artifactsmmo_api_client.models.achievement_type import AchievementType
@@ -381,6 +382,27 @@ class TestExecute:
         assert isinstance(new_state, WorldState)
         assert outcome == "error:cooldown"
         assert "Server cooldown (HTTP 499)" in buf.getvalue()
+
+    def test_execute_network_error_is_transient(self):
+        """httpx transport errors (DNS failures, timeouts, connection resets)
+        must NOT crash the player. _execute should refetch state and surface
+        outcome=error:network so the next cycle replans against current truth."""
+        player = GamePlayer(character="hero")
+        player.state = make_state()
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        from artifactsmmo_cli.ai.actions.movement import MoveAction
+        action = MoveAction(x=3, y=5)
+        char = make_char_schema()
+        net_err = httpx.ConnectError("DNS lookup failed")
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=net_err):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                new_state, outcome = player._execute(action, client)
+
+        assert isinstance(new_state, WorldState)
+        assert outcome == "error:network"
 
     def test_execute_bank_action_syncs_bank(self):
         player = GamePlayer(character="hero")
