@@ -207,7 +207,7 @@ class TestFightAction:
         from unittest.mock import MagicMock, patch
 
         from artifactsmmo_api_client.models.fight_result import FightResult
-        from artifactsmmo_cli.ai.actions.combat import FightAction
+        from tests.test_ai.test_actions_execute import make_char_schema
 
         action = FightAction(monster_code="yellow_slime", locations=frozenset([(1, 0)]))
         state = make_state(x=1, y=0, hp=100, max_hp=100, level=1)
