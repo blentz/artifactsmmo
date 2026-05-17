@@ -186,6 +186,20 @@ class GamePlayer:
                         outcome="no_plan",
                         planner_stats={"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 0},
                     )
+                    self._record_learning_cycle(
+                        prev_state=self.state,
+                        new_state=self.state,
+                        action_repr="<no_plan>",
+                        action_class="NoPlan",
+                        outcome="no_plan",
+                        selected_goal="<none>",
+                        predicted_cost=0.0,
+                        actual_cooldown_seconds=0.0,
+                        planner_nodes=self.planner.last_stats.nodes_explored,
+                        planner_depth=self.planner.last_stats.max_depth_reached,
+                        planner_timed_out=self.planner.last_stats.timed_out,
+                        plan_len=0,
+                    )
                     signal = self._detector.detect()
                     if signal is not None:
                         self._handle_stuck(signal, client)
@@ -202,10 +216,32 @@ class GamePlayer:
                 action = plan[0]
                 self._log_action(action, selected_goal, plan)
 
+                prev_state_for_learning = self.state
                 if self.dry_run:
-                    self.state = action.apply(state, game_data)
+                    new_state = action.apply(state, game_data)
                 else:
-                    self.state = self._execute(action, client)
+                    new_state = self._execute(action, client)
+
+                now = datetime.now(tz=timezone.utc)
+                cooldown_remaining = 0.0
+                if new_state.cooldown_expires is not None:
+                    cooldown_remaining = max(0.0, (new_state.cooldown_expires - now).total_seconds())
+                predicted = action.cost(prev_state_for_learning, game_data, self.history)
+                self._record_learning_cycle(
+                    prev_state=prev_state_for_learning,
+                    new_state=new_state,
+                    action_repr=repr(action),
+                    action_class=type(action).__name__,
+                    outcome="ok",
+                    selected_goal=repr(selected_goal),
+                    predicted_cost=predicted,
+                    actual_cooldown_seconds=cooldown_remaining,
+                    planner_nodes=self.planner.last_stats.nodes_explored,
+                    planner_depth=self.planner.last_stats.max_depth_reached,
+                    planner_timed_out=self.planner.last_stats.timed_out,
+                    plan_len=len(plan),
+                )
+                self.state = new_state
 
                 # After action.execute (or dry_run apply), record the cycle for stuck detection
                 self._detector.record(self._make_cycle_record(
