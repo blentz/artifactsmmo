@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGo
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
@@ -92,8 +93,14 @@ def _format_plan(plan: list[Action]) -> str:
 class GamePlayer:
     """Autonomous GOAP AI player for a single character."""
 
-    def __init__(self, character: str, verbose: bool = False, dry_run: bool = False,
-                 tracer: Tracer | None = None) -> None:
+    def __init__(
+        self,
+        character: str,
+        verbose: bool = False,
+        dry_run: bool = False,
+        tracer: Tracer | None = None,
+        history: LearningStore | None = None,
+    ) -> None:
         self.character = character
         self.verbose = verbose
         self.dry_run = dry_run
@@ -111,6 +118,7 @@ class GamePlayer:
         self._wildcard_mode: bool = False
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
+        self.history = history
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -137,21 +145,21 @@ class GamePlayer:
                 game_data = self.game_data
 
                 goals = self._build_goals()
-                goals.sort(key=lambda g: g.priority(state, game_data), reverse=True)
+                goals.sort(key=lambda g: g.priority(state, game_data, self.history), reverse=True)
 
                 plan: list[Action] = []
                 selected_goal: Goal | None = None
 
                 if self.verbose:
                     goal_summary = "  ".join(
-                        f"{g}={g.priority(state, game_data):.1f}" for g in goals
+                        f"{g}={g.priority(state, game_data, self.history):.1f}" for g in goals
                     )
                     print(f"[{self._now()}] Goals: {goal_summary}")
 
                 for goal in goals:
-                    if goal.priority(state, game_data) <= 0:
+                    if goal.priority(state, game_data, self.history) <= 0:
                         break
-                    plan = self.planner.plan(state, goal, actions, game_data)
+                    plan = self.planner.plan(state, goal, actions, game_data, self.history)
                     if self.verbose and not plan:
                         s = self.planner.last_stats
                         print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
@@ -186,7 +194,7 @@ class GamePlayer:
                     plan_str = _format_plan(plan)
                     relevant = selected_goal.relevant_actions(actions, state, game_data)
                     applicable = [repr(a) for a in relevant if a.is_applicable(state, game_data)]
-                    print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(state, game_data):.1f})  Plan: {plan_str}")
+                    print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(state, game_data, self.history):.1f})  Plan: {plan_str}")
                     print(f"[{self._now()}] Applicable: {applicable}")
 
                 action = plan[0]

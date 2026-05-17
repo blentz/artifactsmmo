@@ -937,6 +937,18 @@ class TestBuildGoalsExtended:
         assert player._bank_accessible is False  # still locked
 
 
+def test_game_player_accepts_history_kwarg():
+    from artifactsmmo_cli.ai.player import GamePlayer
+    player = GamePlayer(character="testchar", history=None)
+    assert player.history is None
+
+
+def test_game_player_default_history_is_none():
+    from artifactsmmo_cli.ai.player import GamePlayer
+    player = GamePlayer(character="testchar")
+    assert player.history is None
+
+
 class TestBuildActionsExtended:
     def test_delete_actions_skip_equipped_items(self):
         """Items in equipment slots must not get delete actions."""
