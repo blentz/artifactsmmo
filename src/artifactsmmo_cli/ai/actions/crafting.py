@@ -9,6 +9,7 @@ from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -83,7 +84,8 @@ class CraftAction(Action):
             pending_items=state.pending_items,
         )
 
-    def cost(self, state: WorldState, game_data: GameData) -> float:
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
         dest = self.workshop_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         return 5.0 * self.quantity + dist

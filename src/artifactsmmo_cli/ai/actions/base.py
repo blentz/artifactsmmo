@@ -7,6 +7,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 T = TypeVar("T")
@@ -37,8 +38,9 @@ class Action(ABC):
         """Return new WorldState after applying this action's effects (no API calls)."""
 
     @abstractmethod
-    def cost(self, state: WorldState, game_data: GameData) -> float:
-        """Estimated seconds this action takes. A* minimises total cost."""
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
+        """Estimated seconds. Optional `history` lets subclasses consult learned stats."""
 
     @abstractmethod
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

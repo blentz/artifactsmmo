@@ -9,6 +9,7 @@ from artifactsmmo_api_client.models.npc_merchant_buy_schema import NpcMerchantBu
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -62,7 +63,8 @@ class NpcSellAction(Action):
             pending_items=state.pending_items,
         )
 
-    def cost(self, state: WorldState, game_data: GameData) -> float:
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
         dest = self.npc_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         return 1.5 + dist

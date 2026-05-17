@@ -5,6 +5,7 @@ from artifactsmmo_api_client.api.my_characters.action_transition_my_name_action_
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -18,7 +19,8 @@ class MapTransitionAction(Action):
         # Destination depends on server-side response; cannot predict in pure planner.
         return state
 
-    def cost(self, state: WorldState, game_data: GameData) -> float:
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
         return 3.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

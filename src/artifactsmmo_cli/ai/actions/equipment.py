@@ -11,6 +11,7 @@ from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 ITEM_TYPE_TO_SLOT: dict[str, str] = {
@@ -89,7 +90,8 @@ class EquipAction(Action):
             pending_items=state.pending_items,
         )
 
-    def cost(self, state: WorldState, game_data: GameData) -> float:
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
         return 1.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
@@ -147,7 +149,8 @@ class UnequipAction(Action):
             pending_items=state.pending_items,
         )
 
-    def cost(self, state: WorldState, game_data: GameData) -> float:
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
         return 1.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

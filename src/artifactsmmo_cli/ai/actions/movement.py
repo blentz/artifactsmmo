@@ -8,6 +8,7 @@ from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -46,7 +47,8 @@ class MoveAction(Action):
             pending_items=state.pending_items,
         )
 
-    def cost(self, state: WorldState, game_data: GameData) -> float:
+    def cost(self, state: WorldState, game_data: GameData,
+             history: LearningStore | None = None) -> float:
         distance = abs(self.x - state.x) + abs(self.y - state.y)
         return max(distance * 5.0, 1.0)
 
