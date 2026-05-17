@@ -10,6 +10,7 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
+from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 
 class LearningStore:
@@ -171,6 +172,51 @@ class LearningStore:
                 return len(list(s.exec(stmt)))
         except SQLAlchemyError:
             return 0
+
+    def action_stats(self, action_repr: str, window: int = 50) -> ActionStats:
+        """Return one Pydantic-validated rollup for one action."""
+        n = self.sample_count(action_repr)
+        return ActionStats(
+            action_repr=action_repr,
+            sample_count=n,
+            median_cost_seconds=(self.action_cost(action_repr, default=-1.0, window=window)
+                                  if n >= 5 else None),
+            success_rate=self.success_rate(action_repr, window=window),
+            median_delta_xp=self.action_effect(action_repr, "delta_xp", window=window),
+            median_delta_gold=self.action_effect(action_repr, "delta_gold", window=window),
+        )
+
+    def goal_stats(self, goal_repr: str, window: int = 20) -> GoalStats:
+        """Return one Pydantic-validated rollup for one goal."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.cycles_to_satisfy)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.selected_goal == goal_repr,
+                    )
+                    .order_by(Cycle.ts.desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            sample_count = len(rows)
+            satisfied = [r for r in rows if r is not None]
+            sat_rate = (len(satisfied) / sample_count) if sample_count else 0.0
+            avg = statistics.median(satisfied) if len(satisfied) >= 5 else None
+            return GoalStats(
+                goal_repr=goal_repr,
+                sample_count=sample_count,
+                avg_cycles_to_satisfy=avg,
+                satisfaction_rate=sat_rate,
+            )
+        except SQLAlchemyError:
+            return GoalStats(
+                goal_repr=goal_repr,
+                sample_count=0,
+                avg_cycles_to_satisfy=None,
+                satisfaction_rate=0.0,
+            )
 
     def close(self) -> None:
         self._engine.dispose()

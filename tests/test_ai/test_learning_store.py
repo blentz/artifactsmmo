@@ -311,3 +311,41 @@ class TestSampleCount:
         assert store.sample_count("Fight(x)") == 7
         assert store.sample_count("Fight(y)") == 3
         store.close()
+
+
+class TestStatsRollups:
+    def test_action_stats_empty(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        stats = store.action_stats("Nothing(x)")
+        store.close()
+        assert stats.action_repr == "Nothing(x)"
+        assert stats.sample_count == 0
+        assert stats.median_cost_seconds is None
+        assert stats.success_rate == 1.0
+
+    def test_action_stats_populated(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        for i in range(10):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T01:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+                action_repr="Fight(x)", actual_cooldown_seconds=12.0,
+                delta_xp=10, delta_gold=0,
+            ))
+        stats = store.action_stats("Fight(x)")
+        store.close()
+        assert stats.sample_count == 10
+        assert stats.median_cost_seconds == 12.0
+        assert stats.success_rate == 1.0
+        assert stats.median_delta_xp == 10.0
+
+
+class TestGoalStatsRollup:
+    def test_goal_stats_empty(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        stats = store.goal_stats("Nothing")
+        store.close()
+        assert stats.sample_count == 0
+        assert stats.avg_cycles_to_satisfy is None
+        assert stats.satisfaction_rate == 0.0
