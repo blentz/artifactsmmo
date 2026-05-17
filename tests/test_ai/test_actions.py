@@ -1,5 +1,8 @@
 """Tests for GOAP actions — pure apply() functions, no mocking needed."""
 
+import os
+import tempfile
+
 import pytest
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -14,6 +17,8 @@ from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskExchangeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import _delete_cost
 from tests.test_ai.fixtures import make_state
 
@@ -610,3 +615,60 @@ def test_delete_cost_weight_rule():
     # Neither → 5
     gd_worthless = FakeGD()
     assert _delete_cost("garbage", gd_worthless) == 5.0
+
+
+def test_fight_action_cost_uses_history_when_provided():
+    """When LearningStore has >=5 ok samples, FightAction.cost returns the learned median."""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    try:
+        store = LearningStore(db_path=path, character="testchar")
+        store.start_session()
+        for i in range(5):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+                action_repr="Fight(yellow_slime)", actual_cooldown_seconds=25.0,
+            ))
+        action = FightAction(monster_code="yellow_slime", locations=frozenset({(1, 1)}))
+        state = make_state(x=1, y=1, hp=100, max_hp=100)
+        gd = GameData()
+        assert repr(action) == "Fight(yellow_slime)"
+        assert action.cost(state, gd, history=store) == 25.0
+        static_cost = action.cost(state, gd, history=None)
+        assert static_cost != 25.0
+        store.close()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+
+def test_fight_action_cost_penalises_low_success_rate():
+    """Low success rate adds penalty: cost = learned / rate."""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    try:
+        store = LearningStore(db_path=path, character="testchar")
+        store.start_session()
+        for i in range(5):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+                action_repr="Fight(z)", actual_cooldown_seconds=10.0,
+            ))
+        for i in range(5, 10):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="error:X",
+                action_repr="Fight(z)", actual_cooldown_seconds=99.0,
+            ))
+        action = FightAction(monster_code="z", locations=frozenset({(1, 1)}))
+        state = make_state(x=1, y=1, hp=100, max_hp=100)
+        # learned cost = 10.0 (only ok cycles counted in action_cost)
+        # success_rate = 0.5 (5 ok / 10 total)
+        # cost = 10.0 / 0.5 = 20.0
+        assert action.cost(state, GameData(), history=store) == 20.0
+        store.close()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
