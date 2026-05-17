@@ -89,10 +89,7 @@ class FarmItemsGoal(Goal):
 
     @property
     def max_depth(self) -> int:
-        # Per-cycle horizon is one submission worth of work: ~recipe-depth gathers
-        # + crafts + one TaskTrade. 25 gives recipe chains room without blowing
-        # up the search.
-        return 25
+        return 200
 
     def __repr__(self) -> str:
         return "FarmItems"
