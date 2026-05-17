@@ -18,7 +18,8 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
     return (
         state.x, state.y,
         state.hp, state.gold,
-        state.xp, state.task_progress,
+        state.xp,
+        state.task_code, state.task_type, state.task_progress, state.task_total,
         tuple(sorted(state.inventory.items())),
         tuple(sorted(state.equipment.items())),
         tuple(sorted((state.bank_items or {}).items())),

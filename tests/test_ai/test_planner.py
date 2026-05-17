@@ -3,11 +3,13 @@
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.task import AcceptTaskAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, FarmMonsterGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
-from artifactsmmo_cli.ai.goals.combat import FarmMonsterGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
@@ -109,6 +111,29 @@ class TestGOAPPlanner:
         plan = planner.plan(state, goal, [RestAction()], make_game_data())
         assert plan != []
         assert planner.last_stats.nodes_explored > 0
+
+    def test_accept_task_picks_single_step_when_already_at_taskmaster(self):
+        """Regression: _state_key must include task_code so the AcceptTask child
+        is not treated as a duplicate of the root state when position is
+        unchanged. Otherwise the planner is forced into longer detours."""
+        planner = GOAPPlanner()
+        state = make_state(x=2, y=13, task_code=None, task_total=0, gold=100)
+        goal = AcceptTaskGoal()
+        gd = make_game_data()
+        gd._npc_sell_prices = {}
+        # NpcBuy at a different tile is the detour the planner used to pick.
+        npc = NpcBuyAction(
+            npc_code="cultist_wizard",
+            item_code="corrupted_fruit",
+            quantity=1,
+            npc_location=(4, 13),
+        )
+        gd_with_npc = make_game_data()
+        gd_with_npc._npc_stock = {"cultist_wizard": {"corrupted_fruit": 10}}
+        actions = [AcceptTaskAction(taskmaster_location=(2, 13)), npc]
+        plan = planner.plan(state, goal, actions, gd_with_npc)
+        assert len(plan) == 1
+        assert isinstance(plan[0], AcceptTaskAction)
 
     def test_plan_accepts_history_parameter(self):
         """GOAPPlanner.plan should accept history (and ignore None gracefully)."""
