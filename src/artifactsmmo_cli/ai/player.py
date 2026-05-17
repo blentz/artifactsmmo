@@ -120,6 +120,7 @@ class GamePlayer:
         self._wildcard_mode: bool = False
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
+        self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
 
     def run(self) -> None:
@@ -168,6 +169,7 @@ class GamePlayer:
                     if plan:
                         selected_goal = goal
                         self._last_goal_name = repr(selected_goal)
+                        self._note_goal_selection(repr(selected_goal), cycle_index=self._cycle_counter)
                         break
 
                 if not plan or selected_goal is None:
@@ -227,6 +229,9 @@ class GamePlayer:
                 if new_state.cooldown_expires is not None:
                     cooldown_remaining = max(0.0, (new_state.cooldown_expires - now).total_seconds())
                 predicted = action.cost(prev_state_for_learning, game_data, self.history)
+                cycles_to_satisfy = None
+                if selected_goal.is_satisfied(new_state):
+                    cycles_to_satisfy = self._compute_cycles_to_satisfy(repr(selected_goal), self._cycle_counter)
                 self._record_learning_cycle(
                     prev_state=prev_state_for_learning,
                     new_state=new_state,
@@ -240,6 +245,7 @@ class GamePlayer:
                     planner_depth=self.planner.last_stats.max_depth_reached,
                     planner_timed_out=self.planner.last_stats.timed_out,
                     plan_len=len(plan),
+                    cycles_to_satisfy=cycles_to_satisfy,
                 )
                 self.state = new_state
 
@@ -701,6 +707,18 @@ class GamePlayer:
         assert self.state is not None
         suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
         print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
+
+    def _note_goal_selection(self, goal_repr: str, cycle_index: int) -> None:
+        """Record when a goal was first selected. Idempotent on re-selection."""
+        if goal_repr not in self._goal_first_selected_at:
+            self._goal_first_selected_at[goal_repr] = cycle_index
+
+    def _compute_cycles_to_satisfy(self, goal_repr: str, current_cycle: int) -> int | None:
+        """Return cycles since first selection, then clear. None if never selected."""
+        first = self._goal_first_selected_at.pop(goal_repr, None)
+        if first is None:
+            return None
+        return current_cycle - first
 
     def _record_learning_cycle(
         self,

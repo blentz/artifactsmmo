@@ -70,3 +70,18 @@ def test_player_no_history_does_not_write(tmp_db_path):
         selected_goal="G", predicted_cost=0.0, actual_cooldown_seconds=0.0,
         planner_nodes=0, planner_depth=0, planner_timed_out=False, plan_len=0,
     )
+
+
+def test_goal_cycles_to_satisfy_tracked():
+    """First-select timestamps tracked; satisfaction returns delta and clears."""
+    player = GamePlayer(character="testchar", history=None)
+    player.game_data = GameData()
+    player._note_goal_selection("G1", cycle_index=0)
+    assert player._goal_first_selected_at == {"G1": 0}
+    player._note_goal_selection("G1", cycle_index=1)
+    assert player._goal_first_selected_at == {"G1": 0}  # idempotent
+    cycles = player._compute_cycles_to_satisfy("G1", current_cycle=5)
+    assert cycles == 5
+    assert "G1" not in player._goal_first_selected_at
+    player._note_goal_selection("G1", cycle_index=6)
+    assert player._goal_first_selected_at["G1"] == 6
