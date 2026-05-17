@@ -16,6 +16,9 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 _TASKS_COIN = "tasks_coin"
 
+# API requires 3 tasks_coin per exchange; fewer returns HTTP 478 (missing item).
+_EXCHANGE_COST = 3
+
 _PENDING_TASK = "__pending__"
 
 
@@ -142,15 +145,19 @@ class TaskExchangeAction(Action):
     taskmaster_location: tuple[int, int]
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        bank = state.bank_items or {}
-        return state.inventory.get(_TASKS_COIN, 0) + bank.get(_TASKS_COIN, 0) > 0
+        # API burns exactly _EXCHANGE_COST coins per call; less = HTTP 478.
+        # Only inventory counts at execute time (bank coins must be withdrawn
+        # separately first).
+        return state.inventory.get(_TASKS_COIN, 0) >= _EXCHANGE_COST
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.taskmaster_location
         new_inventory = dict(state.inventory)
-        new_inventory.pop(_TASKS_COIN, None)
-        new_bank = dict(state.bank_items or {})
-        new_bank.pop(_TASKS_COIN, None)
+        remaining = new_inventory.get(_TASKS_COIN, 0) - _EXCHANGE_COST
+        if remaining <= 0:
+            new_inventory.pop(_TASKS_COIN, None)
+        else:
+            new_inventory[_TASKS_COIN] = remaining
         return WorldState(
             character=state.character,
             level=state.level,
@@ -170,7 +177,7 @@ class TaskExchangeAction(Action):
             task_type=state.task_type,
             task_progress=state.task_progress,
             task_total=state.task_total,
-            bank_items=new_bank,
+            bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
         )

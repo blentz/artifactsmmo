@@ -556,38 +556,45 @@ class TestCompleteTaskAction:
 
 
 class TestTaskExchangeAction:
-    def test_applicable_when_coins_in_inventory(self):
+    def test_applicable_when_three_coins_in_inventory(self):
+        # API burns exactly 3 coins per exchange (HTTP 478 if fewer).
         action = TaskExchangeAction(taskmaster_location=(1, 2))
-        state = make_state(inventory={"tasks_coin": 2})
+        state = make_state(inventory={"tasks_coin": 3})
         assert action.is_applicable(state, make_game_data()) is True
 
-    def test_applicable_when_coins_in_bank(self):
+    def test_not_applicable_with_fewer_than_three_coins(self):
         action = TaskExchangeAction(taskmaster_location=(1, 2))
-        state = make_state(bank_items={"tasks_coin": 1})
-        assert action.is_applicable(state, make_game_data()) is True
+        state = make_state(inventory={"tasks_coin": 2})
+        assert action.is_applicable(state, make_game_data()) is False
+
+    def test_not_applicable_when_coins_only_in_bank(self):
+        # Bank coins must be withdrawn first; goal logic includes them in its
+        # heuristic but the action itself requires them in inventory.
+        action = TaskExchangeAction(taskmaster_location=(1, 2))
+        state = make_state(bank_items={"tasks_coin": 5})
+        assert action.is_applicable(state, make_game_data()) is False
 
     def test_not_applicable_when_no_coins(self):
         action = TaskExchangeAction(taskmaster_location=(1, 2))
         state = make_state(inventory={}, bank_items={})
         assert action.is_applicable(state, make_game_data()) is False
 
-    def test_apply_removes_coins_from_inventory(self):
+    def test_apply_removes_three_coins_from_inventory(self):
         action = TaskExchangeAction(taskmaster_location=(1, 2))
         state = make_state(inventory={"tasks_coin": 3, "copper_ore": 2}, bank_items={})
         new_state = action.apply(state, make_game_data())
         assert "tasks_coin" not in new_state.inventory
         assert new_state.inventory.get("copper_ore") == 2
 
-    def test_apply_removes_coins_from_bank(self):
+    def test_apply_keeps_leftover_coins(self):
         action = TaskExchangeAction(taskmaster_location=(1, 2))
-        state = make_state(inventory={}, bank_items={"tasks_coin": 5, "copper_ore": 10})
+        state = make_state(inventory={"tasks_coin": 5}, bank_items={})
         new_state = action.apply(state, make_game_data())
-        assert "tasks_coin" not in new_state.bank_items
-        assert new_state.bank_items.get("copper_ore") == 10
+        assert new_state.inventory.get("tasks_coin") == 2
 
     def test_apply_moves_character_to_taskmaster(self):
         action = TaskExchangeAction(taskmaster_location=(1, 2))
-        state = make_state(x=0, y=0, inventory={"tasks_coin": 1}, bank_items={})
+        state = make_state(x=0, y=0, inventory={"tasks_coin": 3}, bank_items={})
         new_state = action.apply(state, make_game_data())
         assert new_state.x == 1
         assert new_state.y == 2

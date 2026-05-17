@@ -729,14 +729,15 @@ class TestFarmItemsGoal:
 
 
 class TestTaskExchangeGoal:
-    def test_value_22_when_coins_in_inventory(self):
+    def test_value_22_when_three_coins_in_inventory(self):
+        # API exchange burns 3 coins; goal fires once a full batch is available.
         goal = TaskExchangeGoal()
         state = make_state(inventory={"tasks_coin": 3})
         assert goal.value(state, make_game_data()) == 22.0
 
-    def test_value_22_when_coins_in_bank(self):
+    def test_value_22_when_three_coins_in_bank(self):
         goal = TaskExchangeGoal()
-        state = make_state(bank_items={"tasks_coin": 1})
+        state = make_state(bank_items={"tasks_coin": 3})
         assert goal.value(state, make_game_data()) == 22.0
 
     def test_value_zero_when_no_coins(self):
@@ -744,14 +745,24 @@ class TestTaskExchangeGoal:
         state = make_state(inventory={}, bank_items={})
         assert goal.value(state, make_game_data()) == 0.0
 
+    def test_value_zero_when_fewer_than_three_coins(self):
+        goal = TaskExchangeGoal()
+        state = make_state(inventory={"tasks_coin": 2})
+        assert goal.value(state, make_game_data()) == 0.0
+
     def test_satisfied_when_no_coins(self):
         goal = TaskExchangeGoal()
         state = make_state(inventory={}, bank_items={})
         assert goal.is_satisfied(state) is True
 
-    def test_not_satisfied_when_coins_in_inventory(self):
+    def test_satisfied_when_fewer_than_three_coins(self):
         goal = TaskExchangeGoal()
-        state = make_state(inventory={"tasks_coin": 1})
+        state = make_state(inventory={"tasks_coin": 2})
+        assert goal.is_satisfied(state) is True
+
+    def test_not_satisfied_when_three_coins_in_inventory(self):
+        goal = TaskExchangeGoal()
+        state = make_state(inventory={"tasks_coin": 3})
         assert goal.is_satisfied(state) is False
 
     def test_not_satisfied_when_coins_in_bank(self):
@@ -759,10 +770,10 @@ class TestTaskExchangeGoal:
         state = make_state(bank_items={"tasks_coin": 5})
         assert goal.is_satisfied(state) is False
 
-    def test_desired_state(self):
+    def test_desired_state_drops_below_batch(self):
         goal = TaskExchangeGoal()
-        state = make_state()
-        assert goal.desired_state(state, make_game_data()) == {"inventory": {"tasks_coin": 0}}
+        state = make_state(inventory={"tasks_coin": 5})
+        assert goal.desired_state(state, make_game_data()) == {"inventory": {"tasks_coin": 2}}
 
     def test_repr(self):
         assert repr(TaskExchangeGoal()) == "TaskExchange"
