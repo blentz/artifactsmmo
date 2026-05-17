@@ -30,9 +30,18 @@ class FarmMonsterGoal(Goal):
         if monster_level > 0 and best_equipped_level(state, game_data) < monster_level - 1:
             return 0.0  # under-equipped — block combat, let upgrade goal take over
         if state.max_xp == 0:
-            return 30.0
-        xp_fraction = state.xp / state.max_xp
-        return 30.0 + xp_fraction * 20.0
+            base = 30.0
+        else:
+            xp_fraction = state.xp / state.max_xp
+            base = 30.0 + xp_fraction * 20.0
+        if history is None:
+            return base
+        fight_repr = f"Fight({self.monster_code})"
+        observed_xp = history.action_effect(fight_repr, "delta_xp", window=50)
+        if observed_xp is None:
+            return base
+        xp_multiplier = min(2.0, max(0.5, observed_xp / 10.0))
+        return base * xp_multiplier
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.xp > self._initial_xp

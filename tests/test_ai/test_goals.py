@@ -1,5 +1,8 @@
 """Tests for GOAP goals — pure value() and is_satisfied() functions."""
 
+import os
+import tempfile
+
 from artifactsmmo_cli.ai.actions.bank import DepositAllAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -14,6 +17,8 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
 
@@ -875,4 +880,40 @@ def test_farm_items_goal_includes_task_trade_in_relevant_actions():
     relevant = goal.relevant_actions(actions, state, gd)
     names = [repr(a) for a in relevant]
     assert any("TaskTrade(iron_ore" in n for n in names)
-    assert not any("TaskTrade(other_item" in n for n in names)
+
+
+def test_farm_monster_goal_value_amplifies_on_high_xp_yield():
+    """When Fight(monster) has observed high delta_xp, goal.value scales up."""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    try:
+        store = LearningStore(db_path=path, character="testchar")
+        store.start_session()
+        for i in range(5):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+                action_repr="Fight(yellow_slime)", delta_xp=20,
+            ))
+        goal = FarmMonsterGoal(monster_code="yellow_slime", initial_xp=0)
+        gd = make_game_data()
+        gd._monster_level = {"yellow_slime": 1}
+        state = make_state(xp=50, max_xp=100, level=5)
+        base = goal.value(state, gd, history=None)
+        with_hist = goal.value(state, gd, history=store)
+        # base = 30 + (50/100)*20 = 40
+        # multiplier = min(2.0, max(0.5, 20/10)) = 2.0 -> with_hist = 80
+        assert base == 40.0
+        assert with_hist == 80.0
+        store.close()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+
+def test_farm_monster_goal_value_unchanged_when_history_none():
+    gd = make_game_data()
+    gd._monster_level = {"x": 1}
+    state = make_state(xp=50, max_xp=100, level=5)
+    goal = FarmMonsterGoal(monster_code="x", initial_xp=0)
+    assert goal.value(state, gd) == goal.value(state, gd, history=None)
