@@ -20,6 +20,16 @@ class GatherMaterialsGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
+        base = self._compute_base_value(state, game_data)
+        if history is None:
+            return base
+        avg_cycles = history.goal_avg_cycles_to_satisfy(repr(self), window=20)
+        if avg_cycles is None or avg_cycles == 0:
+            return base
+        efficiency = min(1.0, 5.0 / avg_cycles)
+        return base * efficiency
+
+    def _compute_base_value(self, state: WorldState, game_data: GameData) -> float:
         if self.is_satisfied(state):
             return 0.0
         total_needed = sum(self._needed.values())

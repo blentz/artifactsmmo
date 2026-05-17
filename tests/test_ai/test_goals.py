@@ -917,3 +917,37 @@ def test_farm_monster_goal_value_unchanged_when_history_none():
     state = make_state(xp=50, max_xp=100, level=5)
     goal = FarmMonsterGoal(monster_code="x", initial_xp=0)
     assert goal.value(state, gd) == goal.value(state, gd, history=None)
+
+
+def test_gather_materials_goal_unchanged_when_history_none():
+    """history=None preserves v1 behaviour."""
+    goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60})
+    state = make_state(inventory={}, inventory_max=104, bank_items={})
+    gd = make_game_data()
+    assert goal.value(state, gd) == goal.value(state, gd, history=None)
+
+
+def test_gather_materials_goal_value_penalty_when_slow_to_satisfy():
+    """When goal historically takes many cycles to satisfy, value is scaled down."""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    try:
+        store = LearningStore(db_path=path, character="testchar")
+        store.start_session()
+        for i in range(5):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+                selected_goal="GatherMaterials(copper_boots)",
+                cycles_to_satisfy=50,
+            ))
+        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60})
+        state = make_state(inventory={}, inventory_max=104, bank_items={})
+        gd = make_game_data()
+        base = goal.value(state, gd, history=None)
+        with_hist = goal.value(state, gd, history=store)
+        assert with_hist < base
+        store.close()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
