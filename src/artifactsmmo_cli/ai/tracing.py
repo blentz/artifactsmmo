@@ -37,7 +37,7 @@ class FileTracer(Tracer):
     def write_cycle(self, record: dict[str, object]) -> None:
         if self._fp is None:
             return
-        self._fp.write(json.dumps(record, default=str) + "\n")
+        self._fp.write(json.dumps(record, default=str, ensure_ascii=False) + "\n")
         self._fp.flush()
 
     def close(self) -> None:

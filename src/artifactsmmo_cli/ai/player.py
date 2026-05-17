@@ -765,7 +765,7 @@ class GamePlayer:
             delta_xp=new_state.xp - prev_state.xp,
             delta_hp=new_state.hp - prev_state.hp,
             delta_inv_used=new_state.inventory_used - prev_state.inventory_used,
-            drops_json=json.dumps(drops) if drops else None,
+            drops_json=json.dumps(drops, ensure_ascii=False) if drops else None,
             cycles_to_satisfy=cycles_to_satisfy,
         )
         self.history.record_cycle(cycle)
