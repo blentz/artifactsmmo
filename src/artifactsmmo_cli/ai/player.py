@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.types import Unset
 from artifactsmmo_api_client.api.achievements.get_achievement_achievements_code_get import sync as get_achievement
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
@@ -305,15 +306,51 @@ class GamePlayer:
             return self._fetch_world_state(client)
 
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
-        """Query character state from the API."""
-        result = get_character(client=client, name=self.character)
-        if result is None or not hasattr(result, "data") or result.data is None:
-            raise RuntimeError(f"Could not fetch character '{self.character}'")
+        """Query character state from the API. Retries on transient errors."""
+        last_result = None
+        backoff = 5.0
+        for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
+            last_result = get_character(client=client, name=self.character)
+            if (last_result is not None
+                    and not isinstance(last_result, ErrorResponseSchema)
+                    and hasattr(last_result, "data")
+                    and last_result.data is not None):
+                break
+            if attempt < 3:
+                code = "?"
+                msg = ""
+                if isinstance(last_result, ErrorResponseSchema):
+                    code = str(last_result.error.code)
+                    msg = last_result.error.message
+                print(f"[{self._now()}] get_character returned HTTP {code} ({msg}); retry {attempt}/3 in {backoff:.0f}s")
+                time.sleep(backoff)
+                backoff *= 2
+
+        if (last_result is None
+                or isinstance(last_result, ErrorResponseSchema)
+                or not hasattr(last_result, "data")
+                or last_result.data is None):
+            code = "?"
+            msg = "no data"
+            if isinstance(last_result, ErrorResponseSchema):
+                code = str(last_result.error.code)
+                msg = last_result.error.message
+            raise RuntimeError(
+                f"Could not fetch character '{self.character}' after 3 attempts "
+                f"(last response: HTTP {code} - {msg}). "
+                f"Verify the character exists at https://artifactsmmo.com/account and that "
+                f"your API token belongs to the same account."
+            )
 
         bank_items = self.state.bank_items if self.state else None
         bank_gold = self.state.bank_gold if self.state else None
         pending_items = self.state.pending_items if self.state else None
-        return WorldState.from_character_schema(result.data, bank_items=bank_items, bank_gold=bank_gold, pending_items=pending_items)
+        return WorldState.from_character_schema(
+            last_result.data,
+            bank_items=bank_items,
+            bank_gold=bank_gold,
+            pending_items=pending_items,
+        )
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
         """Re-fetch bank contents after a bank interaction."""

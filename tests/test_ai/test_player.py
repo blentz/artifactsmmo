@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch, call
 import pytest
 
 from artifactsmmo_api_client.models.achievement_type import AchievementType
+from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
+from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -1012,3 +1014,24 @@ class TestBuildActionsExtended:
 
         assert "cooked_chicken" in npc_buy_items
         assert "raw_iron" not in npc_buy_items  # no hp_restore
+
+
+def test_fetch_world_state_retries_on_404(monkeypatch):
+    """_fetch_world_state should retry 3 times on 404 before raising."""
+    attempts = []
+
+    def fake_get_character(client, name):
+        attempts.append(name)
+        return ErrorResponseSchema(
+            error=ErrorSchema(code=404, message="Character not found."),
+        )
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.get_character", fake_get_character)
+    monkeypatch.setattr("time.sleep", lambda _: None)  # don't actually wait
+
+    player = GamePlayer(character="TestChar")
+    with pytest.raises(RuntimeError) as exc:
+        player._fetch_world_state(client=None)
+    assert len(attempts) == 3
+    assert "404" in str(exc.value)
+    assert "TestChar" in str(exc.value)

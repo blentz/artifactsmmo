@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
+from sqlmodel import select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -56,9 +57,16 @@ class TestLearningStoreInit:
 
 class TestSessionLifecycle:
     def test_start_session_returns_id_and_inserts_row(self, tmp_db_path):
+        """start_session allocates the id; row appears only after record_cycle."""
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         session_id = store.start_session()
         assert session_id.startswith("session-")
+
+        # Record a cycle to trigger lazy row creation
+        store.record_cycle(Cycle(
+            ts="2026-05-17T00:00:00+00:00",
+            session_id="x", cycle_index=0, character="x", outcome="ok",
+        ))
 
         with SqlSession(store._engine) as s:
             rows = s.execute(text("SELECT session_id, character, exit_reason FROM sessions")).all()
@@ -71,6 +79,11 @@ class TestSessionLifecycle:
     def test_end_session_records_exit_reason(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         session_id = store.start_session()
+        # Record a cycle so the session row exists
+        store.record_cycle(Cycle(
+            ts="2026-05-17T00:00:00+00:00",
+            session_id="x", cycle_index=0, character="x", outcome="ok",
+        ))
         store.end_session(exit_reason="keyboard_interrupt")
         with SqlSession(store._engine) as s:
             rows = s.execute(text(
@@ -84,6 +97,40 @@ class TestSessionLifecycle:
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         store.end_session()
         store.close()
+
+    def test_start_session_does_not_write_row_immediately(self, tmp_db_path):
+        """Lazy session creation: row only written on first record_cycle."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        with SqlSession(store._engine) as s:
+            rows = list(s.exec(select(Session)))
+        store.close()
+        assert len(rows) == 0
+
+    def test_record_cycle_writes_session_row_lazily(self, tmp_db_path):
+        """First record_cycle triggers the deferred Session row write."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        sid = store.start_session()
+        cycle = Cycle(
+            ts="2026-05-17T00:00:00+00:00",
+            session_id="x", cycle_index=0, character="x", outcome="ok",
+        )
+        store.record_cycle(cycle)
+        with SqlSession(store._engine) as s:
+            rows = list(s.exec(select(Session)))
+        store.close()
+        assert len(rows) == 1
+        assert rows[0].session_id == sid
+
+    def test_end_session_noop_without_cycle(self, tmp_db_path):
+        """end_session without any record_cycle is no-op (no row to mark)."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        store.end_session(exit_reason="crash")  # should not raise
+        with SqlSession(store._engine) as s:
+            rows = list(s.exec(select(Session)))
+        store.close()
+        assert len(rows) == 0
 
 
 class TestRecordCycle:

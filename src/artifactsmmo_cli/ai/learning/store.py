@@ -29,22 +29,34 @@ class LearningStore:
 
         self._character = character
         self._session_id: str | None = None
+        self._session_row_written: bool = False
 
     def start_session(self) -> str:
-        """Begin a new session; insert Session row, return session_id."""
+        """Allocate session_id. Actual Session row written lazily on first record_cycle."""
         self._session_id = datetime.now(tz=timezone.utc).strftime("session-%Y%m%d-%H%M%S-%f")
-        with SqlSession(self._engine) as s:
-            s.add(Session(
-                session_id=self._session_id,
-                started_at=datetime.now(tz=timezone.utc).isoformat(),
-                character=self._character,
-            ))
-            s.commit()
+        self._session_row_written = False
         return self._session_id
 
+    def _ensure_session_row(self) -> None:
+        """Idempotent INSERT of the Session row before any Cycle row."""
+        if self._session_row_written or self._session_id is None:
+            return
+        try:
+            with SqlSession(self._engine) as s:
+                s.add(Session(
+                    session_id=self._session_id,
+                    started_at=datetime.now(tz=timezone.utc).isoformat(),
+                    character=self._character,
+                ))
+                s.commit()
+            self._session_row_written = True
+        except SQLAlchemyError as e:
+            print(f"[learning] _ensure_session_row failed: {e}")
+
     def end_session(self, exit_reason: str = "normal") -> None:
-        """Mark current session ended. No-op if no session was started."""
-        if self._session_id is None:
+        """Mark current session ended. No-op if no session was started or no cycle was recorded."""
+        if self._session_id is None or not self._session_row_written:
+            self._session_id = None
             return
         with SqlSession(self._engine) as s:
             row = s.get(Session, self._session_id)
@@ -59,6 +71,7 @@ class LearningStore:
         """Insert one validated Cycle row. Best-effort: SQLAlchemyError caught, never raised."""
         if self._session_id is None:
             return
+        self._ensure_session_row()
         cycle.session_id = self._session_id
         cycle.character = self._character
         try:

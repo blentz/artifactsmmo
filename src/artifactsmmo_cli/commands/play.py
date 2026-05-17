@@ -48,9 +48,14 @@ def play(
         character=character, verbose=verbose, dry_run=dry_run,
         tracer=tracer, history=store,
     )
+    exit_reason = "crash"
     try:
         player.run()
+        exit_reason = "normal"
+    except KeyboardInterrupt:
+        exit_reason = "keyboard_interrupt"
+        raise
     finally:
         if store is not None:
-            store.end_session(exit_reason="normal")
+            store.end_session(exit_reason=exit_reason)
             store.close()
