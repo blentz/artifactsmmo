@@ -76,22 +76,24 @@ class TestSessionLifecycle:
         assert rows[0][1] == "testchar"
         assert rows[0][2] is None
 
-    def test_end_session_records_exit_reason(self, tmp_db_path):
+    def test_end_session_records_exit_reason_and_cycle_count(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         session_id = store.start_session()
-        # Record a cycle so the session row exists
-        store.record_cycle(Cycle(
-            ts="2026-05-17T00:00:00+00:00",
-            session_id="x", cycle_index=0, character="x", outcome="ok",
-        ))
+        # Record 3 cycles so end_session has something to count
+        for i in range(3):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                session_id="x", cycle_index=i, character="x", outcome="ok",
+            ))
         store.end_session(exit_reason="keyboard_interrupt")
         with SqlSession(store._engine) as s:
             rows = s.execute(text(
-                "SELECT exit_reason, ended_at FROM sessions WHERE session_id=:sid"
+                "SELECT exit_reason, ended_at, cycle_count FROM sessions WHERE session_id=:sid"
             ), {"sid": session_id}).all()
         store.close()
         assert rows[0][0] == "keyboard_interrupt"
         assert rows[0][1] is not None
+        assert rows[0][2] == 3
 
     def test_end_session_without_start_is_noop(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")

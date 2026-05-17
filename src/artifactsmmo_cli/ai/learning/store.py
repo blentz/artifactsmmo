@@ -4,7 +4,7 @@ import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
@@ -58,13 +58,20 @@ class LearningStore:
         if self._session_id is None or not self._session_row_written:
             self._session_id = None
             return
-        with SqlSession(self._engine) as s:
-            row = s.get(Session, self._session_id)
-            if row is not None:
-                row.ended_at = datetime.now(tz=timezone.utc).isoformat()
-                row.exit_reason = exit_reason
-                s.add(row)
-                s.commit()
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.get(Session, self._session_id)
+                if row is not None:
+                    n = s.exec(
+                        select(func.count()).select_from(Cycle).where(Cycle.session_id == self._session_id)
+                    ).one()
+                    row.ended_at = datetime.now(tz=timezone.utc).isoformat()
+                    row.exit_reason = exit_reason
+                    row.cycle_count = int(n)
+                    s.add(row)
+                    s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] end_session failed: {e}")
         self._session_id = None
 
     def record_cycle(self, cycle: Cycle) -> None:
