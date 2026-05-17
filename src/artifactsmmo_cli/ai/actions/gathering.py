@@ -72,7 +72,14 @@ class GatherAction(Action):
              history: LearningStore | None = None) -> float:
         dest = _nearest(self.locations, state)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        return 6.0 + dist
+        static = 6.0 + dist
+        if history is None:
+            return static
+        learned = history.action_cost(repr(self), default=static, window=50)
+        rate = history.success_rate(repr(self), window=50)
+        if rate < 0.95:
+            return learned / max(rate, 0.1)
+        return learned
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         dest = _nearest(self.locations, state)
