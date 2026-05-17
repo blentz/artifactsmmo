@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
-from sqlmodel import SQLModel, create_engine, select
+from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
@@ -78,15 +78,16 @@ class LearningStore:
                         Cycle.character == self._character,
                         Cycle.action_repr == action_repr,
                         Cycle.outcome == "ok",
-                        Cycle.actual_cooldown_seconds.is_not(None),
+                        col(Cycle.actual_cooldown_seconds).is_not(None),
                     )
-                    .order_by(Cycle.ts.desc())
+                    .order_by(col(Cycle.ts).desc())
                     .limit(window)
                 )
                 rows = list(s.exec(stmt))
-            if len(rows) < 5:
+            non_null = [r for r in rows if r is not None]
+            if len(non_null) < 5:
                 return default
-            return statistics.median(rows)
+            return statistics.median(non_null)
         except SQLAlchemyError:
             return default
 
@@ -100,7 +101,7 @@ class LearningStore:
                         Cycle.character == self._character,
                         Cycle.action_repr == action_repr,
                     )
-                    .order_by(Cycle.ts.desc())
+                    .order_by(col(Cycle.ts).desc())
                     .limit(window)
                 )
                 outcomes = list(s.exec(stmt))
@@ -116,24 +117,25 @@ class LearningStore:
         """Median of `field` over recent ok cycles. Allowed fields: delta_gold/delta_xp/delta_hp/delta_inv_used."""
         if field not in self._ALLOWED_EFFECT_FIELDS:
             return None
-        col = getattr(Cycle, field)
+        field_col = getattr(Cycle, field)
         try:
             with SqlSession(self._engine) as s:
                 stmt = (
-                    select(col)
+                    select(field_col)
                     .where(
                         Cycle.character == self._character,
                         Cycle.action_repr == action_repr,
                         Cycle.outcome == "ok",
-                        col.is_not(None),
+                        col(field_col).is_not(None),
                     )
-                    .order_by(Cycle.ts.desc())
+                    .order_by(col(Cycle.ts).desc())
                     .limit(window)
                 )
                 rows = list(s.exec(stmt))
-            if len(rows) < 5:
+            non_null: list[float] = [float(r) for r in rows if r is not None]
+            if len(non_null) < 5:
                 return None
-            return statistics.median(rows)
+            return statistics.median(non_null)
         except SQLAlchemyError:
             return None
 
@@ -146,15 +148,16 @@ class LearningStore:
                     .where(
                         Cycle.character == self._character,
                         Cycle.selected_goal == goal_repr,
-                        Cycle.cycles_to_satisfy.is_not(None),
+                        col(Cycle.cycles_to_satisfy).is_not(None),
                     )
-                    .order_by(Cycle.ts.desc())
+                    .order_by(col(Cycle.ts).desc())
                     .limit(window)
                 )
                 rows = list(s.exec(stmt))
-            if len(rows) < 5:
+            non_null = [r for r in rows if r is not None]
+            if len(non_null) < 5:
                 return None
-            return statistics.median(rows)
+            return statistics.median(non_null)
         except SQLAlchemyError:
             return None
 
@@ -196,7 +199,7 @@ class LearningStore:
                         Cycle.character == self._character,
                         Cycle.selected_goal == goal_repr,
                     )
-                    .order_by(Cycle.ts.desc())
+                    .order_by(col(Cycle.ts).desc())
                     .limit(window)
                 )
                 rows = list(s.exec(stmt))
