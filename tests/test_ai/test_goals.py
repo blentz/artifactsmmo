@@ -152,6 +152,34 @@ class TestFarmMonsterGoal:
         gd._monster_level = {"chicken": 1}
         assert goal.priority(state, gd) == goal.value(state, gd)
 
+    def test_relevant_actions_filters_fights_by_monster_code(self):
+        """FarmMonster(chicken) must NOT expose Fight(yellow_slime) to the planner.
+
+        Regression: prior behaviour returned every FightAction, letting the
+        planner pick a cheaper-cost different monster and walk Robby into
+        a one-shot loss loop.
+        """
+        from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+        from artifactsmmo_cli.ai.actions.gathering import GatherAction
+
+        goal = FarmMonsterGoal(monster_code="chicken")
+        state = make_state()
+        gd = make_game_data()
+        actions = [
+            FightAction(monster_code="chicken", locations=frozenset({(0, 1)})),
+            FightAction(monster_code="yellow_slime", locations=frozenset({(4, -1)})),
+            RestAction(),
+            UseConsumableAction(_item_stats={}),
+            GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 2)})),
+        ]
+        kept = goal.relevant_actions(actions, state, gd)
+        names = [repr(a) for a in kept]
+        assert any("Fight(chicken)" in n for n in names)
+        assert not any("Fight(yellow_slime)" in n for n in names)
+        assert any(isinstance(a, RestAction) for a in kept)
+        assert any(isinstance(a, UseConsumableAction) for a in kept)
+        assert not any(isinstance(a, GatherAction) for a in kept)
+
 
 def _make_equipment(**overrides):
     slots = {k: None for k in ["weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",

@@ -1,5 +1,9 @@
 """Combat goals: monster farming and task completion."""
 
+from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -48,6 +52,20 @@ class FarmMonsterGoal(Goal):
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"xp": self._initial_xp + 10}
+
+    def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
+        """Restrict planner to Fight on THIS monster plus HP recovery options.
+
+        Without this filter the planner sees every FightAction and may pick a
+        cheaper-cost different monster, defeating the purpose of a per-monster goal.
+        """
+        result: list[Action] = []
+        for action in actions:
+            if isinstance(action, FightAction) and action.monster_code == self.monster_code:
+                result.append(action)
+            elif isinstance(action, (RestAction, UseConsumableAction)):
+                result.append(action)
+        return result
 
     def __repr__(self) -> str:
         return f"FarmMonster({self.monster_code})"
