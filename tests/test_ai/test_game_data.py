@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.game_data import GameData
+
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.types import UNSET
@@ -482,3 +484,31 @@ def test_load_maps_captures_transition_tiles(monkeypatch):
     gd = GameData()
     gd._load_maps(client=None)
     assert gd._transition_tiles == {(5, 5), (7, 7)}
+
+
+def test_active_gathering_skills_walks_recipe_tree():
+    """Task on a crafted item should surface every gather skill in its recipe
+    chain (e.g. ash_plank ← ash_wood ← ash_tree → woodcutting)."""
+    gd = GameData()
+    gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    assert gd.active_gathering_skills("ash_plank") == {"woodcutting"}
+
+
+def test_active_gathering_skills_returns_empty_for_no_task():
+    gd = GameData()
+    assert gd.active_gathering_skills(None) == set()
+    assert gd.active_gathering_skills("") == set()
+
+
+def test_active_gathering_skills_handles_multi_skill_recipes():
+    """Two raws in the recipe = two skills surfaced."""
+    gd = GameData()
+    gd._crafting_recipes = {"alloy_bar": {"copper_ore": 2, "iron_ore": 2}}
+    gd._resource_drops = {"copper_rocks": "copper_ore", "iron_rocks": "iron_ore"}
+    gd._resource_skill = {
+        "copper_rocks": ("mining", 1),
+        "iron_rocks": ("mining", 5),
+    }
+    assert gd.active_gathering_skills("alloy_bar") == {"mining"}

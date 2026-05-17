@@ -337,6 +337,69 @@ class TestUpgradeEquipmentGoal:
         assert goal.value(state, gd) == 35.0
 
 
+class TestUpgradeEquipmentGoalToolBias:
+    """A craftable upgrade whose stats bonus an active gathering skill must
+    outrank generic gear and bump value() above FarmItems (35)."""
+
+    def test_value_50_when_craftable_tool_matches_active_skill(self):
+        # Active task = ash_plank → walks recipe ash_plank ← ash_wood ← ash_tree
+        # → woodcutting is active.
+        axe = ItemStats(
+            code="copper_axe", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+            skill_effects={"woodcutting": -1},
+        )
+        gd = make_game_data(item_stats={"copper_axe": axe})
+        gd._crafting_recipes = {
+            "copper_axe": {"copper_ore": 6},
+            "ash_plank": {"ash_wood": 1},
+        }
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        state = make_state(
+            inventory={}, level=5, skills={"weaponcrafting": 1},
+            bank_items={"copper_ore": 6},
+            task_code="ash_plank", task_type="items", task_total=10, task_progress=0,
+        )
+        goal = UpgradeEquipmentGoal()
+        assert goal.value(state, gd) == 50.0
+
+    def test_relevant_tool_beats_lower_level_generic_craftable(self):
+        # Lower craft_level (dagger=1) would normally win; the axe (level 2) has
+        # the relevant skill bonus and should still be picked.
+        dagger = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        axe = ItemStats(
+            code="copper_axe", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=2,
+            skill_effects={"woodcutting": -1},
+        )
+        gd = make_game_data(item_stats={"copper_dagger": dagger, "copper_axe": axe})
+        gd._crafting_recipes = {
+            "copper_dagger": {"copper_ore": 6},
+            "copper_axe": {"copper_ore": 6},
+            "ash_plank": {"ash_wood": 1},
+        }
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        state = make_state(
+            inventory={}, level=5, skills={"weaponcrafting": 2},
+            bank_items={"copper_ore": 12},
+            task_code="ash_plank", task_type="items", task_total=10, task_progress=0,
+        )
+        goal = UpgradeEquipmentGoal()
+        upgrade = goal._find_craftable_upgrade(state, make_game_data_with(gd))
+        assert upgrade is not None
+        assert upgrade[0] == "copper_axe"
+
+
+def make_game_data_with(gd):
+    """Pass-through so we don't accidentally re-create gd."""
+    return gd
+
+
 class TestUpgradeEquipmentGoalPriority:
     def test_priority_60_when_upgrade_in_inventory(self):
         """Regression: upgrade in inventory must have priority > GatherMaterials (50)

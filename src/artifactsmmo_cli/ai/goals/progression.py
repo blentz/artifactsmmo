@@ -15,17 +15,37 @@ class UpgradeEquipmentGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        if self._find_upgrade(state, game_data):
-            return 35.0
-        return 0.0
+        upgrade = self._find_upgrade(state, game_data)
+        if upgrade is None:
+            return 0.0
+        # Tool upgrade that boosts an active gather skill (e.g. better axe while
+        # woodcutting for an ash_plank task) is far more valuable than generic
+        # gear because it cuts the per-gather cooldown directly. Bump above
+        # FarmItems (35) so the loop interrupts to craft+equip the tool.
+        if self._upgrade_is_relevant_tool(upgrade, state, game_data):
+            return 50.0
+        return 35.0
 
     def priority(self, state: WorldState, game_data: GameData,
                  history: LearningStore | None = None) -> float:
         # Upgrade already in inventory → equip immediately, ahead of gathering (50.0).
-        # Upgrade in bank or needs crafting → normal priority.
+        # Upgrade in bank or needs crafting → normal priority (possibly boosted
+        # by value() above for active-skill tool upgrades).
         if self._find_inventory_only_upgrade(state, game_data):
             return 60.0
         return self.value(state, game_data)
+
+    def _upgrade_is_relevant_tool(self, upgrade: tuple[str, str],
+                                   state: WorldState, game_data: GameData) -> bool:
+        """True if the upgrade improves a tool for a skill the current task needs."""
+        item_code, _slot = upgrade
+        stats = game_data.item_stats(item_code)
+        if stats is None or not stats.skill_effects:
+            return False
+        active = game_data.active_gathering_skills(state.task_code)
+        if not active:
+            return False
+        return any(skill in active for skill in stats.skill_effects)
 
     def is_satisfied(self, state: WorldState) -> bool:
         for slot, current in state.equipment.items():
@@ -87,14 +107,20 @@ class UpgradeEquipmentGoal(Goal):
         return best
 
     def _find_craftable_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
-        """Find the lowest-crafting-level upgrade we can make, ignoring material availability.
+        """Find the best craftable upgrade ignoring material availability.
 
-        Lowest crafting_level first so skill progression is linear: craft basic items to
-        level the skill, unlocking higher recipes over time.
+        Ranking: (relevant_tool_first, lowest_crafting_level). Relevant-tool means
+        the item has a positive skill_effect for a skill the current task needs
+        (e.g. a better axe while the active task chains through woodcutting).
+        Within each tier, lowest crafting_level first so skill progression is
+        linear: craft basic items to level the skill, unlocking higher recipes.
         """
+        active = game_data.active_gathering_skills(state.task_code)
         equipped = set(state.equipment.values()) - {None}
         best: tuple[str, str] | None = None
-        best_craft_level = float("inf")
+        # Sort key: (relevant_tool 0|1, -craft_level). Higher tuple wins.
+        # Init to (-1, -inf) so any real candidate beats it.
+        best_key: tuple[int, float] = (-1, -float("inf"))
         for item_code in game_data._crafting_recipes:
             if item_code in state.inventory or item_code in equipped:
                 continue
@@ -106,24 +132,33 @@ class UpgradeEquipmentGoal(Goal):
             if stats.crafting_skill and state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:
                 continue
             craft_level = stats.crafting_level or 0
-            if craft_level >= best_craft_level:
+            relevant_tool = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            # Sort key: relevant tools come first (higher rank), then lower craft level.
+            key = (relevant_tool, -craft_level)
+            if key < best_key:
                 continue
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if self._is_upgrade_over(item_code, stats, current, current_stats, game_data):
-                    best, best_craft_level = (item_code, slot), craft_level
+                    best, best_key = (item_code, slot), key
         return best
 
     def _find_craftable_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
-        """Find the lowest-crafting-level upgrade whose materials are already available."""
+        """Find the best craftable upgrade whose materials are already available.
+
+        Same ranking as _find_craftable_upgrade_target (relevant tool first,
+        then lowest crafting_level), restricted to recipes whose materials
+        the planner can satisfy in a short Withdraw → Craft → Equip chain.
+        """
+        active = game_data.active_gathering_skills(state.task_code)
         equipped = set(state.equipment.values()) - {None}
         bank = state.bank_items or {}
         best: tuple[str, str] | None = None
-        best_craft_level = float("inf")
+        best_key: tuple[int, float] = (-1, -float("inf"))
         for item_code, recipe in game_data._crafting_recipes.items():
             if item_code in state.inventory or item_code in equipped:
-                continue  # already handled by _find_inventory_upgrade or already equipped
+                continue
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
                 continue
@@ -131,21 +166,21 @@ class UpgradeEquipmentGoal(Goal):
                 continue
             if stats.crafting_skill and state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:
                 continue
-            # Only propose craft if materials are already available (inventory + bank).
-            # This keeps the planner chain short: Withdraw → Craft → Equip.
             if not all(
                 state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
                 for mat, qty in recipe.items()
             ):
                 continue
             craft_level = stats.crafting_level or 0
-            if craft_level >= best_craft_level:
+            relevant_tool = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            key = (relevant_tool, -craft_level)
+            if key < best_key:
                 continue
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if self._is_upgrade_over(item_code, stats, current, current_stats, game_data):
-                    best, best_craft_level = (item_code, slot), craft_level
+                    best, best_key = (item_code, slot), key
         return best
 
     def _is_upgrade_over(

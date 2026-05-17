@@ -14,6 +14,9 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.types import Unset
 
 
+_GATHERING_SKILLS = frozenset({"mining", "woodcutting", "fishing", "alchemy"})
+
+
 @dataclass
 class ItemStats:
     """Relevant stats for an item."""
@@ -24,6 +27,7 @@ class ItemStats:
     crafting_skill: str | None = None
     crafting_level: int = 0
     hp_restore: int = 0  # HP restored when consumed (0 for non-consumables)
+    skill_effects: dict[str, int] = field(default_factory=dict)  # skill -> effect value (e.g. woodcutting cooldown reduction)
 
 
 @dataclass
@@ -104,6 +108,36 @@ class GameData:
             if best is None or stats.hp_restore > best[1]:
                 best = (code, stats.hp_restore)
         return best
+
+    def active_gathering_skills(self, task_code: str | None) -> set[str]:
+        """Gathering skills involved in producing task_code (walking the recipe tree).
+
+        E.g. task_code="ash_plank" → recipe needs ash_wood → ash_tree resource →
+        woodcutting. Returns the set of distinct gather skills the player should
+        prefer tool upgrades for.
+        """
+        if not task_code:
+            return set()
+        skills: set[str] = set()
+        visited: set[str] = set()
+
+        def walk(item: str) -> None:
+            if item in visited:
+                return
+            visited.add(item)
+            # Direct gather: any resource that drops this item contributes its skill.
+            for res_code, drop in self._resource_drops.items():
+                if drop == item:
+                    sl = self._resource_skill.get(res_code)
+                    if sl is not None:
+                        skills.add(sl[0])
+            # Indirect gather: recurse into the recipe (e.g. ash_plank → ash_wood).
+            recipe = self._crafting_recipes.get(item) or {}
+            for mat in recipe:
+                walk(mat)
+
+        walk(task_code)
+        return skills
 
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
         """Location of a named NPC on the map."""
@@ -221,7 +255,11 @@ class GameData:
                     for effect in item.effects:
                         if effect.code == "heal":
                             stats.hp_restore = effect.value
-                            break
+                        elif effect.code in _GATHERING_SKILLS:
+                            # Tool bonus for a gather skill (e.g. axe → woodcutting).
+                            # Game encodes as cooldown reduction (negative value = faster);
+                            # store as-is so callers can compare magnitudes.
+                            stats.skill_effects[effect.code] = effect.value
 
                 if not isinstance(item.craft, Unset) and item.craft is not None:
                     craft = item.craft
