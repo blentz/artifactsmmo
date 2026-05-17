@@ -109,3 +109,13 @@ class TestGOAPPlanner:
         plan = planner.plan(state, goal, [RestAction()], make_game_data())
         assert plan != []
         assert planner.last_stats.nodes_explored > 0
+
+    def test_plan_accepts_history_parameter(self):
+        """GOAPPlanner.plan should accept history (and ignore None gracefully)."""
+        planner = GOAPPlanner()
+        state = make_state(hp=50, max_hp=100)
+        goal = RestoreHPGoal()
+        actions = [RestAction()]
+        plan = planner.plan(state, goal, actions, GameData(), history=None)
+        assert len(plan) == 1
+        assert isinstance(plan[0], RestAction)

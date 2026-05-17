@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _SEARCH_BUDGET_SECONDS = 2.0
@@ -55,13 +56,14 @@ class GOAPPlanner:
         goal: Goal,
         actions: list[Action],
         game_data: GameData,
+        history: LearningStore | None = None,
     ) -> list[Action]:
         """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found."""
         max_depth = goal.max_depth
         deadline = time.monotonic() + _SEARCH_BUDGET_SECONDS
         stats = PlanStats()
 
-        h0 = goal.value(state, game_data)
+        h0 = goal.value(state, game_data, history)
         heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
         visited: set[tuple[object, ...]] = set()
         relevant = goal.relevant_actions(actions, state, game_data)
@@ -94,8 +96,8 @@ class GOAPPlanner:
                     continue
 
                 next_state = action.apply(node.state, game_data)
-                g = node.g_score + action.cost(node.state, game_data)
-                h = goal.value(next_state, game_data)
+                g = node.g_score + action.cost(node.state, game_data, history)
+                h = goal.value(next_state, game_data, history)
                 heapq.heappush(
                     heap,
                     _Node(
