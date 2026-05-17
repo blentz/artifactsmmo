@@ -51,3 +51,35 @@ class TestLearningStoreInit:
         store1.close()
         store2 = LearningStore(db_path=tmp_db_path, character="testchar")
         store2.close()
+
+
+class TestSessionLifecycle:
+    def test_start_session_returns_id_and_inserts_row(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        session_id = store.start_session()
+        assert session_id.startswith("session-")
+
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text("SELECT session_id, character, exit_reason FROM sessions")).all()
+        store.close()
+        assert len(rows) == 1
+        assert rows[0][0] == session_id
+        assert rows[0][1] == "testchar"
+        assert rows[0][2] is None
+
+    def test_end_session_records_exit_reason(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        session_id = store.start_session()
+        store.end_session(exit_reason="keyboard_interrupt")
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text(
+                "SELECT exit_reason, ended_at FROM sessions WHERE session_id=:sid"
+            ), {"sid": session_id}).all()
+        store.close()
+        assert rows[0][0] == "keyboard_interrupt"
+        assert rows[0][1] is not None
+
+    def test_end_session_without_start_is_noop(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.end_session()
+        store.close()
