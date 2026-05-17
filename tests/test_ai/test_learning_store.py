@@ -5,6 +5,7 @@ import tempfile
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
@@ -82,4 +83,61 @@ class TestSessionLifecycle:
     def test_end_session_without_start_is_noop(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         store.end_session()
+        store.close()
+
+
+class TestRecordCycle:
+    def test_round_trip(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        cycle = Cycle(
+            ts="2026-05-17T00:00:00+00:00",
+            session_id="overridden",
+            cycle_index=0,
+            character="overridden",
+            outcome="ok",
+            action_repr="Fight(yellow_slime)",
+            actual_cooldown_seconds=12.5,
+        )
+        store.record_cycle(cycle)
+
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text(
+                "SELECT action_repr, actual_cooldown_seconds, session_id, character FROM cycles"
+            )).all()
+        store.close()
+        assert len(rows) == 1
+        assert rows[0][0] == "Fight(yellow_slime)"
+        assert rows[0][1] == 12.5
+
+    def test_record_cycle_overrides_session_id_and_character(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="actual_char")
+        session_id = store.start_session()
+        cycle = Cycle(
+            ts="2026-05-17T00:00:00+00:00",
+            session_id="wrong",
+            cycle_index=0,
+            character="wrong",
+            outcome="ok",
+        )
+        store.record_cycle(cycle)
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text("SELECT session_id, character FROM cycles")).all()
+        store.close()
+        assert rows[0][0] == session_id
+        assert rows[0][1] == "actual_char"
+
+    def test_record_cycle_swallows_sqlalchemy_error(self, tmp_db_path, monkeypatch):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+
+        def boom(self, instance):
+            raise SQLAlchemyError("simulated DB failure")
+
+        monkeypatch.setattr(SqlSession, "add", boom)
+        cycle = Cycle(
+            ts="2026-05-17T00:00:00+00:00",
+            session_id="x", cycle_index=0, character="testchar", outcome="ok",
+        )
+        store.record_cycle(cycle)
         store.close()

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine
 
@@ -51,6 +52,19 @@ class LearningStore:
                 s.add(row)
                 s.commit()
         self._session_id = None
+
+    def record_cycle(self, cycle: Cycle) -> None:
+        """Insert one validated Cycle row. Best-effort: SQLAlchemyError caught, never raised."""
+        if self._session_id is None:
+            return
+        cycle.session_id = self._session_id
+        cycle.character = self._character
+        try:
+            with SqlSession(self._engine) as s:
+                s.add(cycle)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] record_cycle failed: {e}")
 
     def close(self) -> None:
         self._engine.dispose()
