@@ -8,13 +8,15 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class FarmItemsGoal(Goal):
     """Gather or craft the items required by the current items-type task."""
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         if state.task_type != "items" or not state.task_code or state.task_total == 0:
@@ -23,7 +25,8 @@ class FarmItemsGoal(Goal):
         fraction_remaining = remaining / state.task_total
         return max(1.0, 28.0 * fraction_remaining)
 
-    def priority(self, state: WorldState, game_data: GameData) -> float:
+    def priority(self, state: WorldState, game_data: GameData,
+                 history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         if state.task_type != "items" or not state.task_code or state.task_total == 0:

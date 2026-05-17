@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.survival import MIN_FREE_SLOTS
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -15,7 +16,8 @@ class SellInventoryGoal(Goal):
     def __init__(self, bank_accessible: bool = True) -> None:
         self._bank_accessible = bank_accessible
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if self._bank_accessible or state.inventory_max == 0:
             return 0.0
         if self.is_satisfied(state):

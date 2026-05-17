@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _TASKS_COIN = "tasks_coin"
@@ -10,7 +11,8 @@ _TASKS_COIN = "tasks_coin"
 class TaskExchangeGoal(Goal):
     """Exchange task coins when any are held in inventory or bank."""
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         return 22.0

@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5
@@ -10,7 +11,8 @@ MIN_FREE_SLOTS = 5
 class RestoreHPGoal(Goal):
     """Restore HP to full. Urgency spikes when HP is low."""
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         return (1.0 - state.hp_percent) * 100.0
 
     def is_satisfied(self, state: WorldState) -> bool:
@@ -29,7 +31,8 @@ class DepositInventoryGoal(Goal):
     def __init__(self, bank_accessible: bool = True) -> None:
         self._bank_accessible = bank_accessible
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if not self._bank_accessible or state.inventory_max == 0:
             return 0.0
         if self.is_satisfied(state):

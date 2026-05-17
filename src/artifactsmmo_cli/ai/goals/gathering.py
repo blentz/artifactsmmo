@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -17,7 +18,8 @@ class GatherMaterialsGoal(Goal):
         self._target_item = target_item
         self._needed = needed  # {material_code: quantity_needed}
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         total_needed = sum(self._needed.values())
@@ -36,7 +38,8 @@ class GatherMaterialsGoal(Goal):
         fraction_remaining = 1.0 - total_effective / total_needed
         return max(1.0, 40.0 * fraction_remaining)
 
-    def priority(self, state: WorldState, game_data: GameData) -> float:
+    def priority(self, state: WorldState, game_data: GameData,
+                 history: LearningStore | None = None) -> float:
         """Fixed high priority until satisfied — keeps gathering ahead of farming regardless of XP fraction."""
         if self.is_satisfied(state):
             return 0.0

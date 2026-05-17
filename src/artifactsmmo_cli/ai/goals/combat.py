@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -23,7 +24,8 @@ class FarmMonsterGoal(Goal):
         self.monster_code = monster_code
         self._initial_xp = initial_xp
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         monster_level = game_data.monster_level(self.monster_code)
         if monster_level > 0 and best_equipped_level(state, game_data) < monster_level - 1:
             return 0.0  # under-equipped — block combat, let upgrade goal take over
@@ -45,7 +47,8 @@ class FarmMonsterGoal(Goal):
 class AcceptTaskGoal(Goal):
     """Accept a new task when the character has none."""
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         return 20.0
@@ -63,7 +66,8 @@ class AcceptTaskGoal(Goal):
 class CompleteTaskGoal(Goal):
     """Complete the current character task (monster kills, gathering, or crafting)."""
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if not state.task_code or state.task_total == 0:
             return 0.0
         progress_fraction = state.task_progress / state.task_total

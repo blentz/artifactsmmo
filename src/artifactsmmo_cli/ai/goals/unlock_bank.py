@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -17,7 +18,8 @@ class UnlockBankGoal(Goal):
         self._initial_xp = initial_xp
         self._target_monster = target_monster
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if not self._bank_locked or state.xp > self._initial_xp:
             return 0.0
         # If inventory is critical AND we have a faster way to free it (NPC sell),

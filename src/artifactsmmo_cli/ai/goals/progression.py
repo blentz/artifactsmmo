@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -12,12 +13,14 @@ class UpgradeEquipmentGoal(Goal):
     def __init__(self, initial_equipment: dict[str, str | None] | None = None) -> None:
         self._initial_equipment: dict[str, str | None] = dict(initial_equipment) if initial_equipment else {}
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if self._find_upgrade(state, game_data):
             return 35.0
         return 0.0
 
-    def priority(self, state: WorldState, game_data: GameData) -> float:
+    def priority(self, state: WorldState, game_data: GameData,
+                 history: LearningStore | None = None) -> float:
         # Upgrade already in inventory → equip immediately, ahead of gathering (50.0).
         # Upgrade in bank or needs crafting → normal priority.
         if self._find_inventory_only_upgrade(state, game_data):

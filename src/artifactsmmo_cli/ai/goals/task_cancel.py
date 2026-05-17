@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -12,7 +13,8 @@ class TaskCancelGoal(Goal):
     attempts the task first and cancels as a last resort when stuck.
     """
 
-    def value(self, state: WorldState, game_data: GameData) -> float:
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
         if not self._task_is_too_hard(state, game_data):
             return 0.0
         return 12.0

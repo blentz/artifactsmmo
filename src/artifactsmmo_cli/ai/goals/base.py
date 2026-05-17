@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -11,8 +12,9 @@ class Goal(ABC):
     """Abstract base class for all GOAP goals."""
 
     @abstractmethod
-    def value(self, state: WorldState, game_data: GameData) -> float:
-        """Urgency score. Higher = more urgent. Called every cycle."""
+    def value(self, state: WorldState, game_data: GameData,
+              history: LearningStore | None = None) -> float:
+        """Urgency score. Higher = more urgent."""
 
     @abstractmethod
     def is_satisfied(self, state: WorldState) -> bool:
@@ -22,9 +24,10 @@ class Goal(ABC):
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         """Partial world state the planner targets."""
 
-    def priority(self, state: WorldState, game_data: GameData) -> float:
-        """Goal selection weight. Defaults to value(). Override when A* heuristic and selection priority diverge."""
-        return self.value(state, game_data)
+    def priority(self, state: WorldState, game_data: GameData,
+                 history: LearningStore | None = None) -> float:
+        """Goal selection weight. Defaults to value()."""
+        return self.value(state, game_data, history)
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         """Filter to actions that can contribute to satisfying this goal.
