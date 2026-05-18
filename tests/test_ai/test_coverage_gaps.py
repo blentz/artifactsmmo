@@ -108,10 +108,11 @@ class TestDesiredStateMethods:
 
     def test_deposit_inventory_desired_state(self):
         goal = DepositInventoryGoal()
-        state = make_state()
+        # inventory_max=100 → target_used = int(100 * 0.3) = 30
+        state = make_state(inventory_max=100)
         gd = make_gd()
         ds = goal.desired_state(state, gd)
-        assert "inventory_free" in ds
+        assert ds == {"inventory_used": 30}
 
     def test_farm_monster_desired_state(self):
         goal = FarmMonsterGoal(monster_code="chicken", initial_xp=50)

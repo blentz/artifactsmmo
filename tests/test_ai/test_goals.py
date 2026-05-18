@@ -86,14 +86,28 @@ class TestDepositInventoryGoal:
         state = make_state(inventory=inventory, inventory_max=20)
         assert goal.is_satisfied(state) is False
 
-    def test_value_returns_zero_when_satisfied_even_with_partial_fill(self):
-        """value() must respect is_satisfied: if free slots >= MIN_FREE_SLOTS, no urgency to deposit."""
+    def test_value_returns_zero_when_below_ramp_start(self):
+        """No urgency to deposit while inventory is below 50% used."""
         goal = DepositInventoryGoal()
-        # 10/20 used → 50% fill, free=10 (>5 so satisfied). Old behavior: value=40. New: value=0.
-        inventory = {f"item_{i}": 1 for i in range(10)}
+        # 8/20 used = 40% — below 50% ramp start. value should be 0.
+        inventory = {f"item_{i}": 1 for i in range(8)}
+        state = make_state(inventory=inventory, inventory_max=20)
+        assert goal.value(state, make_game_data()) == 0.0
+
+    def test_value_ramps_from_50_to_100_percent_used(self):
+        """At 75% used the value should sit between 0 and the max (80)."""
+        goal = DepositInventoryGoal()
+        inventory = {f"item_{i}": 1 for i in range(15)}  # 15/20 = 75%
+        state = make_state(inventory=inventory, inventory_max=20)
+        v = goal.value(state, make_game_data())
+        assert 35.0 < v < 50.0  # halfway up the ramp ≈ 40
+
+    def test_satisfied_after_draining_below_30_percent(self):
+        """Once below 30% used the goal drops out so gathering can resume."""
+        goal = DepositInventoryGoal()
+        inventory = {f"item_{i}": 1 for i in range(5)}  # 5/20 = 25%
         state = make_state(inventory=inventory, inventory_max=20)
         assert goal.is_satisfied(state) is True
-        assert goal.value(state, make_game_data()) == 0.0
 
 
 class TestCompleteTaskGoal:
