@@ -86,6 +86,20 @@ class GameData:
         """Stats for an item."""
         return self._item_stats.get(code)
 
+    def max_recipe_demand(self, item_code: str) -> int:
+        """Largest single-recipe quantity of `item_code` consumed across all
+        known recipes. Used by the overstock cap: anything beyond this (plus
+        a batch buffer) is dead weight in the inventory.
+
+        Returns 0 when no recipe uses the item.
+        """
+        max_qty = 0
+        for recipe in self._crafting_recipes.values():
+            qty = recipe.get(item_code, 0)
+            if qty > max_qty:
+                max_qty = qty
+        return max_qty
+
     def crafting_recipe(self, code: str) -> dict[str, int] | None:
         """Materials needed to craft an item, or None if not craftable."""
         return self._crafting_recipes.get(code)

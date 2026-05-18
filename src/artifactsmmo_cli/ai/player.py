@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
+from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -923,6 +924,7 @@ class GamePlayer:
             # we have, drive the grind to reach it before continuing
             # business-as-usual. Self-disables once level is reached.
             ReachUnlockLevelGoal(target_level=self._bank_required_level),
+            DiscardOverstockGoal(game_data=self.game_data),
             upgrade_goal,
         ]
         # Combat-driving goals only when a winnable monster exists.
