@@ -449,6 +449,24 @@ class TestUpgradeEquipmentGoalPriority:
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
 
+    def test_no_recraft_when_copy_already_in_bank(self):
+        """Regression: UpgradeEquipment kept crafting fresh copper_dagger
+        copies each cycle because _find_craftable_upgrade_target only
+        skipped items already in inventory, not in bank. After equipping
+        and depositing, the next cycle saw 'no copy in inventory' and
+        re-triggered the craft."""
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting", crafting_level=1)
+        gd = make_game_data(item_stats={"copper_dagger": stats})
+        gd._crafting_recipes = {"copper_dagger": {"copper_ore": 6}}
+        state = make_state(inventory={"copper_ore": 6}, bank_items={"copper_dagger": 1},
+                           level=5, skills={"weaponcrafting": 1})
+        goal = UpgradeEquipmentGoal()
+        # Copy in bank — bot should withdraw, not re-craft. find_upgrade_target
+        # must return the bank item (not None, not a fresh craft target).
+        target = goal.find_upgrade_target(state, gd)
+        assert target == ("copper_dagger", "weapon_slot")
+
 
 class TestFarmMonsterGoalEquipmentGate:
     def test_value_zero_when_under_equipped(self):
@@ -653,6 +671,26 @@ class TestGatherMaterialsGoal:
         state = make_state(inventory={}, bank_items={})
         farm_monster_max = 50.0
         assert goal.priority(state, make_game_data()) >= farm_monster_max
+
+    def test_priority_zero_when_target_craft_skill_gated(self):
+        """Regression: copper_ring needs jewelrycrafting; if Robby's skill is
+        too low, the final Craft is infeasible and gathering can never
+        satisfy the goal. Priority must drop to 0 so lower-priority goals
+        (e.g. DiscardOverstock) can run instead of being starved forever."""
+        stats = ItemStats(code="copper_ring", level=1, type_="ring",
+                          crafting_skill="jewelrycrafting", crafting_level=5)
+        gd = make_game_data(item_stats={"copper_ring": stats})
+        goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6})
+        state = make_state(inventory={}, bank_items={}, skills={"jewelrycrafting": 1})
+        assert goal.priority(state, gd) == 0.0
+
+    def test_priority_high_when_target_craft_skill_met(self):
+        stats = ItemStats(code="copper_ring", level=1, type_="ring",
+                          crafting_skill="jewelrycrafting", crafting_level=5)
+        gd = make_game_data(item_stats={"copper_ring": stats})
+        goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6})
+        state = make_state(inventory={}, bank_items={}, skills={"jewelrycrafting": 5})
+        assert goal.priority(state, gd) == 50.0
 
 
 class TestAcceptTaskGoal:

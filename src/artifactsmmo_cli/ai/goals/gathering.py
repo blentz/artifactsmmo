@@ -49,9 +49,20 @@ class GatherMaterialsGoal(Goal):
 
     def priority(self, state: WorldState, game_data: GameData,
                  history: LearningStore | None = None) -> float:
-        """Fixed high priority until satisfied — keeps gathering ahead of farming regardless of XP fraction."""
+        """Fixed high priority until satisfied — keeps gathering ahead of farming regardless of XP fraction.
+
+        Returns 0 when the target item's craft is skill-gated above the
+        player's current skill level. Without this guard the bot gathers
+        infinitely (final Craft is_applicable=False → goal never satisfies
+        → priority pinned high forever, blocking lower-priority goals like
+        DiscardOverstock from ever running).
+        """
         if self.is_satisfied(state):
             return 0.0
+        stats = game_data.item_stats(self._target_item)
+        if stats is not None and stats.crafting_skill:
+            if state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:
+                return 0.0
         return priorities.GATHER_MATERIALS
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:

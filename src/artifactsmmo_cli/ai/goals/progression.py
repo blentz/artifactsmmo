@@ -121,8 +121,15 @@ class UpgradeEquipmentGoal(Goal):
         # Sort key: (relevant_tool 0|1, -craft_level). Higher tuple wins.
         # Init to (-1, -inf) so any real candidate beats it.
         best_key: tuple[int, float] = (-1, -float("inf"))
+        bank = state.bank_items or {}
         for item_code in game_data._crafting_recipes:
-            if item_code in state.inventory or item_code in equipped:
+            # Skip if already owned (inventory, bank, or equipped) — otherwise
+            # the bot re-crafts copies of items it already has waiting to equip.
+            if (
+                state.inventory.get(item_code, 0) > 0
+                or bank.get(item_code, 0) > 0
+                or item_code in equipped
+            ):
                 continue
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
