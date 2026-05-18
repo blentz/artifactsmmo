@@ -1,6 +1,7 @@
 """NpcBuyAction: purchase an item from an NPC merchant."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_npc_buy_item_my_name_action_npc_buy_post import sync as action_npc_buy
@@ -16,6 +17,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class NpcBuyAction(Action):
     """Move to an NPC merchant and purchase an item."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"npc"})
 
     npc_code: str
     item_code: str

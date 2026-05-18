@@ -1,6 +1,7 @@
 """DepositGoldAction and WithdrawGoldAction: move gold between character and bank."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post import sync as action_deposit_gold
@@ -35,6 +36,8 @@ def _gold_apply(state: WorldState, dest: tuple[int, int], gold_delta: int, bank_
 @dataclass
 class DepositGoldAction(Action):
     """Deposit gold from character into bank."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"bank"})
 
     quantity: int = 0
     bank_location: tuple[int, int] | None = field(default=None, repr=False)
@@ -72,6 +75,8 @@ class DepositGoldAction(Action):
 @dataclass
 class WithdrawGoldAction(Action):
     """Withdraw gold from bank to character."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"bank"})
 
     quantity: int = 0
     bank_location: tuple[int, int] | None = field(default=None, repr=False)

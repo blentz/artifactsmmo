@@ -1,6 +1,7 @@
 """TaskTradeAction: submit gathered items toward an items-type task."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_task_trade_my_name_action_task_trade_post import sync as action_task_trade
@@ -16,6 +17,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class TaskTradeAction(Action):
     """Submit items toward an items-type task at the taskmaster."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"task"})
 
     code: str
     quantity: int = 1

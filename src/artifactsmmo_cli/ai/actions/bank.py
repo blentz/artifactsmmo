@@ -1,6 +1,7 @@
 """Bank actions for GOAP planning."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post import sync as deposit_item
@@ -17,6 +18,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class DepositAllAction(Action):
     """Move to bank and deposit all inventory items."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"bank", "deposit"})
 
     bank_location: tuple[int, int] = field(default=(0, 0), repr=False)
     accessible: bool = True  # False when bank is gated behind an unmet achievement (HTTP 496)
@@ -82,6 +85,8 @@ class DepositAllAction(Action):
 @dataclass
 class WithdrawItemAction(Action):
     """Move to bank and withdraw a specific item."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"bank", "withdraw"})
 
     code: str
     quantity: int

@@ -1,6 +1,7 @@
 """BuyBankExpansionAction: purchase additional bank slots."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post import sync as action_buy_bank_expansion
@@ -15,6 +16,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class BuyBankExpansionAction(Action):
     """Move to the bank and buy a slot expansion."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"bank", "expansion"})
 
     bank_location: tuple[int, int] | None = field(default=None, repr=False)
     accessible: bool = True

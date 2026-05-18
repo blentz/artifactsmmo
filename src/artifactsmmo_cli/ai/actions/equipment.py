@@ -1,6 +1,7 @@
 """Equip and unequip actions for GOAP planning."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import sync as action_equip
@@ -42,6 +43,8 @@ ITEM_TYPE_TO_SLOTS: dict[str, list[str]] = {
 @dataclass
 class EquipAction(Action):
     """Equip an item from the inventory into its equipment slot."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"equip"})
 
     code: str
     slot: str
@@ -112,6 +115,8 @@ class EquipAction(Action):
 @dataclass
 class UnequipAction(Action):
     """Remove an item from an equipment slot and return it to inventory."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"equip"})
 
     slot: str
 

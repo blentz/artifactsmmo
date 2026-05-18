@@ -1,5 +1,7 @@
 """MapTransitionAction: trigger a map transition on the current tile."""
 
+from typing import ClassVar
+
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_transition_my_name_action_transition_post import sync as action_transition
 
@@ -11,6 +13,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 class MapTransitionAction(Action):
     """Trigger a map transition (e.g., enter a dungeon) when standing on a transition tile."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"movement"})
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return (state.x, state.y) in game_data._transition_tiles

@@ -1,6 +1,7 @@
 """Craft action for GOAP planning."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as action_crafting
@@ -16,6 +17,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class CraftAction(Action):
     """Move to the correct workshop and craft an item. Movement is folded into cost and execute."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"craft", "produces_skill_xp"})
 
     code: str
     quantity: int = 1

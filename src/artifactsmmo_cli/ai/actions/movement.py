@@ -2,6 +2,7 @@
 
 import time
 from dataclasses import dataclass
+from typing import ClassVar
 from datetime import datetime, timezone
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -17,6 +18,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class MoveAction(Action):
     """Move the character to a specific tile."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"movement"})
 
     x: int
     y: int

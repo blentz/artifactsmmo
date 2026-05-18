@@ -1,6 +1,7 @@
 """UseConsumableAction: eat food from inventory to restore HP."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post import sync as action_use_item
@@ -34,6 +35,8 @@ class UseConsumableAction(Action):
     approximation keeps the planner chain simple while real execution partially
     heals and subsequent loop iterations handle remaining deficit via Rest.
     """
+
+    tags: ClassVar[frozenset[str]] = frozenset({"recovery"})
 
     _item_stats: dict[str, ItemStats] = field(default_factory=dict, repr=False)
 

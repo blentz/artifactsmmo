@@ -786,3 +786,48 @@ def test_move_action_cost_uses_history_when_provided():
     finally:
         if os.path.exists(path):
             os.unlink(path)
+
+
+class TestActionTags:
+    """R-1: Every concrete Action class declares its semantic tags so goals
+    can filter via `action.tags & {"combat"}` instead of isinstance chains."""
+
+    def test_base_action_default_tags_empty(self):
+        assert Action.tags == frozenset()
+
+    def test_fight_action_tagged_combat_and_xp(self):
+        assert "combat" in FightAction.tags
+        assert "produces_char_xp" in FightAction.tags
+
+    def test_gather_action_tagged_gather_and_skill_xp(self):
+        assert "gather" in GatherAction.tags
+        assert "produces_skill_xp" in GatherAction.tags
+
+    def test_craft_action_tagged_craft(self):
+        assert "craft" in CraftAction.tags
+        assert "produces_skill_xp" in CraftAction.tags
+
+    def test_recovery_actions_tagged(self):
+        assert "recovery" in RestAction.tags
+        assert "recovery" in UseConsumableAction.tags
+
+    def test_movement_tagged(self):
+        assert "movement" in MoveAction.tags
+
+    def test_bank_actions_tagged_bank(self):
+        assert "bank" in DepositAllAction.tags
+        assert "bank" in WithdrawItemAction.tags
+
+    def test_task_actions_tagged_task(self):
+        assert "task" in AcceptTaskAction.tags
+        assert "task" in CompleteTaskAction.tags
+        assert "task" in TaskExchangeAction.tags
+
+    def test_equip_actions_tagged_equip(self):
+        assert "equip" in EquipAction.tags
+
+    def test_tags_are_class_attributes_not_instance(self):
+        """Class attribute on ClassVar — instances share the same frozenset."""
+        a = MoveAction(x=1, y=2)
+        b = MoveAction(x=3, y=4)
+        assert a.tags is b.tags is MoveAction.tags

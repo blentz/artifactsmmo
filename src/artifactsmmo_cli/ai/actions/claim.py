@@ -1,6 +1,7 @@
 """ClaimPendingItemAction: claim the first available pending item."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_claim_pending_item_my_name_action_claim_item_id_post import sync as action_claim_item
@@ -19,6 +20,8 @@ class ClaimPendingItemAction(Action):
     Pending items require no movement — they can be claimed from anywhere.
     The action uses the first (id, code) tuple in state.pending_items.
     """
+
+    tags: ClassVar[frozenset[str]] = frozenset({"claim"})
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return bool(state.pending_items)

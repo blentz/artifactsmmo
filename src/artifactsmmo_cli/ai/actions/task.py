@@ -1,6 +1,7 @@
 """Task actions: accept a new task, complete a finished task, and exchange task coins."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post import sync as action_task_new
@@ -25,6 +26,8 @@ _PENDING_TASK = "__pending__"
 @dataclass
 class AcceptTaskAction(Action):
     """Move to the taskmaster and accept a new task."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"task"})
 
     taskmaster_location: tuple[int, int]
 
@@ -84,6 +87,8 @@ class AcceptTaskAction(Action):
 class CompleteTaskAction(Action):
     """Move to the taskmaster and turn in a finished task for rewards."""
 
+    tags: ClassVar[frozenset[str]] = frozenset({"task"})
+
     taskmaster_location: tuple[int, int]
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
@@ -141,6 +146,8 @@ class CompleteTaskAction(Action):
 @dataclass
 class TaskExchangeAction(Action):
     """Move to the taskmaster and exchange task coins for rewards."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"task"})
 
     taskmaster_location: tuple[int, int]
 
@@ -208,6 +215,8 @@ class TaskExchangeAction(Action):
 @dataclass
 class TaskCancelAction(Action):
     """Move to the taskmaster and cancel the current task (costs one task coin)."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"task"})
 
     taskmaster_location: tuple[int, int]
 

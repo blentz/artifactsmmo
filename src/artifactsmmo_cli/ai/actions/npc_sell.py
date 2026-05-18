@@ -1,6 +1,7 @@
 """NpcSellAction: sell an item to an NPC merchant for gold."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_npc_sell_item_my_name_action_npc_sell_post import sync as action_npc_sell
@@ -16,6 +17,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class NpcSellAction(Action):
     """Move to an NPC merchant and sell an item for gold."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"npc"})
 
     npc_code: str
     item_code: str

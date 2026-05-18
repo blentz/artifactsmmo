@@ -1,6 +1,7 @@
 """Fight action for GOAP planning."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import sync as action_fight
@@ -21,6 +22,8 @@ def _nearest(locations: frozenset[tuple[int, int]], state: WorldState) -> tuple[
 @dataclass
 class FightAction(Action):
     """Move to and fight a monster. Movement is folded into cost and execute."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"combat", "produces_char_xp"})
 
     monster_code: str
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)

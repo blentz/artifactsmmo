@@ -1,6 +1,7 @@
 """Semantic move action: move to a named location type."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 
@@ -19,6 +20,8 @@ class MoveTo(Action):
     (monster, resource, workshop, bank), shrinking the planner branching factor
     from ~90 to ~20.
     """
+
+    tags: ClassVar[frozenset[str]] = frozenset({"movement"})
 
     name: str
     destinations: frozenset[tuple[int, int]]

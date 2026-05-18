@@ -1,6 +1,7 @@
 """Gather action for GOAP planning."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import sync as action_gathering
@@ -19,6 +20,8 @@ def _nearest(locations: frozenset[tuple[int, int]], state: WorldState) -> tuple[
 @dataclass
 class GatherAction(Action):
     """Move to and gather a resource. Movement is folded into cost and execute."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"gather", "produces_skill_xp"})
 
     resource_code: str
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)

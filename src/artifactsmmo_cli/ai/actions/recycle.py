@@ -1,6 +1,7 @@
 """RecycleAction: break down an item into crafting materials."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post import sync as action_recycling
@@ -16,6 +17,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class RecycleAction(Action):
     """Move to the item's workshop and recycle it, recovering a fraction of its materials."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"cleanup", "craft"})
 
     code: str
     quantity: int = 1

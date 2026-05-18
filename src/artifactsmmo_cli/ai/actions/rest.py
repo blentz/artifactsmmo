@@ -1,5 +1,7 @@
 """Rest action for GOAP planning."""
 
+from typing import ClassVar
+
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import sync as action_rest
 
@@ -11,6 +13,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 class RestAction(Action):
     """Restore HP by resting."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"recovery"})
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return state.hp < state.max_hp

@@ -1,6 +1,7 @@
 """DeleteItemAction: remove an item from inventory (no materials returned)."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_delete_item_my_name_action_delete_post import sync as action_delete
@@ -15,6 +16,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass
 class DeleteItemAction(Action):
     """Delete an item from inventory — frees quantity when bank is inaccessible."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"cleanup"})
 
     code: str
     quantity: int = 1
