@@ -1,5 +1,7 @@
 # GOAP Robustness Layer — Implementation Plan
 
+> **Status: COMPLETED** (2026-05-17). All five phases (A–E) merged to `main`. Plan checkboxes left as-is for historical reference; see the live `main` branch for the implemented form. Real-play debugging surfaced additional bugs after the original plan landed — see "Post-merge fixes" at the bottom of this document.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the GOAP AI player run autonomously for hours by adding the 5 missing API actions, a stuck-state detector with escalating recovery, an action-counted refresh policy with JSONL tracing, and a code-quality cleanup pass (mypy → 0, coverage → 98%).
@@ -3833,3 +3835,28 @@ After all phases:
 - [ ] **Trace validity**: `head -3 /tmp/final-test.jsonl | python -c "import json, sys; [json.loads(l) for l in sys.stdin]"` — no exceptions
 
 If all gates pass, the robustness layer is complete and ready for the next phase of real-play validation (run Robby for several hours and capture a trace for offline analysis — which becomes the input data for Phase F autoregressive planning).
+
+---
+
+# Post-merge fixes (real-play debugging, 2026-05-17)
+
+After the robustness layer landed, Robby ran live and surfaced bugs the
+plan's test suite did not exercise. Each is committed to `main` with a
+focused regression test.
+
+- **ff925af refactor** — added type parameters to generic containers (mypy strict on AI).
+- **095cd51 / c8300d1 / ed477c8 / ce7841f** — narrowed `_raise_for_error` return type so callers stop tripping `Optional` access errors; fixed bank-withdraw body shape (API wants `list[SimpleItemSchema]`); closed coverage gaps in delete/unlock_bank/consumable/player error paths.
+- **0a30c4f** — trace JSON had `×` instead of `×`. Set `ensure_ascii=False` on both tracer and drops_json.
+- **b234bf2** — three init-robustness fixes for brand-new characters (lazy session-row insert, true exit_reason capture in `finally`, `_fetch_world_state` retry on transient 5xx).
+- **1c007d1** — `handle_api_response` did not detect `ErrorResponseSchema`, so 404 from `get_character` rendered as `"Unknown's Status"` zeros. Added isinstance check.
+- **bd3b83c** — `character create` skin flag was a string default with invalid options; made it a required `CharacterSkin` Argument typed by API enum.
+- **aebaf4f** — `Session.cycle_count` was never populated; `end_session` now counts via subquery before commit.
+- **d906c75** — `FarmMonsterGoal.relevant_actions` exposed every `FightAction`; restricted to actions matching `self.monster_code` so the planner can't pick the wrong monster.
+- **9a52ea3 + ceb2e4c** — fight-loss detection: API returns 200 OK with `FightResult.LOSS`; threaded outcome through `GamePlayer._execute` and made `FightAction.execute` raise on LOSS so the player loop records `outcome=error:fight_lost` instead of folding zero-XP losses into success metrics.
+- **689d124** — `GOAPPlanner._state_key` omitted `task_code/task_type/task_total`. When an action only changed task state (e.g. `AcceptTaskAction` while standing on the taskmaster tile), the child hashed to the same key as the just-visited parent, A* skipped it, and the planner picked longer detours (NpcBuy → AcceptTask). Added the missing fields.
+- **2a2edd8 + dca92cb** — `FarmItemsGoal` per-cycle horizon. The original `is_satisfied = task_progress >= task_total` with `max_depth=200` blew past the 2s A* budget for any large items-task (e.g. ash_plank ×23 → ~70-step plans). Reframed `is_satisfied` to "one submission past `initial_progress`"; outer loop re-plans after each submission. `max_depth` stays at 200 — horizon and depth ceiling solve different problems.
+- **0d2a958** — composite actions (Gather, Fight, NpcBuy, TaskTrade, AcceptTask, etc.) called `MoveAction.execute()` then immediately the secondary API call; the move's cooldown rejected the secondary with HTTP 499, wasting one cycle per action. `MoveAction.execute()` now blocks on the cooldown the move just consumed before returning. Centralized fix covers all 17 callers.
+- **a313d78** — `CompleteTaskGoal.is_satisfied` returned True when `task_progress >= task_total` — the exact condition for *ready to turn in*. Planner saw root already satisfied → empty plan → CompleteTask never fired → Robby stalled holding a finished task. Reframed as "no task held" (`not state.task_code`).
+- **3c384bd** — API `task_exchange` burns exactly 3 `tasks_coin` per call; the action/goal gated on `>0`, so any leftover coin triggered HTTP 478 loops. Encoded `_EXCHANGE_COST = 3` in both is_applicable and is_satisfied; apply() removes exactly 3 and keeps the leftover.
+- **3dbc5eb** — DNS lookup failure mid-task-trade bubbled `httpx.ConnectError` past the RuntimeError handler and killed the process. Catch `httpx.HTTPError` at both `_execute` (outcome=error:network + refetch) and `_fetch_world_state` (backoff + retry).
+- **eb2b0df** — `UpgradeEquipmentGoal` now biases craftable-upgrade search toward tools that bonus an active gather skill. Three pieces: `ItemStats.skill_effects` parsed from item effects; `GameData.active_gathering_skills(task_code)` walks the recipe tree; `_find_craftable_upgrade*` sorts by `(relevant_tool_first, lowest_craft_level)` and `value()` bumps to 50 when the upgrade is a relevant tool (outranks FarmItems at 35).

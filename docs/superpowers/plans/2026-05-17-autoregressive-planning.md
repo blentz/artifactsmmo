@@ -1,5 +1,7 @@
 # Autoregressive Planning Implementation Plan
 
+> **Status: COMPLETED** (2026-05-17). All six sub-phases (F-A through F-F) merged to `main`. Plan checkboxes left as-is for historical reference; see the live `main` branch for the implemented form. Real-play follow-on work (planner state-key, FarmItems horizon, etc.) is documented in the GOAP Robustness Layer plan's "Post-merge fixes" section since those bugs lived in the GOAP layer, not the learning layer.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add SQLModel-backed learning store so GOAP actions and goals consult observed history (action cost, success rate, observed effects, goal effectiveness) when computing cost and value, enabling within-session adaptation.
