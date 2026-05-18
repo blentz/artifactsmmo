@@ -76,6 +76,8 @@ class GrindCharacterXPGoal(Goal):
                 result.append(action)
             elif "recovery" in action.tags:
                 result.append(action)
+            elif "equip" in action.tags and getattr(action, "target_monster_code", None) == self._target_monster:
+                result.append(action)
         return result
 
     def __repr__(self) -> str:

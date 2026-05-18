@@ -28,6 +28,8 @@ class ItemStats:
     crafting_level: int = 0
     hp_restore: int = 0  # HP restored when consumed (0 for non-consumables)
     skill_effects: dict[str, int] = field(default_factory=dict)  # skill -> effect value (e.g. woodcutting cooldown reduction)
+    attack: dict[str, int] = field(default_factory=dict)        # element -> attack value (weapon)
+    resistance: dict[str, int] = field(default_factory=dict)    # element -> resistance % (armor)
 
 
 @dataclass
@@ -46,6 +48,8 @@ class GameData:
     _monster_level: dict[str, int] = field(default_factory=dict)
     _monster_hp: dict[str, int] = field(default_factory=dict)
     _monster_type: dict[str, str] = field(default_factory=dict)  # "normal" / "elite" / "boss"
+    _monster_attack: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: value}
+    _monster_resistance: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: pct}
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
@@ -141,6 +145,14 @@ class GameData:
         wisdom_bonus = 1.0 + wisdom * 0.001
         raw = (monster_level / char_level * 20 + monster_hp * 0.04)
         return round(raw * penalty * multiplier * wisdom_bonus)
+
+    def monster_attack(self, code: str) -> dict[str, int]:
+        """{element: attack_value} for the monster, or empty dict."""
+        return self._monster_attack.get(code, {})
+
+    def monster_resistance(self, code: str) -> dict[str, int]:
+        """{element: resistance_pct} for the monster, or empty dict."""
+        return self._monster_resistance.get(code, {})
 
     def monster_level(self, code: str) -> int:
         """Level of a monster."""
@@ -305,6 +317,12 @@ class GameData:
                     for effect in item.effects:
                         if effect.code == "heal":
                             stats.hp_restore = effect.value
+                        elif effect.code.startswith("attack_"):
+                            elem = effect.code[len("attack_"):]
+                            stats.attack[elem] = effect.value
+                        elif effect.code.startswith("res_"):
+                            elem = effect.code[len("res_"):]
+                            stats.resistance[elem] = effect.value
                         elif effect.code in _GATHERING_SKILLS:
                             # Tool bonus for a gather skill (e.g. axe → woodcutting).
                             # Game encodes as cooldown reduction (negative value = faster);
@@ -376,6 +394,12 @@ class GameData:
                 self._monster_level[mon.code] = mon.level
                 self._monster_hp[mon.code] = mon.hp
                 self._monster_type[mon.code] = mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
+                self._monster_attack[mon.code] = {
+                    elem: getattr(mon, f"attack_{elem}", 0) for elem in ("fire", "earth", "water", "air")
+                }
+                self._monster_resistance[mon.code] = {
+                    elem: getattr(mon, f"res_{elem}", 0) for elem in ("fire", "earth", "water", "air")
+                }
 
             if len(result.data) < 100:
                 break

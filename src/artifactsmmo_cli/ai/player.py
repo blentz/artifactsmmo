@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGol
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -782,6 +783,9 @@ class GamePlayer:
         # Fight and gather actions carry their own locations — no separate move actions needed
         for monster_code, locs in self.game_data._monster_locations.items():
             actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))
+            actions.append(OptimizeLoadoutAction(target_monster_code=monster_code))
+        # Inject game_data on the class for execute()-time loadout calc.
+        OptimizeLoadoutAction._shared_game_data = self.game_data
 
         for resource_code, locs in self.game_data._resource_locations.items():
             actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))

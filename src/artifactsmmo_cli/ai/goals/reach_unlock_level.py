@@ -69,6 +69,10 @@ class ReachUnlockLevelGoal(Goal):
                     result.append(action)
             elif "recovery" in action.tags:
                 result.append(action)
+            elif "equip" in action.tags and (target := getattr(action, "target_monster_code", None)):
+                ml = game_data.monster_level(target)
+                if ml > 0 and state.level >= ml - 1:
+                    result.append(action)
         return result
 
     def __repr__(self) -> str:
