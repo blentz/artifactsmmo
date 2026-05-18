@@ -155,6 +155,10 @@ class GamePlayer:
 
                 plan: list[Action] = []
                 selected_goal: Goal | None = None
+                # Track every goal that was tried this cycle so the no_plan
+                # trace can show which goals the planner failed on (not just
+                # a useless "<none>" placeholder).
+                goals_tried: list[dict[str, object]] = []
 
                 if self.verbose:
                     goal_summary = "  ".join(
@@ -166,8 +170,15 @@ class GamePlayer:
                     if goal.priority(state, game_data, self.history) <= 0:
                         break
                     plan = self.planner.plan(state, goal, actions, game_data, self.history)
+                    s = self.planner.last_stats
+                    goals_tried.append({
+                        "goal": repr(goal),
+                        "nodes": s.nodes_explored,
+                        "depth": s.max_depth_reached,
+                        "timed_out": s.timed_out,
+                        "plan_len": len(plan),
+                    })
                     if self.verbose and not plan:
-                        s = self.planner.last_stats
                         print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
                     if plan:
                         selected_goal = goal
@@ -185,11 +196,20 @@ class GamePlayer:
                         planner_timed_out=self.planner.last_stats.timed_out,
                         succeeded=False,
                     ))
+                    # Surface the last planner stats AND the per-goal attempts
+                    # so a no_plan cycle is debuggable from trace alone.
+                    last = self.planner.last_stats
                     self._emit_trace(
                         action_name="<no_plan>",
                         goal_name="<none>",
                         outcome="no_plan",
-                        planner_stats={"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 0},
+                        planner_stats={
+                            "nodes": last.nodes_explored,
+                            "depth": last.max_depth_reached,
+                            "timed_out": last.timed_out,
+                            "plan_len": 0,
+                            "goals_tried": goals_tried,
+                        },
                     )
                     self._record_learning_cycle(
                         prev_state=self.state,
