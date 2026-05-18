@@ -93,25 +93,41 @@ class TestDiscardOverstockGoal:
         assert goal.is_satisfied(make_state(level=1, inventory={"sap": 3})) is True
         assert goal.is_satisfied(make_state(level=1, inventory={"sap": 50})) is False
 
-    def test_relevant_actions_picks_sell_when_buyer_exists(self):
+    def test_relevant_actions_constructs_batch_sell(self):
+        """Single batch action drains the entire excess in one cycle."""
         gd = _gd_with_sap_recipes()
         gd._npc_sell_prices = {"npc1": {"sap": 2}}
+        gd._npc_locations = {"npc1": (3, 3)}
         goal = DiscardOverstockGoal(game_data=gd)
         state = make_state(level=1, inventory={"sap": 50})
-        actions = [
-            NpcSellAction(npc_code="npc1", item_code="sap", quantity=1),
-            DeleteItemAction(code="sap", quantity=1),
-        ]
-        relevant = goal.relevant_actions(actions, state, gd)
-        # Sell wins (npc1 buys); Delete excluded.
-        assert any(isinstance(a, NpcSellAction) for a in relevant)
-        assert not any(isinstance(a, DeleteItemAction) for a in relevant)
+        relevant = goal.relevant_actions([], state, gd)
+        # Exactly one batch NpcSell with the full excess quantity.
+        assert len(relevant) == 1
+        sell = relevant[0]
+        assert isinstance(sell, NpcSellAction)
+        assert sell.item_code == "sap"
+        assert sell.quantity == 50 - BATCH_BUFFER  # 45
+        assert sell.npc_code == "npc1"
+        assert sell.npc_location == (3, 3)
 
-    def test_relevant_actions_falls_back_to_delete_when_no_buyer(self):
+    def test_relevant_actions_falls_back_to_batch_delete(self):
+        """No NPC buys → batch DeleteItem with full excess quantity."""
         gd = _gd_with_sap_recipes()
-        # No NPC buys sap
         goal = DiscardOverstockGoal(game_data=gd)
         state = make_state(level=1, inventory={"sap": 50})
-        actions = [DeleteItemAction(code="sap", quantity=1)]
-        relevant = goal.relevant_actions(actions, state, gd)
-        assert any(isinstance(a, DeleteItemAction) for a in relevant)
+        relevant = goal.relevant_actions([], state, gd)
+        assert len(relevant) == 1
+        delete = relevant[0]
+        assert isinstance(delete, DeleteItemAction)
+        assert delete.code == "sap"
+        assert delete.quantity == 50 - BATCH_BUFFER  # 45
+
+    def test_relevant_actions_one_per_overstocked_item(self):
+        """Multiple overstocked items → multiple batch actions, one each."""
+        gd = _gd_with_sap_recipes()
+        goal = DiscardOverstockGoal(game_data=gd)
+        state = make_state(level=1, inventory={"sap": 50, "extra": 99})
+        relevant = goal.relevant_actions([], state, gd)
+        # One batch per overstocked code (sap + extra)
+        codes = {a.code if isinstance(a, DeleteItemAction) else a.item_code for a in relevant}
+        assert codes == {"sap", "extra"}

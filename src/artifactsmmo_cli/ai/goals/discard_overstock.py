@@ -42,22 +42,31 @@ class DiscardOverstockGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData,
     ) -> list[Action]:
-        """Only Sell/Delete for items currently overstocked. Prefer Sell when
-        a buyer exists; Delete is the fallback."""
+        """Construct one BATCH Sell or Delete per overstocked item.
+
+        Bypasses the pre-built quantity=1 actions in `actions` and emits a
+        single-cycle batch action per item so one cycle clears one item's
+        overstock entirely. Sell wins over Delete when any NPC buys —
+        gold > zero. Sell picks the highest-paying NPC.
+        """
         excess = overstocked_items(state, game_data)
         if not excess:
             return []
         result: list[Action] = []
-        for action in actions:
-            if isinstance(action, NpcSellAction):
-                if action.item_code in excess and game_data.npcs_buying_item(action.item_code):
-                    result.append(action)
-            elif isinstance(action, DeleteItemAction):
-                if action.code in excess:
-                    # Only allow delete when no NPC buys this item — sell
-                    # is always strictly better (gold > zero).
-                    if not game_data.npcs_buying_item(action.code):
-                        result.append(action)
+        for code, excess_qty in excess.items():
+            if excess_qty <= 0:
+                continue
+            buyers = game_data.npcs_buying_item(code)
+            if buyers:
+                # npcs_buying_item sorted highest-first
+                npc_code, _price = buyers[0]
+                npc_loc = game_data.npc_location(npc_code)
+                result.append(NpcSellAction(
+                    npc_code=npc_code, item_code=code, quantity=excess_qty,
+                    npc_location=npc_loc,
+                ))
+            else:
+                result.append(DeleteItemAction(code=code, quantity=excess_qty))
         return result
 
     def __repr__(self) -> str:
