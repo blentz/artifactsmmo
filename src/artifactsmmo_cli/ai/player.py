@@ -158,23 +158,33 @@ class GamePlayer:
                 game_data = self.game_data
 
                 goals = self._build_goals()
-                goals.sort(key=lambda g: g.priority(state, game_data, self.history), reverse=True)
+                # Snapshot all goal priorities ONCE per cycle so the trace
+                # records what every goal scored at decision time. Avoids
+                # re-calling priority() (some implementations hit the store).
+                goal_priorities: list[tuple[Goal, float]] = [
+                    (g, g.priority(state, game_data, self.history)) for g in goals
+                ]
+                goal_priorities.sort(key=lambda gp: gp[1], reverse=True)
+                goals = [g for g, _ in goal_priorities]
+                # Structured ranking for the trace: every considered goal, sorted.
+                goal_rank_trace: list[dict[str, object]] = [
+                    {"goal": repr(g), "priority": round(p, 2)}
+                    for g, p in goal_priorities
+                ]
 
                 plan: list[Action] = []
                 selected_goal: Goal | None = None
-                # Track every goal that was tried this cycle so the no_plan
-                # trace can show which goals the planner failed on (not just
-                # a useless "<none>" placeholder).
+                # Track every goal the planner actually attempted (priority > 0).
+                # The no_plan trace shows which goals had a plan-fail vs a
+                # priority-fail.
                 goals_tried: list[dict[str, object]] = []
 
                 if self.verbose:
-                    goal_summary = "  ".join(
-                        f"{g}={g.priority(state, game_data, self.history):.1f}" for g in goals
-                    )
+                    goal_summary = "  ".join(f"{repr(g)}={p:.1f}" for g, p in goal_priorities)
                     print(f"[{self._now()}] Goals: {goal_summary}")
 
-                for goal in goals:
-                    if goal.priority(state, game_data, self.history) <= 0:
+                for goal, priority in goal_priorities:
+                    if priority <= 0:
                         break
                     plan = self.planner.plan(state, goal, actions, game_data, self.history)
                     s = self.planner.last_stats
@@ -216,6 +226,7 @@ class GamePlayer:
                             "timed_out": last.timed_out,
                             "plan_len": 0,
                             "goals_tried": goals_tried,
+                            "goal_rank": goal_rank_trace,
                         },
                     )
                     self._record_learning_cycle(
@@ -299,6 +310,8 @@ class GamePlayer:
                         "depth": self.planner.last_stats.max_depth_reached,
                         "timed_out": self.planner.last_stats.timed_out,
                         "plan_len": len(plan),
+                        "goals_tried": goals_tried,
+                        "goal_rank": goal_rank_trace,
                     },
                 )
                 signal = self._detector.detect()
