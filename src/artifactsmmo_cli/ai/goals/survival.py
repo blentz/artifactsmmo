@@ -9,10 +9,22 @@ MIN_FREE_SLOTS = 5
 
 
 class RestoreHPGoal(Goal):
-    """Restore HP to full. Urgency spikes when HP is low."""
+    """Restore HP to full. Urgency spikes when HP is low.
+
+    Below CRITICAL_HP_FRACTION the goal returns a value above any other goal's
+    normal ceiling (UnlockBank=90, LowYieldCancel=70) so it preempts combat and
+    drives Rest/UseConsumable immediately. Without that, combat-driving goals
+    keep running until HP bottoms out (seen post-restart on real Robby: HP=13
+    while UnlockBank kept fighting chickens).
+    """
+
+    CRITICAL_HP_FRACTION = 0.25
+    CRITICAL_HP_VALUE = 110.0
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
+        if state.hp_percent < self.CRITICAL_HP_FRACTION:
+            return self.CRITICAL_HP_VALUE
         return (1.0 - state.hp_percent) * 100.0
 
     def is_satisfied(self, state: WorldState) -> bool:

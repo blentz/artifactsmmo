@@ -117,6 +117,10 @@ class GamePlayer:
         self.game_data: GameData | None = None
         self._bank_accessible: bool = True
         self._bank_blocked_since: float | None = None
+        # Character level at the moment of the 496 — used by the retry gate
+        # so we don't auto-retry until a level-up could plausibly have
+        # satisfied the achievement.
+        self._bank_blocked_at_level: int = 0
         self._bank_unlock_monster: str | None = None
         self._detector = StuckDetector(history_size=30)
         self._suppressed_goals: dict[str, int] = {}
@@ -328,6 +332,7 @@ class GamePlayer:
             elif "HTTP 496" in msg and isinstance(action, (DepositAllAction, WithdrawItemAction)):
                 self._bank_accessible = False
                 self._bank_blocked_since = time.monotonic()
+                self._bank_blocked_at_level = self.state.level if self.state else 0
                 if self._bank_unlock_monster is None:
                     match = _ACHIEVEMENT_CODE_RE.search(msg)
                     if match:
@@ -759,9 +764,14 @@ class GamePlayer:
             self._wildcard_mode = False  # one-shot
             return [RestoreHPGoal()]
 
-        # Periodically retry bank access after an achievement gate failure (HTTP 496).
+        # Periodically retry bank access after an achievement gate failure (HTTP 496),
+        # but only if there's a reasonable chance the unlock actually happened
+        # since the last attempt — i.e. character has gained at least one level.
+        # Otherwise the flap creates a wasteful Deposit→496→UnlockBank→Deposit loop.
         if not self._bank_accessible and self._bank_blocked_since is not None:
-            if time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS:
+            if (time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
+                    and self.state is not None
+                    and self.state.level > self._bank_blocked_at_level):
                 self._bank_accessible = True
                 self._bank_blocked_since = None
 

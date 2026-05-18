@@ -47,10 +47,12 @@ class TestRestoreHPGoal:
         state = make_state(hp=75, max_hp=150)
         assert abs(goal.value(state, make_game_data()) - 50.0) < 0.1
 
-    def test_value_zero_hp_is_100(self):
+    def test_value_zero_hp_is_critical_floor(self):
+        """Below CRITICAL_HP_FRACTION, value jumps to CRITICAL_HP_VALUE so the
+        goal dominates UnlockBank(90) etc and preempts combat."""
         goal = RestoreHPGoal()
         state = make_state(hp=0, max_hp=150)
-        assert abs(goal.value(state, make_game_data()) - 100.0) < 0.1
+        assert goal.value(state, make_game_data()) == RestoreHPGoal.CRITICAL_HP_VALUE
 
     def test_satisfied_at_full_hp(self):
         goal = RestoreHPGoal()
@@ -911,20 +913,20 @@ class TestUnlockBankGoal:
         state = make_state(xp=101, inventory={"chicken": 20}, inventory_max=20)
         assert goal.value(state, self._make_gd_with_sellables()) == 0.0
 
-    def test_is_satisfied_when_xp_advanced(self):
-        """is_satisfied returns True once xp exceeds initial_xp."""
-        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
-        state = make_state(xp=101)
-        assert goal.is_satisfied(state) is True
-
-    def test_is_not_satisfied_at_initial_xp(self):
-        """is_satisfied returns False when xp has not advanced."""
-        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
-        state = make_state(xp=100)
-        assert goal.is_satisfied(state) is False
+    def test_is_satisfied_only_when_bank_unlocked(self):
+        """is_satisfied flips on bank state, not XP. Any kill bumps XP but
+        wouldn't actually unlock the bank — the prior XP-based check caused
+        the chicken-massacre loop documented in commit history."""
+        # bank_locked=True regardless of XP → not satisfied
+        locked = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        assert locked.is_satisfied(make_state(xp=101)) is False
+        # bank_locked=False → satisfied
+        unlocked = UnlockBankGoal(bank_locked=False, initial_xp=100)
+        assert unlocked.is_satisfied(make_state(xp=100)) is True
 
     def test_desired_state_returns_empty_dict(self):
-        """desired_state returns {} — the goal is satisfied by XP, not a specific key."""
+        """desired_state returns {} — satisfaction is driven by the constructor's
+        bank_locked flag, not by reaching a specific WorldState attribute."""
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
         state = make_state(xp=100)
         gd = self._make_gd_with_sellables()
@@ -969,8 +971,11 @@ class TestUnlockBankGoal:
         assert "Fight(chicken)" in relevant_reprs
         assert "Fight(wolf)" not in relevant_reprs
 
-    def test_relevant_actions_target_monster_falls_back_when_no_match(self):
-        """If target_monster set but no fight action matches, return all fight actions."""
+    def test_relevant_actions_excludes_all_fights_when_target_unavailable(self):
+        """When target_monster is set but no FightAction for it exists, return
+        NO fight actions. The previous fallback to all-fights let the bot
+        grind chickens forever while the actual achievement stayed unmet
+        and the bank stayed locked."""
         from artifactsmmo_cli.ai.actions.combat import FightAction
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="dragon")
         state = make_state(xp=100)
@@ -981,9 +986,8 @@ class TestUnlockBankGoal:
         ]
         relevant = goal.relevant_actions(actions, state, gd)
         relevant_reprs = [repr(a) for a in relevant]
-        # Falls back to all fight actions since "dragon" isn't in the list
-        assert "Fight(chicken)" in relevant_reprs
-        assert "Fight(wolf)" in relevant_reprs
+        assert "Fight(chicken)" not in relevant_reprs
+        assert "Fight(wolf)" not in relevant_reprs
 
     def test_repr_with_no_target_monster(self):
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100)

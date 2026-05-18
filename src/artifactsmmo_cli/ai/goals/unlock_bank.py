@@ -22,6 +22,11 @@ class UnlockBankGoal(Goal):
               history: LearningStore | None = None) -> float:
         if not self._bank_locked or state.xp > self._initial_xp:
             return 0.0
+        # If the target monster is known to be unreachable (way over-level), don't
+        # fire at all — burning chickens won't satisfy the achievement and just
+        # creates a loop. Defer until char levels up enough to attempt the target.
+        if self._target_monster_is_unreachable(state, game_data):
+            return 0.0
         # If inventory is critical AND we have a faster way to free it (NPC sell),
         # defer to SellInventoryGoal — selling is faster than grinding achievement.
         if state.inventory_max > 0:
@@ -36,20 +41,38 @@ class UnlockBankGoal(Goal):
         return 90.0
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return state.xp > self._initial_xp
+        # The only true satisfaction signal is bank access being restored.
+        # `state.xp > initial_xp` was a stand-in but any fight bumps XP — that
+        # made killing a chicken "satisfy" the goal while the bank stayed locked.
+        return not self._bank_locked
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {}
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
-        fight_actions: list[Action] = [a for a in actions if isinstance(a, FightAction)]
-        if self._target_monster:
-            targeted: list[Action] = [a for a in fight_actions if isinstance(a, FightAction) and a.monster_code == self._target_monster]
-            if targeted:
-                fight_actions = targeted
+        # ONLY allow combat on the actual target monster. Falling back to all
+        # fights makes the planner happily grind chickens forever while the
+        # achievement that actually unlocks the bank stays incomplete.
+        fight_actions: list[Action] = [
+            a for a in actions
+            if isinstance(a, FightAction) and (
+                self._target_monster is None or a.monster_code == self._target_monster
+            )
+        ]
         delete_actions: list[Action] = [a for a in actions if isinstance(a, DeleteItemAction)]
         consume_actions: list[Action] = [a for a in actions if isinstance(a, UseConsumableAction)]
         return fight_actions + delete_actions + consume_actions
+
+    def _target_monster_is_unreachable(self, state: WorldState, game_data: GameData) -> bool:
+        """True when the target monster is over-level enough that combat is hopeless."""
+        if not self._target_monster:
+            return False
+        target_level = game_data.monster_level(self._target_monster)
+        if target_level <= 0:
+            return False  # unknown monster level — let planner try and fail
+        # FightAction.is_applicable already requires level >= monster_level - 1;
+        # mirror that so we don't fire when the planner will return [] anyway.
+        return state.level < target_level - 1
 
     def __repr__(self) -> str:
         return f"UnlockBank({self._target_monster or '?'})"
