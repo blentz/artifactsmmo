@@ -3,6 +3,7 @@
 import json
 import re
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import httpx
@@ -51,6 +52,7 @@ from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
@@ -111,6 +113,7 @@ class GamePlayer:
         dry_run: bool = False,
         tracer: Tracer | None = None,
         history: LearningStore | None = None,
+        cycle_observer: "Callable[[CycleSnapshot], None] | None" = None,
     ) -> None:
         self.character = character
         self.verbose = verbose
@@ -133,6 +136,11 @@ class GamePlayer:
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
         self._last_path_plan: PathPlan | None = None
+        self._cycle_observer = cycle_observer
+
+    def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
+        """Allow callers (e.g. TUI host) to subscribe after construction."""
+        self._cycle_observer = observer
 
     # === Backward-compatibility shims that delegate to the blocker registry ===
     # These let the rest of player.py keep using the old field names while the
@@ -311,6 +319,7 @@ class GamePlayer:
                             **self._path_trace_snapshot(),
                         },
                     )
+                    self._notify_observer("<none>", "<no_plan>", "no_plan", goal_rank_trace)
                     self._record_learning_cycle(
                         prev_state=self.state,
                         new_state=self.state,
@@ -396,6 +405,10 @@ class GamePlayer:
                         "goal_rank": goal_rank_trace,
                         **self._path_trace_snapshot(),
                     },
+                )
+                self._notify_observer(
+                    repr(selected_goal) if selected_goal else "<none>",
+                    repr(action), outcome, goal_rank_trace,
                 )
                 signal = self._detector.detect()
                 if signal is not None:
@@ -944,6 +957,50 @@ class GamePlayer:
                     goals.append(gm_goal)
 
         return [g for g in goals if repr(g) not in self._suppressed_goals]
+
+    def _notify_observer(
+        self,
+        selected_goal_name: str,
+        action_name: str,
+        outcome: str,
+        goal_rank_trace: list[dict[str, object]],
+    ) -> None:
+        """Build a CycleSnapshot and hand it to the observer (TUI host)."""
+        if self._cycle_observer is None or self.state is None:
+            return
+        plan = self._last_path_plan
+        snap = CycleSnapshot(
+            cycle_index=self._cycle_counter,
+            timestamp=datetime.now(tz=timezone.utc).isoformat(),
+            character=self.character,
+            x=self.state.x, y=self.state.y,
+            level=self.state.level, xp=self.state.xp, max_xp=self.state.max_xp,
+            hp=self.state.hp, max_hp=self.state.max_hp,
+            gold=self.state.gold,
+            inventory=dict(self.state.inventory),
+            inventory_max=self.state.inventory_max,
+            equipment=dict(self.state.equipment),
+            skills=dict(self.state.skills),
+            skill_xp=dict(self.state.skill_xp),
+            task_code=self.state.task_code,
+            task_type=self.state.task_type,
+            task_progress=self.state.task_progress,
+            task_total=self.state.task_total,
+            selected_goal=selected_goal_name,
+            action=action_name,
+            outcome=outcome,
+            goal_rank=[GoalRankEntry(goal=str(e["goal"]), priority=float(e["priority"]))
+                       for e in goal_rank_trace],
+            path_next_action=plan.next_action_monster if plan else None,
+            projected_cycles_to_max=(
+                plan.total_cycles if plan and plan.total_cycles != float("inf") else None
+            ),
+            max_level=self.game_data.max_character_level if self.game_data else 0,
+            remaining_levels=max(
+                0, (self.game_data.max_character_level if self.game_data else 0) - self.state.level,
+            ),
+        )
+        self._cycle_observer(snap)
 
     def _path_trace_snapshot(self) -> dict[str, object]:
         """G-I: small dict of root-objective state to merge into trace records."""
