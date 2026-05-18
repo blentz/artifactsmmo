@@ -783,7 +783,7 @@ class GamePlayer:
             AcceptTaskGoal(),
             TaskExchangeGoal(),
             TaskCancelGoal(),
-            LowYieldCancelGoal(taskmaster_location=self.game_data.taskmaster_location()),
+            LowYieldCancelGoal(),
             FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp),
             upgrade_goal,
         ]
