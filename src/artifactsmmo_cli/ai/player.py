@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
+from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -131,6 +132,7 @@ class GamePlayer:
         self._cycle_counter: int = 0
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
+        self._last_path_plan: PathPlan | None = None
 
     # === Backward-compatibility shims that delegate to the blocker registry ===
     # These let the rest of player.py keep using the old field names while the
@@ -306,6 +308,7 @@ class GamePlayer:
                             "plan_len": 0,
                             "goals_tried": goals_tried,
                             "goal_rank": goal_rank_trace,
+                            **self._path_trace_snapshot(),
                         },
                     )
                     self._record_learning_cycle(
@@ -391,6 +394,7 @@ class GamePlayer:
                         "plan_len": len(plan),
                         "goals_tried": goals_tried,
                         "goal_rank": goal_rank_trace,
+                        **self._path_trace_snapshot(),
                     },
                 )
                 signal = self._detector.detect()
@@ -878,13 +882,12 @@ class GamePlayer:
                     and self.state.level > self._bank_blocked_at_level):
                 self._blockers.clear("bank")
 
-        # Pick a suitable monster to farm: highest level at or below char level
-        # that the bot has observed itself winning more than half the time.
-        # When history is cold or no monster qualifies, returns None and the
-        # FarmMonster/GrindCharacterXP goals get suppressed entirely below —
-        # the natural fallback is UpgradeEquipment (craft better gear before
-        # engaging again).
-        farm_target = self._pick_winnable_monster()
+        # G-I: under max-level root objective, the cheapest-path projection
+        # picks the next monster. Falls back to win-rate-based picker when
+        # the projection is unavailable (no store) or blocked.
+        farm_target = self._path_aligned_monster()
+        if farm_target is None:
+            farm_target = self._pick_winnable_monster()
 
         upgrade_goal = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
         goals: list[Goal] = [
@@ -941,6 +944,48 @@ class GamePlayer:
                     goals.append(gm_goal)
 
         return [g for g in goals if repr(g) not in self._suppressed_goals]
+
+    def _path_trace_snapshot(self) -> dict[str, object]:
+        """G-I: small dict of root-objective state to merge into trace records."""
+        max_lvl = self.game_data.max_character_level if self.game_data else 0
+        cur_lvl = self.state.level if self.state else 0
+        snapshot: dict[str, object] = {
+            "max_level": max_lvl,
+            "remaining_levels": max(0, max_lvl - cur_lvl),
+        }
+        plan = self._last_path_plan
+        if plan is not None:
+            snapshot["projected_cycles_to_max"] = (
+                round(plan.total_cycles, 1) if plan.total_cycles != float("inf") else "inf"
+            )
+            snapshot["path_next_action"] = plan.next_action_monster
+            snapshot["path_blocked"] = plan.blocked
+        return snapshot
+
+    def _path_aligned_monster(self) -> str | None:
+        """Return the next-monster recommendation from the cheapest-path
+        projection to max character level, or None if no path or no store.
+
+        G-I: this replaces win-rate-based picking when the projection is
+        usable. The projection uses observed char_xp/cycle (or the
+        documented XP formula) to pick the monster that maximizes
+        progression per cycle — which is exactly what the max-level root
+        objective wants.
+        """
+        if self.history is None or self.game_data is None or self.state is None:
+            return None
+        plan = cheapest_path_to_level(
+            self.game_data.max_character_level, self.state, self.history, self.game_data,
+        )
+        # Cache for trace exposure later in the cycle.
+        self._last_path_plan = plan
+        # Even when path is blocked at some later level, the FIRST segment
+        # is a valid immediate-next action — the bot can keep grinding it
+        # until either (a) a new monster opens up after a level-up or
+        # (b) UpgradeEquipment / other goals unblock further progression.
+        if not plan.segments:
+            return None
+        return plan.next_action_monster
 
     def _pick_winnable_monster(self) -> str | None:
         """Highest-level monster at or below char_level with success_rate>=0.5.

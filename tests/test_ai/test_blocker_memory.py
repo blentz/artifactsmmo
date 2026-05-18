@@ -183,3 +183,43 @@ class TestPickWinnableMonster:
         # yellow_slime excluded due to low win rate; chicken (untested) wins.
         assert player._pick_winnable_monster() == "chicken"
         store.close()
+
+
+class TestPathAlignedMonster:
+    """G-I: when path projection has a recommendation, use it as farm_target."""
+
+    def test_uses_path_recommendation_when_available(self, tmp_path):
+        # Both chicken and yellow_slime beatable. Path picks higher-yield one.
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        player = GamePlayer(character="hero", history=store)
+        player.game_data = GameData()
+        player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
+        player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
+        player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
+        player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
+        # Path projection: at L1, both monsters beatable. yellow_slime
+        # higher level → higher XP per formula → picked.
+        target = player._path_aligned_monster()
+        assert target == "yellow_slime"
+        # Plan cached for trace.
+        assert player._last_path_plan is not None
+        assert player._last_path_plan.next_action_monster == "yellow_slime"
+        store.close()
+
+    def test_returns_none_when_blocked(self, tmp_path):
+        """No beatable monster → path blocked → return None to fall back."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        player = GamePlayer(character="hero", history=store)
+        player.game_data = GameData()
+        player.game_data._monster_level = {"ogre": 50}  # unbeatable at L1
+        player.state = make_state(level=1, character="hero")
+        assert player._path_aligned_monster() is None
+        store.close()
+
+    def test_returns_none_without_history(self):
+        """No store wired → return None so caller falls back to winnable picker."""
+        player = GamePlayer(character="hero", history=None)
+        player.game_data = GameData()
+        player.game_data._monster_level = {"chicken": 1}
+        player.state = make_state(level=1, character="hero")
+        assert player._path_aligned_monster() is None
