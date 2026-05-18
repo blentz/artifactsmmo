@@ -36,6 +36,9 @@ class CycleSnapshot(BaseModel):
     task_progress: int = 0
     task_total: int = 0
 
+    # Cooldown (seconds remaining at snapshot time; 0 when free)
+    cooldown_remaining: float = 0.0
+
     # Decision
     selected_goal: str
     action: str

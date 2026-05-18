@@ -40,6 +40,11 @@ class StatusPane(Static):
         t.add_row("XP", Group(xp_bar, Text(f"{s.xp}/{s.max_xp}")))
         t.add_row("Gold", str(s.gold))
         t.add_row("Pos", f"({s.x},{s.y})")
+        if s.cooldown_remaining > 0:
+            cd_color = "yellow" if s.cooldown_remaining < 10 else "red"
+            t.add_row("Cooldown", f"[{cd_color}]{s.cooldown_remaining:.1f}s[/{cd_color}]")
+        else:
+            t.add_row("Cooldown", "[green]ready[/green]")
         if s.task_code:
             t.add_row("Task", f"{s.task_code}  {s.task_progress}/{s.task_total}")
         else:

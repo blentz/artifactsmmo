@@ -975,6 +975,14 @@ class GamePlayer:
         if self._cycle_observer is None or self.state is None:
             return
         plan = self._last_path_plan
+        # Cooldown remaining at snapshot time (post-action; the server-set
+        # cooldown the bot will wait through before the next cycle).
+        cooldown_remaining = 0.0
+        if self.state.cooldown_expires is not None:
+            cooldown_remaining = max(
+                0.0,
+                (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
+            )
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -992,6 +1000,7 @@ class GamePlayer:
             task_type=self.state.task_type,
             task_progress=self.state.task_progress,
             task_total=self.state.task_total,
+            cooldown_remaining=cooldown_remaining,
             selected_goal=selected_goal_name,
             action=action_name,
             outcome=outcome,
