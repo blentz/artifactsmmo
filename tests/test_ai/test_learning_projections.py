@@ -1,0 +1,206 @@
+"""Tests for Phase G-B projections module."""
+
+import json
+
+from sqlmodel import Session
+
+from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.learning.projections import (
+    TASKS_COIN_CODE,
+    WARMUP_MIN_SAMPLES,
+    Yield,
+    cycles_for_progress,
+    expected_yield_per_cycle,
+    project_task_completion,
+)
+from artifactsmmo_cli.ai.learning.store import LearningStore
+from tests.test_ai.fixtures import make_state
+
+
+def _make_cycle(
+    cycle_index: int,
+    selected_goal: str,
+    *,
+    delta_xp: int = 0,
+    delta_gold: int = 0,
+    task_progress: int = 0,
+    cycles_to_satisfy: int | None = None,
+    delta_skill_xp_json: str = "{}",
+    drops_json: str | None = None,
+) -> dict:
+    """Kwargs for Cycle(...) — keep a single template so all tests stay consistent."""
+    return dict(
+        ts=f"2026-05-18T00:{cycle_index:02d}:00Z",
+        session_id="s1",
+        cycle_index=cycle_index,
+        character="hero",
+        selected_goal=selected_goal,
+        action_repr="X",
+        action_class="X",
+        outcome="ok",
+        delta_xp=delta_xp,
+        delta_gold=delta_gold,
+        delta_hp=0,
+        delta_inv_used=0,
+        task_progress=task_progress,
+        task_total=10,
+        delta_skill_xp_json=delta_skill_xp_json,
+        drops_json=drops_json,
+        cycles_to_satisfy=cycles_to_satisfy,
+    )
+
+
+def _populate(store: LearningStore, cycles: list[dict]) -> None:
+    """Insert raw Cycle rows directly (bypassing _ensure_session_row dance)."""
+    store.start_session()
+    with Session(store._engine) as s:
+        # Force the session row to exist for FK-ish referential clarity.
+        if not s.get(SessionModel, store._session_id):
+            s.add(SessionModel(
+                session_id=store._session_id,
+                started_at="2026-05-18T00:00:00Z",
+                character="hero",
+            ))
+        for kw in cycles:
+            kw_with_session = dict(kw)
+            kw_with_session["session_id"] = store._session_id
+            s.add(Cycle(**kw_with_session))
+        s.commit()
+
+
+class TestYieldType:
+    def test_default_empty_yield(self):
+        y = Yield()
+        assert y.char_xp == 0.0
+        assert y.skill_xp == {}
+        assert y.gold == 0.0
+        assert y.tasks_coins == 0.0
+        assert y.sample_count == 0
+
+
+class TestExpectedYieldPerCycle:
+    def test_empty_store_returns_empty_yield(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        y = expected_yield_per_cycle("FarmItems", store)
+        store.close()
+        assert y.sample_count == 0
+        assert y.char_xp == 0.0
+
+    def test_aggregates_char_xp_and_gold(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, [
+            _make_cycle(i, "FarmItems", delta_xp=10, delta_gold=2) for i in range(5)
+        ])
+        y = expected_yield_per_cycle("FarmItems", store)
+        store.close()
+        assert y.sample_count == 5
+        assert y.char_xp == 10.0
+        assert y.gold == 2.0
+
+    def test_aggregates_skill_xp_from_json(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, [
+            _make_cycle(i, "FarmItems",
+                        delta_skill_xp_json=json.dumps({"woodcutting": 4}))
+            for i in range(4)
+        ])
+        y = expected_yield_per_cycle("FarmItems", store)
+        store.close()
+        assert y.skill_xp == {"woodcutting": 4.0}
+
+    def test_parses_tasks_coin_from_drops_json(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # 2 cycles drop 3 coins, 2 drop none → avg = 1.5
+        rows = [
+            _make_cycle(0, "CompleteTask", drops_json=json.dumps({TASKS_COIN_CODE: 3})),
+            _make_cycle(1, "CompleteTask", drops_json=json.dumps({TASKS_COIN_CODE: 3})),
+            _make_cycle(2, "CompleteTask"),
+            _make_cycle(3, "CompleteTask"),
+        ]
+        _populate(store, rows)
+        y = expected_yield_per_cycle("CompleteTask", store)
+        store.close()
+        assert y.tasks_coins == 1.5
+
+    def test_ignores_other_goals(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, [
+            _make_cycle(0, "FarmItems", delta_xp=10),
+            _make_cycle(1, "FarmMonster", delta_xp=100),
+            _make_cycle(2, "FarmItems", delta_xp=10),
+        ])
+        y = expected_yield_per_cycle("FarmItems", store)
+        store.close()
+        assert y.sample_count == 2
+        assert y.char_xp == 10.0
+
+
+class TestCyclesForProgress:
+    def test_returns_none_below_warmup(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, [
+            _make_cycle(0, "FarmItems", task_progress=0),
+            _make_cycle(1, "FarmItems", task_progress=1),
+        ])
+        assert cycles_for_progress("FarmItems", store) is None
+        store.close()
+
+    def test_median_progress_interval(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # Need at least WARMUP_MIN_SAMPLES intervals between progress events.
+        # Bumping progress every 5 cycles gives one interval per 5 cycles, so
+        # use ~5 * (WARMUP_MIN_SAMPLES + 2) cycles to get enough intervals.
+        cycles = []
+        for i in range((WARMUP_MIN_SAMPLES + 2) * 5):
+            tp = i // 5
+            cycles.append(_make_cycle(i, "FarmItems", task_progress=tp))
+        _populate(store, cycles)
+        result = cycles_for_progress("FarmItems", store)
+        store.close()
+        assert result is not None
+        assert 4.0 <= result <= 6.0
+
+
+class TestProjectTaskCompletion:
+    def test_no_task_returns_none(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        state = make_state(task_code=None, task_total=0, task_progress=0)
+        assert project_task_completion(state, store) is None
+        store.close()
+
+    def test_satisfied_task_returns_none(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        state = make_state(task_code="x", task_total=10, task_progress=10)
+        assert project_task_completion(state, store) is None
+        store.close()
+
+    def test_empty_store_uses_defaults(self, tmp_path):
+        """With no history, falls back to 15 cycles/progress and 150 gold bonus."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        state = make_state(task_code="gudgeon", task_type="items",
+                           task_total=20, task_progress=5)
+        proj = project_task_completion(state, store)
+        store.close()
+        assert proj is not None
+        # 15 remaining * 15 cycles/progress = 225 cycles
+        assert proj.cycles_remaining == 225.0
+        # No yield data → expected_char_xp = 0
+        assert proj.expected_char_xp == 0.0
+        # No yield data → expected_gold = 0 + 150 bonus
+        assert proj.expected_gold == 150.0
+        # No history → confidence = 0
+        assert proj.confidence == 0.0
+
+    def test_confidence_scales_with_sample_count(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # 15 cycles → confidence = 15 / (10*3) = 0.5
+        _populate(store, [
+            _make_cycle(i, "FarmItems", delta_xp=5, delta_gold=1, task_progress=i)
+            for i in range(15)
+        ])
+        state = make_state(task_code="x", task_type="items",
+                           task_total=20, task_progress=5)
+        proj = project_task_completion(state, store)
+        store.close()
+        assert proj is not None
+        assert 0.4 < proj.confidence < 0.6

@@ -189,6 +189,28 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+    def recent_goal_cycles(self, goal_repr: str, window: int = 100) -> list[Cycle]:
+        """Return up to `window` most recent Cycle rows where selected_goal=goal_repr
+        for the store's character. Newest first.
+
+        Phase G-B projections aggregate over these rows in pure Python so the
+        scoring math stays testable with synthetic Cycle lists.
+        """
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle)
+                    .where(
+                        col(Cycle.character) == self._character,
+                        col(Cycle.selected_goal) == goal_repr,
+                    )
+                    .order_by(col(Cycle.id).desc())
+                    .limit(window)
+                )
+                return list(s.exec(stmt))
+        except SQLAlchemyError:
+            return []
+
     def sample_count(self, action_repr: str) -> int:
         """Number of cycles recorded for this action_repr and the store's character."""
         try:
