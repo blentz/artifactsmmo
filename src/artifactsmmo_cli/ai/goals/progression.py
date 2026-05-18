@@ -152,43 +152,28 @@ class UpgradeEquipmentGoal(Goal):
         return best
 
     def _find_craftable_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
-        """Find the best craftable upgrade whose materials are already available.
+        """Return the IDEAL craftable upgrade target only if its materials are in hand.
 
-        Same ranking as _find_craftable_upgrade_target (relevant tool first,
-        then lowest crafting_level), restricted to recipes whose materials
-        the planner can satisfy in a short Withdraw → Craft → Equip chain.
+        Must agree with `_find_craftable_upgrade_target` on which item to
+        build. Otherwise the bot races itself: GatherMaterials gathers for
+        the ideal target (ring), this goal sees enough materials for a
+        cheaper item (dagger), and crafts the wrong thing with the bars
+        meant for the ring. Returning None when the ideal target lacks
+        materials lets GatherMaterials keep working until the target
+        chain is genuinely buildable.
         """
-        active = game_data.active_gathering_skills(state.task_code)
-        equipped = set(state.equipment.values()) - {None}
+        target = self._find_craftable_upgrade_target(state, game_data)
+        if target is None:
+            return None
+        item_code, _slot = target
+        recipe = game_data._crafting_recipes.get(item_code) or {}
         bank = state.bank_items or {}
-        best: tuple[str, str] | None = None
-        best_key: tuple[int, float] = (-1, -float("inf"))
-        for item_code, recipe in game_data._crafting_recipes.items():
-            if item_code in state.inventory or item_code in equipped:
-                continue
-            stats = game_data.item_stats(item_code)
-            if stats is None or state.level < stats.level:
-                continue
-            if not ITEM_TYPE_TO_SLOTS.get(stats.type_):
-                continue
-            if stats.crafting_skill and state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:
-                continue
-            if not all(
-                state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
-                for mat, qty in recipe.items()
-            ):
-                continue
-            craft_level = stats.crafting_level or 0
-            relevant_tool = 1 if active and any(s in active for s in stats.skill_effects) else 0
-            key = (relevant_tool, -craft_level)
-            if key < best_key:
-                continue
-            for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
-                current = state.equipment.get(slot)
-                current_stats = game_data.item_stats(current) if current else None
-                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data):
-                    best, best_key = (item_code, slot), key
-        return best
+        if not all(
+            state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
+            for mat, qty in recipe.items()
+        ):
+            return None
+        return target
 
     def _is_upgrade_over(
         self,

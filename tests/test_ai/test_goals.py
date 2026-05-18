@@ -449,6 +449,37 @@ class TestUpgradeEquipmentGoalPriority:
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
 
+    def test_does_not_steal_materials_meant_for_better_upgrade(self):
+        """Regression: GatherMaterials targets the ideal upgrade
+        (find_upgrade_target — ignores material availability), so
+        UpgradeEquipment must not race it by crafting a cheaper item
+        with the bars meant for the ideal target. If the ideal target's
+        materials are not yet in hand, UpgradeEquipment must wait."""
+        ring_stats = ItemStats(code="copper_ring", level=1, type_="ring",
+                               crafting_skill="jewelrycrafting", crafting_level=1)
+        dagger_stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                  crafting_skill="weaponcrafting", crafting_level=1)
+        gd = make_game_data(item_stats={
+            "copper_ring": ring_stats, "copper_dagger": dagger_stats,
+        })
+        # Both recipes need copper_bar; ring needs 6, dagger needs 2.
+        gd._crafting_recipes = {
+            "copper_ring": {"copper_bar": 6},
+            "copper_dagger": {"copper_bar": 2},
+        }
+        # Dagger already in bank — Bug 2 fix excludes it → target = ring.
+        # Bot has 3 bars: enough for dagger, NOT enough for ring.
+        state = make_state(inventory={"copper_bar": 3}, bank_items={"copper_dagger": 1},
+                            level=5,
+                            skills={"jewelrycrafting": 1, "weaponcrafting": 1})
+        goal = UpgradeEquipmentGoal()
+        # Target picker should pick ring (dagger already owned via bank).
+        target = goal._find_craftable_upgrade_target(state, gd)
+        assert target == ("copper_ring", "ring2_slot")
+        # Materials picker should NOT fall back to a non-target item.
+        upgrade = goal._find_craftable_upgrade(state, gd)
+        assert upgrade is None, "must wait for ring's materials, not craft a different item"
+
     def test_no_recraft_when_copy_already_in_bank(self):
         """Regression: UpgradeEquipment kept crafting fresh copper_dagger
         copies each cycle because _find_craftable_upgrade_target only
