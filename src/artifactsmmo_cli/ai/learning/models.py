@@ -88,3 +88,25 @@ class Session(SessionBase, table=True):
     __tablename__ = "sessions"
 
     session_id: str = Field(primary_key=True)
+
+
+class BlockerBase(SQLModel):
+    """A learned dependency: doing X requires reaching some prerequisite first.
+
+    First instance: HTTP 496 on bank deposit — the bank's achievement gate
+    requires killing a monster the player cannot yet beat. We remember the
+    monster + required character level so that future sessions skip
+    bank-dependent goals until the prerequisite is met.
+    """
+
+    blocker_code: str = Field(primary_key=True)
+    character: str = Field(index=True)
+    unlock_monster: str | None = None
+    required_level: int = 0
+    discovered_at: str  # ISO-8601 UTC timestamp
+
+
+class Blocker(BlockerBase, table=True):
+    """ORM-persisted blocker."""
+
+    __tablename__ = "blockers"

@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import Cycle, Session
+from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 
@@ -270,6 +270,40 @@ class LearningStore:
                 avg_cycles_to_satisfy=None,
                 satisfaction_rate=0.0,
             )
+
+    def set_blocker(self, blocker_code: str, unlock_monster: str | None,
+                     required_level: int) -> None:
+        """Upsert a learned blocker for this character. Persists across sessions."""
+        try:
+            with SqlSession(self._engine) as s:
+                existing = s.get(Blocker, blocker_code)
+                if existing is not None and existing.character == self._character:
+                    existing.unlock_monster = unlock_monster
+                    existing.required_level = required_level
+                    existing.discovered_at = datetime.now(tz=timezone.utc).isoformat()
+                    s.add(existing)
+                else:
+                    s.add(Blocker(
+                        blocker_code=blocker_code,
+                        character=self._character,
+                        unlock_monster=unlock_monster,
+                        required_level=required_level,
+                        discovered_at=datetime.now(tz=timezone.utc).isoformat(),
+                    ))
+                s.commit()
+        except SQLAlchemyError:
+            pass
+
+    def get_blocker(self, blocker_code: str) -> Blocker | None:
+        """Return the persisted blocker for this character, or None."""
+        try:
+            with SqlSession(self._engine) as s:
+                b = s.get(Blocker, blocker_code)
+                if b is not None and b.character == self._character:
+                    return b
+                return None
+        except SQLAlchemyError:
+            return None
 
     def close(self) -> None:
         self._engine.dispose()

@@ -49,6 +49,7 @@ from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -122,6 +123,10 @@ class GamePlayer:
         # satisfied the achievement.
         self._bank_blocked_at_level: int = 0
         self._bank_unlock_monster: str | None = None
+        # Persistent blocker memory: the character level we must reach before
+        # the bank achievement can plausibly be satisfied. Loaded from the
+        # learning store on first run when history is set; updated on 496.
+        self._bank_required_level: int = 0
         self._detector = StuckDetector(history_size=30)
         self._suppressed_goals: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
@@ -143,6 +148,20 @@ class GamePlayer:
 
         print(f"[{self._now()}] Fetching character state...")
         self.state = self._fetch_world_state(client)
+
+        # Persistent blocker memory: if a previous session learned that the
+        # bank requires level N to unlock and we're still below N, mark the
+        # bank inaccessible upfront instead of wasting a cycle re-discovering.
+        if self.history is not None:
+            blocker = self.history.get_blocker("bank")
+            if blocker is not None and blocker.required_level > 0:
+                self._bank_unlock_monster = blocker.unlock_monster
+                self._bank_required_level = blocker.required_level
+                if self.state.level < blocker.required_level:
+                    self._bank_accessible = False
+                    self._bank_blocked_since = time.monotonic()
+                    self._bank_blocked_at_level = self.state.level
+                    print(f"[{self._now()}] Bank blocker remembered: need level {blocker.required_level} to fight {blocker.unlock_monster}; deferring bank goals until then")
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
@@ -350,7 +369,20 @@ class GamePlayer:
                     match = _ACHIEVEMENT_CODE_RE.search(msg)
                     if match:
                         self._bank_unlock_monster = self._resolve_bank_unlock_monster(client, match.group(1))
-                print(f"[{self._now()}] Bank locked (HTTP 496) — fighting {self._bank_unlock_monster or '?'} to unlock; retrying in {_BANK_RETRY_SECONDS:.0f}s")
+                # Compute & persist the required character level so future
+                # sessions skip the wasted first-cycle 496 and any dependent
+                # goal (DepositInventory) stays disabled until level met.
+                if self._bank_unlock_monster and self.game_data is not None:
+                    target = self.game_data.monster_level(self._bank_unlock_monster) - 1
+                    if target > 0:
+                        self._bank_required_level = target
+                        if self.history is not None:
+                            self.history.set_blocker(
+                                blocker_code="bank",
+                                unlock_monster=self._bank_unlock_monster,
+                                required_level=target,
+                            )
+                print(f"[{self._now()}] Bank locked (HTTP 496) — need level {self._bank_required_level} to fight {self._bank_unlock_monster or '?'}; remembered for future sessions")
                 outcome = "error:bank_locked"
             elif msg.startswith("fight_lost"):
                 print(f"[{self._now()}] Fight lost: {msg} — refreshing state")
@@ -809,6 +841,10 @@ class GamePlayer:
             TaskExchangeGoal(),
             TaskCancelGoal(),
             LowYieldCancelGoal(),
+            # If a remembered blocker requires a higher character level than
+            # we have, drive the grind to reach it before continuing
+            # business-as-usual. Self-disables once level is reached.
+            ReachUnlockLevelGoal(target_level=self._bank_required_level),
             FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp),
             upgrade_goal,
         ]
