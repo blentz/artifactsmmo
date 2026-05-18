@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.dynamic_priority import learned_priority_bonus
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -38,14 +39,11 @@ class FarmMonsterGoal(Goal):
         else:
             xp_fraction = state.xp / state.max_xp
             base = 30.0 + xp_fraction * 20.0
-        if history is None:
-            return base
-        fight_repr = f"Fight({self.monster_code})"
-        observed_xp = history.action_effect(fight_repr, "delta_xp", window=50)
-        if observed_xp is None:
-            return base
-        xp_multiplier = min(2.0, max(0.5, observed_xp / 10.0))
-        return base * xp_multiplier
+        # G-F: layer the scalar-yield bonus on top of the existing
+        # XP-fraction base. Replaces the old delta_xp-only multiplier — the
+        # scalarizer already weights character XP correctly (level + 1).
+        bonus = learned_priority_bonus(repr(self), state, game_data, history)
+        return base + bonus
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.xp > self._initial_xp

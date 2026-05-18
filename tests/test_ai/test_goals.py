@@ -1014,16 +1014,19 @@ def test_farm_items_goal_includes_task_trade_in_relevant_actions():
 
 
 def test_farm_monster_goal_value_amplifies_on_high_xp_yield():
-    """When Fight(monster) has observed high delta_xp, goal.value scales up."""
+    """G-F: goal.value is base + scalar-yield bonus from cycles where the
+    goal itself was selected (not just from observed Fight outcomes — the
+    selected_goal column is the attribution key)."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         path = f.name
     try:
         store = LearningStore(db_path=path, character="testchar")
         store.start_session()
-        for i in range(5):
+        for i in range(30):
             store.record_cycle(Cycle(
                 ts=f"2026-05-17T00:00:{i:02d}+00:00",
-                session_id="x", cycle_index=i, character="x", outcome="ok",
+                session_id="x", cycle_index=i, character="testchar", outcome="ok",
+                selected_goal="FarmMonster(yellow_slime)",
                 action_repr="Fight(yellow_slime)", delta_xp=20,
             ))
         goal = FarmMonsterGoal(monster_code="yellow_slime", initial_xp=0)
@@ -1032,10 +1035,10 @@ def test_farm_monster_goal_value_amplifies_on_high_xp_yield():
         state = make_state(xp=50, max_xp=100, level=5)
         base = goal.value(state, gd, history=None)
         with_hist = goal.value(state, gd, history=store)
-        # base = 30 + (50/100)*20 = 40
-        # multiplier = min(2.0, max(0.5, 20/10)) = 2.0 -> with_hist = 80
+        # base = 30 + (50/100)*20 = 40. Bonus > 0 since we seeded the goal's
+        # cycles with positive delta_xp at full warmup (30 = CONFIDENCE_CAP).
         assert base == 40.0
-        assert with_hist == 80.0
+        assert with_hist > base
         store.close()
     finally:
         if os.path.exists(path):
