@@ -22,6 +22,14 @@ PRIORITY_WHEN_BLOCKER_ACTIVE = 85.0
 clears the prerequisite first. Below RestoreHP critical (110) and the
 hard survival floor."""
 
+MAX_ACHIEVABLE_GAP = 5
+"""Don't fire when the gap to target_level exceeds this. A bigger gap means
+the prerequisite is effectively unreachable (e.g. bank locked behind a
+level-45 monster while char is level 2). Goal stays at 0 priority and the
+bot operates as if the blocker doesn't exist — UpgradeEquipment /
+FarmMonster naturally take over and the goal will re-activate later if
+the char does eventually close the gap."""
+
 
 class ReachUnlockLevelGoal(Goal):
     """Grind character XP until state.level >= target_level."""
@@ -39,6 +47,10 @@ class ReachUnlockLevelGoal(Goal):
         if self.is_satisfied(state):
             return 0.0
         if self._target_level <= 0:
+            return 0.0
+        # Unreachable gap: defer indefinitely. Bot operates as if blocker
+        # doesn't exist; goal re-activates when the gap narrows.
+        if self._target_level - state.level > MAX_ACHIEVABLE_GAP:
             return 0.0
         return PRIORITY_WHEN_BLOCKER_ACTIVE
 

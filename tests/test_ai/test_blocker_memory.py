@@ -1,15 +1,20 @@
 """Tests for persistent blocker memory + ReachUnlockLevelGoal."""
 
+from sqlmodel import Session
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
+    MAX_ACHIEVABLE_GAP,
     PRIORITY_WHEN_BLOCKER_ACTIVE,
     ReachUnlockLevelGoal,
 )
+from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
 
@@ -98,3 +103,83 @@ class TestReachUnlockLevelGoal:
 
     def test_repr_includes_target(self):
         assert repr(ReachUnlockLevelGoal(target_level=6)) == "ReachUnlockLevel(6)"
+
+
+class TestReachUnlockLevelGapGate:
+    """When the level gap is unreachable, the goal stays silent so the bot
+    doesn't waste planner budget on a never-satisfiable goal."""
+
+    def test_zero_when_gap_exceeds_max(self):
+        goal = ReachUnlockLevelGoal(target_level=44)
+        state = make_state(level=2)  # gap=42, way over MAX
+        assert goal.priority(state, GameData()) == 0.0
+
+    def test_fires_when_gap_within_max(self):
+        goal = ReachUnlockLevelGoal(target_level=5)
+        state = make_state(level=5 - MAX_ACHIEVABLE_GAP)  # exactly at the cap
+        assert goal.priority(state, GameData()) == PRIORITY_WHEN_BLOCKER_ACTIVE
+
+    def test_reactivates_when_gap_closes(self):
+        """A long-running game where the char eventually catches up to the
+        blocker should see the goal re-fire."""
+        goal = ReachUnlockLevelGoal(target_level=10)
+        # Far below — silent
+        assert goal.priority(make_state(level=2), GameData()) == 0.0
+        # Closer — fires
+        assert goal.priority(make_state(level=7), GameData()) == PRIORITY_WHEN_BLOCKER_ACTIVE
+        # Reached — satisfied
+        assert goal.priority(make_state(level=10), GameData()) == 0.0
+
+
+class TestPickWinnableMonster:
+    """When a learning store records low success_rate on a monster, the bot
+    should avoid that monster — pick a lower-level one OR (if none qualify)
+    return None so combat-driving goals stay silent."""
+
+    def _player_with_monsters(self, tmp_path, level: int, monster_levels: dict[str, int]):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        player = GamePlayer(character="hero", history=store)
+        player.game_data = GameData()
+        player.game_data._monster_level = monster_levels
+        player.state = make_state(level=level, character="hero")
+        return player, store
+
+    def test_no_history_picks_highest_level_qualifying(self, tmp_path):
+        player, store = self._player_with_monsters(
+            tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3, "ogre": 10},
+        )
+        assert player._pick_winnable_monster() == "yellow_slime"
+        store.close()
+
+    def test_returns_none_when_no_monster_in_range(self, tmp_path):
+        player, store = self._player_with_monsters(
+            tmp_path, level=1, monster_levels={"ogre": 10, "dragon": 20},
+        )
+        assert player._pick_winnable_monster() is None
+        store.close()
+
+    def test_low_success_rate_excluded(self, tmp_path):
+        """A monster with observed losses below 0.5 win rate (with enough
+        samples) is dropped, even if it's the highest-level option."""
+        player, store = self._player_with_monsters(
+            tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3},
+        )
+        # Seed 6 cycles of Fight(yellow_slime) all failed → success_rate=0.
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id,
+                                started_at="2026-05-18T00:00:00Z", character="hero"))
+            for i in range(6):
+                s.add(Cycle(
+                    ts=f"2026-05-18T00:{i:02d}:00Z",
+                    session_id=store._session_id,
+                    cycle_index=i, character="hero",
+                    selected_goal="FarmMonster(yellow_slime)",
+                    action_repr="Fight(yellow_slime)",
+                    action_class="FightAction",
+                    outcome="error:fight_lost",
+                ))
+            s.commit()
+        # yellow_slime excluded due to low win rate; chicken (untested) wins.
+        assert player._pick_winnable_monster() == "chicken"
+        store.close()

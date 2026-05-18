@@ -820,13 +820,13 @@ class GamePlayer:
                 self._bank_accessible = True
                 self._bank_blocked_since = None
 
-        # Pick a suitable monster to farm: highest level at or below character level
-        farm_target = "chicken"  # safe fallback
-        best_level = 0
-        for code, level in self.game_data._monster_level.items():
-            if level <= self.state.level and level > best_level:
-                best_level = level
-                farm_target = code
+        # Pick a suitable monster to farm: highest level at or below char level
+        # that the bot has observed itself winning more than half the time.
+        # When history is cold or no monster qualifies, returns None and the
+        # FarmMonster/GrindCharacterXP goals get suppressed entirely below —
+        # the natural fallback is UpgradeEquipment (craft better gear before
+        # engaging again).
+        farm_target = self._pick_winnable_monster()
 
         upgrade_goal = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
         goals: list[Goal] = [
@@ -845,15 +845,17 @@ class GamePlayer:
             # we have, drive the grind to reach it before continuing
             # business-as-usual. Self-disables once level is reached.
             ReachUnlockLevelGoal(target_level=self._bank_required_level),
-            FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp),
             upgrade_goal,
         ]
+        # Combat-driving goals only when a winnable monster exists.
+        if farm_target is not None:
+            goals.append(FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp))
 
         if self.state.task_type == "items" and self.state.task_code:
             goals.append(FarmItemsGoal(initial_progress=self.state.task_progress))
 
-        # G-E: when no task is held, drive monster grinding by character XP yield.
-        if not self.state.task_code:
+        # G-E: when no task is held AND a winnable monster exists, drive XP grinding.
+        if not self.state.task_code and farm_target is not None:
             goals.append(GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp))
 
         # G-E: surface a LevelSkillGoal for each skill that gates a craftable
@@ -881,6 +883,42 @@ class GamePlayer:
                     goals.append(gm_goal)
 
         return [g for g in goals if repr(g) not in self._suppressed_goals]
+
+    def _pick_winnable_monster(self) -> str | None:
+        """Highest-level monster at or below char_level with success_rate>=0.5.
+
+        Falls back to the highest-level qualifying monster when history is cold
+        (no samples yet — give benefit of the doubt). Returns None when every
+        candidate has observed-bad win rates, so the caller can suppress
+        combat-driving goals and let upgrade-driven goals dominate.
+        """
+        assert self.game_data is not None
+        assert self.state is not None
+        WIN_RATE_THRESHOLD = 0.5
+        MIN_SAMPLES = 5
+        best_winnable: tuple[str, int] | None = None
+        best_unobserved: tuple[str, int] | None = None
+        for code, level in self.game_data._monster_level.items():
+            if level > self.state.level:
+                continue
+            if self.history is None:
+                # No store wired: highest qualifying monster wins.
+                if best_unobserved is None or level > best_unobserved[1]:
+                    best_unobserved = (code, level)
+                continue
+            samples = self.history.sample_count(f"Fight({code})")
+            rate = self.history.success_rate(f"Fight({code})")
+            if samples < MIN_SAMPLES:
+                if best_unobserved is None or level > best_unobserved[1]:
+                    best_unobserved = (code, level)
+            elif rate >= WIN_RATE_THRESHOLD:
+                if best_winnable is None or level > best_winnable[1]:
+                    best_winnable = (code, level)
+        if best_winnable is not None:
+            return best_winnable[0]
+        if best_unobserved is not None:
+            return best_unobserved[0]
+        return None
 
     def _gating_skill_targets(self, active_skills: set[str]) -> list[tuple[str, int]]:
         """Find (gating_skill, required_level) pairs for craftable items that:
