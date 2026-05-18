@@ -10,17 +10,18 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.scalarizer import scalar_yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-PRIORITY_FLOOR = 30.0
+PRIORITY_FLOOR = priorities.GRIND_CHARACTER_XP_FLOOR
 """Minimum priority when active. Matches existing FarmMonster default so the
 goal doesn't regress behavior in the cold-start case."""
 
-PRIORITY_CEILING = 45.0
+PRIORITY_CEILING = priorities.GRIND_CHARACTER_XP_CEILING
 """Cap on the projected-scalar contribution. Stays under LowYieldCancelGoal(70),
 LevelSkillGoal(55), and ensures survival/bank goals always dominate."""
 

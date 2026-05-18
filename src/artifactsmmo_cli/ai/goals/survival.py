@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -19,7 +20,7 @@ class RestoreHPGoal(Goal):
     """
 
     CRITICAL_HP_FRACTION = 0.25
-    CRITICAL_HP_VALUE = 110.0
+    CRITICAL_HP_VALUE = priorities.HP_CRITICAL
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

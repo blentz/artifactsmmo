@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.task import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import (
     expected_yield_per_cycle,
@@ -75,7 +76,7 @@ class LowYieldCancelGoal(Goal):
         # Fire. High priority (70) — below survival (80) and above gathering
         # (50) so the next cycle pivots to cancel rather than continuing the
         # low-yield grind.
-        return 70.0
+        return priorities.LOW_YIELD_CANCEL
 
     def is_satisfied(self, state: WorldState) -> bool:
         return not state.task_code or state.task_total == 0

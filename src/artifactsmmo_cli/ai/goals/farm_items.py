@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.dynamic_priority import learned_priority_bonus
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -32,7 +33,7 @@ class FarmItemsGoal(Goal):
             return 0.0
         remaining = state.task_total - state.task_progress
         fraction_remaining = remaining / state.task_total
-        return max(1.0, 35.0 * fraction_remaining)
+        return max(1.0, priorities.FARM_ITEMS_BASE * fraction_remaining)
 
     def priority(self, state: WorldState, game_data: GameData,
                  history: LearningStore | None = None) -> float:
@@ -43,7 +44,7 @@ class FarmItemsGoal(Goal):
         # G-F: base 35 (outranks FarmMonster cold-start) + projection-driven
         # bonus when observed throughput exceeds defaults. Bonus scaled by
         # sample-count confidence so we don't react to early noise.
-        base = 35.0
+        base = priorities.FARM_ITEMS_BASE
         bonus = learned_priority_bonus(repr(self), state, game_data, history)
         return base + bonus
 

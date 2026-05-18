@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -51,7 +52,7 @@ class GatherMaterialsGoal(Goal):
         """Fixed high priority until satisfied — keeps gathering ahead of farming regardless of XP fraction."""
         if self.is_satisfied(state):
             return 0.0
-        return 50.0
+        return priorities.GATHER_MATERIALS
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         """Restrict planning to gather/smelt/deposit — excludes combat and unrelated gathers."""
