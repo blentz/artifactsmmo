@@ -50,7 +50,7 @@ from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
-from artifactsmmo_cli.ai.blockers import BlockerRegistry
+from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -214,6 +214,14 @@ class GamePlayer:
                     required_level=b.required_level,
                 )
                 print(f"[{self._now()}] Bank blocker remembered: need level {b.required_level} to fight {b.unlock_monster}; deferring bank goals until then")
+
+        # Seed documented blockers from game_data: near-future combat,
+        # equip, craft, gather prereqs the char is close to unlocking. Adds
+        # nothing for gates the char has already cleared. Discovered
+        # blockers from the learning store (above) take precedence.
+        seeded = seed_documented_blockers(self._blockers, self.game_data, self.state)
+        if seeded:
+            print(f"[{self._now()}] Seeded {seeded} documented near-future blockers from game data")
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 

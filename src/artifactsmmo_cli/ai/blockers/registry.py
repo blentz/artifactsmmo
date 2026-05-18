@@ -8,30 +8,48 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 
 @dataclass
 class BlockerState:
-    """One learned gated dependency."""
+    """One learned or documented gated dependency.
+
+    Prereq fields are independent — a blocker may have any combination:
+    - `required_level` (character XP level) for fight gates and equip gates
+    - `required_skill` + `required_skill_level` for craft / gather gates
+    - `unlock_monster` when an achievement on that monster is the gate
+    - `required_item` when an item drop / craft is the gate (e.g. dungeon key)
+    """
 
     code: str
-    """Logical name for the gate (e.g. "bank", "workshop:weaponcrafting")."""
+    """Logical name for the gate. Convention:
+      - "bank" — bank access
+      - "fight:<monster_code>" — combat with monster
+      - "craft:<item_code>" — craft this item
+      - "gather:<resource_code>" — gather this resource
+      - "equip:<item_code>" — equip this item
+      - "transition:<map_code>" — enter this map
+    """
 
     unlock_monster: str | None = None
     """Monster whose achievement satisfies this blocker, if any."""
 
     required_level: int = 0
-    """Character level required to plausibly attempt the unlock."""
+    """Character level required (combat or equip prereq)."""
+
+    required_skill: str | None = None
+    """Per-skill prereq name (e.g. "weaponcrafting") for craft / gather gates."""
+
+    required_skill_level: int = 0
+    """Level required in `required_skill`. 0 = no skill prereq."""
+
+    required_item: str | None = None
+    """Item code that must be in inventory to clear this blocker (dungeon key, etc)."""
+
+    source: str = "discovered"
+    """"discovered" (learned via API error like 496) or "documented" (seeded from game_data)."""
 
     blocked_since_monotonic: float | None = None
-    """time.monotonic() when this blocker was last observed active.
-
-    Used by the retry timer — caller (player) decides when to re-test the
-    gate based on this + a delay constant.
-    """
+    """time.monotonic() when this blocker was last observed active."""
 
     blocked_at_char_level: int = 0
-    """Character level at the moment of the block.
-
-    Used by the retry gate: don't auto-retry until the char has gained at
-    least one level since this point.
-    """
+    """Character level at the moment of the block (only meaningful for `discovered`)."""
 
 
 @dataclass

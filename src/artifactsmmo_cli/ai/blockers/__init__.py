@@ -6,6 +6,15 @@ New blockers (workshop gates, taskmaster level gates, map transitions)
 register without code changes to player.
 """
 
+from artifactsmmo_cli.ai.blockers.documented import (
+    NEAR_FUTURE_GAP,
+    seed_documented_blockers,
+)
 from artifactsmmo_cli.ai.blockers.registry import BlockerRegistry, BlockerState
 
-__all__ = ["BlockerRegistry", "BlockerState"]
+__all__ = [
+    "BlockerRegistry",
+    "BlockerState",
+    "NEAR_FUTURE_GAP",
+    "seed_documented_blockers",
+]
