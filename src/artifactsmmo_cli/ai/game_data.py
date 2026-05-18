@@ -92,6 +92,19 @@ class GameData:
         """Primary item dropped when gathering this resource (for planning simulation)."""
         return self._resource_drops.get(code)
 
+    @property
+    def max_character_level(self) -> int:
+        """Highest character level required by any documented monster.
+
+        Tentative ceiling derived from monster levels (no documented
+        explicit cap in API). Used by G-G's path projection to bound the
+        search. Returns 1 when no monsters are loaded (safe floor — treats
+        char as already at max so projections don't divide by zero).
+        """
+        if not self._monster_level:
+            return 1
+        return max(self._monster_level.values())
+
     def monster_level(self, code: str) -> int:
         """Level of a monster."""
         return self._monster_level.get(code, 0)

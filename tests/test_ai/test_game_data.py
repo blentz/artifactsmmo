@@ -512,3 +512,15 @@ def test_active_gathering_skills_handles_multi_skill_recipes():
         "iron_rocks": ("mining", 5),
     }
     assert gd.active_gathering_skills("alloy_bar") == {"mining"}
+
+
+def test_max_character_level_from_monsters():
+    gd = GameData()
+    gd._monster_level = {"chicken": 1, "yellow_slime": 3, "sea_marauder": 45, "boss": 55}
+    assert gd.max_character_level == 55
+
+
+def test_max_character_level_empty_data():
+    """No monsters → safe floor of 1 so projections don't divide by zero."""
+    gd = GameData()
+    assert gd.max_character_level == 1

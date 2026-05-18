@@ -12,6 +12,7 @@ import statistics
 
 from pydantic import BaseModel, Field
 
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -159,6 +160,115 @@ def cycles_for_progress(goal_repr: str, store: LearningStore, window: int = 100)
     if len(intervals) < WARMUP_MIN_SAMPLES:
         return None
     return statistics.median(intervals)
+
+
+class PathSegment(BaseModel):
+    """One grind-this-monster-until-level-up step in a path to max level."""
+
+    from_level: int
+    to_level: int
+    monster_code: str
+    estimated_cycles: float
+    xp_per_cycle: float
+    cycles_per_kill: float
+
+
+class PathPlan(BaseModel):
+    """Estimated cheapest path from current level to target level."""
+
+    target_level: int
+    total_cycles: float
+    segments: list[PathSegment] = Field(default_factory=list)
+    blocked: bool = False
+    """True when no beatable monster exists at some intermediate level —
+    the path cannot complete without unlocking new combat options."""
+
+    @property
+    def next_action_monster(self) -> str | None:
+        """Monster code for the first segment, or None if the path is empty."""
+        return self.segments[0].monster_code if self.segments else None
+
+
+def cheapest_path_to_level(
+    target_level: int,
+    state: WorldState,
+    store: LearningStore,
+    game_data: GameData,
+    default_xp_per_kill: float = 5.0,
+    default_cycles_per_kill: float = 30.0,
+) -> PathPlan:
+    """Walk levels current → target picking the cheapest beatable monster
+    at each step. Uses observed char_xp/cycle from the store when sample
+    count > 0; falls back to a game-data default otherwise.
+
+    Returns a PathPlan with `blocked=True` and `total_cycles=inf` when no
+    beatable monster exists at some intermediate level.
+
+    Naive simplifications (acknowledged limits):
+      - Assumes each level requires `state.max_xp` XP. Real curve is
+        unknown; this overestimates lower levels and underestimates
+        higher ones. Future work: per-level XP curve from API.
+      - Doesn't model gathering/crafting detours that could unlock
+        higher-yield monsters via gear. Phase G-I (path-aware
+        meta-policy) can add this.
+      - Doesn't account for HP recovery cycles, deaths, or cooldowns
+        beyond what `action_cost` captures.
+    """
+    if state.level >= target_level:
+        return PathPlan(target_level=target_level, total_cycles=0.0, segments=[])
+
+    segments: list[PathSegment] = []
+    sim_level = state.level
+    xp_to_next = max(1, state.max_xp - state.xp)
+
+    while sim_level < target_level:
+        # Beatable monsters at sim_level: FightAction.is_applicable allows
+        # monster_level <= state.level + 1.
+        beatable = [
+            (code, lvl) for code, lvl in game_data._monster_level.items()
+            if 1 <= lvl <= sim_level + 1
+        ]
+        if not beatable:
+            return PathPlan(target_level=target_level, total_cycles=float("inf"),
+                            segments=segments, blocked=True)
+
+        best_code: str | None = None
+        best_xp_per_cycle = 0.0
+        best_cost = default_cycles_per_kill
+        for code, lvl in beatable:
+            observed = expected_yield_per_cycle(f"FarmMonster({code})", store)
+            if observed.sample_count > 0 and observed.char_xp > 0:
+                xp_per_cycle = observed.char_xp
+            else:
+                # Cold start: assume the level-scaled default XP/kill divided
+                # by the default cycle cost.
+                xp_per_cycle = default_xp_per_kill * lvl / default_cycles_per_kill
+            cost = store.action_cost(f"Fight({code})", default=default_cycles_per_kill)
+            if xp_per_cycle > best_xp_per_cycle:
+                best_code = code
+                best_xp_per_cycle = xp_per_cycle
+                best_cost = cost
+
+        if best_code is None or best_xp_per_cycle <= 0:
+            return PathPlan(target_level=target_level, total_cycles=float("inf"),
+                            segments=segments, blocked=True)
+
+        cycles_for_this_level = xp_to_next / best_xp_per_cycle
+        segments.append(PathSegment(
+            from_level=sim_level,
+            to_level=sim_level + 1,
+            monster_code=best_code,
+            estimated_cycles=cycles_for_this_level,
+            xp_per_cycle=best_xp_per_cycle,
+            cycles_per_kill=best_cost,
+        ))
+        sim_level += 1
+        # After level-up, assume new level starts at 0 XP and the XP-to-next
+        # stays constant (best we can do without a level-curve API).
+        xp_to_next = max(1, state.max_xp)
+
+    total = sum(s.estimated_cycles for s in segments)
+    return PathPlan(target_level=target_level, total_cycles=total, segments=segments)
 
 
 def project_task_completion(

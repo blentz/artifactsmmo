@@ -204,3 +204,97 @@ class TestProjectTaskCompletion:
         store.close()
         assert proj is not None
         assert 0.4 < proj.confidence < 0.6
+
+
+class TestCheapestPathToLevel:
+    def _gd_with_monsters(self, monsters: dict[str, int]) -> "GameData":
+        from artifactsmmo_cli.ai.game_data import GameData
+        gd = GameData()
+        gd._monster_level = monsters
+        return gd
+
+    def test_returns_empty_path_when_already_at_target(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        state = make_state(level=10)
+        plan = cheapest_path_to_level(10, state, store, self._gd_with_monsters({}))
+        store.close()
+        assert plan.total_cycles == 0.0
+        assert plan.segments == []
+        assert plan.blocked is False
+
+    def test_falls_back_to_default_when_no_observations(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(2, state, store, gd,
+                                       default_xp_per_kill=5.0,
+                                       default_cycles_per_kill=30.0)
+        store.close()
+        # xp_per_cycle = 5 * 1 / 30 ≈ 0.167; cycles = 100/0.167 ≈ 600
+        assert not plan.blocked
+        assert len(plan.segments) == 1
+        assert plan.segments[0].monster_code == "chicken"
+        assert 500 < plan.total_cycles < 700
+
+    def test_uses_observed_xp_when_available(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # Seed 5 FarmMonster(chicken) cycles at 20 char-xp each
+        _populate(store, [
+            _make_cycle(i, "FarmMonster(chicken)", delta_xp=20) for i in range(5)
+        ])
+        gd = self._gd_with_monsters({"chicken": 1})
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+        # 100 xp at 20/cycle = 5 cycles
+        assert plan.segments[0].xp_per_cycle == 20.0
+        assert plan.total_cycles == 5.0
+
+    def test_blocked_when_no_beatable_monster(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"ogre": 50, "dragon": 80})
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(50, state, store, gd)
+        store.close()
+        assert plan.blocked
+        assert plan.total_cycles == float("inf")
+
+    def test_picks_highest_xp_monster(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, (
+            [_make_cycle(i, "FarmMonster(chicken)", delta_xp=2) for i in range(5)] +
+            [_make_cycle(5 + i, "FarmMonster(yellow_slime)", delta_xp=15) for i in range(5)]
+        ))
+        gd = self._gd_with_monsters({"chicken": 1, "yellow_slime": 2})
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+        # yellow_slime (lvl 2, char L1) is beatable due to +1 margin, gives 15xp/cyc
+        assert plan.segments[0].monster_code == "yellow_slime"
+
+    def test_extends_across_levels(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1, "wolf": 5})
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(3, state, store, gd)
+        store.close()
+        # Should have 2 segments (level 1→2, level 2→3)
+        assert len(plan.segments) == 2
+
+    def test_next_action_monster_property(self, tmp_path):
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+        assert plan.next_action_monster == "chicken"
+        # Empty path → None
+        empty = cheapest_path_to_level(1, make_state(level=1), store, gd)
+        assert empty.next_action_monster is None
