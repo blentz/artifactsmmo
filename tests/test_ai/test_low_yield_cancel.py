@@ -159,3 +159,40 @@ class TestConstants:
         # Cancel must require the alternative to be *strictly better* than
         # the current task, by at least this margin.
         assert ALTERNATIVE_MARGIN > 1.0
+
+
+class TestGHCharXpFastCancel:
+    """G-H: zero-char-XP task cancels immediately when ANY alt pays char_xp.
+
+    Real-play scenario this fixes: Robby's 347-fish gudgeon task. FarmItems
+    cycles drop 0 char_xp each (XP only at CompleteTask), so the average is
+    near-zero. Any monster grind pays char_xp/cycle > 0. Old scalar-based
+    comparison made this an opaque ratio that required ~30 cycles to flip.
+    New char-XP-rate comparison cancels in 3-ish cycles (just enough to
+    seed the alternative's yield)."""
+
+    def test_zero_char_xp_task_cancels_when_alt_pays(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # Seed FarmItems with 5 zero-char-xp cycles (gudgeon-style).
+        cycles = [_cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
+        # Alternative: FarmMonster(slime) pays 15 char_xp/cycle.
+        cycles += [_cycle(5 + i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
+        _seed_cycles(store, cycles)
+        goal = LowYieldCancelGoal()
+        state = make_state(task_code="gudgeon", task_type="items",
+                           task_total=347, task_progress=5)
+        # Should fire immediately — no need to wait for confidence threshold.
+        from artifactsmmo_cli.ai.priorities import LOW_YIELD_CANCEL
+        assert goal.priority(state, _gd_with_woodcutting_task(), store) == LOW_YIELD_CANCEL
+        store.close()
+
+    def test_zero_char_xp_no_alt_doesnt_fire(self, tmp_path):
+        """If no alternative has char_xp data, can't justify cancel."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = [_cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
+        _seed_cycles(store, cycles)
+        goal = LowYieldCancelGoal()
+        state = make_state(task_code="gudgeon", task_type="items",
+                           task_total=347, task_progress=5)
+        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 0.0
+        store.close()

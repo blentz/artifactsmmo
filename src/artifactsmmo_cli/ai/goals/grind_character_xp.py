@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
-from artifactsmmo_cli.ai.learning.scalarizer import scalar_yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -55,7 +54,10 @@ class GrindCharacterXPGoal(Goal):
         fight_yield = expected_yield_per_cycle(f"FarmMonster({self._target_monster})", history)
         if fight_yield.sample_count == 0:
             return PRIORITY_FLOOR
-        bonus = scalar_yield(fight_yield, state, game_data, history) * SCALAR_TO_PRIORITY_GAIN
+        # G-H: under max-level root objective, char_xp/cycle is the metric.
+        # Scalar (used previously) mixed in gold/skill_xp which dilute the
+        # signal — we explicitly want to rank by character progression rate.
+        bonus = fight_yield.char_xp * SCALAR_TO_PRIORITY_GAIN
         return min(PRIORITY_CEILING, PRIORITY_FLOOR + bonus)
 
     def is_satisfied(self, state: WorldState) -> bool:

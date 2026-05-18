@@ -20,7 +20,6 @@ from artifactsmmo_cli.ai.learning.projections import (
     expected_yield_per_cycle,
     project_task_completion,
 )
-from artifactsmmo_cli.ai.learning.scalarizer import scalar_yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -51,15 +50,14 @@ class LowYieldCancelGoal(Goal):
         if history is None or not state.task_code:
             return 0.0
 
-        projection = project_task_completion(state, history)
-        if projection is None or projection.confidence < CONFIDENCE_THRESHOLD:
-            return 0.0
-
-        # Current task's scalar reward / cycle.
+        # G-H: char_xp/cycle is the primary metric under the max-level
+        # root objective. Other reward shapes (gold, skill_xp, coins) are
+        # means to that end; they don't justify keeping a zero-char-XP
+        # task running when alternatives pay actual char-XP per cycle.
         farm_items_yield = expected_yield_per_cycle("FarmItems", history)
         if farm_items_yield.sample_count == 0:
             return 0.0
-        current_rate = scalar_yield(farm_items_yield, state, game_data, history)
+        current_char_xp_per_cycle = farm_items_yield.char_xp
 
         # Alternative: best FarmMonster repr the bot has data on.
         alt_repr = self._best_alternative_repr(history)
@@ -68,14 +66,25 @@ class LowYieldCancelGoal(Goal):
         alt_yield = expected_yield_per_cycle(alt_repr, history)
         if alt_yield.sample_count == 0:
             return 0.0
-        alternative_rate = scalar_yield(alt_yield, state, game_data, history)
+        alternative_char_xp_per_cycle = alt_yield.char_xp
 
-        if alternative_rate < current_rate * ALTERNATIVE_MARGIN:
+        # Zero-char-XP task case: any positive alternative beats it
+        # immediately (no margin needed). Catches gudgeon-style tasks
+        # that pay only at CompleteTask — when we see N cycles of pure
+        # zero, fire ASAP instead of waiting for confidence to compound.
+        if current_char_xp_per_cycle == 0 and alternative_char_xp_per_cycle > 0:
+            return priorities.LOW_YIELD_CANCEL
+
+        # Positive-but-low task case: require ALTERNATIVE_MARGIN to
+        # avoid noise-driven flapping. Confidence threshold still
+        # applies — don't act on tiny samples.
+        projection = project_task_completion(state, history)
+        if projection is None or projection.confidence < CONFIDENCE_THRESHOLD:
             return 0.0
 
-        # Fire. High priority (70) — below survival (80) and above gathering
-        # (50) so the next cycle pivots to cancel rather than continuing the
-        # low-yield grind.
+        if alternative_char_xp_per_cycle < current_char_xp_per_cycle * ALTERNATIVE_MARGIN:
+            return 0.0
+
         return priorities.LOW_YIELD_CANCEL
 
     def is_satisfied(self, state: WorldState) -> bool:
