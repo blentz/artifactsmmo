@@ -843,6 +843,14 @@ class GamePlayer:
         if self.history is None:
             return
         drops = self._compute_drops(prev_state, new_state)
+        # Per-skill XP delta. Sparse: only skills whose XP changed appear.
+        # Phase G-B projections read this column to attribute skill-XP yield
+        # per cycle, separately from character XP (delta_xp).
+        skill_deltas: dict[str, int] = {}
+        for skill_name, new_xp in new_state.skill_xp.items():
+            prev_xp = prev_state.skill_xp.get(skill_name, 0)
+            if new_xp != prev_xp:
+                skill_deltas[skill_name] = new_xp - prev_xp
         cycle = Cycle(
             ts=datetime.now(tz=timezone.utc).isoformat(),
             session_id="placeholder",
@@ -869,6 +877,7 @@ class GamePlayer:
             delta_hp=new_state.hp - prev_state.hp,
             delta_inv_used=new_state.inventory_used - prev_state.inventory_used,
             drops_json=json.dumps(drops, ensure_ascii=False) if drops else None,
+            delta_skill_xp_json=json.dumps(skill_deltas, ensure_ascii=False, sort_keys=True),
             cycles_to_satisfy=cycles_to_satisfy,
         )
         self.history.record_cycle(cycle)

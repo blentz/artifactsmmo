@@ -1,10 +1,11 @@
 """Integration: GamePlayer + LearningStore."""
 
+import json
 import os
 import tempfile
 
 import pytest
-from sqlmodel import Session as SqlSession, select
+from sqlmodel import Session, Session as SqlSession, select
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -85,3 +86,49 @@ def test_goal_cycles_to_satisfy_tracked():
     assert "G1" not in player._goal_first_selected_at
     player._note_goal_selection("G1", cycle_index=6)
     assert player._goal_first_selected_at["G1"] == 6
+
+
+def test_record_learning_cycle_captures_per_skill_xp_delta(tmp_path):
+    """G-A: per-skill XP delta written to delta_skill_xp_json as JSON."""
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+    store.start_session()
+
+    prev = make_state(skill_xp={"weaponcrafting": 10, "fishing": 50})
+    new = make_state(skill_xp={"weaponcrafting": 14, "fishing": 50})
+    player = GamePlayer(character="hero")
+    player.history = store
+    player._record_learning_cycle(
+        prev_state=prev, new_state=new,
+        action_repr="Craft(copper_axe)", action_class="CraftAction",
+        outcome="ok", selected_goal="UpgradeEquipment",
+        predicted_cost=5.0, actual_cooldown_seconds=4.0,
+        planner_nodes=3, planner_depth=2, planner_timed_out=False, plan_len=2,
+    )
+    with Session(store._engine) as s:
+        rows = list(s.exec(select(Cycle)))
+    assert len(rows) == 1
+    assert json.loads(rows[0].delta_skill_xp_json) == {"weaponcrafting": 4}
+    store.close()
+
+
+def test_record_learning_cycle_empty_skill_delta_when_no_change(tmp_path):
+    """G-A: when no skills change, delta_skill_xp_json is '{}'."""
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+    store.start_session()
+
+    prev = make_state(skill_xp={"weaponcrafting": 10})
+    new = make_state(skill_xp={"weaponcrafting": 10})
+    player = GamePlayer(character="hero")
+    player.history = store
+    player._record_learning_cycle(
+        prev_state=prev, new_state=new,
+        action_repr="Move(1,1)", action_class="MoveAction",
+        outcome="ok", selected_goal="X",
+        predicted_cost=1.0, actual_cooldown_seconds=0.5,
+        planner_nodes=1, planner_depth=1, planner_timed_out=False, plan_len=1,
+    )
+    with Session(store._engine) as s:
+        rows = list(s.exec(select(Cycle)))
+    assert len(rows) == 1
+    assert json.loads(rows[0].delta_skill_xp_json) == {}
+    store.close()
