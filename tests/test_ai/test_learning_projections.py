@@ -303,3 +303,42 @@ class TestCheapestPathToLevel:
         # Empty path → None
         empty = cheapest_path_to_level(1, make_state(level=1), store, gd)
         assert empty.next_action_monster is None
+
+
+class TestPathSuccessRateFilter:
+    """G-I post-fix: monsters with observed low win-rate excluded from path."""
+
+    def test_low_win_rate_monster_skipped(self, tmp_path):
+        from artifactsmmo_cli.ai.game_data import GameData
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+        from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id,
+                                started_at="2026-05-18T00:00:00Z", character="hero"))
+            # 6 yellow_slime fights all lost → success_rate = 0
+            for i in range(6):
+                s.add(Cycle(
+                    ts=f"2026-05-18T00:{i:02d}:00Z",
+                    session_id=store._session_id,
+                    cycle_index=i, character="hero",
+                    selected_goal="FarmMonster(yellow_slime)",
+                    action_repr="Fight(yellow_slime)",
+                    action_class="FightAction",
+                    outcome="error:fight_lost",
+                ))
+            s.commit()
+
+        gd = GameData()
+        gd._monster_level = {"chicken": 1, "yellow_slime": 2}
+        gd._monster_hp = {"chicken": 60, "yellow_slime": 70}
+        gd._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
+        state = make_state(level=1, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+        # yellow_slime would normally win by XP/cycle, but losses eliminate it.
+        # chicken takes over as the only viable option.
+        assert plan.segments[0].monster_code == "chicken"

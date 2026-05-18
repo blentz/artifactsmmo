@@ -193,6 +193,16 @@ DEFAULT_FIGHT_CYCLES = 30.0
 """Fallback cycle cost per Fight when learning store has no observations.
 ~30s server cooldown is the typical post-fight cooldown."""
 
+MIN_PATH_SUCCESS_RATE = 0.5
+"""Minimum observed win-rate (with >= MIN_PATH_SAMPLES observations) for a
+monster to remain in the path projection. Below threshold the monster is
+skipped entirely — losing fights waste HP and drop net XP/cycle below
+slower-but-survivable alternatives."""
+
+MIN_PATH_SAMPLES = 5
+"""Below this sample count the win-rate filter doesn't apply (the bot
+hasn't had a fair chance to learn the monster yet)."""
+
 
 def cheapest_path_to_level(
     target_level: int,
@@ -241,8 +251,17 @@ def cheapest_path_to_level(
         best_xp_per_cycle = 0.0
         best_cost = DEFAULT_FIGHT_CYCLES
         for code, _lvl in beatable:
+            fight_repr = f"Fight({code})"
+            # Skip monsters with observed-low success_rate: losing fights waste
+            # HP and produce zero XP net. Use the actual sample count from the
+            # action stats (NOT goal cycles) so a few real losses count.
+            samples = store.sample_count(fight_repr)
+            if samples >= MIN_PATH_SAMPLES:
+                rate = store.success_rate(fight_repr)
+                if rate < MIN_PATH_SUCCESS_RATE:
+                    continue
             observed = expected_yield_per_cycle(f"FarmMonster({code})", store)
-            cost = store.action_cost(f"Fight({code})", default=DEFAULT_FIGHT_CYCLES)
+            cost = store.action_cost(fight_repr, default=DEFAULT_FIGHT_CYCLES)
             if observed.sample_count > 0 and observed.char_xp > 0:
                 xp_per_cycle = observed.char_xp
             else:
