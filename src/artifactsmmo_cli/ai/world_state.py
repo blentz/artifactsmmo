@@ -1,6 +1,6 @@
 """World state representation for GOAP planning."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
@@ -63,6 +63,10 @@ class WorldState:
     bank_items: dict[str, int] | None  # None = not yet visited
     bank_gold: int | None
     pending_items: tuple[tuple[str, str], ...] | None  # ((id, code), ...) | None = not yet fetched
+    # skill_name -> current XP within level. Default empty so callers that don't
+    # need skill-XP attribution (most action.apply paths) keep working. Filled
+    # from `<skill>_xp` on the API schema by from_character_schema.
+    skill_xp: dict[str, int] = field(default_factory=dict)
 
     @property
     def inventory_used(self) -> int:
@@ -102,8 +106,10 @@ class WorldState:
             equipment[slot_name] = val if val else None
 
         skills: dict[str, int] = {}
+        skill_xp: dict[str, int] = {}
         for skill in SKILL_NAMES:
             skills[skill] = getattr(char, f"{skill}_level", 1)
+            skill_xp[skill] = getattr(char, f"{skill}_xp", 0)
 
         cooldown_expires: datetime | None = None
         if not isinstance(char.cooldown_expiration, Unset) and char.cooldown_expiration:
@@ -118,6 +124,7 @@ class WorldState:
             max_hp=char.max_hp,
             gold=char.gold,
             skills=skills,
+            skill_xp=skill_xp,
             x=char.x,
             y=char.y,
             inventory=inventory,
