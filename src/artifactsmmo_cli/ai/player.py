@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
+from artifactsmmo_cli.ai.blockers import BlockerRegistry
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -116,17 +117,10 @@ class GamePlayer:
         self.planner = GOAPPlanner()
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
-        self._bank_accessible: bool = True
-        self._bank_blocked_since: float | None = None
-        # Character level at the moment of the 496 — used by the retry gate
-        # so we don't auto-retry until a level-up could plausibly have
-        # satisfied the achievement.
-        self._bank_blocked_at_level: int = 0
-        self._bank_unlock_monster: str | None = None
-        # Persistent blocker memory: the character level we must reach before
-        # the bank achievement can plausibly be satisfied. Loaded from the
-        # learning store on first run when history is set; updated on 496.
-        self._bank_required_level: int = 0
+        # Generic blocker registry — replaces what used to be ~5 bank-specific
+        # player fields. New gates (workshop, taskmaster, transitions) plug in
+        # by adding a code to this registry instead of growing player.
+        self._blockers = BlockerRegistry()
         self._detector = StuckDetector(history_size=30)
         self._suppressed_goals: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
@@ -137,6 +131,61 @@ class GamePlayer:
         self._cycle_counter: int = 0
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
+
+    # === Backward-compatibility shims that delegate to the blocker registry ===
+    # These let the rest of player.py keep using the old field names while the
+    # registry owns the actual state. Remove the shims (and update callers) in
+    # a follow-up pass.
+
+    @property
+    def _bank_accessible(self) -> bool:
+        return not self._blockers.is_blocked("bank")
+
+    @_bank_accessible.setter
+    def _bank_accessible(self, value: bool) -> None:
+        """Setter for backward-compat: True clears the blocker; False sets
+        one with whatever metadata was previously known (or empty)."""
+        if value:
+            self._blockers.clear("bank")
+        elif not self._blockers.is_blocked("bank"):
+            self._blockers.mark_blocked("bank", char_level=0)
+
+    @property
+    def _bank_blocked_since(self) -> float | None:
+        b = self._blockers.get("bank")
+        return b.blocked_since_monotonic if b else None
+
+    @_bank_blocked_since.setter
+    def _bank_blocked_since(self, value: float | None) -> None:
+        b = self._blockers.get("bank")
+        if b is None:
+            return
+        b.blocked_since_monotonic = value
+
+    @property
+    def _bank_blocked_at_level(self) -> int:
+        b = self._blockers.get("bank")
+        return b.blocked_at_char_level if b else 0
+
+    @property
+    def _bank_unlock_monster(self) -> str | None:
+        b = self._blockers.get("bank")
+        return b.unlock_monster if b else None
+
+    @_bank_unlock_monster.setter
+    def _bank_unlock_monster(self, value: str | None) -> None:
+        b = self._blockers.get("bank")
+        if b is None:
+            # Tests sometimes set the monster before any 496 — create an
+            # empty blocker so the attribute sticks.
+            self._blockers.mark_blocked("bank", char_level=0, unlock_monster=value)
+            return
+        b.unlock_monster = value
+
+    @property
+    def _bank_required_level(self) -> int:
+        b = self._blockers.get("bank")
+        return b.required_level if b else 0
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -153,15 +202,18 @@ class GamePlayer:
         # bank requires level N to unlock and we're still below N, mark the
         # bank inaccessible upfront instead of wasting a cycle re-discovering.
         if self.history is not None:
-            blocker = self.history.get_blocker("bank")
-            if blocker is not None and blocker.required_level > 0:
-                self._bank_unlock_monster = blocker.unlock_monster
-                self._bank_required_level = blocker.required_level
-                if self.state.level < blocker.required_level:
-                    self._bank_accessible = False
-                    self._bank_blocked_since = time.monotonic()
-                    self._bank_blocked_at_level = self.state.level
-                    print(f"[{self._now()}] Bank blocker remembered: need level {blocker.required_level} to fight {blocker.unlock_monster}; deferring bank goals until then")
+            self._blockers = BlockerRegistry.load(self.history, known_codes=["bank"])
+            b = self._blockers.get("bank")
+            if b is not None and self.state.level < b.required_level:
+                # Refresh blocked_since/at_level so the retry timer keys off
+                # this session's start, not the original discovery.
+                self._blockers.mark_blocked(
+                    "bank",
+                    char_level=self.state.level,
+                    unlock_monster=b.unlock_monster,
+                    required_level=b.required_level,
+                )
+                print(f"[{self._now()}] Bank blocker remembered: need level {b.required_level} to fight {b.unlock_monster}; deferring bank goals until then")
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
@@ -362,27 +414,26 @@ class GamePlayer:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
             elif "HTTP 496" in msg and isinstance(action, (DepositAllAction, WithdrawItemAction)):
-                self._bank_accessible = False
-                self._bank_blocked_since = time.monotonic()
-                self._bank_blocked_at_level = self.state.level if self.state else 0
-                if self._bank_unlock_monster is None:
+                # Discover unlock monster + compute required level, then push
+                # everything into the blocker registry (which also persists
+                # via the learning store when present).
+                unlock_monster = self._bank_unlock_monster
+                if unlock_monster is None:
                     match = _ACHIEVEMENT_CODE_RE.search(msg)
                     if match:
-                        self._bank_unlock_monster = self._resolve_bank_unlock_monster(client, match.group(1))
-                # Compute & persist the required character level so future
-                # sessions skip the wasted first-cycle 496 and any dependent
-                # goal (DepositInventory) stays disabled until level met.
-                if self._bank_unlock_monster and self.game_data is not None:
-                    target = self.game_data.monster_level(self._bank_unlock_monster) - 1
-                    if target > 0:
-                        self._bank_required_level = target
-                        if self.history is not None:
-                            self.history.set_blocker(
-                                blocker_code="bank",
-                                unlock_monster=self._bank_unlock_monster,
-                                required_level=target,
-                            )
-                print(f"[{self._now()}] Bank locked (HTTP 496) — need level {self._bank_required_level} to fight {self._bank_unlock_monster or '?'}; remembered for future sessions")
+                        unlock_monster = self._resolve_bank_unlock_monster(client, match.group(1))
+                required_level = 0
+                if unlock_monster and self.game_data is not None:
+                    required_level = max(0, self.game_data.monster_level(unlock_monster) - 1)
+                char_level = self.state.level if self.state else 0
+                self._blockers.mark_blocked(
+                    "bank",
+                    char_level=char_level,
+                    unlock_monster=unlock_monster,
+                    required_level=required_level,
+                    store=self.history,
+                )
+                print(f"[{self._now()}] Bank locked (HTTP 496) — need level {required_level} to fight {unlock_monster or '?'}; remembered for future sessions")
                 outcome = "error:bank_locked"
             elif msg.startswith("fight_lost"):
                 print(f"[{self._now()}] Fight lost: {msg} — refreshing state")
@@ -817,8 +868,7 @@ class GamePlayer:
             if (time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
                     and self.state is not None
                     and self.state.level > self._bank_blocked_at_level):
-                self._bank_accessible = True
-                self._bank_blocked_since = None
+                self._blockers.clear("bank")
 
         # Pick a suitable monster to farm: highest level at or below char level
         # that the bot has observed itself winning more than half the time.
