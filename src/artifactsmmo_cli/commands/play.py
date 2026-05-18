@@ -29,6 +29,8 @@ def play(
                                 help="Read/write learned stats to SQLite for autoregressive planning"),
     learn_db: str | None = typer.Option(None, "--learn-db",
                                          help="Learning DB path (default: ~/.cache/artifactsmmo/learning.db)"),
+    tui: bool = typer.Option(False, "--tui",
+                              help="Run with a live TUI watcher (Textual). Bot runs in a worker thread."),
 ) -> None:
     """Run the autonomous GOAP AI player for one character."""
     tracer: Tracer = NullTracer()
@@ -50,7 +52,10 @@ def play(
     )
     exit_reason = "crash"
     try:
-        player.run()
+        if tui:
+            _run_with_tui(player, character)
+        else:
+            player.run()
         exit_reason = "normal"
     except KeyboardInterrupt:
         exit_reason = "keyboard_interrupt"
@@ -59,3 +64,28 @@ def play(
         if store is not None:
             store.end_session(exit_reason=exit_reason)
             store.close()
+
+
+def _run_with_tui(player: "GamePlayer", character: str) -> None:
+    """Spawn the bot in a worker thread; run the Textual app on main thread."""
+    import threading
+
+    from artifactsmmo_api_client import AuthenticatedClient
+
+    from artifactsmmo_cli.ai.game_data import GameData
+    from artifactsmmo_cli.client_manager import ClientManager
+    from artifactsmmo_cli.tui.app import WatchApp
+    from artifactsmmo_cli.tui.observer import ThreadSafeBridge
+
+    # Preload game_data on the main thread so the map can render the first
+    # frame before the bot has done a cycle.
+    client = ClientManager().client
+    player.game_data = GameData.load(client)
+    app = WatchApp(character=character, game_data=player.game_data)
+    bridge = ThreadSafeBridge(app, app.update_snapshot)
+    player.set_cycle_observer(bridge.notify)
+
+    # Daemon thread so the process exits cleanly when the TUI quits.
+    bot_thread = threading.Thread(target=player.run, daemon=True)
+    bot_thread.start()
+    app.run()
