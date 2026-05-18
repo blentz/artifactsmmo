@@ -55,6 +55,10 @@ class CycleBase(SQLModel):
     delta_hp: int | None = None
     delta_inv_used: int | None = None
     drops_json: str | None = None
+    # Per-skill XP delta as JSON {skill_name: int}. Sparse — only skills
+    # whose XP actually changed appear. Default "{}" so old rows are valid.
+    # Read by Phase G-B projections to attribute skill-XP yield per cycle.
+    delta_skill_xp_json: str = Field(default="{}")
 
     # Goal completion tracking
     cycles_to_satisfy: int | None = None

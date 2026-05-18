@@ -117,3 +117,24 @@ class TestGoalStats:
             satisfaction_rate=0.0,
         )
         assert s.avg_cycles_to_satisfy is None
+
+
+def test_cycle_delta_skill_xp_json_default_is_empty_object():
+    """G-A: Cycle.delta_skill_xp_json defaults to '{}' so rows constructed
+    without an explicit value (older code paths) still validate."""
+    cycle = Cycle(
+        ts="2026-05-18T00:00:00Z", session_id="s1", cycle_index=0, character="hero",
+        selected_goal="<none>", action_repr="<no_plan>", action_class="NoPlan",
+        outcome="no_plan",
+    )
+    assert cycle.delta_skill_xp_json == "{}"
+
+
+def test_cycle_delta_skill_xp_json_accepts_sparse_map():
+    """G-A: callers pass a JSON-encoded sparse map of {skill: xp_delta}."""
+    cycle = Cycle(
+        ts="2026-05-18T00:00:00Z", session_id="s1", cycle_index=0, character="hero",
+        selected_goal="X", action_repr="Y", action_class="Z", outcome="ok",
+        delta_skill_xp_json='{"weaponcrafting": 4}',
+    )
+    assert cycle.delta_skill_xp_json == '{"weaponcrafting": 4}'
