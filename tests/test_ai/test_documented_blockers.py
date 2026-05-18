@@ -2,7 +2,6 @@
 
 from artifactsmmo_cli.ai.blockers import (
     BlockerRegistry,
-    NEAR_FUTURE_GAP,
     seed_documented_blockers,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -37,26 +36,28 @@ def _gd_with_progression() -> GameData:
 
 
 class TestSeedDocumentedBlockers:
-    def test_adds_near_future_combat_gates(self):
-        reg = BlockerRegistry()
-        state = make_state(level=2, skills={"weaponcrafting": 1, "mining": 1})
-        added = seed_documented_blockers(reg, _gd_with_progression(), state)
-        # yellow_slime (L3) → required_level=2, char L2 → already covered, NOT added.
-        # Wait: required_level = monster_level - 1 = 2, which equals char level. Not added.
-        # skeleton (L18) → required_level=17, gap=15, too far. Not added.
-        # Only items/crafts within gap should be added.
-        assert "fight:skeleton" not in reg.blockers  # too far
-        assert "fight:chicken" not in reg.blockers  # already beatable
-
-    def test_adds_near_future_craft_gates(self):
+    def test_seeds_all_distant_gates_by_default(self):
+        """No cap by default — full progression map goes in the registry.
+        Caller filters at use time."""
         reg = BlockerRegistry()
         state = make_state(level=2, skills={"weaponcrafting": 1, "mining": 1})
         seed_documented_blockers(reg, _gd_with_progression(), state)
-        # iron_axe (craft_level=10), char skill=1, gap=9 → too far (>5)
-        # steel_axe (craft_level=20), gap=19 → too far
-        # Neither added.
+        # skeleton (L18) and lich (L30) far beyond char L2 — included.
+        assert "fight:skeleton" in reg.blockers
+        assert "fight:lich" in reg.blockers
+        # iron_axe / steel_axe craft gates are also distant but included.
+        assert "craft:iron_axe" in reg.blockers
+        assert "craft:steel_axe" in reg.blockers
+        # Already-beatable monsters stay OUT (chicken at L1, char L2).
+        assert "fight:chicken" not in reg.blockers
+
+    def test_max_gap_filters_distant(self):
+        """Callers wanting an actionable-only view can opt in to a cap."""
+        reg = BlockerRegistry()
+        state = make_state(level=2, skills={"weaponcrafting": 1, "mining": 1})
+        seed_documented_blockers(reg, _gd_with_progression(), state, max_gap=5)
+        assert "fight:skeleton" not in reg.blockers
         assert "craft:iron_axe" not in reg.blockers
-        assert "craft:steel_axe" not in reg.blockers
 
     def test_adds_within_gap(self):
         reg = BlockerRegistry()
@@ -104,14 +105,14 @@ class TestSeedDocumentedBlockers:
         n2 = len(reg.blockers)
         assert n1 == n2
 
-    def test_gap_bound_excludes_distant(self):
+    def test_max_gap_param_caps_all_categories(self):
+        """When max_gap is set, no seeded blocker exceeds it across any category."""
         reg = BlockerRegistry()
         state = make_state(level=2, skills={"weaponcrafting": 1})
-        seed_documented_blockers(reg, _gd_with_progression(), state, near_future_gap=NEAR_FUTURE_GAP)
-        # Everything gap > 5 must be absent
-        for code, b in reg.blockers.items():
+        seed_documented_blockers(reg, _gd_with_progression(), state, max_gap=5)
+        for _code, b in reg.blockers.items():
             if b.required_level > 0:
-                assert b.required_level - state.level <= NEAR_FUTURE_GAP
+                assert b.required_level - state.level <= 5
             if b.required_skill_level > 0:
                 cur = state.skills.get(b.required_skill, 0)
-                assert b.required_skill_level - cur <= NEAR_FUTURE_GAP
+                assert b.required_skill_level - cur <= 5
