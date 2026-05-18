@@ -189,28 +189,32 @@ class PathPlan(BaseModel):
         return self.segments[0].monster_code if self.segments else None
 
 
+DEFAULT_FIGHT_CYCLES = 30.0
+"""Fallback cycle cost per Fight when learning store has no observations.
+~30s server cooldown is the typical post-fight cooldown."""
+
+
 def cheapest_path_to_level(
     target_level: int,
     state: WorldState,
     store: LearningStore,
     game_data: GameData,
-    default_xp_per_kill: float = 5.0,
-    default_cycles_per_kill: float = 30.0,
 ) -> PathPlan:
     """Walk levels current → target picking the cheapest beatable monster
-    at each step. Uses observed char_xp/cycle from the store when sample
-    count > 0; falls back to a game-data default otherwise.
+    at each step.
+
+    XP per kill comes from the documented formula (`game_data.xp_per_kill`)
+    — no magic guess. Cycle cost per kill comes from the learning store
+    when observed; otherwise DEFAULT_FIGHT_CYCLES.
 
     Returns a PathPlan with `blocked=True` and `total_cycles=inf` when no
     beatable monster exists at some intermediate level.
 
-    Naive simplifications (acknowledged limits):
-      - Assumes each level requires `state.max_xp` XP. Real curve is
-        unknown; this overestimates lower levels and underestimates
-        higher ones. Future work: per-level XP curve from API.
-      - Doesn't model gathering/crafting detours that could unlock
-        higher-yield monsters via gear. Phase G-I (path-aware
-        meta-policy) can add this.
+    Known limits:
+      - Assumes each level requires `state.max_xp` XP. We don't have the
+        per-level XP curve from API; new char.max_xp could be discovered
+        as the bot levels up and persisted in a follow-up.
+      - Doesn't model gathering/crafting detours.
       - Doesn't account for HP recovery cycles, deaths, or cooldowns
         beyond what `action_cost` captures.
     """
@@ -220,6 +224,7 @@ def cheapest_path_to_level(
     segments: list[PathSegment] = []
     sim_level = state.level
     xp_to_next = max(1, state.max_xp - state.xp)
+    wisdom = state.wisdom
 
     while sim_level < target_level:
         # Beatable monsters at sim_level: FightAction.is_applicable allows
@@ -234,16 +239,16 @@ def cheapest_path_to_level(
 
         best_code: str | None = None
         best_xp_per_cycle = 0.0
-        best_cost = default_cycles_per_kill
-        for code, lvl in beatable:
+        best_cost = DEFAULT_FIGHT_CYCLES
+        for code, _lvl in beatable:
             observed = expected_yield_per_cycle(f"FarmMonster({code})", store)
+            cost = store.action_cost(f"Fight({code})", default=DEFAULT_FIGHT_CYCLES)
             if observed.sample_count > 0 and observed.char_xp > 0:
                 xp_per_cycle = observed.char_xp
             else:
-                # Cold start: assume the level-scaled default XP/kill divided
-                # by the default cycle cost.
-                xp_per_cycle = default_xp_per_kill * lvl / default_cycles_per_kill
-            cost = store.action_cost(f"Fight({code})", default=default_cycles_per_kill)
+                # Documented formula. Yields exact XP-per-kill server-side.
+                xp_per_kill = game_data.xp_per_kill(code, sim_level, wisdom=wisdom)
+                xp_per_cycle = xp_per_kill / max(cost, 1.0)
             if xp_per_cycle > best_xp_per_cycle:
                 best_code = code
                 best_xp_per_cycle = xp_per_cycle
@@ -263,8 +268,6 @@ def cheapest_path_to_level(
             cycles_per_kill=best_cost,
         ))
         sim_level += 1
-        # After level-up, assume new level starts at 0 XP and the XP-to-next
-        # stays constant (best we can do without a level-curve API).
         xp_to_next = max(1, state.max_xp)
 
     total = sum(s.estimated_cycles for s in segments)

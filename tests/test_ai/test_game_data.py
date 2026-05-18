@@ -514,13 +514,54 @@ def test_active_gathering_skills_handles_multi_skill_recipes():
     assert gd.active_gathering_skills("alloy_bar") == {"mining"}
 
 
-def test_max_character_level_from_monsters():
+def test_max_character_level_is_documented_50():
+    """Documented cap per https://docs.artifactsmmo.com/concepts/stats_and_fights/.
+    Constant — does not depend on loaded monster data (events/bosses can
+    exceed 50)."""
     gd = GameData()
-    gd._monster_level = {"chicken": 1, "yellow_slime": 3, "sea_marauder": 45, "boss": 55}
-    assert gd.max_character_level == 55
+    assert gd.max_character_level == 50
+    gd._monster_level = {"sea_marauder": 45, "boss_at_55": 55}
+    assert gd.max_character_level == 50  # still 50, not 55
 
 
-def test_max_character_level_empty_data():
-    """No monsters → safe floor of 1 so projections don't divide by zero."""
+def test_xp_per_kill_formula_normal_monster():
+    """Documented formula: (monster_level/char_level * 20 + monster_hp * 0.04) * penalty * mult * wisdom_bonus."""
     gd = GameData()
-    assert gd.max_character_level == 1
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 60}
+    gd._monster_type = {"chicken": "normal"}
+    # char L1, no wisdom: (1/1 * 20 + 60 * 0.04) * 1.0 * 1.0 * 1.0 = 22.4 → round 22
+    assert gd.xp_per_kill("chicken", char_level=1, wisdom=0) == 22
+
+
+def test_xp_per_kill_level_penalty_above_5():
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 60}
+    gd._monster_type = {"chicken": "normal"}
+    # char L6 vs L1 monster: diff=5 → 0.7 penalty
+    # (1/6 * 20 + 60 * 0.04) * 0.7 = (3.33 + 2.4) * 0.7 = 4.01 → 4
+    result = gd.xp_per_kill("chicken", char_level=6, wisdom=0)
+    assert result == 4
+
+
+def test_xp_per_kill_level_penalty_above_10_zero():
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 60}
+    gd._monster_type = {"chicken": "normal"}
+    assert gd.xp_per_kill("chicken", char_level=11, wisdom=0) == 0
+
+
+def test_xp_per_kill_elite_multiplier():
+    gd = GameData()
+    gd._monster_level = {"elite_boss": 5}
+    gd._monster_hp = {"elite_boss": 200}
+    gd._monster_type = {"elite_boss": "elite"}
+    # (5/5 * 20 + 200 * 0.04) * 1.0 * 1.4 = (20 + 8) * 1.4 = 39.2 → 39
+    assert gd.xp_per_kill("elite_boss", char_level=5) == 39
+
+
+def test_xp_per_kill_unknown_monster_zero():
+    gd = GameData()
+    assert gd.xp_per_kill("nonexistent", char_level=5) == 0

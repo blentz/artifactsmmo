@@ -44,6 +44,8 @@ class GameData:
     _resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
     _resource_drops: dict[str, str] = field(default_factory=dict)  # resource_code -> primary drop item
     _monster_level: dict[str, int] = field(default_factory=dict)
+    _monster_hp: dict[str, int] = field(default_factory=dict)
+    _monster_type: dict[str, str] = field(default_factory=dict)  # "normal" / "elite" / "boss"
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
@@ -92,18 +94,53 @@ class GameData:
         """Primary item dropped when gathering this resource (for planning simulation)."""
         return self._resource_drops.get(code)
 
+    MAX_CHARACTER_LEVEL = 50
+    """Documented character level cap.
+    Source: https://docs.artifactsmmo.com/concepts/stats_and_fights/ —
+    "Characters progress through 50 levels...level 50 being the maximum."
+    Note: monster levels above 50 exist (event/boss monsters); the
+    PROGRESSION cap is 50.
+    """
+
     @property
     def max_character_level(self) -> int:
-        """Highest character level required by any documented monster.
+        """Documented character-level cap. Constant from official docs."""
+        return self.MAX_CHARACTER_LEVEL
 
-        Tentative ceiling derived from monster levels (no documented
-        explicit cap in API). Used by G-G's path projection to bound the
-        search. Returns 1 when no monsters are loaded (safe floor — treats
-        char as already at max so projections don't divide by zero).
+    # === Monster XP formula (documented) ===
+    # Source: https://docs.artifactsmmo.com/concepts/stats_and_fights/
+    #   XP = round((monster_level/player_level * 20 + monster_hp * 0.04)
+    #              * level_penalty * monster_multiplier * wisdom_bonus)
+    #
+    # level_penalty: 1.0 when char_level <= monster_level + 4
+    #                0.7 when char_level - monster_level >= 5
+    #                0.0 when char_level - monster_level >= 10
+    # monster_multiplier: normal=1.0, elite=1.4, boss=2.0
+    # wisdom_bonus: 1 + wisdom * 0.001
+
+    _MONSTER_TYPE_MULTIPLIER = {"normal": 1.0, "elite": 1.4, "boss": 2.0}
+
+    def xp_per_kill(self, monster_code: str, char_level: int, wisdom: int = 0) -> int:
+        """Compute documented XP gained from killing `monster_code`.
+
+        Returns 0 if monster is unknown (no level on file).
         """
-        if not self._monster_level:
-            return 1
-        return max(self._monster_level.values())
+        monster_level = self._monster_level.get(monster_code, 0)
+        if monster_level <= 0 or char_level <= 0:
+            return 0
+        monster_hp = self._monster_hp.get(monster_code, 0)
+        diff = char_level - monster_level
+        if diff >= 10:
+            penalty = 0.0
+        elif diff >= 5:
+            penalty = 0.7
+        else:
+            penalty = 1.0
+        mtype = self._monster_type.get(monster_code, "normal")
+        multiplier = self._MONSTER_TYPE_MULTIPLIER.get(mtype, 1.0)
+        wisdom_bonus = 1.0 + wisdom * 0.001
+        raw = (monster_level / char_level * 20 + monster_hp * 0.04)
+        return round(raw * penalty * multiplier * wisdom_bonus)
 
     def monster_level(self, code: str) -> int:
         """Level of a monster."""
@@ -337,6 +374,8 @@ class GameData:
 
             for mon in result.data:
                 self._monster_level[mon.code] = mon.level
+                self._monster_hp[mon.code] = mon.hp
+                self._monster_type[mon.code] = mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
 
             if len(result.data) < 100:
                 break

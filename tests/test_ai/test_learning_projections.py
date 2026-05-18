@@ -223,20 +223,25 @@ class TestCheapestPathToLevel:
         assert plan.segments == []
         assert plan.blocked is False
 
-    def test_falls_back_to_default_when_no_observations(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
+    def test_uses_documented_xp_formula_when_no_observations(self, tmp_path):
+        """No store data → use game_data.xp_per_kill (documented formula)
+        instead of magic constants."""
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level, DEFAULT_FIGHT_CYCLES
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        gd._monster_type = {"chicken": "normal"}
         state = make_state(level=1, xp=0, max_xp=100)
-        plan = cheapest_path_to_level(2, state, store, gd,
-                                       default_xp_per_kill=5.0,
-                                       default_cycles_per_kill=30.0)
+        plan = cheapest_path_to_level(2, state, store, gd)
         store.close()
-        # xp_per_cycle = 5 * 1 / 30 ≈ 0.167; cycles = 100/0.167 ≈ 600
+        # xp_per_kill(chicken, L1) = 22 per documented formula.
+        # cycle cost = DEFAULT_FIGHT_CYCLES (30) since no observations.
+        # xp_per_cycle = 22/30 ≈ 0.733; cycles to gain 100 XP = ~136.
         assert not plan.blocked
-        assert len(plan.segments) == 1
         assert plan.segments[0].monster_code == "chicken"
-        assert 500 < plan.total_cycles < 700
+        assert plan.segments[0].xp_per_cycle > 0
+        # Within reasonable bounds (formula-derived, not magic)
+        assert 100 < plan.total_cycles < 200
 
     def test_uses_observed_xp_when_available(self, tmp_path):
         from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level

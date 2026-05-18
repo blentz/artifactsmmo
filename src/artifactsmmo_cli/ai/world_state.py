@@ -67,6 +67,10 @@ class WorldState:
     # need skill-XP attribution (most action.apply paths) keep working. Filled
     # from `<skill>_xp` on the API schema by from_character_schema.
     skill_xp: dict[str, int] = field(default_factory=dict)
+    wisdom: int = 0
+    """Wisdom stat — factors into documented XP-per-kill formula
+    (+0.1% XP per wisdom point). Defaults 0 so older WorldState
+    constructions don't break."""
 
     @property
     def inventory_used(self) -> int:
@@ -125,6 +129,7 @@ class WorldState:
             gold=char.gold,
             skills=skills,
             skill_xp=skill_xp,
+            wisdom=getattr(char, "wisdom", 0),
             x=char.x,
             y=char.y,
             inventory=inventory,
