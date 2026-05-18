@@ -101,19 +101,36 @@ def test_handle_stuck_state_frozen_level2_suppresses_current_goal():
     assert player._recovery_level[StuckSignal.STATE_FROZEN] == 2
 
 
-def test_handle_stuck_goal_oscillation_level1_suppresses_both():
+def test_handle_stuck_goal_oscillation_level1_suppresses_failing_goals_only():
+    """Only goals that were actually failing get suppressed. A succeeded goal
+    that merely shares the oscillation window is not the source of the loop
+    and should not be punished."""
     player = GamePlayer(character="testchar")
-    # Populate detector history with A/B alternation
+    # GoalA failing, GoalB succeeding — only GoalA should be suppressed.
     for i in range(8):
         name = "GoalA" if i % 2 == 0 else "GoalB"
         player._detector.record(CycleRecord(
             state_key=(i, 0, 5, (), (), None, 0, False),
             goal_name=name, action_name="X", planned_depth=1,
-            planner_timed_out=False, succeeded=True,
+            planner_timed_out=False, succeeded=(name == "GoalB"),
         ))
     player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
     assert player._suppressed_goals.get("GoalA") == 5
-    assert player._suppressed_goals.get("GoalB") == 5
+    assert "GoalB" not in player._suppressed_goals
+
+
+def test_handle_stuck_goal_oscillation_skips_none_placeholder():
+    """The '<none>' label is the no-plan placeholder, not a real goal —
+    suppressing it would be meaningless."""
+    player = GamePlayer(character="testchar")
+    for i in range(8):
+        player._detector.record(CycleRecord(
+            state_key=(i, 0, 5, (), (), None, 0, False),
+            goal_name="<none>", action_name="<no_plan>", planned_depth=0,
+            planner_timed_out=False, succeeded=False,
+        ))
+    player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+    assert "<none>" not in player._suppressed_goals
 
 
 def test_handle_stuck_no_progress_level1_triggers_refresh():
@@ -133,8 +150,17 @@ def test_handle_stuck_no_progress_level1_triggers_refresh():
 
 
 def test_handle_stuck_goal_oscillation_level3_exits():
-    """Level 3 of GOAL_OSCILLATION exits with SystemExit(2) — unrecoverable."""
+    """Level 3 of GOAL_OSCILLATION exits with SystemExit(2) — unrecoverable.
+    Requires failing history so the recovery handler reaches the L3 branch
+    instead of the early-return when no failing goals exist."""
     player = GamePlayer(character="testchar")
+    for i in range(8):
+        player._detector.record(CycleRecord(
+            state_key=(i, 0, 5, (), (), None, 0, False),
+            goal_name="GoalA" if i % 2 == 0 else "GoalB",
+            action_name="X", planned_depth=1,
+            planner_timed_out=False, succeeded=False,
+        ))
     player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
     with pytest.raises(SystemExit) as exc_info:
         player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)

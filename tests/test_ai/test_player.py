@@ -902,12 +902,14 @@ class TestHandleStuckExtended:
     def test_goal_oscillation_level2_suppresses_for_15_cycles(self):
         player = GamePlayer(character="hero")
         from artifactsmmo_cli.ai.recovery import CycleRecord
+        # succeeded=False so the recovery handler treats these as the
+        # source of the oscillation (succeeded goals are excluded post-b2be2ad).
         for i in range(8):
             name = "GoalA" if i % 2 == 0 else "GoalB"
             player._detector.record(CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False),
                 goal_name=name, action_name="X", planned_depth=1,
-                planner_timed_out=False, succeeded=True,
+                planner_timed_out=False, succeeded=False,
             ))
         player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 1
 

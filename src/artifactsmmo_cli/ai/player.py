@@ -572,8 +572,20 @@ class GamePlayer:
 
         elif signal == StuckSignal.GOAL_OSCILLATION:
             history = list(self._detector._history)[-8:]
-            distinct = {r.goal_name for r in history}
-            if level == 1:
+            # Only suppress goals that were actually failing in the window. A
+            # succeeded goal that merely appears in the oscillation window
+            # (e.g. AcceptTask that fired once between TaskExchange retries)
+            # is not the source of the loop. Also drop "<none>" — it's the
+            # no-plan placeholder, not a real goal that can be suppressed.
+            distinct = {
+                r.goal_name for r in history
+                if not r.succeeded and r.goal_name != "<none>"
+            }
+            if not distinct:
+                # Nothing real to suppress; just clear the signal and let the
+                # next cycle replan instead of escalating.
+                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION: no failing goals to suppress; clearing signal")
+            elif level == 1:
                 suppress_cycles = 5
                 for name in distinct:
                     self._suppressed_goals[name] = suppress_cycles
