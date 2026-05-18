@@ -46,6 +46,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
+from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -782,6 +783,7 @@ class GamePlayer:
             AcceptTaskGoal(),
             TaskExchangeGoal(),
             TaskCancelGoal(),
+            LowYieldCancelGoal(taskmaster_location=self.game_data.taskmaster_location()),
             FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp),
             upgrade_goal,
         ]
