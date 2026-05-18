@@ -25,6 +25,14 @@ class LearningStore:
         with self._engine.connect() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL"))
             conn.execute(text("PRAGMA synchronous=NORMAL"))
+            # Phase G-A migration: add delta_skill_xp_json to pre-existing
+            # cycles tables. SQLModel.create_all only adds tables, not columns.
+            # No Alembic in scope; one-shot ALTER is the simplest contract.
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(cycles)")}
+            if cols and "delta_skill_xp_json" not in cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE cycles ADD COLUMN delta_skill_xp_json TEXT NOT NULL DEFAULT '{}'"
+                )
             conn.commit()
 
         self._character = character

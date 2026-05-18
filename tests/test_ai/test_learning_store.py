@@ -398,3 +398,50 @@ class TestGoalStatsRollup:
         assert stats.sample_count == 0
         assert stats.avg_cycles_to_satisfy is None
         assert stats.satisfaction_rate == 0.0
+
+
+class TestGAMigration:
+    """Phase G-A migration: pre-existing DBs missing delta_skill_xp_json
+    must be migrated on open."""
+
+    def test_old_db_without_column_migrates_on_open(self, tmp_path):
+        import sqlite3
+        db_path = str(tmp_path / "old.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE cycles (
+                id INTEGER PRIMARY KEY,
+                ts TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                cycle_index INTEGER NOT NULL,
+                character TEXT NOT NULL,
+                selected_goal TEXT, action_repr TEXT, action_class TEXT, outcome TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE sessions (
+                session_id TEXT PRIMARY KEY, character TEXT, started_at TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        # Opening the store should add the column.
+        store = LearningStore(db_path=db_path, character="hero")
+        store.close()
+
+        conn = sqlite3.connect(db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(cycles)")}
+        conn.close()
+        assert "delta_skill_xp_json" in cols
+
+    def test_fresh_db_already_has_column(self, tmp_path):
+        """No false alarm on a freshly-created DB."""
+        import sqlite3
+        db_path = str(tmp_path / "new.db")
+        store = LearningStore(db_path=db_path, character="hero")
+        store.close()
+        conn = sqlite3.connect(db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(cycles)")}
+        conn.close()
+        assert "delta_skill_xp_json" in cols
