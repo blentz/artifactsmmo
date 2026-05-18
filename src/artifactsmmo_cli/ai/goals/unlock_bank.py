@@ -2,8 +2,6 @@
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -59,9 +57,9 @@ class UnlockBankGoal(Goal):
                 self._target_monster is None or a.monster_code == self._target_monster
             )
         ]
-        delete_actions: list[Action] = [a for a in actions if isinstance(a, DeleteItemAction)]
-        consume_actions: list[Action] = [a for a in actions if isinstance(a, UseConsumableAction)]
-        return fight_actions + delete_actions + consume_actions
+        cleanup_actions: list[Action] = [a for a in actions if "cleanup" in a.tags]
+        recovery_actions: list[Action] = [a for a in actions if "recovery" in a.tags]
+        return fight_actions + cleanup_actions + recovery_actions
 
     def _target_monster_is_unreachable(self, state: WorldState, game_data: GameData) -> bool:
         """True when the target monster is over-level enough that combat is hopeless."""

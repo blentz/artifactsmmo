@@ -2,7 +2,6 @@
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.survival import MIN_FREE_SLOTS
@@ -37,7 +36,7 @@ class SellInventoryGoal(Goal):
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         result: list[Action] = []
         for action in actions:
-            if isinstance(action, RestAction):
+            if "recovery" in action.tags:
                 result.append(action)
             elif isinstance(action, NpcSellAction) and state.inventory.get(action.item_code, 0) > 0:
                 result.append(action)

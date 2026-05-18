@@ -952,7 +952,11 @@ class TestUnlockBankGoal:
         relevant_reprs = [repr(a) for a in relevant]
         assert "Fight(chicken)" in relevant_reprs
         assert "Fight(wolf)" in relevant_reprs
-        assert "Rest" not in relevant_reprs
+        # R-1.3: now allows Rest (any "recovery"-tagged action) — combat
+        # against the unlock monster benefits from healing between fights.
+        # Previous behavior excluded Rest by isinstance; the new tag-based
+        # filter includes it intentionally.
+        assert "Rest" in relevant_reprs
         assert "Delete(iron_ore×1)" in relevant_reprs
         assert "UseConsumable" in relevant_reprs
 

@@ -8,8 +8,6 @@ beat reliably, rather than falling back to a low-tier default.
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
@@ -73,7 +71,7 @@ class GrindCharacterXPGoal(Goal):
         for action in actions:
             if isinstance(action, FightAction) and action.monster_code == self._target_monster:
                 result.append(action)
-            elif isinstance(action, (RestAction, UseConsumableAction)):
+            elif "recovery" in action.tags:
                 result.append(action)
         return result
 

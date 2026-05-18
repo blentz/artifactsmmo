@@ -9,8 +9,6 @@ pivots to combat instead of looping on locked-bank failures.
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -68,7 +66,7 @@ class ReachUnlockLevelGoal(Goal):
                 ml = game_data.monster_level(action.monster_code)
                 if ml > 0 and state.level >= ml - 1:
                     result.append(action)
-            elif isinstance(action, (RestAction, UseConsumableAction)):
+            elif "recovery" in action.tags:
                 result.append(action)
         return result
 

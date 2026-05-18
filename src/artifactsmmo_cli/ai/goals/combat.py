@@ -2,8 +2,6 @@
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.dynamic_priority import learned_priority_bonus
@@ -61,7 +59,7 @@ class FarmMonsterGoal(Goal):
         for action in actions:
             if isinstance(action, FightAction) and action.monster_code == self.monster_code:
                 result.append(action)
-            elif isinstance(action, (RestAction, UseConsumableAction)):
+            elif "recovery" in action.tags:
                 result.append(action)
         return result
 

@@ -7,10 +7,8 @@ that skill family until the skill levels up.
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.bank import DepositAllAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -65,9 +63,9 @@ class LevelSkillGoal(Goal):
         """Craft anything in this skill family + supporting Gather/Rest/Deposit."""
         result: list[Action] = []
         for action in actions:
-            if isinstance(action, RestAction):
+            if "recovery" in action.tags:
                 result.append(action)
-            elif isinstance(action, DepositAllAction):
+            elif "deposit" in action.tags:
                 result.append(action)
             elif isinstance(action, GatherAction):
                 # All gathers are fair game; they replenish materials for crafting.
