@@ -47,6 +47,8 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
+from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -791,6 +793,19 @@ class GamePlayer:
         if self.state.task_type == "items" and self.state.task_code:
             goals.append(FarmItemsGoal(initial_progress=self.state.task_progress))
 
+        # G-E: when no task is held, drive monster grinding by character XP yield.
+        if not self.state.task_code:
+            goals.append(GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp))
+
+        # G-E: surface a LevelSkillGoal for each skill that gates a craftable
+        # upgrade Robby is currently within MAX_SKILL_GAP of unlocking. Reads
+        # game_data.active_gathering_skills so we only invest in skills tied
+        # to the active task; without that we'd grind every skill always.
+        active_skills = self.game_data.active_gathering_skills(self.state.task_code)
+        if active_skills:
+            for skill, target in self._gating_skill_targets(active_skills):
+                goals.append(LevelSkillGoal(skill_name=skill, target_level=target))
+
         # If upgrade needs materials, add a gather goal to drive material collection.
         # Use the FULL recipe quantity (not remaining needed) so GatherMaterials and
         # UpgradeEquipment both check the same threshold (inventory+bank >= recipe_qty).
@@ -807,6 +822,38 @@ class GamePlayer:
                     goals.append(gm_goal)
 
         return [g for g in goals if repr(g) not in self._suppressed_goals]
+
+    def _gating_skill_targets(self, active_skills: set[str]) -> list[tuple[str, int]]:
+        """Find (gating_skill, required_level) pairs for craftable items that:
+        - apply to a slot (i.e. equipable upgrade)
+        - have a positive skill_effect for one of `active_skills`
+        - require a gating crafting_skill level Robby hasn't reached
+
+        Phase G-E: enables LevelSkillGoal to pivot to skill grinding when a
+        relevant tool is one or two skill levels away.
+        """
+        assert self.state is not None
+        assert self.game_data is not None
+        result: list[tuple[str, int]] = []
+        seen: set[tuple[str, int]] = set()
+        for code, _ in self.game_data._crafting_recipes.items():
+            stats = self.game_data.item_stats(code)
+            if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
+                continue
+            if not any(s in active_skills for s in stats.skill_effects):
+                continue
+            cskill = stats.crafting_skill
+            if not cskill:
+                continue
+            current = self.state.skills.get(cskill, 0)
+            if current >= stats.crafting_level:
+                continue  # already qualified
+            key = (cskill, stats.crafting_level)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(key)
+        return result
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
         assert self.state is not None
