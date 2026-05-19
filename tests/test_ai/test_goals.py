@@ -449,6 +449,32 @@ class TestUpgradeEquipmentGoalPriority:
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
 
+    def test_active_skill_tool_beats_equipped_unrelated_tool(self):
+        """Regression: Robby gathered ash_wood with fishing_net equipped
+        because _is_upgrade_over treated same-level both-craftable items
+        as 'not an upgrade' — ignoring that copper_axe boosts the active
+        gather skill (woodcutting) while fishing_net does not."""
+        gd = make_game_data(item_stats={
+            "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
+                                     skill_effects=frozenset({"woodcutting"})),
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon",
+                                      skill_effects=frozenset({"fishing"})),
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        })
+        gd._crafting_recipes = {"copper_axe": {}, "fishing_net": {}, "ash_plank": {"ash_wood": 1}}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        equipment = {k: None for k in ["weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
+                                        "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot",
+                                        "amulet_slot", "artifact1_slot", "artifact2_slot", "artifact3_slot",
+                                        "utility1_slot", "utility2_slot", "bag_slot", "rune_slot"]}
+        equipment["weapon_slot"] = "fishing_net"
+        state = make_state(inventory={"copper_axe": 1}, level=3, equipment=equipment,
+                            task_code="ash_plank", task_type="items", task_total=10, task_progress=0)
+        goal = UpgradeEquipmentGoal()
+        target = goal._find_inventory_only_upgrade(state, gd)
+        assert target == ("copper_axe", "weapon_slot")
+
     def test_does_not_steal_materials_meant_for_better_upgrade(self):
         """Regression: GatherMaterials targets the ideal upgrade
         (find_upgrade_target — ignores material availability), so

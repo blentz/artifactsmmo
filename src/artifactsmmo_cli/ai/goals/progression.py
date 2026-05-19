@@ -73,6 +73,7 @@ class UpgradeEquipmentGoal(Goal):
 
     def _find_inventory_only_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find a highest-level upgrade in inventory only — can be equipped in one action."""
+        active = frozenset(game_data.active_gathering_skills(state.task_code))
         best: tuple[str, str] | None = None
         best_level = -1
         for item_code in state.inventory:
@@ -84,12 +85,13 @@ class UpgradeEquipmentGoal(Goal):
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
-                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data) and stats.level >= best_level:
+                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active) and stats.level >= best_level:
                     best, best_level = (item_code, slot), stats.level
         return best
 
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find highest-level upgrade in inventory or bank (bank items need Withdraw first)."""
+        active = frozenset(game_data.active_gathering_skills(state.task_code))
         bank = state.bank_items or {}
         best: tuple[str, str] | None = None
         best_level = -1
@@ -102,7 +104,7 @@ class UpgradeEquipmentGoal(Goal):
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
-                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data) and stats.level >= best_level:
+                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active) and stats.level >= best_level:
                     best, best_level = (item_code, slot), stats.level
         return best
 
@@ -182,6 +184,7 @@ class UpgradeEquipmentGoal(Goal):
         current_code: str | None,
         current_stats: ItemStats | None,
         game_data: GameData,
+        active_skills: frozenset[str] = frozenset(),
     ) -> bool:
         """Return True if item_code is an upgrade over current_code for an equipment slot."""
         if current_code is None:
@@ -193,12 +196,24 @@ class UpgradeEquipmentGoal(Goal):
             return False
         if stats.level > current_stats.level:
             return True
-        # Same level: craftable items beat non-craftable starter gear.
-        return (
-            stats.level == current_stats.level
-            and item_code in game_data._crafting_recipes
-            and current_code not in game_data._crafting_recipes
-        )
+        # Same-level rules.
+        if stats.level == current_stats.level:
+            # Active-task tool match: candidate boosts a skill the current
+            # task needs, current does not. Bot was gathering ash with the
+            # fishing_net equipped because the same-level check below
+            # rejected copper_axe (both craftable) without considering the
+            # task-skill mismatch.
+            if active_skills:
+                cand_boosts = bool(active_skills & set(stats.skill_effects))
+                curr_boosts = bool(active_skills & set(current_stats.skill_effects))
+                if cand_boosts and not curr_boosts:
+                    return True
+            # Craftable items beat non-craftable starter gear.
+            return (
+                item_code in game_data._crafting_recipes
+                and current_code not in game_data._crafting_recipes
+            )
+        return False
 
     def __repr__(self) -> str:
         return "UpgradeEquipment"
