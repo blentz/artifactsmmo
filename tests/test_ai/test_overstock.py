@@ -133,6 +133,28 @@ class TestDiscardOverstockGoal:
         assert sell.npc_code == "npc1"
         assert sell.npc_location == (3, 3)
 
+    def test_active_task_item_never_overstocked(self):
+        """Regression: while gathering a batch for a task, the task_code item
+        must NOT appear in overstocked_items even at large counts — otherwise
+        DiscardOverstock would race FarmItems and delete the gathered batch
+        before TaskTrade fires."""
+        gd = GameData()
+        gd._item_stats = {"gudgeon": ItemStats(code="gudgeon", level=1, type_="resource")}
+        gd._crafting_recipes = {}  # no recipes — only task_cap protects it
+        goal = DiscardOverstockGoal(game_data=gd)
+        # Holding 30 gudgeon mid-batch toward a 353 task
+        state = make_state(level=1,
+                            inventory={"gudgeon": 30, "junk": 50},
+                            inventory_max=104,
+                            task_code="gudgeon", task_type="items",
+                            task_total=353, task_progress=121)
+        excess = overstocked_items(state, gd)
+        # gudgeon protected (task_cap=232 >= 30); junk still overstocked
+        assert "gudgeon" not in excess
+        relevant = goal.relevant_actions([], state, gd)
+        codes = {a.code if hasattr(a, "code") else a.item_code for a in relevant}
+        assert "gudgeon" not in codes
+
     def test_relevant_actions_delete_when_buyer_location_unknown(self):
         """Buyer known but location not loaded → must fall back to Delete,
         otherwise NpcSell is_applicable=False and the goal becomes

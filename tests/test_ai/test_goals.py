@@ -1090,6 +1090,49 @@ def test_farm_items_goal_includes_task_trade_in_relevant_actions():
     assert any("TaskTrade(iron_ore" in n for n in names)
 
 
+class TestFarmItemsBatching:
+    def test_relevant_actions_emits_batched_task_trade(self):
+        """qty=1 prebuilt must be substituted with batch-sized variant so
+        planner gathers many items before the round-trip to the taskmaster."""
+        gd = GameData()
+        gd._resource_drops = {"gudgeon_spot": "gudgeon"}
+        gd._crafting_recipes = {}
+        actions = [TaskTradeAction(code="gudgeon", quantity=1, taskmaster_location=(1, 2))]
+        # task_remaining=232, inventory empty, free_slots=104 → batch capped at BATCH_SIZE(30)
+        state = make_state(task_code="gudgeon", task_type="items",
+                            task_total=353, task_progress=121,
+                            inventory={}, inventory_max=104)
+        goal = FarmItemsGoal()
+        relevant = goal.relevant_actions(actions, state, gd)
+        trades = [a for a in relevant if isinstance(a, TaskTradeAction)]
+        assert len(trades) == 1
+        assert trades[0].quantity == 30
+
+    def test_batch_capped_by_task_remaining(self):
+        """Endgame: task_remaining < BATCH_SIZE → trade only what's left."""
+        gd = GameData()
+        actions = [TaskTradeAction(code="gudgeon", quantity=1, taskmaster_location=(1, 2))]
+        # 5 items left in task
+        state = make_state(task_code="gudgeon", task_type="items",
+                            task_total=353, task_progress=348,
+                            inventory={}, inventory_max=104)
+        goal = FarmItemsGoal()
+        trades = [a for a in goal.relevant_actions(actions, state, gd) if isinstance(a, TaskTradeAction)]
+        assert trades[0].quantity == 5
+
+    def test_batch_capped_by_bag_headroom(self):
+        """Bag-near-full: batch cap = inventory free + current task-item count."""
+        gd = GameData()
+        actions = [TaskTradeAction(code="gudgeon", quantity=1, taskmaster_location=(1, 2))]
+        # 10 gudgeon in inventory, 5 free slots → achievable = 15, batch = min(30, 232, 15) = 15
+        state = make_state(task_code="gudgeon", task_type="items",
+                            task_total=353, task_progress=121,
+                            inventory={"gudgeon": 10, "other": 89}, inventory_max=104)
+        goal = FarmItemsGoal()
+        trades = [a for a in goal.relevant_actions(actions, state, gd) if isinstance(a, TaskTradeAction)]
+        assert trades[0].quantity == 15
+
+
 def test_farm_monster_goal_value_amplifies_on_high_xp_yield():
     """G-F: goal.value is base + scalar-yield bonus from cycles where the
     goal itself was selected (not just from observed Fight outcomes — the

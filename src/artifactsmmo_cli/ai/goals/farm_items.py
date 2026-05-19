@@ -12,6 +12,12 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
+BATCH_SIZE = 30
+"""Max items per task-trade trip. Trading one item per round-trip to the
+taskmaster wastes ~22s per fish in movement; batching cuts that to ~22s
+per batch of 30 = ~5x speedup. Capped by bag headroom and task_remaining."""
+
+
 class FarmItemsGoal(Goal):
     """Gather or craft the items required by the current items-type task.
 
@@ -53,6 +59,22 @@ class FarmItemsGoal(Goal):
             return True
         return state.task_progress > self._initial_progress
 
+    def _batch_target(self, state: WorldState) -> int:
+        """How many task items to submit per trip to the taskmaster.
+
+        Caps:
+          - BATCH_SIZE (configured ceiling)
+          - task_remaining (don't aim past task_total)
+          - available slots + current count (don't plan to gather past bag)
+        """
+        if not state.task_code:
+            return 1
+        task_remaining = max(0, state.task_total - state.task_progress)
+        current_count = state.inventory.get(state.task_code, 0)
+        free_slots = max(0, state.inventory_max - state.inventory_used)
+        achievable = current_count + free_slots
+        return max(1, min(BATCH_SIZE, task_remaining, achievable))
+
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_progress": self._initial_progress + 1}
 
@@ -88,7 +110,16 @@ class FarmItemsGoal(Goal):
             elif isinstance(action, CraftAction) and action.code in craftable_mats:
                 result.append(action)
             elif isinstance(action, TaskTradeAction) and action.code == state.task_code:
-                result.append(action)
+                # Substitute the qty=1 prebuilt with a batch-sized variant.
+                # Forces the planner to gather batch_target items before
+                # trading — eliminates the per-fish round-trip to the
+                # taskmaster.
+                batch_qty = self._batch_target(state)
+                result.append(TaskTradeAction(
+                    code=action.code,
+                    quantity=batch_qty,
+                    taskmaster_location=action.taskmaster_location,
+                ))
         return result
 
     @property
