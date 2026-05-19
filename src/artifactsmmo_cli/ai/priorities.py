@@ -36,6 +36,22 @@ DEPOSIT_FULL = 80.0
 """DepositInventoryGoal ceiling (at 100% used). Ramps from 0 at
 DepositInventoryGoal._RAMP_START (50%)."""
 
+DISCARD_OVERSTOCK_BASE = 40.0
+"""DiscardOverstockGoal baseline when overstock present but bag not full.
+Sits below GATHER_MATERIALS (50) — overstock is non-urgent during normal
+gather/craft chains."""
+
+DISCARD_OVERSTOCK_HIGH_PRESSURE = 55.0
+"""DiscardOverstockGoal when inventory_used > HIGH_PRESSURE_FRACTION (0.85).
+Above GATHER_MATERIALS so the bot preempts gather to free slots before
+the bag fills and Gather actions start failing."""
+
+DISCARD_OVERSTOCK_CRITICAL = 85.0
+"""DiscardOverstockGoal when inventory_used > CRITICAL_PRESSURE_FRACTION (0.95).
+Above DEPOSIT_FULL (80) and tactical pursuits but below COMPLETE_TASK and
+BANK_UNLOCK so hard prerequisites still win. Bag this full and any Gather
+will fail; clear excess immediately."""
+
 # === Strategic decisions (data-driven) ===
 
 LOW_YIELD_CANCEL = 70.0

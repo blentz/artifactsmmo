@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.goals.discard_overstock import (
     PRIORITY_WHEN_OVERSTOCKED,
     DiscardOverstockGoal,
@@ -78,8 +79,30 @@ class TestDiscardOverstockGoal:
     def test_fires_high_when_overstocked(self):
         gd = _gd_with_sap_recipes()
         goal = DiscardOverstockGoal(game_data=gd)
-        state = make_state(level=1, inventory={"sap": 50})
+        # Large inventory_max so pressure is low (50/200=25%); checks baseline tier.
+        state = make_state(level=1, inventory={"sap": 50}, inventory_max=200)
         assert goal.priority(state, gd) == PRIORITY_WHEN_OVERSTOCKED
+
+    def test_priority_escalates_under_high_pressure(self):
+        """Inventory pressure >= 0.85 → DISCARD_OVERSTOCK_HIGH_PRESSURE (55)."""
+        gd = _gd_with_sap_recipes()
+        goal = DiscardOverstockGoal(game_data=gd)
+        state = make_state(level=1, inventory={"sap": 50}, inventory_max=55)  # 50/55 = 0.91
+        assert goal.priority(state, gd) == priorities.DISCARD_OVERSTOCK_HIGH_PRESSURE
+
+    def test_priority_escalates_under_critical_pressure(self):
+        """Inventory pressure >= 0.95 → DISCARD_OVERSTOCK_CRITICAL (85)."""
+        gd = _gd_with_sap_recipes()
+        goal = DiscardOverstockGoal(game_data=gd)
+        state = make_state(level=1, inventory={"sap": 50}, inventory_max=52)  # 50/52 = 0.96
+        assert goal.priority(state, gd) == priorities.DISCARD_OVERSTOCK_CRITICAL
+
+    def test_high_pressure_beats_gather_materials(self):
+        """At high pressure (>=0.85), overstock outranks GatherMaterials (50)."""
+        gd = _gd_with_sap_recipes()
+        goal = DiscardOverstockGoal(game_data=gd)
+        state = make_state(level=1, inventory={"sap": 50}, inventory_max=55)
+        assert goal.priority(state, gd) > priorities.GATHER_MATERIALS
 
     def test_zero_when_no_overstock(self):
         gd = _gd_with_sap_recipes()
