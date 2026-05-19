@@ -36,8 +36,8 @@ class StatusPane(Static):
         t.add_column("k", style="dim")
         t.add_column("v")
         t.add_row("Char", f"[bold]{s.character}[/bold]  L{s.level}")
-        t.add_row("HP", Group(hp_bar, Text(f"{s.hp}/{s.max_hp}", style=hp_color)))
-        t.add_row("XP", Group(xp_bar, Text(f"{s.xp}/{s.max_xp}")))
+        t.add_row("HP", Group(Text(f"{s.hp}/{s.max_hp}", style=hp_color), hp_bar))
+        t.add_row("XP", Group(Text(f"{s.xp}/{s.max_xp}", style="cyan"), xp_bar))
         t.add_row("Gold", str(s.gold))
         t.add_row("Pos", f"({s.x},{s.y})")
         if s.cooldown_remaining > 0:
