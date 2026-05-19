@@ -133,6 +133,20 @@ class TestDiscardOverstockGoal:
         assert sell.npc_code == "npc1"
         assert sell.npc_location == (3, 3)
 
+    def test_relevant_actions_delete_when_buyer_location_unknown(self):
+        """Buyer known but location not loaded → must fall back to Delete,
+        otherwise NpcSell is_applicable=False and the goal becomes
+        unsatisfiable (plan_len=0)."""
+        gd = _gd_with_sap_recipes()
+        gd._npc_sell_prices = {"npc1": {"sap": 2}}  # buyer known
+        gd._npc_locations = {}  # location NOT loaded
+        goal = DiscardOverstockGoal(game_data=gd)
+        state = make_state(level=1, inventory={"sap": 50})
+        relevant = goal.relevant_actions([], state, gd)
+        assert len(relevant) == 1
+        assert isinstance(relevant[0], DeleteItemAction)
+        assert relevant[0].code == "sap"
+
     def test_relevant_actions_falls_back_to_batch_delete(self):
         """No NPC buys → batch DeleteItem with full excess quantity."""
         gd = _gd_with_sap_recipes()

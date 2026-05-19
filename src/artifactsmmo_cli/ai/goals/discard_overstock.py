@@ -81,15 +81,22 @@ class DiscardOverstockGoal(Goal):
             if excess_qty <= 0:
                 continue
             buyers = game_data.npcs_buying_item(code)
+            npc_loc: tuple[int, int] | None = None
+            npc_code: str | None = None
             if buyers:
                 # npcs_buying_item sorted highest-first
                 npc_code, _price = buyers[0]
                 npc_loc = game_data.npc_location(npc_code)
+            if npc_code is not None and npc_loc is not None:
                 result.append(NpcSellAction(
                     npc_code=npc_code, item_code=code, quantity=excess_qty,
                     npc_location=npc_loc,
                 ))
             else:
+                # No buyer, or buyer location unknown — Delete is the only
+                # action the planner can actually execute. Without this
+                # fallback the goal becomes unsatisfiable (plan_len=0) and
+                # silently loses to lower-priority alternatives.
                 result.append(DeleteItemAction(code=code, quantity=excess_qty))
         return result
 
