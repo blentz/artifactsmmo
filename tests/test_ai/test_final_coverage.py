@@ -51,8 +51,10 @@ class TestProgressionGoalEdgeCases:
         assert goal.value(state, gd) == 0.0
 
     def test_find_upgrade_when_current_stats_none(self):
+        """Regression: missing stats for an equipped item must NOT auto-trigger
+        an upgrade. The bot used to recraft duplicates every cycle whenever
+        the game_data DB lacked entries for starter gear (fishing_net)."""
         goal = UpgradeEquipmentGoal()
-        # weapon_slot has "ghost_sword" with no stats — new item should be equipped
         new_stats = ItemStats(code="copper_dagger", level=2, type_="weapon")
         equipment = {k: None for k in ["weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
                                         "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot",
@@ -61,8 +63,8 @@ class TestProgressionGoalEdgeCases:
         equipment["weapon_slot"] = "ghost_sword"
         state = make_state(inventory={"copper_dagger": 1}, level=5, equipment=equipment)
         gd = make_gd(item_stats={"copper_dagger": new_stats})  # ghost_sword has no stats
-        # current_stats is None → treat as upgrade
-        assert goal.value(state, gd) == 35.0
+        # Conservative: current_stats None → refuse upgrade (don't recraft).
+        assert goal.value(state, gd) == 0.0
 
     def test_find_upgrade_higher_level_upgrade(self):
         goal = UpgradeEquipmentGoal()

@@ -184,8 +184,13 @@ class UpgradeEquipmentGoal(Goal):
         game_data: GameData,
     ) -> bool:
         """Return True if item_code is an upgrade over current_code for an equipment slot."""
-        if current_code is None or current_stats is None:
+        if current_code is None:
             return True
+        # Stats missing for an equipped item: refuse the upgrade. Treating
+        # missing-stats as "no current item" caused infinite recrafts when
+        # the game_data DB lacked entries for starter gear (fishing_net).
+        if current_stats is None:
+            return False
         if stats.level > current_stats.level:
             return True
         # Same level: craftable items beat non-craftable starter gear.

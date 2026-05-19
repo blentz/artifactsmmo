@@ -53,6 +53,13 @@ class DiscardOverstockGoal(Goal):
     def is_satisfied(self, state: WorldState) -> bool:
         return not overstocked_items(state, self._gd)
 
+    @property
+    def max_depth(self) -> int:
+        """Plan needs one Delete/Sell per overstocked item to fully satisfy.
+        Default 15 cuts off when many items are overstocked → plan_len=0 →
+        the goal silently loses to a lower-priority alternative."""
+        return 64
+
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory_overstock_cleared": True}
 
