@@ -449,6 +449,30 @@ class TestUpgradeEquipmentGoalPriority:
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
 
+    def test_inventory_ready_active_tool_preempts_farm_items(self):
+        """Regression: copper_axe sat in inventory while Robby gathered ash
+        with fishing_net, because FarmItems' runaway dynamic bonus (377)
+        crushed the equip. An inventory-ready tool that boosts the active
+        task skill must now preempt a capped FarmItems (max 75)."""
+        gd = make_game_data(item_stats={
+            "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
+                                     skill_effects=frozenset({"woodcutting"})),
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon",
+                                      skill_effects=frozenset({"fishing"})),
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        })
+        gd._crafting_recipes = {"copper_axe": {}, "fishing_net": {}, "ash_plank": {"ash_wood": 1}}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        equipment = _make_equipment(weapon_slot="fishing_net")
+        state = make_state(inventory={"copper_axe": 1}, level=3, equipment=equipment,
+                           task_code="ash_plank", task_type="items",
+                           task_total=10, task_progress=0)
+        goal = UpgradeEquipmentGoal()
+        prio = goal.priority(state, gd)
+        assert prio == 88.0  # UPGRADE_EQUIPMENT_ACTIVE_TOOL_READY
+        assert prio > 75.0   # above capped FarmItems max
+
     def test_active_skill_tool_beats_equipped_unrelated_tool(self):
         """Regression: Robby gathered ash_wood with fishing_net equipped
         because _is_upgrade_over treated same-level both-craftable items

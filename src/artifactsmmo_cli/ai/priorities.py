@@ -76,9 +76,24 @@ UPGRADE_EQUIPMENT_INVENTORY_READY = 60.0
 ready to equip in one action — preempts gathering so we don't grind
 unnecessary materials."""
 
+UPGRADE_EQUIPMENT_ACTIVE_TOOL_READY = 88.0
+"""UpgradeEquipmentGoal priority when an inventory-ready upgrade boosts the
+active task's gather skill (e.g. copper_axe in inventory during an
+ash_plank/woodcutting task). One Equip action that speeds every
+subsequent gather, so it must preempt FarmItems (capped at
+FARM_ITEMS_BASE + FARM_ITEMS_BONUS_CAP = 75). Stays below COMPLETE_TASK /
+BANK_UNLOCK (90) so hard prerequisites still win."""
+
 FARM_ITEMS_BASE = 35.0
 """FarmItemsGoal base (per-cycle items-task delivery). Outranks FarmMonster
 cold-start so an active items task dominates monster grinding."""
+
+FARM_ITEMS_BONUS_CAP = 40.0
+"""Ceiling on FarmItems' learned dynamic bonus. Items tasks pay XP in a
+lump on CompleteTask; attributing that per-cycle inflated the bonus to
+~340 (observed), letting FarmItems crush every equipment/tool decision.
+Cap keeps FarmItems max at 75 — above tactical pursuits, below an
+active-tool equip (88) and hard prerequisites (90)."""
 
 UPGRADE_EQUIPMENT_BASE = 35.0
 """UpgradeEquipmentGoal base when no relevant-tool match."""

@@ -55,7 +55,8 @@ class FarmItemsGoal(Goal):
         # bonus when observed throughput exceeds defaults. Bonus scaled by
         # sample-count confidence so we don't react to early noise.
         base = priorities.FARM_ITEMS_BASE
-        bonus = learned_priority_bonus(repr(self), state, game_data, history)
+        bonus = min(priorities.FARM_ITEMS_BONUS_CAP,
+                    learned_priority_bonus(repr(self), state, game_data, history))
         return base + bonus
 
     def is_satisfied(self, state: WorldState) -> bool:

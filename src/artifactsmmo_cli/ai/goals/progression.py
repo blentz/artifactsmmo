@@ -1,5 +1,6 @@
 """Progression goal: equipment upgrades."""
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -23,16 +24,22 @@ class UpgradeEquipmentGoal(Goal):
         # gear because it cuts the per-gather cooldown directly. Bump above
         # FarmItems (35) so the loop interrupts to craft+equip the tool.
         if self._upgrade_is_relevant_tool(upgrade, state, game_data):
-            return 50.0
-        return 35.0
+            return priorities.UPGRADE_EQUIPMENT_RELEVANT_TOOL
+        return priorities.UPGRADE_EQUIPMENT_BASE
 
     def priority(self, state: WorldState, game_data: GameData,
                  history: LearningStore | None = None) -> float:
         # Upgrade already in inventory → equip immediately, ahead of gathering (50.0).
         # Upgrade in bank or needs crafting → normal priority (possibly boosted
         # by value() above for active-skill tool upgrades).
-        if self._find_inventory_only_upgrade(state, game_data):
-            return 60.0
+        ready = self._find_inventory_only_upgrade(state, game_data)
+        if ready:
+            # Inventory-ready upgrade that boosts the active task's gather
+            # skill: one Equip that speeds all future gathering. Preempt
+            # FarmItems so the bot equips the tool before grinding the task.
+            if self._upgrade_is_relevant_tool(ready, state, game_data):
+                return priorities.UPGRADE_EQUIPMENT_ACTIVE_TOOL_READY
+            return priorities.UPGRADE_EQUIPMENT_INVENTORY_READY
         return self.value(state, game_data)
 
     def _upgrade_is_relevant_tool(self, upgrade: tuple[str, str],
