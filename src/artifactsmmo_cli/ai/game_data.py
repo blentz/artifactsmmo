@@ -87,17 +87,38 @@ class GameData:
         return self._item_stats.get(code)
 
     def max_recipe_demand(self, item_code: str) -> int:
-        """Largest single-recipe quantity of `item_code` consumed across all
-        known recipes. Used by the overstock cap: anything beyond this (plus
-        a batch buffer) is dead weight in the inventory.
+        """Largest TRANSITIVE quantity of `item_code` consumed to produce any
+        single end-item, recursively across the crafting chain. Used by the
+        overstock cap: anything beyond this (plus a batch buffer) is dead
+        weight in the inventory.
+
+        Example: copper_bar needs 4 copper_ore; copper_ring needs 6 copper_bar.
+        Direct demand on copper_ore is 4 (per bar). Transitive demand is
+        4 × 6 = 24 (one ring chain). Without the transitive multiplier the
+        cap is 20, but the bot needs 24 ore to satisfy GatherMaterials —
+        DiscardOverstock then deletes ore the gather goal is actively
+        trying to accumulate, causing a gather/delete pingpong.
 
         Returns 0 when no recipe uses the item.
         """
+        return self._max_recipe_demand_recursive(item_code, frozenset())
+
+    def _max_recipe_demand_recursive(self, item_code: str, visited: frozenset[str]) -> int:
+        if item_code in visited:
+            return 0
+        next_visited = visited | {item_code}
         max_qty = 0
-        for recipe in self._crafting_recipes.values():
-            qty = recipe.get(item_code, 0)
-            if qty > max_qty:
-                max_qty = qty
+        for parent_code, recipe in self._crafting_recipes.items():
+            direct = recipe.get(item_code, 0)
+            if direct == 0:
+                continue
+            # Demand multiplied by how many of `parent_code` are themselves
+            # demanded transitively. A leaf with no further demand counts
+            # as 1 (the parent IS the end-item).
+            parent_demand = max(1, self._max_recipe_demand_recursive(parent_code, next_visited))
+            chain_demand = direct * parent_demand
+            if chain_demand > max_qty:
+                max_qty = chain_demand
         return max_qty
 
     def crafting_recipe(self, code: str) -> dict[str, int] | None:
