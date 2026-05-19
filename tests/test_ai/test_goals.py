@@ -1120,6 +1120,20 @@ class TestFarmItemsBatching:
         trades = [a for a in goal.relevant_actions(actions, state, gd) if isinstance(a, TaskTradeAction)]
         assert trades[0].quantity == 5
 
+    def test_crafted_task_uses_smaller_batch(self):
+        """Crafted-item tasks (ash_plank: gather wood + craft plank) inflate
+        plan depth ~3x. Smaller batch keeps plans inside the 2s budget.
+        Without this, FarmItems timed_out=True → plan_len=0 → no_plan."""
+        gd = GameData()
+        gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
+        actions = [TaskTradeAction(code="ash_plank", quantity=1, taskmaster_location=(1, 2))]
+        state = make_state(task_code="ash_plank", task_type="items",
+                            task_total=26, task_progress=0,
+                            inventory={}, inventory_max=104)
+        goal = FarmItemsGoal()
+        trades = [a for a in goal.relevant_actions(actions, state, gd) if isinstance(a, TaskTradeAction)]
+        assert trades[0].quantity == 8  # BATCH_SIZE_CRAFTED, not 30
+
     def test_batch_capped_by_bag_headroom(self):
         """Bag-near-full: batch cap = inventory free + current task-item count."""
         gd = GameData()
