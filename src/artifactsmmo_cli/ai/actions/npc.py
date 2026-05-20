@@ -1,14 +1,18 @@
 """NpcBuyAction: purchase an item from an NPC merchant."""
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_npc_buy_item_my_name_action_npc_buy_post import sync as action_npc_buy
+from artifactsmmo_api_client.api.my_characters.action_npc_buy_item_my_name_action_npc_buy_post import (
+    sync as action_npc_buy,
+)
 from artifactsmmo_api_client.models.npc_merchant_buy_schema import NpcMerchantBuySchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -31,8 +35,14 @@ class NpcBuyAction(Action):
         price = game_data.npc_sells_item(self.npc_code, self.item_code)
         if price is None:
             return False
-        total_cost = price * self.quantity
-        return state.gold >= total_cost
+        if state.gold < price * self.quantity:
+            return False
+        return event_npc_tradeable(
+            self.npc_code, game_data,
+            x=state.x, y=state.y,
+            active_events=state.active_events,
+            now=datetime.now(timezone.utc),
+        )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         price = game_data.npc_sells_item(self.npc_code, self.item_code) or 0
