@@ -449,6 +449,30 @@ class TestUpgradeEquipmentGoalPriority:
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
 
+    def test_craftable_tiebreak_prefers_ring_over_dagger_deterministically(self):
+        """Regression: copper_dagger and copper_ring are both L1, craft_level 1.
+        With the weapon slot filled (copper_axe), only the ring is a valid
+        upgrade. Even when both slots are empty, the tiebreak must be
+        deterministic (not dict-order) so the bot never crafts a redundant
+        dagger when a ring is the intended target."""
+        gd = make_game_data(item_stats={
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                        crafting_skill="weaponcrafting", crafting_level=1),
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                      crafting_skill="jewelrycrafting", crafting_level=1),
+            "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon"),
+        })
+        gd._crafting_recipes = {
+            "copper_dagger": {"copper_bar": 6},
+            "copper_ring": {"copper_bar": 6},
+        }
+        equipment = _make_equipment(weapon_slot="copper_axe")  # weapon filled
+        state = make_state(inventory={}, level=5, equipment=equipment,
+                           skills={"weaponcrafting": 5, "jewelrycrafting": 5})
+        goal = UpgradeEquipmentGoal()
+        # Weapon occupied by axe (dagger not an upgrade); ring slots empty.
+        assert goal._find_craftable_upgrade_target(state, gd) == ("copper_ring", "ring1_slot")
+
     def test_inventory_ready_active_tool_preempts_farm_items(self):
         """Regression: copper_axe sat in inventory while Robby gathered ash
         with fishing_net, because FarmItems' runaway dynamic bonus (377)
@@ -525,7 +549,7 @@ class TestUpgradeEquipmentGoalPriority:
         goal = UpgradeEquipmentGoal()
         # Target picker should pick ring (dagger already owned via bank).
         target = goal._find_craftable_upgrade_target(state, gd)
-        assert target == ("copper_ring", "ring2_slot")
+        assert target == ("copper_ring", "ring1_slot")
         # Materials picker should NOT fall back to a non-target item.
         upgrade = goal._find_craftable_upgrade(state, gd)
         assert upgrade is None, "must wait for ring's materials, not craft a different item"
