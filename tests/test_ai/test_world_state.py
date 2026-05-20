@@ -1,5 +1,6 @@
 """Tests for WorldState."""
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -37,6 +38,16 @@ class TestWorldStateProperties:
         state = make_state()
         with pytest.raises((AttributeError, TypeError)):
             state.x = 99  # type: ignore[misc]
+
+
+def test_active_events_defaults_empty():
+    assert make_state().active_events == {}
+
+
+def test_active_events_round_trips():
+    exp = datetime(2026, 5, 20, 22, 30, tzinfo=timezone.utc)
+    state = make_state(active_events={"gemstone_merchant": exp})
+    assert state.active_events["gemstone_merchant"] == exp
 
 
 def test_from_character_schema_captures_per_skill_xp():

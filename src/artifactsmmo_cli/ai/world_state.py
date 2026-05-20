@@ -71,6 +71,10 @@ class WorldState:
     """Wisdom stat — factors into documented XP-per-kill formula
     (+0.1% XP per wisdom point). Defaults 0 so older WorldState
     constructions don't break."""
+    active_events: dict[str, datetime] = field(default_factory=dict)
+    """event code -> expiration (tz-aware). Per-cycle snapshot from
+    GET /events/active. Defaults empty so constructions that don't supply it
+    (and planner sims through actions that preserve it) keep working."""
 
     @property
     def inventory_used(self) -> int:
