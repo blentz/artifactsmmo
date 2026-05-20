@@ -35,6 +35,21 @@ class TestSellInventorySeize:
             goal = SellInventoryGoal(bank_accessible=True)
             assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
 
+    def test_zero_quantity_items_are_skipped(self):
+        """An inventory entry with qty <= 0 is skipped; a real sellable item still boosts."""
+        gd = _gd()
+        state = make_state(
+            x=6,
+            y=-1,
+            inventory={"empty_stack": 0, "copper_ore": 101},
+            inventory_max=104,
+            active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
+        )
+        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
+            dt.now.return_value = FIXED_NOW
+            goal = SellInventoryGoal(bank_accessible=True)
+            assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
+
     def test_no_boost_when_no_window_and_bank_accessible(self):
         """Bank accessible and no active event -> value == 0."""
         gd = _gd()

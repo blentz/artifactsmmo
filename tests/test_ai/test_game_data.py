@@ -618,3 +618,24 @@ def test_static_npc_location_wins_over_event_spawn():
     with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=_make_event_catalog()):
         gd._load_events(client=None)
     assert gd.npc_location("gemstone_merchant") == (1, 1)
+
+
+def test_load_events_paginates_past_full_page():
+    """A full 100-entry page advances to the next page until a short page ends it."""
+    def _npc_event(code: str) -> EventSchema:
+        return EventSchema(
+            name=code,
+            code=code,
+            content=EventContentSchema(type_=MapContentType.NPC, code=code),
+            maps=[EventMapSchema(map_id=1, x=0, y=0, layer="overworld", skin="s")],
+            duration=60,
+            rate=1500,
+        )
+
+    full_page = StaticDataPageEventSchema(data=[_npc_event(f"merchant_{i}") for i in range(100)])
+    last_page = StaticDataPageEventSchema(data=[_npc_event("merchant_last")])
+    gd = GameData()
+    with patch("artifactsmmo_cli.ai.game_data.get_all_events", side_effect=[full_page, last_page]):
+        gd._load_events(client=None)
+    assert gd.is_event_npc("merchant_0") is True
+    assert gd.is_event_npc("merchant_last") is True
