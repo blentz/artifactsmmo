@@ -1,5 +1,6 @@
 """Tests for WorldState.from_character_schema()."""
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from artifactsmmo_api_client.types import UNSET
@@ -93,8 +94,18 @@ class TestFromCharacterSchema:
         assert state.cooldown_expires is None
 
     def test_cooldown_set(self):
-        from datetime import datetime, timezone
         dt = datetime(2026, 5, 12, 12, 0, 0, tzinfo=timezone.utc)
         char = make_char(cooldown=dt)
         state = WorldState.from_character_schema(char)
         assert state.cooldown_expires == dt
+
+    def test_from_character_schema_threads_active_events(self):
+        char = make_char()
+        exp = {"gemstone_merchant": datetime(2026, 5, 20, 22, 30, tzinfo=timezone.utc)}
+        state = WorldState.from_character_schema(char, active_events=exp)
+        assert state.active_events == exp
+
+    def test_from_character_schema_active_events_defaults_empty(self):
+        char = make_char()
+        state = WorldState.from_character_schema(char)
+        assert state.active_events == {}

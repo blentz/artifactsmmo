@@ -100,6 +100,7 @@ class WorldState:
         bank_items: dict[str, int] | None = None,
         bank_gold: int | None = None,
         pending_items: "tuple[tuple[str, str], ...] | None" = None,
+        active_events: dict[str, datetime] | None = None,
     ) -> "WorldState":
         """Build WorldState from a CharacterSchema API response."""
         inventory: dict[str, int] = {}
@@ -147,4 +148,5 @@ class WorldState:
             bank_items=bank_items,
             bank_gold=bank_gold,
             pending_items=pending_items,
+            active_events=active_events or {},
         )
