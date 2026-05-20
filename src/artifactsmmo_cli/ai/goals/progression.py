@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction, UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -64,6 +65,15 @@ class UpgradeEquipmentGoal(Goal):
         return any(skill in active for skill in stats.skill_effects)
 
     def is_satisfied(self, state: WorldState) -> bool:
+        # Committed to a specific (item, slot): satisfied only when THAT item sits
+        # in THAT slot. The old "any slot differs from the initial snapshot" rule
+        # let the planner satisfy the goal by equipping any freshly-crafted item
+        # (e.g. a fishing_net built from the shield's ash_planks), defeating the
+        # commitment. Without a commitment, keep the snapshot rule so an
+        # inventory-ready equip into any slot still counts.
+        if self._committed_target is not None:
+            item, slot = self._committed_target
+            return state.equipment.get(slot) == item
         for slot, current in state.equipment.items():
             if current is not None and current != self._initial_equipment.get(slot):
                 return True
@@ -78,26 +88,43 @@ class UpgradeEquipmentGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        """Restrict planning so the goal can ONLY be satisfied by equipping the
-        upgrade target — never by unequipping or equipping a worse item.
+        """Lock planning to the upgrade target's SLOT.
 
-        is_satisfied fires when any slot differs from the initial snapshot, so
-        without this filter the planner could satisfy the goal by equipping a
-        downgrade (swap copper_axe → fishing_net, both in inventory) since that
-        also makes the slot 'differ'. Drop all UnequipActions and every
-        EquipAction except the one for the current upgrade target; keep the
-        craft/gather/withdraw chain that produces it, plus recovery/deposit.
+        is_satisfied (when committed) requires the target item in its slot, but
+        the planner still needs a narrow action set or it finds cheaper detours.
+        The bug this prevents: while gathering ash_plank for a wooden_shield
+        (shield_slot), the planner crafted a fishing_net (a weapon tool sharing
+        the ash_plank recipe) and equipped it via OptimizeLoadout. Lock to the
+        slot — keep only:
+          - the EquipAction for the exact target item into the target slot,
+          - CraftActions for the target item, items equippable in the target
+            slot, and non-equippable recipe-chain materials (ash_plank, bars),
+          - gather/withdraw and recovery/deposit support.
+        Drop UnequipActions and every other equip-tagged action (including
+        OptimizeLoadout, which equips arbitrary slots) and crafts of equippables
+        belonging to a different slot.
         """
         target = self.find_upgrade_target(state, game_data)
-        target_item = target[0] if target is not None else None
+        if target is None:
+            return actions
+        target_item, target_slot = target
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
                 result.append(action)
             elif isinstance(action, UnequipAction):
                 continue
-            elif isinstance(action, EquipAction):
-                if target_item is not None and action.code == target_item:
+            elif isinstance(action, CraftAction):
+                stats = game_data.item_stats(action.code)
+                slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, []) if stats is not None else []
+                # Keep target-slot equippables and non-equippable materials
+                # (recipe chain); drop equippables for other slots.
+                if not slots or target_slot in slots:
+                    result.append(action)
+            elif "equip" in action.tags:
+                # Only the exact target item into the target slot. Drops
+                # OptimizeLoadout and any other-item/other-slot equip.
+                if isinstance(action, EquipAction) and action.code == target_item and action.slot == target_slot:
                     result.append(action)
             else:
                 result.append(action)
