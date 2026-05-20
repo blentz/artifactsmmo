@@ -75,6 +75,7 @@ class FightAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -101,6 +102,7 @@ class FightAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
         # Detect defeat: API returns 200 OK on loss; result.data.fight.result == LOSS.
         # Raise so the player loop records outcome=error:fight_lost and learning

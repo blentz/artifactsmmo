@@ -55,6 +55,7 @@ class ClaimPendingItemAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=remaining if remaining else None,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -80,6 +81,7 @@ class ClaimPendingItemAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=remaining,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:

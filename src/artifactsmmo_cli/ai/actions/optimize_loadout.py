@@ -82,6 +82,7 @@ class OptimizeLoadoutAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             skill_xp=state.skill_xp,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

@@ -50,6 +50,7 @@ class MoveAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -73,6 +74,7 @@ class MoveAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
         # Server applies a per-action cooldown to moves. Composite actions
         # (Gather, Fight, NpcBuy, TaskTrade, etc.) call MoveAction.execute then

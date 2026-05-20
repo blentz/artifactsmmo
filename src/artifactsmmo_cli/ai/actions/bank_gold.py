@@ -30,6 +30,7 @@ def _gold_apply(state: WorldState, dest: tuple[int, int], gold_delta: int, bank_
         bank_items=state.bank_items,
         bank_gold=new_bank_gold,
         pending_items=state.pending_items,
+        active_events=state.active_events,
     )
 
 
@@ -66,6 +67,7 @@ class DepositGoldAction(Action):
         return WorldState.from_character_schema(
             result.data.character, bank_items=state.bank_items,
             bank_gold=state.bank_gold, pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:
@@ -107,6 +109,7 @@ class WithdrawGoldAction(Action):
         return WorldState.from_character_schema(
             result.data.character, bank_items=state.bank_items,
             bank_gold=state.bank_gold, pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:

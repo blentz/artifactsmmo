@@ -58,6 +58,7 @@ class AcceptTaskAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -77,6 +78,7 @@ class AcceptTaskAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:
@@ -118,6 +120,7 @@ class CompleteTaskAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -137,6 +140,7 @@ class CompleteTaskAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:
@@ -187,6 +191,7 @@ class TaskExchangeAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -206,6 +211,7 @@ class TaskExchangeAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:
@@ -247,6 +253,7 @@ class TaskCancelAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -266,6 +273,7 @@ class TaskCancelAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:

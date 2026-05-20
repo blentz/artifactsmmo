@@ -54,6 +54,7 @@ class DepositAllAction(Action):
             bank_items=new_bank,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -75,6 +76,7 @@ class DepositAllAction(Action):
                     bank_items=last_state.bank_items,
                     bank_gold=last_state.bank_gold,
                     pending_items=last_state.pending_items,
+                    active_events=last_state.active_events,
                 )
         return last_state
 
@@ -128,6 +130,7 @@ class WithdrawItemAction(Action):
             bank_items=new_bank,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -147,6 +150,7 @@ class WithdrawItemAction(Action):
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def __repr__(self) -> str:

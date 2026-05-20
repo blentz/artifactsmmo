@@ -579,6 +579,7 @@ class GamePlayer:
             bank_items=bank_items,
             bank_gold=bank_gold,
             pending_items=state.pending_items,
+            active_events=state.active_events,
         )
 
     def _sync_pending(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
@@ -616,6 +617,7 @@ class GamePlayer:
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
             pending_items=pending,
+            active_events=state.active_events,
         )
 
     def _full_refresh(self, client: AuthenticatedClient) -> None:
