@@ -24,18 +24,32 @@ def _snap(x: int, y: int) -> CycleSnapshot:
     )
 
 
+def _gd_typed() -> GameData:
+    gd = GameData()
+    gd._monster_locations = {"green_slime": [(2, 0)], "chicken": [(0, 2)]}
+    gd._npc_locations = {"archaeologist": (-1, 0)}
+    gd._bank_location = (4, 1)
+    gd._taskmaster_location = (1, 2)
+    gd._workshop_locations = {"mining": (3, 3)}
+    gd._grand_exchange_location = (-2, -2)
+    gd._transition_tiles = {(0, -3)}
+    gd._resource_locations = {"ash_tree": [(2, 2)]}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    return gd
+
+
 class TestMapPaneRender:
     def test_index_built_from_game_data(self):
         gd = _gd_with_world()
         pane = MapPane(gd)
-        # Monster at (2,0) should map to ('M', 'red')
-        assert pane._tile_index[(2, 0)] == ("M", "red")
+        # Monster at (2,0): chicken → ('c', 'red')
+        assert pane._tile_index[(2, 0)] == ("c", "red")
         # Tree (woodcutting) at (-1,0)
         assert pane._tile_index[(-1, 0)] == ("T", "green")
-        # Bank
-        assert pane._tile_index[(4, 1)] == ("$", "yellow")
-        # Taskmaster
-        assert pane._tile_index[(1, 2)] == ("?", "cyan")
+        # Bank → structure box glyph
+        assert pane._tile_index[(4, 1)] == ("╣", "white")
+        # Taskmaster → structure box glyph
+        assert pane._tile_index[(1, 2)] == ("╤", "white")
 
     def test_viewport_dimensions_are_odd(self):
         """Player must be at exact center → both dims odd."""
@@ -57,9 +71,9 @@ class TestMapPaneRender:
         pane = MapPane(gd)
         pane.update_snapshot(_snap(0, 0))
         rendered = str(pane.render())
-        assert "M" in rendered  # monster glyph
+        assert "c" in rendered  # monster glyph (chicken → 'c')
         assert "T" in rendered  # tree
-        assert "?" in rendered  # taskmaster
+        assert "╤" in rendered  # taskmaster structure glyph
 
     def test_body_rows_match_viewport_and_no_trailing_blank(self):
         """1 header + VIEWPORT_H body rows, every body row exactly VIEWPORT_W wide,
@@ -88,3 +102,29 @@ class TestMapPaneRender:
         pane = MapPane(gd)
         pane.update_snapshot(_snap(0, 0))
         assert WALKABLE_GLYPH in pane.render().plain
+
+
+class TestMapPaneTypedGlyphs:
+    def test_npc_renders_uppercase_letter(self):
+        idx = MapPane._build_tile_index(_gd_typed())
+        assert idx[(-1, 0)] == ("A", "cyan")
+
+    def test_monster_renders_lowercase_letter(self):
+        idx = MapPane._build_tile_index(_gd_typed())
+        assert idx[(2, 0)] == ("s", "red")
+        assert idx[(0, 2)] == ("c", "red")
+
+    def test_structures_render_box_glyphs(self):
+        idx = MapPane._build_tile_index(_gd_typed())
+        assert idx[(4, 1)] == ("╣", "white")
+        assert idx[(-2, -2)] == ("╠", "white")
+        assert idx[(3, 3)] == ("╬", "white")
+        assert idx[(1, 2)] == ("╤", "white")
+
+    def test_transition_renders_door(self):
+        idx = MapPane._build_tile_index(_gd_typed())
+        assert idx[(0, -3)] == ("+", "magenta")
+
+    def test_resources_unchanged(self):
+        idx = MapPane._build_tile_index(_gd_typed())
+        assert idx[(2, 2)] == ("T", "green")

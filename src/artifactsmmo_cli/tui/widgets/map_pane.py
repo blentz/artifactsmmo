@@ -7,14 +7,18 @@ from textual.widgets import Static
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import (
-    CONTENT_GLYPHS,
+    DOOR_COLOR,
+    DOOR_GLYPH,
     PLAYER_COLOR,
     PLAYER_GLYPH,
+    RESOURCE_GLYPHS,
     UNMAPPED_GLYPH,
     WALKABLE_COLOR,
     WALKABLE_GLYPH,
+    monster_glyph,
+    npc_glyph,
+    structure_glyph,
 )
-
 
 VIEWPORT_W = 41  # odd so the player sits in the exact center
 VIEWPORT_H = 21
@@ -39,7 +43,6 @@ class MapPane(Static):
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], tuple[str, str]]:
         """Map (x,y) → (glyph, color). Player position resolved at render time."""
         index: dict[tuple[int, int], tuple[str, str]] = {}
-        # Resources — keyed by skill to pick glyph
         skill_to_key = {
             "woodcutting": "resource_woodcutting",
             "mining": "resource_mining",
@@ -50,27 +53,24 @@ class MapPane(Static):
             skill_lvl = gd._resource_skill.get(code)
             key = skill_to_key.get(skill_lvl[0], "resource_mining") if skill_lvl else "resource_mining"
             for (x, y) in locs:
-                index[(x, y)] = CONTENT_GLYPHS[key]
-        # Workshops
-        for skill, loc in gd._workshop_locations.items():
+                index[(x, y)] = RESOURCE_GLYPHS[key]
+        for _skill, loc in gd._workshop_locations.items():
             if loc is not None:
-                index[loc] = CONTENT_GLYPHS["workshop"]
-        # NPCs
+                index[loc] = structure_glyph("workshop")
         for npc_code, loc in gd._npc_locations.items():
-            index[loc] = CONTENT_GLYPHS["npc"]
-        # Bank
+            index[loc] = npc_glyph(npc_code)
         if gd._bank_location is not None:
-            index[gd._bank_location] = CONTENT_GLYPHS["bank"]
-        # Taskmaster
+            index[gd._bank_location] = structure_glyph("bank")
+        if gd._grand_exchange_location is not None:
+            index[gd._grand_exchange_location] = structure_glyph("grand_exchange")
         if gd._taskmaster_location is not None:
-            index[gd._taskmaster_location] = CONTENT_GLYPHS["tasks_master"]
-        # Monsters last so monsters at shared tiles win the cell
+            index[gd._taskmaster_location] = structure_glyph("tasks_master")
         for code, locs in gd._monster_locations.items():
+            glyph = monster_glyph(code)
             for (x, y) in locs:
-                index[(x, y)] = CONTENT_GLYPHS["monster"]
-        # Transitions
+                index[(x, y)] = glyph
         for (x, y) in gd._transition_tiles:
-            index[(x, y)] = CONTENT_GLYPHS["transition"]
+            index[(x, y)] = (DOOR_GLYPH, DOOR_COLOR)
         return index
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
