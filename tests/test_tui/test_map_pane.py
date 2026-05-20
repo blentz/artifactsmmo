@@ -128,3 +128,13 @@ class TestMapPaneTypedGlyphs:
     def test_resources_unchanged(self):
         idx = MapPane._build_tile_index(_gd_typed())
         assert idx[(2, 2)] == ("T", "green")
+
+    def test_legend_uses_category_key(self):
+        gd = _gd_typed()
+        pane = MapPane(gd)
+        pane.update_snapshot(_snap(0, 0))
+        header = pane.render().plain.split("\n")[0]
+        assert "npc" in header and "monster" in header
+        assert "structure" in header and "door" in header
+        assert "M=monster" not in header
+        assert ">=portal" not in header

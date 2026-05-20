@@ -93,7 +93,7 @@ class MapPane(Static):
         text = Text(no_wrap=True, overflow="crop")
         # Header line: char coords + glyph legend.
         text.append(
-            f" ({cx},{cy})  @=you  M=monster  T=tree  *=ore  ~=fish  $=bank  ?=tasks  !=npc  >=portal\n",
+            f" ({cx},{cy})  @ you  A-Z npc  a-z monster  ╬ structure  + door  T/*/~/% resource\n",
             style="dim",
         )
         for dy in range(-half_h, half_h + 1):
