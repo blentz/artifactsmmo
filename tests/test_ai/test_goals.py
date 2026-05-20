@@ -514,6 +514,30 @@ class TestUpgradeEquipmentGoalPriority:
         goal = UpgradeEquipmentGoal(committed_target=("wooden_shield", "shield_slot"))
         assert goal._find_upgrade(state, gd) is None
 
+    def test_value_ranking_prefers_shield_over_fishing_net(self):
+        """Regression: with an empty weapon slot the picker chose fishing_net
+        (attack 5, fishing penalty) over a wooden_shield (resist 2/2/2/2 = 8)
+        because the tiebreak was alphabetical. Rank by stat value so the
+        better gear is the committed target."""
+        gd = make_game_data(item_stats={
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon",
+                                      crafting_skill="weaponcrafting", crafting_level=1,
+                                      attack={"water": 5}, skill_effects={"fishing": -10}),
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                        crafting_skill="gearcrafting", crafting_level=1,
+                                        resistance={"fire": 2, "earth": 2, "water": 2, "air": 2}),
+        })
+        gd._crafting_recipes = {
+            "fishing_net": {"ash_plank": 6},
+            "wooden_shield": {"ash_plank": 6},
+        }
+        # Both slots empty, both craftable. Shield must win on value.
+        state = make_state(inventory={}, level=5,
+                           skills={"weaponcrafting": 5, "gearcrafting": 5})
+        goal = UpgradeEquipmentGoal()
+        target = goal._find_craftable_upgrade_target(state, gd)
+        assert target == ("wooden_shield", "shield_slot")
+
     def test_craftable_tiebreak_prefers_ring_over_dagger_deterministically(self):
         """Regression: copper_dagger and copper_ring are both L1, craft_level 1.
         With the weapon slot filled (copper_axe), only the ring is a valid

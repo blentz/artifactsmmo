@@ -184,14 +184,12 @@ class UpgradeEquipmentGoal(Goal):
         active = game_data.active_gathering_skills(state.task_code)
         equipped = set(state.equipment.values()) - {None}
         best: tuple[str, str] | None = None
-        # Sort key per (item, slot): (relevant_tool, fills_empty_slot,
+        # Sort key per (item, slot): (relevant_tool, fills_empty_slot, value,
         # -craft_level, item_code). Higher tuple wins. fills_empty ranks an
-        # additive equip (empty slot) above a replacement, and item_code is
-        # a deterministic tiebreak — without it, two same-craft-level
-        # candidates (copper_dagger vs copper_ring, both craft_level 1) were
-        # decided by dict iteration order, so the bot sometimes crafted a
-        # dagger when a ring was wanted.
-        best_key: tuple[int, int, float, str] = (-1, -1, -float("inf"), "")
+        # additive equip (empty slot) above a replacement; value ranks better
+        # gear first; item_code is the final deterministic tiebreak so equal
+        # candidates never depend on dict iteration order.
+        best_key: tuple[int, int, float, int, str] = (-1, -1, -float("inf"), -10**9, "")
         bank = state.bank_items or {}
         for item_code in game_data._crafting_recipes:
             # Skip if already owned (inventory, bank, or equipped) — otherwise
@@ -211,13 +209,20 @@ class UpgradeEquipmentGoal(Goal):
                 continue
             craft_level = stats.crafting_level or 0
             relevant_tool = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data):
                     continue
                 fills_empty = 1 if current is None else 0
-                key = (relevant_tool, fills_empty, -craft_level, item_code)
+                # Rank by VALUE before craft_level: the prior alphabetical
+                # tiebreak made the bot prefer fishing_net (attack 5 + fishing
+                # penalty) or wooden_staff over a wooden_shield purely by
+                # item-code string order. value() puts genuinely better gear
+                # first so the committed target is the best upgrade, not an
+                # alphabetical accident.
+                key = (relevant_tool, fills_empty, value, -craft_level, item_code)
                 if key > best_key:
                     best, best_key = (item_code, slot), key
         return best
@@ -256,6 +261,27 @@ class UpgradeEquipmentGoal(Goal):
         active_skills: frozenset[str] = frozenset(),
     ) -> bool:
         """Return True if item_code is an upgrade over current_code for an equipment slot."""
+        return self._is_upgrade_over_impl(
+            item_code, stats, current_code, current_stats, game_data, active_skills)
+
+    def _upgrade_value(self, stats: ItemStats) -> float:
+        """Crude combat/utility value of an equippable: total attack +
+        resistance + hp restore. Ranks upgrade candidates so the picker
+        prefers genuinely better gear over an alphabetical accident
+        (wooden_shield's resistances > fishing_net's lone attack stat)."""
+        attack = sum(stats.attack.values()) if stats.attack else 0
+        resistance = sum(stats.resistance.values()) if stats.resistance else 0
+        return float(attack + resistance + stats.hp_restore)
+
+    def _is_upgrade_over_impl(
+        self,
+        item_code: str,
+        stats: ItemStats,
+        current_code: str | None,
+        current_stats: ItemStats | None,
+        game_data: GameData,
+        active_skills: frozenset[str],
+    ) -> bool:
         if current_code is None:
             return True
         # Stats missing for an equipped item: refuse the upgrade. Treating
