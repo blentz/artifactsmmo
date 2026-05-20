@@ -3,8 +3,6 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
@@ -39,7 +37,7 @@ class TestFetchActiveEvents:
         page = MagicMock()
         page.data = [ev]
 
-        with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=page) as mock_api:
+        with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=page):
             result = player._fetch_active_events(client)
 
         assert result == {"gemstone_merchant": expiry}
