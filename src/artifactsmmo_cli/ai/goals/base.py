@@ -11,6 +11,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 class Goal(ABC):
     """Abstract base class for all GOAP goals."""
 
+    preemptive: bool = False
+    """When True, this goal may interrupt a committed goal mid-pursuit if it
+    outranks the commitment (used for HP-critical safety). Non-preemptive goals
+    must wait until the committed goal is satisfied or unplannable, which is what
+    stops per-cycle goal thrashing."""
+
     @abstractmethod
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

@@ -19,6 +19,8 @@ class RestoreHPGoal(Goal):
     while UnlockBank kept fighting chickens).
     """
 
+    preemptive = True  # HP-critical may interrupt a committed goal when it outranks it
+
     CRITICAL_HP_FRACTION = 0.25
     CRITICAL_HP_VALUE = priorities.HP_CRITICAL
 

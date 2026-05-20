@@ -137,6 +137,10 @@ class GamePlayer:
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
         self._committed_upgrade_target: tuple[str, str] | None = None
+        # Sticky goal commitment: the goal repr we keep pursuing across cycles
+        # until it is satisfied or can no longer plan, so the selector stops
+        # thrashing between near-equal-priority goals every cycle.
+        self._committed_goal_name: str | None = None
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
         self._last_path_plan: PathPlan | None = None
@@ -265,36 +269,16 @@ class GamePlayer:
                     for g, p in goal_priorities
                 ]
 
-                plan: list[Action] = []
-                selected_goal: Goal | None = None
-                # Track every goal the planner actually attempted (priority > 0).
-                # The no_plan trace shows which goals had a plan-fail vs a
-                # priority-fail.
-                goals_tried: list[dict[str, object]] = []
-
                 if self.verbose:
                     goal_summary = "  ".join(f"{repr(g)}={p:.1f}" for g, p in goal_priorities)
                     print(f"[{self._now()}] Goals: {goal_summary}")
 
-                for goal, priority in goal_priorities:
-                    if priority <= 0:
-                        break
-                    plan = self.planner.plan(state, goal, actions, game_data, self.history)
-                    s = self.planner.last_stats
-                    goals_tried.append({
-                        "goal": repr(goal),
-                        "nodes": s.nodes_explored,
-                        "depth": s.max_depth_reached,
-                        "timed_out": s.timed_out,
-                        "plan_len": len(plan),
-                    })
-                    if self.verbose and not plan:
-                        print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
-                    if plan:
-                        selected_goal = goal
-                        self._last_goal_name = repr(selected_goal)
-                        self._note_goal_selection(repr(selected_goal), cycle_index=self._cycle_counter)
-                        break
+                selected_goal, plan, goals_tried = self._select_goal(
+                    state, game_data, actions, goal_priorities
+                )
+                if selected_goal is not None:
+                    self._last_goal_name = repr(selected_goal)
+                    self._note_goal_selection(repr(selected_goal), cycle_index=self._cycle_counter)
 
                 if not plan or selected_goal is None:
                     print(f"[{self._now()}] No plan found — waiting 5s")
@@ -369,6 +353,10 @@ class GamePlayer:
                 cycles_to_satisfy = None
                 if outcome == "ok" and selected_goal.is_satisfied(new_state):
                     cycles_to_satisfy = self._compute_cycles_to_satisfy(repr(selected_goal), self._cycle_counter)
+                    # Goal achieved — release the commitment so the next cycle
+                    # is free to select whatever is now most important.
+                    if repr(selected_goal) == self._committed_goal_name:
+                        self._committed_goal_name = None
                 self._record_learning_cycle(
                     prev_state=prev_state_for_learning,
                     new_state=new_state,
@@ -1192,6 +1180,84 @@ class GamePlayer:
         assert self.state is not None
         suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
         print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
+
+    def _select_goal(
+        self,
+        state: WorldState,
+        game_data: GameData,
+        actions: list[Action],
+        goal_priorities: list[tuple[Goal, float]],
+    ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
+        """Choose the goal to pursue this cycle with sticky commitment.
+
+        Order of precedence:
+        1. Preemption — a preemptive goal (HP-critical) that outranks the
+           committed goal's current priority interrupts the commitment.
+        2. Stick — keep the committed goal while it still has positive priority,
+           is not satisfied, and yields a plan. This stops the per-cycle goal
+           thrashing where near-equal priorities flip the selection every cycle.
+        3. Reselect — otherwise pick the highest-priority plannable goal and
+           commit to it.
+
+        Returns (selected_goal, plan, goals_tried). goals_tried records the
+        planner attempts for the trace, exactly as the old inline loop did.
+        """
+        goals_tried: list[dict[str, object]] = []
+
+        def attempt(goal: Goal) -> list[Action]:
+            plan = self.planner.plan(state, goal, actions, game_data, self.history)
+            s = self.planner.last_stats
+            goals_tried.append({
+                "goal": repr(goal),
+                "nodes": s.nodes_explored,
+                "depth": s.max_depth_reached,
+                "timed_out": s.timed_out,
+                "plan_len": len(plan),
+            })
+            if self.verbose and not plan:
+                print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
+            return plan
+
+        committed_priority = -float("inf")
+        if self._committed_goal_name is not None:
+            for goal, priority in goal_priorities:
+                if repr(goal) == self._committed_goal_name:
+                    committed_priority = priority
+                    break
+
+        # 1. Preemption: a safety goal that outranks the commitment interrupts it.
+        if self._committed_goal_name is not None:
+            for goal, priority in goal_priorities:
+                if priority <= 0:
+                    break
+                if goal.preemptive and priority > committed_priority and repr(goal) != self._committed_goal_name:
+                    plan = attempt(goal)
+                    if plan:
+                        self._committed_goal_name = repr(goal)
+                        return goal, plan, goals_tried
+
+        # 2. Stick with the committed goal while it remains viable.
+        if self._committed_goal_name is not None:
+            for goal, priority in goal_priorities:
+                if repr(goal) != self._committed_goal_name:
+                    continue
+                if priority > 0 and not goal.is_satisfied(state):
+                    plan = attempt(goal)
+                    if plan:
+                        return goal, plan, goals_tried
+                break  # committed goal present but not viable — fall through
+
+        # 3. Reselect: highest-priority plannable goal; commit to it.
+        for goal, priority in goal_priorities:
+            if priority <= 0:
+                break
+            plan = attempt(goal)
+            if plan:
+                self._committed_goal_name = repr(goal)
+                return goal, plan, goals_tried
+
+        self._committed_goal_name = None
+        return None, [], goals_tried
 
     def _note_goal_selection(self, goal_repr: str, cycle_index: int) -> None:
         """Record when a goal was first selected. Idempotent on re-selection."""
