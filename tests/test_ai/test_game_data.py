@@ -8,6 +8,10 @@ from artifactsmmo_cli.ai.game_data import GameData
 
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.map_content_type import MapContentType
+from artifactsmmo_api_client.models.event_schema import EventSchema
+from artifactsmmo_api_client.models.event_content_schema import EventContentSchema
+from artifactsmmo_api_client.models.event_map_schema import EventMapSchema
+from artifactsmmo_api_client.models.static_data_page_event_schema import StaticDataPageEventSchema
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -426,8 +430,9 @@ class TestGameDataLoad:
                 with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty_page):
                     with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
-                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                gd = GameData.load(client)
+                            with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
+                                with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                    gd = GameData.load(client)
         assert isinstance(gd, GameData)
 
 
@@ -565,3 +570,51 @@ def test_xp_per_kill_elite_multiplier():
 def test_xp_per_kill_unknown_monster_zero():
     gd = GameData()
     assert gd.xp_per_kill("nonexistent", char_level=5) == 0
+
+
+# ---------------------------------------------------------------------------
+# Event NPC registry tests
+# ---------------------------------------------------------------------------
+
+def _make_event_catalog() -> StaticDataPageEventSchema:
+    npc_event = EventSchema(
+        name="Gemstone Merchant",
+        code="gemstone_merchant",
+        content=EventContentSchema(type_=MapContentType.NPC, code="gemstone_merchant"),
+        maps=[EventMapSchema(map_id=238, x=6, y=-1, layer="overworld", skin="x")],
+        duration=60,
+        rate=1500,
+    )
+    monster_event = EventSchema(
+        name="Bandit Camp",
+        code="bandit_camp",
+        content=EventContentSchema(type_=MapContentType.MONSTER, code="bandit_lizard"),
+        maps=[EventMapSchema(map_id=538, x=4, y=5, layer="overworld", skin="y")],
+        duration=120,
+        rate=1500,
+    )
+    return StaticDataPageEventSchema(data=[npc_event, monster_event])
+
+
+def test_load_events_indexes_npc_events_only():
+    gd = GameData()
+    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=_make_event_catalog()):
+        gd._load_events(client=None)
+    assert gd.is_event_npc("gemstone_merchant") is True
+    assert gd.is_event_npc("bandit_lizard") is False
+    assert gd.npc_event_code("gemstone_merchant") == "gemstone_merchant"
+
+
+def test_npc_location_falls_back_to_event_spawn():
+    gd = GameData()
+    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=_make_event_catalog()):
+        gd._load_events(client=None)
+    assert gd.npc_location("gemstone_merchant") == (6, -1)
+
+
+def test_static_npc_location_wins_over_event_spawn():
+    gd = GameData()
+    gd._npc_locations["gemstone_merchant"] = (1, 1)
+    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=_make_event_catalog()):
+        gd._load_events(client=None)
+    assert gd.npc_location("gemstone_merchant") == (1, 1)

@@ -8,6 +8,7 @@ from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_a
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
+from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
@@ -53,6 +54,8 @@ class GameData:
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
+    _event_npc_spawns: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> fixed event spawn tile
+    _npc_event_code: dict[str, str] = field(default_factory=dict)  # npc_code -> event code (membership = is_event_npc)
     _bank_capacity: int = 0
     _next_expansion_cost: int = 0
     _slots_per_expansion: int = 0  # learned after the first expansion (response delta)
@@ -237,8 +240,19 @@ class GameData:
         return skills
 
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
-        """Location of a named NPC on the map."""
-        return self._npc_locations.get(npc_code)
+        """Location of a named NPC: static map scan first, then event spawn tile."""
+        loc = self._npc_locations.get(npc_code)
+        if loc is not None:
+            return loc
+        return self._event_npc_spawns.get(npc_code)
+
+    def is_event_npc(self, npc_code: str) -> bool:
+        """True if this NPC only exists during a timed event window."""
+        return npc_code in self._npc_event_code
+
+    def npc_event_code(self, npc_code: str) -> str | None:
+        """Event code whose active window spawns this NPC, or None if not an event NPC."""
+        return self._npc_event_code.get(npc_code)
 
     def npc_sells_item(self, npc_code: str, item_code: str) -> int | None:
         """Buy price of item_code from npc_code, or None if the NPC doesn't sell it."""
@@ -281,6 +295,7 @@ class GameData:
         data._load_resources(client)
         data._load_monsters(client)
         data._load_npcs(client)
+        data._load_events(client)
         data._load_bank_metadata(client)
         return data
 
@@ -413,6 +428,30 @@ class GameData:
                 sell_price = entry.sell_price
                 if not isinstance(sell_price, Unset) and sell_price is not None:
                     self._npc_sell_prices.setdefault(entry.npc, {})[entry.code] = sell_price
+            if len(result.data) < 100:
+                break
+            page += 1
+
+    def _load_events(self, client: AuthenticatedClient) -> None:
+        """Index event NPCs (code -> event code, code -> fixed spawn tile) from the catalog.
+
+        Event merchants never appear in get_all_maps; their fixed spawn tile lives
+        only in the events catalog, and they exist on the map only while their event
+        is active.
+        """
+        page = 1
+        while True:
+            result = get_all_events(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for ev in result.data:
+                if ev.content.type_ != MapContentType.NPC:
+                    continue
+                npc_code = ev.content.code
+                self._npc_event_code[npc_code] = ev.code
+                if ev.maps:
+                    first = ev.maps[0]
+                    self._event_npc_spawns[npc_code] = (first.x, first.y)
             if len(result.data) < 100:
                 break
             page += 1

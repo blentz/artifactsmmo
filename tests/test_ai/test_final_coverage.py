@@ -229,14 +229,15 @@ class TestPlayerRunVerboseAndExecute:
                         with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
                                 with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                        with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                                with patch.object(player, "_maybe_periodic_refresh"):
-                                                    with patch.object(player, "_build_actions", return_value=[RestAction()]):
-                                                        with patch("artifactsmmo_cli.ai.actions.rest.action_rest", return_value=make_api_result(char_after_rest)):
-                                                            with pytest.raises(KeyboardInterrupt):
-                                                                player.run()
+                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])):
+                                        with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                            with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                                                with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                                                    with patch.object(player, "_maybe_periodic_refresh"):
+                                                        with patch.object(player, "_build_actions", return_value=[RestAction()]):
+                                                            with patch("artifactsmmo_cli.ai.actions.rest.action_rest", return_value=make_api_result(char_after_rest)):
+                                                                with pytest.raises(KeyboardInterrupt):
+                                                                    player.run()
 
         assert player.state is not None
         assert player.state.hp == 150  # Rest was executed
@@ -261,13 +262,14 @@ class TestPlayerRunVerboseAndExecute:
                         with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
                                 with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                        with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                                with patch.object(player, "_maybe_periodic_refresh"):
-                                                    with patch.object(player, "_build_actions", return_value=[RestAction()]):
-                                                        with pytest.raises(KeyboardInterrupt):
-                                                            player.run()
+                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])):
+                                        with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                            with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                                                with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                                                    with patch.object(player, "_maybe_periodic_refresh"):
+                                                        with patch.object(player, "_build_actions", return_value=[RestAction()]):
+                                                            with pytest.raises(KeyboardInterrupt):
+                                                                player.run()
 
         # dry_run: apply() was called, not execute()
         assert player.state is not None
