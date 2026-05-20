@@ -27,7 +27,12 @@ def event_npc_tradeable(
     checks (location known, price, gold/inventory) still apply. Event NPCs are
     tradeable only when their event is active and won't expire before the
     character can reach the spawn tile.
+
+    `now` must be timezone-aware (event expirations from the API are), otherwise
+    the expiry subtraction raises an opaque TypeError deep in the planner.
     """
+    if now.tzinfo is None:
+        raise ValueError(f"event_npc_tradeable: 'now' must be timezone-aware, got {now!r}")
     event_code = game_data.npc_event_code(npc_code)
     if event_code is None:
         return True  # not an event NPC; nothing to gate on here

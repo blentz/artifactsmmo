@@ -1,6 +1,8 @@
 """event_npc_tradeable: event NPC must be active AND reachable before expiry."""
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 
@@ -36,6 +38,12 @@ def test_non_event_npc_is_true_passthrough():
     now = datetime(2026, 5, 20, 21, 0, tzinfo=timezone.utc)
     gd = GameData()
     assert event_npc_tradeable("tailor", gd, x=0, y=0, active_events={}, now=now) is True
+
+
+def test_naive_now_raises():
+    gd = GameData()
+    with pytest.raises(ValueError, match="must be timezone-aware"):
+        event_npc_tradeable("tailor", gd, x=0, y=0, active_events={}, now=datetime(2026, 5, 20, 21, 0))
 
 
 def test_event_npc_with_no_known_spawn_is_false():
