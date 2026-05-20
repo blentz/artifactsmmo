@@ -514,6 +514,29 @@ class TestUpgradeEquipmentGoalPriority:
         goal = UpgradeEquipmentGoal(committed_target=("wooden_shield", "shield_slot"))
         assert goal._find_upgrade(state, gd) is None
 
+    def test_junk_inventory_weapon_does_not_beat_better_craftable(self):
+        """Regression: a junk weapon already in the bag (wooden_stick / fishing_net)
+        with an empty weapon slot used to win the upgrade target because
+        find_upgrade_target checked inventory FIRST and the inventory picker
+        maximized level, not value. Now the best-VALUE candidate across
+        inventory and craftable wins, so junk loses to real craftable gear."""
+        gd = make_game_data(item_stats={
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                       attack={"air": 1}),
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon",
+                                      attack={"water": 5}, skill_effects={"fishing": -10}),
+            "wooden_staff": ItemStats(code="wooden_staff", level=1, type_="weapon",
+                                       crafting_skill="weaponcrafting", crafting_level=1,
+                                       attack={"air": 8}),
+        })
+        gd._crafting_recipes = {"wooden_staff": {"ash_plank": 6}}
+        equipment = _make_equipment()  # weapon slot empty
+        state = make_state(inventory={"wooden_stick": 1, "fishing_net": 1}, level=5,
+                           equipment=equipment, skills={"weaponcrafting": 5})
+        goal = UpgradeEquipmentGoal()
+        # staff (value 8, craftable) beats stick (1) and net (5) in inventory.
+        assert goal.find_upgrade_target(state, gd) == ("wooden_staff", "weapon_slot")
+
     def test_value_ranking_prefers_shield_over_fishing_net(self):
         """Regression: with an empty weapon slot the picker chose fishing_net
         (attack 5, fishing penalty) over a wooden_shield (resist 2/2/2/2 = 8)

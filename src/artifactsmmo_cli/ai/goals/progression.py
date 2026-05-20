@@ -110,7 +110,11 @@ class UpgradeEquipmentGoal(Goal):
         """
         if self._committed_target is not None:
             return self._committed_target
-        return self._find_inventory_upgrade(state, game_data) or self._find_craftable_upgrade_target(state, game_data)
+        return self._best_by_value(
+            self._find_inventory_upgrade(state, game_data),
+            self._find_craftable_upgrade_target(state, game_data),
+            game_data,
+        )
 
     def _find_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find a better item in inventory or craftable with materials already available."""
@@ -118,7 +122,26 @@ class UpgradeEquipmentGoal(Goal):
             # Locked to the player's persisted target: craft it only when its
             # materials are in hand, never substitute a different equippable.
             return self._committed_upgrade_if_ready(state, game_data)
-        return self._find_inventory_upgrade(state, game_data) or self._find_craftable_upgrade(state, game_data)
+        return self._best_by_value(
+            self._find_inventory_upgrade(state, game_data),
+            self._find_craftable_upgrade(state, game_data),
+            game_data,
+        )
+
+    def _best_by_value(self, inv: tuple[str, str] | None, craft: tuple[str, str] | None,
+                       game_data: GameData) -> tuple[str, str] | None:
+        """Pick the higher-VALUE of an inventory pick and a craftable pick.
+
+        Inventory-first precedence let a junk owned weapon (wooden_stick) beat
+        a far better craftable shield just because it was already in the bag.
+        Compare by stat value; prefer the owned (inventory) item only on a tie,
+        since equipping it is cheaper than crafting.
+        """
+        if inv is None:
+            return craft
+        if craft is None:
+            return inv
+        return inv if self._value_of(inv, game_data) >= self._value_of(craft, game_data) else craft
 
     def _committed_upgrade_if_ready(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         assert self._committed_target is not None
@@ -135,41 +158,64 @@ class UpgradeEquipmentGoal(Goal):
             return self._committed_target
         return None
 
+    def _value_of(self, target: tuple[str, str] | None, game_data: GameData) -> float:
+        """Stat value of a (item, slot) pick, or -inf for None."""
+        if target is None:
+            return -float("inf")
+        stats = game_data.item_stats(target[0])
+        return self._upgrade_value(stats) if stats is not None else -float("inf")
+
     def _find_inventory_only_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
-        """Find a highest-level upgrade in inventory only — can be equipped in one action."""
+        """Best-VALUE upgrade already in inventory — equippable in one action.
+
+        Ranked by (relevant_tool, value, level, item_code), not by level alone:
+        a junk weapon (wooden_stick) sitting in the bag used to win an empty
+        slot over far better gear purely because the picker maximized level
+        with an arbitrary tiebreak.
+        """
         active = frozenset(game_data.active_gathering_skills(state.task_code))
         best: tuple[str, str] | None = None
-        best_level = -1
+        best_key: tuple[int, float, int, str] = (-1, -float("inf"), -1, "")
         for item_code in state.inventory:
             if state.inventory.get(item_code, 0) <= 0:
                 continue
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
                 continue
+            relevant = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
-                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active) and stats.level >= best_level:
-                    best, best_level = (item_code, slot), stats.level
+                if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active):
+                    continue
+                key = (relevant, value, stats.level, item_code)
+                if key > best_key:
+                    best, best_key = (item_code, slot), key
         return best
 
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
-        """Find highest-level upgrade in inventory or bank (bank items need Withdraw first)."""
+        """Best-VALUE upgrade in inventory or bank (bank items need Withdraw first)."""
         active = frozenset(game_data.active_gathering_skills(state.task_code))
         bank = state.bank_items or {}
         best: tuple[str, str] | None = None
-        best_level = -1
+        best_key: tuple[int, float, int, str] = (-1, -float("inf"), -1, "")
         for item_code in set(state.inventory) | set(bank):
             if state.inventory.get(item_code, 0) + bank.get(item_code, 0) <= 0:
                 continue
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
                 continue
+            relevant = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
-                if self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active) and stats.level >= best_level:
-                    best, best_level = (item_code, slot), stats.level
+                if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active):
+                    continue
+                key = (relevant, value, stats.level, item_code)
+                if key > best_key:
+                    best, best_key = (item_code, slot), key
         return best
 
     def _find_craftable_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
