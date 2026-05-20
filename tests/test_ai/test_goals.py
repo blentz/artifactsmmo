@@ -378,7 +378,7 @@ class TestUpgradeEquipmentGoalToolBias:
             task_code="ash_plank", task_type="items", task_total=10, task_progress=0,
         )
         goal = UpgradeEquipmentGoal()
-        assert goal.value(state, gd) == 50.0
+        assert goal.value(state, gd) == 51.0
 
     def test_relevant_tool_beats_lower_level_generic_craftable(self):
         # Lower craft_level (dagger=1) would normally win; the axe (level 2) has
@@ -448,6 +448,36 @@ class TestUpgradeEquipmentGoalPriority:
         state = make_state(inventory={}, bank_items={})
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
+
+    def test_relevant_actions_excludes_unequip_and_downgrade_equips(self):
+        """Regression: is_satisfied fires when any slot differs from the initial
+        snapshot, so the planner could 'upgrade' by equipping a worse item
+        (copper_axe → fishing_net, both owned) since that also makes the slot
+        differ. relevant_actions must drop UnequipActions and every EquipAction
+        except the one for the current upgrade target."""
+        from artifactsmmo_cli.ai.actions.equipment import EquipAction, UnequipAction
+        gd = make_game_data(item_stats={
+            "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon"),
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon"),
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                        crafting_skill="gearcrafting", crafting_level=1),
+        })
+        gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6}}
+        equipment = _make_equipment(weapon_slot="copper_axe")
+        state = make_state(inventory={"fishing_net": 1, "ash_plank": 6}, level=5,
+                           equipment=equipment, skills={"gearcrafting": 5})
+        # Committed target = wooden_shield (the intended upgrade).
+        goal = UpgradeEquipmentGoal(committed_target=("wooden_shield", "shield_slot"))
+        actions = [
+            UnequipAction(slot="weapon_slot"),
+            EquipAction(code="fishing_net", slot="weapon_slot"),   # downgrade — must be dropped
+            EquipAction(code="wooden_shield", slot="shield_slot"), # the target — must be kept
+            CraftAction(code="wooden_shield"),
+        ]
+        result = goal.relevant_actions(actions, state, gd)
+        assert not any(isinstance(a, UnequipAction) for a in result)
+        equips = [a for a in result if isinstance(a, EquipAction)]
+        assert {a.code for a in equips} == {"wooden_shield"}
 
     def test_committed_target_locks_craft_to_one_item(self):
         """Regression: ash_planks gathered for a wooden_shield got spent on a
@@ -1091,14 +1121,17 @@ class TestUnlockBankGoal:
         state = make_state(xp=101, inventory={"chicken": 20}, inventory_max=20)
         assert goal.value(state, self._make_gd_with_sellables()) == 0.0
 
-    def test_is_satisfied_only_when_bank_unlocked(self):
-        """is_satisfied flips on bank state, not XP. Any kill bumps XP but
-        wouldn't actually unlock the bank — the prior XP-based check caused
-        the chicken-massacre loop documented in commit history."""
-        # bank_locked=True regardless of XP → not satisfied
+    def test_is_satisfied_when_bank_unlocked_or_target_fight_landed(self):
+        """is_satisfied is planner-reachable via xp>initial. The chicken-massacre
+        loop is now prevented by relevant_actions restricting combat to the
+        TARGET monster, so a generic XP bump can't come from the wrong fight.
+        `not bank_locked` still short-circuits to satisfied."""
+        # Locked, no XP gained yet → not satisfied (planner must fight target).
         locked = UnlockBankGoal(bank_locked=True, initial_xp=100)
-        assert locked.is_satisfied(make_state(xp=101)) is False
-        # bank_locked=False → satisfied
+        assert locked.is_satisfied(make_state(xp=100)) is False
+        # Locked, XP advanced (a target-monster fight was simulated) → satisfied.
+        assert locked.is_satisfied(make_state(xp=101)) is True
+        # Already unlocked → satisfied regardless of XP.
         unlocked = UnlockBankGoal(bank_locked=False, initial_xp=100)
         assert unlocked.is_satisfied(make_state(xp=100)) is True
 

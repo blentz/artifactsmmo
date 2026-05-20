@@ -39,10 +39,16 @@ class UnlockBankGoal(Goal):
         return 90.0
 
     def is_satisfied(self, state: WorldState) -> bool:
-        # The only true satisfaction signal is bank access being restored.
-        # `state.xp > initial_xp` was a stand-in but any fight bumps XP — that
-        # made killing a chicken "satisfy" the goal while the bank stayed locked.
-        return not self._bank_locked
+        # Planner-reachable satisfaction: one target-monster fight bumps XP.
+        # `not _bank_locked` is a flag set at construction, never changed by
+        # any simulated action, so it left the planner unable to ever reach a
+        # satisfied node → plan_len=0 every cycle and this priority-90 goal
+        # silently lost. relevant_actions restricts combat to the TARGET
+        # monster only, so `xp > initial_xp` can only be reached by fighting
+        # the right monster — killing a chicken can no longer satisfy it.
+        if not self._bank_locked:
+            return True
+        return state.xp > self._initial_xp
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {}

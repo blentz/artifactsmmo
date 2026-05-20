@@ -929,7 +929,7 @@ class GamePlayer:
             RestoreHPGoal(),
             DepositInventoryGoal(bank_accessible=self._bank_accessible),
             SellInventoryGoal(bank_accessible=self._bank_accessible),
-            ExpandBankGoal(bank_accessible=self._bank_accessible),
+            ExpandBankGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
             UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp, target_monster=self._bank_unlock_monster),
             ClaimPendingGoal(),
             CompleteTaskGoal(),
@@ -944,16 +944,20 @@ class GamePlayer:
             DiscardOverstockGoal(game_data=self.game_data),
             upgrade_goal,
         ]
-        # Combat-driving goals only when a winnable monster exists.
+        # Combat-driving goals. FarmMonster and GrindCharacterXP both grind the
+        # same farm_target for character XP and are both satisfied by xp>initial,
+        # so running them together was redundant AND split the learned-priority
+        # history across two repr() buckets (FarmMonster(X) vs GrindCharacterXP(X)),
+        # destabilizing the dynamic priority. Split by task state: GrindCharacterXP
+        # owns the no-task grind; FarmMonster is the in-task combat fallback.
         if farm_target is not None:
-            goals.append(FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp))
+            if self.state.task_code:
+                goals.append(FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp))
+            else:
+                goals.append(GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp))
 
         if self.state.task_type == "items" and self.state.task_code:
             goals.append(FarmItemsGoal(initial_progress=self.state.task_progress))
-
-        # G-E: when no task is held AND a winnable monster exists, drive XP grinding.
-        if not self.state.task_code and farm_target is not None:
-            goals.append(GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp))
 
         # G-E: surface a LevelSkillGoal for each skill that gates a craftable
         # upgrade Robby is currently within MAX_SKILL_GAP of unlocking. Reads

@@ -19,8 +19,11 @@ def _bank_fill_known(state: WorldState) -> int | None:
 class ExpandBankGoal(Goal):
     """Buy a bank expansion when current bank is near full and gold is sufficient."""
 
-    def __init__(self, bank_accessible: bool = True) -> None:
+    def __init__(self, bank_accessible: bool = True, game_data: GameData | None = None) -> None:
         self._bank_accessible = bank_accessible
+        # Stashed so is_satisfied (which the Goal protocol calls with state
+        # only) can use the ACTUAL bank capacity instead of a fixed slot count.
+        self._game_data = game_data
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -43,10 +46,13 @@ class ExpandBankGoal(Goal):
         used = _bank_fill_known(state)
         if used is None:
             return True
-        # Conservative threshold: 90% of an assumed default capacity of 30 slots.
-        # (Goal.is_satisfied doesn't receive game_data, so we use a fixed slot count;
-        # the value() method uses the actual game_data._bank_capacity for triggering.)
-        return used < 27
+        # Use the ACTUAL bank capacity. A fixed `< 27` (90% of an assumed
+        # 30-slot bank) meant that after the first expansion the goal reported
+        # satisfied even at 100% of the larger bank, so it never re-triggered.
+        capacity = self._game_data._bank_capacity if self._game_data is not None else 0
+        if capacity <= 0:
+            return True
+        return used < capacity * _SATISFIED_FILL
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"bank_capacity": game_data._bank_capacity + 1}

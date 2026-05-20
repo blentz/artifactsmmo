@@ -66,10 +66,12 @@ GATHER_MATERIALS = 50.0
 """GatherMaterialsGoal: gather/craft until target_item's recipe is satisfied.
 Fixed high priority so material chains finish before the loop reverts to farming."""
 
-UPGRADE_EQUIPMENT_RELEVANT_TOOL = 50.0
+UPGRADE_EQUIPMENT_RELEVANT_TOOL = 51.0
 """UpgradeEquipmentGoal value when the chosen upgrade has a positive
 skill_effect for the active task's gather skill (e.g. better axe during
-ash_plank task → woodcutting)."""
+ash_plank task → woodcutting). One above GATHER_MATERIALS (50) so a
+craft-ready relevant tool is equipped before gathering more — a tie at
+50 left the ordering to goal-list position, not intent."""
 
 UPGRADE_EQUIPMENT_INVENTORY_READY = 60.0
 """UpgradeEquipmentGoal priority when an upgrade is sitting in inventory

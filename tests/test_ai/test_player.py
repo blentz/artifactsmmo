@@ -101,12 +101,14 @@ class TestBuildGoals:
         gd._crafting_recipes = {}
         gd._resource_skill = {}
         player.game_data = gd
+        # No task held → the no-task combat driver is GrindCharacterXP, not
+        # FarmMonster (the two no longer coexist).
         player.state = make_state(level=5)
         goals = player._build_goals()
-        from artifactsmmo_cli.ai.goals.combat import FarmMonsterGoal
-        farm_goals = [g for g in goals if isinstance(g, FarmMonsterGoal)]
-        assert len(farm_goals) == 1
-        assert farm_goals[0].monster_code != "dragon"
+        from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+        grind_goals = [g for g in goals if isinstance(g, GrindCharacterXPGoal)]
+        assert len(grind_goals) == 1
+        assert grind_goals[0]._target_monster != "dragon"
 
     def test_adds_gather_goal_when_upgrade_needs_materials(self):
         player = GamePlayer(character="hero")

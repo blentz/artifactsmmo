@@ -58,7 +58,10 @@ class GrindCharacterXPGoal(Goal):
         # Scalar (used previously) mixed in gold/skill_xp which dilute the
         # signal — we explicitly want to rank by character progression rate.
         bonus = fight_yield.char_xp * SCALAR_TO_PRIORITY_GAIN
-        return min(PRIORITY_CEILING, PRIORITY_FLOOR + bonus)
+        # Floor-clamp so an unlucky run of observed-negative char_xp can't
+        # push priority below PRIORITY_FLOOR and permanently suppress the only
+        # combat goal (leaving the bot with no plan when no task is held).
+        return min(PRIORITY_CEILING, max(PRIORITY_FLOOR, PRIORITY_FLOOR + bonus))
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.xp > self._initial_xp

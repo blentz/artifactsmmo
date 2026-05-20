@@ -1,7 +1,8 @@
 """Progression goal: equipment upgrades."""
 
 from artifactsmmo_cli.ai import priorities
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction, UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -74,6 +75,33 @@ class UpgradeEquipmentGoal(Goal):
             return {}
         code, slot = upgrade
         return {"equipment": {slot: code}}
+
+    def relevant_actions(self, actions: list[Action], state: WorldState,
+                         game_data: GameData) -> list[Action]:
+        """Restrict planning so the goal can ONLY be satisfied by equipping the
+        upgrade target — never by unequipping or equipping a worse item.
+
+        is_satisfied fires when any slot differs from the initial snapshot, so
+        without this filter the planner could satisfy the goal by equipping a
+        downgrade (swap copper_axe → fishing_net, both in inventory) since that
+        also makes the slot 'differ'. Drop all UnequipActions and every
+        EquipAction except the one for the current upgrade target; keep the
+        craft/gather/withdraw chain that produces it, plus recovery/deposit.
+        """
+        target = self.find_upgrade_target(state, game_data)
+        target_item = target[0] if target is not None else None
+        result: list[Action] = []
+        for action in actions:
+            if "recovery" in action.tags or "deposit" in action.tags:
+                result.append(action)
+            elif isinstance(action, UnequipAction):
+                continue
+            elif isinstance(action, EquipAction):
+                if target_item is not None and action.code == target_item:
+                    result.append(action)
+            else:
+                result.append(action)
+        return result
 
     def find_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find the best upgrade (inventory or craftable) ignoring material availability.
