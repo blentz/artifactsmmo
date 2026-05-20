@@ -339,8 +339,8 @@ class TestActionCommands(TestSetup):
             if "│" in line and not line.strip().startswith("│ Name") and not line.strip().startswith("│ ─"):
                 # Extract character name from table row
                 parts = [part.strip() for part in line.split("│") if part.strip()]
-                if len(parts) > 1 and parts[1] and not parts[1].startswith("─"):
-                    character_name = parts[1]
+                if len(parts) > 0 and parts[0] and not parts[0].startswith("─"):
+                    character_name = parts[0]
                     break
 
         if not character_name:
@@ -356,6 +356,7 @@ class TestActionCommands(TestSetup):
                 show_path_command(
                     character=character_name,
                     destination="5 5",  # Simple coordinate destination
+                    y=None,  # Force "X Y" parse branch; typer's None default isn't applied on direct calls
                 )
             except SystemExit as e:
                 # SystemExit with code 1 indicates an error, 0 or None is success
