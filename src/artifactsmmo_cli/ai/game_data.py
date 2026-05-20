@@ -42,6 +42,7 @@ class GameData:
     _workshop_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # skill -> (x, y)
     _bank_location: tuple[int, int] | None = None
     _taskmaster_location: tuple[int, int] | None = None
+    _grand_exchange_location: tuple[int, int] | None = None
     _item_stats: dict[str, ItemStats] = field(default_factory=dict)
     _crafting_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
     _resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
@@ -339,6 +340,8 @@ class GameData:
                     self._bank_location = loc
                 elif ct == MapContentType.TASKS_MASTER:
                     self._taskmaster_location = loc
+                elif ct == MapContentType.GRAND_EXCHANGE:
+                    self._grand_exchange_location = loc
                 elif ct == MapContentType.NPC:
                     self._npc_locations[code] = loc
                 elif ct == MapContentType.WORKSHOP:

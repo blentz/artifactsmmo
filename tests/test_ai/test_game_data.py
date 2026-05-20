@@ -187,6 +187,16 @@ class TestGameDataLoadMaps:
             gd._load_maps(MagicMock())
         assert gd._monster_locations == {}
 
+    def test_records_known_tiles_including_empty(self):
+        """Every tile is recorded in _known_tiles — even content-free ones — so the
+        TUI map can distinguish known floor from unmapped void."""
+        gd = GameData()
+        empty = make_map_tile(1, 0)  # no content
+        monster = make_map_tile(2, 3, "monster", "chicken")
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([empty, monster])):
+            gd._load_maps(MagicMock())
+        assert gd._known_tiles == {(1, 0), (2, 3)}
+
     def test_paginates_until_partial_page(self):
         gd = GameData()
         tile = make_map_tile(1, 0, "monster", "chicken")
@@ -199,6 +209,13 @@ class TestGameDataLoadMaps:
             gd._load_maps(MagicMock())
         assert "chicken" in gd._monster_locations
         assert "cow" in gd._monster_locations
+
+    def test_loads_grand_exchange_location(self):
+        gd = GameData()
+        tile = make_map_tile(3, 4, "grand_exchange", "grand_exchange")
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+            gd._load_maps(MagicMock())
+        assert gd._grand_exchange_location == (3, 4)
 
     def test_stops_on_none_result(self):
         gd = GameData()
