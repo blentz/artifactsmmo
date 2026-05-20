@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.tui.glyphs import WALKABLE_GLYPH
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane, VIEWPORT_H, VIEWPORT_W
 
 
@@ -59,3 +60,31 @@ class TestMapPaneRender:
         assert "M" in rendered  # monster glyph
         assert "T" in rendered  # tree
         assert "?" in rendered  # taskmaster
+
+    def test_body_rows_match_viewport_and_no_trailing_blank(self):
+        """1 header + VIEWPORT_H body rows, every body row exactly VIEWPORT_W wide,
+        and no trailing blank line (the old code left one)."""
+        gd = _gd_with_world()
+        pane = MapPane(gd)
+        pane.update_snapshot(_snap(0, 0))
+        lines = pane.render().plain.split("\n")
+        assert len(lines) == 1 + VIEWPORT_H  # header + rows, no trailing empty line
+        body = lines[1:]
+        assert all(len(row) == VIEWPORT_W for row in body)
+
+    def test_render_is_no_wrap_and_cropped(self):
+        """The viewport must never wrap; the wide legend should crop, not fold."""
+        gd = _gd_with_world()
+        pane = MapPane(gd)
+        pane.update_snapshot(_snap(0, 0))
+        out = pane.render()
+        assert out.no_wrap is True
+        assert out.overflow == "crop"
+
+    def test_known_empty_tile_renders_walkable_floor(self):
+        """A known tile with no content renders the walkable glyph, not blank void."""
+        gd = _gd_with_world()
+        gd._known_tiles = {(1, 0)}  # in view from (0,0), no content there
+        pane = MapPane(gd)
+        pane.update_snapshot(_snap(0, 0))
+        assert WALKABLE_GLYPH in pane.render().plain

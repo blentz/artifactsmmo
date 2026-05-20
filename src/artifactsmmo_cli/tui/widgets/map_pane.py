@@ -31,6 +31,9 @@ class MapPane(Static):
         # Pre-index the world for fast (x,y) lookup. NetHack-style maps need
         # constant-time "what's at this cell" so the viewport renders fast.
         self._tile_index = self._build_tile_index(game_data)
+        # Known-but-empty tiles render as walkable floor; everything else is
+        # unmapped void. Without this set the map is content islands in blank.
+        self._known_tiles = game_data._known_tiles
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], tuple[str, str]]:
@@ -83,7 +86,16 @@ class MapPane(Static):
         half_w = VIEWPORT_W // 2
         half_h = VIEWPORT_H // 2
         cx, cy = snap.x, snap.y
-        text = Text()
+        # no_wrap + crop: the viewport is a fixed grid. Letting Rich wrap it (the
+        # default) folds the wide legend and long rows onto extra lines, shoving
+        # the bottom of the map out of the pane — the "pinched and incomplete"
+        # symptom. Crop instead so the grid keeps its shape and overflow is hidden.
+        text = Text(no_wrap=True, overflow="crop")
+        # Header line: char coords + glyph legend.
+        text.append(
+            f" ({cx},{cy})  @=you  M=monster  T=tree  *=ore  ~=fish  $=bank  ?=tasks  !=npc  >=portal\n",
+            style="dim",
+        )
         for dy in range(-half_h, half_h + 1):
             for dx in range(-half_w, half_w + 1):
                 world_x = cx + dx
@@ -95,9 +107,11 @@ class MapPane(Static):
                 if cell is not None:
                     glyph, color = cell
                     text.append(glyph, style=color)
+                elif (world_x, world_y) in self._known_tiles:
+                    text.append(WALKABLE_GLYPH, style=WALKABLE_COLOR)
                 else:
                     text.append(UNMAPPED_GLYPH)
-            text.append("\n")
-        # Header line: char coords + glyph legend
-        header = Text(f" ({cx},{cy})  @=you  M=monster  T=tree  *=ore  ~=fish  $=bank  ?=tasks  !=npc  >=portal\n", style="dim")
-        return header + text
+            # Newline between rows only — no trailing newline after the last row.
+            if dy != half_h:
+                text.append("\n")
+        return text

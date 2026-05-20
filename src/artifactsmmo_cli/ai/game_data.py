@@ -60,6 +60,7 @@ class GameData:
     _next_expansion_cost: int = 0
     _slots_per_expansion: int = 0  # learned after the first expansion (response delta)
     _transition_tiles: set[tuple[int, int]] = field(default_factory=set)
+    _known_tiles: set[tuple[int, int]] = field(default_factory=set)  # every overworld tile that exists, content or not
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
@@ -317,6 +318,7 @@ class GameData:
 
             for tile in result.data:
                 loc = (tile.x, tile.y)
+                self._known_tiles.add(loc)
 
                 transition = tile.interactions.transition
                 if not isinstance(transition, Unset) and transition is not None:
