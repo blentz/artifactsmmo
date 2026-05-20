@@ -449,6 +449,41 @@ class TestUpgradeEquipmentGoalPriority:
         gd = make_game_data()
         assert goal.priority(state, gd) == 0.0
 
+    def test_committed_target_locks_craft_to_one_item(self):
+        """Regression: ash_planks gathered for a wooden_shield got spent on a
+        fishing_net because the per-cycle target picker flipped. A committed
+        target locks UpgradeEquipment to exactly that item — even when a
+        different equippable is also craftable from the same materials."""
+        gd = make_game_data(item_stats={
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon",
+                                      crafting_skill="weaponcrafting", crafting_level=1),
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                        crafting_skill="gearcrafting", crafting_level=1),
+        })
+        gd._crafting_recipes = {
+            "fishing_net": {"ash_plank": 6},
+            "wooden_shield": {"ash_plank": 6},
+        }
+        # 6 planks: enough for EITHER. Both slots empty. Committed to shield.
+        state = make_state(inventory={"ash_plank": 6}, level=5,
+                           skills={"weaponcrafting": 5, "gearcrafting": 5})
+        goal = UpgradeEquipmentGoal(committed_target=("wooden_shield", "shield_slot"))
+        assert goal.find_upgrade_target(state, gd) == ("wooden_shield", "shield_slot")
+        assert goal._find_upgrade(state, gd) == ("wooden_shield", "shield_slot")
+        assert goal.desired_state(state, gd) == {"equipment": {"shield_slot": "wooden_shield"}}
+
+    def test_committed_target_waits_without_materials(self):
+        """Committed target with no materials → _find_upgrade returns None
+        (don't craft a different item, just wait for GatherMaterials)."""
+        gd = make_game_data(item_stats={
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                        crafting_skill="gearcrafting", crafting_level=1),
+        })
+        gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6}}
+        state = make_state(inventory={"ash_plank": 2}, level=5, skills={"gearcrafting": 5})
+        goal = UpgradeEquipmentGoal(committed_target=("wooden_shield", "shield_slot"))
+        assert goal._find_upgrade(state, gd) is None
+
     def test_craftable_tiebreak_prefers_ring_over_dagger_deterministically(self):
         """Regression: copper_dagger and copper_ring are both L1, craft_level 1.
         With the weapon slot filled (copper_axe), only the ring is a valid

@@ -135,6 +135,7 @@ class GamePlayer:
         self._wildcard_mode: bool = False
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
+        self._committed_upgrade_target: tuple[str, str] | None = None
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
         self._last_path_plan: PathPlan | None = None
@@ -907,7 +908,23 @@ class GamePlayer:
         if farm_target is None:
             farm_target = self._pick_winnable_monster()
 
-        upgrade_goal = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
+        # Resolve a STABLE upgrade target. Recomputing the best craftable
+        # upgrade every cycle let a transient inventory change flip the target
+        # (e.g. wooden_shield → fishing_net) mid-gather, so UpgradeEquipment
+        # would craft a different equippable than GatherMaterials was gathering
+        # for. Persist the target until it is equipped or stops being an
+        # upgrade, and feed the SAME target to both goals.
+        probe = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
+        committed = self._committed_upgrade_target
+        if committed is not None and not self._upgrade_target_still_valid(probe, committed):
+            committed = None
+        if committed is None:
+            committed = probe.find_upgrade_target(self.state, self.game_data)
+        self._committed_upgrade_target = committed
+
+        upgrade_goal = UpgradeEquipmentGoal(
+            initial_equipment=self.state.equipment, committed_target=committed,
+        )
         goals: list[Goal] = [
             RestoreHPGoal(),
             DepositInventoryGoal(bank_accessible=self._bank_accessible),
@@ -953,9 +970,8 @@ class GamePlayer:
         # Using a partial quantity causes GatherMaterials to satisfy early when existing
         # items were deposited to the bank, while UpgradeEquipment still sees insufficient
         # total materials.
-        target = upgrade_goal.find_upgrade_target(self.state, self.game_data)
-        if target is not None:
-            item_code, _slot = target
+        if committed is not None:
+            item_code, _slot = committed
             recipe = self.game_data._crafting_recipes.get(item_code)
             if recipe:
                 gm_goal = GatherMaterialsGoal(target_item=item_code, needed=dict(recipe))
@@ -1058,6 +1074,27 @@ class GamePlayer:
         if not plan.segments:
             return None
         return plan.next_action_monster
+
+    def _upgrade_target_still_valid(self, probe: UpgradeEquipmentGoal,
+                                    target: tuple[str, str]) -> bool:
+        """True if the persisted upgrade target is still worth pursuing.
+
+        Invalid (→ recompute) when the target item is already equipped in its
+        slot (we got it), or it is no longer an upgrade over whatever now
+        occupies the slot.
+        """
+        assert self.state is not None and self.game_data is not None
+        item_code, slot = target
+        if self.state.equipment.get(slot) == item_code:
+            return False
+        stats = self.game_data.item_stats(item_code)
+        if stats is None:
+            return False
+        current = self.state.equipment.get(slot)
+        current_stats = self.game_data.item_stats(current) if current else None
+        active = frozenset(self.game_data.active_gathering_skills(self.state.task_code))
+        return probe._is_upgrade_over(item_code, stats, current, current_stats,
+                                      self.game_data, active)
 
     def _pick_winnable_monster(self) -> str | None:
         """Highest-level monster at or below char_level with success_rate>=0.5.

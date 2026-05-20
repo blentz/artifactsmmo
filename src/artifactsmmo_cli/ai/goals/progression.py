@@ -11,8 +11,16 @@ from artifactsmmo_cli.ai.world_state import WorldState
 class UpgradeEquipmentGoal(Goal):
     """Craft and equip better gear when an upgrade is available or craftable."""
 
-    def __init__(self, initial_equipment: dict[str, str | None] | None = None) -> None:
+    def __init__(self, initial_equipment: dict[str, str | None] | None = None,
+                 committed_target: tuple[str, str] | None = None) -> None:
         self._initial_equipment: dict[str, str | None] = dict(initial_equipment) if initial_equipment else {}
+        # When set, the goal commits to crafting exactly this (item, slot)
+        # upgrade and ignores all other craftable candidates. The player
+        # persists the target across cycles so a transient inventory change
+        # can't make UpgradeEquipment craft a different equippable than the
+        # one GatherMaterials is actively gathering for (e.g. a fishing_net
+        # built from ash_planks meant for a wooden_shield).
+        self._committed_target = committed_target
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -72,11 +80,32 @@ class UpgradeEquipmentGoal(Goal):
 
         Used to identify what to craft even when materials haven't been gathered yet.
         """
+        if self._committed_target is not None:
+            return self._committed_target
         return self._find_inventory_upgrade(state, game_data) or self._find_craftable_upgrade_target(state, game_data)
 
     def _find_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find a better item in inventory or craftable with materials already available."""
+        if self._committed_target is not None:
+            # Locked to the player's persisted target: craft it only when its
+            # materials are in hand, never substitute a different equippable.
+            return self._committed_upgrade_if_ready(state, game_data)
         return self._find_inventory_upgrade(state, game_data) or self._find_craftable_upgrade(state, game_data)
+
+    def _committed_upgrade_if_ready(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
+        assert self._committed_target is not None
+        item_code, _slot = self._committed_target
+        recipe = game_data._crafting_recipes.get(item_code) or {}
+        bank = state.bank_items or {}
+        if recipe and all(
+            state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
+            for mat, qty in recipe.items()
+        ):
+            return self._committed_target
+        # Already crafted and sitting in inventory? Then it's equip-ready.
+        if state.inventory.get(item_code, 0) > 0:
+            return self._committed_target
+        return None
 
     def _find_inventory_only_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find a highest-level upgrade in inventory only — can be equipped in one action."""
