@@ -17,6 +17,7 @@ from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import sync as get_bank_items
 from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
+from artifactsmmo_api_client.api.events.get_all_active_events_events_active_get import sync as get_all_active_events
 
 from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
@@ -483,6 +484,21 @@ class GamePlayer:
             print(f"[{self._now()}] Network error during {action!r}: {e!r} — refreshing state")
             return self._fetch_world_state(client), "error:network"
 
+    def _fetch_active_events(self, client: AuthenticatedClient) -> dict[str, datetime]:
+        """Map of currently-active event code -> expiration. Empty on no/failed data."""
+        active: dict[str, datetime] = {}
+        page = 1
+        while True:
+            result = get_all_active_events(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for ev in result.data:
+                active[ev.code] = ev.expiration
+            if len(result.data) < 100:
+                break
+            page += 1
+        return active
+
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""
         last_result = None
@@ -531,11 +547,13 @@ class GamePlayer:
         bank_items = self.state.bank_items if self.state else None
         bank_gold = self.state.bank_gold if self.state else None
         pending_items = self.state.pending_items if self.state else None
+        active_events = self._fetch_active_events(client)
         return WorldState.from_character_schema(
             last_result.data,
             bank_items=bank_items,
             bank_gold=bank_gold,
             pending_items=pending_items,
+            active_events=active_events,
         )
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:

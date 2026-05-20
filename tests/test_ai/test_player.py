@@ -264,8 +264,11 @@ class TestFetchWorldState:
         player.state = None
         char = make_char_schema()
         client = MagicMock()
+        empty_events = MagicMock()
+        empty_events.data = []
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-            state = player._fetch_world_state(client)
+            with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                state = player._fetch_world_state(client)
         assert isinstance(state, WorldState)
 
     def test_preserves_bank_state_from_current_state(self):
@@ -273,8 +276,11 @@ class TestFetchWorldState:
         player.state = make_state(bank_items={"gold": 100}, bank_gold=50)
         char = make_char_schema()
         client = MagicMock()
+        empty_events = MagicMock()
+        empty_events.data = []
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-            state = player._fetch_world_state(client)
+            with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                state = player._fetch_world_state(client)
         assert state.bank_items == {"gold": 100}
 
     def test_raises_on_none_response(self):
@@ -355,10 +361,13 @@ class TestExecute:
         from artifactsmmo_cli.ai.actions.movement import MoveAction
         action = MoveAction(x=3, y=5)
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("fail")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                new_state, outcome = player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:other"
@@ -372,6 +381,8 @@ class TestExecute:
         from artifactsmmo_cli.ai.actions.movement import MoveAction
         action = MoveAction(x=3, y=5)
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         import io
         from contextlib import redirect_stdout
@@ -379,7 +390,8 @@ class TestExecute:
         with redirect_stdout(buf):
             with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("HTTP 499: Character in cooldown")):
                 with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                    new_state, outcome = player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                        new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:cooldown"
@@ -398,10 +410,13 @@ class TestExecute:
         action = MoveAction(x=3, y=5)
         char = make_char_schema()
         net_err = httpx.ConnectError("DNS lookup failed")
+        empty_events = MagicMock()
+        empty_events.data = []
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=net_err):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                new_state, outcome = player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:network"
@@ -442,10 +457,13 @@ class TestExecute:
         from artifactsmmo_cli.ai.actions.combat import FightAction
         action = FightAction(monster_code="yellow_slime", locations=frozenset({(1, 1)}))
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         with patch.object(action, "execute", side_effect=RuntimeError("fight_lost: yellow_slime (turns=3)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                new_state, outcome = player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    new_state, outcome = player._execute(action, client)
 
         assert outcome == "error:fight_lost"
         assert isinstance(new_state, WorldState)
@@ -665,12 +683,15 @@ class TestExecuteHttp496BankLock:
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0))
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
                    side_effect=RuntimeError("HTTP 496 (locked bank_deposit achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
-                    player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                        player._execute(action, client)
 
         assert player._bank_accessible is False
         assert player._bank_blocked_since is not None
@@ -684,12 +705,15 @@ class TestExecuteHttp496BankLock:
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0))
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         # No achievement code in error message — no match for the regex
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
                    side_effect=RuntimeError("HTTP 496 bank access denied")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    player._execute(action, client)
 
         assert player._bank_accessible is False
         assert player._bank_unlock_monster is None
@@ -703,12 +727,15 @@ class TestExecuteHttp496BankLock:
         from artifactsmmo_cli.ai.actions.movement import MoveAction
         action = MoveAction(x=1, y=0)
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         # HTTP 496 on a non-bank action — bank_accessible must NOT be changed
         with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                    side_effect=RuntimeError("HTTP 496 some unrelated error")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    player._execute(action, client)
 
         assert player._bank_accessible is True  # unchanged
 
@@ -722,6 +749,8 @@ class TestExecuteHttp496BankLock:
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0))
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         resolve_calls = []
 
@@ -734,7 +763,8 @@ class TestExecuteHttp496BankLock:
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
                    side_effect=RuntimeError("HTTP 496 (myach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    player._execute(action, client)
 
         assert resolve_calls == ["myach"]
         assert player._bank_unlock_monster == "skeleton"
@@ -750,6 +780,8 @@ class TestExecuteHttp496BankLock:
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0))
         char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
 
         resolve_calls = []
 
@@ -762,7 +794,8 @@ class TestExecuteHttp496BankLock:
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
                    side_effect=RuntimeError("HTTP 496 (newach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
-                player._execute(action, client)
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    player._execute(action, client)
 
         # resolve should NOT be called since monster is already set
         assert resolve_calls == []
@@ -1076,6 +1109,7 @@ def test_fetch_world_state_retries_on_404(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.player.get_character", fake_get_character)
     monkeypatch.setattr("time.sleep", lambda _: None)  # don't actually wait
+    # get_all_active_events is only reached after a successful get_character; not needed here
 
     player = GamePlayer(character="TestChar")
     with pytest.raises(RuntimeError) as exc:
