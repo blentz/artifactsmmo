@@ -60,6 +60,34 @@ class TestUsefulQuantityCap:
         cap = useful_quantity_cap("sap", state, gd)
         assert cap >= 1
 
+    def test_equippable_craftable_capped_at_one(self):
+        """Equippable craftables (weapon/armor/ring) cap at 1 — keep a single
+        spare for the optimizer's swap pool, discard the rest. We don't need
+        a hoard of duplicate daggers."""
+        gd = GameData()
+        gd._item_stats = {"copper_dagger": ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1)}
+        gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}  # not a recipe ingredient
+        state = make_state(level=5, inventory={"copper_dagger": 3})
+        assert useful_quantity_cap("copper_dagger", state, gd) == 1
+        assert overstocked_items(state, gd) == {"copper_dagger": 2}
+
+    def test_equippable_cap_yields_to_active_task(self):
+        """...unless a task requires more — task_cap overrides the equippable
+        floor so the bot keeps enough to complete an items task."""
+        gd = GameData()
+        gd._item_stats = {"copper_dagger": ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1)}
+        gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+        state = make_state(level=5, inventory={"copper_dagger": 3},
+                           task_code="copper_dagger", task_type="items",
+                           task_total=10, task_progress=2)
+        # Task needs 8 more → cap 8, nothing overstocked at 3 held.
+        assert useful_quantity_cap("copper_dagger", state, gd) == 8
+        assert "copper_dagger" not in overstocked_items(state, gd)
+
 
 class TestOverstockedItems:
     def test_only_returns_items_over_cap(self):
