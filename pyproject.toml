@@ -42,6 +42,7 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["F", "I", "UP", "E", "W"]
+ignore = ["UP017"]  # repo convention: timezone.utc (not datetime.UTC)
 
 [tool.mypy]
 python_version = "3.13"
