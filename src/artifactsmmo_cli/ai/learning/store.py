@@ -1,5 +1,6 @@
 """SQLModel-backed learning store for autoregressive GOAP planning."""
 
+import json
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path
@@ -210,6 +211,33 @@ class LearningStore:
                 return list(s.exec(stmt))
         except SQLAlchemyError:
             return []
+
+    def skill_xp_per_cycle(self, skill: str, window: int = 100) -> float | None:
+        """Mean positive per-cycle XP gain for `skill` over the most recent `window` cycles.
+
+        Only cycles with a positive delta for the given skill are included.
+        Returns None when no such data exists (caller falls back to a default).
+        """
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.delta_skill_xp_json)
+                    .where(col(Cycle.character) == self._character)
+                    .order_by(col(Cycle.id).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            values: list[int] = []
+            for raw in rows:
+                delta: dict[str, int] = json.loads(raw)
+                xp = delta.get(skill, 0)
+                if xp > 0:
+                    values.append(xp)
+            if not values:
+                return None
+            return float(sum(values)) / len(values)
+        except SQLAlchemyError:
+            return None
 
     def sample_count(self, action_repr: str) -> int:
         """Number of cycles recorded for this action_repr and the store's character."""

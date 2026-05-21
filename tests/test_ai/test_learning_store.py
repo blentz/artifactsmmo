@@ -465,3 +465,137 @@ def test_task_reward_value_mean_improves_with_history(tmp_path):
     assert store.mean_task_reward_value(default=5.0) == 150.0
     assert store.task_reward_sample_count() == 2
     store.close()
+
+
+class TestSkillXpPerCycle:
+    def test_returns_none_when_no_cycles(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        result = store.skill_xp_per_cycle("alchemy")
+        store.close()
+        assert result is None
+
+    def test_returns_none_when_no_positive_deltas_for_skill(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        # Insert cycles with only mining XP, not alchemy
+        with SqlSession(store._engine) as s:
+            s.add(Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id=store._session_id, cycle_index=0,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"mining": 3}',
+            ))
+            s.commit()
+        result = store.skill_xp_per_cycle("alchemy")
+        store.close()
+        assert result is None
+
+    def test_returns_mean_positive_deltas_for_skill(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        # Insert 3 cycles: alchemy 5, alchemy 15, mining 3 (no alchemy)
+        with SqlSession(store._engine) as s:
+            s.add(Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id=store._session_id, cycle_index=0,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 5}',
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:01+00:00",
+                session_id=store._session_id, cycle_index=1,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 15}',
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:02+00:00",
+                session_id=store._session_id, cycle_index=2,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"mining": 3}',
+            ))
+            s.commit()
+        result = store.skill_xp_per_cycle("alchemy")
+        store.close()
+        assert result == 10.0  # mean of 5 and 15
+
+    def test_returns_mean_for_mining(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        with SqlSession(store._engine) as s:
+            s.add(Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id=store._session_id, cycle_index=0,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 5}',
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:01+00:00",
+                session_id=store._session_id, cycle_index=1,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"mining": 3}',
+            ))
+            s.commit()
+        result = store.skill_xp_per_cycle("mining")
+        store.close()
+        assert result == 3.0
+
+    def test_zero_delta_is_excluded(self, tmp_db_path):
+        """Cycles with delta of 0 for the skill should not count."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        with SqlSession(store._engine) as s:
+            s.add(Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id=store._session_id, cycle_index=0,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 0}',
+            ))
+            s.commit()
+        result = store.skill_xp_per_cycle("alchemy")
+        store.close()
+        assert result is None
+
+    def test_window_limits_rows_considered(self, tmp_db_path):
+        """Only the most recent `window` cycles are considered."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        with SqlSession(store._engine) as s:
+            # Insert 3 old cycles with alchemy=100
+            for i in range(3):
+                s.add(Cycle(
+                    ts=f"2026-05-17T00:00:{i:02d}+00:00",
+                    session_id=store._session_id, cycle_index=i,
+                    character="testchar", outcome="ok",
+                    delta_skill_xp_json='{"alchemy": 100}',
+                ))
+            # Insert 2 recent cycles with alchemy=10
+            for i in range(3, 5):
+                s.add(Cycle(
+                    ts=f"2026-05-17T00:01:{i:02d}+00:00",
+                    session_id=store._session_id, cycle_index=i,
+                    character="testchar", outcome="ok",
+                    delta_skill_xp_json='{"alchemy": 10}',
+                ))
+            s.commit()
+        # window=2 should only see the 2 most recent cycles (alchemy=10 each)
+        result = store.skill_xp_per_cycle("alchemy", window=2)
+        store.close()
+        assert result == 10.0
+
+    def test_filters_by_character(self, tmp_db_path):
+        """skill_xp_per_cycle only considers cycles for the store's character."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        with SqlSession(store._engine) as s:
+            # cycle for a different character
+            s.add(Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id=store._session_id, cycle_index=0,
+                character="villain", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 50}',
+            ))
+            s.commit()
+        result = store.skill_xp_per_cycle("alchemy")
+        store.close()
+        assert result is None
