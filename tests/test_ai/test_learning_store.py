@@ -445,3 +445,13 @@ class TestGAMigration:
         cols = {row[1] for row in conn.execute("PRAGMA table_info(cycles)")}
         conn.close()
         assert "delta_skill_xp_json" in cols
+
+
+def test_records_and_returns_skill_max_xp_observations(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+    store.record_skill_max_xp("alchemy", 1, 150)
+    store.record_skill_max_xp("alchemy", 2, 220)
+    store.record_skill_max_xp("alchemy", 1, 150)  # idempotent on (skill, level)
+    obs = store.skill_max_xp_observations("alchemy")
+    store.close()
+    assert obs == {1: 150, 2: 220}

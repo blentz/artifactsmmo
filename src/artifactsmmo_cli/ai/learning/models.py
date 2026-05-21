@@ -110,3 +110,16 @@ class Blocker(BlockerBase, table=True):
     """ORM-persisted blocker."""
 
     __tablename__ = "blockers"
+
+
+class SkillXpObservation(SQLModel, table=True):
+    """Observed `<skill>_max_xp` (XP to reach the next level) at a given level,
+    per character. One row per (character, skill, level); last write wins."""
+
+    __tablename__ = "skill_xp_observations"
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    skill: str = Field(index=True)
+    level: int
+    max_xp: int

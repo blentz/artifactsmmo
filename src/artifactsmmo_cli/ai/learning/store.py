@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session
+from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session, SkillXpObservation
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 
@@ -305,5 +305,43 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+    def record_skill_max_xp(self, skill: str, level: int, max_xp: int) -> None:
+        """Upsert observed max_xp for (self._character, skill, level). Last write wins."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(SkillXpObservation).where(
+                    SkillXpObservation.character == self._character,
+                    SkillXpObservation.skill == skill,
+                    SkillXpObservation.level == level,
+                )
+                existing = s.exec(stmt).first()
+                if existing is not None:
+                    existing.max_xp = max_xp
+                    s.add(existing)
+                else:
+                    s.add(SkillXpObservation(
+                        character=self._character,
+                        skill=skill,
+                        level=level,
+                        max_xp=max_xp,
+                    ))
+                s.commit()
+        except SQLAlchemyError:
+            pass
+
+    def skill_max_xp_observations(self, skill: str) -> dict[int, int]:
+        """Return {level: max_xp} for all observed (self._character, skill) rows."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(SkillXpObservation).where(
+                    SkillXpObservation.character == self._character,
+                    SkillXpObservation.skill == skill,
+                )
+                rows = list(s.exec(stmt))
+            return {row.level: row.max_xp for row in rows}
+        except SQLAlchemyError:
+            return {}
+
     def close(self) -> None:
         self._engine.dispose()
+
