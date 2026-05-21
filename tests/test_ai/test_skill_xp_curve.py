@@ -1,6 +1,10 @@
 from artifactsmmo_cli.ai.learning.skill_xp_curve import DEFAULT_GROWTH_RATIO, SkillXpCurve
 
 
+def test_required_xp_empty_curve_returns_zero():
+    assert SkillXpCurve(observed={}).required_xp(3) == 0
+
+
 def test_required_xp_uses_observed_value():
     curve = SkillXpCurve(observed={1: 100, 2: 200})
     assert curve.required_xp(1) == 100

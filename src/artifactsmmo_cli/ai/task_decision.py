@@ -35,9 +35,9 @@ def task_decision(state: WorldState, game_data: GameData,
         return PIVOT
     skill_cycles = curve.cycles_to_level(req.current_level, req.required_level,
                                          DEFAULT_SKILL_XP_PER_CYCLE)
-    if skill_cycles == float("inf"):
-        return PIVOT
+    # task_requirement returns None when task_total == 0, so total_cycles >= 1 here
+    # (skill_cycles >= 0 + task_total >= 1) — no divide-by-zero guard needed.
     total_cycles = skill_cycles + float(state.task_total)
     reward = history.mean_task_reward_value(default=DEFAULT_TASK_REWARD_VALUE)
-    skill_up_vpc = reward / total_cycles if total_cycles > 0 else 0.0
+    skill_up_vpc = reward / total_cycles
     return PURSUE if skill_up_vpc >= DEFAULT_COIN_VALUE_GOLD else PIVOT
