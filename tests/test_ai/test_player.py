@@ -190,9 +190,17 @@ class TestBuildGoals:
         # Must be the full recipe quantity — not (6 - 2 = 4)
         assert gather_goals[0]._needed == {"copper_ore": 6}
 
-    def test_level_skill_goal_added_for_items_task_gating_skill(self):
-        """_build_goals surfaces LevelSkillGoal for the active items task's gating skill."""
-        player = GamePlayer(character="hero")
+    def test_level_skill_goal_added_for_items_task_gating_skill(self, tmp_path):
+        """_build_goals surfaces LevelSkillGoal for the active items task's gating skill
+        when task_decision returns PURSUE (seeded with gap-of-1 observations + high reward)."""
+        from artifactsmmo_cli.ai.learning.store import LearningStore
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # Seed observations: alchemy levels 1-4 with cheap max_xp, high reward
+        # so task_decision returns PURSUE (mirrors test_task_decision.py's PURSUE test).
+        for lvl in (1, 2, 3, 4):
+            store.record_skill_max_xp("alchemy", lvl, 10)
+        store.record_task_reward_value(100000.0)
+        player = GamePlayer(character="hero", history=store)
         gd = GameData()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
@@ -208,17 +216,20 @@ class TestBuildGoals:
         gd._crafting_recipes = {"small_health_potion": {"sunflower": 3}}
         gd._resource_skill = {}
         player.game_data = gd
-        # Character has alchemy 1 but task needs crafting_level 5
+        # Character has alchemy 4 and task needs crafting_level 5 (gap of 1, observed)
         player.state = make_state(
             level=3,
             task_code="small_health_potion",
             task_type="items",
-            task_total=29,
+            task_total=1,
             task_progress=0,
-            skills={"alchemy": 1},
+            skills={"alchemy": 4},
         )
-        goals = player._build_goals()
-        assert any(repr(g) == "LevelSkill(alchemy->5)" for g in goals)
+        try:
+            goals = player._build_goals()
+            assert any(repr(g) == "LevelSkill(alchemy->5)" for g in goals)
+        finally:
+            store.close()
 
 
 class TestWaitForCooldown:

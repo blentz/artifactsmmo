@@ -3,7 +3,7 @@
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.task_feasibility import task_requirement
+from artifactsmmo_cli.ai.task_decision import PIVOT, task_decision
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -20,7 +20,7 @@ class TaskCancelGoal(Goal):
               history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
-        return 12.0 if task_requirement(state, game_data) is not None else 0.0
+        return 12.0 if task_decision(state, game_data, history) == PIVOT else 0.0
 
     def is_satisfied(self, state: WorldState) -> bool:
         return not state.task_code or state.task_total == 0

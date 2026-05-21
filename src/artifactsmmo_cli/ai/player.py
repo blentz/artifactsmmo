@@ -63,6 +63,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
+from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
@@ -994,10 +995,13 @@ class GamePlayer:
                 goals.append(LevelSkillGoal(skill_name=skill, target_level=target))
 
         # Task-gating skill: if the active items task needs a crafting skill the
-        # character lacks, surface a LevelSkillGoal so the planner can grind it
-        # as a prerequisite to completing the task.
+        # character lacks, AND the cost-analysis decision says PURSUE, surface a
+        # LevelSkillGoal so the planner can grind it as a prerequisite to
+        # completing the task. When the decision is PIVOT, TaskCancelGoal fires
+        # instead and no LevelSkill goal is added.
         task_req = task_requirement(self.state, self.game_data)
-        if task_req is not None and task_req.skill != "combat":
+        if (task_req is not None and task_req.skill != "combat"
+                and task_decision(self.state, self.game_data, self.history) == PURSUE):
             goals.append(LevelSkillGoal(skill_name=task_req.skill,
                                         target_level=task_req.required_level))
 
