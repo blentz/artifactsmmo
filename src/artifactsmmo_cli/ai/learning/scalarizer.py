@@ -87,7 +87,9 @@ def expected_coin_value_with_prices(
             total_value += qty_i * sell_back_price.get(str(code), 0)
     if coin_calls == 0:
         return DEFAULT_COIN_VALUE_GOLD
-    # Each call burns 3 coins (constant from _EXCHANGE_COST).
+    # Rough gold-per-coin estimate. NOTE: divisor assumes ~3 coins/call, which
+    # is a stale heuristic (real exchange cost is learned at runtime, not 3).
+    # Tracked separately from the 478-loop fix; needs recorded coin deltas.
     return total_value / (coin_calls * 3)
 
 

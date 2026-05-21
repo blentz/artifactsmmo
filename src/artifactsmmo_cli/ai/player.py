@@ -141,6 +141,12 @@ class GamePlayer:
         # until it is satisfied or can no longer plan, so the selector stops
         # thrashing between near-equal-priority goals every cycle.
         self._committed_goal_name: str | None = None
+        # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
+        # API does not expose the per-exchange cost as data, so we discover it
+        # from HTTP 478 ("missing items") failures: raise the bound past any coin
+        # count that failed, and pin it to the exact cost once an exchange
+        # succeeds. Starts at 1 (optimistic) — never a hardcoded cost.
+        self._task_exchange_min_coins: int = 1
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
         self._last_path_plan: PathPlan | None = None
@@ -351,6 +357,7 @@ class GamePlayer:
                     cooldown_remaining = max(0.0, (new_state.cooldown_expires - now).total_seconds())
                 predicted = action.cost(prev_state_for_learning, game_data, self.history)
                 cycles_to_satisfy = None
+                self._learn_task_exchange_cost(action, prev_state_for_learning, new_state, outcome)
                 if outcome == "ok" and selected_goal.is_satisfied(new_state):
                     cycles_to_satisfy = self._compute_cycles_to_satisfy(repr(selected_goal), self._cycle_counter)
                     # Goal achieved — release the commitment so the next cycle
@@ -785,7 +792,7 @@ class GamePlayer:
             DepositAllAction(bank_location=bank, accessible=self._bank_accessible),
             AcceptTaskAction(taskmaster_location=taskmaster),
             CompleteTaskAction(taskmaster_location=taskmaster),
-            TaskExchangeAction(taskmaster_location=taskmaster),
+            TaskExchangeAction(taskmaster_location=taskmaster, min_coins=self._task_exchange_min_coins),
             TaskCancelAction(taskmaster_location=taskmaster),
             ClaimPendingItemAction(),
         ]
@@ -942,7 +949,7 @@ class GamePlayer:
             ClaimPendingGoal(),
             CompleteTaskGoal(),
             AcceptTaskGoal(),
-            TaskExchangeGoal(),
+            TaskExchangeGoal(min_coins=self._task_exchange_min_coins),
             TaskCancelGoal(),
             LowYieldCancelGoal(),
             # If a remembered blocker requires a higher character level than
@@ -1258,6 +1265,25 @@ class GamePlayer:
 
         self._committed_goal_name = None
         return None, [], goals_tried
+
+    def _learn_task_exchange_cost(self, action: Action, prev_state: WorldState,
+                                  new_state: WorldState, outcome: str) -> None:
+        """Discover the taskmaster exchange cost from outcomes — never hardcoded.
+
+        The API does not expose the per-exchange coin cost as data. HTTP 478
+        ("missing items") means the coin count we tried was too low, so raise the
+        minimum past it. A success reveals the exact cost via the coin delta, so
+        pin the minimum to that.
+        """
+        if not isinstance(action, TaskExchangeAction):
+            return
+        before = prev_state.inventory.get("tasks_coin", 0)
+        if outcome == "error:HTTP_478":
+            self._task_exchange_min_coins = max(self._task_exchange_min_coins, before + 1)
+        elif outcome == "ok":
+            spent = before - new_state.inventory.get("tasks_coin", 0)
+            if spent > 0:
+                self._task_exchange_min_coins = spent
 
     def _note_goal_selection(self, goal_repr: str, cycle_index: int) -> None:
         """Record when a goal was first selected. Idempotent on re-selection."""

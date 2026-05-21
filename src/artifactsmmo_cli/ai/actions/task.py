@@ -17,9 +17,6 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 _TASKS_COIN = "tasks_coin"
 
-# API requires 3 tasks_coin per exchange; fewer returns HTTP 478 (missing item).
-_EXCHANGE_COST = 3
-
 _PENDING_TASK = "__pending__"
 
 
@@ -154,17 +151,21 @@ class TaskExchangeAction(Action):
     tags: ClassVar[frozenset[str]] = frozenset({"task"})
 
     taskmaster_location: tuple[int, int]
+    # Minimum coins worth attempting an exchange with. The real per-exchange
+    # cost is not exposed as API data, so the player learns it empirically from
+    # HTTP 478 ("missing items") failures and injects the current lower bound
+    # here. Never hardcode the cost.
+    min_coins: int = 1
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        # API burns exactly _EXCHANGE_COST coins per call; less = HTTP 478.
         # Only inventory counts at execute time (bank coins must be withdrawn
-        # separately first).
-        return state.inventory.get(_TASKS_COIN, 0) >= _EXCHANGE_COST
+        # separately first). Fewer than the learned minimum returns HTTP 478.
+        return state.inventory.get(_TASKS_COIN, 0) >= self.min_coins
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.taskmaster_location
         new_inventory = dict(state.inventory)
-        remaining = new_inventory.get(_TASKS_COIN, 0) - _EXCHANGE_COST
+        remaining = new_inventory.get(_TASKS_COIN, 0) - self.min_coins
         if remaining <= 0:
             new_inventory.pop(_TASKS_COIN, None)
         else:
