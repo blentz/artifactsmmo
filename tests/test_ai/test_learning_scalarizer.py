@@ -81,7 +81,9 @@ class TestExpectedCoinValueWithPrices:
         assert v == DEFAULT_COIN_VALUE_GOLD
 
     def test_aggregates_drop_value_per_coin(self, tmp_path):
-        """One TaskExchange drops 6 apples worth 2 gold each. 12 gold / 3 coins = 4 gold/coin."""
+        """One exchange received 6 apples worth 2 gold; coins spent derived from
+        the inventory delta. received=6, delta_inv_used = 6 - 6 spent = 0, so
+        spent=6 -> 12 gold / 6 coins = 2 gold/coin."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         store.start_session()
         with Session(store._engine) as s:
@@ -100,11 +102,50 @@ class TestExpectedCoinValueWithPrices:
                 action_class="TaskExchangeAction",
                 outcome="ok",
                 drops_json=json.dumps({"apple": 6}),
+                delta_inv_used=0,  # +6 apples, -6 coins
             ))
             s.commit()
         v = expected_coin_value_with_prices(store, {"apple": 2})
         store.close()
-        assert abs(v - 4.0) < 0.01
+        assert abs(v - 2.0) < 0.01
+
+    def test_coin_cost_derived_not_hardcoded(self, tmp_path):
+        """A different exchange spends 2 coins for 1 apple: received=1,
+        delta_inv_used = 1 - 2 = -1, spent=2 -> 2 gold / 2 coins = 1 gold/coin.
+        Proves the divisor comes from data, not a constant."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id,
+                               started_at="2026-05-18T00:00:00Z", character="hero"))
+            s.add(Cycle(
+                ts="2026-05-18T00:00:01Z", session_id=store._session_id, cycle_index=0,
+                character="hero", selected_goal="TaskExchange", action_repr="TaskExchange",
+                action_class="TaskExchangeAction", outcome="ok",
+                drops_json=json.dumps({"apple": 1}), delta_inv_used=-1,
+            ))
+            s.commit()
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert abs(v - 1.0) < 0.01
+
+    def test_cycle_without_inventory_delta_falls_back_to_default(self, tmp_path):
+        """delta_inv_used unknown -> can't derive coins spent -> default."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id,
+                               started_at="2026-05-18T00:00:00Z", character="hero"))
+            s.add(Cycle(
+                ts="2026-05-18T00:00:01Z", session_id=store._session_id, cycle_index=0,
+                character="hero", selected_goal="TaskExchange", action_repr="TaskExchange",
+                action_class="TaskExchangeAction", outcome="ok",
+                drops_json=json.dumps({"apple": 6}), delta_inv_used=None,
+            ))
+            s.commit()
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert v == DEFAULT_COIN_VALUE_GOLD
 
     def test_unknown_items_contribute_zero(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
@@ -125,12 +166,77 @@ class TestExpectedCoinValueWithPrices:
                 action_class="TaskExchangeAction",
                 outcome="ok",
                 drops_json=json.dumps({"unknown_artifact": 1}),
+                delta_inv_used=-5,  # +1 item, -6 coins
             ))
             s.commit()
         v = expected_coin_value_with_prices(store, {"apple": 2})
         store.close()
-        # No known sell price → 0 gold / 3 coins = 0
+        # No known sell price → 0 gold / 6 coins spent = 0
         assert v == 0.0
+
+    @staticmethod
+    def _store_one_cycle(tmp_path, *, drops_json, delta_inv_used, outcome="ok",
+                         action_repr="TaskExchange"):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id,
+                               started_at="2026-05-18T00:00:00Z", character="hero"))
+            s.add(Cycle(
+                ts="2026-05-18T00:00:01Z", session_id=store._session_id, cycle_index=0,
+                character="hero", selected_goal="TaskExchange", action_repr=action_repr,
+                action_class="TaskExchangeAction", outcome=outcome,
+                drops_json=drops_json, delta_inv_used=delta_inv_used,
+            ))
+            s.commit()
+        return store
+
+    def test_non_ok_cycle_is_skipped(self, tmp_path):
+        store = self._store_one_cycle(
+            tmp_path, drops_json=json.dumps({"apple": 6}), delta_inv_used=0,
+            outcome="error:HTTP_478")
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert v == DEFAULT_COIN_VALUE_GOLD
+
+    def test_drops_json_not_a_dict_is_skipped(self, tmp_path):
+        store = self._store_one_cycle(tmp_path, drops_json="[]", delta_inv_used=-6)
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert v == DEFAULT_COIN_VALUE_GOLD
+
+    def test_malformed_drops_json_is_skipped(self, tmp_path):
+        store = self._store_one_cycle(tmp_path, drops_json="{not json", delta_inv_used=-6)
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert v == DEFAULT_COIN_VALUE_GOLD  # only cycle unusable -> default
+
+    def test_non_integer_quantity_is_ignored(self, tmp_path):
+        # apple qty is non-numeric -> not counted in received or value; the
+        # numeric coin reward keeps received>0. received=0 here -> coins_spent
+        # = 0 - (-6) = 6, value 0 -> 0 gold/coin.
+        store = self._store_one_cycle(
+            tmp_path, drops_json=json.dumps({"apple": "lots"}), delta_inv_used=-6)
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert v == 0.0
+
+    def test_nonpositive_coins_spent_is_skipped(self, tmp_path):
+        # received=2, delta_inv_used=5 -> coins_spent = 2-5 = -3 (implausible) -> skip.
+        store = self._store_one_cycle(
+            tmp_path, drops_json=json.dumps({"apple": 2}), delta_inv_used=5)
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert v == DEFAULT_COIN_VALUE_GOLD
+
+    def test_received_coins_count_for_delta_not_value(self, tmp_path):
+        # Reward of 1 apple + 2 tasks_coin: received=3, delta_inv_used = 3 - 6
+        # spent = -3. coins_spent = 3-(-3)=6. Value counts only the apple.
+        store = self._store_one_cycle(
+            tmp_path, drops_json=json.dumps({"apple": 1, "tasks_coin": 2}), delta_inv_used=-3)
+        v = expected_coin_value_with_prices(store, {"apple": 2})
+        store.close()
+        assert abs(v - (2.0 / 6.0)) < 0.01  # 1 apple * 2 gold / 6 coins
 
 
 class TestWeightConstants:

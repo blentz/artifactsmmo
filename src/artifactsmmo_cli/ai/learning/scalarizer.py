@@ -53,9 +53,12 @@ def expected_coin_value_with_prices(
     """Estimated gold-equivalent value of one tasks_coin.
 
     Looks at past TaskExchange outcomes (cycles where action_repr is
-    "TaskExchange" and outcome=="ok"), sums the NPC sell-back gold value
-    of items received, divides by 3 (coins burned per call). Returns
-    DEFAULT_COIN_VALUE_GOLD when there's no history.
+    "TaskExchange" and outcome=="ok"), sums the NPC sell-back gold value of
+    items received, and divides by the coins actually spent. The per-exchange
+    coin cost is NOT API data, so it is derived per cycle from the recorded
+    inventory change: a TaskExchange only adds rewards and removes coins, so
+    ``coins_spent = received_item_count - delta_inv_used``. Returns
+    DEFAULT_COIN_VALUE_GOLD when there's no usable history.
 
     `sell_back_price`: `{item_code: gold_per_unit}` for every item an NPC
     will buy back from the player. Caller builds it from
@@ -63,11 +66,12 @@ def expected_coin_value_with_prices(
     """
     rows = store.recent_goal_cycles("TaskExchange", window=window)
     total_value = 0.0
-    coin_calls = 0
+    total_coins_spent = 0
     for cycle in rows:
         if cycle.action_repr != "TaskExchange" or cycle.outcome != "ok":
             continue
-        coin_calls += 1
+        if cycle.delta_inv_used is None:
+            continue  # can't derive coins spent without the inventory delta
         raw = cycle.drops_json or "{}"
         try:
             drops = json.loads(raw)
@@ -75,22 +79,30 @@ def expected_coin_value_with_prices(
             continue
         if not isinstance(drops, dict):
             continue
+        received = 0
+        cycle_value = 0.0
         for code, qty in drops.items():
-            if code == "tasks_coin":
-                # Coins received as a reward shouldn't count as value
-                # (we're computing the value of spending one, not earning one).
-                continue
             try:
                 qty_i = int(qty)
             except (TypeError, ValueError):
                 continue
-            total_value += qty_i * sell_back_price.get(str(code), 0)
-    if coin_calls == 0:
+            received += qty_i
+            if code == "tasks_coin":
+                # Coins received as a reward aren't value (we price spending a
+                # coin, not earning one) — but they DO count toward the
+                # inventory delta, so they're included in `received` above.
+                continue
+            cycle_value += qty_i * sell_back_price.get(str(code), 0)
+        # TaskExchange adds `received` items and removes the coins spent, so
+        # delta_inv_used = received - coins_spent  =>  coins_spent = received - delta.
+        coins_spent = received - cycle.delta_inv_used
+        if coins_spent <= 0:
+            continue  # implausible (bad/partial data) — skip
+        total_value += cycle_value
+        total_coins_spent += coins_spent
+    if total_coins_spent == 0:
         return DEFAULT_COIN_VALUE_GOLD
-    # Rough gold-per-coin estimate. NOTE: divisor assumes ~3 coins/call, which
-    # is a stale heuristic (real exchange cost is learned at runtime, not 3).
-    # Tracked separately from the 478-loop fix; needs recorded coin deltas.
-    return total_value / (coin_calls * 3)
+    return total_value / total_coins_spent
 
 
 def _max_sell_back_price(game_data: GameData) -> dict[str, int]:
