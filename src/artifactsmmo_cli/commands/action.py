@@ -1,12 +1,20 @@
 """Character action commands."""
 
+import math
 import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 import typer
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.destination_schema import DestinationSchema
+from artifactsmmo_api_client.models.equip_schema import EquipSchema
+from artifactsmmo_api_client.models.item_slot import ItemSlot
+from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
+from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
@@ -140,7 +148,7 @@ def execute_gather_action(character: str) -> CLIResponse[Any]:
         api = ClientManager().api
         response = api.action_gathering(name=character)
         return handle_api_response(response, f"{character} gathered resources")
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         return handle_api_error(e)
 
 
@@ -151,7 +159,7 @@ def execute_fight_action(character: str) -> CLIResponse[Any]:
         api = ClientManager().api
         response = api.action_fight(name=character)
         return handle_api_response(response, f"{character} engaged in combat")
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         return handle_api_error(e)
 
 
@@ -162,7 +170,7 @@ def execute_rest_action(character: str) -> CLIResponse[Any]:
         api = ClientManager().api
         response = api.action_rest(name=character)
         return handle_api_response(response, f"{character} is resting")
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         return handle_api_error(e)
 
 
@@ -187,9 +195,6 @@ def move_character(
 
         api = ClientManager().api
 
-        # Import the destination schema
-        from artifactsmmo_api_client.models.destination_schema import DestinationSchema
-
         destination = DestinationSchema(x=x, y=y)
         response = api.action_move(name=character, body=destination)
 
@@ -202,7 +207,7 @@ def move_character(
             console.print(format_error_message(cli_response.error or "Move failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -234,7 +239,7 @@ def fight_monster(character: str = typer.Argument(..., help="Character name")) -
             console.print(format_error_message(cli_response.error or "Combat failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -266,7 +271,7 @@ def gather_resource(character: str = typer.Argument(..., help="Character name"))
             console.print(format_error_message(cli_response.error or "Gathering failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -293,7 +298,7 @@ def rest_character(character: str = typer.Argument(..., help="Character name")) 
             console.print(format_error_message(cli_response.error or "Rest failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -318,10 +323,6 @@ def equip_item(
 
         api = ClientManager().api
 
-        # Import the equip schema
-        from artifactsmmo_api_client.models.equip_schema import EquipSchema
-        from artifactsmmo_api_client.models.item_slot import ItemSlot
-
         equip_data = EquipSchema(code=item_code, slot=ItemSlot(slot), quantity=quantity)
         response = api.action_equip_item(name=character, body=equip_data)
 
@@ -334,7 +335,7 @@ def equip_item(
             console.print(format_error_message(cli_response.error or "Equip failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -357,10 +358,6 @@ def unequip_item(
 
         api = ClientManager().api
 
-        # Import the unequip schema
-        from artifactsmmo_api_client.models.item_slot import ItemSlot
-        from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
-
         unequip_data = UnequipSchema(slot=ItemSlot(slot), quantity=quantity)
         response = api.action_unequip_item(name=character, body=unequip_data)
 
@@ -373,7 +370,7 @@ def unequip_item(
             console.print(format_error_message(cli_response.error or "Unequip failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -396,9 +393,6 @@ def use_item(
 
         api = ClientManager().api
 
-        # Import the use item schema
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
-
         use_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = api.action_use_item(name=character, body=use_data)
 
@@ -411,7 +405,7 @@ def use_item(
             console.print(format_error_message(cli_response.error or "Use item failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -447,7 +441,7 @@ def goto_location(
         # Get character's current position
         try:
             start_x, start_y = get_character_position(character)
-        except Exception as e:
+        except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
             console.print(format_error_message(f"Could not get character position: {str(e)}"))
             raise typer.Exit(1)
 
@@ -473,7 +467,7 @@ def goto_location(
                 # Named location
                 try:
                     end_x, end_y = resolve_named_location(parsed_dest, start_x, start_y)
-                except Exception as e:
+                except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
                     console.print(format_error_message(f"Could not find location '{parsed_dest}': {str(e)}"))
                     raise typer.Exit(1)
 
@@ -524,8 +518,6 @@ def goto_location(
                 # Execute move
                 try:
                     api = ClientManager().api
-                    from artifactsmmo_api_client.models.destination_schema import DestinationSchema
-
                     destination_data = DestinationSchema(x=step.x, y=step.y)
                     response = api.action_move(name=character, body=destination_data)
 
@@ -574,7 +566,7 @@ def goto_location(
                         console.print(format_error_message(error_msg))
                         break
 
-                except Exception as e:
+                except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
                     cli_response = handle_api_error(e)
                     if cli_response.cooldown_remaining:
                         cooldown_seconds = cli_response.cooldown_remaining
@@ -605,7 +597,7 @@ def goto_location(
                                     error_msg = cli_response.error or "Move failed after cooldown"
                                     console.print(format_error_message(error_msg))
                                     break
-                            except Exception as retry_e:
+                            except (ValueError, UnexpectedStatus, httpx.HTTPError) as retry_e:
                                 retry_cli_response = handle_api_error(retry_e)
                                 console.print(
                                     format_error_message(
@@ -640,14 +632,12 @@ def goto_location(
                     f"[yellow]⚠ {character} stopped at ({final_x}, {final_y}), "
                     f"target was ({end_x}, {end_y})[/yellow]"
                 )
-        except Exception:
+        except (UnexpectedStatus, httpx.HTTPError):
             console.print("[yellow]⚠ Could not verify final position[/yellow]")
 
-    except Exception as e:
-        if not isinstance(e, typer.Exit):
-            console.print(format_error_message(f"Navigation failed: {str(e)}"))
-            raise typer.Exit(1)
-        raise
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
+        console.print(format_error_message(f"Navigation failed: {str(e)}"))
+        raise typer.Exit(1)
 
 
 @app.command("path")
@@ -673,7 +663,7 @@ def show_path_command(
         # Get character's current position
         try:
             start_x, start_y = get_character_position(character)
-        except Exception as e:
+        except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
             console.print(format_error_message(f"Could not get character position: {str(e)}"))
             raise typer.Exit(1)
 
@@ -699,7 +689,7 @@ def show_path_command(
                 # Named location
                 try:
                     end_x, end_y = resolve_named_location(parsed_dest, start_x, start_y)
-                except Exception as e:
+                except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
                     console.print(format_error_message(f"Could not find location '{parsed_dest}': {str(e)}"))
                     raise typer.Exit(1)
 
@@ -724,11 +714,9 @@ def show_path_command(
             console.print(f"[cyan]Total distance: {path_result.total_distance}[/cyan]")
             console.print(f"[cyan]Estimated time: ~{path_result.estimated_time} seconds[/cyan]")
 
-    except Exception as e:
-        if not isinstance(e, typer.Exit):
-            console.print(format_error_message(f"Path calculation failed: {str(e)}"))
-            raise typer.Exit(1)
-        raise
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
+        console.print(format_error_message(f"Path calculation failed: {str(e)}"))
+        raise typer.Exit(1)
 
 
 @app.command("batch")
@@ -822,8 +810,6 @@ def batch_action(
                         )
 
                         # Wait with countdown - add 1 second for safety and handle float cooldowns
-                        import math
-
                         total_wait_seconds = math.ceil(cooldown_seconds) + 1
                         for remaining in range(total_wait_seconds, 0, -1):
                             progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
@@ -895,8 +881,6 @@ def batch_action(
         if results.failed_actions > 0 and not continue_on_error:
             raise typer.Exit(1)
 
-    except Exception as e:
-        if not isinstance(e, typer.Exit):
-            console.print(format_error_message(f"Batch operation failed: {str(e)}"))
-            raise typer.Exit(1)
-        raise
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
+        console.print(format_error_message(f"Batch operation failed: {str(e)}"))
+        raise typer.Exit(1)

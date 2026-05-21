@@ -1,11 +1,26 @@
 """Bank operation commands."""
 
 import time
-from typing import Dict, List, Optional, Tuple
 
+import httpx
 import typer
+from artifactsmmo_api_client.api.items import get_item_items_code_get
+from artifactsmmo_api_client.api.my_account import (
+    get_bank_details_my_bank_get,
+    get_bank_items_my_bank_items_get,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_buy_bank_expansion_my_name_action_bank_buy_expansion_post,
+    action_deposit_bank_gold_my_name_action_bank_deposit_gold_post,
+    action_deposit_bank_item_my_name_action_bank_deposit_item_post,
+    action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post,
+    action_withdraw_bank_item_my_name_action_bank_withdraw_item_post,
+)
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.deposit_withdraw_gold_schema import DepositWithdrawGoldSchema
+from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.table import Table
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -45,7 +60,7 @@ DEFAULT_KEEP_ITEMS = {
 }
 
 
-def get_character_inventory(character: str) -> List[Dict]:
+def get_character_inventory(character: str) -> list[dict]:
     """Get character's inventory items."""
     try:
         api = ClientManager().api
@@ -65,17 +80,14 @@ def get_character_inventory(character: str) -> List[Dict]:
                     for item in character_data.inventory
                 ]
         return []
-    except Exception:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError):
         return []
 
 
-def get_item_info(item_code: str) -> Optional[Dict]:
+def get_item_info(item_code: str) -> dict | None:
     """Get item information including type and subtype."""
     try:
         client = ClientManager().client
-
-        # Import the API function
-        from artifactsmmo_api_client.api.items import get_item_items_code_get
 
         response = get_item_items_code_get.sync(client=client, code=item_code)
         cli_response = handle_api_response(response)
@@ -91,11 +103,11 @@ def get_item_info(item_code: str) -> Optional[Dict]:
                 "tradeable": getattr(item, "tradeable", True),
             }
         return None
-    except Exception:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError):
         return None
 
 
-def categorize_item(item_info: Dict) -> str:
+def categorize_item(item_info: dict) -> str:
     """Categorize an item based on its type and subtype."""
     # Handle both "type" and "type_" for compatibility
     item_type = (item_info.get("type_", "") or item_info.get("type", "")).lower()
@@ -108,7 +120,7 @@ def categorize_item(item_info: Dict) -> str:
     return "other"
 
 
-def filter_items_by_type(inventory: List[Dict], item_type: str) -> List[Dict]:
+def filter_items_by_type(inventory: list[dict], item_type: str) -> list[dict]:
     """Filter inventory items by type category."""
     filtered_items = []
 
@@ -123,7 +135,7 @@ def filter_items_by_type(inventory: List[Dict], item_type: str) -> List[Dict]:
     return filtered_items
 
 
-def should_keep_item(item_info: Dict, keep_equipment: bool = True, keep_consumables: bool = False) -> bool:
+def should_keep_item(item_info: dict, keep_equipment: bool = True, keep_consumables: bool = False) -> bool:
     """Determine if an item should be kept based on its category."""
     category = categorize_item(item_info)
 
@@ -137,16 +149,10 @@ def should_keep_item(item_info: Dict, keep_equipment: bool = True, keep_consumab
     return False
 
 
-def execute_single_deposit(character: str, item_code: str, quantity: int) -> Tuple[bool, Optional[str], Optional[int]]:
+def execute_single_deposit(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, int | None]:
     """Execute a single deposit operation. Returns (success, error_message, cooldown_remaining)."""
     try:
         client = ClientManager().client
-
-        # Import the simple item schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_deposit_bank_item_my_name_action_bank_deposit_item_post,
-        )
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
         deposit_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync(
@@ -162,7 +168,7 @@ def execute_single_deposit(character: str, item_code: str, quantity: int) -> Tup
         else:
             return False, cli_response.error or "Deposit failed", None
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             return False, None, cli_response.cooldown_remaining
@@ -170,16 +176,10 @@ def execute_single_deposit(character: str, item_code: str, quantity: int) -> Tup
             return False, cli_response.error or str(e), None
 
 
-def execute_single_withdraw(character: str, item_code: str, quantity: int) -> Tuple[bool, Optional[str], Optional[int]]:
+def execute_single_withdraw(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, int | None]:
     """Execute a single withdraw operation. Returns (success, error_message, cooldown_remaining)."""
     try:
         client = ClientManager().client
-
-        # Import the simple item schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_withdraw_bank_item_my_name_action_bank_withdraw_item_post,
-        )
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
         withdraw_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync(
@@ -195,7 +195,7 @@ def execute_single_withdraw(character: str, item_code: str, quantity: int) -> Tu
         else:
             return False, cli_response.error or "Withdrawal failed", None
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             return False, None, cli_response.cooldown_remaining
@@ -209,9 +209,6 @@ def list_bank_items() -> None:
     try:
         client = ClientManager().client
 
-        # Import the API function
-        from artifactsmmo_api_client.api.my_account import get_bank_items_my_bank_items_get
-
         response = get_bank_items_my_bank_items_get.sync(client=client)
 
         cli_response = handle_api_response(response)
@@ -220,7 +217,7 @@ def list_bank_items() -> None:
         else:
             console.print(format_error_message(cli_response.error or "No bank items found"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -231,9 +228,6 @@ def bank_details() -> None:
     """Show bank details including gold and expansion info."""
     try:
         client = ClientManager().client
-
-        # Import the API function
-        from artifactsmmo_api_client.api.my_account import get_bank_details_my_bank_get
 
         response = get_bank_details_my_bank_get.sync(client=client)
 
@@ -247,7 +241,7 @@ def bank_details() -> None:
             console.print(format_error_message(cli_response.error or "Could not get bank details"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -265,12 +259,6 @@ def deposit_gold(
 
         client = ClientManager().client
 
-        # Import the deposit gold schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_deposit_bank_gold_my_name_action_bank_deposit_gold_post,
-        )
-        from artifactsmmo_api_client.models.deposit_withdraw_gold_schema import DepositWithdrawGoldSchema
-
         deposit_data = DepositWithdrawGoldSchema(quantity=amount)
         response = action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync(
             client=client, name=character, body=deposit_data
@@ -285,7 +273,7 @@ def deposit_gold(
             console.print(format_error_message(cli_response.error or "Deposit failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -306,12 +294,6 @@ def withdraw_gold(
 
         client = ClientManager().client
 
-        # Import the withdraw gold schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post,
-        )
-        from artifactsmmo_api_client.models.deposit_withdraw_gold_schema import DepositWithdrawGoldSchema
-
         withdraw_data = DepositWithdrawGoldSchema(quantity=amount)
         response = action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync(
             client=client, name=character, body=withdraw_data
@@ -326,7 +308,7 @@ def withdraw_gold(
             console.print(format_error_message(cli_response.error or "Withdrawal failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -349,12 +331,6 @@ def deposit_item(
 
         client = ClientManager().client
 
-        # Import the simple item schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_deposit_bank_item_my_name_action_bank_deposit_item_post,
-        )
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
-
         deposit_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync(
             client=client, name=character, body=deposit_data
@@ -369,7 +345,7 @@ def deposit_item(
             console.print(format_error_message(cli_response.error or "Deposit failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -392,12 +368,6 @@ def withdraw_item(
 
         client = ClientManager().client
 
-        # Import the simple item schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_withdraw_bank_item_my_name_action_bank_withdraw_item_post,
-        )
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
-
         withdraw_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync(
             client=client, name=character, body=withdraw_data
@@ -412,7 +382,7 @@ def withdraw_item(
             console.print(format_error_message(cli_response.error or "Withdrawal failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -429,11 +399,6 @@ def buy_expansion(character: str = typer.Argument(..., help="Character name")) -
 
         client = ClientManager().client
 
-        # Import the API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_buy_bank_expansion_my_name_action_bank_buy_expansion_post,
-        )
-
         response = action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync(client=client, name=character)
 
         cli_response = handle_api_response(response, "Bank expansion purchased")
@@ -445,7 +410,7 @@ def buy_expansion(character: str = typer.Argument(..., help="Character name")) -
             console.print(format_error_message(cli_response.error or "Expansion failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -457,7 +422,7 @@ def buy_expansion(character: str = typer.Argument(..., help="Character name")) -
 @app.command("deposit-all")
 def deposit_all_items(
     character: str = typer.Argument(..., help="Character name"),
-    item_type: Optional[str] = typer.Option(
+    item_type: str | None = typer.Option(
         None, "--type", help="Filter by item type (resource, consumable, equipment, crafting)"
     ),
     keep_equipment: bool = typer.Option(True, "--keep-equipment/--no-keep-equipment", help="Keep equipment items"),
@@ -546,7 +511,7 @@ def deposit_all_items(
         # Display summary
         _display_operation_summary("Deposit", successful_deposits, failed_deposits)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -565,7 +530,6 @@ def withdraw_all_items(
 
         # Get bank items to find how many we have
         client = ClientManager().client
-        from artifactsmmo_api_client.api.my_account import get_bank_items_my_bank_items_get
 
         response = get_bank_items_my_bank_items_get.sync(client=client)
         cli_response = handle_api_response(response)
@@ -608,7 +572,7 @@ def withdraw_all_items(
             console.print(format_error_message(error or "Withdrawal failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -715,14 +679,14 @@ def smart_exchange(
         # Display summary
         _display_operation_summary("Smart Exchange", successful_deposits, failed_deposits)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
 
 
 def _display_operation_summary(
-    operation_name: str, successful_operations: List[Tuple], failed_operations: List[Tuple]
+    operation_name: str, successful_operations: list[tuple], failed_operations: list[tuple]
 ) -> None:
     """Display a summary of bulk operations."""
     console.print(f"\n[bold]{operation_name} Summary:[/bold]")
@@ -760,6 +724,8 @@ def _display_operation_summary(
     total_attempted = len(successful_operations) + len(failed_operations)
     success_rate = (len(successful_operations) / total_attempted * 100) if total_attempted > 0 else 0
 
-    console.print(
-        f"\n[bold]Overall: {len(successful_operations)}/{total_attempted} operations successful ({success_rate:.1f}%)[/bold]"
+    summary = (
+        f"\n[bold]Overall: {len(successful_operations)}/{total_attempted}"
+        f" operations successful ({success_rate:.1f}%)[/bold]"
     )
+    console.print(summary)

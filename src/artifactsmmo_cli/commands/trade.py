@@ -2,14 +2,30 @@
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
 
+import httpx
 import typer
+from artifactsmmo_api_client.api.grand_exchange import (
+    get_ge_history_grandexchange_history_code_get,
+    get_ge_orders_grandexchange_orders_get,
+)
+from artifactsmmo_api_client.api.my_account import (
+    get_ge_history_my_grandexchange_history_get,
+    get_ge_orders_my_grandexchange_orders_get,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_ge_buy_item_my_name_action_grandexchange_buy_post,
+    action_ge_cancel_order_my_name_action_grandexchange_cancel_post,
+    action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post,
+)
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
+from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
+from artifactsmmo_api_client.models.ge_order_creationr_schema import GEOrderCreationrSchema
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.utils.formatters import (
@@ -30,7 +46,7 @@ console = Console()
 
 
 # Market Analysis Helper Functions
-def calculate_price_stats(orders: List) -> Dict[str, float]:
+def calculate_price_stats(orders: list) -> dict[str, float]:
     """Calculate price statistics from orders."""
     if not orders:
         return {"min": 0, "max": 0, "avg": 0, "median": 0}
@@ -42,7 +58,7 @@ def calculate_price_stats(orders: List) -> Dict[str, float]:
     return {"min": min(prices), "max": max(prices), "avg": statistics.mean(prices), "median": statistics.median(prices)}
 
 
-def calculate_volume_stats(orders: List) -> Dict[str, int]:
+def calculate_volume_stats(orders: list) -> dict[str, int]:
     """Calculate volume statistics from orders."""
     if not orders:
         return {"total_quantity": 0, "total_orders": 0, "avg_quantity": 0}
@@ -57,7 +73,7 @@ def calculate_volume_stats(orders: List) -> Dict[str, int]:
     }
 
 
-def find_arbitrage_opportunities(all_orders: List, min_profit_margin: float = 0.1) -> List[Dict]:
+def find_arbitrage_opportunities(all_orders: list, min_profit_margin: float = 0.1) -> list[dict]:
     """Find potential arbitrage opportunities."""
     opportunities = []
 
@@ -91,7 +107,7 @@ def find_arbitrage_opportunities(all_orders: List, min_profit_margin: float = 0.
     return sorted(opportunities, key=lambda x: x["profit_margin"], reverse=True)
 
 
-def format_market_analysis_table(item_code: str, orders: List, history: List) -> Table:
+def format_market_analysis_table(item_code: str, orders: list, history: list) -> Table:
     """Format market analysis data into a rich table."""
     table = Table(title=f"Market Analysis: {item_code}")
 
@@ -120,7 +136,7 @@ def format_market_analysis_table(item_code: str, orders: List, history: List) ->
     return table
 
 
-def format_price_table(item_code: str, orders: List) -> Table:
+def format_price_table(item_code: str, orders: list) -> Table:
     """Format current prices into a table."""
     table = Table(title=f"Current Prices: {item_code}")
     table.add_column("Price", style="cyan")
@@ -136,7 +152,7 @@ def format_price_table(item_code: str, orders: List) -> Table:
         if hasattr(order, "created_at"):
             try:
                 created_date = datetime.fromisoformat(order.created_at.replace("Z", "+00:00")).strftime("%m/%d %H:%M")
-            except:
+            except ValueError:
                 created_date = "Unknown"
 
         table.add_row(
@@ -149,7 +165,7 @@ def format_price_table(item_code: str, orders: List) -> Table:
     return table
 
 
-def format_opportunities_table(opportunities: List) -> Table:
+def format_opportunities_table(opportunities: list) -> Table:
     """Format arbitrage opportunities into a table."""
     table = Table(title="Trading Opportunities")
     table.add_column("Item", style="cyan")
@@ -183,10 +199,6 @@ def buy_from_ge(
 
         client = ClientManager().client
 
-        # Import the GE buy order schema and API function
-        from artifactsmmo_api_client.api.my_characters import action_ge_buy_item_my_name_action_grandexchange_buy_post
-        from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
-
         buy_data = GEBuyOrderSchema(id=order_id, quantity=quantity)
         response = action_ge_buy_item_my_name_action_grandexchange_buy_post.sync(
             client=client, name=character, body=buy_data
@@ -201,7 +213,7 @@ def buy_from_ge(
             console.print(format_error_message(cli_response.error or "Purchase failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -228,12 +240,6 @@ def sell_on_ge(
 
         client = ClientManager().client
 
-        # Import the GE order creation schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post,
-        )
-        from artifactsmmo_api_client.models.ge_order_creationr_schema import GEOrderCreationrSchema
-
         sell_data = GEOrderCreationrSchema(code=item_code, quantity=quantity, price=price)
         response = action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync(
             client=client, name=character, body=sell_data
@@ -250,7 +256,7 @@ def sell_on_ge(
             console.print(format_error_message(cli_response.error or "Sell order failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -264,9 +270,6 @@ def list_ge_orders() -> None:
     """List your current Grand Exchange orders."""
     try:
         client = ClientManager().client
-
-        # Import the API function
-        from artifactsmmo_api_client.api.my_account import get_ge_orders_my_grandexchange_orders_get
 
         response = get_ge_orders_my_grandexchange_orders_get.sync(client=client)
 
@@ -294,7 +297,7 @@ def list_ge_orders() -> None:
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve orders"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -311,12 +314,6 @@ def cancel_ge_order(
 
         client = ClientManager().client
 
-        # Import the GE cancel order schema and API function
-        from artifactsmmo_api_client.api.my_characters import (
-            action_ge_cancel_order_my_name_action_grandexchange_cancel_post,
-        )
-        from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
-
         cancel_data = GECancelOrderSchema(id=order_id)
         response = action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync(
             client=client, name=character, body=cancel_data
@@ -331,7 +328,7 @@ def cancel_ge_order(
             console.print(format_error_message(cli_response.error or "Cancel failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -348,9 +345,6 @@ def show_item_prices(
     try:
         item_code = validate_item_code(item_code)
         client = ClientManager().client
-
-        # Import the API function for getting all orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
         response = get_ge_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=50)
 
@@ -381,7 +375,7 @@ def show_item_prices(
                 format_error_message(cli_response.error or f"Failed to retrieve market data for '{item_code}'")
             )
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -389,8 +383,8 @@ def show_item_prices(
 
 @app.command("orders")
 def show_item_orders(
-    item: Optional[str] = typer.Option(None, "--item", help="Filter by item code"),
-    seller: Optional[str] = typer.Option(None, "--seller", help="Filter by seller"),
+    item: str | None = typer.Option(None, "--item", help="Filter by item code"),
+    seller: str | None = typer.Option(None, "--seller", help="Filter by seller"),
     page: int = typer.Option(1, "--page", help="Page number"),
     size: int = typer.Option(20, "--size", help="Page size"),
 ) -> None:
@@ -400,9 +394,6 @@ def show_item_orders(
             item = validate_item_code(item)
 
         client = ClientManager().client
-
-        # Import the API function for getting all orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
         response = get_ge_orders_grandexchange_orders_get.sync(
             client=client, code=item, seller=seller, page=page, size=size
@@ -424,7 +415,7 @@ def show_item_orders(
                             created_date = datetime.fromisoformat(order.created_at.replace("Z", "+00:00")).strftime(
                                 "%m/%d %H:%M"
                             )
-                        except:
+                        except ValueError:
                             created_date = "Unknown"
 
                     rows.append(
@@ -437,7 +428,7 @@ def show_item_orders(
                         ]
                     )
 
-                title = f"Grand Exchange Orders"
+                title = "Grand Exchange Orders"
                 if item:
                     title += f" - {item}"
                 if seller:
@@ -455,7 +446,7 @@ def show_item_orders(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve orders"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -463,8 +454,8 @@ def show_item_orders(
 
 @app.command("history")
 def show_trading_history(
-    character: Optional[str] = typer.Argument(None, help="Character name (optional, shows your history if provided)"),
-    item: Optional[str] = typer.Option(None, "--item", help="Filter by item code"),
+    character: str | None = typer.Argument(None, help="Character name (optional, shows your history if provided)"),
+    item: str | None = typer.Option(None, "--item", help="Filter by item code"),
     page: int = typer.Option(1, "--page", help="Page number"),
     size: int = typer.Option(20, "--size", help="Page size"),
 ) -> None:
@@ -479,8 +470,6 @@ def show_trading_history(
 
         if character:
             # Show personal trading history
-            from artifactsmmo_api_client.api.my_account import get_ge_history_my_grandexchange_history_get
-
             response = get_ge_history_my_grandexchange_history_get.sync(
                 client=client, code=item, page=page, size=size
             )
@@ -489,8 +478,6 @@ def show_trading_history(
             if not item:
                 console.print(format_error_message("Item code is required when not showing personal history"))
                 raise typer.Exit(1)
-
-            from artifactsmmo_api_client.api.grand_exchange import get_ge_history_grandexchange_history_code_get
 
             response = get_ge_history_grandexchange_history_code_get.sync(
                 client=client, code=item, page=page, size=size
@@ -512,7 +499,7 @@ def show_trading_history(
                             sold_date = datetime.fromisoformat(sale.sold_at.replace("Z", "+00:00")).strftime(
                                 "%m/%d %H:%M"
                             )
-                        except:
+                        except ValueError:
                             sold_date = "Unknown"
 
                     rows.append(
@@ -544,7 +531,7 @@ def show_trading_history(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve trading history"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -558,12 +545,6 @@ def analyze_item_market(
     try:
         item_code = validate_item_code(item_code)
         client = ClientManager().client
-
-        # Get current orders
-        from artifactsmmo_api_client.api.grand_exchange import (
-            get_ge_orders_grandexchange_orders_get,
-            get_ge_history_grandexchange_history_code_get,
-        )
 
         # Fetch current orders
         orders_response = get_ge_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=100)
@@ -626,7 +607,7 @@ def analyze_item_market(
             for insight in insights:
                 console.print(f"  {insight}")
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -639,9 +620,6 @@ def show_trending_items(
     """Show items with most trading activity."""
     try:
         client = ClientManager().client
-
-        # Get all recent orders to analyze activity
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
         response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
 
@@ -683,7 +661,7 @@ def show_trending_items(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve market data"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -698,9 +676,6 @@ def show_trade_opportunities(
     try:
         client = ClientManager().client
 
-        # Get all current orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
-
         response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
 
         cli_response = handle_api_response(response)
@@ -714,8 +689,9 @@ def show_trade_opportunities(
                     table = format_opportunities_table(opportunities[:limit])
                     console.print(table)
 
+                    count = min(len(opportunities), limit)
                     console.print(
-                        f"\n[dim]Showing top {min(len(opportunities), limit)} opportunities with ≥{min_margin:.0%} margin[/dim]"
+                        f"\n[dim]Showing top {count} opportunities with ≥{min_margin:.0%} margin[/dim]"
                     )
                 else:
                     console.print(format_error_message(f"No opportunities found with ≥{min_margin:.0%} profit margin"))
@@ -724,7 +700,7 @@ def show_trade_opportunities(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve market data"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -737,9 +713,6 @@ def show_price_spreads(
     """Show items with best buy/sell spreads."""
     try:
         client = ClientManager().client
-
-        # Get all current orders
-        from artifactsmmo_api_client.api.grand_exchange import get_ge_orders_grandexchange_orders_get
 
         response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
 
@@ -799,7 +772,7 @@ def show_price_spreads(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve market data"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)

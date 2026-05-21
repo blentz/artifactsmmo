@@ -1,6 +1,31 @@
 """Information and lookup commands."""
 
+import httpx
 import typer
+from artifactsmmo_api_client.api.badges import get_all_badges_badges_get, get_badge_badges_code_get
+from artifactsmmo_api_client.api.characters import get_character_characters_name_get
+from artifactsmmo_api_client.api.events import (
+    get_all_active_events_events_active_get,
+    get_all_events_events_get,
+)
+from artifactsmmo_api_client.api.items import get_all_items_items_get, get_item_items_code_get
+from artifactsmmo_api_client.api.leaderboard import (
+    get_accounts_leaderboard_leaderboard_accounts_get,
+    get_characters_leaderboard_leaderboard_characters_get,
+)
+from artifactsmmo_api_client.api.maps import get_all_maps_maps_get, get_map_by_position_maps_layer_x_y_get
+from artifactsmmo_api_client.api.monsters import (
+    get_all_monsters_monsters_get,
+    get_monster_monsters_code_get,
+)
+from artifactsmmo_api_client.api.resources import (
+    get_all_resources_resources_get,
+    get_resource_resources_code_get,
+)
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
+from artifactsmmo_api_client.models.map_layer import MapLayer
+from artifactsmmo_api_client.types import UNSET
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -29,9 +54,6 @@ def list_items(
         client = ClientManager().client
 
         if item_code:
-            # Import the API function
-            from artifactsmmo_api_client.api.items import get_item_items_code_get
-
             # Get specific item
             response = get_item_items_code_get.sync(client=client, code=item_code)
             cli_response = handle_api_response(response)
@@ -62,9 +84,6 @@ def list_items(
             else:
                 console.print(format_error_message(cli_response.error or f"Item '{item_code}' not found"))
         else:
-            # Import the API function
-            from artifactsmmo_api_client.api.items import get_all_items_items_get
-
             # List items - only pass non-None parameters to avoid API client bugs
             kwargs = {"client": client, "page": page, "size": size}
             if item_type is not None:
@@ -106,7 +125,7 @@ def list_items(
             else:
                 console.print(format_error_message(cli_response.error or "Could not retrieve items"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -166,9 +185,6 @@ def list_monsters(
         client = ClientManager().client
 
         if monster_code:
-            # Import the API function
-            from artifactsmmo_api_client.api.monsters import get_monster_monsters_code_get
-
             # Get specific monster
             response = get_monster_monsters_code_get.sync(client=client, code=monster_code)
             cli_response = handle_api_response(response)
@@ -222,9 +238,6 @@ def list_monsters(
             else:
                 console.print(format_error_message(cli_response.error or f"Monster '{monster_code}' not found"))
         else:
-            # Import the API function
-            from artifactsmmo_api_client.api.monsters import get_all_monsters_monsters_get
-
             # List monsters
             response = get_all_monsters_monsters_get.sync(
                 client=client, min_level=api_min_level, max_level=api_max_level, page=page, size=size
@@ -308,7 +321,7 @@ def list_monsters(
             else:
                 console.print(format_error_message(cli_response.error or "Could not retrieve monsters"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -332,8 +345,6 @@ def get_monster(
         client = ClientManager().client
 
         # Try to get monster by exact code first
-        from artifactsmmo_api_client.api.monsters import get_monster_monsters_code_get
-
         try:
             response = get_monster_monsters_code_get.sync(client=client, code=name)
             cli_response = handle_api_response(response)
@@ -342,11 +353,10 @@ def get_monster(
                 monster = cli_response.data
                 _display_monster_details(monster, character_data)
                 return
-        except Exception:
+        except (UnexpectedStatus, httpx.HTTPError):
             pass  # Try searching by name instead
 
         # If exact code lookup failed, search by name
-        from artifactsmmo_api_client.api.monsters import get_all_monsters_monsters_get
 
         # Search through monsters to find name match
         found_monster = None
@@ -385,7 +395,7 @@ def get_monster(
             console.print(format_error_message(f"Monster '{name}' not found"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -504,16 +514,13 @@ def list_resources(
         if character:
             try:
                 char_x, char_y = get_character_position(character)
-            except Exception as e:
+            except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
                 console.print(format_error_message(f"Could not get character position: {e}"))
                 raise typer.Exit(1)
 
         client = ClientManager().client
 
         if resource_code:
-            # Import the API function
-            from artifactsmmo_api_client.api.resources import get_resource_resources_code_get
-
             # Get specific resource
             response = get_resource_resources_code_get.sync(client=client, code=resource_code)
             cli_response = handle_api_response(response)
@@ -546,7 +553,7 @@ def list_resources(
                                     f"({nearest['x']}, {nearest['y']}) - Distance: {nearest['distance']}",
                                 ]
                             )
-                    except Exception:
+                    except (UnexpectedStatus, httpx.HTTPError):
                         pass  # Don't fail if location lookup fails
 
                 output = format_table(headers, rows, title=f"Resource: {resource_code}")
@@ -554,17 +561,11 @@ def list_resources(
             else:
                 console.print(format_error_message(cli_response.error or f"Resource '{resource_code}' not found"))
         else:
-            # Import the API function
-            from artifactsmmo_api_client.api.resources import get_all_resources_resources_get
-
             # Determine API parameters for level filtering
             api_min_level = level
             api_max_level = max_level
 
             # List resources - only pass non-None parameters to avoid API client bugs
-            from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
-            from artifactsmmo_api_client.types import UNSET
-
             kwargs = {"client": client, "page": page, "size": size}
 
             # Convert skill string to GatheringSkill enum if provided
@@ -629,7 +630,7 @@ def list_resources(
 
                                     if locations:
                                         resource_locations[resource_code_val] = locations
-                        except Exception:
+                        except (UnexpectedStatus, httpx.HTTPError):
                             pass  # Don't fail if location lookup fails
 
                     # Filter resources that have locations if location filtering is active
@@ -702,7 +703,7 @@ def list_resources(
             else:
                 console.print(format_error_message(cli_response.error or "Could not retrieve resources"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -719,9 +720,6 @@ def list_achievements(
         client = ClientManager().client
 
         if achievement_code:
-            # Import the API function
-            from artifactsmmo_api_client.api.badges import get_badge_badges_code_get
-
             # Get specific achievement
             response = get_badge_badges_code_get.sync(client=client, code=achievement_code)
             cli_response = handle_api_response(response)
@@ -739,9 +737,6 @@ def list_achievements(
             else:
                 console.print(format_error_message(cli_response.error or f"Achievement '{achievement_code}' not found"))
         else:
-            # Import the API function
-            from artifactsmmo_api_client.api.badges import get_all_badges_badges_get
-
             # List achievements
             response = get_all_badges_badges_get.sync(client=client, page=page, size=size)
 
@@ -765,7 +760,7 @@ def list_achievements(
             else:
                 console.print(format_error_message(cli_response.error or "Could not retrieve achievements"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -787,16 +782,10 @@ def show_leaderboard(
         client = ClientManager().client
 
         if board_type.lower() == "characters":
-            # Import the API function
-            from artifactsmmo_api_client.api.leaderboard import get_characters_leaderboard_leaderboard_characters_get
-
             response = get_characters_leaderboard_leaderboard_characters_get.sync(
                 client=client, sort=sort, page=page, size=size
             )
         elif board_type.lower() == "accounts":
-            # Import the API function
-            from artifactsmmo_api_client.api.leaderboard import get_accounts_leaderboard_leaderboard_accounts_get
-
             response = get_accounts_leaderboard_leaderboard_accounts_get.sync(
                 client=client, sort=sort, page=page, size=size
             )
@@ -837,7 +826,7 @@ def show_leaderboard(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve leaderboard"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -854,14 +843,8 @@ def list_events(
         client = ClientManager().client
 
         if active_only:
-            # Import the API function
-            from artifactsmmo_api_client.api.events import get_all_active_events_events_active_get
-
             response = get_all_active_events_events_active_get.sync(client=client, page=page, size=size)
         else:
-            # Import the API function
-            from artifactsmmo_api_client.api.events import get_all_events_events_get
-
             response = get_all_events_events_get.sync(client=client, page=page, size=size)
 
         cli_response = handle_api_response(response)
@@ -889,7 +872,7 @@ def list_events(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve events"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -908,10 +891,6 @@ def map_info(
         client = ClientManager().client
 
         if x is not None and y is not None:
-            # Import the API function for specific coordinates
-            from artifactsmmo_api_client.api.maps import get_map_by_position_maps_layer_x_y_get
-            from artifactsmmo_api_client.models.map_layer import MapLayer
-
             # Get specific map location
             response = get_map_by_position_maps_layer_x_y_get.sync(client=client, layer=MapLayer.OVERWORLD, x=x, y=y)
             cli_response = handle_api_response(response)
@@ -939,9 +918,6 @@ def map_info(
             else:
                 console.print(format_error_message(cli_response.error or f"Map location ({x}, {y}) not found"))
         else:
-            # Import the API function for searching maps
-            from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
-
             # List maps with optional filtering
             response = get_all_maps_maps_get.sync(client=client, content_code=content_code, page=page, size=size)
 
@@ -978,7 +954,7 @@ def map_info(
             else:
                 console.print(format_error_message(cli_response.error or "Could not retrieve map information"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -993,9 +969,6 @@ def list_npcs(
     """List all NPCs and their locations."""
     try:
         client = ClientManager().client
-
-        # Import the API function for searching maps
-        from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
 
         # Search through map data to find NPCs
         all_npcs = []
@@ -1083,7 +1056,7 @@ def list_npcs(
             # "known locations" table (CLAUDE.md: use only API data or fail).
             console.print(format_error_message("No NPC content data found in map API"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -1096,9 +1069,6 @@ def get_npc(
     """Get specific NPC details by name."""
     try:
         client = ClientManager().client
-
-        # Import the API function for searching maps
-        from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
 
         # Search through map data to find the specific NPC
         found_npc = None
@@ -1162,7 +1132,7 @@ def get_npc(
             # fabricate coordinates (CLAUDE.md: use only API data or fail).
             console.print(format_error_message(f"NPC '{name}' not found"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -1237,7 +1207,7 @@ def find_nearest_resource(
         if character:
             try:
                 char_x, char_y = get_character_position(character)
-            except Exception as e:
+            except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
                 console.print(format_error_message(f"Could not get character position: {e}"))
                 raise typer.Exit(1)
 
@@ -1297,7 +1267,7 @@ def find_nearest_resource(
         output = format_table(headers, rows, title=title)
         console.print(output)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -1328,8 +1298,6 @@ def _find_resource_locations(
     resource_data = _get_resource_data(resource_name, resource_type)
 
     # Search map for resource locations
-    from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
-
     resource_locations = []
     current_page = 1
     max_pages = 20  # Limit search to prevent infinite loops
@@ -1404,9 +1372,6 @@ def _get_resource_data(resource_name: str, resource_type: str | None = None) -> 
         List of resource data dictionaries
     """
     client = ClientManager().client
-    from artifactsmmo_api_client.api.resources import get_all_resources_resources_get
-    from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
-    from artifactsmmo_api_client.types import UNSET
 
     resources = []
     current_page = 1
@@ -1543,8 +1508,6 @@ def _get_character_data(character_name: str) -> dict[str, str | int] | None:
         Character data dictionary or None if not found
     """
     try:
-        from artifactsmmo_api_client.api.characters import get_character_characters_name_get
-
         client = ClientManager().client
         response = get_character_characters_name_get.sync(client=client, name=character_name)
         cli_response = handle_api_response(response)
@@ -1570,7 +1533,7 @@ def _get_character_data(character_name: str) -> dict[str, str | int] | None:
                 "dmg_water": getattr(character, "dmg_water", 0),
                 "dmg_air": getattr(character, "dmg_air", 0),
             }
-    except Exception:
+    except (UnexpectedStatus, httpx.HTTPError):
         pass
 
     return None

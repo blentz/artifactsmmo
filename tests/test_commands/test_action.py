@@ -2,7 +2,9 @@
 
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from rich.text import Text
 from typer.testing import CliRunner
 
@@ -78,12 +80,12 @@ class TestMoveCommand:
     def test_move_validation_error(self, runner):
         """Test move command with validation error."""
         result = runner.invoke(app, ["move", "", "5", "10"])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_move_api_exception(self, runner, mock_client_manager):
         """Test move command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -96,7 +98,7 @@ class TestMoveCommand:
     def test_move_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test move command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=15, error=None)
@@ -191,12 +193,12 @@ class TestFightCommand:
     def test_fight_validation_error(self, runner):
         """Test fight command with validation error."""
         result = runner.invoke(app, ["fight", ""])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_fight_api_exception(self, runner, mock_client_manager):
         """Test fight command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -209,7 +211,7 @@ class TestFightCommand:
     def test_fight_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test fight command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=20, error=None)
@@ -255,12 +257,12 @@ class TestGatherCommand:
     def test_gather_validation_error(self, runner):
         """Test gather command with validation error."""
         result = runner.invoke(app, ["gather", ""])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_gather_api_exception(self, runner, mock_client_manager):
         """Test gather command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -273,7 +275,7 @@ class TestGatherCommand:
     def test_gather_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test gather command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=25, error=None)
@@ -319,12 +321,12 @@ class TestRestCommand:
     def test_rest_validation_error(self, runner):
         """Test rest command with validation error."""
         result = runner.invoke(app, ["rest", ""])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_rest_api_exception(self, runner, mock_client_manager):
         """Test rest command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -337,7 +339,7 @@ class TestRestCommand:
     def test_rest_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test rest command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=10, error=None)
@@ -393,12 +395,12 @@ class TestEquipCommand:
     def test_equip_validation_error(self, runner):
         """Test equip command with validation error."""
         result = runner.invoke(app, ["equip", "", "sword", "weapon"])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_equip_api_exception(self, runner, mock_client_manager):
         """Test equip command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -411,7 +413,7 @@ class TestEquipCommand:
     def test_equip_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test equip command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=5, error=None)
@@ -467,12 +469,12 @@ class TestUnequipCommand:
     def test_unequip_validation_error(self, runner):
         """Test unequip command with validation error."""
         result = runner.invoke(app, ["unequip", "", "weapon"])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_unequip_api_exception(self, runner, mock_client_manager):
         """Test unequip command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -485,7 +487,7 @@ class TestUnequipCommand:
     def test_unequip_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test unequip command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=3, error=None)
@@ -541,12 +543,12 @@ class TestUseCommand:
     def test_use_validation_error(self, runner):
         """Test use command with validation error."""
         result = runner.invoke(app, ["use", "", "potion"])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_use_api_exception(self, runner, mock_client_manager):
         """Test use command with API exception."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -559,7 +561,7 @@ class TestUseCommand:
     def test_use_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test use command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=8, error=None)
@@ -718,7 +720,7 @@ class TestBatchCommand:
     def test_batch_validation_error(self, runner):
         """Test batch command with validation error."""
         result = runner.invoke(app, ["batch", "", "gather", "--times", "3"])
-        assert result.exit_code == 1
+        assert result.exit_code != 0
 
     def test_batch_results_accumulation(self, runner, mock_client_manager):
         """Test that batch results are properly accumulated."""
@@ -784,7 +786,7 @@ class TestActionExecutors:
         """Test action executor handles exceptions."""
         with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_handle_error:
             mock_handle_error.return_value = Mock(success=False, error="API Error")
-            mock_client_manager.api.action_gathering.side_effect = Exception("API Error")
+            mock_client_manager.api.action_gathering.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
 
             result = execute_gather_action("testchar")
 
@@ -882,7 +884,7 @@ class TestExecuteActionExceptions:
     def test_execute_fight_action_exception(self):
         """Test execute_fight_action handles exceptions."""
         with patch("artifactsmmo_cli.commands.action.ClientManager") as mock_cm:
-            mock_cm.return_value.api.action_fight.side_effect = RuntimeError("fight error")
+            mock_cm.return_value.api.action_fight.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(success=False, error="fight error")
 
@@ -894,7 +896,7 @@ class TestExecuteActionExceptions:
     def test_execute_rest_action_exception(self):
         """Test execute_rest_action handles exceptions."""
         with patch("artifactsmmo_cli.commands.action.ClientManager") as mock_cm:
-            mock_cm.return_value.api.action_rest.side_effect = RuntimeError("rest error")
+            mock_cm.return_value.api.action_rest.side_effect = UnexpectedStatus(status_code=478, content=b"{}")
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(success=False, error="rest error")
 
@@ -1005,7 +1007,7 @@ class TestGotoCommand:
         """Test goto when character position cannot be retrieved."""
         with patch(
             "artifactsmmo_cli.commands.action.get_character_position",
-            side_effect=RuntimeError("Character not found"),
+            side_effect=httpx.ConnectError("Character not found"),
         ):
             result = runner.invoke(app, ["goto", "testchar", "bank"])
 
@@ -1148,7 +1150,7 @@ class TestGotoCommand:
                         mock_path.return_value = self._make_path_result([(3, 0)])
 
                         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.side_effect = RuntimeError("Network error")
+                            mock_resp.side_effect = httpx.ConnectError("Network error")
 
                             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                                 mock_err.return_value = Mock(cooldown_remaining=None, error="Network error")
@@ -1168,7 +1170,7 @@ class TestGotoCommand:
                         mock_path.return_value = self._make_path_result([(3, 0)])
 
                         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.side_effect = RuntimeError("cooldown error")
+                            mock_resp.side_effect = httpx.ConnectError("cooldown error")
 
                             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                                 mock_err.return_value = Mock(cooldown_remaining=5, error=None)
@@ -1192,7 +1194,7 @@ class TestGotoCommand:
                         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
                             # First call raises, retry call succeeds
                             mock_resp.side_effect = [
-                                RuntimeError("cooldown"),
+                                httpx.ConnectError("cooldown"),
                                 Mock(success=True, cooldown_remaining=None, error=None),
                             ]
 
@@ -1214,9 +1216,9 @@ class TestGotoCommand:
                         mock_path.return_value = self._make_path_result([(3, 0)])
 
                         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # First raises, retry also raises
+                            # First raises, retry returns failure
                             mock_resp.side_effect = [
-                                RuntimeError("cooldown"),
+                                httpx.ConnectError("cooldown"),
                                 Mock(success=False, cooldown_remaining=None, error="Move failed after cooldown"),
                             ]
 
@@ -1239,7 +1241,7 @@ class TestGotoCommand:
 
                         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
                             # Both calls raise exceptions
-                            mock_resp.side_effect = RuntimeError("api error")
+                            mock_resp.side_effect = httpx.ConnectError("api error")
 
                             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                                 # First handle_api_error call has cooldown, retry also raises
@@ -1280,7 +1282,7 @@ class TestGotoCommand:
         """Test goto handles error when verifying final position."""
         with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
             # Initial position ok, final position check raises
-            mock_pos.side_effect = [(0, 0), RuntimeError("Position check failed")]
+            mock_pos.side_effect = [(0, 0), httpx.ConnectError("Position check failed")]
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
                     with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
@@ -1301,7 +1303,7 @@ class TestGotoCommand:
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
                     with patch(
                         "artifactsmmo_cli.commands.action.calculate_path",
-                        side_effect=RuntimeError("Unexpected calculation error"),
+                        side_effect=httpx.ConnectError("Unexpected calculation error"),
                     ):
                         result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
@@ -1395,7 +1397,7 @@ class TestShowPathCommand:
         """Test path command when character position cannot be retrieved."""
         with patch(
             "artifactsmmo_cli.commands.action.get_character_position",
-            side_effect=RuntimeError("Character not found"),
+            side_effect=httpx.ConnectError("Character not found"),
         ):
             result = runner.invoke(app, ["path", "testchar", "bank"])
 
@@ -1409,7 +1411,7 @@ class TestShowPathCommand:
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(1, 1)):
                     with patch(
                         "artifactsmmo_cli.commands.action.calculate_path",
-                        side_effect=RuntimeError("Calculation failed"),
+                        side_effect=httpx.ConnectError("Calculation failed"),
                     ):
                         result = runner.invoke(app, ["path", "testchar", "1 1"])
 

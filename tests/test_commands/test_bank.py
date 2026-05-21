@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.bank import (
@@ -75,16 +76,19 @@ class TestListCommand:
 
     def test_list_api_exception(self, runner, mock_client_manager):
         """Test list command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["list"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["list"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
 
 class TestDetailsCommand:
@@ -121,16 +125,19 @@ class TestDetailsCommand:
 
     def test_details_api_exception(self, runner, mock_client_manager):
         """Test details command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch("artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync") as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["details"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["details"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
 
 class TestDepositGoldCommand:
@@ -184,25 +191,30 @@ class TestDepositGoldCommand:
     def test_deposit_gold_validation_error(self, runner):
         """Test deposit gold command with validation error."""
         result = runner.invoke(app, ["deposit-gold", "", "100"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_deposit_gold_api_exception(self, runner, mock_client_manager):
         """Test deposit gold command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
+        ) as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
     def test_deposit_gold_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test deposit gold command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=15, error=None)
@@ -214,7 +226,7 @@ class TestDepositGoldCommand:
     def test_withdraw_gold_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test withdraw gold command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=8, error=None)
@@ -226,7 +238,7 @@ class TestDepositGoldCommand:
     def test_deposit_item_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test deposit item command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=5, error=None)
@@ -238,7 +250,7 @@ class TestDepositGoldCommand:
     def test_withdraw_item_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test withdraw item command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=12, error=None)
@@ -250,7 +262,7 @@ class TestDepositGoldCommand:
     def test_expand_api_exception_with_cooldown(self, runner, mock_client_manager):
         """Test expand command with API exception and cooldown."""
         with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=20, error=None)
@@ -311,20 +323,25 @@ class TestWithdrawGoldCommand:
     def test_withdraw_gold_validation_error(self, runner):
         """Test withdraw gold command with validation error."""
         result = runner.invoke(app, ["withdraw-gold", "", "50"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_withdraw_gold_api_exception(self, runner, mock_client_manager):
         """Test withdraw gold command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
+        ) as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
 
 class TestDepositItemCommand:
@@ -378,20 +395,25 @@ class TestDepositItemCommand:
     def test_deposit_item_validation_error(self, runner):
         """Test deposit item command with validation error."""
         result = runner.invoke(app, ["deposit-item", "", "iron_ore", "10"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_deposit_item_api_exception(self, runner, mock_client_manager):
         """Test deposit item command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
+        ) as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
 
 class TestWithdrawItemCommand:
@@ -445,20 +467,25 @@ class TestWithdrawItemCommand:
     def test_withdraw_item_validation_error(self, runner):
         """Test withdraw item command with validation error."""
         result = runner.invoke(app, ["withdraw-item", "", "copper_ore", "5"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_withdraw_item_api_exception(self, runner, mock_client_manager):
         """Test withdraw item command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
+        ) as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
 
 class TestExpandCommand:
@@ -512,20 +539,25 @@ class TestExpandCommand:
     def test_expand_validation_error(self, runner):
         """Test expand command with validation error."""
         result = runner.invoke(app, ["expand", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_expand_api_exception(self, runner, mock_client_manager):
         """Test expand command with API exception."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
+        ) as mock_api:
+            mock_api.return_value = Mock()
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
-                result = runner.invoke(app, ["expand", "testchar"])
+                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
+                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+                    result = runner.invoke(app, ["expand", "testchar"])
+
+                    assert result.exit_code == 1
+                    assert "API Error" in result.stdout
 
 
 class TestBulkOperations:
@@ -646,17 +678,17 @@ class TestBulkOperations:
         """Test item keep logic."""
         # Test equipment (should keep by default)
         weapon_info = {"type": "weapon", "subtype": "sword"}
-        assert should_keep_item(weapon_info, keep_equipment=True, keep_consumables=False) == True
-        assert should_keep_item(weapon_info, keep_equipment=False, keep_consumables=False) == False
+        assert should_keep_item(weapon_info, keep_equipment=True, keep_consumables=False)
+        assert not should_keep_item(weapon_info, keep_equipment=False, keep_consumables=False)
 
         # Test consumables
         food_info = {"type": "consumable", "subtype": "food"}
-        assert should_keep_item(food_info, keep_equipment=True, keep_consumables=True) == True
-        assert should_keep_item(food_info, keep_equipment=True, keep_consumables=False) == False
+        assert should_keep_item(food_info, keep_equipment=True, keep_consumables=True)
+        assert not should_keep_item(food_info, keep_equipment=True, keep_consumables=False)
 
         # Test currency (always keep)
         currency_info = {"type": "currency", "subtype": "gold"}
-        assert should_keep_item(currency_info, keep_equipment=False, keep_consumables=False) == True
+        assert should_keep_item(currency_info, keep_equipment=False, keep_consumables=False)
 
     def test_execute_single_deposit_success(self, mock_client_manager):
         """Test successful single deposit operation."""
@@ -671,7 +703,7 @@ class TestBulkOperations:
 
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
-                assert success == True
+                assert success
                 assert error is None
                 assert cooldown is None
 
@@ -688,7 +720,7 @@ class TestBulkOperations:
 
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
-                assert success == False
+                assert not success
                 assert error is None
                 assert cooldown == 5
 
@@ -705,7 +737,7 @@ class TestBulkOperations:
 
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
-                assert success == False
+                assert not success
                 assert error == "Item not found"
                 assert cooldown is None
 
@@ -715,12 +747,6 @@ class TestDepositAllCommand:
 
     def test_deposit_all_success(self, runner, mock_client_manager):
         """Test successful deposit-all command."""
-        # Mock inventory
-        mock_inventory = [
-            Mock(code="iron_ore", quantity=10, slot=1),
-            Mock(code="copper_ore", quantity=5, slot=2),
-        ]
-
         with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
             mock_get_inv.return_value = [
                 {"code": "iron_ore", "quantity": 10, "slot": 1},
@@ -1007,7 +1033,7 @@ class TestDepositAllCommand:
     def test_deposit_all_exception_handler(self, runner, mock_client_manager):
         """Test deposit-all exception handler exits with code 1."""
         with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.side_effect = RuntimeError("unexpected error")
+            mock_get_inv.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="unexpected error")
@@ -1181,7 +1207,7 @@ class TestWithdrawAllCommand:
     def test_withdraw_all_exception_handler(self, runner, mock_client_manager):
         """Test withdraw-all exception handler exits with code 1."""
         with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_api.side_effect = RuntimeError("connection error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="connection error")
@@ -1274,7 +1300,8 @@ class TestSmartExchangeCommand:
 
                     assert result.exit_code == 0
                     assert "Smart Exchange Plan" in result.stdout
-                    # Should deposit iron_ore (resource) but keep wooden_sword (equipment) and bread (consumable with keep_consumables=True)
+                    # Should deposit iron_ore (resource) but keep wooden_sword (equipment)
+                    # and bread (consumable with keep_consumables=True)
                     assert mock_deposit.call_count == 1
 
     def test_smart_exchange_no_items_to_deposit(self, runner, mock_client_manager):
@@ -1470,7 +1497,7 @@ class TestSmartExchangeCommand:
     def test_smart_exchange_exception_handler(self, runner, mock_client_manager):
         """Test smart exchange exception handler exits with code 1."""
         with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.side_effect = RuntimeError("unexpected error")
+            mock_get_inv.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="unexpected error")
@@ -1534,7 +1561,7 @@ class TestHelperFunctions:
     def test_get_character_inventory_exception(self):
         """Test get_character_inventory returns [] on exception."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = RuntimeError("connection failed")
+            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             result = get_character_inventory("testchar")
             assert result == []
@@ -1555,7 +1582,7 @@ class TestHelperFunctions:
     def test_get_item_info_exception(self):
         """Test get_item_info returns None on exception."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = RuntimeError("connection failed")
+            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             result = get_item_info("iron_ore")
             assert result is None
@@ -1610,7 +1637,7 @@ class TestHelperFunctions:
     def test_execute_single_deposit_exception_with_cooldown(self):
         """Test execute_single_deposit exception path returns cooldown."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = RuntimeError("connection lost")
+            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=7, error=None)
@@ -1623,7 +1650,7 @@ class TestHelperFunctions:
     def test_execute_single_deposit_exception_with_error(self):
         """Test execute_single_deposit exception path returns error string."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = RuntimeError("connection lost")
+            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="connection lost")
@@ -1690,7 +1717,7 @@ class TestHelperFunctions:
     def test_execute_single_withdraw_exception_with_cooldown(self):
         """Test execute_single_withdraw exception path returns cooldown."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = RuntimeError("connection lost")
+            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=3, error=None)
@@ -1703,7 +1730,7 @@ class TestHelperFunctions:
     def test_execute_single_withdraw_exception_with_error(self):
         """Test execute_single_withdraw exception path returns error string."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = RuntimeError("connection lost")
+            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="connection lost")

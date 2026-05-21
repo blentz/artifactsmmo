@@ -2,7 +2,9 @@
 
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.info import (
@@ -467,7 +469,7 @@ class TestInfoCommands:
     def test_api_error_handling(self, runner, mock_client_manager):
         """Test API error handling in info commands."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"API Error")
 
             with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(error="API Error")
@@ -745,7 +747,7 @@ class TestNPCCommands:
     def test_npc_api_error(self, runner, mock_client_manager):
         """Test NPC commands handle API errors gracefully."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"API Error")
 
             with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(error="API Error")
@@ -957,7 +959,7 @@ class TestResourceDiscoveryCommands:
     def test_nearest_command_character_not_found(self, runner, mock_client_manager):
         """Test nearest command with invalid character."""
         with patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos:
-            mock_get_pos.side_effect = Exception("Character not found")
+            mock_get_pos.side_effect = ValueError("Character not found")
 
             result = runner.invoke(app, ["nearest", "copper", "--character", "invalidchar"])
 
@@ -1605,7 +1607,7 @@ class TestCombatAssessment:
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list_api,
         ):
             # Mock failed direct lookup
-            mock_get_api.side_effect = Exception("Not found")
+            mock_get_api.side_effect = UnexpectedStatus(status_code=404, content=b"Not found")
 
             # Mock empty search results
             mock_list_api.return_value = mock_api_response
@@ -2202,7 +2204,7 @@ class TestResourcesEdgeCases:
             patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
         ):
             mock_api.return_value = mock_api_response
-            mock_find_locs.side_effect = RuntimeError("lookup failure")
+            mock_find_locs.side_effect = httpx.ConnectError("lookup failure")
 
             mock_resource = Mock()
             mock_resource.code = "copper_rock"
@@ -2688,7 +2690,7 @@ class TestNPCsAdditionalCoverage:
     def test_npc_exception_handler(self, runner, mock_client_manager):
         """Test npc command handles exceptions gracefully (lines 1177-1180)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.side_effect = RuntimeError("connection failed")
+            mock_api.side_effect = UnexpectedStatus(status_code=503, content=b"connection failed")
 
             with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(error="connection failed")
@@ -2917,7 +2919,7 @@ class TestGetCharacterDataEdgeCases:
     def test_get_character_data_exception_returns_none(self, mock_client_manager):
         """Test _get_character_data returns None when exception is raised (lines 1721-1722)."""
         with patch("artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync") as mock_api:
-            mock_api.side_effect = RuntimeError("network error")
+            mock_api.side_effect = httpx.ConnectError("network error")
 
             result = _get_character_data("TestChar")
 
@@ -3054,7 +3056,7 @@ class TestExceptionHandlers:
     def test_achievements_exception_handler(self, runner, mock_client_manager):
         """Test achievements command exception handler (lines 767-770)."""
         with patch("artifactsmmo_api_client.api.badges.get_all_badges_badges_get.sync") as mock_api:
-            mock_api.side_effect = RuntimeError("badge API crash")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"badge API crash")
 
             with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(error="badge API crash")
@@ -3067,7 +3069,7 @@ class TestExceptionHandlers:
     def test_events_exception_handler(self, runner, mock_client_manager):
         """Test events command exception handler (lines 891-894)."""
         with patch("artifactsmmo_api_client.api.events.get_all_active_events_events_active_get.sync") as mock_api:
-            mock_api.side_effect = RuntimeError("events crash")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"events crash")
 
             with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(error="events crash")
@@ -3080,7 +3082,7 @@ class TestExceptionHandlers:
     def test_map_exception_handler(self, runner, mock_client_manager):
         """Test map command exception handler (lines 980-983)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.side_effect = RuntimeError("map crash")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"map crash")
 
             with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(error="map crash")
@@ -3272,7 +3274,7 @@ class TestResourceSpecificLocationException:
         ):
             mock_api.return_value = mock_api_response
             mock_get_pos.return_value = (0, 0)
-            mock_find_locs.side_effect = RuntimeError("location crash")
+            mock_find_locs.side_effect = httpx.ConnectError("location crash")
 
             mock_resource = Mock()
             mock_resource.code = "copper_rock"

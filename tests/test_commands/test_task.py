@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.task import app
@@ -250,7 +251,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -276,13 +277,16 @@ class TestTaskCommands:
             with patch("artifactsmmo_cli.commands.task.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=True, data=mock_character)
 
-                result = runner.invoke(app, ["status", "testchar"])
+                with patch("artifactsmmo_api_client.api.tasks.get_task_tasks_list_code_get.sync") as mock_task_api:
+                    mock_task_api.side_effect = UnexpectedStatus(status_code=404, content=b"{}")
 
-                assert result.exit_code == 0
-                assert "chicken" in result.stdout
-                assert "monsters" in result.stdout
-                assert "3/153" in result.stdout
-                mock_api.assert_called_once()
+                    result = runner.invoke(app, ["status", "testchar"])
+
+                    assert result.exit_code == 0
+                    assert "chicken" in result.stdout
+                    assert "monsters" in result.stdout
+                    assert "3/153" in result.stdout
+                    mock_api.assert_called_once()
 
     def test_task_status_no_task(self, runner, mock_client_manager, mock_api_response):
         """Test task status command when character has no task."""
@@ -324,7 +328,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=30, error="API Error")
@@ -339,7 +343,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("Wrong location for this action")
+            mock_api.side_effect = UnexpectedStatus(status_code=486, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="Wrong location for this action")
@@ -370,7 +374,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_complete_task_my_name_action_task_complete_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=45, error="API Error")
@@ -385,7 +389,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_complete_task_my_name_action_task_complete_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("content not found at this location")
+            mock_api.side_effect = UnexpectedStatus(status_code=486, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="content not found at this location")
@@ -416,7 +420,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_task_exchange_my_name_action_task_exchange_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=60, error="API Error")
@@ -431,7 +435,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_task_exchange_my_name_action_task_exchange_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("Wrong location for this action")
+            mock_api.side_effect = UnexpectedStatus(status_code=486, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="Wrong location for this action")
@@ -462,7 +466,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_task_trade_my_name_action_task_trade_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=20, error="API Error")
@@ -477,7 +481,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_task_trade_my_name_action_task_trade_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("content not found at this location")
+            mock_api.side_effect = UnexpectedStatus(status_code=486, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="content not found at this location")
@@ -508,7 +512,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_task_cancel_my_name_action_task_cancel_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=15, error="API Error")
@@ -523,7 +527,7 @@ class TestTaskCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_task_cancel_my_name_action_task_cancel_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("Wrong location for this action")
+            mock_api.side_effect = UnexpectedStatus(status_code=486, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="Wrong location for this action")
@@ -599,7 +603,7 @@ class TestTaskCommands:
     def test_task_status_exception_handling(self, runner, mock_client_manager):
         """Test task status command exception handling."""
         with patch("artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync") as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(error="API Error")
@@ -639,7 +643,7 @@ class TestTaskCommands:
     def test_list_tasks_exception_handling(self, runner, mock_client_manager):
         """Test list tasks command exception handling."""
         with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.task.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(error="API Error")

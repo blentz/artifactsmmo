@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.trade import (
@@ -60,7 +61,7 @@ class TestTradeCommands:
     def test_ge_buy_validation_error(self, runner):
         """Test GE buy with invalid input."""
         result = runner.invoke(app, ["ge-buy", "", "order123", "5"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_ge_sell_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful GE sell command."""
@@ -159,7 +160,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_ge_buy_item_my_name_action_grandexchange_buy_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"API Error")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -174,7 +175,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_ge_buy_item_my_name_action_grandexchange_buy_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=429, content=b"API Error")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=25, error=None)
@@ -606,10 +607,10 @@ class TestTradeCommands:
     def test_invalid_item_code_validation(self, runner, mock_client_manager):
         """Test validation of invalid item codes in new commands."""
         result = runner.invoke(app, ["prices", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
         result = runner.invoke(app, ["analyze", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_calculate_price_stats_no_price_attr(self):
         """Test calculate_price_stats with orders that lack price attribute."""
@@ -653,7 +654,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("connection error")
+            mock_api.side_effect = UnexpectedStatus(status_code=429, content=b"connection error")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=20, error=None)
@@ -667,7 +668,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("connection error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"connection error")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="connection error")
@@ -697,7 +698,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API failure")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"API failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="API failure")
@@ -745,7 +746,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("cancel error")
+            mock_api.side_effect = UnexpectedStatus(status_code=429, content=b"cancel error")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=30, error=None)
@@ -759,7 +760,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("cancel error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"cancel error")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="cancel error")
@@ -789,7 +790,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("prices failure")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"prices failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="prices failure")
@@ -872,7 +873,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("orders exception")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"orders exception")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="orders exception")
@@ -977,7 +978,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("history failure")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"history failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="history failure")
@@ -1117,7 +1118,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_orders_api:
-            mock_orders_api.side_effect = Exception("analyze failure")
+            mock_orders_api.side_effect = UnexpectedStatus(status_code=500, content=b"analyze failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="analyze failure")
@@ -1165,7 +1166,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("trending failure")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"trending failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="trending failure")
@@ -1213,7 +1214,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("opportunities failure")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"opportunities failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="opportunities failure")
@@ -1261,7 +1262,7 @@ class TestTradeCommands:
         with patch(
             "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("spread failure")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"spread failure")
 
             with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="spread failure")

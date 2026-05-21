@@ -1,6 +1,21 @@
 """Task management commands."""
 
+import httpx
 import typer
+from artifactsmmo_api_client.api.characters import get_character_characters_name_get
+from artifactsmmo_api_client.api.my_characters import (
+    action_accept_new_task_my_name_action_task_new_post,
+    action_complete_task_my_name_action_task_complete_post,
+    action_task_cancel_my_name_action_task_cancel_post,
+    action_task_exchange_my_name_action_task_exchange_post,
+    action_task_trade_my_name_action_task_trade_post,
+)
+from artifactsmmo_api_client.api.tasks import get_all_tasks_tasks_list_get, get_task_tasks_list_code_get
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
+from artifactsmmo_api_client.models.skill import Skill
+from artifactsmmo_api_client.models.task_type import TaskType
+from artifactsmmo_api_client.types import UNSET
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -25,9 +40,6 @@ def accept_new_task(character: str = typer.Argument(..., help="Character name"))
 
         client = ClientManager().client
 
-        # Import the API function
-        from artifactsmmo_api_client.api.my_characters import action_accept_new_task_my_name_action_task_new_post
-
         response = action_accept_new_task_my_name_action_task_new_post.sync(client=client, name=character)
 
         cli_response = handle_api_response(response, f"{character} accepted a new task")
@@ -39,7 +51,7 @@ def accept_new_task(character: str = typer.Argument(..., help="Character name"))
             console.print(format_error_message(cli_response.error or "Failed to accept task"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -60,9 +72,6 @@ def complete_task(character: str = typer.Argument(..., help="Character name")) -
 
         client = ClientManager().client
 
-        # Import the API function
-        from artifactsmmo_api_client.api.my_characters import action_complete_task_my_name_action_task_complete_post
-
         response = action_complete_task_my_name_action_task_complete_post.sync(client=client, name=character)
 
         cli_response = handle_api_response(response, f"{character} completed task")
@@ -74,7 +83,7 @@ def complete_task(character: str = typer.Argument(..., help="Character name")) -
             console.print(format_error_message(cli_response.error or "Failed to complete task"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -95,9 +104,6 @@ def exchange_task(character: str = typer.Argument(..., help="Character name")) -
 
         client = ClientManager().client
 
-        # Import the API function
-        from artifactsmmo_api_client.api.my_characters import action_task_exchange_my_name_action_task_exchange_post
-
         response = action_task_exchange_my_name_action_task_exchange_post.sync(client=client, name=character)
 
         cli_response = handle_api_response(response, f"{character} exchanged task")
@@ -109,7 +115,7 @@ def exchange_task(character: str = typer.Argument(..., help="Character name")) -
             console.print(format_error_message(cli_response.error or "Failed to exchange task"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -134,10 +140,6 @@ def trade_task_items(
 
         client = ClientManager().client
 
-        # Import the API function and schema
-        from artifactsmmo_api_client.api.my_characters import action_task_trade_my_name_action_task_trade_post
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
-
         # Create the item schema for the trade
         item_data = SimpleItemSchema(code=item_code, quantity=quantity)
 
@@ -152,7 +154,7 @@ def trade_task_items(
             console.print(format_error_message(cli_response.error or "Failed to trade task items"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -173,9 +175,6 @@ def cancel_task(character: str = typer.Argument(..., help="Character name")) -> 
 
         client = ClientManager().client
 
-        # Import the API function
-        from artifactsmmo_api_client.api.my_characters import action_task_cancel_my_name_action_task_cancel_post
-
         response = action_task_cancel_my_name_action_task_cancel_post.sync(client=client, name=character)
 
         cli_response = handle_api_response(response, f"{character} cancelled task")
@@ -187,7 +186,7 @@ def cancel_task(character: str = typer.Argument(..., help="Character name")) -> 
             console.print(format_error_message(cli_response.error or "Failed to cancel task"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -209,8 +208,6 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
         client = ClientManager().client
 
         # Get character information to see current task
-        from artifactsmmo_api_client.api.characters import get_character_characters_name_get
-
         response = get_character_characters_name_get.sync(client=client, name=character)
 
         cli_response = handle_api_response(response)
@@ -235,8 +232,6 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
 
                 # Try to get additional task details from the tasks API
                 try:
-                    from artifactsmmo_api_client.api.tasks import get_task_tasks_list_code_get
-
                     task_details_response = get_task_tasks_list_code_get.sync(client=client, code=task_code)
                     task_details_cli_response = handle_api_response(task_details_response)
 
@@ -276,7 +271,7 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
                                 reward_output = format_table(reward_headers, reward_rows, title="Task Rewards")
                                 console.print()
                                 console.print(reward_output)
-                except Exception:
+                except (ValueError, UnexpectedStatus, httpx.HTTPError):
                     # If we can't get task details, that's okay - we still show the basic info
                     pass
             else:
@@ -286,7 +281,7 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
             console.print(format_error_message(cli_response.error or f"Character '{character}' not found"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -303,12 +298,6 @@ def list_tasks(
     """List available tasks."""
     try:
         client = ClientManager().client
-
-        # Import the API function and enums
-        from artifactsmmo_api_client.api.tasks import get_all_tasks_tasks_list_get
-        from artifactsmmo_api_client.models.skill import Skill
-        from artifactsmmo_api_client.models.task_type import TaskType
-        from artifactsmmo_api_client.types import UNSET
 
         # Convert string parameters to enum values if provided
         skill_enum = UNSET
@@ -365,7 +354,7 @@ def list_tasks(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve tasks"))
 
-    except Exception as e:
+    except (ValueError, typer.BadParameter, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
