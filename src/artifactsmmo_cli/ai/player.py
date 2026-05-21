@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
@@ -358,6 +359,9 @@ class GamePlayer:
                 predicted = action.cost(prev_state_for_learning, game_data, self.history)
                 cycles_to_satisfy = None
                 self._learn_task_exchange_cost(action, prev_state_for_learning, new_state, outcome)
+                self._record_task_reward_if_completed(
+                    prev_state_for_learning, new_state, type(action).__name__, outcome
+                )
                 if outcome == "ok" and selected_goal.is_satisfied(new_state):
                     cycles_to_satisfy = self._compute_cycles_to_satisfy(repr(selected_goal), self._cycle_counter)
                     # Goal achieved — release the commitment so the next cycle
@@ -543,13 +547,18 @@ class GamePlayer:
         bank_gold = self.state.bank_gold if self.state else None
         pending_items = self.state.pending_items if self.state else None
         active_events = self._fetch_active_events(client)
-        return WorldState.from_character_schema(
+        state = WorldState.from_character_schema(
             last_result.data,
             bank_items=bank_items,
             bank_gold=bank_gold,
             pending_items=pending_items,
             active_events=active_events,
         )
+        self._record_skill_observations(
+            state,
+            {skill: getattr(last_result.data, f"{skill}_max_xp", 0) for skill in state.skills},
+        )
+        return state
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
         """Re-fetch bank contents after a bank interaction."""
@@ -1284,6 +1293,31 @@ class GamePlayer:
             spent = before - new_state.inventory.get("tasks_coin", 0)
             if spent > 0:
                 self._task_exchange_min_coins = spent
+
+    def _record_skill_observations(self, state: WorldState, skill_max_xp: dict[str, int]) -> None:
+        """Persist observed XP-to-next-level for each skill at its current level."""
+        if self.history is None:
+            return
+        for skill, level in state.skills.items():
+            max_xp = skill_max_xp.get(skill, 0)
+            if isinstance(max_xp, int) and max_xp > 0:
+                self.history.record_skill_max_xp(skill, level, max_xp)
+
+    def _record_task_reward_if_completed(self, prev_state: WorldState, new_state: WorldState,
+                                         action_class: str, outcome: str) -> None:
+        """On task completion, record the sell-back gold value of the reward
+        items received so the mean reward estimate improves over time."""
+        if (self.history is None or self.game_data is None
+                or outcome != "ok" or action_class != "CompleteTaskAction"):
+            return
+        prices = _max_sell_back_price(self.game_data)
+        value = 0.0
+        for code, qty in new_state.inventory.items():
+            gained = qty - prev_state.inventory.get(code, 0)
+            if gained > 0:
+                value += gained * prices.get(code, 0)
+        if value > 0:
+            self.history.record_task_reward_value(value)
 
     def _note_goal_selection(self, goal_repr: str, cycle_index: int) -> None:
         """Record when a goal was first selected. Idempotent on re-selection."""
