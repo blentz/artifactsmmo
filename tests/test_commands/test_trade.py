@@ -616,3 +616,667 @@ class TestTradeCommands:
 
         result = runner.invoke(app, ["analyze", ""])
         assert result.exit_code == 1
+
+    def test_calculate_price_stats_no_price_attr(self):
+        """Test calculate_price_stats with orders that lack price attribute."""
+        from artifactsmmo_cli.commands.trade import calculate_price_stats
+
+        # Orders present but none have a 'price' attribute
+        orders = [object(), object()]
+        stats = calculate_price_stats(orders)
+        assert stats["min"] == 0
+        assert stats["max"] == 0
+        assert stats["avg"] == 0
+        assert stats["median"] == 0
+
+    def test_format_price_table_invalid_created_at(self):
+        """Test format_price_table with unparseable created_at value."""
+        from artifactsmmo_cli.commands.trade import format_price_table
+
+        order = Mock()
+        order.price = 100
+        order.quantity = 5
+        order.seller = "seller1"
+        order.created_at = "not-a-date"
+
+        table = format_price_table("iron_ore", [order])
+        # Just verifying it doesn't raise and returns a Table
+        assert table is not None
+
+    def test_ge_sell_cooldown_response(self, runner, mock_client_manager, mock_api_response):
+        """Test GE sell command with cooldown response."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, cooldown_remaining=15, error=None)
+
+                result = runner.invoke(app, ["ge-sell", "testchar", "iron_ore", "10", "100"])
+
+                assert result.exit_code == 0
+                assert "cooldown" in result.stdout.lower()
+
+    def test_ge_sell_api_error_cooldown(self, runner, mock_client_manager):
+        """Test GE sell command exception path with cooldown."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("connection error")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=20, error=None)
+
+                result = runner.invoke(app, ["ge-sell", "testchar", "iron_ore", "10", "100"])
+
+                assert result.exit_code == 1
+
+    def test_ge_sell_api_error_no_cooldown(self, runner, mock_client_manager):
+        """Test GE sell command exception path without cooldown."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("connection error")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="connection error")
+
+                result = runner.invoke(app, ["ge-sell", "testchar", "iron_ore", "10", "100"])
+
+                assert result.exit_code == 1
+                assert "connection error" in result.stdout
+
+    def test_ge_orders_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test GE orders list with error response."""
+        with patch(
+            "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="orders error")
+
+                result = runner.invoke(app, ["ge-orders"])
+
+                assert result.exit_code == 0
+                assert "orders error" in result.stdout
+
+    def test_ge_orders_api_exception(self, runner, mock_client_manager):
+        """Test GE orders list command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("API failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="API failure")
+
+                result = runner.invoke(app, ["ge-orders"])
+
+                assert result.exit_code == 1
+                assert "API failure" in result.stdout
+
+    def test_ge_orders_success_no_data_attr(self, runner, mock_client_manager, mock_api_response):
+        """Test GE orders list with data lacking .data attribute."""
+        with patch(
+            "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            # data object has no .data attribute
+            mock_data = Mock(spec=[])
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["ge-orders"])
+
+                assert result.exit_code == 0
+                assert "No orders found" in result.stdout
+
+    def test_ge_cancel_cooldown_response(self, runner, mock_client_manager, mock_api_response):
+        """Test GE cancel command with cooldown response."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, cooldown_remaining=10, error=None)
+
+                result = runner.invoke(app, ["ge-cancel", "testchar", "order123"])
+
+                assert result.exit_code == 0
+                assert "cooldown" in result.stdout.lower()
+
+    def test_ge_cancel_api_error_cooldown(self, runner, mock_client_manager):
+        """Test GE cancel command exception path with cooldown."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("cancel error")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=30, error=None)
+
+                result = runner.invoke(app, ["ge-cancel", "testchar", "order123"])
+
+                assert result.exit_code == 1
+
+    def test_ge_cancel_api_error_no_cooldown(self, runner, mock_client_manager):
+        """Test GE cancel command exception path without cooldown."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("cancel error")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="cancel error")
+
+                result = runner.invoke(app, ["ge-cancel", "testchar", "order123"])
+
+                assert result.exit_code == 1
+                assert "cancel error" in result.stdout
+
+    def test_prices_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test prices command with error API response."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="prices error")
+
+                result = runner.invoke(app, ["prices", "iron_ore"])
+
+                assert result.exit_code == 0
+                assert "prices error" in result.stdout
+
+    def test_prices_api_exception(self, runner, mock_client_manager):
+        """Test prices command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("prices failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="prices failure")
+
+                result = runner.invoke(app, ["prices", "iron_ore"])
+
+                assert result.exit_code == 1
+                assert "prices failure" in result.stdout
+
+    def test_orders_command_invalid_created_at(self, runner, mock_client_manager, mock_api_response):
+        """Test orders command with unparseable created_at."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_order = Mock()
+            mock_order.code = "iron_ore"
+            mock_order.quantity = 10
+            mock_order.price = 100
+            mock_order.seller = "testuser"
+            mock_order.created_at = "bad-date"
+
+            mock_data = Mock()
+            mock_data.data = [mock_order]
+            mock_data.total = 1
+            mock_data.pages = 1
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["orders"])
+
+                assert result.exit_code == 0
+                assert "Unknown" in result.stdout
+
+    def test_orders_command_with_seller_filter(self, runner, mock_client_manager, mock_api_response):
+        """Test orders command title includes seller when provided."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_order = Mock()
+            mock_order.code = "iron_ore"
+            mock_order.quantity = 5
+            mock_order.price = 50
+            mock_order.seller = "bob"
+            mock_order.created_at = "2023-06-15T10:30:00Z"
+
+            mock_data = Mock()
+            mock_data.data = [mock_order]
+            mock_data.total = 1
+            mock_data.pages = 1
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["orders", "--seller", "bob"])
+
+                assert result.exit_code == 0
+
+    def test_orders_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test orders command with error response."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="orders fetch error")
+
+                result = runner.invoke(app, ["orders"])
+
+                assert result.exit_code == 0
+                assert "orders fetch error" in result.stdout
+
+    def test_orders_api_exception(self, runner, mock_client_manager):
+        """Test orders command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("orders exception")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="orders exception")
+
+                result = runner.invoke(app, ["orders"])
+
+                assert result.exit_code == 1
+                assert "orders exception" in result.stdout
+
+    def test_orders_empty_result(self, runner, mock_client_manager, mock_api_response):
+        """Test orders command with empty result."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_data = Mock()
+            mock_data.data = []
+            mock_data.total = 0
+            mock_data.pages = 0
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["orders"])
+
+                assert result.exit_code == 0
+                assert "No orders found" in result.stdout
+
+    def test_history_invalid_sold_at(self, runner, mock_client_manager, mock_api_response):
+        """Test history command with unparseable sold_at value."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_sale = Mock()
+            mock_sale.code = "iron_ore"
+            mock_sale.quantity = 5
+            mock_sale.price = 100
+            mock_sale.seller = "seller"
+            mock_sale.buyer = "buyer"
+            mock_sale.sold_at = "not-a-date"
+
+            mock_data = Mock()
+            mock_data.data = [mock_sale]
+            mock_data.total = 1
+            mock_data.pages = 1
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["history", "--item", "iron_ore"])
+
+                assert result.exit_code == 0
+                assert "Unknown" in result.stdout
+
+    def test_history_character_and_item_title(self, runner, mock_client_manager, mock_api_response):
+        """Test history command title includes both character and item."""
+        with patch(
+            "artifactsmmo_api_client.api.my_account.get_ge_history_my_grandexchange_history_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_sale = Mock()
+            mock_sale.code = "iron_ore"
+            mock_sale.quantity = 2
+            mock_sale.price = 80
+            mock_sale.seller = "me"
+            mock_sale.buyer = "them"
+            mock_sale.sold_at = "2023-05-10T08:00:00Z"
+
+            mock_data = Mock()
+            mock_data.data = [mock_sale]
+            mock_data.total = 1
+            mock_data.pages = 1
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["history", "testchar", "--item", "iron_ore"])
+
+                assert result.exit_code == 0
+
+    def test_history_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test history command with error response."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="history error")
+
+                result = runner.invoke(app, ["history", "--item", "iron_ore"])
+
+                assert result.exit_code == 0
+                assert "history error" in result.stdout
+
+    def test_history_api_exception(self, runner, mock_client_manager):
+        """Test history command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("history failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="history failure")
+
+                result = runner.invoke(app, ["history", "--item", "iron_ore"])
+
+                assert result.exit_code == 1
+                assert "history failure" in result.stdout
+
+    def test_analyze_high_variance_insight(self, runner, mock_client_manager, mock_api_response):
+        """Test analyze command triggers high price variance insight."""
+        with (
+            patch(
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+            ) as mock_orders_api,
+            patch(
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
+            ) as mock_history_api,
+        ):
+            mock_orders_api.return_value = mock_api_response
+            mock_history_api.return_value = mock_api_response
+
+            # High price variance: max > min * 1.5; high total_quantity > 100
+            order_low = Mock()
+            order_low.price = 50
+            order_low.quantity = 200
+            order_low.seller = "seller1"
+            order_low.created_at = "2023-01-01T12:00:00Z"
+            order_high = Mock()
+            order_high.price = 150
+            order_high.quantity = 1
+            order_high.seller = "seller2"
+            order_high.created_at = "2023-01-02T12:00:00Z"
+
+            mock_orders_data = Mock()
+            mock_orders_data.data = [order_low, order_high]
+
+            # High trading history volume (> 50 total)
+            sale = Mock()
+            sale.price = 90
+            sale.quantity = 60
+
+            mock_history_data = Mock()
+            mock_history_data.data = [sale]
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.side_effect = [
+                    Mock(success=True, data=mock_orders_data),
+                    Mock(success=True, data=mock_history_data),
+                ]
+
+                result = runner.invoke(app, ["analyze", "iron_ore"])
+
+                assert result.exit_code == 0
+                assert "High price variance" in result.stdout
+                assert "High supply available" in result.stdout
+                assert "High trading activity" in result.stdout
+
+    def test_analyze_low_supply_low_activity_insight(self, runner, mock_client_manager, mock_api_response):
+        """Test analyze command triggers low supply and low activity insights."""
+        with (
+            patch(
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+            ) as mock_orders_api,
+            patch(
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
+            ) as mock_history_api,
+        ):
+            mock_orders_api.return_value = mock_api_response
+            mock_history_api.return_value = mock_api_response
+
+            # Low price variance, low quantity (< 10)
+            order1 = Mock()
+            order1.price = 100
+            order1.quantity = 3
+            order1.seller = "seller1"
+            order1.created_at = "2023-01-01T12:00:00Z"
+
+            mock_orders_data = Mock()
+            mock_orders_data.data = [order1]
+
+            # Low history volume (< 5 total)
+            sale = Mock()
+            sale.price = 95
+            sale.quantity = 2
+
+            mock_history_data = Mock()
+            mock_history_data.data = [sale]
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.side_effect = [
+                    Mock(success=True, data=mock_orders_data),
+                    Mock(success=True, data=mock_history_data),
+                ]
+
+                result = runner.invoke(app, ["analyze", "iron_ore"])
+
+                assert result.exit_code == 0
+                assert "Low supply" in result.stdout
+                assert "Low trading activity" in result.stdout
+
+    def test_analyze_only_history_no_orders(self, runner, mock_client_manager, mock_api_response):
+        """Test analyze command with history data but no orders."""
+        with (
+            patch(
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+            ) as mock_orders_api,
+            patch(
+                "artifactsmmo_api_client.api.grand_exchange.get_ge_history_grandexchange_history_code_get.sync"
+            ) as mock_history_api,
+        ):
+            mock_orders_api.return_value = mock_api_response
+            mock_history_api.return_value = mock_api_response
+
+            mock_orders_data = Mock()
+            mock_orders_data.data = []
+
+            sale = Mock()
+            sale.price = 80
+            sale.quantity = 10
+
+            mock_history_data = Mock()
+            mock_history_data.data = [sale]
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.side_effect = [
+                    Mock(success=True, data=mock_orders_data),
+                    Mock(success=True, data=mock_history_data),
+                ]
+
+                result = runner.invoke(app, ["analyze", "iron_ore"])
+
+                assert result.exit_code == 0
+
+    def test_analyze_api_exception(self, runner, mock_client_manager):
+        """Test analyze command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_orders_api:
+            mock_orders_api.side_effect = Exception("analyze failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="analyze failure")
+
+                result = runner.invoke(app, ["analyze", "iron_ore"])
+
+                assert result.exit_code == 1
+                assert "analyze failure" in result.stdout
+
+    def test_trending_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test trending command with error response."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="trending error")
+
+                result = runner.invoke(app, ["trending"])
+
+                assert result.exit_code == 0
+                assert "trending error" in result.stdout
+
+    def test_trending_empty_orders(self, runner, mock_client_manager, mock_api_response):
+        """Test trending command with empty orders list."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_data = Mock()
+            mock_data.data = []
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["trending"])
+
+                assert result.exit_code == 0
+                assert "No orders found" in result.stdout
+
+    def test_trending_api_exception(self, runner, mock_client_manager):
+        """Test trending command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("trending failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="trending failure")
+
+                result = runner.invoke(app, ["trending"])
+
+                assert result.exit_code == 1
+                assert "trending failure" in result.stdout
+
+    def test_opportunities_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test opportunities command with error response."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="opportunities error")
+
+                result = runner.invoke(app, ["opportunities"])
+
+                assert result.exit_code == 0
+                assert "opportunities error" in result.stdout
+
+    def test_opportunities_empty_orders(self, runner, mock_client_manager, mock_api_response):
+        """Test opportunities command with empty orders list."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_data = Mock()
+            mock_data.data = []
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["opportunities"])
+
+                assert result.exit_code == 0
+                assert "No orders found" in result.stdout
+
+    def test_opportunities_api_exception(self, runner, mock_client_manager):
+        """Test opportunities command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("opportunities failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="opportunities failure")
+
+                result = runner.invoke(app, ["opportunities"])
+
+                assert result.exit_code == 1
+                assert "opportunities failure" in result.stdout
+
+    def test_spread_error_response(self, runner, mock_client_manager, mock_api_response):
+        """Test spread command with error response."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, data=None, error="spread error")
+
+                result = runner.invoke(app, ["spread"])
+
+                assert result.exit_code == 0
+                assert "spread error" in result.stdout
+
+    def test_spread_empty_orders(self, runner, mock_client_manager, mock_api_response):
+        """Test spread command with empty orders list."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_data = Mock()
+            mock_data.data = []
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["spread"])
+
+                assert result.exit_code == 0
+                assert "No orders found" in result.stdout
+
+    def test_spread_api_exception(self, runner, mock_client_manager):
+        """Test spread command with API exception."""
+        with patch(
+            "artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = Exception("spread failure")
+
+            with patch("artifactsmmo_cli.commands.trade.handle_api_error") as mock_handle:
+                mock_handle.return_value = Mock(cooldown_remaining=None, error="spread failure")
+
+                result = runner.invoke(app, ["spread"])
+
+                assert result.exit_code == 1
+                assert "spread failure" in result.stdout
