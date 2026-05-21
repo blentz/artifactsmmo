@@ -123,3 +123,13 @@ class SkillXpObservation(SQLModel, table=True):
     skill: str = Field(index=True)
     level: int
     max_xp: int
+
+
+class TaskRewardObservation(SQLModel, table=True):
+    """Gold-equivalent value of a completed task's reward, per character."""
+
+    __tablename__ = "task_reward_observations"
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    value: float

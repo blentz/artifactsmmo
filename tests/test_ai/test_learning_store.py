@@ -455,3 +455,13 @@ def test_records_and_returns_skill_max_xp_observations(tmp_path):
     obs = store.skill_max_xp_observations("alchemy")
     store.close()
     assert obs == {1: 150, 2: 220}
+
+
+def test_task_reward_value_mean_improves_with_history(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+    assert store.mean_task_reward_value(default=5.0) == 5.0
+    store.record_task_reward_value(100.0)
+    store.record_task_reward_value(200.0)
+    assert store.mean_task_reward_value(default=5.0) == 150.0
+    assert store.task_reward_sample_count() == 2
+    store.close()

@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session, SkillXpObservation
+from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session, SkillXpObservation, TaskRewardObservation
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 
@@ -341,6 +341,36 @@ class LearningStore:
             return {row.level: row.max_xp for row in rows}
         except SQLAlchemyError:
             return {}
+
+    def record_task_reward_value(self, value: float) -> None:
+        """Append one completed-task reward observation for this character."""
+        try:
+            with SqlSession(self._engine) as s:
+                s.add(TaskRewardObservation(character=self._character, value=value))
+                s.commit()
+        except SQLAlchemyError:
+            pass
+
+    def _task_reward_values(self) -> list[float]:
+        """Return all recorded task reward values for this character."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(TaskRewardObservation).where(
+                    TaskRewardObservation.character == self._character,
+                )
+                rows = list(s.exec(stmt))
+            return [row.value for row in rows]
+        except SQLAlchemyError:
+            return []
+
+    def task_reward_sample_count(self) -> int:
+        """Number of completed-task reward observations for this character."""
+        return len(self._task_reward_values())
+
+    def mean_task_reward_value(self, default: float) -> float:
+        """Mean reward value over all observations, or `default` if none recorded."""
+        vals = self._task_reward_values()
+        return sum(vals) / len(vals) if vals else default
 
     def close(self) -> None:
         self._engine.dispose()
