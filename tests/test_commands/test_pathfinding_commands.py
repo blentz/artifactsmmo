@@ -54,7 +54,7 @@ class TestGotoCommand:
     @patch("artifactsmmo_cli.commands.action.get_character_position")
     def test_goto_invalid_character(self, mock_get_position):
         """Test goto with invalid character."""
-        mock_get_position.side_effect = Exception("Character not found")
+        mock_get_position.side_effect = ValueError("Character not found")
 
         result = self.runner.invoke(app, ["goto", "invalidchar", "5 5"])
 
@@ -68,7 +68,7 @@ class TestGotoCommand:
         """Test goto with invalid named location."""
         mock_get_position.return_value = (0, 0)
         mock_parse_destination.return_value = "invalidlocation"
-        mock_resolve_location.side_effect = Exception("Location not found")
+        mock_resolve_location.side_effect = ValueError("Location not found")
 
         result = self.runner.invoke(app, ["goto", "testchar", "invalidlocation"])
 
@@ -232,7 +232,7 @@ class TestPathCommand:
     @patch("artifactsmmo_cli.commands.action.get_character_position")
     def test_path_invalid_character(self, mock_get_position):
         """Test path command with invalid character."""
-        mock_get_position.side_effect = Exception("Character not found")
+        mock_get_position.side_effect = ValueError("Character not found")
 
         result = self.runner.invoke(app, ["path", "invalidchar", "5 5"])
 
@@ -271,7 +271,7 @@ class TestPathCommand:
         """Test path command with invalid named location."""
         mock_get_position.return_value = (0, 0)
         mock_parse_destination.return_value = "invalidlocation"
-        mock_resolve_location.side_effect = Exception("Location not found")
+        mock_resolve_location.side_effect = ValueError("Location not found")
 
         result = self.runner.invoke(app, ["path", "testchar", "invalidlocation"])
 
