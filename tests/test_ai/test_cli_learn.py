@@ -58,4 +58,5 @@ def test_play_marks_exit_reason_crash_when_run_raises(monkeypatch, tmp_path):
     engine = create_engine(f"sqlite:///{db_path}")
     with Session(engine) as s:
         rows = list(s.exec(sqlmodel_select(SessRow)))
+    engine.dispose()  # close the verification connection; otherwise it leaks (ResourceWarning)
     assert len(rows) == 0, "lazy session creation: no row should exist if no cycle recorded"
