@@ -12,7 +12,6 @@ from artifactsmmo_cli.commands.info import (
     _find_resource_locations,
     _format_combat_analysis,
     _get_character_data,
-    _get_fallback_npc,
     _get_monster_drops,
     _get_resource_data,
     _get_resource_info_for_content,
@@ -620,8 +619,8 @@ class TestNPCCommands:
                 assert "(1, 2)" in result.stdout
                 assert "(4, 1)" in result.stdout
 
-    def test_npcs_fallback_data(self, runner, mock_client_manager, mock_api_response):
-        """Test npcs command falls back to known locations when no API data."""
+    def test_npcs_no_api_data(self, runner, mock_client_manager, mock_api_response):
+        """Test npcs command prints error when no API data found."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -636,17 +635,15 @@ class TestNPCCommands:
                 result = runner.invoke(app, ["npcs"])
 
                 assert result.exit_code == 0
-                assert "Warning: No NPC content data found" in result.stdout
-                assert "Known NPCs (Fallback Data)" in result.stdout
-                assert "Task Master" in result.stdout
-                assert "Bank" in result.stdout
+                assert "No NPC content data found in map API" in result.stdout
+                assert "fallback" not in result.stdout.lower()
 
-    def test_npcs_with_type_filter(self, runner, mock_client_manager, mock_api_response):
-        """Test npcs command with type filter."""
+    def test_npcs_with_type_filter_no_api_data(self, runner, mock_client_manager, mock_api_response):
+        """Test npcs command with type filter when no API data prints error."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            # Mock empty API response to trigger fallback
+            # Mock empty API response — no fallback any more
             mock_data = Mock()
             mock_data.data = []
             mock_data.pages = 1
@@ -657,20 +654,15 @@ class TestNPCCommands:
                 result = runner.invoke(app, ["npcs", "--npc-type", "workshop"])
 
                 assert result.exit_code == 0
-                assert "Type: workshop" in result.stdout
-                assert "Weaponcrafting Workshop" in result.stdout
-                assert "Gearcrafting Workshop" in result.stdout
-                assert "Cooking Workshop" in result.stdout
-                # Should not contain non-workshop NPCs
-                assert "Task Master" not in result.stdout
-                assert "Bank" not in result.stdout
+                assert "No NPC content data found in map API" in result.stdout
+                assert "fallback" not in result.stdout.lower()
 
-    def test_npcs_pagination(self, runner, mock_client_manager, mock_api_response):
-        """Test npcs command pagination."""
+    def test_npcs_pagination_no_api_data(self, runner, mock_client_manager, mock_api_response):
+        """Test npcs command pagination when no API data prints error."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            # Mock empty API response to trigger fallback
+            # Mock empty API response — no fallback any more
             mock_data = Mock()
             mock_data.data = []
             mock_data.pages = 1
@@ -681,7 +673,7 @@ class TestNPCCommands:
                 result = runner.invoke(app, ["npcs", "--page", "1", "--size", "3"])
 
                 assert result.exit_code == 0
-                assert "Page 1 of" in result.stdout
+                assert "No NPC content data found in map API" in result.stdout
 
     def test_npc_specific_found(self, runner, mock_client_manager, mock_api_response):
         """Test npc command for specific NPC found in API data."""
@@ -713,8 +705,8 @@ class TestNPCCommands:
                 assert "Town Square" in result.stdout
                 assert "tasks_master" in result.stdout
 
-    def test_npc_specific_fallback(self, runner, mock_client_manager, mock_api_response):
-        """Test npc command falls back to known locations."""
+    def test_npc_specific_not_in_api(self, runner, mock_client_manager, mock_api_response):
+        """Test npc command prints not-found error when NPC absent from API data."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -729,9 +721,8 @@ class TestNPCCommands:
                 result = runner.invoke(app, ["npc", "bank"])
 
                 assert result.exit_code == 0
-                assert "NPC: Bank" in result.stdout
-                assert "(4, 1)" in result.stdout
-                assert "API content data not available" in result.stdout
+                assert "not found" in result.stdout
+                assert "(4, 1)" not in result.stdout
 
     def test_npc_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test npc command when NPC not found."""
@@ -840,35 +831,6 @@ class TestNPCHelperFunctions:
     def test_classify_npc_empty_content(self):
         """Test classifying empty content."""
         result = _classify_npc("", "")
-
-        assert result is None
-
-    def test_get_fallback_npc_found(self):
-        """Test getting fallback NPC that exists."""
-        result = _get_fallback_npc("task")
-
-        assert result is not None
-        assert result["name"] == "Task Master"
-        assert result["x"] == 1
-        assert result["y"] == 2
-
-    def test_get_fallback_npc_case_insensitive(self):
-        """Test getting fallback NPC with case insensitive search."""
-        result = _get_fallback_npc("BANK")
-
-        assert result is not None
-        assert result["name"] == "Bank"
-
-    def test_get_fallback_npc_partial_match(self):
-        """Test getting fallback NPC with partial name match."""
-        result = _get_fallback_npc("weapon")
-
-        assert result is not None
-        assert result["name"] == "Weaponcrafting Workshop"
-
-    def test_get_fallback_npc_not_found(self):
-        """Test getting fallback NPC that doesn't exist."""
-        result = _get_fallback_npc("nonexistent")
 
         assert result is None
 
@@ -2737,27 +2699,6 @@ class TestNPCsAdditionalCoverage:
                 assert "connection failed" in result.output
 
 
-class TestShowFallbackNPCs:
-    """Test _show_fallback_npcs helper."""
-
-    def test_show_fallback_npcs_no_npcs_on_page(self, runner, mock_client_manager, mock_api_response):
-        """Test fallback NPCs shows error when no NPCs on page (line 1308)."""
-        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
-
-            mock_data = Mock()
-            mock_data.data = []
-            mock_data.pages = 1
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                # Page 999 on fallback data — no NPCs exist there
-                result = runner.invoke(app, ["npcs", "--page", "999"])
-
-                assert result.exit_code == 0
-                assert "No NPCs found on page 999" in result.output
-
 
 class TestFindResourceLocationsEdgeCases:
     """Test edge cases for _find_resource_locations."""
@@ -3154,7 +3095,7 @@ class TestNPCsPaginationLoop:
     """Test npcs/npc pagination loop continuation lines."""
 
     def test_npcs_api_failure_in_loop(self, runner, mock_client_manager, mock_api_response):
-        """Test npcs stops loop on API failure (line 1009)."""
+        """Test npcs stops loop on API failure and shows error (line 1009)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -3164,8 +3105,8 @@ class TestNPCsPaginationLoop:
                 result = runner.invoke(app, ["npcs"])
 
                 assert result.exit_code == 0
-                # Falls through to fallback since all_npcs is empty
-                assert "Known NPCs" in result.output
+                # API failure → no NPC data → error message, no fallback
+                assert "No NPC content data found in map API" in result.output
 
     def test_npcs_increments_page_when_more_pages_exist(self, runner, mock_client_manager, mock_api_response):
         """Test npcs increments current_page when pages > 1 (line 1043)."""
@@ -3202,7 +3143,7 @@ class TestNPCsPaginationLoop:
                 assert mock_api.call_count == 2
 
     def test_npc_api_failure_in_loop(self, runner, mock_client_manager, mock_api_response):
-        """Test npc stops loop on API failure (line 1112)."""
+        """Test npc stops loop on API failure and shows not-found error (line 1112)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
@@ -3212,8 +3153,8 @@ class TestNPCsPaginationLoop:
                 result = runner.invoke(app, ["npc", "bank"])
 
                 assert result.exit_code == 0
-                # Falls through to fallback
-                assert "Bank" in result.output
+                # API failure → NPC not found → error message, no fallback
+                assert "not found" in result.output
 
     def test_npc_increments_page_when_more_pages_exist(self, runner, mock_client_manager, mock_api_response):
         """Test npc increments current_page when pages > 1 (line 1143)."""
@@ -3250,36 +3191,6 @@ class TestNPCsPaginationLoop:
                 assert result.exit_code == 0
                 assert mock_api.call_count == 2
 
-
-class TestFallbackNPCsServices:
-    """Test _show_fallback_npcs services truncation."""
-
-    def test_fallback_npcs_services_truncated_when_more_than_two(self, runner, mock_client_manager, mock_api_response):
-        """Test fallback NPC with >2 services shows ellipsis (line 1289)."""
-        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
-
-            # Empty API data → triggers fallback
-            mock_data = Mock()
-            mock_data.data = []
-            mock_data.pages = 1
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                # Task Master in fallback has 2 services → no ellipsis
-                # Bank has 2 services, Task Master 2 services
-                # But _show_fallback_npcs adds "..." when len > 2
-                # We need to exercise the >2 branch by using the non-filtered version
-                # which includes task_master with ["Task Assignment", "Task Completion"]
-                # None of the fallback NPCs have >2 services in _show_fallback_npcs (only _get_fallback_npc does)
-                # But _get_fallback_npc task_master has 3 services in the known_npcs list
-                # _show_fallback_npcs task_master only has 2 — so the branch is not reachable there.
-                # However test still exercises the fallback path with default data.
-                result = runner.invoke(app, ["npcs"])
-
-                assert result.exit_code == 0
-                assert "Known NPCs" in result.output
 
 
 class TestDisplayMonsterDetails:

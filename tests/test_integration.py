@@ -268,12 +268,15 @@ class TestInfoCommands(TestSetup):
 
         output = console_output.getvalue()
 
-        # Verify we got NPC data (either from API or fallback)
-        assert "NPCs" in output or "NPC:" in output
-        assert "Error" not in output
-
-        # Should contain NPC-related information
-        assert any(term in output for term in ["Bank", "Task Master", "Workshop", "Exchange", "Location"])
+        # Either the API has NPC map content (a table with NPC details) or it
+        # honestly reports none — we no longer fabricate a fallback table.
+        if "No NPC content data found" in output:
+            # Valid outcome: the live map currently has no NPC content tiles.
+            assert "Error" not in output
+        else:
+            assert "NPCs" in output or "NPC:" in output
+            assert "Error" not in output
+            assert any(term in output for term in ["Name", "Type", "Location", "Services"])
 
 
 @pytest.mark.integration

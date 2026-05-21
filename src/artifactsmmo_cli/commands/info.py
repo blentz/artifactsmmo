@@ -1079,9 +1079,9 @@ def list_npcs(
             else:
                 console.print(format_error_message(f"No NPCs found on page {page}"))
         else:
-            # Fallback: show known NPC locations if no content data is available
-            console.print("[yellow]Warning: No NPC content data found in map API. Showing known locations:[/yellow]")
-            _show_fallback_npcs(npc_type, page, size)
+            # No NPC content in the map API — report it. Never fabricate a
+            # "known locations" table (CLAUDE.md: use only API data or fail).
+            console.print(format_error_message("No NPC content data found in map API"))
 
     except Exception as e:
         cli_response = handle_api_error(e)
@@ -1158,22 +1158,9 @@ def get_npc(
             output = format_table(headers, rows, title=f"NPC: {found_npc['name']}")
             console.print(output)
         else:
-            # Fallback: check known NPC locations
-            fallback_npc = _get_fallback_npc(name)
-            if fallback_npc:
-                headers = ["Property", "Value"]
-                rows = [
-                    ["Name", fallback_npc["name"]],
-                    ["Type", fallback_npc["type"]],
-                    ["Location", f"({fallback_npc['x']}, {fallback_npc['y']})"],
-                    ["Services", ", ".join(fallback_npc["services"])],
-                    ["Note", "Location from known coordinates (API content data not available)"],
-                ]
-
-                output = format_table(headers, rows, title=f"NPC: {fallback_npc['name']}")
-                console.print(output)
-            else:
-                console.print(format_error_message(f"NPC '{name}' not found"))
+            # No NPC content for this name in the map API. Report it — never
+            # fabricate coordinates (CLAUDE.md: use only API data or fail).
+            console.print(format_error_message(f"NPC '{name}' not found"))
 
     except Exception as e:
         cli_response = handle_api_error(e)
@@ -1231,142 +1218,6 @@ def _classify_npc(content_type: str, content_code: str) -> dict[str, str | list[
                 "type": "workshop",
                 "services": ["Crafting", "Item Creation"],
             }
-
-    return None
-
-
-def _show_fallback_npcs(npc_type: str | None, page: int, size: int) -> None:
-    """Show known NPC locations as fallback when API content data is not available."""
-    known_npcs = [
-        {
-            "name": "Task Master",
-            "type": "task_master",
-            "x": 1,
-            "y": 2,
-            "services": ["Task Assignment", "Task Completion"],
-        },
-        {
-            "name": "Task Master",
-            "type": "task_master",
-            "x": 5,
-            "y": 1,
-            "services": ["Task Assignment", "Task Completion"],
-        },
-        {"name": "Bank", "type": "bank", "x": 4, "y": 1, "services": ["Item Storage", "Gold Storage"]},
-        {
-            "name": "Grand Exchange",
-            "type": "grand_exchange",
-            "x": 5,
-            "y": 1,
-            "services": ["Item Trading", "Market Access"],
-        },
-        {
-            "name": "Grand Exchange",
-            "type": "grand_exchange",
-            "x": 5,
-            "y": 5,
-            "services": ["Item Trading", "Market Access"],
-        },
-        {"name": "Weaponcrafting Workshop", "type": "workshop", "x": 1, "y": 3, "services": ["Weapon Crafting"]},
-        {"name": "Gearcrafting Workshop", "type": "workshop", "x": 3, "y": 1, "services": ["Gear Crafting"]},
-        {"name": "Cooking Workshop", "type": "workshop", "x": 1, "y": 5, "services": ["Food Preparation"]},
-    ]
-
-    # Apply type filter if specified
-    if npc_type:
-        known_npcs = [npc for npc in known_npcs if npc_type.lower() in npc["type"].lower()]
-
-    # Apply pagination
-    start_idx = (page - 1) * size
-    end_idx = start_idx + size
-    paginated_npcs = known_npcs[start_idx:end_idx]
-
-    if paginated_npcs:
-        headers = ["Name", "Type", "Location (X,Y)", "Services"]
-        rows = []
-        for npc in paginated_npcs:
-            services_str = ", ".join(npc["services"][:2])
-            if len(npc["services"]) > 2:
-                services_str += "..."
-
-            rows.append(
-                [
-                    npc["name"],
-                    npc["type"],
-                    f"({npc['x']}, {npc['y']})",
-                    services_str,
-                ]
-            )
-
-        title = "Known NPCs (Fallback Data)"
-        if npc_type:
-            title += f" (Type: {npc_type})"
-        title += f" - Page {page} of {(len(known_npcs) + size - 1) // size}"
-
-        output = format_table(headers, rows, title=title)
-        console.print(output)
-    else:
-        console.print(format_error_message(f"No NPCs found on page {page}"))
-
-
-def _get_fallback_npc(name: str) -> dict[str, str | int | list[str]] | None:
-    """Get specific NPC from known locations as fallback."""
-    known_npcs = [
-        {
-            "name": "Task Master",
-            "type": "task_master",
-            "x": 1,
-            "y": 2,
-            "services": ["Task Assignment", "Task Completion", "Quest Management"],
-        },
-        {
-            "name": "Task Master",
-            "type": "task_master",
-            "x": 5,
-            "y": 1,
-            "services": ["Task Assignment", "Task Completion", "Quest Management"],
-        },
-        {
-            "name": "Bank",
-            "type": "bank",
-            "x": 4,
-            "y": 1,
-            "services": ["Item Storage", "Gold Storage", "Inventory Management"],
-        },
-        {
-            "name": "Grand Exchange",
-            "type": "grand_exchange",
-            "x": 5,
-            "y": 1,
-            "services": ["Item Trading", "Market Access", "Price Discovery"],
-        },
-        {
-            "name": "Grand Exchange",
-            "type": "grand_exchange",
-            "x": 5,
-            "y": 5,
-            "services": ["Item Trading", "Market Access", "Price Discovery"],
-        },
-        {
-            "name": "Weaponcrafting Workshop",
-            "type": "workshop",
-            "x": 1,
-            "y": 3,
-            "services": ["Weapon Crafting", "Weapon Upgrades"],
-        },
-        {
-            "name": "Gearcrafting Workshop",
-            "type": "workshop",
-            "x": 3,
-            "y": 1,
-            "services": ["Gear Crafting", "Armor Creation"],
-        },
-        {"name": "Cooking Workshop", "type": "workshop", "x": 1, "y": 5, "services": ["Food Preparation", "Cooking"]},
-    ]
-
-    for npc in known_npcs:
-        if name.lower() in npc["name"].lower():
-            return npc
 
     return None
 
