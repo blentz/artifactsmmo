@@ -1,7 +1,6 @@
 """WatchApp: Textual app with four panes for live character observation."""
 
 from textual.app import App, ComposeResult
-from textual.containers import Grid
 from textual.widgets import Footer, Header
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot

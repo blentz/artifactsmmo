@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_task_trade_my_name_action_task_trade_post import sync as action_task_trade
+from artifactsmmo_api_client.api.my_characters.action_task_trade_my_name_action_task_trade_post import (
+    sync as action_task_trade,
+)
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action

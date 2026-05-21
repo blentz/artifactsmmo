@@ -3,7 +3,9 @@
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_transition_my_name_action_transition_post import sync as action_transition
+from artifactsmmo_api_client.api.my_characters.action_transition_my_name_action_transition_post import (
+    sync as action_transition,
+)
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData

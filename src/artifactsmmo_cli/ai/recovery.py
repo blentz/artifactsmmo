@@ -3,7 +3,6 @@
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Deque
 
 
 class StuckSignal(Enum):
@@ -28,7 +27,7 @@ class StuckDetector:
     """Tracks recent cycles and reports stuck-state signals."""
 
     def __init__(self, history_size: int = 30) -> None:
-        self._history: Deque[CycleRecord] = deque(maxlen=history_size)
+        self._history: deque[CycleRecord] = deque(maxlen=history_size)
         self._ack_index: dict[StuckSignal, int] = {}
         self._cycle_counter = 0
 

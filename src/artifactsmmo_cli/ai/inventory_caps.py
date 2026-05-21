@@ -9,7 +9,6 @@ from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 
-
 BATCH_BUFFER = 5
 """How many craft batches worth of material to keep on hand. With BATCH=5 and
 a recipe needing 6 of a mat, the cap is 30."""

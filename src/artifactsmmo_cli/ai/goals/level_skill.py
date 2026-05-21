@@ -6,15 +6,14 @@ grinding through it is reasonable. Drives the planner to craft items in
 that skill family until the skill levels up.
 """
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
-
 
 MAX_SKILL_GAP = 5
 """Don't fire if the level gap exceeds this — too long a grind for one

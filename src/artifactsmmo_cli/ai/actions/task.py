@@ -4,10 +4,18 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post import sync as action_task_new
-from artifactsmmo_api_client.api.my_characters.action_complete_task_my_name_action_task_complete_post import sync as action_task_complete
-from artifactsmmo_api_client.api.my_characters.action_task_cancel_my_name_action_task_cancel_post import sync as action_task_cancel
-from artifactsmmo_api_client.api.my_characters.action_task_exchange_my_name_action_task_exchange_post import sync as action_task_exchange
+from artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_action_task_new_post import (
+    sync as action_task_new,
+)
+from artifactsmmo_api_client.api.my_characters.action_complete_task_my_name_action_task_complete_post import (
+    sync as action_task_complete,
+)
+from artifactsmmo_api_client.api.my_characters.action_task_cancel_my_name_action_task_cancel_post import (
+    sync as action_task_cancel,
+)
+from artifactsmmo_api_client.api.my_characters.action_task_exchange_my_name_action_task_exchange_post import (
+    sync as action_task_exchange,
+)
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction

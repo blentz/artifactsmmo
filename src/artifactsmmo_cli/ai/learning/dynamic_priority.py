@@ -15,7 +15,6 @@ from artifactsmmo_cli.ai.learning.scalarizer import scalar_yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-
 CONFIDENCE_CAP_SAMPLES = WARMUP_MIN_SAMPLES * 3
 """Number of observed cycles where confidence reaches 1.0. Below this, the
 bonus is scaled linearly."""

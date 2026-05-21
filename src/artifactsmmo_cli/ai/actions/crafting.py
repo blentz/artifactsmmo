@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import sync as action_crafting
+from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post import (
+    sync as action_crafting,
+)
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from artifactsmmo_cli.ai.actions.base import Action

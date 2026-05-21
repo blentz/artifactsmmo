@@ -3,17 +3,16 @@
 from dataclasses import dataclass, field
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
 from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items
 from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
-from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.types import Unset
-
 
 _GATHERING_SKILLS = frozenset({"mining", "woodcutting", "fishing", "alchemy"})
 

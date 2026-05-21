@@ -5,7 +5,9 @@ from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import sync as action_equip
-from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import sync as action_unequip
+from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import (
+    sync as action_unequip,
+)
 from artifactsmmo_api_client.models.equip_schema import EquipSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 from artifactsmmo_api_client.models.unequip_schema import UnequipSchema

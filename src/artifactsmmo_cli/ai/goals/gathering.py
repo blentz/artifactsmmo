@@ -1,11 +1,11 @@
 """Gathering goal: accumulate materials needed to craft an upgrade."""
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 

@@ -6,7 +6,6 @@ from datetime import datetime
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.types import Unset
 
-
 EQUIPMENT_SLOTS = [
     "weapon_slot",
     "rune_slot",

@@ -10,7 +10,6 @@ from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-
 PRIORITY_WHEN_OVERSTOCKED = priorities.DISCARD_OVERSTOCK_BASE
 """Baseline. Pressure-scaled tiers live in priorities.DISCARD_OVERSTOCK_*."""
 

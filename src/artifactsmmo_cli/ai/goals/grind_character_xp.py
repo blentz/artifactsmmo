@@ -6,15 +6,14 @@ has no task assigned, he should pursue the most XP-rewarding monster he can
 beat reliably, rather than falling back to a low-tier default.
 """
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
-
 
 PRIORITY_FLOOR = priorities.GRIND_CHARACTER_XP_FLOOR
 """Minimum priority when active. Matches existing FarmMonster default so the

@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_claim_pending_item_my_name_action_claim_item_id_post import sync as action_claim_item
 from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
+from artifactsmmo_api_client.api.my_characters.action_claim_pending_item_my_name_action_claim_item_id_post import (
+    sync as action_claim_item,
+)
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData

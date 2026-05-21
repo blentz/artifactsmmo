@@ -7,14 +7,13 @@ required level. Priority sits above DepositInventory's ramp so the bot
 pivots to combat instead of looping on locked-bank failures.
 """
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
-
 
 PRIORITY_WHEN_BLOCKER_ACTIVE = priorities.REACH_UNLOCK_LEVEL
 """Above DepositInventory's max (80) and FarmItems (35+bonus) so the bot

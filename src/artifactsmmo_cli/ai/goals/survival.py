@@ -1,8 +1,8 @@
 """Survival goals: HP restoration and inventory management."""
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 

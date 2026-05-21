@@ -2,8 +2,8 @@
 
 import time
 from dataclasses import dataclass
-from typing import ClassVar
 from datetime import datetime, timezone
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post import sync as action_move

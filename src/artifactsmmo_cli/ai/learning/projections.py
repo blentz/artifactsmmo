@@ -17,7 +17,6 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-
 WARMUP_MIN_SAMPLES = 10
 """Minimum cycles for a projection to be considered trustworthy.
 
