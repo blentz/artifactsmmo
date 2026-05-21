@@ -674,8 +674,9 @@ def list_resources(
 
                             elif char_x is not None and char_y is not None:
                                 row.extend(["Not found", "N/A"])
-                            elif center_x is not None and center_y is not None:
-                                row.append("Not found")
+                            # Center-only mode pre-filters resources to those WITH a
+                            # location (see filter above), so the "not found" case
+                            # cannot occur here — no branch needed.
 
                             row.append(", ".join(drops) if drops else "None")
                             rows.append(row)
