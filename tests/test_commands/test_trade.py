@@ -5,7 +5,13 @@ from unittest.mock import Mock, patch
 import pytest
 from typer.testing import CliRunner
 
-from artifactsmmo_cli.commands.trade import app
+from artifactsmmo_cli.commands.trade import (
+    app,
+    calculate_price_stats,
+    calculate_volume_stats,
+    find_arbitrage_opportunities,
+    format_price_table,
+)
 
 
 @pytest.fixture
@@ -555,12 +561,6 @@ class TestTradeCommands:
 
     def test_market_analysis_helper_functions(self):
         """Test market analysis helper functions."""
-        from artifactsmmo_cli.commands.trade import (
-            calculate_price_stats,
-            calculate_volume_stats,
-            find_arbitrage_opportunities,
-        )
-
         # Test price stats calculation
         mock_orders = []
         for price in [50, 75, 100]:
@@ -589,12 +589,6 @@ class TestTradeCommands:
 
     def test_market_analysis_empty_data(self):
         """Test market analysis functions with empty data."""
-        from artifactsmmo_cli.commands.trade import (
-            calculate_price_stats,
-            calculate_volume_stats,
-            find_arbitrage_opportunities,
-        )
-
         # Test with empty orders
         price_stats = calculate_price_stats([])
         assert price_stats["min"] == 0
@@ -619,8 +613,6 @@ class TestTradeCommands:
 
     def test_calculate_price_stats_no_price_attr(self):
         """Test calculate_price_stats with orders that lack price attribute."""
-        from artifactsmmo_cli.commands.trade import calculate_price_stats
-
         # Orders present but none have a 'price' attribute
         orders = [object(), object()]
         stats = calculate_price_stats(orders)
@@ -631,8 +623,6 @@ class TestTradeCommands:
 
     def test_format_price_table_invalid_created_at(self):
         """Test format_price_table with unparseable created_at value."""
-        from artifactsmmo_cli.commands.trade import format_price_table
-
         order = Mock()
         order.price = 100
         order.quantity = 5

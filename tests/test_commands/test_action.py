@@ -3,9 +3,18 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
-from artifactsmmo_cli.commands.action import app
+from artifactsmmo_cli.commands.action import (
+    BatchResults,
+    app,
+    execute_fight_action,
+    execute_gather_action,
+    execute_rest_action,
+)
+from artifactsmmo_cli.models.responses import CLIResponse
+from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
 
 
 @pytest.fixture
@@ -123,8 +132,6 @@ class TestFightCommand:
             mock_handle.return_value = Mock(success=True, data={"fight": fight_data}, message="Combat completed")
 
             with patch("artifactsmmo_cli.commands.action.format_combat_result") as mock_format:
-                from rich.text import Text
-
                 mock_format.return_value = Text(
                     "🗡️ Victory! | XP gained: 150 | Gold gained: 75 | Items dropped: 2x iron_ore, 1x leather"
                 )
@@ -142,8 +149,6 @@ class TestFightCommand:
             mock_handle.return_value = Mock(success=True, data={"fight": fight_data}, message="Combat completed")
 
             with patch("artifactsmmo_cli.commands.action.format_combat_result") as mock_format:
-                from rich.text import Text
-
                 mock_format.return_value = Text("💀 Defeat! | XP gained: 25")
 
                 result = runner.invoke(app, ["fight", "testchar"])
@@ -573,8 +578,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_gathering.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # Mock successful gather responses
             mock_handle.return_value = CLIResponse.success_response(
                 {"details": {"xp": 50, "items": [{"code": "wood", "quantity": 2}]}}, "Gathering completed"
@@ -593,8 +596,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_fight.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # Mock successful fight responses
             mock_handle.return_value = CLIResponse.success_response(
                 {"fight": {"result": "win", "xp": 100, "gold": 25, "drops": [{"code": "leather", "quantity": 1}]}},
@@ -614,8 +615,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_rest.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # Mock successful rest responses
             mock_handle.return_value = CLIResponse.success_response({}, "Rest completed")
 
@@ -646,8 +645,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_gathering.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # First call succeeds, second has cooldown
             mock_handle.side_effect = [
                 CLIResponse.success_response({"details": {"xp": 50}}, "Gathering completed"),
@@ -667,8 +664,6 @@ class TestBatchCommand:
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("time.sleep") as mock_sleep:  # Mock sleep to speed up test
-                from artifactsmmo_cli.models.responses import CLIResponse
-
                 # First call succeeds, second has cooldown, third succeeds after wait
                 mock_handle.side_effect = [
                     CLIResponse.success_response({"details": {"xp": 50}}, "Gathering completed"),
@@ -689,8 +684,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_gathering.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # First succeeds, second fails, third succeeds
             mock_handle.side_effect = [
                 CLIResponse.success_response({"details": {"xp": 50}}, "Gathering completed"),
@@ -710,8 +703,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_gathering.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # First succeeds, second fails
             mock_handle.side_effect = [
                 CLIResponse.success_response({"details": {"xp": 50}}, "Gathering completed"),
@@ -735,8 +726,6 @@ class TestBatchCommand:
         mock_client_manager.api.action_fight.return_value = Mock()
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            from artifactsmmo_cli.models.responses import CLIResponse
-
             # Mock multiple successful fight responses with different rewards
             mock_handle.side_effect = [
                 CLIResponse.success_response(
@@ -766,8 +755,6 @@ class TestActionExecutors:
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             mock_handle.return_value = Mock(success=True, data={"details": {"xp": 50}})
 
-            from artifactsmmo_cli.commands.action import execute_gather_action
-
             result = execute_gather_action("testchar")
 
             assert result.success is True
@@ -778,8 +765,6 @@ class TestActionExecutors:
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             mock_handle.return_value = Mock(success=True, data={"fight": {"result": "win"}})
 
-            from artifactsmmo_cli.commands.action import execute_fight_action
-
             result = execute_fight_action("testchar")
 
             assert result.success is True
@@ -789,8 +774,6 @@ class TestActionExecutors:
         """Test execute_rest_action with successful response."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             mock_handle.return_value = Mock(success=True, data={})
-
-            from artifactsmmo_cli.commands.action import execute_rest_action
 
             result = execute_rest_action("testchar")
 
@@ -803,8 +786,6 @@ class TestActionExecutors:
             mock_handle_error.return_value = Mock(success=False, error="API Error")
             mock_client_manager.api.action_gathering.side_effect = Exception("API Error")
 
-            from artifactsmmo_cli.commands.action import execute_gather_action
-
             result = execute_gather_action("testchar")
 
             assert result.success is False
@@ -816,8 +797,6 @@ class TestBatchResults:
 
     def test_batch_results_initialization(self):
         """Test BatchResults initializes correctly."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         assert results.total_attempts == 0
         assert results.successful_actions == 0
@@ -829,8 +808,6 @@ class TestBatchResults:
 
     def test_batch_results_add_success(self):
         """Test adding successful results."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
 
         # Test with fight data
@@ -844,8 +821,6 @@ class TestBatchResults:
 
     def test_batch_results_add_success_xp_from_details(self):
         """Test add_success extracts XP from details dict."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         results.add_success({"details": {"xp": 75, "gold": 10, "items": [{"code": "wood", "quantity": 3}]}})
 
@@ -856,8 +831,6 @@ class TestBatchResults:
 
     def test_batch_results_add_success_xp_direct(self):
         """Test add_success extracts XP and gold from top-level keys."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         results.add_success({"xp": 50, "gold": 20})
 
@@ -866,8 +839,6 @@ class TestBatchResults:
 
     def test_batch_results_add_success_no_data(self):
         """Test add_success with no data increments only successful_actions."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         results.add_success(None)
 
@@ -877,8 +848,6 @@ class TestBatchResults:
 
     def test_batch_results_add_failure(self):
         """Test adding failed results."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         results.add_failure("Test error")
 
@@ -887,8 +856,6 @@ class TestBatchResults:
 
     def test_batch_results_format_summary(self):
         """Test formatting results summary."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         results.total_attempts = 5
         results.successful_actions = 4
@@ -902,8 +869,6 @@ class TestBatchResults:
 
     def test_batch_results_format_summary_no_attempts(self):
         """Test formatting results summary with zero attempts (no division by zero)."""
-        from artifactsmmo_cli.commands.action import BatchResults
-
         results = BatchResults()
         results.total_attempts = 0
 
@@ -921,8 +886,6 @@ class TestExecuteActionExceptions:
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(success=False, error="fight error")
 
-                from artifactsmmo_cli.commands.action import execute_fight_action
-
                 result = execute_fight_action("testchar")
 
                 assert result.success is False
@@ -934,8 +897,6 @@ class TestExecuteActionExceptions:
             mock_cm.return_value.api.action_rest.side_effect = RuntimeError("rest error")
             with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
                 mock_err.return_value = Mock(success=False, error="rest error")
-
-                from artifactsmmo_cli.commands.action import execute_rest_action
 
                 result = execute_rest_action("testchar")
 
@@ -960,8 +921,6 @@ class TestGatherCommandSuccessNoData:
         """Test gather success when data has 'details' key."""
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("artifactsmmo_cli.commands.action.format_gathering_result") as mock_fmt:
-                from rich.text import Text
-
                 mock_fmt.return_value = Text("Gathered resources")
                 mock_handle.return_value = Mock(
                     success=True, data={"details": {"xp": 50, "items": []}}, message="Gathering completed"
@@ -978,8 +937,6 @@ class TestGotoCommand:
 
     def _make_path_result(self, steps=None):
         """Build a mock PathResult."""
-        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
-
         if steps is None:
             steps = []
         step_objs = [PathStep(x=s[0], y=s[1]) for s in steps]
@@ -1357,8 +1314,6 @@ class TestShowPathCommand:
 
     def _make_path_result(self, steps=None):
         """Build a mock PathResult."""
-        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
-
         if steps is None:
             steps = []
         step_objs = [PathStep(x=s[0], y=s[1]) for s in steps]
@@ -1471,8 +1426,6 @@ class TestBatchCommandCooldownRetry:
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("time.sleep"):
-                from artifactsmmo_cli.models.responses import CLIResponse
-
                 fight_data = {"fight": {"result": "win", "xp": 80, "gold": 10, "drops": []}}
                 mock_handle.side_effect = [
                     CLIResponse.cooldown_response(1),
@@ -1480,8 +1433,6 @@ class TestBatchCommandCooldownRetry:
                 ]
 
                 with patch("artifactsmmo_cli.commands.action.format_combat_result") as mock_fmt:
-                    from rich.text import Text
-
                     mock_fmt.return_value = Text("Victory!")
 
                     result = runner.invoke(
@@ -1497,8 +1448,6 @@ class TestBatchCommandCooldownRetry:
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("time.sleep"):
-                from artifactsmmo_cli.models.responses import CLIResponse
-
                 gather_data = {"details": {"xp": 40, "items": [{"code": "copper", "quantity": 1}]}}
                 mock_handle.side_effect = [
                     CLIResponse.cooldown_response(1),
@@ -1506,8 +1455,6 @@ class TestBatchCommandCooldownRetry:
                 ]
 
                 with patch("artifactsmmo_cli.commands.action.format_gathering_result") as mock_fmt:
-                    from rich.text import Text
-
                     mock_fmt.return_value = Text("Gathered copper!")
 
                     result = runner.invoke(
@@ -1523,8 +1470,6 @@ class TestBatchCommandCooldownRetry:
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("time.sleep"):
-                from artifactsmmo_cli.models.responses import CLIResponse
-
                 mock_handle.side_effect = [
                     CLIResponse.cooldown_response(1),
                     CLIResponse.success_response({}, "Rest completed"),
@@ -1543,8 +1488,6 @@ class TestBatchCommandCooldownRetry:
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("time.sleep"):
-                from artifactsmmo_cli.models.responses import CLIResponse
-
                 mock_handle.side_effect = [
                     CLIResponse.cooldown_response(1),
                     CLIResponse.error_response("Action failed after cooldown"),
@@ -1563,8 +1506,6 @@ class TestBatchCommandCooldownRetry:
 
         with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
             with patch("time.sleep"):
-                from artifactsmmo_cli.models.responses import CLIResponse
-
                 mock_handle.side_effect = [
                     CLIResponse.cooldown_response(1),
                     CLIResponse.error_response("Action failed after cooldown"),

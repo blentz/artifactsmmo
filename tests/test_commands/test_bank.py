@@ -5,7 +5,17 @@ from unittest.mock import Mock, patch
 import pytest
 from typer.testing import CliRunner
 
-from artifactsmmo_cli.commands.bank import app
+from artifactsmmo_cli.commands.bank import (
+    _display_operation_summary,
+    app,
+    categorize_item,
+    execute_single_deposit,
+    execute_single_withdraw,
+    filter_items_by_type,
+    get_character_inventory,
+    get_item_info,
+    should_keep_item,
+)
 
 
 @pytest.fixture
@@ -586,8 +596,6 @@ class TestBulkOperations:
                 ]
                 mock_handle.return_value = Mock(success=True, data=mock_character)
 
-                from artifactsmmo_cli.commands.bank import get_character_inventory
-
                 result = get_character_inventory("testchar")
 
                 assert len(result) == 2
@@ -610,8 +618,6 @@ class TestBulkOperations:
                 mock_item.tradeable = True
                 mock_handle.return_value = Mock(success=True, data=mock_item)
 
-                from artifactsmmo_cli.commands.bank import get_item_info
-
                 result = get_item_info("iron_ore")
 
                 assert result["code"] == "iron_ore"
@@ -620,8 +626,6 @@ class TestBulkOperations:
 
     def test_categorize_item(self):
         """Test item categorization."""
-        from artifactsmmo_cli.commands.bank import categorize_item
-
         # Test ore categorization
         ore_item = {"type": "ore", "subtype": "mining"}
         assert categorize_item(ore_item) == "resource"
@@ -640,8 +644,6 @@ class TestBulkOperations:
 
     def test_should_keep_item(self):
         """Test item keep logic."""
-        from artifactsmmo_cli.commands.bank import should_keep_item, categorize_item
-
         # Test equipment (should keep by default)
         weapon_info = {"type": "weapon", "subtype": "sword"}
         assert should_keep_item(weapon_info, keep_equipment=True, keep_consumables=False) == True
@@ -667,8 +669,6 @@ class TestBulkOperations:
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=True, cooldown_remaining=None, error=None)
 
-                from artifactsmmo_cli.commands.bank import execute_single_deposit
-
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
                 assert success == True
@@ -686,8 +686,6 @@ class TestBulkOperations:
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=5, error=None)
 
-                from artifactsmmo_cli.commands.bank import execute_single_deposit
-
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
                 assert success == False
@@ -704,8 +702,6 @@ class TestBulkOperations:
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Item not found")
-
-                from artifactsmmo_cli.commands.bank import execute_single_deposit
 
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
@@ -1540,8 +1536,6 @@ class TestHelperFunctions:
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
             mock_cm.side_effect = RuntimeError("connection failed")
 
-            from artifactsmmo_cli.commands.bank import get_character_inventory
-
             result = get_character_inventory("testchar")
             assert result == []
 
@@ -1555,8 +1549,6 @@ class TestHelperFunctions:
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, data=None)
 
-                from artifactsmmo_cli.commands.bank import get_character_inventory
-
                 result = get_character_inventory("testchar")
                 assert result == []
 
@@ -1564,8 +1556,6 @@ class TestHelperFunctions:
         """Test get_item_info returns None on exception."""
         with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
             mock_cm.side_effect = RuntimeError("connection failed")
-
-            from artifactsmmo_cli.commands.bank import get_item_info
 
             result = get_item_info("iron_ore")
             assert result is None
@@ -1581,8 +1571,6 @@ class TestHelperFunctions:
                 with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                     mock_handle.return_value = Mock(success=False, data=None)
 
-                    from artifactsmmo_cli.commands.bank import get_item_info
-
                     result = get_item_info("iron_ore")
                     assert result is None
 
@@ -1594,8 +1582,6 @@ class TestHelperFunctions:
 
         with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
             mock_get_info.return_value = None
-
-            from artifactsmmo_cli.commands.bank import filter_items_by_type
 
             result = filter_items_by_type(inventory, "resource")
             assert result == []
@@ -1617,8 +1603,6 @@ class TestHelperFunctions:
         with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
             mock_get_info.side_effect = mock_item_info
 
-            from artifactsmmo_cli.commands.bank import filter_items_by_type
-
             result = filter_items_by_type(inventory, "resource")
             assert len(result) == 1
             assert result[0]["code"] == "iron_ore"
@@ -1630,8 +1614,6 @@ class TestHelperFunctions:
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=7, error=None)
-
-                from artifactsmmo_cli.commands.bank import execute_single_deposit
 
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
                 assert success is False
@@ -1645,8 +1627,6 @@ class TestHelperFunctions:
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="connection lost")
-
-                from artifactsmmo_cli.commands.bank import execute_single_deposit
 
                 success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
                 assert success is False
@@ -1666,8 +1646,6 @@ class TestHelperFunctions:
                 with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                     mock_handle.return_value = Mock(success=True, cooldown_remaining=None, error=None)
 
-                    from artifactsmmo_cli.commands.bank import execute_single_withdraw
-
                     success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
                     assert success is True
                     assert error is None
@@ -1685,8 +1663,6 @@ class TestHelperFunctions:
 
                 with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                     mock_handle.return_value = Mock(success=False, cooldown_remaining=9, error=None)
-
-                    from artifactsmmo_cli.commands.bank import execute_single_withdraw
 
                     success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
                     assert success is False
@@ -1706,8 +1682,6 @@ class TestHelperFunctions:
                 with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                     mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Not enough items")
 
-                    from artifactsmmo_cli.commands.bank import execute_single_withdraw
-
                     success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
                     assert success is False
                     assert error == "Not enough items"
@@ -1720,8 +1694,6 @@ class TestHelperFunctions:
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=3, error=None)
-
-                from artifactsmmo_cli.commands.bank import execute_single_withdraw
 
                 success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
                 assert success is False
@@ -1736,8 +1708,6 @@ class TestHelperFunctions:
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=None, error="connection lost")
 
-                from artifactsmmo_cli.commands.bank import execute_single_withdraw
-
                 success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
                 assert success is False
                 assert error == "connection lost"
@@ -1749,8 +1719,6 @@ class TestDisplayOperationSummary:
 
     def test_display_summary_success_only(self, runner):
         """Test displaying summary with only successful operations."""
-        from artifactsmmo_cli.commands.bank import _display_operation_summary
-
         successful_ops = [
             ("iron_ore", "Iron Ore", 10),
             ("copper_ore", "Copper Ore", 5),
@@ -1762,8 +1730,6 @@ class TestDisplayOperationSummary:
 
     def test_display_summary_with_failures(self, runner):
         """Test displaying summary with failed operations."""
-        from artifactsmmo_cli.commands.bank import _display_operation_summary
-
         successful_ops = [
             ("iron_ore", "Iron Ore", 10),
         ]
@@ -1776,8 +1742,6 @@ class TestDisplayOperationSummary:
 
     def test_display_summary_empty(self, runner):
         """Test displaying summary with no operations."""
-        from artifactsmmo_cli.commands.bank import _display_operation_summary
-
         successful_ops = []
         failed_ops = []
 
