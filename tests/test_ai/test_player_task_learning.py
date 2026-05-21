@@ -31,3 +31,18 @@ def test_records_task_reward_on_completion(tmp_path):
     assert p.history.task_reward_sample_count() == 1
     assert p.history.mean_task_reward_value(default=0.0) == 60.0  # 2 * 30
     p.history.close()
+
+
+def test_records_zero_value_task_reward_when_reward_items_have_no_sell_price(tmp_path):
+    """CompleteTaskAction 'ok' with reward items that have no NPC sell price must record
+    a 0.0 value observation so sample_count grows and mean_task_reward_value improves."""
+    p = _player(tmp_path)
+    # No NPC sell prices — reward item is worthless
+    p.game_data._npc_sell_prices = {}
+    prev = make_state(task_code="x", task_type="monsters", task_progress=10, task_total=10)
+    # Reward item received but no NPC buys it → value computes to 0.0
+    new = make_state(task_code=None, inventory={"mysterious_gem": 1})
+    p._record_task_reward_if_completed(prev, new, action_class="CompleteTaskAction", outcome="ok")
+    assert p.history.task_reward_sample_count() == 1
+    assert p.history.mean_task_reward_value(default=-1.0) == 0.0
+    p.history.close()

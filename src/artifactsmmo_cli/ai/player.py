@@ -1019,7 +1019,7 @@ class GamePlayer:
                 if not gm_goal.is_satisfied(self.state):
                     goals.append(gm_goal)
 
-        return [g for g in goals if repr(g) not in self._suppressed_goals]
+        return [g for g in goals if repr(g) == "TaskCancel" or repr(g) not in self._suppressed_goals]
 
     def _notify_observer(
         self,
@@ -1329,8 +1329,7 @@ class GamePlayer:
             gained = qty - prev_state.inventory.get(code, 0)
             if gained > 0:
                 value += gained * prices.get(code, 0)
-        if value > 0:
-            self.history.record_task_reward_value(value)
+        self.history.record_task_reward_value(value)
 
     def _note_goal_selection(self, goal_repr: str, cycle_index: int) -> None:
         """Record when a goal was first selected. Idempotent on re-selection."""

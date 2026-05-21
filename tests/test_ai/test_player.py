@@ -1138,6 +1138,46 @@ class TestBuildActionsExtended:
         assert "raw_iron" not in npc_buy_items  # no hp_restore
 
 
+class TestBuildGoalsTaskCancelNeverSuppressed:
+    """TaskCancelGoal must survive suppression — it is the escape hatch for infeasible tasks."""
+
+    def _make_minimal_player(self) -> GamePlayer:
+        player = GamePlayer(character="hero")
+        gd = GameData()
+        gd._monster_locations = {"chicken": [(1, 0)]}
+        gd._monster_level = {"chicken": 1}
+        gd._resource_locations = {}
+        gd._workshop_locations = {}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        gd._resource_skill = {}
+        player.game_data = gd
+        player.state = make_state()
+        return player
+
+    def test_task_cancel_survives_suppression(self):
+        """TaskCancel must appear in _build_goals even when in _suppressed_goals."""
+        player = self._make_minimal_player()
+        # Suppress TaskCancel as if oscillation recovery had hit it
+        player._suppressed_goals = {"TaskCancel": 5}
+        goals = player._build_goals()
+        assert any(repr(g) == "TaskCancel" for g in goals), (
+            "TaskCancelGoal must not be filtered by suppression"
+        )
+
+    def test_other_suppressed_goals_are_still_filtered(self):
+        """Suppression of goals other than TaskCancel must still work."""
+        player = self._make_minimal_player()
+        player._suppressed_goals = {"TaskCancel": 5, "CompleteTask": 5}
+        goals = player._build_goals()
+        # TaskCancel survives
+        assert any(repr(g) == "TaskCancel" for g in goals)
+        # CompleteTask is filtered out
+        assert not any(repr(g) == "CompleteTask" for g in goals)
+
+
 def test_fetch_world_state_retries_on_404(monkeypatch):
     """_fetch_world_state should retry 3 times on 404 before raising."""
     attempts = []
