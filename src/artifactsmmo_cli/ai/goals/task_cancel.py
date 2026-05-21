@@ -1,35 +1,32 @@
-"""TaskCancelGoal: cancel a task whose monster target is above the character's reach."""
+"""TaskCancelGoal: cancel any task that is infeasible for the character."""
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class TaskCancelGoal(Goal):
-    """Cancel the current task when the target monster is too strong to kill.
+    """Cancel the current task when it is infeasible for the character.
 
-    Only applies to monster tasks. Triggers at low priority (12) so the bot
-    attempts the task first and cancels as a last resort when stuck.
+    Fires for ANY task type (fight or non-fight): a monster task whose target is
+    well above the character's level, or an items task whose target item needs a
+    crafting skill level the character has not reached. Low priority (12) so the
+    bot attempts feasible tasks first and only cancels as an escape.
     """
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        if not self._task_is_too_hard(state, game_data):
+        if self.is_satisfied(state):
             return 0.0
-        return 12.0
+        return 12.0 if task_requirement(state, game_data) is not None else 0.0
 
     def is_satisfied(self, state: WorldState) -> bool:
         return not state.task_code or state.task_total == 0
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_code": None, "task_total": 0}
-
-    def _task_is_too_hard(self, state: WorldState, game_data: GameData) -> bool:
-        if state.task_type != "monsters" or not state.task_code:
-            return False
-        monster_level = game_data.monster_level(state.task_code)
-        return monster_level > 0 and monster_level > state.level + 2
 
     def __repr__(self) -> str:
         return "TaskCancel"

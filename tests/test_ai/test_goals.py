@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
+from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -1198,8 +1199,8 @@ class TestUnlockBankGoal:
     def test_relevant_actions_returns_fight_actions(self):
         """relevant_actions includes FightAction instances."""
         from artifactsmmo_cli.ai.actions.combat import FightAction
-        from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
         from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+        from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
         from artifactsmmo_cli.ai.actions.rest import RestAction
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
         state = make_state(xp=100)
@@ -1413,3 +1414,32 @@ def test_gather_materials_goal_value_penalty_when_slow_to_satisfy():
     finally:
         if os.path.exists(path):
             os.unlink(path)
+
+
+def test_task_cancel_fires_for_infeasible_items_task():
+    gd = make_game_data()
+    gd._item_stats["small_health_potion"] = ItemStats(
+        code="small_health_potion", level=1, type_="utility",
+        crafting_skill="alchemy", crafting_level=5)
+    gd._crafting_recipes["small_health_potion"] = {"sunflower": 3}
+    state = make_state(task_code="small_health_potion", task_type="items",
+                       task_total=29, task_progress=0, skills={"alchemy": 1})
+    assert TaskCancelGoal().value(state, gd) > 0.0
+
+
+def test_task_cancel_zero_for_feasible_items_task():
+    gd = make_game_data()
+    gd._item_stats["copper_dagger"] = ItemStats(
+        code="copper_dagger", level=1, type_="weapon",
+        crafting_skill="weaponcrafting", crafting_level=1)
+    gd._crafting_recipes["copper_dagger"] = {"copper_bar": 6}
+    state = make_state(task_code="copper_dagger", task_type="items",
+                       task_total=5, skills={"weaponcrafting": 6})
+    assert TaskCancelGoal().value(state, gd) == 0.0
+
+
+def test_task_cancel_still_fires_for_too_hard_monster():
+    gd = make_game_data()
+    gd._monster_level = {"dragon": 40}
+    state = make_state(task_code="dragon", task_type="monsters", task_total=1, level=3)
+    assert TaskCancelGoal().value(state, gd) > 0.0
