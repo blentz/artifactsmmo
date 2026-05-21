@@ -2,6 +2,10 @@
 
 from dataclasses import dataclass
 
+import httpx
+from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
+from artifactsmmo_api_client.errors import UnexpectedStatus
+
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.utils.helpers import handle_api_response
 from artifactsmmo_cli.utils.validators import validate_character_name
@@ -159,54 +163,46 @@ def find_nearest_bank(character_x: int, character_y: int) -> tuple[int, int]:
     Raises:
         Exception: If no bank found
     """
-    # Try to find banks via map API
-    try:
-        client = ClientManager().client
-        from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
+    client = ClientManager().client
 
-        # Search for bank content
-        banks = []
-        current_page = 1
-        max_pages = 10  # Limit search
+    # Search for bank content
+    banks = []
+    current_page = 1
+    max_pages = 10  # Limit search
 
-        while current_page <= max_pages:
-            response = get_all_maps_maps_get.sync(client=client, page=current_page, size=100)
-            cli_response = handle_api_response(response)
+    while current_page <= max_pages:
+        response = get_all_maps_maps_get.sync(client=client, page=current_page, size=100)
+        cli_response = handle_api_response(response)
 
-            if not cli_response.success or not cli_response.data:
-                break
+        if not cli_response.success or not cli_response.data:
+            break
 
-            maps = cli_response.data
-            if not hasattr(maps, "data") or not maps.data:
-                break
+        maps = cli_response.data
+        if not hasattr(maps, "data") or not maps.data:
+            break
 
-            # Look for banks in this page
-            for map_item in maps.data:
-                if hasattr(map_item, "content") and map_item.content:
-                    content = map_item.content
-                    content_type = getattr(content, "type", "").lower()
+        # Look for banks in this page
+        for map_item in maps.data:
+            if hasattr(map_item, "content") and map_item.content:
+                content = map_item.content
+                content_type = getattr(content, "type", "").lower()
 
-                    if "bank" in content_type:
-                        x = getattr(map_item, "x", None)
-                        y = getattr(map_item, "y", None)
-                        if x is not None and y is not None:
-                            banks.append((int(x), int(y)))
+                if "bank" in content_type:
+                    x = getattr(map_item, "x", None)
+                    y = getattr(map_item, "y", None)
+                    if x is not None and y is not None:
+                        banks.append((int(x), int(y)))
 
-            # Check if we have more pages
-            if hasattr(maps, "pages") and current_page >= maps.pages:
-                break
-            current_page += 1
+        # Check if we have more pages
+        if hasattr(maps, "pages") and current_page >= maps.pages:
+            break
+        current_page += 1
 
-        if banks:
-            # Find nearest bank
-            return _find_nearest_location(banks, character_x, character_y)
+    if banks:
+        # Find nearest bank
+        return _find_nearest_location(banks, character_x, character_y)
 
-    except Exception:
-        pass  # Fall back to known locations
-
-    # Fallback to known bank locations
-    known_banks = [(4, 1)]  # Known bank location from info.py
-    return _find_nearest_location(known_banks, character_x, character_y)
+    raise RuntimeError("No bank location available from the API")
 
 
 def find_nearest_task_master(character_x: int, character_y: int) -> tuple[int, int]:
@@ -222,54 +218,46 @@ def find_nearest_task_master(character_x: int, character_y: int) -> tuple[int, i
     Raises:
         Exception: If no task master found
     """
-    # Try to find task masters via map API
-    try:
-        client = ClientManager().client
-        from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
+    client = ClientManager().client
 
-        # Search for task master content
-        task_masters = []
-        current_page = 1
-        max_pages = 10  # Limit search
+    # Search for task master content
+    task_masters = []
+    current_page = 1
+    max_pages = 10  # Limit search
 
-        while current_page <= max_pages:
-            response = get_all_maps_maps_get.sync(client=client, page=current_page, size=100)
-            cli_response = handle_api_response(response)
+    while current_page <= max_pages:
+        response = get_all_maps_maps_get.sync(client=client, page=current_page, size=100)
+        cli_response = handle_api_response(response)
 
-            if not cli_response.success or not cli_response.data:
-                break
+        if not cli_response.success or not cli_response.data:
+            break
 
-            maps = cli_response.data
-            if not hasattr(maps, "data") or not maps.data:
-                break
+        maps = cli_response.data
+        if not hasattr(maps, "data") or not maps.data:
+            break
 
-            # Look for task masters in this page
-            for map_item in maps.data:
-                if hasattr(map_item, "content") and map_item.content:
-                    content = map_item.content
-                    content_type = getattr(content, "type", "").lower()
+        # Look for task masters in this page
+        for map_item in maps.data:
+            if hasattr(map_item, "content") and map_item.content:
+                content = map_item.content
+                content_type = getattr(content, "type", "").lower()
 
-                    if "task" in content_type:
-                        x = getattr(map_item, "x", None)
-                        y = getattr(map_item, "y", None)
-                        if x is not None and y is not None:
-                            task_masters.append((int(x), int(y)))
+                if "task" in content_type:
+                    x = getattr(map_item, "x", None)
+                    y = getattr(map_item, "y", None)
+                    if x is not None and y is not None:
+                        task_masters.append((int(x), int(y)))
 
-            # Check if we have more pages
-            if hasattr(maps, "pages") and current_page >= maps.pages:
-                break
-            current_page += 1
+        # Check if we have more pages
+        if hasattr(maps, "pages") and current_page >= maps.pages:
+            break
+        current_page += 1
 
-        if task_masters:
-            # Find nearest task master
-            return _find_nearest_location(task_masters, character_x, character_y)
+    if task_masters:
+        # Find nearest task master
+        return _find_nearest_location(task_masters, character_x, character_y)
 
-    except Exception:
-        pass  # Fall back to known locations
-
-    # Fallback to known task master locations
-    known_task_masters = [(1, 2), (5, 1)]  # Known task master locations from info.py
-    return _find_nearest_location(known_task_masters, character_x, character_y)
+    raise RuntimeError("No task master location available from the API")
 
 
 def find_nearest_resource(resource_name: str, character_x: int, character_y: int) -> tuple[int, int]:
@@ -288,7 +276,6 @@ def find_nearest_resource(resource_name: str, character_x: int, character_y: int
     """
     try:
         client = ClientManager().client
-        from artifactsmmo_api_client.api.maps import get_all_maps_maps_get
 
         # Search for resource content by name
         resources = []
@@ -333,11 +320,11 @@ def find_nearest_resource(resource_name: str, character_x: int, character_y: int
             # Find nearest resource
             return _find_nearest_location(resources, character_x, character_y)
 
-    except Exception:
-        pass
+    except (ValueError, UnexpectedStatus, httpx.HTTPError):
+        raise
 
     # If not found, raise an error
-    raise Exception(f"Resource '{resource_name}' not found on the map")
+    raise RuntimeError(f"Resource '{resource_name}' not found on the map")
 
 
 def _find_nearest_location(locations: list[tuple[int, int]], character_x: int, character_y: int) -> tuple[int, int]:

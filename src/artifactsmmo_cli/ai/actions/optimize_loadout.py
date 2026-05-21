@@ -1,6 +1,6 @@
 """OptimizeLoadoutAction: swap equipment to optimal loadout for a target monster."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -11,7 +11,6 @@ from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
-
 
 SWAP_COST_PER_SLOT = 5.0
 """Approximate cycle cost per equip/unequip API call."""
@@ -29,6 +28,7 @@ class OptimizeLoadoutAction(Action):
     tags: ClassVar[frozenset[str]] = frozenset({"equip"})
 
     target_monster_code: str = ""
+    game_data: GameData | None = field(default=None, repr=False, compare=False)
 
     def _swap_plan(self, state: WorldState, game_data: GameData) -> dict[str, str | None]:
         """Slots that would change in the optimal loadout. Empty when nothing to do."""
@@ -93,11 +93,9 @@ class OptimizeLoadoutAction(Action):
         return SWAP_COST_PER_SLOT * 2 * n
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
-        swaps = self._swap_plan(state, self._game_data_for_execute(state))
-        # Note: at execute time we need GameData. Stash via closure or
-        # lookup via ClientManager singleton. Simpler: re-derive from
-        # the action's stored target — but pick_loadout needs game_data.
-        # For now, just sequentially unequip then equip each.
+        if self.game_data is None:
+            raise RuntimeError("OptimizeLoadoutAction requires game_data; pass it via __init__")
+        swaps = self._swap_plan(state, self.game_data)
         for slot, new_code in swaps.items():
             old_code = state.equipment.get(slot)
             if old_code is not None:
@@ -105,13 +103,6 @@ class OptimizeLoadoutAction(Action):
             if new_code is not None:
                 state = EquipAction(code=new_code, slot=slot).execute(state, client)
         return state
-
-    def _game_data_for_execute(self, state: WorldState) -> GameData:
-        """Execute-path access to GameData. Loaded once by player, stashed via class attribute."""
-        # Placeholder — patched at runtime by player._build_actions.
-        if not hasattr(self.__class__, "_shared_game_data") or self.__class__._shared_game_data is None:
-            raise RuntimeError("OptimizeLoadoutAction needs game_data injected via class attribute")
-        return self.__class__._shared_game_data  # type: ignore[attr-defined]
 
     def __repr__(self) -> str:
         return f"OptimizeLoadout({self.target_monster_code})"

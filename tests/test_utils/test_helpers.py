@@ -142,9 +142,9 @@ class TestHandleApiError:
         # Create an error that will cause an exception during JSON parsing
         error = UnexpectedStatus(status_code=400, content=b"valid json")
 
-        # Mock json.loads to raise an exception
+        # Mock json.loads to raise a JSON decode error
         with patch("json.loads") as mock_json:
-            mock_json.side_effect = Exception("JSON parsing error")
+            mock_json.side_effect = json.JSONDecodeError("JSON parsing error", "", 0)
 
             result = handle_api_error(error)
 

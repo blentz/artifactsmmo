@@ -368,28 +368,44 @@ class TestFindNearestBank:
         pass
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
-    def test_find_nearest_bank_fallback(self, mock_client_manager):
-        """Test finding nearest bank with fallback to known locations."""
-        # Mock client manager to raise exception (API failure)
-        mock_client_manager.side_effect = Exception("API error")
+    def test_find_nearest_bank_raises_when_api_fails(self, mock_client_manager):
+        """Test finding nearest bank raises RuntimeError when API fails with no data."""
+        # Mock client manager to return a client, but maps API returns no banks
+        mock_client = Mock()
+        mock_client_manager.return_value.client = mock_client
 
-        result = find_nearest_bank(0, 0)
-        assert result == (4, 1)  # Known bank location
+        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_get_maps:
+            mock_get_maps.return_value = Mock()
+            with patch("artifactsmmo_cli.utils.pathfinding.handle_api_response") as mock_handle:
+                mock_cli_response = Mock()
+                mock_cli_response.success = False
+                mock_cli_response.data = None
+                mock_handle.return_value = mock_cli_response
+
+                with pytest.raises(RuntimeError, match="No bank location available from the API"):
+                    find_nearest_bank(0, 0)
 
 
 class TestFindNearestTaskMaster:
     """Test find_nearest_task_master function."""
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
-    def test_find_nearest_task_master_fallback(self, mock_client_manager):
-        """Test finding nearest task master with fallback to known locations."""
-        # Mock client manager to raise exception (API failure)
-        mock_client_manager.side_effect = Exception("API error")
+    def test_find_nearest_task_master_raises_when_api_fails(self, mock_client_manager):
+        """Test finding nearest task master raises RuntimeError when API yields no data."""
+        # Mock client manager to return a client, but maps API returns no task masters
+        mock_client = Mock()
+        mock_client_manager.return_value.client = mock_client
 
-        result = find_nearest_task_master(0, 0)
-        # Should return nearest of known locations (1, 2) and (5, 1)
-        # (1, 2) has distance 3, (5, 1) has distance 6
-        assert result == (1, 2)
+        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_get_maps:
+            mock_get_maps.return_value = Mock()
+            with patch("artifactsmmo_cli.utils.pathfinding.handle_api_response") as mock_handle:
+                mock_cli_response = Mock()
+                mock_cli_response.success = False
+                mock_cli_response.data = None
+                mock_handle.return_value = mock_cli_response
+
+                with pytest.raises(RuntimeError, match="No task master location available from the API"):
+                    find_nearest_task_master(0, 0)
 
 
 class TestFindNearestResource:
@@ -397,12 +413,21 @@ class TestFindNearestResource:
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
     def test_find_nearest_resource_not_found(self, mock_client_manager):
-        """Test finding resource that doesn't exist."""
-        # Mock client manager to raise exception (API failure)
-        mock_client_manager.side_effect = Exception("API error")
+        """Test finding resource that doesn't exist raises RuntimeError."""
+        # Mock client manager to return a client, but maps API returns no matching resources
+        mock_client = Mock()
+        mock_client_manager.return_value.client = mock_client
 
-        with pytest.raises(Exception, match="Resource 'nonexistent' not found"):
-            find_nearest_resource("nonexistent", 0, 0)
+        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_get_maps:
+            mock_get_maps.return_value = Mock()
+            with patch("artifactsmmo_cli.utils.pathfinding.handle_api_response") as mock_handle:
+                mock_cli_response = Mock()
+                mock_cli_response.success = False
+                mock_cli_response.data = None
+                mock_handle.return_value = mock_cli_response
+
+                with pytest.raises(RuntimeError, match="Resource 'nonexistent' not found"):
+                    find_nearest_resource("nonexistent", 0, 0)
 
 
 class TestFindNearestBankAPISuccess:
@@ -493,7 +518,7 @@ class TestFindNearestBankAPISuccess:
     @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
     @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
     def test_find_nearest_bank_api_no_banks_found(self, mock_get_maps, mock_handle_response, mock_client_manager):
-        """Test finding nearest bank via API when no banks found."""
+        """Test finding nearest bank via API when no banks found raises RuntimeError."""
         # Mock client
         mock_client = Mock()
         mock_client_manager.return_value.client = mock_client
@@ -513,14 +538,14 @@ class TestFindNearestBankAPISuccess:
         mock_cli_response.data = mock_maps_data
         mock_handle_response.return_value = mock_cli_response
 
-        result = find_nearest_bank(0, 0)
-        assert result == (4, 1)  # Falls back to known location
+        with pytest.raises(RuntimeError, match="No bank location available from the API"):
+            find_nearest_bank(0, 0)
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
     @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
     @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
     def test_find_nearest_bank_api_response_failure(self, mock_get_maps, mock_handle_response, mock_client_manager):
-        """Test finding nearest bank via API when response fails."""
+        """Test finding nearest bank via API when response fails raises RuntimeError."""
         # Mock client
         mock_client = Mock()
         mock_client_manager.return_value.client = mock_client
@@ -535,21 +560,20 @@ class TestFindNearestBankAPISuccess:
         mock_cli_response.data = None
         mock_handle_response.return_value = mock_cli_response
 
-        result = find_nearest_bank(0, 0)
-        assert result == (4, 1)  # Falls back to known location
+        with pytest.raises(RuntimeError, match="No bank location available from the API"):
+            find_nearest_bank(0, 0)
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
     @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
     @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
     def test_find_nearest_bank_api_no_data_attribute(self, mock_get_maps, mock_handle_response, mock_client_manager):
-        """Test finding nearest bank via API when maps has no data attribute."""
+        """Test finding nearest bank via API when maps has no data attribute raises RuntimeError."""
         # Mock client
         mock_client = Mock()
         mock_client_manager.return_value.client = mock_client
 
-        # Mock maps response without data attribute
-        mock_maps_data = Mock()
-        # Don't set data attribute
+        # Mock maps response without data attribute (spec=object prevents attribute access)
+        mock_maps_data = Mock(spec=object)
 
         # Mock API response
         mock_response = Mock()
@@ -561,14 +585,14 @@ class TestFindNearestBankAPISuccess:
         mock_cli_response.data = mock_maps_data
         mock_handle_response.return_value = mock_cli_response
 
-        result = find_nearest_bank(0, 0)
-        assert result == (4, 1)  # Falls back to known location
+        with pytest.raises(RuntimeError, match="No bank location available from the API"):
+            find_nearest_bank(0, 0)
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
     @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
     @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
     def test_find_nearest_bank_api_map_item_no_content(self, mock_get_maps, mock_handle_response, mock_client_manager):
-        """Test finding nearest bank via API when map item has no content."""
+        """Test finding nearest bank via API when map item has no content raises RuntimeError."""
         # Mock client
         mock_client = Mock()
         mock_client_manager.return_value.client = mock_client
@@ -592,8 +616,8 @@ class TestFindNearestBankAPISuccess:
         mock_cli_response.data = mock_maps_data
         mock_handle_response.return_value = mock_cli_response
 
-        result = find_nearest_bank(0, 0)
-        assert result == (4, 1)  # Falls back to known location
+        with pytest.raises(RuntimeError, match="No bank location available from the API"):
+            find_nearest_bank(0, 0)
 
     @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
     @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
@@ -630,8 +654,8 @@ class TestFindNearestBankAPISuccess:
         mock_cli_response.data = mock_maps_data
         mock_handle_response.return_value = mock_cli_response
 
-        result = find_nearest_bank(0, 0)
-        assert result == (4, 1)  # Falls back to known location
+        with pytest.raises(RuntimeError, match="No bank location available from the API"):
+            find_nearest_bank(0, 0)
 
 
 class TestFindNearestTaskMasterAPISuccess:
@@ -743,8 +767,8 @@ class TestFindNearestTaskMasterAPISuccess:
         mock_cli_response.data = mock_maps_data
         mock_handle_response.return_value = mock_cli_response
 
-        result = find_nearest_task_master(0, 0)
-        assert result == (1, 2)  # Falls back to known location
+        with pytest.raises(RuntimeError, match="No task master location available from the API"):
+            find_nearest_task_master(0, 0)
 
 
 class TestFindNearestResourceAPISuccess:
@@ -935,5 +959,5 @@ class TestFindNearestResourceAPISuccess:
         mock_cli_response.data = mock_maps_data
         mock_handle_response.return_value = mock_cli_response
 
-        with pytest.raises(Exception, match="Resource 'nonexistent' not found"):
+        with pytest.raises(RuntimeError, match="Resource 'nonexistent' not found"):
             find_nearest_resource("nonexistent", 0, 0)

@@ -7,7 +7,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 import httpx
-
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.achievements.get_achievement_achievements_code_get import sync as get_achievement
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
@@ -25,47 +24,47 @@ from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGol
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
-from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction, UnequipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskAction, TaskCancelAction, TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
+from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, FarmMonsterGoal
+from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
+from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
-from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
-from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
-from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
-from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
+from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
-from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -811,9 +810,7 @@ class GamePlayer:
         # Fight and gather actions carry their own locations — no separate move actions needed
         for monster_code, locs in self.game_data._monster_locations.items():
             actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))
-            actions.append(OptimizeLoadoutAction(target_monster_code=monster_code))
-        # Inject game_data on the class for execute()-time loadout calc.
-        OptimizeLoadoutAction._shared_game_data = self.game_data
+            actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=self.game_data))
 
         for resource_code, locs in self.game_data._resource_locations.items():
             actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))

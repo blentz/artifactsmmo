@@ -1,15 +1,14 @@
 """Helper utilities for the CLI."""
 
-from typing import Any
 import json
-import traceback
+import re
+from typing import Any
 
 import httpx
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 
 from artifactsmmo_cli.models.responses import CLIResponse
-
 
 # ArtifactsMMO Error Code Messages
 ERROR_MESSAGES = {
@@ -117,8 +116,6 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
     # Handle ValueError from non-standard HTTP status codes
     if isinstance(error, ValueError) and "is not a valid HTTPStatus" in str(error):
         # Extract the status code from the error message
-        import re
-
         match = re.search(r"(\d+) is not a valid HTTPStatus", str(error))
         if match:
             status_code = int(match.group(1))
@@ -163,7 +160,7 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
                     return CLIResponse.error_response(f"{error_message}: {detailed_msg}")
                 return CLIResponse.error_response(error_message)
 
-        except Exception as parse_error:
+        except (AttributeError, ValueError) as parse_error:
             # If parsing fails, return a safe error message
             return CLIResponse.error_response(
                 f"API error {error.status_code}: Unable to parse error details ({str(parse_error)})"
@@ -188,8 +185,6 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
 def _extract_error_code(error: UnexpectedStatus) -> int | None:
     """Extract the actual error code from the API response."""
     try:
-        import json
-
         error_data = json.loads(error.content.decode())
 
         # Check for error code in the error object
@@ -202,7 +197,7 @@ def _extract_error_code(error: UnexpectedStatus) -> int | None:
         if "code" in error_data:
             return int(error_data["code"])
 
-    except Exception:
+    except (json.JSONDecodeError, KeyError, AttributeError, ValueError):
         pass
 
     return None
@@ -211,8 +206,6 @@ def _extract_error_code(error: UnexpectedStatus) -> int | None:
 def _parse_detailed_error_message(error: UnexpectedStatus) -> str | None:
     """Parse additional error details from API response."""
     try:
-        import json
-
         error_data = json.loads(error.content.decode())
 
         # Try to get additional message details
@@ -233,7 +226,7 @@ def _parse_detailed_error_message(error: UnexpectedStatus) -> str | None:
         if "message" in error_data:
             return error_data["message"]
 
-    except Exception:
+    except (json.JSONDecodeError, KeyError, AttributeError):
         pass
 
     return None
@@ -242,9 +235,6 @@ def _parse_detailed_error_message(error: UnexpectedStatus) -> str | None:
 def _parse_cooldown_error(error: UnexpectedStatus) -> CLIResponse[Any]:
     """Parse cooldown error from API response."""
     try:
-        import json
-        import re
-
         error_data = json.loads(error.content.decode())
 
         # Try multiple possible paths for cooldown data
@@ -265,15 +255,13 @@ def _parse_cooldown_error(error: UnexpectedStatus) -> CLIResponse[Any]:
 
         # Fallback if no specific cooldown time found
         return CLIResponse.error_response("Character is on cooldown")
-    except Exception:
+    except (json.JSONDecodeError, KeyError, AttributeError, ValueError):
         return CLIResponse.error_response("Character is on cooldown")
 
 
 def _parse_api_error_response(error: UnexpectedStatus, fallback_message: str) -> CLIResponse[Any]:
     """Parse detailed error information from API response."""
     try:
-        import json
-
         error_data = json.loads(error.content.decode())
 
         # Try multiple possible paths for error messages
@@ -306,7 +294,7 @@ def _parse_api_error_response(error: UnexpectedStatus, fallback_message: str) ->
                 message = get_error_message(code)
 
         return CLIResponse.error_response(message)
-    except Exception:
+    except (json.JSONDecodeError, KeyError, AttributeError, ValueError):
         return CLIResponse.error_response(fallback_message)
 
 

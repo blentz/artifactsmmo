@@ -122,7 +122,7 @@ def test_api_wrapper_get_server_details():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.server_details.get_server_details_get.sync",
+        "artifactsmmo_cli.client_manager.get_server_details_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.get_server_details()
@@ -134,7 +134,7 @@ def test_api_wrapper_get_my_characters():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.get_my_characters_my_characters_get.sync",
+        "artifactsmmo_cli.client_manager.get_my_characters_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.get_my_characters()
@@ -147,7 +147,7 @@ def test_api_wrapper_create_character():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.characters.create_character_characters_create_post.sync",
+        "artifactsmmo_cli.client_manager.create_character_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.create_character(body)
@@ -160,7 +160,7 @@ def test_api_wrapper_delete_character():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.characters.delete_character_characters_delete_post.sync",
+        "artifactsmmo_cli.client_manager.delete_character_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.delete_character(body)
@@ -172,7 +172,7 @@ def test_api_wrapper_get_character():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync",
+        "artifactsmmo_cli.client_manager.get_character_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.get_character("Alice")
@@ -189,7 +189,7 @@ def test_api_wrapper_action_move_success():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post.sync",
+        "artifactsmmo_cli.client_manager.action_move_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_move("Alice", body)
@@ -201,7 +201,7 @@ def test_api_wrapper_action_fight_success():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post.sync",
+        "artifactsmmo_cli.client_manager.action_fight_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_fight("Alice")
@@ -213,7 +213,7 @@ def test_api_wrapper_action_gathering_success():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post.sync",
+        "artifactsmmo_cli.client_manager.action_gathering_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_gathering("Alice")
@@ -225,7 +225,7 @@ def test_api_wrapper_action_rest_success():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post.sync",
+        "artifactsmmo_cli.client_manager.action_rest_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_rest("Alice")
@@ -238,7 +238,7 @@ def test_api_wrapper_action_equip_item_success():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post.sync",
+        "artifactsmmo_cli.client_manager.action_equip_item_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_equip_item("Alice", body)
@@ -251,7 +251,7 @@ def test_api_wrapper_action_unequip_item_success():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post.sync",
+        "artifactsmmo_cli.client_manager.action_unequip_item_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_unequip_item("Alice", body)
@@ -264,7 +264,7 @@ def test_api_wrapper_action_use_item_success():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post.sync",
+        "artifactsmmo_cli.client_manager.action_use_item_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_use_item("Alice", body)
@@ -290,7 +290,7 @@ def test_api_wrapper_action_move_non_standard_status_reraises():
     body = MagicMock()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post.sync",
+        "artifactsmmo_cli.client_manager.action_move_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -305,7 +305,7 @@ def test_api_wrapper_action_move_other_value_error_reraises():
     body = MagicMock()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post.sync",
+        "artifactsmmo_cli.client_manager.action_move_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -316,7 +316,7 @@ def test_api_wrapper_action_fight_non_standard_status_reraises():
     wrapper = _make_wrapper()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post.sync",
+        "artifactsmmo_cli.client_manager.action_fight_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -329,7 +329,7 @@ def test_api_wrapper_action_fight_other_value_error_reraises():
     wrapper = _make_wrapper()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post.sync",
+        "artifactsmmo_cli.client_manager.action_fight_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -340,7 +340,7 @@ def test_api_wrapper_action_gathering_non_standard_status_reraises():
     wrapper = _make_wrapper()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post.sync",
+        "artifactsmmo_cli.client_manager.action_gathering_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -353,7 +353,7 @@ def test_api_wrapper_action_gathering_other_value_error_reraises():
     wrapper = _make_wrapper()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post.sync",
+        "artifactsmmo_cli.client_manager.action_gathering_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -364,7 +364,7 @@ def test_api_wrapper_action_rest_non_standard_status_reraises():
     wrapper = _make_wrapper()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post.sync",
+        "artifactsmmo_cli.client_manager.action_rest_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -377,7 +377,7 @@ def test_api_wrapper_action_rest_other_value_error_reraises():
     wrapper = _make_wrapper()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post.sync",
+        "artifactsmmo_cli.client_manager.action_rest_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -389,7 +389,7 @@ def test_api_wrapper_action_equip_non_standard_status_reraises():
     body = MagicMock()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post.sync",
+        "artifactsmmo_cli.client_manager.action_equip_item_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -403,7 +403,7 @@ def test_api_wrapper_action_equip_other_value_error_reraises():
     body = MagicMock()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post.sync",
+        "artifactsmmo_cli.client_manager.action_equip_item_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -415,7 +415,7 @@ def test_api_wrapper_action_unequip_non_standard_status_reraises():
     body = MagicMock()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post.sync",
+        "artifactsmmo_cli.client_manager.action_unequip_item_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -429,7 +429,7 @@ def test_api_wrapper_action_unequip_other_value_error_reraises():
     body = MagicMock()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post.sync",
+        "artifactsmmo_cli.client_manager.action_unequip_item_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -441,7 +441,7 @@ def test_api_wrapper_action_use_item_non_standard_status_reraises():
     body = MagicMock()
     err = _non_standard_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post.sync",
+        "artifactsmmo_cli.client_manager.action_use_item_sync",
         side_effect=err,
     ):
         with patch.object(wrapper, "_handle_non_standard_status_error", side_effect=err) as mock_handler:
@@ -455,7 +455,7 @@ def test_api_wrapper_action_use_item_other_value_error_reraises():
     body = MagicMock()
     err = _other_value_error()
     with patch(
-        "artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post.sync",
+        "artifactsmmo_cli.client_manager.action_use_item_sync",
         side_effect=err,
     ):
         with pytest.raises(ValueError, match="some other error"):
@@ -470,7 +470,7 @@ def test_api_wrapper_get_bank_items():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync",
+        "artifactsmmo_cli.client_manager.get_bank_items_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.get_bank_items()
@@ -482,7 +482,7 @@ def test_api_wrapper_get_bank_details():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync",
+        "artifactsmmo_cli.client_manager.get_bank_details_sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.get_bank_details()
@@ -495,8 +495,7 @@ def test_api_wrapper_action_deposit_bank_gold():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters"
-        ".action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync",
+        "artifactsmmo_cli.client_manager.deposit_gold_api.sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_deposit_bank_gold("Alice", body)
@@ -509,8 +508,7 @@ def test_api_wrapper_action_withdraw_bank_gold():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters"
-        ".action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync",
+        "artifactsmmo_cli.client_manager.withdraw_gold_api.sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_withdraw_bank_gold("Alice", body)
@@ -523,8 +521,7 @@ def test_api_wrapper_action_deposit_bank_item():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters"
-        ".action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync",
+        "artifactsmmo_cli.client_manager.deposit_item_api.sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_deposit_bank_item("Alice", body)
@@ -537,8 +534,7 @@ def test_api_wrapper_action_withdraw_bank_item():
     body = MagicMock()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters"
-        ".action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync",
+        "artifactsmmo_cli.client_manager.withdraw_item_api.sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_withdraw_bank_item("Alice", body)
@@ -550,8 +546,7 @@ def test_api_wrapper_action_buy_bank_expansion():
     wrapper = _make_wrapper()
     sentinel = object()
     with patch(
-        "artifactsmmo_api_client.api.my_characters"
-        ".action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync",
+        "artifactsmmo_cli.client_manager.buy_expansion_api.sync",
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_buy_bank_expansion("Alice")
@@ -667,14 +662,16 @@ def test_handle_non_standard_json_decode_error_reraises_original():
 
 
 def test_handle_non_standard_httpx_raises_reraises_original():
-    """If httpx.Client raises an unexpected exception, raise original error."""
+    """If httpx.Client raises an httpx.HTTPError, raise original error."""
+    import httpx
+
     wrapper = _make_wrapper()
     original = ValueError("499 is not a valid HTTPStatus")
 
     mock_http_client = MagicMock()
     mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
     mock_http_client.__exit__ = MagicMock(return_value=False)
-    mock_http_client.post.side_effect = RuntimeError("network failure")
+    mock_http_client.post.side_effect = httpx.ConnectError("network failure")
 
     with patch("httpx.Client", return_value=mock_http_client):
         with pytest.raises(ValueError, match="499 is not a valid HTTPStatus"):
