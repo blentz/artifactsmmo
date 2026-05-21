@@ -105,6 +105,10 @@ class TestMapPaneRender:
 
 
 class TestMapPaneTypedGlyphs:
+    def test_render_without_snapshot_shows_waiting(self):
+        pane = MapPane(_gd_typed())
+        assert "Waiting" in pane.render().plain
+
     def test_npc_renders_uppercase_letter(self):
         idx = MapPane._build_tile_index(_gd_typed())
         assert idx[(-1, 0)] == ("A", "cyan")
