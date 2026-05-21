@@ -36,9 +36,12 @@ class SkillXpCurve:
             return self.observed[level]
         if not self.observed:
             return 0
-        highest = max(self.observed)
-        steps = level - highest
-        return int(self.observed[highest] * (self.growth_ratio() ** steps))
+        below = [lvl for lvl in self.observed if lvl < level]
+        if not below:
+            return 0  # below all observed data — no requirement known yet
+        anchor = max(below)
+        steps = level - anchor  # >= 1, so the exponent is always positive
+        return int(self.observed[anchor] * (self.growth_ratio() ** steps))
 
     def total_xp_to_reach(self, current_level: int, target_level: int) -> int:
         return sum(self.required_xp(lvl) for lvl in range(current_level, target_level))
@@ -50,6 +53,14 @@ class SkillXpCurve:
         if xp_per_cycle <= 0:
             return float("inf")
         return self.total_xp_to_reach(current_level, target_level) / xp_per_cycle
+
+    def confidence(self, current_level: int, target_level: int) -> float:
+        """Fraction of gap levels directly observed, in [0.0, 1.0]."""
+        levels = list(range(current_level, target_level))
+        if not levels:
+            return 1.0
+        observed = sum(1 for lvl in levels if lvl in self.observed)
+        return observed / len(levels)
 
     def is_confident(self, current_level: int, target_level: int) -> bool:
         """True only if every level in the gap was directly observed."""
