@@ -1,6 +1,13 @@
 """Account management commands."""
 
+import httpx
 import typer
+from artifactsmmo_api_client.api.my_account import get_account_details_my_details_get
+from artifactsmmo_api_client.api.my_characters import (
+    get_all_characters_logs_my_logs_get,
+    get_character_logs_my_logs_name_get,
+)
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -20,9 +27,6 @@ def show_account_details() -> None:
     """Show account details."""
     try:
         client = ClientManager().client
-
-        # Import the API function
-        from artifactsmmo_api_client.api.my_account import get_account_details_my_details_get
 
         response = get_account_details_my_details_get.sync(client=client)
 
@@ -55,7 +59,7 @@ def show_account_details() -> None:
             console.print(format_error_message(cli_response.error or "Could not retrieve account details"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -72,17 +76,11 @@ def show_logs(
         client = ClientManager().client
 
         if character:
-            # Import the API function
-            from artifactsmmo_api_client.api.my_characters import get_character_logs_my_logs_name_get
-
             # Get logs for specific character
             character = validate_character_name(character)
             response = get_character_logs_my_logs_name_get.sync(client=client, name=character, page=page, size=size)
             title = f"Logs for {character}"
         else:
-            # Import the API function
-            from artifactsmmo_api_client.api.my_characters import get_all_characters_logs_my_logs_get
-
             # Get logs for all characters
             response = get_all_characters_logs_my_logs_get.sync(client=client, page=page, size=size)
             title = "All Character Logs"
@@ -121,7 +119,7 @@ def show_logs(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve logs"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)

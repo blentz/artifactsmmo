@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.account import app
@@ -203,7 +204,7 @@ class TestAccountCommands:
     def test_api_error_handling(self, runner, mock_client_manager):
         """Test API error handling in account commands."""
         with patch("artifactsmmo_api_client.api.my_account.get_account_details_my_details_get.sync") as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.account.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(error="API Error")

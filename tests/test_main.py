@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.main import app
@@ -126,7 +127,7 @@ def test_cli_status_exception():
     try:
         with patch("artifactsmmo_cli.main.ClientManager") as mock_manager:
             mock_manager().is_initialized.return_value = True
-            mock_manager().api.get_server_details.side_effect = Exception("Connection error")
+            mock_manager().api.get_server_details.side_effect = httpx.HTTPError("Connection error")
 
             result = runner.invoke(app, ["--token-file", str(token_file), "status"])
             assert result.exit_code == 1
@@ -143,7 +144,7 @@ def test_cli_initialization_exception():
 
     try:
         with patch("artifactsmmo_cli.main.ClientManager") as mock_manager:
-            mock_manager().initialize.side_effect = Exception("Initialization failed")
+            mock_manager().initialize.side_effect = httpx.HTTPError("Initialization failed")
 
             result = runner.invoke(app, ["--token-file", str(token_file), "version"])
             assert result.exit_code == 1
@@ -165,7 +166,7 @@ def test_cli_help_commands_skip_initialization():
 def test_cli_completion_commands_skip_initialization():
     """Test that completion commands skip initialization."""
     # Test install-completion command
-    result = runner.invoke(app, ["--install-completion"])
+    runner.invoke(app, ["--install-completion"])
     # This might fail due to shell detection, but it should not fail due to missing token
     # The important thing is that it doesn't try to initialize the client
 

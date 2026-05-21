@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.craft import app
@@ -70,7 +71,7 @@ class TestCraftCommands:
     def test_craft_validation_error(self, runner):
         """Test craft with invalid input."""
         result = runner.invoke(app, ["craft", "", "iron_sword"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_recycle_success(self, runner, mock_client_manager, mock_api_response):
         """Test successful recycle command."""
@@ -196,7 +197,7 @@ class TestCraftCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=30, error=None)
@@ -225,7 +226,7 @@ class TestCraftCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=25, error=None)
@@ -239,7 +240,7 @@ class TestCraftCommands:
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="API Error")
@@ -473,12 +474,12 @@ class TestCraftCommands:
     def test_preview_validation_error(self, runner):
         """Test preview with invalid input."""
         result = runner.invoke(app, ["preview", "", "iron_sword"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_preview_api_exception(self, runner, mock_client_manager):
         """Test preview command with API exception."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.side_effect = Exception("API Error")
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_handle:
                 mock_handle.return_value = Mock(cooldown_remaining=None, error="API Error")

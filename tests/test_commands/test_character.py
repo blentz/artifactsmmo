@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.character import app
@@ -75,7 +76,7 @@ class TestListCommand:
 
     def test_list_api_exception(self, runner, mock_client_manager):
         """Test list command with API exception."""
-        mock_client_manager.api.get_my_characters.side_effect = Exception("API Error")
+        mock_client_manager.api.get_my_characters.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
         with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
             mock_error.return_value = Mock(error="API Error")
@@ -129,11 +130,11 @@ class TestCreateCommand:
     def test_create_validation_error(self, runner):
         """Test create command with validation error on name."""
         result = runner.invoke(app, ["create", "", "men1"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_create_api_exception(self, runner, mock_client_manager):
         """Test create command with API exception."""
-        mock_client_manager.api.create_character.side_effect = Exception("API Error")
+        mock_client_manager.api.create_character.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
         with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
             mock_error.return_value = Mock(error="API Error")
@@ -196,12 +197,12 @@ class TestDeleteCommand:
     def test_delete_validation_error(self, runner):
         """Test delete command with validation error."""
         result = runner.invoke(app, ["delete", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_delete_api_exception(self, runner, mock_client_manager):
         """Test delete command with API exception."""
         with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="API Error")
@@ -336,12 +337,12 @@ class TestCooldownCommand:
     def test_cooldown_validation_error(self, runner):
         """Test cooldown command with validation error."""
         result = runner.invoke(app, ["cooldown", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_cooldown_api_exception(self, runner, mock_client_manager):
         """Test cooldown command with API exception."""
         with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="API Error")
@@ -397,12 +398,12 @@ class TestInfoCommand:
     def test_info_validation_error(self, runner):
         """Test info command with validation error."""
         result = runner.invoke(app, ["info", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_info_api_exception(self, runner, mock_client_manager):
         """Test info command with API exception."""
         with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="API Error")
@@ -473,12 +474,12 @@ class TestInventoryCommand:
     def test_inventory_validation_error(self, runner):
         """Test inventory command with validation error."""
         result = runner.invoke(app, ["inventory", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_inventory_api_exception(self, runner, mock_client_manager):
         """Test inventory command with API exception."""
         with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="API Error")
@@ -661,12 +662,12 @@ class TestStatusCommand:
     def test_status_validation_error(self, runner):
         """Test status command with validation error."""
         result = runner.invoke(app, ["status", ""])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
 
     def test_status_api_exception(self, runner, mock_client_manager):
         """Test status command with API exception."""
         with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:
-            mock_handle.side_effect = Exception("API Error")
+            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.character.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(error="API Error")

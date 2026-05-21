@@ -3,6 +3,8 @@
 import re
 
 import typer
+from artifactsmmo_api_client.models.character_skin import CharacterSkin
+from artifactsmmo_api_client.models.item_slot import ItemSlot
 
 
 def validate_coordinates(x: int, y: int) -> tuple[int, int]:
@@ -69,8 +71,6 @@ def validate_gold_amount(amount: int) -> int:
 
 def validate_skin_code(skin: str) -> str:
     """Validate character skin code."""
-    from artifactsmmo_api_client.models.character_skin import CharacterSkin
-
     valid_skins = [s.value for s in CharacterSkin]
 
     if skin not in valid_skins:
@@ -81,8 +81,6 @@ def validate_skin_code(skin: str) -> str:
 
 def validate_item_slot(slot: str) -> str:
     """Validate item slot."""
-    from artifactsmmo_api_client.models.item_slot import ItemSlot
-
     valid_slots = [s.value for s in ItemSlot]
 
     if slot not in valid_slots:

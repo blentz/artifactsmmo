@@ -1,13 +1,18 @@
 """Play command: run the GOAP AI player."""
 
+import threading
 from datetime import datetime
 from pathlib import Path
 
 import typer
 
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tracing import FileTracer, NullTracer, Tracer
+from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.tui.app import WatchApp
+from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 
 app = typer.Typer(help="Run the autonomous AI player")
 
@@ -66,17 +71,8 @@ def play(
             store.close()
 
 
-def _run_with_tui(player: "GamePlayer", character: str) -> None:
+def _run_with_tui(player: GamePlayer, character: str) -> None:
     """Spawn the bot in a worker thread; run the Textual app on main thread."""
-    import threading
-
-    from artifactsmmo_api_client import AuthenticatedClient
-
-    from artifactsmmo_cli.ai.game_data import GameData
-    from artifactsmmo_cli.client_manager import ClientManager
-    from artifactsmmo_cli.tui.app import WatchApp
-    from artifactsmmo_cli.tui.observer import ThreadSafeBridge
-
     # Preload game_data on the main thread so the map can render the first
     # frame before the bot has done a cycle.
     client = ClientManager().client

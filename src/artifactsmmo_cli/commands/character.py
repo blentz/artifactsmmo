@@ -2,11 +2,13 @@
 
 from datetime import datetime
 
+import httpx
 import typer
-from rich.console import Console
-
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
 from artifactsmmo_api_client.models.character_skin import CharacterSkin
+from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
+from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.utils.formatters import (
@@ -35,7 +37,7 @@ def list_characters() -> None:
         else:
             console.print(format_error_message("No characters found"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -62,7 +64,7 @@ def create_character(
             console.print(format_error_message("Failed to create character"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -86,9 +88,6 @@ def delete_character(
 
         api = ClientManager().api
 
-        # Import the schema for character deletion
-        from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
-
         delete_data = DeleteCharacterSchema(name=name)
         response = api.delete_character(body=delete_data)
 
@@ -99,7 +98,7 @@ def delete_character(
             console.print(format_error_message(cli_response.error or "Failed to delete character"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -123,7 +122,7 @@ def character_info(name: str = typer.Argument(..., help="Character name")) -> No
             console.print(format_error_message(cli_response.error or f"Character '{name}' not found"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -163,7 +162,7 @@ def character_inventory(name: str = typer.Argument(..., help="Character name")) 
             console.print(format_error_message(cli_response.error or f"Character '{name}' not found"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -366,7 +365,7 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
             console.print(format_error_message(cli_response.error or f"Character '{name}' not found"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -419,7 +418,7 @@ def character_cooldown(name: str = typer.Argument(..., help="Character name")) -
 
     except typer.Exit:
         raise  # Re-raise typer.Exit to preserve exit codes
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)

@@ -2,9 +2,12 @@
 
 from pathlib import Path
 
+import httpx
 import typer
+from artifactsmmo_api_client.errors import UnexpectedStatus
 from rich.console import Console
 
+from artifactsmmo_cli import __version__
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.commands import account, action, bank, character, craft, info, task, trade
 from artifactsmmo_cli.commands.play import app as play_app
@@ -64,7 +67,7 @@ def main(
     except ValueError as e:
         console.print(format_error_message(str(e)))
         raise typer.Exit(1)
-    except Exception as e:
+    except (httpx.HTTPError, UnexpectedStatus) as e:
         console.print(format_error_message(f"Failed to initialize CLI: {str(e)}"))
         raise typer.Exit(1)
 
@@ -72,8 +75,6 @@ def main(
 @app.command("version")
 def version() -> None:
     """Show version information."""
-    from artifactsmmo_cli import __version__
-
     console.print(f"ArtifactsMMO CLI version {__version__}")
 
 
@@ -100,7 +101,7 @@ def status() -> None:
             console.print(format_error_message("Failed to connect to API"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         console.print(format_error_message(f"API connection failed: {str(e)}"))
         raise typer.Exit(1)
 

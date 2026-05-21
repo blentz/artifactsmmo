@@ -1,7 +1,20 @@
 """Crafting and recycling commands."""
 
+import httpx
 import typer
+from artifactsmmo_api_client.api.items import get_all_items_items_get
+from artifactsmmo_api_client.api.my_characters import (
+    action_crafting_my_name_action_crafting_post,
+    action_recycling_my_name_action_recycling_post,
+)
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.craft_skill import CraftSkill
+from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
+from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
+from artifactsmmo_api_client.types import UNSET
 from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.utils.formatters import (
@@ -35,10 +48,6 @@ def craft_item(
 
         client = ClientManager().client
 
-        # Import the crafting schema and API function
-        from artifactsmmo_api_client.api.my_characters import action_crafting_my_name_action_crafting_post
-        from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
-
         craft_data = CraftingSchema(code=item_code, quantity=quantity)
         response = action_crafting_my_name_action_crafting_post.sync(client=client, name=character, body=craft_data)
 
@@ -51,7 +60,7 @@ def craft_item(
             console.print(format_error_message(cli_response.error or "Crafting failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -74,10 +83,6 @@ def recycle_item(
 
         client = ClientManager().client
 
-        # Import the recycling schema and API function
-        from artifactsmmo_api_client.api.my_characters import action_recycling_my_name_action_recycling_post
-        from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
-
         recycle_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_recycling_my_name_action_recycling_post.sync(client=client, name=character, body=recycle_data)
 
@@ -90,7 +95,7 @@ def recycle_item(
             console.print(format_error_message(cli_response.error or "Recycling failed"))
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         if cli_response.cooldown_remaining:
             console.print(format_cooldown_message(cli_response.cooldown_remaining))
@@ -111,9 +116,6 @@ def preview_craft(
 
         client = ClientManager().client
         api = ClientManager().api
-
-        # Import the API functions
-        from artifactsmmo_api_client.api.items import get_all_items_items_get
 
         # Fetch item recipe information
         items_response = get_all_items_items_get.sync(
@@ -197,9 +199,6 @@ def preview_craft(
             character_skill_level = getattr(character_data, skill_attr, 0)
 
         # Create output
-        from rich.table import Table
-        from rich.text import Text
-
         # Header info
         header_text = Text()
         header_text.append("Craft Preview: ", style="bold cyan")
@@ -249,7 +248,7 @@ def preview_craft(
         if not can_craft:
             raise typer.Exit(1)
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)
@@ -266,11 +265,6 @@ def list_recipes(
     """List available crafting recipes."""
     try:
         client = ClientManager().client
-
-        # Import the API function
-        from artifactsmmo_api_client.api.items import get_all_items_items_get
-        from artifactsmmo_api_client.models.craft_skill import CraftSkill
-        from artifactsmmo_api_client.types import UNSET
 
         # Convert skill string to CraftSkill enum if provided
         craft_skill_param = UNSET
@@ -328,7 +322,7 @@ def list_recipes(
         else:
             console.print(format_error_message(cli_response.error or "Could not retrieve recipes"))
 
-    except Exception as e:
+    except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)
         console.print(format_error_message(cli_response.error or str(e)))
         raise typer.Exit(1)

@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from rich import box
+from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -261,8 +262,6 @@ def format_gathering_result(gather_data: dict[str, Any]) -> Text:
 
 def format_character_status(character: Any) -> Panel:
     """Format detailed character status with skills and combat stats."""
-    from rich.columns import Columns
-
     # Basic character info
     basic_info = Table(box=box.ROUNDED, title="Character Info")
     basic_info.add_column("Property", style="cyan")
@@ -418,7 +417,6 @@ def format_character_status(character: Any) -> Panel:
     else:
         task_info.add_row("Status", "No active task")
 
-    # Arrange tables in columns
     top_row = Columns([basic_info, gathering_skills], equal=True, expand=True)
     middle_row = Columns([crafting_skills, combat_stats], equal=True, expand=True)
     bottom_row = Columns([attack_stats, resistance_stats], equal=True, expand=True)
