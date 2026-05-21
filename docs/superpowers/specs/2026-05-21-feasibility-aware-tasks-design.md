@@ -43,9 +43,17 @@ just "accepts a new task"), so feasibility is assessed **after** accepting.
   cycle from the live CharacterSchema), persisted in the learning store.
   - Each entry is cited in code as "observed from CharacterSchema.<skill>_max_xp
     at level N on <date>".
-  - Levels not yet observed are treated as **unknown**; the cost projection is
-    conservative for unknown levels (see Cost analysis) — never a hardcoded
-    curve value.
+  - **Estimating beyond the current level:** the current level's requirement is
+    always known from the API. For higher, not-yet-observed levels, estimate
+    each level's required_xp as a **multiple of the current known gap** —
+    `required_xp(level+k) ≈ current_max_xp × growth_ratio**k`. This always
+    yields a concrete estimate (no "unknown" punt).
+  - **The growth ratio is learned, not hardcoded:** derive it from the ratios
+    between *observed* consecutive levels (e.g. mean of `max_xp[n+1]/max_xp[n]`
+    across observed pairs). With fewer than two observed levels for a skill, use
+    a documented default ratio (cited) and mark the projection low-confidence.
+    As the character levels up and more `max_xp` values are observed, the ratio
+    and the per-level map refine toward the true progression.
 
 ### Task reward value
 - Rewards are random from the task reward table; a task's value is an
@@ -90,9 +98,13 @@ A decision function `task_decision(state, game_data, history) -> PURSUE | PIVOT`
 - `alt_vpc` = best alternative goal's value-per-cycle from the scalarizer over
   the other applicable goals.
 - Decision: `PURSUE` if `skill_up_vpc >= alt_vpc`, else `PIVOT`.
-- Confidence: when the SkillXpCurve has unobserved levels in the gap, or reward
-  history is empty, the projection is low-confidence → bias toward PIVOT (don't
-  commit to a long grind on a guess). Exact rule defined in the plan.
+- Confidence: the projection always produces an estimate (current gap known;
+  beyond-current levels estimated via the learned growth ratio). Confidence is
+  **lower** when the gap spans many not-yet-observed levels or the growth ratio
+  rests on few observations, and when reward history is empty. Low confidence
+  biases toward PIVOT (don't commit to a long grind on a rough estimate);
+  confidence rises as observed levels and completed-task rewards accumulate.
+  Exact thresholds defined in the plan.
 
 The decision drives goal priorities: PURSUE → LevelSkill + FarmItems run as
 normal; PIVOT → `TaskCancelGoal` priority raised so the bot cancels and the next
