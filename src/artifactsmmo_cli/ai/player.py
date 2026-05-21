@@ -63,6 +63,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
+from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -991,6 +992,14 @@ class GamePlayer:
         if active_skills:
             for skill, target in self._gating_skill_targets(active_skills):
                 goals.append(LevelSkillGoal(skill_name=skill, target_level=target))
+
+        # Task-gating skill: if the active items task needs a crafting skill the
+        # character lacks, surface a LevelSkillGoal so the planner can grind it
+        # as a prerequisite to completing the task.
+        task_req = task_requirement(self.state, self.game_data)
+        if task_req is not None and task_req.skill != "combat":
+            goals.append(LevelSkillGoal(skill_name=task_req.skill,
+                                        target_level=task_req.required_level))
 
         # If upgrade needs materials, add a gather goal to drive material collection.
         # Use the FULL recipe quantity (not remaining needed) so GatherMaterials and

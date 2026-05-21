@@ -190,6 +190,36 @@ class TestBuildGoals:
         # Must be the full recipe quantity — not (6 - 2 = 4)
         assert gather_goals[0]._needed == {"copper_ore": 6}
 
+    def test_level_skill_goal_added_for_items_task_gating_skill(self):
+        """_build_goals surfaces LevelSkillGoal for the active items task's gating skill."""
+        player = GamePlayer(character="hero")
+        gd = GameData()
+        gd._monster_locations = {"chicken": [(1, 0)]}
+        gd._monster_level = {"chicken": 1}
+        gd._resource_locations = {}
+        gd._workshop_locations = {}
+        gd._bank_location = (4, 0)
+        gd._item_stats = {
+            "small_health_potion": ItemStats(
+                code="small_health_potion", level=1, type_="utility",
+                crafting_skill="alchemy", crafting_level=5,
+            )
+        }
+        gd._crafting_recipes = {"small_health_potion": {"sunflower": 3}}
+        gd._resource_skill = {}
+        player.game_data = gd
+        # Character has alchemy 1 but task needs crafting_level 5
+        player.state = make_state(
+            level=3,
+            task_code="small_health_potion",
+            task_type="items",
+            task_total=29,
+            task_progress=0,
+            skills={"alchemy": 1},
+        )
+        goals = player._build_goals()
+        assert any(repr(g) == "LevelSkill(alchemy->5)" for g in goals)
+
 
 class TestWaitForCooldown:
     def test_no_wait_when_state_is_none(self):
