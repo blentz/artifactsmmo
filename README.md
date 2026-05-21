@@ -88,9 +88,9 @@ bot's behavior:
 ```
 ┌────────────────┬─────────────────────────┐
 │ Status         │ Map (NetHack-inspired)  │
-│  L3 HP:[█▓ ]   │  ......T...M..          │
+│  L3 HP:[█▓ ]   │  ......T...c..          │
 │  XP:[██ ]      │  ......@....            │
-│  Gold: 335     │  ......$..>             │
+│  Gold: 335     │  ......╣..+             │
 │  Path → L50    │                         │
 │  next: chicken │                         │
 ├────────────────┼─────────────────────────┤
@@ -101,9 +101,23 @@ bot's behavior:
 └────────────────┴─────────────────────────┘
 ```
 
-Map glyphs: `@` you, `M` monster, `T` tree, `*` ore, `~` fish, `%`
-plant, `$` bank, `?` taskmaster, `!` NPC, `>` transition. Quit with
-`q` or `Ctrl+C`.
+Map glyphs are typed and colored by category:
+
+- `@` you (yellow).
+- **NPCs** — uppercase letter, cyan: `A` archaeologist, `C` cultist
+  wizard, `R` rune vendor, `S` sandwhisper trader, `T` tailor, `K` tasks
+  trader.
+- **Monsters** — lowercase letter by family, red: `s` slime (all
+  variants), `c` chicken, `g` goblin, `w` wolf, `k` skeleton, … .
+- **Structures** — box-drawing glyphs, white: `╣` bank, `╠` grand
+  exchange, `╬` workshop, `╤` taskmaster.
+- **Doors** (map transitions) — `+`, magenta.
+- **Resources** — `T` tree, `*` ore, `~` fish, `%` plant.
+
+Categories are colored distinctly, so glyphs that share a letter (tailor
+`T` cyan vs the woodcutting-resource `T` green) stay readable. Unknown
+codes from the API fall back to their first letter — uppercase for NPCs,
+lowercase for monsters. Quit with `q` or `Ctrl+C`.
 
 ## Design docs
 
