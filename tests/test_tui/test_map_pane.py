@@ -4,7 +4,7 @@ from textual.geometry import Size
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.tui.glyphs import PLAYER_GLYPH, WALKABLE_GLYPH
+from artifactsmmo_cli.tui.glyphs import PLAYER_GLYPH, UNMAPPED_GLYPH, WALKABLE_GLYPH
 from artifactsmmo_cli.tui.widgets.map_pane import VIEWPORT_H, VIEWPORT_W, MapPane
 
 
@@ -105,6 +105,17 @@ class TestMapPaneRender:
         pane = MapPane(gd)
         pane.update_snapshot(_snap(0, 0))
         assert WALKABLE_GLYPH in pane.render().plain
+
+    def test_unmapped_void_fills_with_faint_glyph(self):
+        """Unexplored cells render a faint glyph, not blank, so the viewport
+        fills the pane instead of floating a strip in black void."""
+        gd = GameData()  # no world data, nothing known
+        pane = MapPane(gd)
+        pane.update_snapshot(_snap(0, 0))
+        body = pane._render_viewport(_snap(0, 0), 41, 21).plain.split("\n")[1:]
+        # Every map cell is non-blank (player glyph + faint void everywhere else).
+        assert all(set(row) <= {UNMAPPED_GLYPH, PLAYER_GLYPH} for row in body)
+        assert " " not in "".join(body)
 
 
 class TestMapPaneTypedGlyphs:

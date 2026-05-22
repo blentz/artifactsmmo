@@ -52,9 +52,10 @@ RESOURCE_GLYPHS: dict[str, tuple[str, str]] = {
     "resource_alchemy": ("%", "magenta"),
 }
 
-UNMAPPED_GLYPH = " "
+UNMAPPED_GLYPH = "·"
+UNMAPPED_COLOR = "grey15"  # faint void texture so the viewport fills the pane
 WALKABLE_GLYPH = "·"
-WALKABLE_COLOR = "grey50"
+WALKABLE_COLOR = "grey50"  # explored floor — brighter than unmapped void
 
 
 def npc_glyph(code: str) -> tuple[str, str]:

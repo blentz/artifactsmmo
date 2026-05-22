@@ -15,6 +15,7 @@ from artifactsmmo_cli.tui.glyphs import (
     PLAYER_COLOR,
     PLAYER_GLYPH,
     RESOURCE_GLYPHS,
+    UNMAPPED_COLOR,
     UNMAPPED_GLYPH,
     WALKABLE_COLOR,
     WALKABLE_GLYPH,
@@ -118,7 +119,7 @@ class MapPane(Static):
                 elif (world_x, world_y) in self._known_tiles:
                     text.append(WALKABLE_GLYPH, style=WALKABLE_COLOR)
                 else:
-                    text.append(UNMAPPED_GLYPH)
+                    text.append(UNMAPPED_GLYPH, style=UNMAPPED_COLOR)
             if row != map_h - 1:
                 text.append("\n")
         return text
