@@ -75,6 +75,27 @@ def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData) -
     return max(count, 1)
 
 
+def root_cost(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
+    """Effort proxy in 'steps remaining': levels for leaf progression goals,
+    craft/gather chain size for gear. Floored at 1."""
+    if isinstance(root, ReachCharLevel):
+        return max(1, root.level - state.level)
+    if isinstance(root, ReachSkillLevel):
+        return max(1, root.level - state.skills.get(root.skill, 1))
+    return unmet_closure_size(root, state, game_data)
+
+
+def instrumental_skills(objective: CharacterObjective, game_data: GameData) -> set[str]:
+    """Crafting skills that gate target gear — leveling these unlocks gear the
+    objective wants, so they win skill ties."""
+    skills: set[str] = set()
+    for code in objective.target_gear.values():
+        stats = game_data.item_stats(code)
+        if stats is not None and stats.crafting_skill:
+            skills.add(stats.crafting_skill)
+    return skills
+
+
 @dataclass(frozen=True)
 class RootScore:
     root_repr: str
@@ -83,6 +104,7 @@ class RootScore:
     cost: int
     score: float
     step_repr: str
+    instrumental: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -133,6 +155,11 @@ class StrategyEngine:
     def decide(self, state: WorldState, game_data: GameData) -> StrategyDecision:
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
         gap = self.objective.gap(state)
+        instrumental = instrumental_skills(self.objective, game_data)
+
+        def is_instrumental(root: MetaGoal) -> bool:
+            return isinstance(root, ReachSkillLevel) and root.skill in instrumental
+
         candidates: list[tuple[MetaGoal, MetaGoal, float, int, float]] = []
         for root in objective_roots(self.objective):
             if root.is_satisfied(state, game_data):
@@ -141,12 +168,13 @@ class StrategyEngine:
             if step is None:
                 continue
             contribution = self._contribution(root, gap, game_data)
-            cost = unmet_closure_size(root, state, game_data)
+            cost = root_cost(root, state, game_data)
             score = contribution / max(cost, 1)
             candidates.append((root, step, contribution, cost, score))
-        candidates.sort(key=lambda c: (-c[4], repr(c[0])))
+        candidates.sort(key=lambda c: (-c[4], 0 if is_instrumental(c[0]) else 1, repr(c[0])))
         ranking = [
-            RootScore(repr(r), root_category(r), contribution, cost, score, repr(s))
+            RootScore(repr(r), root_category(r), contribution, cost, score, repr(s),
+                      is_instrumental(r))
             for (r, s, contribution, cost, score) in candidates
         ]
         if candidates:

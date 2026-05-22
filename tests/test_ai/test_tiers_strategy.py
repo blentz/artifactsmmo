@@ -6,7 +6,9 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     StrategyEngine,
     actionable_step,
     desired_state_of,
+    instrumental_skills,
     root_category,
+    root_cost,
     unmet_closure_size,
 )
 from tests.test_ai.fixtures import make_state
@@ -81,7 +83,11 @@ def test_decide_hp_interrupt_flag_only():
 
 
 def test_personality_reweighting_changes_choice():
-    gd = _gd()
+    # Gear-free world so only char-level vs skills compete (leaf goals score
+    # weight/max_level, gap-independent): balanced ties → char wins on repr;
+    # skill-first lifts skills above char.
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}  # char level reachable (combat-capable)
     obj = CharacterObjective.from_game_data(gd)
     state = make_state(level=49, skills={s: 1 for s in obj.target_skill_levels})
 
@@ -89,8 +95,8 @@ def test_personality_reweighting_changes_choice():
         def category_weight(self, category: str) -> float:
             return 10.0 if category == "skills" else 1.0
 
-    skill_choice = StrategyEngine(obj, SkillFirst()).decide(state, gd).chosen_root
-    assert root_category(skill_choice) == "skills"
+    assert root_category(StrategyEngine(obj, BalancedPersonality()).decide(state, gd).chosen_root) == "char_level"
+    assert root_category(StrategyEngine(obj, SkillFirst()).decide(state, gd).chosen_root) == "skills"
 
 
 def test_unmet_closure_size_dedups_shared_prereq():
@@ -127,6 +133,44 @@ def test_decide_skips_blocked_unmet_root():
     assert all("cursed_blade" not in rs.root_repr for rs in d.ranking)
     # but other roots (skills/level) still produce a decision
     assert d.chosen_root is not None
+
+
+def test_root_cost_is_levels_remaining_for_leaf_goals():
+    gd = _gd()
+    assert root_cost(ReachSkillLevel("mining", 50), make_state(skills={"mining": 3}), gd) == 47
+    assert root_cost(ReachCharLevel(50), make_state(level=3), gd) == 47
+    assert root_cost(ReachSkillLevel("mining", 5), make_state(skills={"mining": 5}), gd) == 1  # floor
+
+
+def test_root_cost_for_gear_uses_closure_size():
+    gd = _gd()
+    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
+
+
+def test_instrumental_skills_are_target_gear_crafting_skills():
+    gd = _gd()  # copper_dagger crafted by weaponcrafting is the only equippable
+    obj = CharacterObjective.from_game_data(gd)
+    assert instrumental_skills(obj, gd) == {"weaponcrafting"}
+    assert instrumental_skills(CharacterObjective.from_game_data(GameData()), GameData()) == set()
+
+
+def test_instrumental_skill_wins_tie():
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=50, skills={s: 1 for s in obj.target_skill_levels},
+                       equipment={"weapon_slot": "copper_dagger"})  # gear root satisfied
+    d = StrategyEngine(obj, BalancedPersonality()).decide(state, gd)
+    assert d.chosen_root == ReachSkillLevel("weaponcrafting", 50)
+    chosen_rs = next(rs for rs in d.ranking if rs.root_repr == repr(d.chosen_root))
+    assert chosen_rs.instrumental is True
+
+
+def test_rootscore_instrumental_false_for_non_skill():
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
+    char = next((rs for rs in d.ranking if rs.category == "char_level"), None)
+    assert char is not None and char.instrumental is False
 
 
 def test_decide_empty_when_nothing_reachable():
