@@ -231,6 +231,7 @@ class GamePlayer:
         # bank inaccessible upfront instead of wasting a cycle re-discovering.
         if self.history is not None:
             self._blockers = BlockerRegistry.load(self.history, known_codes=["bank"])
+            self._drop_stale_bank_lock()
             b = self._blockers.get("bank")
             if b is not None and self.state.level < b.required_level:
                 # Refresh blocked_since/at_level so the retry timer keys off
@@ -673,6 +674,23 @@ class GamePlayer:
         if remaining > 0:
             print(f"[{self._now()}] Cooldown: {remaining:.1f}s")
             time.sleep(remaining + 0.1)
+
+    def _drop_stale_bank_lock(self) -> None:
+        """Drop a persisted global "bank" lock when the world has an open bank.
+
+        The lock is recorded after probing a gated bank (e.g. the
+        achievement-gated desert-island bank returns HTTP 496 on approach), but
+        open banks exist — so the global lock is bogus and would otherwise
+        disable all banking for every future session."""
+        if (
+            self.history is not None
+            and self._blockers.is_blocked("bank")
+            and self.game_data is not None
+            and self.game_data.has_open_bank()
+        ):
+            self._blockers.clear("bank")
+            self.history.delete_blocker("bank")
+            print(f"[{self._now()}] Cleared stale bank lock — an open bank is available")
 
     def _resolve_bank_unlock_monster(self, client: AuthenticatedClient, achievement_code: str) -> str | None:
         """Fetch the first combat_kill objective target for an achievement."""

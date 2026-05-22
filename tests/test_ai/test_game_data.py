@@ -1,5 +1,6 @@
 """Tests for GameData loading and lookup methods."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,10 +18,13 @@ from artifactsmmo_api_client.types import UNSET
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 
 
-def make_map_tile(x, y, content_type=None, content_code=None):
+def make_map_tile(x, y, content_type=None, content_code=None, access_conditions=None):
     tile = MagicMock()
     tile.x = x
     tile.y = y
+    # Default: open tile (no access conditions). Pass a non-empty list to gate it.
+    tile.access = MagicMock()
+    tile.access.conditions = access_conditions if access_conditions is not None else []
     if content_type is not None:
         content = MagicMock()
         content.type_ = MapContentType(content_type)
@@ -165,6 +169,37 @@ class TestGameDataLoadMaps:
         with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
             gd._load_maps(MagicMock())
         assert gd._bank_location == (0, 1)
+
+    def test_bank_selection_prefers_open_over_gated(self):
+        """A gated bank (access conditions) must not win over an open one, in
+        either iteration order — else the bot 496s on the gated bank."""
+        for tiles in (
+            [make_map_tile(-2, 19, "bank", "bank", access_conditions=[{"code": "secure_the_island"}]),
+             make_map_tile(4, 1, "bank", "bank")],
+            [make_map_tile(4, 1, "bank", "bank"),
+             make_map_tile(-2, 19, "bank", "bank", access_conditions=[{"code": "secure_the_island"}])],
+        ):
+            gd = GameData()
+            with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page(tiles)):
+                gd._load_maps(MagicMock())
+            assert gd._bank_location == (4, 1)
+            assert gd.has_open_bank() is True
+
+    def test_bank_tile_open_treats_missing_access_as_open(self):
+        assert GameData._bank_tile_open(SimpleNamespace(access=None)) is True
+        assert GameData._bank_tile_open(SimpleNamespace(access=SimpleNamespace(conditions=None))) is True
+        assert GameData._bank_tile_open(SimpleNamespace(access=SimpleNamespace(conditions=[]))) is True
+        assert GameData._bank_tile_open(
+            SimpleNamespace(access=SimpleNamespace(conditions=[{"code": "secure_the_island"}]))
+        ) is False
+
+    def test_bank_falls_back_to_gated_when_no_open(self):
+        gd = GameData()
+        tile = make_map_tile(-2, 19, "bank", "bank", access_conditions=[{"code": "secure_the_island"}])
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+            gd._load_maps(MagicMock())
+        assert gd._bank_location == (-2, 19)
+        assert gd.has_open_bank() is False
 
     def test_loads_taskmaster_location(self):
         gd = GameData()

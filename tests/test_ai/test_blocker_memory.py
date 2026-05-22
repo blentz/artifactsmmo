@@ -6,13 +6,15 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.blockers import BlockerRegistry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     MAX_ACHIEVABLE_GAP,
     PRIORITY_WHEN_BLOCKER_ACTIVE,
     ReachUnlockLevelGoal,
 )
-from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -54,6 +56,26 @@ class TestBlockerPersistence:
         assert b is not None
         assert b.required_level == 6
 
+    def test_delete_blocker_removes_persisted_row(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        store.set_blocker("bank", "sea_marauder", required_level=44)
+        assert store.get_blocker("bank") is not None
+        store.delete_blocker("bank")
+        assert store.get_blocker("bank") is None
+        store.close()
+
+    def test_delete_blocker_only_affects_own_character(self, tmp_path):
+        db = str(tmp_path / "p.db")
+        s1 = LearningStore(db_path=db, character="hero")
+        s1.set_blocker("bank", "m", required_level=5)
+        s1.close()
+        s2 = LearningStore(db_path=db, character="other")
+        s2.delete_blocker("bank")  # different character — must not delete hero's row
+        s2.close()
+        s1b = LearningStore(db_path=db, character="hero")
+        assert s1b.get_blocker("bank") is not None
+        s1b.close()
+
     def test_blocker_is_per_character(self, tmp_path):
         db = str(tmp_path / "p.db")
         s1 = LearningStore(db_path=db, character="hero")
@@ -64,6 +86,35 @@ class TestBlockerPersistence:
         # character's get returns None unless they wrote their own entry.
         assert s2.get_blocker("bank") is None
         s2.close()
+
+
+class TestDropStaleBankLock:
+    def _player_with_blocked_bank(self, tmp_path, open_bank: bool):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        store.set_blocker("bank", "sea_marauder", required_level=44)
+        player = GamePlayer(character="hero")
+        player.history = store
+        player._blockers = BlockerRegistry.load(store, known_codes=["bank"])
+        gd = GameData()
+        gd._bank_location = (4, 1)
+        gd._bank_location_open = open_bank
+        player.game_data = gd
+        return player, store
+
+    def test_clears_lock_when_open_bank_exists(self, tmp_path):
+        player, store = self._player_with_blocked_bank(tmp_path, open_bank=True)
+        assert player._blockers.is_blocked("bank")
+        player._drop_stale_bank_lock()
+        assert not player._blockers.is_blocked("bank")
+        assert store.get_blocker("bank") is None  # also removed from the DB
+        store.close()
+
+    def test_keeps_lock_when_no_open_bank(self, tmp_path):
+        player, store = self._player_with_blocked_bank(tmp_path, open_bank=False)
+        player._drop_stale_bank_lock()
+        assert player._blockers.is_blocked("bank")
+        assert store.get_blocker("bank") is not None
+        store.close()
 
 
 class TestReachUnlockLevelGoal:

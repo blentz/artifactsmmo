@@ -333,6 +333,18 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+    def delete_blocker(self, blocker_code: str) -> None:
+        """Remove a persisted blocker for this character (e.g. a stale bank lock
+        recorded against a gated bank when an open bank is actually available)."""
+        try:
+            with SqlSession(self._engine) as s:
+                b = s.get(Blocker, blocker_code)
+                if b is not None and b.character == self._character:
+                    s.delete(b)
+                    s.commit()
+        except SQLAlchemyError:
+            pass
+
     def record_skill_max_xp(self, skill: str, level: int, max_xp: int) -> None:
         """Upsert observed max_xp for (self._character, skill, level). Last write wins."""
         try:

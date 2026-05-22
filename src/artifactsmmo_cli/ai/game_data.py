@@ -40,6 +40,7 @@ class GameData:
     _resource_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     _workshop_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # skill -> (x, y)
     _bank_location: tuple[int, int] | None = None
+    _bank_location_open: bool = False  # True once _bank_location points at an unconditional bank
     _taskmaster_location: tuple[int, int] | None = None
     _grand_exchange_location: tuple[int, int] | None = None
     _item_stats: dict[str, ItemStats] = field(default_factory=dict)
@@ -79,6 +80,22 @@ class GameData:
         if self._bank_location is None:
             raise RuntimeError("Bank location not found in map data")
         return self._bank_location
+
+    def has_open_bank(self) -> bool:
+        """True when the resolved bank is unconditionally accessible (no
+        achievement gate). Used to drop a stale global bank-lock blocker."""
+        return self._bank_location_open
+
+    @staticmethod
+    def _bank_tile_open(tile: object) -> bool:
+        """True when a bank tile has no access conditions (open to everyone)."""
+        access = getattr(tile, "access", None)
+        if access is None or isinstance(access, Unset):
+            return True
+        conditions = getattr(access, "conditions", None)
+        if conditions is None or isinstance(conditions, Unset):
+            return True
+        return len(conditions) == 0
 
     def taskmaster_location(self) -> tuple[int, int]:
         """Location of the tasks master NPC."""
@@ -341,7 +358,16 @@ class GameData:
                 elif ct == MapContentType.RESOURCE:
                     self._resource_locations.setdefault(code, []).append(loc)
                 elif ct == MapContentType.BANK:
-                    self._bank_location = loc
+                    # Prefer an OPEN bank. Some banks are achievement-gated
+                    # (e.g. the desert-island bank needs `secure_the_island`);
+                    # moving to one returns HTTP 496 and the bot wrongly records
+                    # a global "bank locked" blocker. Latch onto an unconditional
+                    # bank and only fall back to a gated one if none is open.
+                    if self._bank_tile_open(tile):
+                        self._bank_location = loc
+                        self._bank_location_open = True
+                    elif not self._bank_location_open:
+                        self._bank_location = loc
                 elif ct == MapContentType.TASKS_MASTER:
                     self._taskmaster_location = loc
                 elif ct == MapContentType.GRAND_EXCHANGE:
