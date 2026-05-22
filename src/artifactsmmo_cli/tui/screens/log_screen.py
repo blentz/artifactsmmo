@@ -11,24 +11,45 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 
 
 def build_debug_log_line(snap: CycleSnapshot) -> str:
-    """Rich-markup debug record for one cycle: the compact decision line plus
-    task progress, vitals, cooldown, position, path-next, projected cycles, and
-    the full goal-rank ranking (priority > 0)."""
+    """Rich-markup trace record for one cycle — the same per-cycle detail the
+    file tracer writes to traces.jsonl, rendered as a multi-line block:
+
+    - decision header (ts, cycle, goal, action, outcome);
+    - planner internals (nodes/depth/plan_len/timeout) + task progress, vitals,
+      cooldown, position, path-next, projected cycles, path-blocked;
+    - every planner attempt (goals_tried) with its own nodes/depth/plan_len;
+    - the full goal-rank ranking (priority > 0);
+    - suppressed goals (only when any are active).
+    """
     ts = snap.timestamp[11:19] if len(snap.timestamp) >= 19 else snap.timestamp
     outcome_color = {"ok": "green", "no_plan": "yellow"}.get(snap.outcome, "red")
+    task = f"{snap.task_progress}/{snap.task_total}" if snap.task_code else "-"
+    proj = f"{snap.projected_cycles_to_max:.0f}" if snap.projected_cycles_to_max is not None else "?"
+    timeout = "yes" if snap.planner_timed_out else "no"
+    blocked = "yes" if snap.path_blocked else "no"
+
+    lines = [
+        f"[dim]{ts}[/dim] c{snap.cycle_index:>3} "
+        f"[cyan]{snap.selected_goal}[/cyan] {snap.action} "
+        f"[{outcome_color}]{snap.outcome}[/{outcome_color}]",
+        f"  [dim]planner[/dim] nodes={snap.planner_nodes} depth={snap.planner_depth} "
+        f"plan_len={snap.plan_len} timeout={timeout} "
+        f"| task {task} hp {snap.hp}/{snap.max_hp} cd {snap.cooldown_remaining:.1f} "
+        f"pos ({snap.x},{snap.y}) next {snap.path_next_action or '?'} proj {proj} blocked={blocked}",
+    ]
+    if snap.goals_tried:
+        attempts = "  ".join(
+            f"{g.goal}(n={g.nodes} d={g.depth} len={g.plan_len}{' TIMEOUT' if g.timed_out else ''})"
+            for g in snap.goals_tried
+        )
+        lines.append(f"  [dim]goals[/dim] {attempts}")
     ranks = "  ".join(
         f"{gr.goal}={gr.priority:.0f}" for gr in snap.goal_rank if gr.priority > 0
     )
-    task = f"{snap.task_progress}/{snap.task_total}" if snap.task_code else "-"
-    proj = f"{snap.projected_cycles_to_max:.0f}" if snap.projected_cycles_to_max is not None else "?"
-    return (
-        f"[dim]{ts}[/dim] c{snap.cycle_index:>3} "
-        f"[cyan]{snap.selected_goal}[/cyan] {snap.action} "
-        f"[{outcome_color}]{snap.outcome}[/{outcome_color}] "
-        f"| task {task} hp {snap.hp}/{snap.max_hp} cd {snap.cooldown_remaining:.1f} "
-        f"pos ({snap.x},{snap.y}) next {snap.path_next_action or '?'} proj {proj} "
-        f"| {ranks}"
-    )
+    lines.append(f"  [dim]rank[/dim] {ranks}")
+    if snap.suppressed_goals:
+        lines.append(f"  [dim]suppressed[/dim] {'  '.join(snap.suppressed_goals)}")
+    return "\n".join(lines)
 
 
 class LogScreen(Screen[None]):
@@ -41,7 +62,7 @@ class LogScreen(Screen[None]):
         self._history = list(history)
 
     def compose(self) -> ComposeResult:
-        log = RichLog(wrap=False, markup=True, auto_scroll=True, id="debug-log")
+        log = RichLog(wrap=True, markup=True, auto_scroll=True, id="debug-log")
         yield log
 
     def on_mount(self) -> None:

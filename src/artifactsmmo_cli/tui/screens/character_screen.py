@@ -3,6 +3,7 @@
 from rich.console import RenderableType
 from rich.table import Table
 from textual.app import ComposeResult
+from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Static
 
@@ -44,7 +45,9 @@ class CharacterScreen(Screen[None]):
         self._snapshot = snapshot
 
     def compose(self) -> ComposeResult:
-        yield Static(build_character_detail(self._snapshot), id="char-detail")
+        # Scroll container so a tall character sheet scrolls instead of clipping.
+        with VerticalScroll():
+            yield Static(build_character_detail(self._snapshot), id="char-detail")
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self._snapshot = snap
