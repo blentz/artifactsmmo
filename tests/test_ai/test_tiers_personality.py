@@ -1,3 +1,5 @@
+import pytest
+
 from artifactsmmo_cli.ai.tiers.objective import ObjectiveGap
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality, weighted_remaining
 
@@ -23,7 +25,7 @@ def test_weighted_remaining_zero_when_complete():
 
 def test_weighted_remaining_sums_fractions_under_balanced():
     g = _gap(cl=0.2, sk=0.5, gr=0.1)
-    assert weighted_remaining(g, BalancedPersonality()) == 0.8
+    assert weighted_remaining(g, BalancedPersonality()) == pytest.approx(0.8)
 
 
 def test_weighted_remaining_grows_with_gaps():
