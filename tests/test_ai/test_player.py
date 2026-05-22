@@ -1,12 +1,11 @@
 """Tests for GamePlayer."""
 
 import time
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch, call
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.error_schema import ErrorSchema
@@ -21,7 +20,7 @@ from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_game_data_mock() -> GameData:
@@ -56,8 +55,8 @@ class TestBuildActions:
         player = GamePlayer(character="hero")
         player.game_data = make_game_data_mock()
         actions = player._build_actions()
-        from artifactsmmo_cli.ai.actions.rest import RestAction
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.rest import RestAction
         assert any(isinstance(a, RestAction) for a in actions)
         assert any(isinstance(a, DepositAllAction) for a in actions)
 
@@ -429,7 +428,8 @@ class TestExecute:
         from contextlib import redirect_stdout
         buf = io.StringIO()
         with redirect_stdout(buf):
-            with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("HTTP 499: Character in cooldown")):
+            with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                       side_effect=RuntimeError("HTTP 499: Character in cooldown")):
                 with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                         new_state, outcome = player._execute(action, client)
@@ -531,8 +531,8 @@ class TestFormatPlan:
         assert _format_plan(actions) == "Gather(copper_rocks)×3"
 
     def test_mixed_plan_collapsed(self):
-        from artifactsmmo_cli.ai.actions.gathering import GatherAction
         from artifactsmmo_cli.ai.actions.crafting import CraftAction
+        from artifactsmmo_cli.ai.actions.gathering import GatherAction
         gathers = [GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))] * 80
         crafts = [CraftAction(code="copper_bar", quantity=1, workshop_location=(1, 5))] * 8
         result = _format_plan(gathers + crafts)
@@ -541,8 +541,8 @@ class TestFormatPlan:
         assert "…" not in result  # only 2 distinct segments — no truncation needed
 
     def test_truncates_after_five_segments(self):
-        from artifactsmmo_cli.ai.actions.rest import RestAction
         from artifactsmmo_cli.ai.actions.movement import MoveAction
+        from artifactsmmo_cli.ai.actions.rest import RestAction
         plan = [RestAction(), MoveAction(1, 0), MoveAction(2, 0), MoveAction(3, 0),
                 MoveAction(4, 0), MoveAction(5, 0), RestAction()]
         result = _format_plan(plan)
@@ -863,7 +863,6 @@ class TestExecuteClaimPendingSync:
         final_pending.data = []
 
         sync_calls = []
-        original_sync = player._sync_pending
 
         def fake_sync(c, s):
             sync_calls.append(True)
@@ -949,7 +948,7 @@ class TestEmitTrace:
         tracer.write_cycle.assert_not_called()
 
     def test_computes_cooldown_remaining_when_cooldown_set(self):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         player = GamePlayer(character="hero")
         future = datetime.now(tz=timezone.utc) + timedelta(seconds=5.0)
         player.state = make_state(cooldown_expires=future)

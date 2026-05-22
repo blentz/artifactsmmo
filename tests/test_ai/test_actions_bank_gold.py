@@ -1,13 +1,10 @@
 """Tests for DepositGoldAction and WithdrawGoldAction."""
 
-from unittest.mock import MagicMock, patch
 
-import pytest
 
 from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
 from artifactsmmo_cli.ai.game_data import GameData
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
 
 
 def make_gd(**kwargs) -> GameData:

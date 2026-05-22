@@ -27,7 +27,8 @@ class ItemStats:
     crafting_skill: str | None = None
     crafting_level: int = 0
     hp_restore: int = 0  # HP restored when consumed (0 for non-consumables)
-    skill_effects: dict[str, int] = field(default_factory=dict)  # skill -> effect value (e.g. woodcutting cooldown reduction)
+    # skill -> effect value (e.g. woodcutting cooldown reduction)
+    skill_effects: dict[str, int] = field(default_factory=dict)
     attack: dict[str, int] = field(default_factory=dict)        # element -> attack value (weapon)
     resistance: dict[str, int] = field(default_factory=dict)    # element -> resistance % (armor)
 
@@ -502,7 +503,9 @@ class GameData:
             for mon in result.data:
                 self._monster_level[mon.code] = mon.level
                 self._monster_hp[mon.code] = mon.hp
-                self._monster_type[mon.code] = mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
+                self._monster_type[mon.code] = (
+                    mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
+                )
                 self._monster_attack[mon.code] = {
                     elem: getattr(mon, f"attack_{elem}", 0) for elem in ("fire", "earth", "water", "air")
                 }

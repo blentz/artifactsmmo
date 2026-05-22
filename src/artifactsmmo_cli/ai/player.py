@@ -242,7 +242,8 @@ class GamePlayer:
                     unlock_monster=b.unlock_monster,
                     required_level=b.required_level,
                 )
-                print(f"[{self._now()}] Bank blocker remembered: need level {b.required_level} to fight {b.unlock_monster}; deferring bank goals until then")
+                print(f"[{self._now()}] Bank blocker remembered: need level "
+                      f"{b.required_level} to fight {b.unlock_monster}; deferring bank goals until then")
 
         # Seed documented blockers from game_data: near-future combat,
         # equip, craft, gather prereqs the char is close to unlocking. Adds
@@ -347,7 +348,8 @@ class GamePlayer:
                     plan_str = _format_plan(plan)
                     relevant = selected_goal.relevant_actions(actions, state, game_data)
                     applicable = [repr(a) for a in relevant if a.is_applicable(state, game_data)]
-                    print(f"[{self._now()}] Goal: {selected_goal}({selected_goal.priority(state, game_data, self.history):.1f})  Plan: {plan_str}")
+                    goal_prio = selected_goal.priority(state, game_data, self.history)
+                    print(f"[{self._now()}] Goal: {selected_goal}({goal_prio:.1f})  Plan: {plan_str}")
                     print(f"[{self._now()}] Applicable: {applicable}")
 
                 action = plan[0]
@@ -471,7 +473,8 @@ class GamePlayer:
                     required_level=required_level,
                     store=self.history,
                 )
-                print(f"[{self._now()}] Bank locked (HTTP 496) — need level {required_level} to fight {unlock_monster or '?'}; remembered for future sessions")
+                print(f"[{self._now()}] Bank locked (HTTP 496) — need level {required_level} "
+                      f"to fight {unlock_monster or '?'}; remembered for future sessions")
                 outcome = "error:bank_locked"
             elif msg.startswith("fight_lost"):
                 print(f"[{self._now()}] Fight lost: {msg} — refreshing state")
@@ -533,7 +536,8 @@ class GamePlayer:
                 if isinstance(last_result, ErrorResponseSchema):
                     code = str(last_result.error.code)
                     msg = last_result.error.message
-                print(f"[{self._now()}] get_character returned HTTP {code} ({msg}); retry {attempt}/3 in {backoff:.0f}s")
+                print(f"[{self._now()}] get_character returned HTTP {code} ({msg}); "
+                      f"retry {attempt}/3 in {backoff:.0f}s")
                 time.sleep(backoff)
                 backoff *= 2
 
@@ -853,16 +857,19 @@ class GamePlayer:
                 actions.append(EquipAction(code=item_code, slot=slot))
             if ITEM_TYPE_TO_SLOTS.get(stats.type_):
                 # Allow withdrawing the crafted item from bank to equip it
-                actions.append(WithdrawItemAction(code=item_code, quantity=1, bank_location=bank, accessible=self._bank_accessible))
+                actions.append(WithdrawItemAction(
+                    code=item_code, quantity=1, bank_location=bank, accessible=self._bank_accessible))
                 for mat_code, mat_qty in recipe.items():
                     if mat_qty > materials_to_withdraw.get(mat_code, 0):
                         materials_to_withdraw[mat_code] = mat_qty
 
         for mat_code, mat_qty in materials_to_withdraw.items():
-            actions.append(WithdrawItemAction(code=mat_code, quantity=mat_qty, bank_location=bank, accessible=self._bank_accessible))
+            actions.append(WithdrawItemAction(
+                code=mat_code, quantity=mat_qty, bank_location=bank, accessible=self._bank_accessible))
 
         # Allow withdrawing task coins from bank for exchange
-        actions.append(WithdrawItemAction(code="tasks_coin", quantity=1, bank_location=bank, accessible=self._bank_accessible))
+        actions.append(WithdrawItemAction(
+            code="tasks_coin", quantity=1, bank_location=bank, accessible=self._bank_accessible))
 
         # Unequip actions: one per equipment slot
         all_slots = {slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots}
@@ -986,7 +993,8 @@ class GamePlayer:
             DepositInventoryGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
             SellInventoryGoal(bank_accessible=self._bank_accessible),
             ExpandBankGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
-            UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp, target_monster=self._bank_unlock_monster),
+            UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp,
+                           target_monster=self._bank_unlock_monster),
             ClaimPendingGoal(),
             CompleteTaskGoal(),
             AcceptTaskGoal(),
@@ -1296,7 +1304,8 @@ class GamePlayer:
                 "plan_len": len(plan),
             })
             if self.verbose and not plan:
-                print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} depth={s.max_depth_reached} timeout={s.timed_out}")
+                print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} "
+                      f"depth={s.max_depth_reached} timeout={s.timed_out}")
             return plan
 
         committed_priority = -float("inf")

@@ -5,7 +5,8 @@ import json
 from sqlmodel import Session
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import Yield
 from artifactsmmo_cli.ai.learning.scalarizer import (
     CHARACTER_XP_LEVEL_SCALAR,

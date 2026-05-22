@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_gd(**kwargs) -> GameData:
@@ -84,7 +84,8 @@ class TestTaskCancelAction:
         with patch("artifactsmmo_cli.ai.actions.task.MoveAction") as MockMove:
             move_instance = MockMove.return_value
             move_instance.execute.return_value = make_state(x=1, y=2)
-            with patch("artifactsmmo_cli.ai.actions.task.action_task_cancel", return_value=make_api_result(char)) as mock_api:
+            with patch("artifactsmmo_cli.ai.actions.task.action_task_cancel",
+                       return_value=make_api_result(char)) as mock_api:
                 action.execute(state, client)
         MockMove.assert_called_once_with(x=1, y=2)
         mock_api.assert_called_once()
@@ -153,7 +154,8 @@ class TestClaimPendingItemAction:
         pending_result.data = [pending_item]
 
         with patch("artifactsmmo_cli.ai.actions.claim.get_pending_items", return_value=pending_result):
-            with patch("artifactsmmo_cli.ai.actions.claim.action_claim_item", return_value=make_api_result(char)) as mock_claim:
+            with patch("artifactsmmo_cli.ai.actions.claim.action_claim_item",
+                       return_value=make_api_result(char)) as mock_claim:
                 new_state = action.execute(state, client)
 
         mock_claim.assert_called_once()

@@ -11,7 +11,8 @@ from artifactsmmo_cli.ai.goals.low_yield_cancel import (
     CONFIDENCE_THRESHOLD,
     LowYieldCancelGoal,
 )
-from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 

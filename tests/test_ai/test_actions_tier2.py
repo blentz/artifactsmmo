@@ -3,15 +3,15 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.types import UNSET
+
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOT, UnequipAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_gd(**kwargs) -> GameData:
@@ -78,7 +78,8 @@ class TestUnequipAction:
         char = make_char_schema()
         state = make_state(equipment=equipment)
         client = MagicMock()
-        with patch("artifactsmmo_cli.ai.actions.equipment.action_unequip", return_value=make_api_result(char)) as mock_api:
+        with patch("artifactsmmo_cli.ai.actions.equipment.action_unequip",
+                   return_value=make_api_result(char)) as mock_api:
             action.execute(state, client)
         mock_api.assert_called_once()
 
@@ -148,7 +149,8 @@ class TestRecycleAction:
         with patch("artifactsmmo_cli.ai.actions.recycle.MoveAction") as MockMove:
             move_instance = MockMove.return_value
             move_instance.execute.return_value = make_state(x=5, y=0, inventory={"copper_dagger": 1})
-            with patch("artifactsmmo_cli.ai.actions.recycle.action_recycling", return_value=make_api_result(char)) as mock_recycle:
+            with patch("artifactsmmo_cli.ai.actions.recycle.action_recycling",
+                       return_value=make_api_result(char)) as mock_recycle:
                 action.execute(state, client)
         MockMove.assert_called_once_with(x=5, y=0)
         mock_recycle.assert_called_once()
@@ -206,7 +208,8 @@ class TestNpcBuyAction:
         with patch("artifactsmmo_cli.ai.actions.npc.MoveAction") as MockMove:
             move_instance = MockMove.return_value
             move_instance.execute.return_value = make_state(x=2, y=1, gold=100)
-            with patch("artifactsmmo_cli.ai.actions.npc.action_npc_buy", return_value=make_api_result(char)) as mock_buy:
+            with patch("artifactsmmo_cli.ai.actions.npc.action_npc_buy",
+                       return_value=make_api_result(char)) as mock_buy:
                 action.execute(state, client)
         MockMove.assert_called_once_with(x=2, y=1)
         mock_buy.assert_called_once()

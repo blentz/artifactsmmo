@@ -4,14 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from artifactsmmo_cli.ai.game_data import GameData
-
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
-from artifactsmmo_api_client.models.map_content_type import MapContentType
-from artifactsmmo_api_client.models.event_schema import EventSchema
 from artifactsmmo_api_client.models.event_content_schema import EventContentSchema
 from artifactsmmo_api_client.models.event_map_schema import EventMapSchema
+from artifactsmmo_api_client.models.event_schema import EventSchema
+from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.static_data_page_event_schema import StaticDataPageEventSchema
 from artifactsmmo_api_client.types import UNSET
 
@@ -130,7 +127,8 @@ class TestGameDataLookups:
 
     def test_best_consumable_returns_highest_restore(self):
         self.gd._item_stats["bread"] = ItemStats(code="bread", level=1, type_="consumable", hp_restore=10)
-        self.gd._item_stats["cooked_chicken"] = ItemStats(code="cooked_chicken", level=1, type_="consumable", hp_restore=25)
+        self.gd._item_stats["cooked_chicken"] = ItemStats(
+            code="cooked_chicken", level=1, type_="consumable", hp_restore=25)
         result = self.gd.best_consumable({"bread": 1, "cooked_chicken": 2})
         assert result == ("cooked_chicken", 25)
 

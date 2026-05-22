@@ -32,24 +32,23 @@ Usage:
 """
 
 import os
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
-from io import StringIO
-import sys
 
 import pytest
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
-from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.commands.action import show_path_command
+from artifactsmmo_cli.commands.character import list_characters
 from artifactsmmo_cli.commands.info import (
     list_items,
     list_monsters,
-    list_resources,
     list_npcs,
+    list_resources,
 )
-from artifactsmmo_cli.commands.character import list_characters
-from artifactsmmo_cli.commands.action import show_path_command
+from artifactsmmo_cli.config import Config
 
 
 class TestSetup:

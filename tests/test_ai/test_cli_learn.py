@@ -24,6 +24,7 @@ def test_play_marks_exit_reason_crash_when_run_raises(monkeypatch, tmp_path):
     from sqlalchemy import create_engine
     from sqlmodel import Session
     from sqlmodel import select as sqlmodel_select
+
     from artifactsmmo_cli.ai.learning.models import Session as SessRow
     from artifactsmmo_cli.ai.learning.store import LearningStore
     from artifactsmmo_cli.ai.player import GamePlayer

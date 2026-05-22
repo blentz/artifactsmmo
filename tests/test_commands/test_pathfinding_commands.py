@@ -1,7 +1,7 @@
 """Tests for pathfinding commands."""
 
-import pytest
 from unittest.mock import Mock, patch
+
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.action import app
@@ -30,7 +30,7 @@ class TestGotoCommand:
         mock_parse_destination.return_value = (5, 5)
 
         # Mock path calculation
-        from artifactsmmo_cli.utils.pathfinding import PathStep, PathResult
+        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
 
         mock_path = PathResult(steps=[PathStep(1, 1), PathStep(2, 2)], total_distance=4, estimated_time=10)
         mock_calculate_path.return_value = mock_path
@@ -109,7 +109,7 @@ class TestGotoCommand:
         mock_parse_destination.return_value = (1, 1)
 
         # Mock path calculation
-        from artifactsmmo_cli.utils.pathfinding import PathStep, PathResult
+        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
 
         mock_path = PathResult(steps=[PathStep(1, 1)], total_distance=2, estimated_time=5)
         mock_calculate_path.return_value = mock_path
@@ -150,7 +150,7 @@ class TestGotoCommand:
         mock_parse_destination.return_value = (1, 1)
 
         # Mock path calculation
-        from artifactsmmo_cli.utils.pathfinding import PathStep, PathResult
+        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
 
         mock_path = PathResult(steps=[PathStep(1, 1)], total_distance=2, estimated_time=5)
         mock_calculate_path.return_value = mock_path
@@ -192,7 +192,7 @@ class TestPathCommand:
         mock_parse_destination.return_value = (3, 3)
 
         # Mock path calculation
-        from artifactsmmo_cli.utils.pathfinding import PathStep, PathResult
+        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
 
         mock_path = PathResult(
             steps=[PathStep(1, 1), PathStep(2, 2), PathStep(3, 3)], total_distance=6, estimated_time=15
@@ -249,7 +249,7 @@ class TestPathCommand:
         mock_resolve_location.return_value = (4, 1)
 
         with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_calculate_path:
-            from artifactsmmo_cli.utils.pathfinding import PathStep, PathResult
+            from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
 
             mock_path = PathResult(
                 steps=[PathStep(1, 0), PathStep(2, 0), PathStep(3, 0), PathStep(4, 0), PathStep(4, 1)],

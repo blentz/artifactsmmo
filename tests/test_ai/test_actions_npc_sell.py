@@ -7,7 +7,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_gd(**kwargs) -> GameData:

@@ -1,7 +1,6 @@
 """Tests for GameHTTPStatus — ensures game-specific codes don't crash the client."""
 
 import pytest
-
 from artifactsmmo_api_client.types import GameHTTPStatus
 
 

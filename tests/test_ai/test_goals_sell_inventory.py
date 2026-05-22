@@ -1,8 +1,8 @@
 """Tests for SellInventoryGoal."""
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from tests.test_ai.fixtures import make_state

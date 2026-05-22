@@ -1,19 +1,20 @@
 """Tests for pathfinding utilities."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from artifactsmmo_cli.utils.pathfinding import (
     PathResult,
     PathStep,
+    _find_nearest_location,
     calculate_path,
+    find_nearest_bank,
+    find_nearest_resource,
+    find_nearest_task_master,
     get_character_position,
     parse_destination,
     resolve_named_location,
-    find_nearest_bank,
-    find_nearest_task_master,
-    find_nearest_resource,
-    _find_nearest_location,
 )
 
 

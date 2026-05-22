@@ -2,10 +2,10 @@
 
 from unittest.mock import patch
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, FarmMonsterGoal

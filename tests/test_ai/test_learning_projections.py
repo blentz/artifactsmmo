@@ -4,7 +4,9 @@ import json
 
 from sqlmodel import Session
 
-from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import (
     TASKS_COIN_CODE,
     WARMUP_MIN_SAMPLES,
@@ -207,8 +209,7 @@ class TestProjectTaskCompletion:
 
 
 class TestCheapestPathToLevel:
-    def _gd_with_monsters(self, monsters: dict[str, int]) -> "GameData":
-        from artifactsmmo_cli.ai.game_data import GameData
+    def _gd_with_monsters(self, monsters: dict[str, int]) -> GameData:
         gd = GameData()
         gd._monster_level = monsters
         return gd
@@ -226,7 +227,7 @@ class TestCheapestPathToLevel:
     def test_uses_documented_xp_formula_when_no_observations(self, tmp_path):
         """No store data → use game_data.xp_per_kill (documented formula)
         instead of magic constants."""
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level, DEFAULT_FIGHT_CYCLES
+        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
         gd._monster_hp = {"chicken": 60}
@@ -309,9 +310,9 @@ class TestPathSuccessRateFilter:
     """G-I post-fix: monsters with observed low win-rate excluded from path."""
 
     def test_low_win_rate_monster_skipped(self, tmp_path):
-        from artifactsmmo_cli.ai.game_data import GameData
+        from artifactsmmo_cli.ai.learning.models import Cycle
+        from artifactsmmo_cli.ai.learning.models import Session as SessionModel
         from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
-        from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
 
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         store.start_session()

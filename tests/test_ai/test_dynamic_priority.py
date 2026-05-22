@@ -8,7 +8,8 @@ from artifactsmmo_cli.ai.learning.dynamic_priority import (
     DEFAULT_BONUS_WEIGHT,
     learned_priority_bonus,
 )
-from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 

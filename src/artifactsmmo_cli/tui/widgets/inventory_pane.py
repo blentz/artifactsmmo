@@ -24,7 +24,8 @@ class InventoryPane(Static):
     def _render_inventory(self, s: CycleSnapshot) -> Group:
         used = sum(s.inventory.values())
         max_ = s.inventory_max
-        header_color = "red" if (max_ and used / max_ > 0.9) else ("yellow" if (max_ and used / max_ > 0.7) else "white")
+        fill = used / max_ if max_ else 0.0
+        header_color = "red" if fill > 0.9 else ("yellow" if fill > 0.7 else "white")
         header = Text(f"Inventory  {used}/{max_}", style=f"bold {header_color}")
 
         # Items sorted by qty desc

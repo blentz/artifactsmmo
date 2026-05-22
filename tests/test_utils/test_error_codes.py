@@ -1,10 +1,8 @@
 """Test error code handling for ArtifactsMMO specific response codes."""
 
-import pytest
-from unittest.mock import Mock
 
-from artifactsmmo_cli.utils.helpers import get_error_message, handle_api_error
 from artifactsmmo_cli.models.responses import CLIResponse
+from artifactsmmo_cli.utils.helpers import get_error_message, handle_api_error
 
 
 class TestErrorCodes:

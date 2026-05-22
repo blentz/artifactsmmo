@@ -5,7 +5,8 @@ import os
 import tempfile
 
 import pytest
-from sqlmodel import Session, Session as SqlSession, select
+from sqlmodel import Session, select
+from sqlmodel import Session as SqlSession
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle

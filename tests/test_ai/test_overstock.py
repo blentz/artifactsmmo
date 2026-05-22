@@ -1,9 +1,9 @@
 """Tests for inventory_caps + DiscardOverstockGoal."""
 
+from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.goals.discard_overstock import (
     PRIORITY_WHEN_OVERSTOCKED,
     DiscardOverstockGoal,

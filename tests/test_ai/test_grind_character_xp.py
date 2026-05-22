@@ -12,7 +12,8 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import (
     PRIORITY_FLOOR,
     GrindCharacterXPGoal,
 )
-from artifactsmmo_cli.ai.learning.models import Cycle, Session as SessionModel
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 

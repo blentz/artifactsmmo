@@ -1,11 +1,10 @@
 """Tests for final coverage gaps."""
 
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from artifactsmmo_api_client.types import UNSET
+
 from artifactsmmo_cli.ai.actions.bank import WithdrawItemAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equipment import EquipAction
@@ -15,11 +14,11 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.combat import FarmMonsterGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
+from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_char_schema, make_api_result
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_gd(**kwargs) -> GameData:
@@ -227,15 +226,20 @@ class TestPlayerRunVerboseAndExecute:
                 with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
                     with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])):
+                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters",
+                                       return_value=MagicMock(data=[])):
+                                with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items",
+                                           return_value=MagicMock(data=[])):
+                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events",
+                                               return_value=MagicMock(data=[])):
                                         with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
                                             with patch.object(player, "_fetch_world_state", return_value=initial_state):
                                                 with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                                                     with patch.object(player, "_maybe_periodic_refresh"):
-                                                        with patch.object(player, "_build_actions", return_value=[RestAction()]):
-                                                            with patch("artifactsmmo_cli.ai.actions.rest.action_rest", return_value=make_api_result(char_after_rest)):
+                                                        with patch.object(player, "_build_actions",
+                                                                   return_value=[RestAction()]):
+                                                            with patch("artifactsmmo_cli.ai.actions.rest.action_rest",
+                                                                       return_value=make_api_result(char_after_rest)):
                                                                 with pytest.raises(KeyboardInterrupt):
                                                                     player.run()
 
@@ -260,14 +264,18 @@ class TestPlayerRunVerboseAndExecute:
                 with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
                     with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])):
+                            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters",
+                                       return_value=MagicMock(data=[])):
+                                with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items",
+                                           return_value=MagicMock(data=[])):
+                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events",
+                                               return_value=MagicMock(data=[])):
                                         with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
                                             with patch.object(player, "_fetch_world_state", return_value=initial_state):
                                                 with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                                                     with patch.object(player, "_maybe_periodic_refresh"):
-                                                        with patch.object(player, "_build_actions", return_value=[RestAction()]):
+                                                        with patch.object(player, "_build_actions",
+                                                                   return_value=[RestAction()]):
                                                             with pytest.raises(KeyboardInterrupt):
                                                                 player.run()
 

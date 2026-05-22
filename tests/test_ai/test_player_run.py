@@ -4,19 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
-from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
-from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_minimal_game_data() -> GameData:
