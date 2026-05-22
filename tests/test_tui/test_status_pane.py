@@ -5,7 +5,7 @@ import io
 from rich.console import Console
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
-from artifactsmmo_cli.tui.widgets.status_pane import StatusPane
+from artifactsmmo_cli.tui.widgets.status_pane import StatusPane, task_eta_seconds, format_eta
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -228,3 +228,61 @@ class TestStatusPaneUpdateSnapshot:
         snap = _snap()
         pane.update_snapshot(snap)
         assert pane.snapshot == snap
+
+
+class TestTaskEta:
+    def test_none_with_fewer_than_two_samples(self):
+        assert task_eta_seconds([], remaining=5) is None
+        assert task_eta_seconds([(0.0, 0)], remaining=5) is None
+
+    def test_none_when_no_time_span(self):
+        assert task_eta_seconds([(10.0, 0), (10.0, 2)], remaining=5) is None
+
+    def test_none_when_rate_not_positive(self):
+        assert task_eta_seconds([(0.0, 3), (60.0, 3)], remaining=5) is None  # no progress
+        assert task_eta_seconds([(0.0, 5), (60.0, 3)], remaining=5) is None  # went down
+
+    def test_steady_progress(self):
+        # 2 progress over 60s = 0.0333/s; remaining 4 -> 120s
+        assert task_eta_seconds([(0.0, 0), (60.0, 2)], remaining=4) == 120.0
+
+    def test_format_eta_sub_minute(self):
+        assert format_eta(45.0) == "~45s"
+
+    def test_format_eta_minutes(self):
+        assert format_eta(250.0) == "~4m 10s"
+
+
+class TestStatusEtaRow:
+    def test_eta_dash_before_enough_samples(self):
+        pane = StatusPane()
+        pane.update_snapshot(_snap(task_code="t", task_type="items",
+                                   task_progress=0, task_total=10,
+                                   timestamp="2026-05-21T12:00:00Z"))
+        assert "ETA" in _render(pane)
+        assert "—" in _render(pane)
+
+    def test_eta_shows_estimate_with_progress(self):
+        pane = StatusPane()
+        pane.update_snapshot(_snap(task_code="t", task_type="items",
+                                   task_progress=0, task_total=10,
+                                   timestamp="2026-05-21T12:00:00Z"))
+        pane.update_snapshot(_snap(task_code="t", task_type="items",
+                                   task_progress=2, task_total=10,
+                                   timestamp="2026-05-21T12:01:00Z"))
+        out = _render(pane)
+        assert "ETA" in out and "~" in out and "m" in out  # 8 remaining at 2/60s
+
+    def test_eta_resets_on_task_change(self):
+        pane = StatusPane()
+        pane.update_snapshot(_snap(task_code="a", task_total=5, task_progress=1,
+                                   timestamp="2026-05-21T12:00:00Z"))
+        pane.update_snapshot(_snap(task_code="b", task_total=5, task_progress=0,
+                                   timestamp="2026-05-21T12:00:30Z"))
+        # only 1 sample for task b -> dash
+        assert "—" in _render(pane)
+
+    def test_no_eta_row_without_task(self):
+        pane = StatusPane()
+        pane.update_snapshot(_snap(task_code=None))
+        assert "ETA" not in _render(pane)
