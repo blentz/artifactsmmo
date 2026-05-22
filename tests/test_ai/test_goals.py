@@ -1401,16 +1401,35 @@ class TestFarmItemsBatching:
         assert trades[0].quantity == 8  # BATCH_SIZE_CRAFTED, not 30
 
     def test_batch_capped_by_bag_headroom(self):
-        """Bag-near-full: batch cap = inventory free + current task-item count."""
+        """Bag-near-full: batch = current task-item count + the slots gathering
+        can still fill (free_slots minus the gather min-free reserve), NOT the
+        full free_slots — otherwise the trade demands more than is obtainable."""
         gd = GameData()
         actions = [TaskTradeAction(code="gudgeon", quantity=1, taskmaster_location=(1, 2))]
-        # 10 gudgeon in inventory, 5 free slots → achievable = 15, batch = min(30, 232, 15) = 15
+        # 10 gudgeon, 5 free slots; gather stops at 2 free (MIN_FREE_SLOTS=3) so
+        # only 3 more obtainable → achievable = 13, batch = min(30, 232, 13) = 13.
         state = make_state(task_code="gudgeon", task_type="items",
                             task_total=353, task_progress=121,
                             inventory={"gudgeon": 10, "other": 89}, inventory_max=104)
         goal = FarmItemsGoal()
         trades = [a for a in goal.relevant_actions(actions, state, gd) if isinstance(a, TaskTradeAction)]
-        assert trades[0].quantity == 15
+        assert trades[0].quantity == 13
+
+    def test_full_bag_delivers_what_it_holds_no_deadlock(self):
+        """Regression (Robby stuck): near-full bag (free < MIN_FREE_SLOTS) can't
+        gather more, so the batch must equal what's already held — a deliverable
+        TaskTrade — not current+free which overshoots and yields no plan."""
+        gd = GameData()
+        actions = [TaskTradeAction(code="copper_ore", quantity=1, taskmaster_location=(1, 2))]
+        # 15 copper_ore, bag 102/104 → free 2 (< MIN_FREE_SLOTS): 0 gatherable.
+        state = make_state(task_code="copper_ore", task_type="items",
+                           task_total=255, task_progress=0,
+                           inventory={"copper_ore": 15, "junk": 87}, inventory_max=104)
+        goal = FarmItemsGoal()
+        trade = [a for a in goal.relevant_actions(actions, state, gd)
+                 if isinstance(a, TaskTradeAction)][0]
+        assert trade.quantity == 15
+        assert trade.is_applicable(state, gd)  # deliverable now → breaks the deadlock
 
 
 def test_farm_monster_goal_value_amplifies_on_high_xp_yield():

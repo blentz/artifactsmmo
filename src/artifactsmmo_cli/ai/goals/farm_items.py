@@ -78,7 +78,14 @@ class FarmItemsGoal(Goal):
         task_remaining = max(0, state.task_total - state.task_progress)
         current_count = state.inventory.get(state.task_code, 0)
         free_slots = max(0, state.inventory_max - state.inventory_used)
-        achievable = current_count + free_slots
+        # Gathering stops once free slots fall below GatherAction._MIN_FREE_SLOTS,
+        # so only (free_slots - (MIN_FREE_SLOTS - 1)) MORE task items can actually
+        # be obtained. Using the full free_slots overshot the deliverable count:
+        # the batched TaskTrade then required more items than could ever be held
+        # (e.g. 15 in bag, 2 free → batch 17, but gather is blocked at 2 free),
+        # so no delivery plan existed and the bot deadlocked with a near-full bag.
+        gatherable = max(0, free_slots - (GatherAction._MIN_FREE_SLOTS - 1))
+        achievable = current_count + gatherable
         return max(1, min(ceiling, task_remaining, achievable))
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
