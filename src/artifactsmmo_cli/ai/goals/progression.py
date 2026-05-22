@@ -59,7 +59,7 @@ class UpgradeEquipmentGoal(Goal):
         stats = game_data.item_stats(item_code)
         if stats is None or not stats.skill_effects:
             return False
-        active = game_data.active_gathering_skills(state.task_code)
+        active = game_data.active_gathering_skills(state.task_code, state.crafting_target)
         if not active:
             return False
         return any(skill in active for skill in stats.skill_effects)
@@ -200,7 +200,7 @@ class UpgradeEquipmentGoal(Goal):
         slot over far better gear purely because the picker maximized level
         with an arbitrary tiebreak.
         """
-        active = frozenset(game_data.active_gathering_skills(state.task_code))
+        active = frozenset(game_data.active_gathering_skills(state.task_code, state.crafting_target))
         best: tuple[str, str] | None = None
         best_key: tuple[int, float, int, str] = (-1, -float("inf"), -1, "")
         for item_code in state.inventory:
@@ -223,7 +223,7 @@ class UpgradeEquipmentGoal(Goal):
 
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Best-VALUE upgrade in inventory or bank (bank items need Withdraw first)."""
-        active = frozenset(game_data.active_gathering_skills(state.task_code))
+        active = frozenset(game_data.active_gathering_skills(state.task_code, state.crafting_target))
         bank = state.bank_items or {}
         best: tuple[str, str] | None = None
         best_key: tuple[int, float, int, str] = (-1, -float("inf"), -1, "")
@@ -254,7 +254,7 @@ class UpgradeEquipmentGoal(Goal):
         Within each tier, lowest crafting_level first so skill progression is
         linear: craft basic items to level the skill, unlocking higher recipes.
         """
-        active = game_data.active_gathering_skills(state.task_code)
+        active = game_data.active_gathering_skills(state.task_code, state.crafting_target)
         equipped = set(state.equipment.values()) - {None}
         best: tuple[str, str] | None = None
         # Sort key per (item, slot): (relevant_tool, fills_empty_slot, value,

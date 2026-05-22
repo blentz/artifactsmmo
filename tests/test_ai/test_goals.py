@@ -381,6 +381,42 @@ class TestUpgradeEquipmentGoalToolBias:
         goal = UpgradeEquipmentGoal()
         assert goal.value(state, gd) == 51.0
 
+    def test_crafting_target_makes_mining_tool_relevant(self):
+        """Self-directed copper-gear crafting (no mining task) marks mining
+        active via crafting_target, so the pickaxe is picked over a higher-value
+        generic weapon. Without the target it is not — proving the new signal."""
+        dagger = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+            attack={"fire": 10},  # higher raw value → wins when mining inactive
+        )
+        pickaxe = ItemStats(
+            code="copper_pickaxe", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+            skill_effects={"mining": -1},
+        )
+        gd = make_game_data(item_stats={"copper_dagger": dagger, "copper_pickaxe": pickaxe})
+        gd._crafting_recipes = {
+            "copper_dagger": {"copper_ore": 6},
+            "copper_pickaxe": {"copper_ore": 6},
+            "copper_bar": {"copper_ore": 10},  # the crafting target's chain → mining
+        }
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        base = dict(
+            inventory={}, level=5, skills={"weaponcrafting": 1},
+            bank_items={"copper_ore": 12},  # both craftable; empty weapon slot
+        )
+        goal = UpgradeEquipmentGoal()
+
+        # No task, no crafting target → mining inactive → higher-value dagger wins.
+        no_target = make_state(task_code=None, crafting_target=None, **base)
+        assert goal._find_craftable_upgrade_target(no_target, gd)[0] == "copper_dagger"
+
+        # Crafting copper gear (copper_bar chain → mining) → pickaxe wins.
+        mining = make_state(task_code=None, crafting_target="copper_bar", **base)
+        assert goal._find_craftable_upgrade_target(mining, gd)[0] == "copper_pickaxe"
+
     def test_relevant_tool_beats_lower_level_generic_craftable(self):
         # Lower craft_level (dagger=1) would normally win; the axe (level 2) has
         # the relevant skill bonus and should still be picked.

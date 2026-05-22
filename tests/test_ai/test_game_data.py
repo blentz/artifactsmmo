@@ -524,6 +524,35 @@ def test_active_gathering_skills_returns_empty_for_no_task():
     assert gd.active_gathering_skills("") == set()
 
 
+def test_active_gathering_skills_counts_crafting_target():
+    """A self-directed crafting target surfaces its recipe-tree gather skills
+    even with no taskmaster task — mining copper for copper gear marks mining."""
+    gd = GameData()
+    gd._crafting_recipes = {
+        "copper_dagger": {"copper_bar": 6},
+        "copper_bar": {"copper_ore": 10},
+    }
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    # No task, but the bot is crafting a copper dagger → mining is active.
+    assert gd.active_gathering_skills(None, "copper_dagger") == {"mining"}
+
+
+def test_active_gathering_skills_unions_task_and_crafting_target():
+    """Skills from BOTH the task recipe tree and the crafting target unite."""
+    gd = GameData()
+    gd._crafting_recipes = {
+        "ash_plank": {"ash_wood": 1},
+        "copper_bar": {"copper_ore": 10},
+    }
+    gd._resource_drops = {"ash_tree": "ash_wood", "copper_rocks": "copper_ore"}
+    gd._resource_skill = {
+        "ash_tree": ("woodcutting", 1),
+        "copper_rocks": ("mining", 1),
+    }
+    assert gd.active_gathering_skills("ash_plank", "copper_bar") == {"woodcutting", "mining"}
+
+
 def test_active_gathering_skills_handles_multi_skill_recipes():
     """Two raws in the recipe = two skills surfaced."""
     gd = GameData()

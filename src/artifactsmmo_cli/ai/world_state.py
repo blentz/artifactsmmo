@@ -74,6 +74,12 @@ class WorldState:
     """event code -> expiration (tz-aware). Per-cycle snapshot from
     GET /events/active. Defaults empty so constructions that don't supply it
     (and planner sims through actions that preserve it) keep working."""
+    crafting_target: str | None = None
+    """Item the bot is currently working to craft/upgrade toward (the committed
+    UpgradeEquipment target). Set per cycle by the player. Lets
+    active_gathering_skills count skills the bot gathers for self-directed
+    crafting (e.g. mining copper ore for copper gear), not just the taskmaster
+    task. Defaults None so other constructions keep working."""
 
     @property
     def inventory_used(self) -> int:

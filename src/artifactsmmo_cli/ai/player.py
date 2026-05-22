@@ -4,6 +4,7 @@ import json
 import re
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -951,6 +952,13 @@ class GamePlayer:
         if committed is None:
             committed = probe.find_upgrade_target(self.state, self.game_data)
         self._committed_upgrade_target = committed
+        # Expose the committed crafting target on the state so every consumer of
+        # active_gathering_skills (tool relevance, gating-XP, scalarizer) counts
+        # the skills the bot gathers for this self-directed craft — e.g. mining
+        # copper ore for copper gear marks mining active so a pickaxe is built.
+        self.state = replace(
+            self.state, crafting_target=committed[0] if committed else None
+        )
 
         upgrade_goal = UpgradeEquipmentGoal(
             initial_equipment=self.state.equipment, committed_target=committed,
@@ -993,7 +1001,7 @@ class GamePlayer:
         # upgrade Robby is currently within MAX_SKILL_GAP of unlocking. Reads
         # game_data.active_gathering_skills so we only invest in skills tied
         # to the active task; without that we'd grind every skill always.
-        active_skills = self.game_data.active_gathering_skills(self.state.task_code)
+        active_skills = self.game_data.active_gathering_skills(self.state.task_code, self.state.crafting_target)
         if active_skills:
             for skill, target in self._gating_skill_targets(active_skills):
                 goals.append(LevelSkillGoal(skill_name=skill, target_level=target))
@@ -1159,7 +1167,7 @@ class GamePlayer:
             return False
         current = self.state.equipment.get(slot)
         current_stats = self.game_data.item_stats(current) if current else None
-        active = frozenset(self.game_data.active_gathering_skills(self.state.task_code))
+        active = frozenset(self.game_data.active_gathering_skills(self.state.task_code, self.state.crafting_target))
         return probe._is_upgrade_over(item_code, stats, current, current_stats,
                                       self.game_data, active)
 

@@ -210,15 +210,18 @@ class GameData:
                 best = (code, stats.hp_restore)
         return best
 
-    def active_gathering_skills(self, task_code: str | None) -> set[str]:
-        """Gathering skills involved in producing task_code (walking the recipe tree).
+    def active_gathering_skills(
+        self, task_code: str | None, crafting_target: str | None = None
+    ) -> set[str]:
+        """Gathering skills involved in producing task_code AND the bot's current
+        self-directed crafting target (walking each item's recipe tree).
 
         E.g. task_code="ash_plank" → recipe needs ash_wood → ash_tree resource →
-        woodcutting. Returns the set of distinct gather skills the player should
-        prefer tool upgrades for.
+        woodcutting. crafting_target="copper_dagger" → copper_bar → copper_ore →
+        mining. Returns the union of distinct gather skills the player should
+        prefer tool upgrades for — so mining a copper-gear's materials counts
+        even when no taskmaster task drives it.
         """
-        if not task_code:
-            return set()
         skills: set[str] = set()
         visited: set[str] = set()
 
@@ -237,7 +240,9 @@ class GameData:
             for mat in recipe:
                 walk(mat)
 
-        walk(task_code)
+        for root in (task_code, crafting_target):
+            if root:
+                walk(root)
         return skills
 
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:

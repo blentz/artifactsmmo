@@ -127,14 +127,14 @@ def scalar_yield(
 
     - char_xp * CHARACTER_XP_LEVEL_SCALAR * (state.level + 1)
     - sum(per-skill xp * weight) where weight is SKILL_XP_RELEVANT_TOOL_WEIGHT
-      if the skill is in `game_data.active_gathering_skills(state.task_code)`,
+      if the skill is in `game_data.active_gathering_skills(state.task_code, state.crafting_target)`,
       else SKILL_XP_BASELINE_WEIGHT.
     - gold / GOLD_PER_XP_EQUIVALENT
     - tasks_coins * expected_coin_value / GOLD_PER_XP_EQUIVALENT
     """
     char_xp_component = yield_.char_xp * CHARACTER_XP_LEVEL_SCALAR * (state.level + 1)
 
-    active_skills = game_data.active_gathering_skills(state.task_code)
+    active_skills = game_data.active_gathering_skills(state.task_code, state.crafting_target)
     skill_xp_component = 0.0
     for skill_name, delta in yield_.skill_xp.items():
         weight = (SKILL_XP_RELEVANT_TOOL_WEIGHT
