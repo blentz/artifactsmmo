@@ -1,8 +1,9 @@
-"""Static-viewport NetHack-style map centered on the player."""
+"""NetHack-style map: a grid that fills the pane, centered on the player."""
 
 from typing import Any
 
 from rich.text import Text
+from textual.events import Resize
 from textual.reactive import reactive
 from textual.widgets import Static
 
@@ -27,7 +28,7 @@ VIEWPORT_H = 21
 
 
 class MapPane(Static):
-    """Renders a VIEWPORT_W x VIEWPORT_H grid centered on the player."""
+    """Renders a grid that fills the pane, centered on the player."""
 
     snapshot: reactive[CycleSnapshot | None] = reactive(None)
 
@@ -82,7 +83,13 @@ class MapPane(Static):
         snap = self.snapshot
         if snap is None:
             return Text("Waiting for first cycle...")
-        return self._render_viewport(snap, VIEWPORT_W, VIEWPORT_H)
+        width = self.size.width or VIEWPORT_W
+        height = self.size.height or VIEWPORT_H
+        return self._render_viewport(snap, width, height)
+
+    def on_resize(self, event: Resize) -> None:
+        """Recompute the grid whenever the pane is resized."""
+        self.refresh()
 
     def _render_viewport(self, snap: CycleSnapshot, width: int, height: int) -> Text:
         """Render a width x height block: 1 legend line + (height-1) map rows,

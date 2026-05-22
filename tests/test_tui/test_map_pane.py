@@ -180,3 +180,27 @@ class TestRenderViewportDimensions:
         lines = pane._render_viewport(_snap(0, 0), w, h).plain.split("\n")
         map_h = h - 1
         assert lines[1 + map_h // 2][w // 2 + 2] == "s"   # green_slime glyph
+
+
+class TestRenderSizing:
+    def test_render_uses_pane_size(self, monkeypatch):
+        from textual.geometry import Size
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        monkeypatch.setattr(type(pane), "size", property(lambda self: Size(30, 12)))
+        lines = pane.render().plain.split("\n")
+        assert len(lines) == 12
+        assert all(len(row) == 30 for row in lines[1:])
+
+    def test_render_falls_back_when_size_zero(self, monkeypatch):
+        from textual.geometry import Size
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        monkeypatch.setattr(type(pane), "size", property(lambda self: Size(0, 0)))
+        lines = pane.render().plain.split("\n")
+        assert len(lines) == VIEWPORT_H                  # 21 fallback
+        assert all(len(row) == VIEWPORT_W for row in lines[1:])
+
+    def test_render_no_snapshot_waiting(self):
+        pane = MapPane(_gd_typed())
+        assert "Waiting" in pane.render().plain
