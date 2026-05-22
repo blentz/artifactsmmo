@@ -2,7 +2,7 @@
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.tui.glyphs import WALKABLE_GLYPH
+from artifactsmmo_cli.tui.glyphs import PLAYER_GLYPH, WALKABLE_GLYPH
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane, VIEWPORT_H, VIEWPORT_W
 
 
@@ -142,3 +142,41 @@ class TestMapPaneTypedGlyphs:
         assert "structure" in header and "door" in header
         assert "M=monster" not in header
         assert ">=portal" not in header
+
+
+class TestRenderViewportDimensions:
+    def test_fills_exact_dimensions_odd(self):
+        pane = MapPane(_gd_typed())
+        out = pane._render_viewport(_snap(0, 0), 41, 21)
+        lines = out.plain.split("\n")
+        assert len(lines) == 21                       # 1 header + 20 map rows
+        assert all(len(row) == 41 for row in lines[1:])
+
+    def test_fills_exact_dimensions_even(self):
+        pane = MapPane(_gd_typed())
+        out = pane._render_viewport(_snap(0, 0), 40, 20)
+        lines = out.plain.split("\n")
+        assert len(lines) == 20
+        assert all(len(row) == 40 for row in lines[1:])
+
+    def test_player_centered(self):
+        pane = MapPane(_gd_typed())
+        w, h = 41, 21
+        lines = pane._render_viewport(_snap(0, 0), w, h).plain.split("\n")
+        map_h = h - 1
+        player_row = lines[1 + map_h // 2]            # +1 for the header line
+        assert player_row[w // 2] == PLAYER_GLYPH
+
+    def test_height_one_is_header_only(self):
+        pane = MapPane(_gd_typed())
+        lines = pane._render_viewport(_snap(0, 0), 41, 1).plain.split("\n")
+        assert len(lines) == 1                        # header only, no map rows
+
+    def test_world_offset_maps_to_centered_cell(self):
+        # Monster at (2,0); player at (0,0); width 41 -> player col 20,
+        # monster col 20+2 = 22 on the player's row.
+        pane = MapPane(_gd_typed())                   # _gd_typed has green_slime at (2,0)
+        w, h = 41, 21
+        lines = pane._render_viewport(_snap(0, 0), w, h).plain.split("\n")
+        map_h = h - 1
+        assert lines[1 + map_h // 2][w // 2 + 2] == "s"   # green_slime glyph

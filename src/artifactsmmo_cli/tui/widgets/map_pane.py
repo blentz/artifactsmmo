@@ -1,5 +1,7 @@
 """Static-viewport NetHack-style map centered on the player."""
 
+from typing import Any
+
 from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
@@ -29,7 +31,7 @@ class MapPane(Static):
 
     snapshot: reactive[CycleSnapshot | None] = reactive(None)
 
-    def __init__(self, game_data: GameData, **kwargs) -> None:
+    def __init__(self, game_data: GameData, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._game_data = game_data
         # Pre-index the world for fast (x,y) lookup. NetHack-style maps need
@@ -80,27 +82,26 @@ class MapPane(Static):
         snap = self.snapshot
         if snap is None:
             return Text("Waiting for first cycle...")
-        return self._render_viewport(snap)
+        return self._render_viewport(snap, VIEWPORT_W, VIEWPORT_H)
 
-    def _render_viewport(self, snap: CycleSnapshot) -> Text:
-        half_w = VIEWPORT_W // 2
-        half_h = VIEWPORT_H // 2
+    def _render_viewport(self, snap: CycleSnapshot, width: int, height: int) -> Text:
+        """Render a width x height block: 1 legend line + (height-1) map rows,
+        player centered at (width//2, (height-1)//2)."""
+        map_h = height - 1
+        half_w = width // 2
+        half_h = map_h // 2
         cx, cy = snap.x, snap.y
-        # no_wrap + crop: the viewport is a fixed grid. Letting Rich wrap it (the
-        # default) folds the wide legend and long rows onto extra lines, shoving
-        # the bottom of the map out of the pane — the "pinched and incomplete"
-        # symptom. Crop instead so the grid keeps its shape and overflow is hidden.
         text = Text(no_wrap=True, overflow="crop")
-        # Header line: char coords + glyph legend.
+        header_nl = "\n" if map_h > 0 else ""
         text.append(
-            f" ({cx},{cy})  @ you  A-Z npc  a-z monster  ╬ structure  + door  T/*/~/% resource\n",
+            f" ({cx},{cy})  @ you  A-Z npc  a-z monster  ╬ structure  + door  T/*/~/% resource{header_nl}",
             style="dim",
         )
-        for dy in range(-half_h, half_h + 1):
-            for dx in range(-half_w, half_w + 1):
-                world_x = cx + dx
-                world_y = cy + dy
-                if dx == 0 and dy == 0:
+        for row in range(map_h):
+            for col in range(width):
+                world_x = cx + col - half_w
+                world_y = cy + row - half_h
+                if col == half_w and row == half_h:
                     text.append(PLAYER_GLYPH, style=PLAYER_COLOR)
                     continue
                 cell = self._tile_index.get((world_x, world_y))
@@ -111,7 +112,6 @@ class MapPane(Static):
                     text.append(WALKABLE_GLYPH, style=WALKABLE_COLOR)
                 else:
                     text.append(UNMAPPED_GLYPH)
-            # Newline between rows only — no trailing newline after the last row.
-            if dy != half_h:
+            if row != map_h - 1:
                 text.append("\n")
         return text
