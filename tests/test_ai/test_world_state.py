@@ -81,3 +81,62 @@ def test_from_character_schema_captures_per_skill_xp():
     assert state.skill_xp["weaponcrafting"] == 42
     assert state.skill_xp["fishing"] == 7
     assert state.skill_xp["mining"] == 0
+
+
+def test_from_character_schema_populates_combat_stats():
+    char = MagicMock()
+    char.name = "hero"
+    char.level = 1
+    char.xp = 0
+    char.max_xp = 100
+    char.hp = 100
+    char.max_hp = 100
+    char.gold = 0
+    char.x = 0
+    char.y = 0
+    char.cooldown_expiration = None
+    char.task = ""
+    char.task_type = ""
+    char.task_progress = 0
+    char.task_total = 0
+    char.inventory = []
+    char.inventory_max_items = 100
+    for slot in EQUIPMENT_SLOTS:
+        setattr(char, slot, "")
+    for s in SKILL_NAMES:
+        setattr(char, f"{s}_level", 1)
+        setattr(char, f"{s}_xp", 0)
+    # combat stats
+    char.attack_fire = 10
+    char.attack_earth = 0
+    char.attack_water = 5
+    char.attack_air = 0
+    char.dmg = 8
+    char.dmg_fire = 4
+    char.dmg_earth = 0
+    char.dmg_water = 0
+    char.dmg_air = 0
+    char.res_fire = 0
+    char.res_earth = 12
+    char.res_water = 0
+    char.res_air = 0
+    char.critical_strike = 15
+    char.initiative = 30
+
+    state = WorldState.from_character_schema(char)
+    assert state.attack == {"fire": 10, "water": 5}        # zeros dropped
+    assert state.dmg == 8
+    assert state.dmg_elements == {"fire": 4}                # zeros dropped
+    assert state.resistance == {"earth": 12}               # zeros dropped
+    assert state.critical_strike == 15
+    assert state.initiative == 30
+
+
+def test_combat_stats_default_empty_when_not_supplied():
+    state = make_state()
+    assert state.attack == {}
+    assert state.dmg == 0
+    assert state.dmg_elements == {}
+    assert state.resistance == {}
+    assert state.critical_strike == 0
+    assert state.initiative == 0

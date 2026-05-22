@@ -36,6 +36,8 @@ SKILL_NAMES = [
     "alchemy",
 ]
 
+ELEMENTS = ("fire", "earth", "water", "air")
+
 
 @dataclass(frozen=True)
 class WorldState:
@@ -80,6 +82,19 @@ class WorldState:
     active_gathering_skills count skills the bot gathers for self-directed
     crafting (e.g. mining copper ore for copper gear), not just the taskmaster
     task. Defaults None so other constructions keep working."""
+    attack: dict[str, int] = field(default_factory=dict)
+    """element -> attack value (server-computed total, base + gear). Empty by
+    default so non-schema constructions keep working. From attack_{el}."""
+    dmg: int = 0
+    """Global damage % bonus. Applies to every element. From `dmg`."""
+    dmg_elements: dict[str, int] = field(default_factory=dict)
+    """element -> per-element damage % bonus. From dmg_{el}."""
+    resistance: dict[str, int] = field(default_factory=dict)
+    """element -> resistance %. From res_{el}."""
+    critical_strike: int = 0
+    """Critical-strike chance %. From `critical_strike`."""
+    initiative: int = 0
+    """Turn-order stat (higher acts first). From `initiative`."""
 
     @property
     def inventory_used(self) -> int:
@@ -125,6 +140,20 @@ class WorldState:
             skills[skill] = getattr(char, f"{skill}_level", 1)
             skill_xp[skill] = getattr(char, f"{skill}_xp", 0)
 
+        attack: dict[str, int] = {}
+        dmg_elements: dict[str, int] = {}
+        resistance: dict[str, int] = {}
+        for elem in ELEMENTS:
+            atk = getattr(char, f"attack_{elem}", 0)
+            if atk != 0:
+                attack[elem] = atk
+            de = getattr(char, f"dmg_{elem}", 0)
+            if de != 0:
+                dmg_elements[elem] = de
+            res = getattr(char, f"res_{elem}", 0)
+            if res != 0:
+                resistance[elem] = res
+
         cooldown_expires: datetime | None = None
         if not isinstance(char.cooldown_expiration, Unset) and char.cooldown_expiration:
             cooldown_expires = char.cooldown_expiration
@@ -154,4 +183,10 @@ class WorldState:
             bank_gold=bank_gold,
             pending_items=pending_items,
             active_events=active_events or {},
+            attack=attack,
+            dmg=getattr(char, "dmg", 0),
+            dmg_elements=dmg_elements,
+            resistance=resistance,
+            critical_strike=getattr(char, "critical_strike", 0),
+            initiative=getattr(char, "initiative", 0),
         )
