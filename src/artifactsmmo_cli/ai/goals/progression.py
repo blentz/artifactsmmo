@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipActio
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -339,12 +340,8 @@ class UpgradeEquipmentGoal(Goal):
 
     def _upgrade_value(self, stats: ItemStats) -> float:
         """Crude combat/utility value of an equippable: total attack +
-        resistance + hp restore. Ranks upgrade candidates so the picker
-        prefers genuinely better gear over an alphabetical accident
-        (wooden_shield's resistances > fishing_net's lone attack stat)."""
-        attack = sum(stats.attack.values()) if stats.attack else 0
-        resistance = sum(stats.resistance.values()) if stats.resistance else 0
-        return float(attack + resistance + stats.hp_restore)
+        resistance + hp restore. Delegates to the shared tiers.equip_value."""
+        return equip_value(stats)
 
     def _is_upgrade_over_impl(
         self,
