@@ -53,8 +53,10 @@ class TestTaskDecisionIntegration:
         finally:
             store.close()
 
-    def test_pursue_case_cancel_zero_and_level_skill_goal_present(self, tmp_path):
-        """PURSUE (alchemy 4 with gap-of-1 observed, high reward): cancel == 0 and LevelSkill goal present."""
+    def test_pursue_case_cancel_zero(self, tmp_path):
+        """PURSUE (alchemy 4 with gap-of-1 observed, high reward): TaskCancel does
+        not fire (value 0). The old LevelSkill-for-task-gating goal is retired in
+        P3b (items-tasks paused; strategy owns progression)."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         # Seed observations: alchemy levels 1-4 with max_xp=10 each (cheap grind)
         for lvl in (1, 2, 3, 4):
@@ -72,8 +74,5 @@ class TestTaskDecisionIntegration:
         )
         try:
             assert TaskCancelGoal().value(state, gd, store) == 0
-            player = _make_player(gd, state, store)
-            goals = player._build_goals()
-            assert any(repr(g) == "LevelSkill(alchemy->5)" for g in goals)
         finally:
             store.close()

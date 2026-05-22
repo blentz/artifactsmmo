@@ -12,12 +12,15 @@ from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
-from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
+from artifactsmmo_cli.ai.strategy_driver import FALLBACK_BAND, MetaGoalAdapter
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
+from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
@@ -88,8 +91,31 @@ class TestBuildGoals:
         # RestoreHP, DepositInventory, CompleteTask, AcceptTask, TaskExchange, FarmMonster, UpgradeEquipment
         assert len(goals) >= 7
 
-    def test_farm_target_respects_character_level(self):
+    def _with_strategy(self, gd: GameData, **state_kw) -> GamePlayer:
         player = GamePlayer(character="hero")
+        player.game_data = gd
+        player._objective = CharacterObjective.from_game_data(gd)
+        player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+        player.state = make_state(**state_kw)
+        return player
+
+    def test_progression_goals_removed_strategy_drives(self):
+        # P3b: the six progression goals are gone from flat selection; a Strategy
+        # adapter + low-pri fallback grind drive progression; kept goals remain.
+        player = self._with_strategy(make_game_data_mock(), level=3)
+        goals = player._build_goals()
+        reprs = [repr(g) for g in goals]
+        retired = ("FarmItems", "UpgradeEquipment", "FarmMonster", "GatherMaterials", "LevelSkill")
+        # none of the retired goals appear as a top-level (non-Strategy) goal
+        assert not any(
+            r == n or r.startswith(f"{n}(")
+            for r in reprs if not r.startswith("Strategy(")
+            for n in retired
+        )
+        assert any(r.startswith("Strategy(") for r in reprs)   # strategy drives
+        assert "RestoreHP" in reprs and "DepositInventory" in reprs  # kept goals
+
+    def test_fallback_grind_added_and_respects_level(self):
         gd = GameData()
         gd._monster_locations = {"chicken": [(1, 0)], "dragon": [(10, 0)]}
         gd._monster_level = {"chicken": 1, "dragon": 100}
@@ -99,136 +125,13 @@ class TestBuildGoals:
         gd._item_stats = {}
         gd._crafting_recipes = {}
         gd._resource_skill = {}
-        player.game_data = gd
-        # No task held → the no-task combat driver is GrindCharacterXP, not
-        # FarmMonster (the two no longer coexist).
-        player.state = make_state(level=5)
+        player = self._with_strategy(gd, level=5)
         goals = player._build_goals()
-        from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-        grind_goals = [g for g in goals if isinstance(g, GrindCharacterXPGoal)]
-        assert len(grind_goals) == 1
-        assert grind_goals[0]._target_monster != "dragon"
-
-    def test_adds_gather_goal_when_upgrade_needs_materials(self):
-        player = GamePlayer(character="hero")
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)]}
-        gd._monster_level = {"chicken": 1}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._item_stats = {
-            "copper_dagger": ItemStats(
-                code="copper_dagger", level=1, type_="weapon",
-                crafting_skill="weaponcrafting", crafting_level=1,
-            )
-        }
-        gd._crafting_recipes = {"copper_dagger": {"copper_ore": 6}}
-        gd._resource_skill = {}
-        player.game_data = gd
-        # Skilled enough to craft but no materials
-        player.state = make_state(level=5, skills={"weaponcrafting": 1},
-                                  inventory={}, bank_items={})
-        goals = player._build_goals()
-        gather_goals = [g for g in goals if isinstance(g, GatherMaterialsGoal)]
-        assert len(gather_goals) == 1
-        assert gather_goals[0]._target_item == "copper_dagger"
-        assert gather_goals[0]._needed == {"copper_ore": 6}
-
-    def test_no_gather_goal_when_materials_available(self):
-        player = GamePlayer(character="hero")
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)]}
-        gd._monster_level = {"chicken": 1}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._item_stats = {
-            "copper_dagger": ItemStats(
-                code="copper_dagger", level=1, type_="weapon",
-                crafting_skill="weaponcrafting", crafting_level=1,
-            )
-        }
-        gd._crafting_recipes = {"copper_dagger": {"copper_ore": 6}}
-        gd._resource_skill = {}
-        player.game_data = gd
-        # Materials already in bank — no gather needed
-        player.state = make_state(level=5, skills={"weaponcrafting": 1},
-                                  inventory={}, bank_items={"copper_ore": 6})
-        goals = player._build_goals()
-        gather_goals = [g for g in goals if isinstance(g, GatherMaterialsGoal)]
-        assert len(gather_goals) == 0
-
-    def test_gather_goal_uses_full_recipe_qty_not_remaining(self):
-        """Regression: GatherMaterials must use the full recipe quantity so it aligns
-        with UpgradeEquipment's material check (both threshold on inventory+bank >= recipe_qty).
-        Using remaining=(recipe-already_have) caused GatherMaterials to satisfy early when
-        DepositAll moved existing items to bank during gathering."""
-        player = GamePlayer(character="hero")
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)]}
-        gd._monster_level = {"chicken": 1}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._item_stats = {
-            "copper_dagger": ItemStats(
-                code="copper_dagger", level=1, type_="weapon",
-                crafting_skill="weaponcrafting", crafting_level=1,
-            )
-        }
-        gd._crafting_recipes = {"copper_dagger": {"copper_ore": 6}}
-        gd._resource_skill = {}
-        player.game_data = gd
-        # Partial materials in bank: old code would set needed=4, new code must use 6
-        player.state = make_state(level=5, skills={"weaponcrafting": 1},
-                                  inventory={}, bank_items={"copper_ore": 2})
-        goals = player._build_goals()
-        gather_goals = [g for g in goals if isinstance(g, GatherMaterialsGoal)]
-        assert len(gather_goals) == 1
-        # Must be the full recipe quantity — not (6 - 2 = 4)
-        assert gather_goals[0]._needed == {"copper_ore": 6}
-
-    def test_level_skill_goal_added_for_items_task_gating_skill(self, tmp_path):
-        """_build_goals surfaces LevelSkillGoal for the active items task's gating skill
-        when task_decision returns PURSUE (seeded with gap-of-1 observations + high reward)."""
-        from artifactsmmo_cli.ai.learning.store import LearningStore
-        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        # Seed observations: alchemy levels 1-4 with cheap max_xp, high reward
-        # so task_decision returns PURSUE (mirrors test_task_decision.py's PURSUE test).
-        for lvl in (1, 2, 3, 4):
-            store.record_skill_max_xp("alchemy", lvl, 10)
-        store.record_task_reward_value(100000.0)
-        player = GamePlayer(character="hero", history=store)
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)]}
-        gd._monster_level = {"chicken": 1}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._item_stats = {
-            "small_health_potion": ItemStats(
-                code="small_health_potion", level=1, type_="utility",
-                crafting_skill="alchemy", crafting_level=5,
-            )
-        }
-        gd._crafting_recipes = {"small_health_potion": {"sunflower": 3}}
-        gd._resource_skill = {}
-        player.game_data = gd
-        # Character has alchemy 4 and task needs crafting_level 5 (gap of 1, observed)
-        player.state = make_state(
-            level=3,
-            task_code="small_health_potion",
-            task_type="items",
-            task_total=1,
-            task_progress=0,
-            skills={"alchemy": 4},
-        )
-        try:
-            goals = player._build_goals()
-            assert any(repr(g) == "LevelSkill(alchemy->5)" for g in goals)
-        finally:
-            store.close()
+        fallbacks = [g for g in goals
+                     if isinstance(g, MetaGoalAdapter) and isinstance(g._inner, GrindCharacterXPGoal)
+                     and g.priority(player.state, gd) == FALLBACK_BAND]
+        assert len(fallbacks) == 1                              # the low-pri safety net
+        assert fallbacks[0]._inner._target_monster != "dragon"  # over-level monster excluded
 
 
 class TestWaitForCooldown:
@@ -565,26 +468,13 @@ class TestBuildGoalsTier1:
         player.game_data = gd
         return player
 
-    def test_farm_items_goal_added_for_items_task(self):
+    def test_items_task_no_longer_adds_a_farm_goal(self):
+        # P3b: items-tasks are paused — no FarmItems goal is built for an active
+        # items task (re-enabled when P3c folds tasks into the strategy).
         player = self._make_player_with_gd()
         player.state = make_state(task_type="items", task_code="ash_wood", task_total=5, task_progress=0)
-        goals = player._build_goals()
-        farm_goals = [g for g in goals if isinstance(g, FarmItemsGoal)]
-        assert len(farm_goals) == 1
-
-    def test_farm_items_goal_not_added_for_monsters_task(self):
-        player = self._make_player_with_gd()
-        player.state = make_state(task_type="monsters", task_code="chicken", task_total=10, task_progress=0)
-        goals = player._build_goals()
-        farm_goals = [g for g in goals if isinstance(g, FarmItemsGoal)]
-        assert len(farm_goals) == 0
-
-    def test_farm_items_goal_not_added_when_no_task(self):
-        player = self._make_player_with_gd()
-        player.state = make_state(task_code="", task_total=0, task_progress=0)
-        goals = player._build_goals()
-        farm_goals = [g for g in goals if isinstance(g, FarmItemsGoal)]
-        assert len(farm_goals) == 0
+        reprs = [repr(g) for g in player._build_goals()]
+        assert not any(r.startswith("FarmItems") for r in reprs)
 
     def test_task_exchange_goal_always_in_goals(self):
         player = self._make_player_with_gd()

@@ -35,6 +35,10 @@ def test_adapter_delegates_and_fixes_priority():
     assert adapter.priority(make_state(), _gd()) == STRATEGY_BAND
     assert adapter.max_depth == inner.max_depth
     assert "GatherMaterials" in repr(adapter)
+    gd = _gd()
+    s2 = make_state()
+    assert adapter.value(s2, gd) == inner.value(s2, gd)                       # delegates heuristic
+    assert adapter.relevant_actions([], s2, gd) == inner.relevant_actions([], s2, gd)
 
 
 def test_material_obtain_maps_to_gather_materials():

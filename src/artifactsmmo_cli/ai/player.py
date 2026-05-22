@@ -44,13 +44,10 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalR
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
-from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal, FarmMonsterGoal
+from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
-from artifactsmmo_cli.ai.goals.farm_items import FarmItemsGoal
-from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
@@ -65,8 +62,12 @@ from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
-from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
-from artifactsmmo_cli.ai.task_feasibility import task_requirement
+from artifactsmmo_cli.ai.strategy_driver import (
+    FALLBACK_BAND,
+    STRATEGY_BAND,
+    MetaGoalAdapter,
+    strategy_goal,
+)
 from artifactsmmo_cli.ai.tiers import BalancedPersonality, CharacterObjective, StrategyEngine
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -762,7 +763,7 @@ class GamePlayer:
             "recovery": recovery,
             "suppressed_goals": list(self._suppressed_goals.keys()),
         }
-        if self._strategy is not None:
+        if self._strategy is not None and self.game_data is not None:
             record["strategy"] = self._strategy.decide(self.state, self.game_data).to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
@@ -995,9 +996,6 @@ class GamePlayer:
             self.state, crafting_target=committed[0] if committed else None
         )
 
-        upgrade_goal = UpgradeEquipmentGoal(
-            initial_equipment=self.state.equipment, committed_target=committed,
-        )
         goals: list[Goal] = [
             RestoreHPGoal(),
             DepositInventoryGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
@@ -1016,56 +1014,22 @@ class GamePlayer:
             # business-as-usual. Self-disables once level is reached.
             ReachUnlockLevelGoal(target_level=self._bank_required_level),
             DiscardOverstockGoal(game_data=self.game_data),
-            upgrade_goal,
         ]
-        # Combat-driving goals. FarmMonster and GrindCharacterXP both grind the
-        # same farm_target for character XP and are both satisfied by xp>initial,
-        # so running them together was redundant AND split the learned-priority
-        # history across two repr() buckets (FarmMonster(X) vs GrindCharacterXP(X)),
-        # destabilizing the dynamic priority. Split by task state: GrindCharacterXP
-        # owns the no-task grind; FarmMonster is the in-task combat fallback.
+        # Tier-3 strategy drives progression: map its chosen step to a goal at a
+        # fixed band (replaces the old FarmMonster/GrindXP/UpgradeEquipment/
+        # GatherMaterials/LevelSkill/FarmItems goals). A low-priority grind is the
+        # safety net so the bot always has a plannable action if the step can't
+        # plan. Survival/economy/task goals above retain their priorities and
+        # still preempt when urgent.
+        decision = self._strategy.decide(self.state, self.game_data) if self._strategy else None
+        step = decision.chosen_step if decision is not None else None
+        strat = strategy_goal(step, self.state, self.game_data, STRATEGY_BAND, farm_target)
+        if strat is not None:
+            goals.append(strat)
         if farm_target is not None:
-            if self.state.task_code:
-                goals.append(FarmMonsterGoal(monster_code=farm_target, initial_xp=self.state.xp))
-            else:
-                goals.append(GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp))
-
-        if self.state.task_type == "items" and self.state.task_code:
-            goals.append(FarmItemsGoal(initial_progress=self.state.task_progress))
-
-        # G-E: surface a LevelSkillGoal for each skill that gates a craftable
-        # upgrade Robby is currently within MAX_SKILL_GAP of unlocking. Reads
-        # game_data.active_gathering_skills so we only invest in skills tied
-        # to the active task; without that we'd grind every skill always.
-        active_skills = self.game_data.active_gathering_skills(self.state.task_code, self.state.crafting_target)
-        if active_skills:
-            for skill, target in self._gating_skill_targets(active_skills):
-                goals.append(LevelSkillGoal(skill_name=skill, target_level=target))
-
-        # Task-gating skill: if the active items task needs a crafting skill the
-        # character lacks, AND the cost-analysis decision says PURSUE, surface a
-        # LevelSkillGoal so the planner can grind it as a prerequisite to
-        # completing the task. When the decision is PIVOT, TaskCancelGoal fires
-        # instead and no LevelSkill goal is added.
-        task_req = task_requirement(self.state, self.game_data)
-        if (task_req is not None and task_req.skill != "combat"
-                and task_decision(self.state, self.game_data, self.history) == PURSUE):
-            goals.append(LevelSkillGoal(skill_name=task_req.skill,
-                                        target_level=task_req.required_level))
-
-        # If upgrade needs materials, add a gather goal to drive material collection.
-        # Use the FULL recipe quantity (not remaining needed) so GatherMaterials and
-        # UpgradeEquipment both check the same threshold (inventory+bank >= recipe_qty).
-        # Using a partial quantity causes GatherMaterials to satisfy early when existing
-        # items were deposited to the bank, while UpgradeEquipment still sees insufficient
-        # total materials.
-        if committed is not None:
-            item_code, _slot = committed
-            recipe = self.game_data._crafting_recipes.get(item_code)
-            if recipe:
-                gm_goal = GatherMaterialsGoal(target_item=item_code, needed=dict(recipe))
-                if not gm_goal.is_satisfied(self.state):
-                    goals.append(gm_goal)
+            goals.append(MetaGoalAdapter(
+                GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp),
+                FALLBACK_BAND))
 
         return [g for g in goals if repr(g) == "TaskCancel" or repr(g) not in self._suppressed_goals]
 
