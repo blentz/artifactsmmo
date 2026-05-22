@@ -983,7 +983,7 @@ class GamePlayer:
         )
         goals: list[Goal] = [
             RestoreHPGoal(),
-            DepositInventoryGoal(bank_accessible=self._bank_accessible),
+            DepositInventoryGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
             SellInventoryGoal(bank_accessible=self._bank_accessible),
             ExpandBankGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
             UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp, target_monster=self._bank_unlock_monster),

@@ -68,49 +68,56 @@ class TestRestoreHPGoal:
 
 
 class TestDepositInventoryGoal:
+    # Bankable generic items: a game_data with no recipes/consumables/weapons so
+    # every "item_N" is bankable (not in the keep-set), letting the fill-driven
+    # value ramp be exercised directly.
+    def _gd(self):
+        return make_game_data()
+
     def test_value_empty_inventory_is_zero(self):
-        goal = DepositInventoryGoal()
+        goal = DepositInventoryGoal(game_data=self._gd())
         state = make_state(inventory={}, inventory_max=20)
-        assert goal.value(state, make_game_data()) == 0.0
+        assert goal.value(state, self._gd()) == 0.0
 
     def test_value_full_inventory_is_80(self):
-        goal = DepositInventoryGoal()
+        goal = DepositInventoryGoal(game_data=self._gd())
         inventory = {f"item_{i}": 1 for i in range(20)}
         state = make_state(inventory=inventory, inventory_max=20)
-        assert abs(goal.value(state, make_game_data()) - 80.0) < 0.1
+        assert abs(goal.value(state, self._gd()) - 80.0) < 0.1
 
-    def test_satisfied_with_enough_free_slots(self):
-        goal = DepositInventoryGoal()
-        state = make_state(inventory={"item1": 1}, inventory_max=20)
+    def test_satisfied_when_nothing_bankable(self):
+        # Only kept items (task coins) remain → nothing to bank → satisfied.
+        goal = DepositInventoryGoal(game_data=self._gd())
+        state = make_state(inventory={"tasks_coin": 3}, inventory_max=20)
         assert goal.is_satisfied(state) is True
 
-    def test_not_satisfied_when_nearly_full(self):
-        goal = DepositInventoryGoal()
+    def test_not_satisfied_when_bankable_items_present(self):
+        goal = DepositInventoryGoal(game_data=self._gd())
         inventory = {f"item_{i}": 1 for i in range(17)}
         state = make_state(inventory=inventory, inventory_max=20)
         assert goal.is_satisfied(state) is False
 
     def test_value_returns_zero_when_below_ramp_start(self):
         """No urgency to deposit while inventory is below 50% used."""
-        goal = DepositInventoryGoal()
+        goal = DepositInventoryGoal(game_data=self._gd())
         # 8/20 used = 40% — below 50% ramp start. value should be 0.
         inventory = {f"item_{i}": 1 for i in range(8)}
         state = make_state(inventory=inventory, inventory_max=20)
-        assert goal.value(state, make_game_data()) == 0.0
+        assert goal.value(state, self._gd()) == 0.0
 
     def test_value_ramps_from_50_to_100_percent_used(self):
         """At 75% used the value should sit between 0 and the max (80)."""
-        goal = DepositInventoryGoal()
+        goal = DepositInventoryGoal(game_data=self._gd())
         inventory = {f"item_{i}": 1 for i in range(15)}  # 15/20 = 75%
         state = make_state(inventory=inventory, inventory_max=20)
-        v = goal.value(state, make_game_data())
+        v = goal.value(state, self._gd())
         assert 35.0 < v < 50.0  # halfway up the ramp ≈ 40
 
-    def test_satisfied_after_draining_below_30_percent(self):
-        """Once below 30% used the goal drops out so gathering can resume."""
-        goal = DepositInventoryGoal()
-        inventory = {f"item_{i}": 1 for i in range(5)}  # 5/20 = 25%
-        state = make_state(inventory=inventory, inventory_max=20)
+    def test_satisfied_when_only_kept_items_remain(self):
+        """No fixed-fraction rule: satisfaction is purely 'nothing bankable'."""
+        goal = DepositInventoryGoal(game_data=self._gd())
+        state = make_state(inventory={"tasks_coin": 1}, inventory_max=20,
+                           task_code="copper_ore")  # copper_ore not in bag → no bankable
         assert goal.is_satisfied(state) is True
 
 
@@ -1533,3 +1540,34 @@ def test_task_cancel_still_fires_for_too_hard_monster():
     gd._monster_level = {"dragon": 40}
     state = make_state(task_code="dragon", task_type="monsters", task_total=1, level=3)
     assert TaskCancelGoal().value(state, gd) > 0.0
+
+
+class TestDepositInventorySelective:
+    def _gd(self):
+        gd = make_game_data()
+        gd._npc_sell_prices = {"m": {"sap": 3}}
+        gd._item_stats = {
+            "sap": ItemStats(code="sap", level=1, type_="resource"),
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        }
+        return gd
+
+    def test_satisfied_when_no_bankable_items(self):
+        gd = self._gd()
+        goal = DepositInventoryGoal(bank_accessible=True, game_data=gd)
+        state = make_state(inventory={"copper_ore": 100}, inventory_max=104,
+                           task_code="copper_ore")
+        assert goal.is_satisfied(state) is True
+        assert goal.value(state, gd) == 0.0
+
+    def test_not_satisfied_when_bankable_present(self):
+        gd = self._gd()
+        goal = DepositInventoryGoal(bank_accessible=True, game_data=gd)
+        state = make_state(inventory={"sap": 60}, inventory_max=104)
+        assert goal.is_satisfied(state) is False
+
+    def test_value_zero_when_bank_inaccessible(self):
+        gd = self._gd()
+        goal = DepositInventoryGoal(bank_accessible=False, game_data=gd)
+        state = make_state(inventory={"sap": 100}, inventory_max=104)
+        assert goal.value(state, gd) == 0.0

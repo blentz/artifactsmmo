@@ -1,6 +1,7 @@
 """Survival goals: HP restoration and inventory management."""
 
 from artifactsmmo_cli.ai import priorities
+from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -41,19 +42,20 @@ class RestoreHPGoal(Goal):
 
 
 class DepositInventoryGoal(Goal):
-    """Deposit inventory to the bank as it fills up.
+    """Deposit bankable inventory to the bank as it fills up.
 
-    Value ramps from 50% used (0) to 100% used (80). Satisfied below 30% used
-    so a single deposit drains a meaningful chunk before the goal drops out
-    and gathering resumes.
+    Value ramps from 50% used (0) to 100% used (80). Satisfied when nothing
+    remains to bank — the keep-set (task item, crafting materials, best weapon,
+    task coins, HP consumables) may itself exceed any fixed fraction of the bag,
+    so a percentage-based satisfaction rule could never be reached.
     """
 
     _RAMP_START = 0.5   # fraction used below which the goal is inactive
-    _RESET_TO = 0.3     # fraction used at/below which the goal is satisfied
     _MAX_VALUE = 80.0   # value at 100% used; outranks FarmItems(35) once near cap
 
-    def __init__(self, bank_accessible: bool = True) -> None:
+    def __init__(self, bank_accessible: bool = True, game_data: GameData | None = None) -> None:
         self._bank_accessible = bank_accessible
+        self._game_data = game_data
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -68,15 +70,19 @@ class DepositInventoryGoal(Goal):
         return (used_fraction - self._RAMP_START) / (1.0 - self._RAMP_START) * self._MAX_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        if state.inventory_max == 0:
+        if state.inventory_max == 0 or self._game_data is None:
             return True
-        return state.inventory_used / state.inventory_max <= self._RESET_TO
+        # Satisfied once nothing remains to bank (see class docstring).
+        return not select_bank_deposits(state, self._game_data)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        # Target the satisfaction threshold so the planner stops once the
-        # bank visit drained enough.
-        target_used = int(state.inventory_max * self._RESET_TO)
-        return {"inventory_used": target_used}
+        # Post-deposit inventory_used (current minus everything bankable) — this
+        # is exactly the satisfied state, keeping the A* heuristic reachable.
+        bankable = (
+            sum(qty for _, qty in select_bank_deposits(state, self._game_data))
+            if self._game_data is not None else 0
+        )
+        return {"inventory_used": state.inventory_used - bankable}
 
     def __repr__(self) -> str:
         return "DepositInventory"
