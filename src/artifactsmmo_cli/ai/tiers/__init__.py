@@ -23,6 +23,15 @@ from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     objective_roots,
     prerequisites,
 )
+from artifactsmmo_cli.ai.tiers.strategy import (
+    RootScore,
+    StrategyDecision,
+    StrategyEngine,
+    actionable_step,
+    desired_state_of,
+    root_category,
+    unmet_closure_size,
+)
 
 __all__ = [
     "equip_value",
@@ -40,4 +49,11 @@ __all__ = [
     "combat_capable",
     "objective_roots",
     "prerequisites",
+    "RootScore",
+    "StrategyDecision",
+    "StrategyEngine",
+    "actionable_step",
+    "desired_state_of",
+    "root_category",
+    "unmet_closure_size",
 ]

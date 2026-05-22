@@ -67,6 +67,7 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
+from artifactsmmo_cli.ai.tiers import BalancedPersonality, CharacterObjective, StrategyEngine
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -141,6 +142,10 @@ class GamePlayer:
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
         self._committed_upgrade_target: tuple[str, str] | None = None
+        # Tier-3 strategy engine (built after game-data load); P3a runs it in
+        # shadow — its decision is traced each cycle but does not drive the bot.
+        self._objective: CharacterObjective | None = None
+        self._strategy: StrategyEngine | None = None
         # Sticky goal commitment: the goal repr we keep pursuing across cycles
         # until it is satisfied or can no longer plan, so the selector stops
         # thrashing between near-equal-priority goals every cycle.
@@ -222,6 +227,9 @@ class GamePlayer:
 
         print(f"[{self._now()}] Loading game data...")
         self.game_data = GameData.load(client)
+        # Build the Tier-3 strategy engine once (shadow mode — traced only).
+        self._objective = CharacterObjective.from_game_data(self.game_data)
+        self._strategy = StrategyEngine(self._objective, BalancedPersonality())
 
         print(f"[{self._now()}] Fetching character state...")
         self.state = self._fetch_world_state(client)
@@ -754,6 +762,8 @@ class GamePlayer:
             "recovery": recovery,
             "suppressed_goals": list(self._suppressed_goals.keys()),
         }
+        if self._strategy is not None:
+            record["strategy"] = self._strategy.decide(self.state, self.game_data).to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 
