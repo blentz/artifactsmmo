@@ -1,8 +1,12 @@
 """WatchApp tests — static properties and live-loop tests via run_test()."""
 
+import pytest
+
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.app import WatchApp
+from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
+from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.widgets.inventory_pane import InventoryPane
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane
@@ -117,3 +121,41 @@ class TestWatchAppQuitBinding:
         app = _make_app()
         async with app.run_test(size=(120, 50)) as pilot:
             await pilot.press("q")
+
+
+class TestWatchAppBuffers:
+    def test_update_stores_last_and_recent(self):
+        app = _make_app()
+        # exercise the pure storage method without a running app loop
+        app._store_snapshot(_snap(cycle_index=1))
+        app._store_snapshot(_snap(cycle_index=2))
+        assert app._last_snapshot.cycle_index == 2
+        assert len(app._recent_snapshots) == 2
+
+    def test_recent_snapshots_capped(self):
+        app = _make_app()
+        for i in range(app.LOG_BUFFER + 50):
+            app._store_snapshot(_snap(cycle_index=i))
+        assert len(app._recent_snapshots) == app.LOG_BUFFER
+
+
+class TestWatchAppModals:
+    @pytest.mark.asyncio
+    async def test_c_toggles_character_screen(self):
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("c")
+            assert isinstance(app.screen, CharacterScreen)
+            await pilot.press("c")
+            assert not isinstance(app.screen, CharacterScreen)
+
+    @pytest.mark.asyncio
+    async def test_l_toggles_log_screen(self):
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("l")
+            assert isinstance(app.screen, LogScreen)
+            await pilot.press("escape")
+            assert not isinstance(app.screen, LogScreen)
