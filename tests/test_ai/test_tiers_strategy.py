@@ -93,6 +93,42 @@ def test_personality_reweighting_changes_choice():
     assert root_category(skill_choice) == "skills"
 
 
+def test_unmet_closure_size_dedups_shared_prereq():
+    # X -> {A, B}; A -> {C}; B -> {C}: C is reached twice and deduped.
+    gd = GameData()
+    gd._crafting_recipes = {"X": {"A": 1, "B": 1}, "A": {"C": 1}, "B": {"C": 1}}
+    gd._item_stats = {c: ItemStats(code=c, level=1, type_="resource") for c in "XABC"}
+    assert unmet_closure_size(ObtainItem("X"), make_state(), gd) == 4  # X,A,B,C once each
+
+
+def test_contribution_zero_for_unknown_node_type():
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    eng = StrategyEngine(obj, BalancedPersonality())
+
+    class _Dummy:
+        def is_satisfied(self, state, game_data) -> bool:
+            return False
+
+    assert eng._contribution(_Dummy(), obj.gap(make_state()), gd) == 0.0
+
+
+def test_decide_skips_blocked_unmet_root():
+    # A weapon whose only recipe is self-referential → its gear root is unmet
+    # but has no actionable step, so decide skips it (the `step is None` path).
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._item_stats = {"cursed_blade": ItemStats(code="cursed_blade", level=1, type_="weapon", attack={"f": 5})}
+    gd._crafting_recipes = {"cursed_blade": {"cursed_blade": 1}}
+    obj = CharacterObjective.from_game_data(gd)
+    eng = StrategyEngine(obj, BalancedPersonality())
+    d = eng.decide(make_state(level=5), gd)
+    # the cursed_blade gear root is excluded from ranking (blocked)
+    assert all("cursed_blade" not in rs.root_repr for rs in d.ranking)
+    # but other roots (skills/level) still produce a decision
+    assert d.chosen_root is not None
+
+
 def test_decide_empty_when_nothing_reachable():
     gd = GameData()
     obj = CharacterObjective.from_game_data(gd)
