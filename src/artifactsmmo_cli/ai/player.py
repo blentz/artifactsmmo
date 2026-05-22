@@ -5,6 +5,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 from artifactsmmo_api_client import AuthenticatedClient
@@ -38,7 +39,7 @@ from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskActio
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
@@ -301,21 +302,25 @@ class GamePlayer:
                     # Surface the last planner stats AND the per-goal attempts
                     # so a no_plan cycle is debuggable from trace alone.
                     last = self.planner.last_stats
+                    no_plan_stats: dict[str, object] = {
+                        "nodes": last.nodes_explored,
+                        "depth": last.max_depth_reached,
+                        "timed_out": last.timed_out,
+                        "plan_len": 0,
+                        "goals_tried": goals_tried,
+                        "goal_rank": goal_rank_trace,
+                        **self._path_trace_snapshot(),
+                    }
                     self._emit_trace(
                         action_name="<no_plan>",
                         goal_name="<none>",
                         outcome="no_plan",
-                        planner_stats={
-                            "nodes": last.nodes_explored,
-                            "depth": last.max_depth_reached,
-                            "timed_out": last.timed_out,
-                            "plan_len": 0,
-                            "goals_tried": goals_tried,
-                            "goal_rank": goal_rank_trace,
-                            **self._path_trace_snapshot(),
-                        },
+                        planner_stats=no_plan_stats,
                     )
-                    self._notify_observer("<none>", "<no_plan>", "no_plan", goal_rank_trace)
+                    self._notify_observer(
+                        "<none>", "<no_plan>", "no_plan", goal_rank_trace,
+                        planner_stats=no_plan_stats,
+                    )
                     self._record_learning_cycle(
                         prev_state=self.state,
                         new_state=self.state,
@@ -396,23 +401,25 @@ class GamePlayer:
                 ))
                 self._actions_since_full_refresh += 1
                 self._decrement_suppressions()
+                cycle_stats: dict[str, object] = {
+                    "nodes": self.planner.last_stats.nodes_explored,
+                    "depth": self.planner.last_stats.max_depth_reached,
+                    "timed_out": self.planner.last_stats.timed_out,
+                    "plan_len": len(plan),
+                    "goals_tried": goals_tried,
+                    "goal_rank": goal_rank_trace,
+                    **self._path_trace_snapshot(),
+                }
                 self._emit_trace(
                     action_name=repr(action),
                     goal_name=repr(selected_goal),
                     outcome=outcome,
-                    planner_stats={
-                        "nodes": self.planner.last_stats.nodes_explored,
-                        "depth": self.planner.last_stats.max_depth_reached,
-                        "timed_out": self.planner.last_stats.timed_out,
-                        "plan_len": len(plan),
-                        "goals_tried": goals_tried,
-                        "goal_rank": goal_rank_trace,
-                        **self._path_trace_snapshot(),
-                    },
+                    planner_stats=cycle_stats,
                 )
                 self._notify_observer(
                     repr(selected_goal) if selected_goal else "<none>",
                     repr(action), outcome, goal_rank_trace,
+                    planner_stats=cycle_stats,
                 )
                 signal = self._detector.detect()
                 if signal is not None:
@@ -1023,11 +1030,26 @@ class GamePlayer:
         selected_goal_name: str,
         action_name: str,
         outcome: str,
-        goal_rank_trace: list[dict[str, object]],
+        goal_rank_trace: list[dict[str, Any]],
+        planner_stats: dict[str, object] | None = None,
     ) -> None:
-        """Build a CycleSnapshot and hand it to the observer (TUI host)."""
+        """Build a CycleSnapshot and hand it to the observer (TUI host).
+
+        ``planner_stats`` carries the same trace internals emitted to the file
+        tracer so the log modal can show trace-level detail; when omitted the
+        planner fields fall back to their snapshot defaults."""
         if self._cycle_observer is None or self.state is None:
             return
+        stats: dict[str, Any] = dict(planner_stats or {})
+        raw_attempts = stats.get("goals_tried", [])
+        attempts = raw_attempts if isinstance(raw_attempts, list) else []
+        goals_tried = [
+            GoalAttempt(
+                goal=str(g["goal"]), nodes=int(g["nodes"]), depth=int(g["depth"]),
+                timed_out=bool(g["timed_out"]), plan_len=int(g["plan_len"]),
+            )
+            for g in attempts
+        ]
         plan = self._last_path_plan
         # Cooldown remaining at snapshot time (post-action; the server-set
         # cooldown the bot will wait through before the next cycle).
@@ -1068,6 +1090,13 @@ class GamePlayer:
             remaining_levels=max(
                 0, (self.game_data.max_character_level if self.game_data else 0) - self.state.level,
             ),
+            planner_nodes=int(stats.get("nodes", 0)),
+            planner_depth=int(stats.get("depth", 0)),
+            planner_timed_out=bool(stats.get("timed_out", False)),
+            plan_len=int(stats.get("plan_len", 0)),
+            goals_tried=goals_tried,
+            suppressed_goals=list(self._suppressed_goals.keys()),
+            path_blocked=bool(stats.get("path_blocked", False)),
         )
         self._cycle_observer(snap)
 

@@ -10,6 +10,17 @@ class GoalRankEntry(BaseModel):
     priority: float
 
 
+class GoalAttempt(BaseModel):
+    """One planner attempt recorded in the trace: the goal that was planned and
+    the planner stats that attempt produced."""
+
+    goal: str
+    nodes: int = 0
+    depth: int = 0
+    timed_out: bool = False
+    plan_len: int = 0
+
+
 class CycleSnapshot(BaseModel):
     """Everything a watcher needs about one bot cycle. Frozen at end-of-cycle."""
 
@@ -48,3 +59,13 @@ class CycleSnapshot(BaseModel):
     projected_cycles_to_max: float | None = None
     max_level: int = 0
     remaining_levels: int = 0
+
+    # Planner trace internals (the deep per-cycle detail also written to
+    # traces.jsonl) — surfaced for the full-screen log modal.
+    planner_nodes: int = 0
+    planner_depth: int = 0
+    planner_timed_out: bool = False
+    plan_len: int = 0
+    goals_tried: list[GoalAttempt] = Field(default_factory=list)
+    suppressed_goals: list[str] = Field(default_factory=list)
+    path_blocked: bool = False

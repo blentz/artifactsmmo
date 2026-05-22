@@ -17,6 +17,14 @@ class TestCycleSnapshot:
         assert snap.character == "hero"
         assert snap.goal_rank == []
         assert snap.inventory == {}
+        # Planner-trace fields default when omitted.
+        assert snap.planner_nodes == 0
+        assert snap.planner_depth == 0
+        assert snap.planner_timed_out is False
+        assert snap.plan_len == 0
+        assert snap.goals_tried == []
+        assert snap.suppressed_goals == []
+        assert snap.path_blocked is False
 
 
 class TestObserverHook:
@@ -58,6 +66,38 @@ class TestObserverHook:
         assert snap.outcome == "ok"
         assert len(snap.goal_rank) == 1
         assert snap.goal_rank[0].priority == 36.0
+
+    def test_notify_observer_carries_planner_trace(self):
+        """planner_stats threads the trace internals onto the snapshot."""
+        calls: list[CycleSnapshot] = []
+        player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player.state = make_state(level=3)
+        player._suppressed_goals = {"NpcSell": 4}
+        player._notify_observer(
+            "CraftEquipment", "MoveTo(1,2)", "ok",
+            goal_rank_trace=[{"goal": "CraftEquipment", "priority": 88.0}],
+            planner_stats={
+                "nodes": 842, "depth": 7, "timed_out": False, "plan_len": 3,
+                "goals_tried": [
+                    {"goal": "CraftEquipment", "nodes": 842, "depth": 7,
+                     "timed_out": False, "plan_len": 3},
+                    {"goal": "FightMonster", "nodes": 120, "depth": 4,
+                     "timed_out": True, "plan_len": 0},
+                ],
+                "goal_rank": [{"goal": "CraftEquipment", "priority": 88.0}],
+                "path_blocked": True,
+            },
+        )
+        snap = calls[0]
+        assert snap.planner_nodes == 842
+        assert snap.planner_depth == 7
+        assert snap.planner_timed_out is False
+        assert snap.plan_len == 3
+        assert snap.path_blocked is True
+        assert snap.suppressed_goals == ["NpcSell"]
+        assert [g.goal for g in snap.goals_tried] == ["CraftEquipment", "FightMonster"]
+        assert snap.goals_tried[1].timed_out is True
+        assert snap.goals_tried[1].nodes == 120
 
     def test_notify_observer_noop_when_unset(self):
         """No observer = silent skip; no exception."""
