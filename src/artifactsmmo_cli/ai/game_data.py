@@ -168,6 +168,18 @@ class GameData:
         """Documented character-level cap. Constant from official docs."""
         return self.MAX_CHARACTER_LEVEL
 
+    MAX_SKILL_LEVEL = 50
+    """Documented skill level cap.
+    Source: https://docs.artifactsmmo.com/concepts/skills —
+    "Your characters have 8 skills that can gain XP and reach up to level 50."
+    Equals the character-level cap.
+    """
+
+    @property
+    def max_skill_level(self) -> int:
+        """Documented per-skill level cap. Constant from official docs."""
+        return self.MAX_SKILL_LEVEL
+
     # === Monster XP formula (documented) ===
     # Source: https://docs.artifactsmmo.com/concepts/stats_and_fights/
     #   XP = round((monster_level/player_level * 20 + monster_hp * 0.04)

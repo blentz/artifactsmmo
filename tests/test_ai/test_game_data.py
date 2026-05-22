@@ -608,6 +608,12 @@ def test_max_character_level_is_documented_50():
     assert gd.max_character_level == 50  # still 50, not 55
 
 
+def test_max_skill_level_is_documented_50():
+    """Verified: https://docs.artifactsmmo.com/concepts/skills —
+    '8 skills that can gain XP and reach up to level 50'."""
+    assert GameData().max_skill_level == 50
+
+
 def test_xp_per_kill_formula_normal_monster():
     """Documented formula: (monster_level/char_level * 20 + monster_hp * 0.04) * penalty * mult * wisdom_bonus."""
     gd = GameData()
