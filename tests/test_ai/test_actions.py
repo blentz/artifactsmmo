@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -225,7 +225,10 @@ class TestFightAction:
 
     def test_apply_increments_task_progress_for_task_monster(self):
         action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
-        state = make_state(x=0, y=0, hp=100, max_hp=100, level=1, task_code="chicken", task_type="monsters", task_progress=2, task_total=10)
+        state = make_state(
+            x=0, y=0, hp=100, max_hp=100, level=1,
+            task_code="chicken", task_type="monsters", task_progress=2, task_total=10,
+        )
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3
@@ -241,6 +244,7 @@ class TestFightAction:
         from unittest.mock import MagicMock, patch
 
         from artifactsmmo_api_client.models.fight_result import FightResult
+
         from tests.test_ai.test_actions_execute import make_char_schema
 
         action = FightAction(monster_code="yellow_slime", locations=frozenset([(1, 0)]))
@@ -361,7 +365,10 @@ class TestWithdrawItemAction:
 class TestCraftAction:
     def test_applicable_with_workshop_location_and_materials(self):
         action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
-        stats = ItemStats(code="copper_dagger", level=1, type_="weapon", crafting_skill="weaponcrafting", crafting_level=1)
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
         state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 6})
         gd = make_game_data(
             workshop_locs={"weaponcrafting": (3, 0)},
@@ -372,14 +379,20 @@ class TestCraftAction:
 
     def test_not_applicable_no_workshop_location(self):
         action = CraftAction(code="copper_dagger", quantity=1, workshop_location=None)
-        stats = ItemStats(code="copper_dagger", level=1, type_="weapon", crafting_skill="weaponcrafting", crafting_level=1)
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
         state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 6})
         gd = make_game_data(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_missing_materials(self):
         action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
-        stats = ItemStats(code="copper_dagger", level=1, type_="weapon", crafting_skill="weaponcrafting", crafting_level=1)
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
         state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 2})
         gd = make_game_data(
             workshop_locs={"weaponcrafting": (3, 0)},
@@ -390,7 +403,10 @@ class TestCraftAction:
 
     def test_apply_moves_to_workshop_and_produces_item(self):
         action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
-        stats = ItemStats(code="copper_dagger", level=1, type_="weapon", crafting_skill="weaponcrafting", crafting_level=1)
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
         state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 6})
         gd = make_game_data(
             workshop_locs={"weaponcrafting": (3, 0)},
