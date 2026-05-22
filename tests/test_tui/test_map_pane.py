@@ -1,5 +1,7 @@
 """MapPane viewport rendering tests (no Textual app needed)."""
 
+from textual.geometry import Size
+
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import PLAYER_GLYPH, WALKABLE_GLYPH
@@ -185,7 +187,6 @@ class TestRenderViewportDimensions:
 
 class TestRenderSizing:
     def test_render_uses_pane_size(self, monkeypatch):
-        from textual.geometry import Size
         pane = MapPane(_gd_typed())
         pane.update_snapshot(_snap(0, 0))
         monkeypatch.setattr(type(pane), "size", property(lambda self: Size(30, 12)))
@@ -194,7 +195,6 @@ class TestRenderSizing:
         assert all(len(row) == 30 for row in lines[1:])
 
     def test_render_falls_back_when_size_zero(self, monkeypatch):
-        from textual.geometry import Size
         pane = MapPane(_gd_typed())
         pane.update_snapshot(_snap(0, 0))
         monkeypatch.setattr(type(pane), "size", property(lambda self: Size(0, 0)))
