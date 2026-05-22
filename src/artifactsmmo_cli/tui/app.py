@@ -43,6 +43,11 @@ class WatchApp(App[None]):
         row-span: 1;
         border: solid white;
         padding: 0 1;
+        /* Fill the cell; the map renderer sizes its grid from self.size, and a
+           Static defaults to height:auto, which would collapse to the 1-line
+           legend and draw no map rows. */
+        width: 1fr;
+        height: 1fr;
     }
     #inv {
         column-span: 1;

@@ -75,6 +75,19 @@ class TestWatchAppCompose:
         async with app.run_test(size=(120, 50)):
             assert app.query_one("#map", MapPane) is not None
 
+    @pytest.mark.asyncio
+    async def test_map_pane_fills_its_cell_height(self):
+        """The map must fill its grid cell, not collapse to the 1-line legend."""
+        app = _make_app()
+        async with app.run_test(size=(160, 50)) as pilot:
+            app.update_snapshot(_snap())
+            await pilot.pause()
+            m = app.query_one("#map", MapPane)
+            assert m.size.height > 1            # more than just the legend line
+            rows = str(m.render()).split("\n")
+            assert len(rows) == m.size.height   # full block fills the cell
+            assert len(rows[1]) == m.size.width  # rows span the full cell width
+
     async def test_compose_yields_inventory_pane(self):
         app = _make_app()
         async with app.run_test(size=(120, 50)):
