@@ -1571,3 +1571,27 @@ class TestDepositInventorySelective:
         goal = DepositInventoryGoal(bank_accessible=False, game_data=gd)
         state = make_state(inventory={"sap": 100}, inventory_max=104)
         assert goal.value(state, gd) == 0.0
+
+    def test_planner_banks_junk_keeps_protected(self):
+        gd = self._gd()
+        gd._npc_sell_prices = {"m": {"sap": 3, "gold_ore": 50}}
+        gd._item_stats.update({
+            "gold_ore": ItemStats(code="gold_ore", level=1, type_="resource"),
+            "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable", hp_restore=25),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 12}),
+        })
+        goal = DepositInventoryGoal(bank_accessible=True, game_data=gd)
+        action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
+        state = make_state(
+            x=0, y=0, inventory_max=104, bank_items={},
+            inventory={"gold_ore": 5, "sap": 5, "copper_ore": 5,
+                       "tasks_coin": 2, "cooked_chicken": 3, "copper_dagger": 1},
+            task_code="copper_ore", task_type="items",
+        )
+        plan = GOAPPlanner().plan(state, goal, [action], gd)
+        assert plan, "expected a deposit plan"
+        result = state
+        for a in plan:
+            result = a.apply(result, gd)
+        assert set(result.inventory) == {"copper_ore", "tasks_coin", "cooked_chicken", "copper_dagger"}
+        assert result.bank_items == {"gold_ore": 5, "sap": 5}

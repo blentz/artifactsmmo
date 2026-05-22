@@ -85,6 +85,18 @@ def test_keeps_crafting_target_materials():
     assert select_bank_deposits(state, gd) == [("sap", 1)]
 
 
+def test_keeps_materials_via_shared_submaterial():
+    """A material reachable through two recipe branches is visited once."""
+    gd = _gd()
+    gd._crafting_recipes = {
+        "twin_blade": {"left_hilt": 1, "right_hilt": 1},
+        "left_hilt": {"shared_bar": 1},
+        "right_hilt": {"shared_bar": 1},  # shared_bar reached twice → visited guard
+    }
+    state = make_state(inventory={"shared_bar": 4, "sap": 1}, crafting_target="twin_blade")
+    assert select_bank_deposits(state, gd) == [("sap", 1)]
+
+
 def test_empty_when_everything_kept():
     gd = _gd()
     state = make_state(inventory={"tasks_coin": 1, "copper_ore": 5}, task_code="copper_ore")

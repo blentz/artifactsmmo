@@ -106,13 +106,13 @@ class TestDesiredStateMethods:
         ds = goal.desired_state(state, gd)
         assert ds == {"hp": 150}
 
-    def test_deposit_inventory_desired_state(self):
+    def test_deposit_inventory_no_game_data_branches(self):
+        # Without game_data the goal can't compute bankable items: it reports
+        # satisfied (nothing to do) and a no-op desired_state (current used).
         goal = DepositInventoryGoal()
-        # inventory_max=100 → target_used = int(100 * 0.3) = 30
-        state = make_state(inventory_max=100)
-        gd = make_gd()
-        ds = goal.desired_state(state, gd)
-        assert ds == {"inventory_used": 30}
+        state = make_state(inventory={"sap": 10}, inventory_max=100)
+        assert goal.is_satisfied(state) is True
+        assert goal.desired_state(state, make_gd()) == {"inventory_used": 10}
 
     def test_farm_monster_desired_state(self):
         goal = FarmMonsterGoal(monster_code="chicken", initial_xp=50)

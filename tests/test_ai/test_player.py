@@ -469,7 +469,7 @@ class TestExecute:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         bank_slot = MagicMock()
         bank_slot.code = "copper_ore"
@@ -722,7 +722,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -744,7 +744,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -788,7 +788,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -819,7 +819,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.bank import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
