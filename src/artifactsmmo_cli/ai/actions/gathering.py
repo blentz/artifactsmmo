@@ -44,11 +44,12 @@ class GatherAction(Action):
         new_inventory = dict(state.inventory)
         drop_item = game_data.resource_drop_item(self.resource_code) or self.resource_code
         new_inventory[drop_item] = new_inventory.get(drop_item, 0) + 1
-        new_progress = (
-            state.task_progress + 1
-            if state.task_type == "items" and state.task_code == drop_item
-            else state.task_progress
-        )
+        # Gathering NEVER advances an items-task: the server only counts items
+        # when they are DELIVERED to the taskmaster (TaskTradeAction). Modelling
+        # gather as +progress made FarmItems "satisfied" by a single gather, so
+        # the bot gathered the task item forever without ever delivering, filled
+        # its inventory, and then deadlocked (gather no longer applicable, no
+        # plan). Only TaskTradeAction increments task_progress.
         return WorldState(
             character=state.character,
             level=state.level,
@@ -66,7 +67,7 @@ class GatherAction(Action):
             cooldown_expires=None,
             task_code=state.task_code,
             task_type=state.task_type,
-            task_progress=new_progress,
+            task_progress=state.task_progress,
             task_total=state.task_total,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,

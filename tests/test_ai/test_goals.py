@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
 
@@ -1041,6 +1042,40 @@ class TestFarmItemsGoal:
         goal = FarmItemsGoal()
         state = make_state(task_type="items", task_code="ash_wood", task_total=10, task_progress=10)
         assert goal.priority(state, make_game_data()) == 0.0
+
+    def test_plan_delivers_via_task_trade_not_gather_only(self):
+        """Regression: gathering no longer fakes items-task progress, so the
+        planner must reach progress via a TaskTrade delivery. Bot holds the
+        items; the plan delivers them."""
+        gd = make_game_data()
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_locations = {"copper_rocks": [(2, 0)]}
+        state = make_state(
+            x=1, y=2, task_type="items", task_code="copper_ore",
+            task_total=5, task_progress=0, inventory={"copper_ore": 5},
+        )
+        actions = [
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)])),
+            TaskTradeAction(code="copper_ore", taskmaster_location=(1, 2)),
+        ]
+        goal = FarmItemsGoal(initial_progress=0)
+        plan = GOAPPlanner().plan(state, goal, actions, gd)
+        assert plan, "expected a delivery plan, got none"
+        assert any(isinstance(a, TaskTradeAction) for a in plan)
+
+    def test_no_plan_when_only_gather_available(self):
+        """Without a delivery action, gathering can't advance an items-task —
+        the planner finds no plan (proving gather alone doesn't fake progress)."""
+        gd = make_game_data()
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_locations = {"copper_rocks": [(2, 0)]}
+        state = make_state(
+            x=1, y=2, task_type="items", task_code="copper_ore",
+            task_total=5, task_progress=0, inventory={"copper_ore": 5},
+        )
+        actions = [GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))]
+        goal = FarmItemsGoal(initial_progress=0)
+        assert GOAPPlanner().plan(state, goal, actions, gd) == []
 
     def test_relevant_actions_includes_task_item_gather(self):
         gd = make_game_data()

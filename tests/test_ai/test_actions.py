@@ -620,15 +620,21 @@ class TestTaskExchangeAction:
 
 
 class TestGatherActionTaskProgress:
-    def test_increments_when_task_type_items_and_drop_matches(self):
+    """Gathering NEVER advances an items-task — the server only counts items on
+    delivery to the taskmaster (TaskTradeAction). Modelling gather as +progress
+    made the bot gather the task item forever without delivering, fill its
+    inventory, and deadlock."""
+
+    def test_gather_does_not_advance_items_task_even_when_drop_matches(self):
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
         state = make_state(task_code="copper_ore", task_type="items", task_progress=3, task_total=10)
         new_state = action.apply(state, gd)
-        assert new_state.task_progress == 4
+        assert new_state.task_progress == 3                # unchanged
+        assert new_state.inventory.get("copper_ore", 0) == 1  # item still gathered
 
-    def test_no_increment_when_task_type_wrong(self):
+    def test_no_change_when_task_type_wrong(self):
         gd = make_game_data(resource_locs={"copper_rocks": [(2, 0)]})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
@@ -636,7 +642,7 @@ class TestGatherActionTaskProgress:
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3
 
-    def test_no_increment_when_drop_doesnt_match_task(self):
+    def test_no_change_when_drop_doesnt_match_task(self):
         gd = make_game_data(resource_locs={"ash_tree": [(2, 0)]})
         gd._resource_drops = {"ash_tree": "ash_wood"}
         action = GatherAction(resource_code="ash_tree", locations=frozenset([(2, 0)]))
