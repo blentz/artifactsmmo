@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     actionable_step,
     desired_state_of,
     instrumental_skills,
+    is_reachable,
     root_category,
     root_cost,
     unmet_closure_size,
@@ -183,3 +184,80 @@ def test_decide_empty_when_nothing_reachable():
     assert d.desired_state == {}
     td = d.to_trace()
     assert td["chosen_root"] is None and td["ranking"] == []
+
+
+def _reach_gd():
+    gd = GameData()
+    gd._item_stats = {
+        "drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 50}),
+        "iron_helm": ItemStats(code="iron_helm", level=1, type_="helmet", resistance={"fire": 10},
+                               crafting_skill="gearcrafting", crafting_level=1),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"iron_helm": {"iron_bar": 5}, "iron_bar": {"iron_ore": 3}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 1)}
+    gd._monster_level = {"chicken": 1}
+    return gd
+
+
+def test_producible():
+    from artifactsmmo_cli.ai.tiers.strategy import _producible
+    gd = _reach_gd()
+    assert _producible("iron_helm", gd) is True   # craftable
+    assert _producible("iron_ore", gd) is True     # gatherable (iron_rocks drops it)
+    assert _producible("drop_blade", gd) is False   # no recipe, no drop
+
+
+def test_is_reachable_gatherable_and_craftable_chain():
+    gd = _reach_gd()
+    s = make_state(level=1)
+    assert is_reachable(ObtainItem("iron_ore"), s, gd) is True
+    assert is_reachable(ObtainItem("iron_helm"), s, gd) is True
+
+
+def test_is_reachable_false_for_unproducible_and_blocked_material():
+    gd = _reach_gd()
+    s = make_state(level=1)
+    assert is_reachable(ObtainItem("drop_blade"), s, gd) is False
+    gd._crafting_recipes["cursed_helm"] = {"drop_blade": 1}
+    gd._item_stats["cursed_helm"] = ItemStats(code="cursed_helm", level=1, type_="helmet")
+    assert is_reachable(ObtainItem("cursed_helm"), s, gd) is False
+
+
+def test_is_reachable_skill_and_char_level():
+    gd = _reach_gd()
+    assert is_reachable(ReachSkillLevel("mining", 50), make_state(level=1), gd) is True
+    assert is_reachable(ReachCharLevel(50), make_state(level=1), gd) is True
+
+
+def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon():
+    gd = GameData()
+    gd._monster_level = {"dragon": 40}
+    gd._item_stats = {"drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 9})}
+    assert is_reachable(ReachCharLevel(50), make_state(level=1), gd) is False
+
+
+def test_is_reachable_satisfied_and_cycle():
+    gd = _reach_gd()
+    assert is_reachable(ReachCharLevel(1), make_state(level=5), gd) is True
+    cyc = GameData()
+    cyc._crafting_recipes = {"a": {"a": 1}}
+    cyc._item_stats = {"a": ItemStats(code="a", level=1, type_="resource")}
+    assert is_reachable(ObtainItem("a"), make_state(), cyc) is False
+
+
+def test_actionable_step_none_for_unproducible_leaf():
+    gd = _reach_gd()
+    assert actionable_step(ObtainItem("drop_blade"), make_state(), gd) is None
+
+
+def test_decide_excludes_unreachable_gear():
+    gd = _reach_gd()
+    obj = CharacterObjective.from_game_data(gd)
+    assert obj.target_gear.get("weapon_slot") == "drop_blade"
+    d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
+    reprs = [rs.root_repr for rs in d.ranking]
+    assert all("drop_blade" not in r for r in reprs)
+    assert any("iron_helm" in r for r in reprs)

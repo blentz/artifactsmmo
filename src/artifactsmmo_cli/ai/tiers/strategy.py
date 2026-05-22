@@ -49,6 +49,8 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData) -> M
         unmet = [p for p in prerequisites(node, state, game_data)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
+            if isinstance(node, ObtainItem) and not _producible(node.code, game_data):
+                return None
             return node
         for prereq in sorted(unmet, key=repr):
             step = _step(prereq, visited)
@@ -94,6 +96,31 @@ def instrumental_skills(objective: CharacterObjective, game_data: GameData) -> s
         if stats is not None and stats.crafting_skill:
             skills.add(stats.crafting_skill)
     return skills
+
+
+def _producible(code: str, game_data: GameData) -> bool:
+    """True when the item can be made by known means: craftable (has a recipe)
+    or gatherable (some resource drops it). Buying / monster-drops are not
+    modelled yet, so such items read as not-producible."""
+    return (game_data.crafting_recipe(code) is not None
+            or code in game_data._resource_drops.values())
+
+
+def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
+                 path: frozenset[MetaGoal] = frozenset()) -> bool:
+    """True when `root`'s entire prerequisite chain bottoms out in obtainable
+    leaves. Cycle-safe (a node on the current path can't bottom out)."""
+    if root.is_satisfied(state, game_data):
+        return True
+    if root in path:
+        return False
+    if isinstance(root, ReachSkillLevel):
+        return True  # grinding the skill is always an available action
+    prereqs = prerequisites(root, state, game_data)
+    if isinstance(root, ObtainItem) and not prereqs:
+        return _producible(root.code, game_data)
+    sub_path = path | {root}
+    return all(is_reachable(p, state, game_data, sub_path) for p in prereqs)
 
 
 @dataclass(frozen=True)
@@ -164,9 +191,11 @@ class StrategyEngine:
         for root in objective_roots(self.objective):
             if root.is_satisfied(state, game_data):
                 continue
-            step = actionable_step(root, state, game_data)
-            if step is None:
+            if not is_reachable(root, state, game_data):
                 continue
+            step = actionable_step(root, state, game_data)
+            # is_reachable guarantees the chain bottoms out in a producible step.
+            assert step is not None
             contribution = self._contribution(root, gap, game_data)
             cost = root_cost(root, state, game_data)
             score = contribution / max(cost, 1)
