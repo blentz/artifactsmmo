@@ -51,7 +51,7 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
             return prereqs
         for res_code, drop in game_data._resource_drops.items():
             if drop == node.code:
-                skill_level = game_data.resource_skill(res_code)
+                skill_level = game_data.resource_skill_level(res_code)
                 if skill_level is not None:
                     return [ReachSkillLevel(skill_level[0], skill_level[1])]
         return []  # buyable / monster-drop / unknown → leaf
