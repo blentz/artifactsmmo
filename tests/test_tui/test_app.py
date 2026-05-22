@@ -159,3 +159,58 @@ class TestWatchAppModals:
             assert isinstance(app.screen, LogScreen)
             await pilot.press("escape")
             assert not isinstance(app.screen, LogScreen)
+
+    @pytest.mark.asyncio
+    async def test_character_screen_update_snapshot_while_open(self):
+        """app.update_snapshot while CharacterScreen is on top dispatches to it (line 92)."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap(level=1))
+            await pilot.press("c")
+            assert isinstance(app.screen, CharacterScreen)
+            app.update_snapshot(_snap(level=9))
+            assert app.screen._snapshot.level == 9
+
+    @pytest.mark.asyncio
+    async def test_log_screen_update_snapshot_while_open(self):
+        """app.update_snapshot while LogScreen is on top writes to it (line 92)."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap(cycle_index=1))
+            await pilot.press("l")
+            assert isinstance(app.screen, LogScreen)
+            log_widget = app.screen.query_one("#debug-log")
+            lines_before = len(log_widget.lines)
+            app.update_snapshot(_snap(cycle_index=99))
+            assert len(log_widget.lines) > lines_before
+
+    @pytest.mark.asyncio
+    async def test_action_toggle_character_pops_when_screen_is_character(self):
+        """action_toggle_character() pops CharacterScreen directly (app line 96)."""
+        app = _make_app()
+        async with app.run_test():
+            app.update_snapshot(_snap())
+            await app.push_screen(CharacterScreen(app._last_snapshot))
+            assert isinstance(app.screen, CharacterScreen)
+            app.action_toggle_character()
+            assert not isinstance(app.screen, CharacterScreen)
+
+    @pytest.mark.asyncio
+    async def test_action_toggle_log_pops_when_screen_is_log(self):
+        """action_toggle_log() pops LogScreen directly (app line 102)."""
+        app = _make_app()
+        async with app.run_test():
+            app.update_snapshot(_snap())
+            await app.push_screen(LogScreen(app._recent_snapshots))
+            assert isinstance(app.screen, LogScreen)
+            app.action_toggle_log()
+            assert not isinstance(app.screen, LogScreen)
+
+    @pytest.mark.asyncio
+    async def test_c_no_op_without_snapshot(self):
+        """Pressing 'c' with no snapshot does not push a CharacterScreen (elif guard)."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            # Do NOT call update_snapshot — _last_snapshot is None
+            await pilot.press("c")
+            assert not isinstance(app.screen, CharacterScreen)

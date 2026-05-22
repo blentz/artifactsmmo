@@ -5,7 +5,7 @@ import io
 from rich.console import Console
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
-from artifactsmmo_cli.tui.widgets.status_pane import StatusPane, task_eta_seconds, format_eta
+from artifactsmmo_cli.tui.widgets.status_pane import StatusPane, format_eta, task_eta_seconds
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -251,6 +251,26 @@ class TestTaskEta:
 
     def test_format_eta_minutes(self):
         assert format_eta(250.0) == "~4m 10s"
+
+
+class TestStatusPaneEtaWindow:
+    def test_eta_samples_trimmed_to_window(self):
+        """Feeding > ETA_WINDOW snapshots for the same task keeps only the last ETA_WINDOW."""
+        from artifactsmmo_cli.tui.widgets.status_pane import ETA_WINDOW
+        pane = StatusPane()
+        for i in range(ETA_WINDOW + 5):
+            # build a simple ISO timestamp string by using offset minutes
+            minutes, secs = divmod(i * 30, 60)
+            hours, minutes = divmod(minutes, 60)
+            ts_str = f"2026-05-21T{12 + hours:02d}:{minutes:02d}:{secs:02d}Z"
+            pane.update_snapshot(_snap(
+                task_code="trim_test",
+                task_type="items",
+                task_progress=i,
+                task_total=ETA_WINDOW + 10,
+                timestamp=ts_str,
+            ))
+        assert len(pane._eta_samples) == ETA_WINDOW
 
 
 class TestStatusEtaRow:
