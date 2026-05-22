@@ -15,7 +15,7 @@ from artifactsmmo_cli.tui.widgets.map_pane import MapPane
 from artifactsmmo_cli.tui.widgets.status_pane import StatusPane
 
 
-class WatchApp(App):
+class WatchApp(App[None]):
     """Live watch-mode TUI. Subscribes to GamePlayer's cycle_observer."""
 
     CSS = """
@@ -66,8 +66,8 @@ class WatchApp(App):
         ("l", "toggle_log", "Log"),
     ]
 
-    def __init__(self, character: str, game_data: GameData, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, character: str, game_data: GameData) -> None:
+        super().__init__()
         self._character = character
         self._game_data = game_data
         self.title = f"artifactsmmo watch: {character}"
