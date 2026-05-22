@@ -1,5 +1,5 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai.fixtures import make_state
 
@@ -14,6 +14,13 @@ def _gd() -> GameData:
         "ruby_ring": ItemStats(code="ruby_ring", level=30, type_="ring", attack={"fire": 6}),
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),  # not equippable
     }
+    # Make the targeted gear attainable: each is craftable from one gatherable raw.
+    gd._crafting_recipes = {
+        c: {"bar": 1}
+        for c in ("wooden_stick", "iron_sword", "copper_ring", "gold_ring", "ruby_ring")
+    }
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
     return gd
 
 
@@ -39,9 +46,45 @@ def test_paired_ring_slots_get_top_two_distinct():
 def test_slot_with_no_candidate_is_omitted():
     gd = GameData()
     gd._item_stats = {"only_weapon": ItemStats(code="only_weapon", level=1, type_="weapon", attack={"f": 1})}
+    gd._crafting_recipes = {"only_weapon": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
     obj = CharacterObjective.from_game_data(gd)
     assert "weapon_slot" in obj.target_gear
     assert "boots_slot" not in obj.target_gear
+
+
+def test_is_attainable_gatherable_and_craftable_chain():
+    gd = GameData()
+    gd._crafting_recipes = {"sword": {"bar": 2}, "bar": {"ore": 3}}
+    gd._resource_drops = {"rocks": "ore"}
+    assert is_attainable("ore", gd) is True          # gatherable raw
+    assert is_attainable("sword", gd) is True         # sword<-bar<-ore all attainable
+
+
+def test_is_attainable_false_for_drop_only_and_blocked_material():
+    gd = GameData()
+    gd._crafting_recipes = {"cursed": {"boss_drop": 1}}
+    gd._resource_drops = {"rocks": "ore"}
+    assert is_attainable("boss_drop", gd) is False    # no recipe, no drop
+    assert is_attainable("cursed", gd) is False        # material unattainable
+
+
+def test_is_attainable_false_for_cycle():
+    gd = GameData()
+    gd._crafting_recipes = {"a": {"a": 1}}
+    assert is_attainable("a", gd) is False
+
+
+def test_target_gear_prefers_attainable_over_higher_value_drop():
+    gd = GameData()
+    gd._item_stats = {
+        "drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 99}),  # unattainable
+        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon", attack={"f": 20}),    # craftable
+    }
+    gd._crafting_recipes = {"iron_blade": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    obj = CharacterObjective.from_game_data(gd)
+    assert obj.target_gear["weapon_slot"] == "iron_blade"  # attainable wins despite lower value
 
 
 def test_gap_complete_fractions_zero_for_maxed_components():

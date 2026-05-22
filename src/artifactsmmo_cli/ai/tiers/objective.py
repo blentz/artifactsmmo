@@ -12,6 +12,19 @@ from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
+def is_attainable(code: str, game_data: GameData, _path: frozenset[str] = frozenset()) -> bool:
+    """True when the item is producible in principle (at max progression): its
+    craft chain bottoms out in gatherables, with no drop-only/unknown component.
+    State-independent — the perfect-sheet target ignores current skills. Cycle-safe."""
+    recipe = game_data.crafting_recipe(code)
+    if recipe is not None:
+        if code in _path:
+            return False
+        sub_path = _path | {code}
+        return all(is_attainable(mat, game_data, sub_path) for mat in recipe)
+    return code in game_data._resource_drops.values()
+
+
 @dataclass(frozen=True)
 class ObjectiveGap:
     """Distance from a state to the Tier-1 objective. Positive gaps only;
@@ -53,7 +66,9 @@ class CharacterObjective:
         for type_, items in by_type.items():
             slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
             ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
-            for slot, (_value, code) in zip(slots, ranked):
+            attainable = [(value, code) for (value, code) in ranked
+                          if is_attainable(code, game_data)]
+            for slot, (_value, code) in zip(slots, attainable):
                 target_gear[slot] = code
         return cls(
             target_char_level=game_data.max_character_level,

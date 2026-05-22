@@ -11,7 +11,11 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     owned_count,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, ObjectiveGap
+from artifactsmmo_cli.ai.tiers.objective import (
+    CharacterObjective,
+    ObjectiveGap,
+    is_attainable,
+)
 from artifactsmmo_cli.ai.tiers.personality import (
     BalancedPersonality,
     Personality,
@@ -37,6 +41,7 @@ __all__ = [
     "equip_value",
     "CharacterObjective",
     "ObjectiveGap",
+    "is_attainable",
     "Personality",
     "BalancedPersonality",
     "weighted_remaining",
