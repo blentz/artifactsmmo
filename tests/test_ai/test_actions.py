@@ -317,23 +317,23 @@ class TestGatherAction:
 
 class TestDepositAllAction:
     def test_applicable_with_items(self):
-        action = DepositAllAction(bank_location=(4, 0))
-        state = make_state(x=0, y=0, inventory={"copper_ore": 5})
         gd = make_game_data(bank_loc=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=gd)
+        state = make_state(x=0, y=0, inventory={"copper_ore": 5})  # no task → bankable
         assert action.is_applicable(state, gd) is True
 
     def test_not_applicable_empty_inventory(self):
-        action = DepositAllAction(bank_location=(4, 0))
-        state = make_state(x=0, y=0, inventory={})
         gd = make_game_data(bank_loc=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=gd)
+        state = make_state(x=0, y=0, inventory={})
         assert action.is_applicable(state, gd) is False
 
-    def test_apply_moves_to_bank_clears_inventory(self):
-        action = DepositAllAction(bank_location=(4, 0))
-        state = make_state(x=0, y=0, inventory={"copper_ore": 5}, bank_items={"iron_ore": 2})
+    def test_apply_moves_to_bank_clears_bankable_inventory(self):
         gd = make_game_data(bank_loc=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=gd)
+        state = make_state(x=0, y=0, inventory={"copper_ore": 5}, bank_items={"iron_ore": 2})
         new_state = action.apply(state, gd)
-        assert new_state.inventory == {}
+        assert new_state.inventory == {}  # copper_ore (no keep rule) banked
         assert new_state.bank_items["copper_ore"] == 5
         assert new_state.bank_items["iron_ore"] == 2
         assert (new_state.x, new_state.y) == (4, 0)
@@ -859,3 +859,42 @@ class TestActionTags:
         a = MoveAction(x=1, y=2)
         b = MoveAction(x=3, y=4)
         assert a.tags is b.tags is MoveAction.tags
+
+
+class TestDepositAllSelective:
+    def _gd(self):
+        gd = make_game_data()
+        gd._npc_sell_prices = {"m": {"gold_ore": 50, "sap": 3}}
+        gd._item_stats = {
+            "gold_ore": ItemStats(code="gold_ore", level=1, type_="resource"),
+            "sap": ItemStats(code="sap", level=1, type_="resource"),
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        }
+        return gd
+
+    def test_apply_deposits_only_selected_keeps_task_item(self):
+        gd = self._gd()
+        action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
+        state = make_state(x=0, y=0, inventory={"gold_ore": 1, "copper_ore": 5},
+                           task_code="copper_ore", task_type="items", bank_items={})
+        new_state = action.apply(state, gd)
+        assert new_state.inventory == {"copper_ore": 5}   # task item kept
+        assert new_state.bank_items == {"gold_ore": 1}    # junk banked
+        assert (new_state.x, new_state.y) == (4, 1)
+
+    def test_not_applicable_when_nothing_bankable(self):
+        gd = self._gd()
+        action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
+        state = make_state(inventory={"copper_ore": 5}, task_code="copper_ore")
+        assert action.is_applicable(state, gd) is False
+
+    def test_not_applicable_without_game_data(self):
+        action = DepositAllAction(bank_location=(4, 1), accessible=True)
+        state = make_state(inventory={"sap": 1})
+        assert action.is_applicable(state, make_game_data()) is False
+
+    def test_not_applicable_when_inaccessible(self):
+        gd = self._gd()
+        action = DepositAllAction(bank_location=(4, 1), accessible=False, game_data=gd)
+        state = make_state(inventory={"sap": 1})
+        assert action.is_applicable(state, gd) is False

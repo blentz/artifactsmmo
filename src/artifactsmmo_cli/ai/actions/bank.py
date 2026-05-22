@@ -14,6 +14,7 @@ from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -27,15 +28,25 @@ class DepositAllAction(Action):
 
     bank_location: tuple[int, int] = field(default=(0, 0), repr=False)
     accessible: bool = True  # False when bank is gated behind an unmet achievement (HTTP 496)
+    game_data: GameData | None = field(default=None, repr=False)
+
+    def _deposits(self, state: WorldState) -> list[tuple[str, int]]:
+        """Items to bank this trip (selective + sell-value ordered), or [] when
+        no game_data is available (no banking without data)."""
+        if self.game_data is None:
+            return []
+        return select_bank_deposits(state, self.game_data)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return self.accessible and len(state.inventory) > 0
+        return self.accessible and bool(self._deposits(state))
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.bank_location
+        new_inventory = dict(state.inventory)
         new_bank = dict(state.bank_items or {})
-        for code, qty in state.inventory.items():
+        for code, qty in self._deposits(state):
             new_bank[code] = new_bank.get(code, 0) + qty
+            new_inventory.pop(code, None)
         return WorldState(
             character=state.character,
             level=state.level,
@@ -47,7 +58,7 @@ class DepositAllAction(Action):
             skills=state.skills,
             x=dest[0],
             y=dest[1],
-            inventory={},
+            inventory=new_inventory,
             inventory_max=state.inventory_max,
             equipment=state.equipment,
             cooldown_expires=None,
@@ -59,6 +70,7 @@ class DepositAllAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            crafting_target=state.crafting_target,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -71,7 +83,7 @@ class DepositAllAction(Action):
         if (state.x, state.y) != self.bank_location:
             state = MoveAction(x=self.bank_location[0], y=self.bank_location[1]).execute(state, client)
         last_state = state
-        for code, qty in list(state.inventory.items()):
+        for code, qty in self._deposits(state):
             body = SimpleItemSchema(code=code, quantity=qty)
             result = deposit_item(client=client, name=state.character, body=[body])
             if result is not None and hasattr(result, "data") and result.data is not None:

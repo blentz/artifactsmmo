@@ -825,7 +825,7 @@ class GamePlayer:
         actions: list[Action] = [
             RestAction(),
             UseConsumableAction(_item_stats=self.game_data._item_stats),
-            DepositAllAction(bank_location=bank, accessible=self._bank_accessible),
+            DepositAllAction(bank_location=bank, accessible=self._bank_accessible, game_data=self.game_data),
             AcceptTaskAction(taskmaster_location=taskmaster),
             CompleteTaskAction(taskmaster_location=taskmaster),
             TaskExchangeAction(taskmaster_location=taskmaster, min_coins=self._task_exchange_min_coins),
