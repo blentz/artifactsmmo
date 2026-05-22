@@ -253,11 +253,25 @@ def test_actionable_step_none_for_unproducible_leaf():
     assert actionable_step(ObtainItem("drop_blade"), make_state(), gd) is None
 
 
-def test_decide_excludes_unreachable_gear():
-    gd = _reach_gd()
+def test_decide_skips_root_unreachable_in_current_game_data():
+    # Objective built from data where iron_helm is craftable (attainable → targeted),
+    # but decide() runs against game data lacking that production → is_reachable
+    # False → the root is skipped (defensive filter).
+    gd_full = _reach_gd()
+    obj = CharacterObjective.from_game_data(gd_full)
+    assert obj.target_gear.get("helmet_slot") == "iron_helm"
+    gd_empty = GameData()
+    gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
+    d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd_empty)
+    assert all("iron_helm" not in rs.root_repr for rs in d.ranking)
+
+
+def test_unattainable_gear_not_targeted_but_craftable_is():
+    gd = _reach_gd()  # drop_blade unattainable; iron_helm craftable-from-gatherables
     obj = CharacterObjective.from_game_data(gd)
-    assert obj.target_gear.get("weapon_slot") == "drop_blade"
+    assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
+    assert obj.target_gear.get("helmet_slot") == "iron_helm"
     d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
     reprs = [rs.root_repr for rs in d.ranking]
+    assert any("iron_helm" in r for r in reprs)            # craftable gear is a candidate
     assert all("drop_blade" not in r for r in reprs)
-    assert any("iron_helm" in r for r in reprs)

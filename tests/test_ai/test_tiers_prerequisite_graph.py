@@ -20,7 +20,7 @@ def _gd() -> GameData:
         "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
     }
-    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}, "copper_bar": {"copper_ore": 10}}
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1, "dragon": 40}
