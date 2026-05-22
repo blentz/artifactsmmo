@@ -55,10 +55,19 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
 class LogScreen(Screen[None]):
     """Modal full-screen debug log. Dismiss with 'l' or Escape."""
 
+    # Fill the screen. (The screen's own layout is reset from the app's grid in
+    # WatchApp.CSS, where app-level rules can outrank this DEFAULT_CSS.)
+    DEFAULT_CSS = """
+    #log-modal #debug-log {
+        width: 1fr;
+        height: 1fr;
+    }
+    """
+
     BINDINGS = [("escape", "dismiss", "Back"), ("l", "dismiss", "Back")]
 
     def __init__(self, history: Iterable[CycleSnapshot], **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(id="log-modal", **kwargs)
         self._history = list(history)
 
     def compose(self) -> ComposeResult:

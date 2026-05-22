@@ -25,6 +25,13 @@ class WatchApp(App):
         grid-columns: 1fr 2fr;
         grid-rows: 1fr 1fr;
     }
+    /* The bare `Screen` grid above also matches the pushed modals; reset them
+       to a full-screen vertical layout. This rule must live in the app
+       stylesheet (not the modals' DEFAULT_CSS) because app CSS outranks a
+       screen's DEFAULT_CSS regardless of selector specificity. */
+    #character-modal, #log-modal {
+        layout: vertical;
+    }
     #status {
         column-span: 1;
         row-span: 1;

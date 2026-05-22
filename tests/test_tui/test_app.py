@@ -161,6 +161,28 @@ class TestWatchAppModals:
             assert not isinstance(app.screen, LogScreen)
 
     @pytest.mark.asyncio
+    async def test_log_screen_fills_terminal(self):
+        """The log widget fills the whole modal screen, not a small content box."""
+        app = _make_app()
+        async with app.run_test(size=(120, 50)) as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("l")
+            log = app.screen.query_one("#debug-log")
+            assert log.size.width == 120
+            assert log.size.height == 50
+
+    @pytest.mark.asyncio
+    async def test_character_screen_fills_terminal(self):
+        """The character detail scroll container fills the whole modal screen."""
+        app = _make_app()
+        async with app.run_test(size=(120, 50)) as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("c")
+            scroll = app.screen.query_one("#char-scroll")
+            assert scroll.size.width == 120
+            assert scroll.size.height == 50
+
+    @pytest.mark.asyncio
     async def test_character_screen_update_snapshot_while_open(self):
         """app.update_snapshot while CharacterScreen is on top dispatches to it (line 92)."""
         app = _make_app()

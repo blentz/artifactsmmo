@@ -38,15 +38,25 @@ def build_character_detail(snap: CycleSnapshot) -> RenderableType:
 class CharacterScreen(Screen[None]):
     """Modal full-screen character detail. Dismiss with 'c' or Escape."""
 
+    # Fill the screen. (The screen's own layout is reset from the app's grid in
+    # WatchApp.CSS, where app-level rules can outrank this DEFAULT_CSS.)
+    DEFAULT_CSS = """
+    #character-modal #char-scroll {
+        width: 1fr;
+        height: 1fr;
+        padding: 1 2;
+    }
+    """
+
     BINDINGS = [("escape", "dismiss", "Back"), ("c", "dismiss", "Back")]
 
     def __init__(self, snapshot: CycleSnapshot) -> None:
-        super().__init__()
+        super().__init__(id="character-modal")
         self._snapshot = snapshot
 
     def compose(self) -> ComposeResult:
         # Scroll container so a tall character sheet scrolls instead of clipping.
-        with VerticalScroll():
+        with VerticalScroll(id="char-scroll"):
             yield Static(build_character_detail(self._snapshot), id="char-detail")
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
