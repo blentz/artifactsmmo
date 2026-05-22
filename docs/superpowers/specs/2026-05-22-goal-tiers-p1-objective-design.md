@@ -52,10 +52,10 @@ so no test changes beyond import. Formula unchanged:
 
 ### `GameData.MAX_SKILL_LEVEL`
 Add a documented constant mirroring `MAX_CHARACTER_LEVEL`, with a property
-`max_skill_level`. Per the official docs the gathering/crafting skill cap equals
-the character cap (50); cite the same source comment as `MAX_CHARACTER_LEVEL`.
-`MAX_SKILL_LEVEL = 50`. (Single constant — trivially corrected if the cap ever
-diverges; keeps "derive from documented data, never invent inline".)
+`max_skill_level`. **Verified against the official docs**
+(https://docs.artifactsmmo.com/concepts/skills): *"Your characters have 8
+skills that can gain XP and reach up to level 50"* — the skill cap equals the
+character cap. `MAX_SKILL_LEVEL = 50`; cite this URL in the constant's comment.
 
 ### `CharacterObjective`
 Built once from `GameData` (`CharacterObjective.from_game_data(game_data)`).
@@ -67,7 +67,11 @@ Frozen. Fields:
 **Best-attainable gear:** since the objective assumes max skills, every
 craftable item is ultimately attainable, so the per-slot target is the highest
 `equip_value` equippable item in `game_data._item_stats` whose `type_` maps
-(via `ITEM_TYPE_TO_SLOTS`) to that slot. For paired slots fed by one type
+(via `ITEM_TYPE_TO_SLOTS`) to that slot. The target is the **endpoint** of a
+slot's upgrade chain (e.g. the max-level weapon); the intermediate progression
+that gets there — copper_dagger → iron_dagger → … → endpoint — is **not**
+modeled in P1. P3's frontier search discovers each reachable next-step upgrade
+and the planner crafts/equips it, walking the chain one singular loop at a time. For paired slots fed by one type
 (`ring1_slot`/`ring2_slot`, `artifact1_slot`/`artifact2_slot`), assign the
 top-1 and top-2 distinct items by value (ties broken by item code). A slot with
 no candidate item is omitted from `target_gear`. Only slots present in
