@@ -53,6 +53,8 @@ class GameData:
     _monster_type: dict[str, str] = field(default_factory=dict)  # "normal" / "elite" / "boss"
     _monster_attack: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: value}
     _monster_resistance: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: pct}
+    _monster_critical_strike: dict[str, int] = field(default_factory=dict)  # code -> crit %
+    _monster_initiative: dict[str, int] = field(default_factory=dict)  # code -> initiative
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
@@ -222,6 +224,18 @@ class GameData:
     def monster_resistance(self, code: str) -> dict[str, int]:
         """{element: resistance_pct} for the monster, or empty dict."""
         return self._monster_resistance.get(code, {})
+
+    def monster_hp(self, code: str) -> int:
+        """Max HP of a monster, or 0 when unknown."""
+        return self._monster_hp.get(code, 0)
+
+    def monster_critical_strike(self, code: str) -> int:
+        """Critical-strike chance % of a monster, or 0 when unknown."""
+        return self._monster_critical_strike.get(code, 0)
+
+    def monster_initiative(self, code: str) -> int:
+        """Initiative (turn-order) stat of a monster, or 0 when unknown."""
+        return self._monster_initiative.get(code, 0)
 
     def monster_level(self, code: str) -> int:
         """Level of a monster."""
@@ -524,6 +538,8 @@ class GameData:
                 self._monster_resistance[mon.code] = {
                     elem: getattr(mon, f"res_{elem}", 0) for elem in ("fire", "earth", "water", "air")
                 }
+                self._monster_critical_strike[mon.code] = mon.critical_strike
+                self._monster_initiative[mon.code] = mon.initiative
 
             if len(result.data) < 100:
                 break

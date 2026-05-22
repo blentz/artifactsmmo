@@ -410,6 +410,20 @@ class TestGameDataLoadMonsters:
             gd._load_monsters(MagicMock())
         assert gd._monster_level["chicken"] == 1
 
+    def test_loads_monster_combat_stats(self):
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "chicken"
+        monster.level = 1
+        monster.hp = 60
+        monster.critical_strike = 5
+        monster.initiative = 100
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd._monster_hp["chicken"] == 60
+        assert gd._monster_critical_strike["chicken"] == 5
+        assert gd._monster_initiative["chicken"] == 100
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):
@@ -724,3 +738,20 @@ def test_load_events_paginates_past_full_page():
         gd._load_events(client=None)
     assert gd.is_event_npc("merchant_0") is True
     assert gd.is_event_npc("merchant_last") is True
+
+
+def test_monster_combat_getters_return_stored_values():
+    gd = GameData()
+    gd._monster_hp = {"chicken": 60}
+    gd._monster_critical_strike = {"chicken": 5}
+    gd._monster_initiative = {"chicken": 100}
+    assert gd.monster_hp("chicken") == 60
+    assert gd.monster_critical_strike("chicken") == 5
+    assert gd.monster_initiative("chicken") == 100
+
+
+def test_monster_combat_getters_default_zero_when_unknown():
+    gd = GameData()
+    assert gd.monster_hp("missing") == 0
+    assert gd.monster_critical_strike("missing") == 0
+    assert gd.monster_initiative("missing") == 0
