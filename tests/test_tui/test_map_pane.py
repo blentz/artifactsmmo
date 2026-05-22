@@ -3,7 +3,7 @@
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import PLAYER_GLYPH, WALKABLE_GLYPH
-from artifactsmmo_cli.tui.widgets.map_pane import MapPane, VIEWPORT_H, VIEWPORT_W
+from artifactsmmo_cli.tui.widgets.map_pane import VIEWPORT_H, VIEWPORT_W, MapPane
 
 
 def _gd_with_world() -> GameData:
@@ -76,14 +76,15 @@ class TestMapPaneRender:
         assert "╤" in rendered  # taskmaster structure glyph
 
     def test_body_rows_match_viewport_and_no_trailing_blank(self):
-        """1 header + VIEWPORT_H body rows, every body row exactly VIEWPORT_W wide,
-        and no trailing blank line (the old code left one)."""
+        """1 header + (VIEWPORT_H-1) map rows = VIEWPORT_H total lines; every map row
+        exactly VIEWPORT_W wide; no trailing blank line."""
         gd = _gd_with_world()
         pane = MapPane(gd)
         pane.update_snapshot(_snap(0, 0))
         lines = pane.render().plain.split("\n")
-        assert len(lines) == 1 + VIEWPORT_H  # header + rows, no trailing empty line
+        assert len(lines) == VIEWPORT_H  # 1 header + (VIEWPORT_H-1) map rows, no trailing blank
         body = lines[1:]
+        assert len(body) == VIEWPORT_H - 1
         assert all(len(row) == VIEWPORT_W for row in body)
 
     def test_render_is_no_wrap_and_cropped(self):
