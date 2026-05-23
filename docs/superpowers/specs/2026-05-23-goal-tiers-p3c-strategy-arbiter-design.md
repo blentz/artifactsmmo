@@ -185,13 +185,20 @@ def select(decision, state, game_data, actions, planner) -> Goal | None:
 
 Verified by grep (no live reader) + green suite:
 - `_committed_upgrade_target`, `_upgrade_target_still_valid`, and the per-cycle
-  committed-target computation in `_build_goals`.
-- `state.crafting_target` and the now-dead branches in `active_gathering_skills`
-  and any consumer that existed only for tool-relevance priority; drop the
-  `crafting_target` argument from `active_gathering_skills`.
+  committed-target *probe* computation in `_build_goals`.
 - `_gating_skill_targets`.
 - `FarmMonsterGoal` and `FarmItemsGoal` classes + their tests (dormant since P3b).
 - Any `priorities.py`-only helper left unreferenced.
+
+**`state.crafting_target` is kept, re-sourced.** It is NOT dead: live readers
+protect the committed craft's materials from bank deposit (`bank_selection.py`,
+`actions/bank.py`) and weight yield scoring (`scalarizer.py`, and
+`active_gathering_skills` for `UpgradeEquipmentGoal` tool relevance, which still
+exists post-cutover). Only its *source* — the dead committed-target probe —
+retires. Re-source it each cycle from the strategy's committed gear/material
+step: when `chosen_step` is an `ObtainItem`, set `crafting_target = chosen_step.code`;
+otherwise `None`. The field and all its readers (and the `crafting_target`
+argument to `active_gathering_skills`) stay.
 
 ## Error handling
 
