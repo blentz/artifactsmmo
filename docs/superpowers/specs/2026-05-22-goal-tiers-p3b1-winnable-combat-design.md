@@ -148,13 +148,13 @@ Success per project standard: 0 errors, 0 warnings, 0 skipped, 100% on changed c
 - Modify tests: `tests/test_ai/test_world_state*.py`, new `test_combat.py`,
   `test_game_data.py`, `test_player.py`.
 
-## Simplified combat model (flagged for review)
-`predict_win` uses per-element `attack × (1 − resistance%)` summed, and a
-rounds-to-kill ≤ rounds-to-die comparison from full HP. It **ignores** critical
-strikes, damage-bonus effects, haste/turn-order, and consumable use mid-fight —
-a deliberate first-cut heuristic. The learned-win-rate veto corrects systematic
-mis-predictions over time. A higher-fidelity model (documented crit/dmg formula)
-can replace `predict_win` later without touching callers.
+## Modelling notes
+`predict_win` implements the full documented per-element formula (output =
+attack + Round(attack·dmg%/100); blocked by resistance %; expected-crit
+multiplier; initiative turn order; 100-turn cap) over the player's `max_hp`.
+Haste/extra-turn and mid-fight consumable use are not modelled (not part of the
+documented per-hit formula); the learned-win-rate veto corrects residual
+mis-prediction over time.
 
 ## Out of scope
 - Win-rate-aware `combat_capable` in tiers (kept level-gated; harmless).
