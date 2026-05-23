@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.goals.low_yield_cancel import (
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.priorities import LOW_YIELD_CANCEL
 from tests.test_ai.fixtures import make_state
 
 
@@ -183,7 +184,6 @@ class TestGHCharXpFastCancel:
         state = make_state(task_code="gudgeon", task_type="items",
                            task_total=347, task_progress=5)
         # Should fire immediately — no need to wait for confidence threshold.
-        from artifactsmmo_cli.ai.priorities import LOW_YIELD_CANCEL
         assert goal.priority(state, _gd_with_woodcutting_task(), store) == LOW_YIELD_CANCEL
         store.close()
 

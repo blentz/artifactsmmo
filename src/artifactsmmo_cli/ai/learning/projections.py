@@ -11,6 +11,8 @@ import json
 import statistics
 
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -326,3 +328,84 @@ def project_task_completion(
         expected_tasks_coins=farm_yield.tasks_coins * cycles_remaining + 3.0,
         confidence=confidence,
     )
+
+
+LOW_YIELD_CONFIDENCE_THRESHOLD = 0.5
+"""Don't cancel until projection confidence >= this. Below the threshold we
+defer to existing hardcoded priorities and let the task run."""
+
+LOW_YIELD_ALTERNATIVE_MARGIN = 1.5
+"""Cancel only when the alternative's char-XP rate is at least this multiple
+of the current task's rate. Higher = more conservative cancels."""
+
+
+def _best_alternative_repr(history: LearningStore) -> str | None:
+    """Find the FarmMonster repr with the most observed cycles.
+
+    FarmMonster reprs are per-monster, e.g. "FarmMonster(chicken)". The
+    canonical alternative for this comparison is whichever monster the
+    bot has actually been farming.  None rows are skipped; returns None
+    when no FarmMonster cycles exist or on DB error.
+    """
+    try:
+        with Session(history._engine) as s:
+            stmt = (
+                select(Cycle.selected_goal)
+                .where(
+                    col(Cycle.character) == history._character,
+                    col(Cycle.selected_goal).like("FarmMonster(%"),
+                )
+                .order_by(col(Cycle.id).desc())
+                .limit(50)
+            )
+            rows = list(s.exec(stmt))
+    except SQLAlchemyError:
+        return None
+    if not rows:
+        return None
+    counts: dict[str, int] = {}
+    for r in rows:
+        if r is not None:
+            counts[r] = counts.get(r, 0) + 1
+    if not counts:
+        return None
+    return max(counts, key=lambda k: counts[k])
+
+
+def low_yield_cancel_fires(state: WorldState, history: LearningStore | None) -> bool:
+    """True when the held task should be cancelled for a clearly-better monster
+    alternative. Single source of truth for both LowYieldCancelGoal and the
+    strategy means predicate.
+
+    Fires when: a task is held (task_code set AND task_total > 0), there is
+    FarmItems yield history and a best FarmMonster alternative with samples, and
+    either the current char-XP/cycle is 0 while the alternative is positive
+    (zero fast-path), OR project_task_completion confidence >= 0.5 and the
+    alternative rate >= current rate * 1.5.
+    """
+    if history is None or not state.task_code or state.task_total <= 0:
+        return False
+
+    farm_items_yield = expected_yield_per_cycle("FarmItems", history)
+    if farm_items_yield.sample_count == 0:
+        return False
+    current_char_xp_per_cycle = farm_items_yield.char_xp
+
+    alt_repr = _best_alternative_repr(history)
+    if alt_repr is None:
+        return False
+    alt_yield = expected_yield_per_cycle(alt_repr, history)
+    if alt_yield.sample_count == 0:
+        return False
+    alternative_char_xp_per_cycle = alt_yield.char_xp
+
+    # Zero-char-XP task case: any positive alternative beats it immediately.
+    if current_char_xp_per_cycle == 0 and alternative_char_xp_per_cycle > 0:
+        return True
+
+    # Positive-but-low task case: confidence gate + margin.
+    projection = project_task_completion(state, history)
+    if projection is None or projection.confidence < LOW_YIELD_CONFIDENCE_THRESHOLD:
+        return False
+
+    return alternative_char_xp_per_cycle >= current_char_xp_per_cycle * LOW_YIELD_ALTERNATIVE_MARGIN

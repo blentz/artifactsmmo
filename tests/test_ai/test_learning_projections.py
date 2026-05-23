@@ -11,8 +11,10 @@ from artifactsmmo_cli.ai.learning.projections import (
     TASKS_COIN_CODE,
     WARMUP_MIN_SAMPLES,
     Yield,
+    cheapest_path_to_level,
     cycles_for_progress,
     expected_yield_per_cycle,
+    low_yield_cancel_fires,
     project_task_completion,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -215,7 +217,6 @@ class TestCheapestPathToLevel:
         return gd
 
     def test_returns_empty_path_when_already_at_target(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(level=10)
         plan = cheapest_path_to_level(10, state, store, self._gd_with_monsters({}))
@@ -227,7 +228,6 @@ class TestCheapestPathToLevel:
     def test_uses_documented_xp_formula_when_no_observations(self, tmp_path):
         """No store data → use game_data.xp_per_kill (documented formula)
         instead of magic constants."""
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
         gd._monster_hp = {"chicken": 60}
@@ -245,7 +245,6 @@ class TestCheapestPathToLevel:
         assert 100 < plan.total_cycles < 200
 
     def test_uses_observed_xp_when_available(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         # Seed 5 FarmMonster(chicken) cycles at 20 char-xp each
         _populate(store, [
@@ -260,7 +259,6 @@ class TestCheapestPathToLevel:
         assert plan.total_cycles == 5.0
 
     def test_blocked_when_no_beatable_monster(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"ogre": 50, "dragon": 80})
         state = make_state(level=1, xp=0, max_xp=100)
@@ -270,7 +268,6 @@ class TestCheapestPathToLevel:
         assert plan.total_cycles == float("inf")
 
     def test_picks_highest_xp_monster(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, (
             [_make_cycle(i, "FarmMonster(chicken)", delta_xp=2) for i in range(5)] +
@@ -284,7 +281,6 @@ class TestCheapestPathToLevel:
         assert plan.segments[0].monster_code == "yellow_slime"
 
     def test_extends_across_levels(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1, "wolf": 5})
         state = make_state(level=1, xp=0, max_xp=100)
@@ -294,7 +290,6 @@ class TestCheapestPathToLevel:
         assert len(plan.segments) == 2
 
     def test_next_action_monster_property(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
         state = make_state(level=1, xp=0, max_xp=100)
@@ -310,10 +305,6 @@ class TestPathSuccessRateFilter:
     """G-I post-fix: monsters with observed low win-rate excluded from path."""
 
     def test_low_win_rate_monster_skipped(self, tmp_path):
-        from artifactsmmo_cli.ai.learning.models import Cycle
-        from artifactsmmo_cli.ai.learning.models import Session as SessionModel
-        from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
-
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         store.start_session()
         with Session(store._engine) as s:
@@ -343,3 +334,122 @@ class TestPathSuccessRateFilter:
         # yellow_slime would normally win by XP/cycle, but losses eliminate it.
         # chicken takes over as the only viable option.
         assert plan.segments[0].monster_code == "chicken"
+
+
+class TestLowYieldCancelFires:
+    """Unit tests for the shared low_yield_cancel_fires predicate."""
+
+    def _seed(self, store: LearningStore, cycles: list[dict]) -> None:
+        store.start_session()
+        with Session(store._engine) as s:
+            if not s.get(SessionModel, store._session_id):
+                s.add(SessionModel(
+                    session_id=store._session_id,
+                    started_at="2026-05-18T00:00:00Z",
+                    character="hero",
+                ))
+            for kw in cycles:
+                kw_with = dict(kw)
+                kw_with["session_id"] = store._session_id
+                s.add(Cycle(**kw_with))
+            s.commit()
+
+    def _cycle(self, idx: int, goal: str, *, delta_xp: int = 0,
+               task_progress: int = 0) -> dict:
+        return dict(
+            ts=f"2026-05-18T00:{idx:02d}:00Z",
+            cycle_index=idx,
+            character="hero",
+            selected_goal=goal,
+            action_repr="X",
+            action_class="X",
+            outcome="ok",
+            delta_xp=delta_xp,
+            delta_gold=0,
+            delta_hp=0,
+            delta_inv_used=0,
+            task_progress=task_progress,
+            task_total=10,
+        )
+
+    def test_returns_false_when_no_history(self):
+        state = make_state(task_code="x", task_total=10, task_progress=5)
+        assert low_yield_cancel_fires(state, None) is False
+
+    def test_returns_false_when_no_task(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        state = make_state(task_code=None, task_total=0)
+        assert low_yield_cancel_fires(state, store) is False
+        store.close()
+
+    def test_returns_false_when_task_total_zero(self, tmp_path):
+        """task_total == 0 is treated as no active task (fixes means.py bug)."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        state = make_state(task_code="gudgeon", task_total=0, task_progress=0)
+        assert low_yield_cancel_fires(state, store) is False
+        store.close()
+
+    def test_zero_char_xp_fires_immediately(self, tmp_path):
+        """FarmItems 0 xp/cycle + FarmMonster positive → fires without confidence gate."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = [self._cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
+        cycles += [self._cycle(5 + i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
+        self._seed(store, cycles)
+        state = make_state(task_code="gudgeon", task_total=347, task_progress=5)
+        assert low_yield_cancel_fires(state, store) is True
+        store.close()
+
+    def test_no_fire_when_no_farmitems_history(self, tmp_path):
+        """FarmMonster data but no FarmItems samples → cannot determine current rate."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = [self._cycle(i, "FarmMonster(slime)", delta_xp=15) for i in range(5)]
+        self._seed(store, cycles)
+        state = make_state(task_code="gudgeon", task_total=50, task_progress=5)
+        assert low_yield_cancel_fires(state, store) is False
+        store.close()
+
+    def test_no_fire_when_no_alternative_history(self, tmp_path):
+        """FarmItems data but no FarmMonster cycles → no alternative repr."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(35)]
+        self._seed(store, cycles)
+        state = make_state(task_code="x", task_total=50, task_progress=10)
+        assert low_yield_cancel_fires(state, store) is False
+        store.close()
+
+    def test_positive_path_fires_above_margin_and_confidence(self, tmp_path):
+        """FarmItems 1 xp, FarmMonster 5 xp → 5x margin, sufficient confidence → fires."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = (
+            [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(35)] +
+            [self._cycle(35 + i, "FarmMonster(chicken)", delta_xp=5) for i in range(35)]
+        )
+        self._seed(store, cycles)
+        state = make_state(task_code="x", task_total=50, task_progress=10)
+        assert low_yield_cancel_fires(state, store) is True
+        store.close()
+
+    def test_no_fire_below_confidence_threshold(self, tmp_path):
+        """3 FarmItems samples → confidence 0.1 < 0.5 → no fire on positive path."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = (
+            [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(3)] +
+            [self._cycle(3 + i, "FarmMonster(chicken)", delta_xp=5) for i in range(3)]
+        )
+        self._seed(store, cycles)
+        state = make_state(task_code="x", task_total=50, task_progress=3)
+        assert low_yield_cancel_fires(state, store) is False
+        store.close()
+
+    def test_no_fire_below_margin(self, tmp_path):
+        """Alt 1.2x better but below 1.5 margin → no fire."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = (
+            [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(30)] +
+            [self._cycle(30 + i, "FarmMonster(chicken)", delta_xp=1) for i in range(30)] +
+            [self._cycle(60 + i, "FarmMonster(chicken)", delta_xp=2) for i in range(6)]
+        )
+        self._seed(store, cycles)
+        state = make_state(task_code="x", task_total=50, task_progress=10)
+        assert low_yield_cancel_fires(state, store) is False
+        store.close()
