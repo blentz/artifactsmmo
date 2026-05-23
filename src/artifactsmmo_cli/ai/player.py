@@ -40,6 +40,7 @@ from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, CompleteTaskActio
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -73,6 +74,11 @@ from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
+WIN_RATE_THRESHOLD = 0.5
+"""Observed win rate at or above which a monster is considered beatable."""
+MIN_WIN_SAMPLES = 5
+"""Minimum recorded fights before an observed win rate can veto a stat
+prediction (below this the sample is too noisy to trust)."""
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
@@ -1171,41 +1177,38 @@ class GamePlayer:
         return probe._is_upgrade_over(item_code, stats, current, current_stats,
                                       self.game_data, active)
 
-    def _pick_winnable_monster(self) -> str | None:
-        """Highest-level monster at or below char_level with success_rate>=0.5.
+    def _is_winnable(self, monster_code: str) -> bool:
+        """True when the documented combat-stat prediction says we win AND we
+        have not been observed losing this monster (>= MIN_WIN_SAMPLES fights
+        under WIN_RATE_THRESHOLD). The learned-loss veto overrides an optimistic
+        stat prediction; a cold/absent history defers to the prediction."""
+        assert self.state is not None and self.game_data is not None
+        if self.history is not None:
+            # Gate on our own sample threshold (not success_rate's internal
+            # small-sample guard) so the veto fires only on a well-observed loss
+            # record; short-circuit avoids the success_rate query when too few.
+            samples = self.history.sample_count(f"Fight({monster_code})")
+            if (samples >= MIN_WIN_SAMPLES
+                    and self.history.success_rate(f"Fight({monster_code})") < WIN_RATE_THRESHOLD):
+                return False
+        return predict_win(self.state, self.game_data, monster_code)
 
-        Falls back to the highest-level qualifying monster when history is cold
-        (no samples yet — give benefit of the doubt). Returns None when every
-        candidate has observed-bad win rates, so the caller can suppress
-        combat-driving goals and let upgrade-driven goals dominate.
-        """
+    def _pick_winnable_monster(self) -> str | None:
+        """Highest-level monster that `_is_winnable` (stat prediction not vetoed
+        by observed losses). Returns None when no monster is winnable, so the
+        caller can suppress combat-driving goals and let upgrade goals dominate.
+
+        No level cap: predict_win's stat math is the gate (the win-rate veto
+        corrects any monster the formula over-rates once losses accumulate)."""
         assert self.game_data is not None
         assert self.state is not None
-        WIN_RATE_THRESHOLD = 0.5
-        MIN_SAMPLES = 5
-        best_winnable: tuple[str, int] | None = None
-        best_unobserved: tuple[str, int] | None = None
+        best: tuple[str, int] | None = None
         for code, level in self.game_data._monster_level.items():
-            if level > self.state.level:
+            if not self._is_winnable(code):
                 continue
-            if self.history is None:
-                # No store wired: highest qualifying monster wins.
-                if best_unobserved is None or level > best_unobserved[1]:
-                    best_unobserved = (code, level)
-                continue
-            samples = self.history.sample_count(f"Fight({code})")
-            rate = self.history.success_rate(f"Fight({code})")
-            if samples < MIN_SAMPLES:
-                if best_unobserved is None or level > best_unobserved[1]:
-                    best_unobserved = (code, level)
-            elif rate >= WIN_RATE_THRESHOLD:
-                if best_winnable is None or level > best_winnable[1]:
-                    best_winnable = (code, level)
-        if best_winnable is not None:
-            return best_winnable[0]
-        if best_unobserved is not None:
-            return best_unobserved[0]
-        return None
+            if best is None or level > best[1]:
+                best = (code, level)
+        return best[0] if best is not None else None
 
     def _gating_skill_targets(self, active_skills: set[str]) -> list[tuple[str, int]]:
         """Find (gating_skill, required_level) pairs for craftable items that:

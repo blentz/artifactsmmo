@@ -183,28 +183,45 @@ class TestReachUnlockLevelGapGate:
 
 
 class TestPickWinnableMonster:
-    """When a learning store records low success_rate on a monster, the bot
-    should avoid that monster — pick a lower-level one OR (if none qualify)
-    return None so combat-driving goals stay silent."""
+    """The picker returns the highest-level monster the combat-stat estimator
+    says we beat, minus any vetoed by an observed low win-rate. Returns None
+    when nothing is winnable so combat-driving goals stay silent."""
 
-    def _player_with_monsters(self, tmp_path, level: int, monster_levels: dict[str, int]):
+    def _player_with_monsters(self, tmp_path, level: int, monster_levels: dict[str, int],
+                              monster_hp: dict[str, int] | None = None):
+        """Build a player whose monsters carry real combat stats. Each monster
+        defaults to a beatable hp=10 / fire-attack=1; `monster_hp` overrides per
+        code (a huge HP wall makes a monster unwinnable inside the 100-turn cap).
+        The player is a capable fire attacker."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
-        player.game_data = GameData()
-        player.game_data._monster_level = monster_levels
-        player.state = make_state(level=level, character="hero")
+        gd = GameData()
+        gd._monster_level = monster_levels
+        hp_overrides = monster_hp or {}
+        for code in monster_levels:
+            gd._monster_hp[code] = hp_overrides.get(code, 10)
+            gd._monster_attack[code] = {"fire": 1}
+            gd._monster_resistance[code] = {}
+            gd._monster_critical_strike[code] = 0
+            gd._monster_initiative[code] = 0
+        player.game_data = gd
+        player.state = make_state(level=level, character="hero",
+                                  max_hp=100, attack={"fire": 50}, initiative=50)
         return player, store
 
-    def test_no_history_picks_highest_level_qualifying(self, tmp_path):
+    def test_no_records_picks_highest_level_winnable(self, tmp_path):
+        # ogre is an unwinnable HP wall; yellow_slime is the highest beatable.
         player, store = self._player_with_monsters(
             tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3, "ogre": 10},
+            monster_hp={"ogre": 100000},
         )
         assert player._pick_winnable_monster() == "yellow_slime"
         store.close()
 
-    def test_returns_none_when_no_monster_in_range(self, tmp_path):
+    def test_returns_none_when_nothing_winnable(self, tmp_path):
         player, store = self._player_with_monsters(
             tmp_path, level=1, monster_levels={"ogre": 10, "dragon": 20},
+            monster_hp={"ogre": 100000, "dragon": 100000},
         )
         assert player._pick_winnable_monster() is None
         store.close()

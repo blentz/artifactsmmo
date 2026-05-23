@@ -10,11 +10,15 @@ from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
+from sqlmodel import Session
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import FALLBACK_BAND, MetaGoalAdapter
@@ -37,6 +41,12 @@ def make_game_data_mock() -> GameData:
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     gd._monster_level = {"chicken": 1, "cow": 2}
+    # Real combat stats so the winnability estimator can beat these low mobs.
+    gd._monster_hp = {"chicken": 10, "cow": 20}
+    gd._monster_attack = {"chicken": {"fire": 1}, "cow": {"fire": 2}}
+    gd._monster_resistance = {"chicken": {}, "cow": {}}
+    gd._monster_critical_strike = {"chicken": 0, "cow": 0}
+    gd._monster_initiative = {"chicken": 0, "cow": 0}
     return gd
 
 
@@ -96,7 +106,11 @@ class TestBuildGoals:
         player.game_data = gd
         player._objective = CharacterObjective.from_game_data(gd)
         player._strategy = StrategyEngine(player._objective, BalancedPersonality())
-        player.state = make_state(**state_kw)
+        # A capable fighter by default so the stat-based winnability estimator
+        # can beat the low test mobs (callers can override via state_kw).
+        combat_defaults = dict(max_hp=100, attack={"fire": 50}, initiative=50)
+        combat_defaults.update(state_kw)
+        player.state = make_state(**combat_defaults)
         return player
 
     def test_progression_goals_removed_strategy_drives(self):
@@ -119,6 +133,13 @@ class TestBuildGoals:
         gd = GameData()
         gd._monster_locations = {"chicken": [(1, 0)], "dragon": [(10, 0)]}
         gd._monster_level = {"chicken": 1, "dragon": 100}
+        # chicken is beatable; the dragon's HP wall is unkillable inside the
+        # 100-turn cap, so winnability (not a level gate) excludes it.
+        gd._monster_hp = {"chicken": 10, "dragon": 100000}
+        gd._monster_attack = {"chicken": {"fire": 1}, "dragon": {"fire": 9999}}
+        gd._monster_resistance = {"chicken": {}, "dragon": {}}
+        gd._monster_critical_strike = {"chicken": 0, "dragon": 0}
+        gd._monster_initiative = {"chicken": 0, "dragon": 0}
         gd._resource_locations = {}
         gd._workshop_locations = {}
         gd._bank_location = (4, 0)
@@ -131,7 +152,115 @@ class TestBuildGoals:
                      if isinstance(g, MetaGoalAdapter) and isinstance(g._inner, GrindCharacterXPGoal)
                      and g.priority(player.state, gd) == FALLBACK_BAND]
         assert len(fallbacks) == 1                              # the low-pri safety net
-        assert fallbacks[0]._inner._target_monster != "dragon"  # over-level monster excluded
+        assert fallbacks[0]._inner._target_monster != "dragon"  # unwinnable monster excluded
+
+
+def _winnable_gd(monsters: dict[str, dict]) -> GameData:
+    """Build a GameData whose monsters carry real combat stats.
+
+    `monsters` maps code -> {level, hp, attack, resistance, crit, initiative}.
+    Only level/hp/attack are required; the rest default sensibly.
+    """
+    gd = GameData()
+    for code, m in monsters.items():
+        gd._monster_level[code] = m["level"]
+        gd._monster_hp[code] = m["hp"]
+        gd._monster_attack[code] = m.get("attack", {})
+        gd._monster_resistance[code] = m.get("resistance", {})
+        gd._monster_critical_strike[code] = m.get("crit", 0)
+        gd._monster_initiative[code] = m.get("initiative", 0)
+    return gd
+
+
+def _seed_fights(store: LearningStore, monster_code: str, *, wins: int, losses: int) -> None:
+    """Record real Fight(monster) cycles so success_rate/sample_count are live.
+
+    `idx` is encoded as the minutes field of the ts, so callers must keep
+    wins+losses < 60 to stay within valid ISO-8601 timestamps.
+    """
+    store.start_session()
+    with Session(store._engine) as s:
+        if not s.get(SessionModel, store._session_id):
+            s.add(SessionModel(session_id=store._session_id,
+                               started_at="2026-05-22T00:00:00Z", character="hero"))
+        idx = 0
+        for outcome, n in (("ok", wins), ("error", losses)):
+            for _ in range(n):
+                idx += 1
+                s.add(Cycle(
+                    session_id=store._session_id, ts=f"2026-05-22T00:{idx:02d}:00Z",
+                    cycle_index=idx, character="hero", selected_goal="GrindCharacterXP",
+                    action_repr=f"Fight({monster_code})", action_class="FightAction",
+                    outcome=outcome, delta_xp=0, delta_gold=0, delta_hp=0,
+                    delta_inv_used=0, task_progress=0, task_total=0,
+                ))
+        s.commit()
+
+
+class TestWinnable:
+    """_is_winnable / _pick_winnable_monster driven by the real predict_win
+    estimator and a real LearningStore win-rate veto (no mocking)."""
+
+    def _player(self, gd: GameData, state, history=None) -> GamePlayer:
+        player = GamePlayer(character="hero", history=history)
+        player.game_data = gd
+        player.state = state
+        return player
+
+    def test_winnable_when_stats_predict_a_win(self):
+        gd = _winnable_gd({"chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}}})
+        state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
+        assert self._player(gd, state)._is_winnable("chicken") is True
+
+    def test_not_winnable_when_stats_predict_a_loss(self):
+        # A wall of HP the player cannot chew through inside the 100-turn cap.
+        gd = _winnable_gd({"titan": {"level": 5, "hp": 100000, "attack": {"fire": 1}}})
+        state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
+        assert self._player(gd, state)._is_winnable("titan") is False
+
+    def test_not_winnable_when_player_has_no_attack(self):
+        gd = _winnable_gd({"chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}}})
+        state = make_state(level=5, max_hp=100, attack={}, initiative=50)
+        assert self._player(gd, state)._is_winnable("chicken") is False
+
+    def test_observed_losses_veto_a_predicted_win(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "veto.db"), character="hero")
+        try:
+            _seed_fights(store, "chicken", wins=0, losses=5)  # 0% over 5 fights
+            gd = _winnable_gd({"chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}}})
+            state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
+            # Stats say win, but the learned 0% win-rate vetoes it.
+            assert self._player(gd, state, history=store)._is_winnable("chicken") is False
+        finally:
+            store.close()
+
+    def test_veto_ignored_below_min_samples(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "few.db"), character="hero")
+        try:
+            _seed_fights(store, "chicken", wins=0, losses=4)  # < MIN_WIN_SAMPLES
+            gd = _winnable_gd({"chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}}})
+            state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
+            # Too few fights to trust the loss record -> defer to the stat win.
+            assert self._player(gd, state, history=store)._is_winnable("chicken") is True
+        finally:
+            store.close()
+
+    def test_pick_returns_highest_level_winnable(self):
+        gd = _winnable_gd({
+            "chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}},
+            "wolf": {"level": 4, "hp": 10, "attack": {"fire": 1}},
+            "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},  # unwinnable
+        })
+        state = make_state(level=10, max_hp=100, attack={"fire": 50}, initiative=50)
+        assert self._player(gd, state)._pick_winnable_monster() == "wolf"
+
+    def test_pick_none_when_nothing_winnable(self):
+        gd = _winnable_gd({
+            "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},
+            "colossus": {"level": 9, "hp": 100000, "attack": {"fire": 1}},
+        })
+        state = make_state(level=10, max_hp=100, attack={"fire": 50}, initiative=50)
+        assert self._player(gd, state)._pick_winnable_monster() is None
 
 
 class TestWaitForCooldown:
