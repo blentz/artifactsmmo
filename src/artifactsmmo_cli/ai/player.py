@@ -975,10 +975,12 @@ class GamePlayer:
                 self._blockers.clear("bank")
 
         # G-I: under max-level root objective, the cheapest-path projection
-        # picks the next monster. Falls back to win-rate-based picker when
-        # the projection is unavailable (no store) or blocked.
+        # picks the next monster. The projection maximizes XP/cycle but does NOT
+        # consider winnability, so gate it: if the path-aligned pick isn't
+        # winnable (or there is no projection), fall back to the conservative
+        # winnable picker. When that also yields None, no combat grind is built.
         farm_target = self._path_aligned_monster()
-        if farm_target is None:
+        if farm_target is None or not self._is_winnable(farm_target):
             farm_target = self._pick_winnable_monster()
 
         # Resolve a STABLE upgrade target. Recomputing the best craftable

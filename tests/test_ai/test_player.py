@@ -154,6 +154,55 @@ class TestBuildGoals:
         assert len(fallbacks) == 1                              # the low-pri safety net
         assert fallbacks[0]._inner._target_monster != "dragon"  # unwinnable monster excluded
 
+    def _grind_targets(self, goals) -> list[str]:
+        return [g._inner._target_monster for g in goals
+                if isinstance(g, MetaGoalAdapter) and isinstance(g._inner, GrindCharacterXPGoal)]
+
+    def test_gate_keeps_winnable_path_aligned_target(self):
+        # The path-aligned (XP-optimal) pick is winnable -> it is kept as-is and
+        # NOT replaced by the conservative picker. chicken is winnable but is not
+        # the picker's top choice (cow, the highest-level winnable), so a gate
+        # that wrongly replaced it would surface cow instead. Only the separately
+        # tested _path_aligned_monster projection is stubbed; winnability is real.
+        player = self._with_strategy(make_game_data_mock(), level=3)
+        player._path_aligned_monster = lambda: "chicken"        # winnable, not the picker's pick
+        goals = player._build_goals()
+        targets = self._grind_targets(goals)
+        assert "chicken" in targets                             # path-aligned pick kept
+        assert "cow" not in targets                             # picker did NOT replace it
+
+    def test_gate_falls_back_when_path_aligned_unwinnable(self):
+        gd = make_game_data_mock()
+        gd._monster_level["ogre"] = 10                          # XP-optimal but...
+        gd._monster_hp["ogre"] = 100000                         # ...an unwinnable HP wall
+        gd._monster_attack["ogre"] = {"fire": 1}
+        gd._monster_resistance["ogre"] = {}
+        gd._monster_critical_strike["ogre"] = 0
+        gd._monster_initiative["ogre"] = 0
+        player = self._with_strategy(gd, level=3)
+        player._path_aligned_monster = lambda: "ogre"           # projection picks the wall
+        goals = player._build_goals()
+        targets = self._grind_targets(goals)
+        assert "ogre" not in targets                            # gate rejected it
+        assert targets and all(t in {"chicken", "cow"} for t in targets)  # winnable pick used
+
+    def test_gate_no_grind_when_nothing_winnable(self):
+        gd = GameData()
+        gd._monster_level = {"ogre": 10}
+        gd._monster_hp = {"ogre": 100000}                       # unwinnable
+        gd._monster_attack = {"ogre": {"fire": 1}}
+        gd._monster_resistance = {"ogre": {}}
+        gd._monster_critical_strike = {"ogre": 0}
+        gd._monster_initiative = {"ogre": 0}
+        gd._bank_location = (4, 0)
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        gd._resource_skill = {}
+        player = self._with_strategy(gd, level=3)
+        player._path_aligned_monster = lambda: "ogre"
+        goals = player._build_goals()
+        assert self._grind_targets(goals) == []                 # no winnable monster -> no grind
+
 
 def _winnable_gd(monsters: dict[str, dict]) -> GameData:
     """Build a GameData whose monsters carry real combat stats.
