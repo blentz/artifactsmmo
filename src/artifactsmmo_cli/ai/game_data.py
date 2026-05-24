@@ -31,6 +31,11 @@ class ItemStats:
     skill_effects: dict[str, int] = field(default_factory=dict)
     attack: dict[str, int] = field(default_factory=dict)        # element -> attack value (weapon)
     resistance: dict[str, int] = field(default_factory=dict)    # element -> resistance % (armor)
+    dmg: int = 0                                                 # global damage % bonus
+    dmg_elements: dict[str, int] = field(default_factory=dict)  # element -> dmg % bonus
+    critical_strike: int = 0                                     # crit chance % bonus
+    initiative: int = 0                                          # initiative bonus
+    hp_bonus: int = 0                                            # flat max-HP bonus (gear)
 
 
 @dataclass
@@ -435,6 +440,16 @@ class GameData:
                         elif effect.code.startswith("res_"):
                             elem = effect.code[len("res_"):]
                             stats.resistance[elem] = effect.value
+                        elif effect.code == "dmg":
+                            stats.dmg = effect.value
+                        elif effect.code.startswith("dmg_"):
+                            stats.dmg_elements[effect.code[len("dmg_"):]] = effect.value
+                        elif effect.code == "critical_strike":
+                            stats.critical_strike = effect.value
+                        elif effect.code == "initiative":
+                            stats.initiative = effect.value
+                        elif effect.code == "hp":
+                            stats.hp_bonus = effect.value
                         elif effect.code in _GATHERING_SKILLS:
                             # Tool bonus for a gather skill (e.g. axe → woodcutting).
                             # Game encodes as cooldown reduction (negative value = faster);

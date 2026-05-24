@@ -334,6 +334,29 @@ class TestGameDataLoadItems:
             gd._load_items(MagicMock())
         assert gd._item_stats == {}
 
+    def test_loads_gear_combat_effects(self):
+        gd = GameData()
+        item = MagicMock()
+        item.code = "power_ring"
+        item.level = 5
+        item.type_ = "ring"
+        item.craft = UNSET  # no recipe
+        def eff(code, value):
+            e = MagicMock()
+            e.code = code
+            e.value = value
+            return e
+        item.effects = [eff("dmg", 8), eff("dmg_fire", 4), eff("critical_strike", 6),
+                        eff("initiative", 20), eff("hp", 50)]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        s = gd.item_stats("power_ring")
+        assert s.dmg == 8
+        assert s.dmg_elements == {"fire": 4}
+        assert s.critical_strike == 6
+        assert s.initiative == 20
+        assert s.hp_bonus == 50
+
 
 class TestGameDataLoadResources:
     def test_loads_skill_requirement(self):
