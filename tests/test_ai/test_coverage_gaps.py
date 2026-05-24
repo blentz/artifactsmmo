@@ -11,7 +11,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.goals.combat import CompleteTaskGoal, FarmMonsterGoal
+from artifactsmmo_cli.ai.goals.combat import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
 from tests.test_ai.fixtures import make_state
@@ -52,9 +52,6 @@ class TestReprMethods:
 
     def test_deposit_inventory_repr(self):
         assert repr(DepositInventoryGoal()) == "DepositInventory"
-
-    def test_farm_monster_repr(self):
-        assert repr(FarmMonsterGoal(monster_code="chicken")) == "FarmMonster(chicken)"
 
     def test_complete_task_repr(self):
         assert repr(CompleteTaskGoal()) == "CompleteTask"
@@ -113,13 +110,6 @@ class TestDesiredStateMethods:
         state = make_state(inventory={"sap": 10}, inventory_max=100)
         assert goal.is_satisfied(state) is True
         assert goal.desired_state(state, make_gd()) == {"inventory_used": 10}
-
-    def test_farm_monster_desired_state(self):
-        goal = FarmMonsterGoal(monster_code="chicken", initial_xp=50)
-        state = make_state(xp=50)
-        gd = make_gd()
-        ds = goal.desired_state(state, gd)
-        assert ds["xp"] > 50
 
     def test_complete_task_desired_state(self):
         goal = CompleteTaskGoal()
@@ -296,13 +286,6 @@ class TestIsUpgradeOver:
 
 
 class TestEdgeCases:
-    def test_farm_monster_goal_value_zero_max_xp(self):
-        goal = FarmMonsterGoal(monster_code="chicken")
-        state = make_state(xp=0, max_xp=0)
-        gd = make_gd()
-        val = goal.value(state, gd)
-        assert val == pytest.approx(30.0)
-
     def test_withdraw_not_applicable_when_bank_items_none(self):
         action = WithdrawItemAction(code="copper", quantity=1)
         state = make_state(x=4, y=0, bank_items=None)

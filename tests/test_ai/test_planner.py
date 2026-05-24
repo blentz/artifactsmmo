@@ -2,13 +2,12 @@
 
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, FarmMonsterGoal
+from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
@@ -55,16 +54,17 @@ class TestGOAPPlanner:
         plan = planner.plan(state, goal, actions, gd)
         assert plan == []
 
-    def test_fight_plan_without_explicit_move(self):
+    def test_accept_task_plan_single_step(self):
         planner = GOAPPlanner()
-        state = make_state(x=0, y=0, hp=150, max_hp=150, xp=0, max_xp=500, level=1)
-        goal = FarmMonsterGoal(monster_code="chicken", initial_xp=0)
-        actions = [FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))]
-        gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
+        state = make_state(x=0, y=0, task_code="")
+        goal = AcceptTaskGoal()
+        actions = [AcceptTaskAction(taskmaster_location=(1, 2))]
+        gd = make_game_data()
+        gd._taskmaster_location = (1, 2)
         plan = planner.plan(state, goal, actions, gd)
-        # FightAction handles movement itself — plan is a single step
+        # AcceptTaskAction handles movement itself — plan is a single step
         assert len(plan) == 1
-        assert isinstance(plan[0], FightAction)
+        assert isinstance(plan[0], AcceptTaskAction)
 
     def test_stops_at_max_depth(self):
         planner = GOAPPlanner()

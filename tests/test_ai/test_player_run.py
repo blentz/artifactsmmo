@@ -11,6 +11,9 @@ from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
+from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.means import MeansKind
 from tests.test_ai.fixtures import make_state
 
 
@@ -137,8 +140,8 @@ class TestPlayerRun:
             if call_count[0] > 1:
                 raise KeyboardInterrupt
 
-        # State with full HP and no task — FarmMonsterGoal will plan but with empty game data
-        # no actions will be applicable, so plan will be empty → sleep
+        # State with full HP and no task — the arbiter selects a goal but with empty
+        # game data no actions are applicable, so the plan is empty → sleep
         initial_state = make_state(hp=150, max_hp=150)
         p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank = _patch_game_data_load()
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
@@ -202,10 +205,6 @@ def test_player_builds_sell_actions_for_sellable_inventory():
 
 def test_sell_means_maps_to_sell_inventory_goal():
     """The SELL_IDLE/SELL_PRESSURED means map to SellInventoryGoal (bank-locked)."""
-    from artifactsmmo_cli.ai.strategy_driver import map_means
-    from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-    from artifactsmmo_cli.ai.tiers.means import MeansKind
-
     gd = GameData()
     ctx = SelectionContext(bank_accessible=False, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,
@@ -238,10 +237,6 @@ def test_player_builds_phase_b_actions():
 
 def test_bank_expand_means_maps_to_expand_bank_goal():
     """The BANK_EXPAND means maps to ExpandBankGoal."""
-    from artifactsmmo_cli.ai.strategy_driver import map_means
-    from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-    from artifactsmmo_cli.ai.tiers.means import MeansKind
-
     gd = GameData()
     ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,

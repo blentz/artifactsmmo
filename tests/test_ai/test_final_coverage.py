@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.combat import FarmMonsterGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -385,9 +384,9 @@ class TestBuildActionsWithCraftingRecipes:
 class TestPlannerVisitedSet:
     def test_skips_revisited_states(self):
         planner = GOAPPlanner()
-        # xp=100, initial_xp=100 → not yet satisfied; only MoveActions can't increase xp
-        state = make_state(x=1, y=0, xp=100)
-        goal = FarmMonsterGoal(monster_code="chicken", initial_xp=100)
+        # hp=50 < max_hp=150 → RestoreHPGoal not satisfied; only MoveActions can't heal
+        state = make_state(x=1, y=0, hp=50, max_hp=150)
+        goal = RestoreHPGoal()
         # Move between two points creates a cycle; planner should skip the revisit
         actions = [MoveAction(2, 0), MoveAction(1, 0)]
         gd = make_gd()
