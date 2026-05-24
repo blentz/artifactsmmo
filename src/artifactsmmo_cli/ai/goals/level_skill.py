@@ -30,9 +30,10 @@ so we still cancel a bad task first."""
 class LevelSkillGoal(Goal):
     """Level a specific skill to `target_level` by crafting items in its family."""
 
-    def __init__(self, skill_name: str, target_level: int) -> None:
+    def __init__(self, skill_name: str, target_level: int, initial_skill_xp: int = 0) -> None:
         self._skill_name = skill_name
         self._target_level = target_level
+        self._initial_skill_xp = initial_skill_xp
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -40,6 +41,10 @@ class LevelSkillGoal(Goal):
             return 0.0
         current = state.skills.get(self._skill_name, 0)
         gap = self._target_level - current
+        # NOTE: the strategy driver bounds target_level to current+1 (gap==1), so
+        # this MAX_SKILL_GAP guard is inert for the objective-step path — the
+        # "don't grind too far" intent is handled by the incremental current+1
+        # march + replan. The guard still protects any other (small-gap) caller.
         if gap <= 0 or gap > MAX_SKILL_GAP:
             return 0.0
         # Don't fire if no craftable item in this skill family exists at the
@@ -49,7 +54,9 @@ class LevelSkillGoal(Goal):
         return PRIORITY_WHEN_FIRING
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return state.skills.get(self._skill_name, 0) >= self._target_level
+        if state.skills.get(self._skill_name, 0) >= self._target_level:
+            return True
+        return state.skill_xp.get(self._skill_name, 0) > self._initial_skill_xp
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"skills": {self._skill_name: self._target_level}}

@@ -165,6 +165,13 @@ class TestRestAction:
         new_state = action.apply(state, gd)
         assert new_state.hp == 100
 
+    def test_apply_preserves_skill_xp(self):
+        """RestAction.apply must carry skill_xp forward (not reset to {})."""
+        action = RestAction()
+        state = make_state(hp=50, max_hp=100, skill_xp={"alchemy": 200})
+        new_state = action.apply(state, make_game_data())
+        assert new_state.skill_xp == {"alchemy": 200}
+
     def test_cost(self):
         action = RestAction()
         state = make_state()
@@ -307,6 +314,24 @@ class TestGatherAction:
         assert new_state.inventory.get("copper_ore", 0) == 1
         assert (new_state.x, new_state.y) == (2, 0)  # nearest
 
+    def test_apply_bumps_skill_xp_for_gather_skill(self):
+        """GatherAction.apply must increment skill_xp for the gather skill by 1."""
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
+        gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 5})
+        new_state = action.apply(state, gd)
+        assert new_state.skill_xp["mining"] == 6
+
+    def test_apply_preserves_other_skill_xp_entries(self):
+        """GatherAction.apply must not wipe unrelated skill_xp entries."""
+        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
+        gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 0, "alchemy": 200})
+        new_state = action.apply(state, gd)
+        assert new_state.skill_xp["alchemy"] == 200
+
     def test_apply_falls_back_to_resource_code_when_no_drop_mapping(self):
         action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
         state = make_state(x=0, y=0, inventory={})
@@ -337,6 +362,15 @@ class TestDepositAllAction:
         assert new_state.bank_items["copper_ore"] == 5
         assert new_state.bank_items["iron_ore"] == 2
         assert (new_state.x, new_state.y) == (4, 0)
+
+    def test_apply_preserves_skill_xp(self):
+        """DepositAllAction.apply must carry skill_xp forward (not reset to {})."""
+        gd = make_game_data(bank_loc=(4, 0))
+        action = DepositAllAction(bank_location=(4, 0), game_data=gd)
+        state = make_state(x=0, y=0, inventory={"copper_ore": 5}, bank_items={},
+                           skill_xp={"alchemy": 200})
+        new_state = action.apply(state, gd)
+        assert new_state.skill_xp == {"alchemy": 200}
 
 
 class TestWithdrawItemAction:
@@ -418,6 +452,46 @@ class TestCraftAction:
         assert new_state.inventory["copper_dagger"] == 1
         assert (new_state.x, new_state.y) == (3, 0)
 
+    def test_apply_bumps_skill_xp_by_quantity(self):
+        """CraftAction.apply must increment skill_xp[crafting_skill] by quantity."""
+        action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(3, 0))
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        state = make_state(
+            x=0, y=0, skills={"weaponcrafting": 5},
+            inventory={"copper_ore": 18},
+            skill_xp={"weaponcrafting": 10},
+        )
+        gd = make_game_data(
+            workshop_locs={"weaponcrafting": (3, 0)},
+            item_stats={"copper_dagger": stats},
+            recipes={"copper_dagger": {"copper_ore": 6}},
+        )
+        new_state = action.apply(state, gd)
+        assert new_state.skill_xp["weaponcrafting"] == 13  # 10 + quantity(3)
+
+    def test_apply_preserves_other_skill_xp_entries(self):
+        """CraftAction.apply must carry forward unrelated skill_xp entries."""
+        action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        state = make_state(
+            x=0, y=0, skills={"weaponcrafting": 5},
+            inventory={"copper_ore": 6},
+            skill_xp={"weaponcrafting": 0, "alchemy": 777},
+        )
+        gd = make_game_data(
+            workshop_locs={"weaponcrafting": (3, 0)},
+            item_stats={"copper_dagger": stats},
+            recipes={"copper_dagger": {"copper_ore": 6}},
+        )
+        new_state = action.apply(state, gd)
+        assert new_state.skill_xp["alchemy"] == 777
+
 
 class TestEquipAction:
     def test_applicable_with_item_in_inventory(self):
@@ -487,6 +561,14 @@ class TestUseConsumableAction:
         state = make_state(hp=50, max_hp=150, inventory={"cooked_chicken": 1})
         new_state = action.apply(state, make_game_data())
         assert "cooked_chicken" not in new_state.inventory
+
+    def test_apply_preserves_skill_xp(self):
+        """UseConsumableAction.apply must carry skill_xp forward (not reset to {})."""
+        action = UseConsumableAction(_item_stats=_consumable_stats())
+        state = make_state(hp=50, max_hp=150, inventory={"cooked_chicken": 1},
+                           skill_xp={"alchemy": 200})
+        new_state = action.apply(state, make_game_data())
+        assert new_state.skill_xp == {"alchemy": 200}
 
     def test_apply_picks_highest_restore_food(self):
         stats = {

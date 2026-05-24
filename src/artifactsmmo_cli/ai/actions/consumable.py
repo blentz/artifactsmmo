@@ -76,6 +76,7 @@ class UseConsumableAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            skill_xp=state.skill_xp,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

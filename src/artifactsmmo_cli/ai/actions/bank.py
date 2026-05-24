@@ -71,6 +71,7 @@ class DepositAllAction(Action):
             pending_items=state.pending_items,
             active_events=state.active_events,
             crafting_target=state.crafting_target,
+            skill_xp=state.skill_xp,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

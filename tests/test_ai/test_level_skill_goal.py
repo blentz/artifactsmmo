@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.goals.level_skill import (
     PRIORITY_WHEN_FIRING,
     LevelSkillGoal,
 )
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
 
@@ -67,6 +68,24 @@ class TestSatisfaction:
         goal = LevelSkillGoal("weaponcrafting", 3)
         assert goal.is_satisfied(make_state(skills={"weaponcrafting": 2})) is False
 
+    def test_satisfied_by_skill_xp_progress(self):
+        """is_satisfied returns True when skill_xp > initial_skill_xp, even if level not reached."""
+        goal = LevelSkillGoal("weaponcrafting", 50, initial_skill_xp=0)
+        state = make_state(skills={"weaponcrafting": 1}, skill_xp={"weaponcrafting": 5})
+        assert goal.is_satisfied(state) is True
+
+    def test_unsatisfied_when_no_xp_progress_and_level_below(self):
+        """is_satisfied returns False when skill_xp == initial AND level < target."""
+        goal = LevelSkillGoal("weaponcrafting", 50, initial_skill_xp=10)
+        state = make_state(skills={"weaponcrafting": 1}, skill_xp={"weaponcrafting": 10})
+        assert goal.is_satisfied(state) is False
+
+    def test_satisfied_when_level_at_target_regardless_of_xp(self):
+        """is_satisfied returns True when skills[skill] >= target, even if initial_skill_xp set."""
+        goal = LevelSkillGoal("weaponcrafting", 5, initial_skill_xp=999)
+        state = make_state(skills={"weaponcrafting": 5}, skill_xp={"weaponcrafting": 999})
+        assert goal.is_satisfied(state) is True
+
 
 class TestRelevantActions:
     def test_includes_craft_in_skill_family(self):
@@ -89,3 +108,56 @@ class TestRelevantActions:
 class TestRepr:
     def test_repr_includes_skill_and_target(self):
         assert repr(LevelSkillGoal("woodcutting", 5)) == "LevelSkill(woodcutting->5)"
+
+
+def _gd_with_alchemy_resource() -> GameData:
+    """GameData with an alchemy-skill resource so GatherAction bumps alchemy skill_xp."""
+    gd = GameData()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    gd._resource_locations = {"sunflower_field": [(3, 0)]}
+    gd._workshop_locations = {}
+    gd._monster_locations = {}
+    gd._monster_level = {}
+    gd._bank_location = (4, 0)
+    return gd
+
+
+class TestPlannerIntegration:
+    """Decisive integration test: proves the skill goal is now plannable (was: 646k nodes / timeout)."""
+
+    def test_gather_alchemy_resource_satisfies_level_skill_goal(self):
+        """
+        LevelSkillGoal("alchemy", target_level=2, initial_skill_xp=0) must be satisfied
+        by a single GatherAction on an alchemy resource (sunflower_field).
+        Before the fix: planner explored to 646k-node timeout.
+        After the fix: plan has exactly 1 action, no timeout, and < 50 nodes explored.
+        """
+        gd = _gd_with_alchemy_resource()
+        state = make_state(
+            skills={"alchemy": 1},
+            skill_xp={"alchemy": 0},
+            hp=150,
+            max_hp=150,
+            inventory={},
+            inventory_max=20,
+            x=0,
+            y=0,
+        )
+        goal = LevelSkillGoal("alchemy", target_level=2, initial_skill_xp=0)
+        actions = [GatherAction(resource_code="sunflower_field", locations=frozenset([(3, 0)]))]
+
+        planner = GOAPPlanner()
+        plan = planner.plan(state, goal, actions, gd, None)
+        stats = planner.last_stats
+
+        assert plan, "planner must return a non-empty plan (was timing out before fix)"
+        assert len(plan) == 1, f"expected 1-step plan, got {len(plan)}: {plan}"
+        assert isinstance(plan[0], GatherAction), f"expected GatherAction, got {plan[0]!r}"
+        assert stats.timed_out is False, "planner must NOT time out"
+        assert stats.nodes_explored < 50, (
+            f"BLOCKED: expected < 50 nodes, got {stats.nodes_explored} "
+            f"(timed_out={stats.timed_out}). The fix is not working."
+        )

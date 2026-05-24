@@ -165,9 +165,23 @@ def test_objective_step_obtain_material():
 
 def test_objective_step_reach_skill_level():
     step = ReachSkillLevel("mining", 10)
-    g = objective_step_goal(step, make_state(), _gd(), _ctx())
+    # make_state() has mining level 3; target should be bounded to 3+1=4
+    state = make_state(skills={"mining": 3}, skill_xp={"mining": 42})
+    g = objective_step_goal(step, state, _gd(), _ctx())
     assert isinstance(g, LevelSkillGoal)
-    assert g._skill_name == "mining" and g._target_level == 10
+    assert g._skill_name == "mining"
+    assert g._target_level == 4, f"expected target_level==4 (current+1), got {g._target_level}"
+    assert g._initial_skill_xp == 42, f"expected initial_skill_xp==42, got {g._initial_skill_xp}"
+
+
+def test_objective_step_reach_skill_level_bounds_to_current_plus_one():
+    """objective_step_goal must bound ReachSkillLevel target to current+1."""
+    step = ReachSkillLevel("alchemy", 50)
+    state = make_state(skills={"alchemy": 1}, skill_xp={"alchemy": 99})
+    g = objective_step_goal(step, state, _gd(), _ctx())
+    assert isinstance(g, LevelSkillGoal)
+    assert g._target_level == 2, f"expected 2 (1+1), got {g._target_level}"
+    assert g._initial_skill_xp == 99
 
 
 def test_objective_step_reach_char_level_with_monster():

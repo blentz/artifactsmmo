@@ -97,7 +97,10 @@ def objective_step_goal(
             )
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
-        return LevelSkillGoal(skill_name=step.skill, target_level=step.level)
+        current = state.skills.get(step.skill, 0)
+        target = min(step.level, current + 1)
+        return LevelSkillGoal(skill_name=step.skill, target_level=target,
+                              initial_skill_xp=state.skill_xp.get(step.skill, 0))
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None

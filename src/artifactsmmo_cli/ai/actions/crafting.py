@@ -65,6 +65,15 @@ class CraftAction(Action):
 
         dest = self.workshop_location or (state.x, state.y)
 
+        # Simulated skill-progress sentinel (NOT modeled XP): a positive delta lets
+        # LevelSkillGoal.is_satisfied (skill_xp > initial) trip after one family
+        # craft, so the planner can reach the goal. Magnitude is irrelevant — only
+        # "did progress happen" matters.
+        crafting_skill = stats.crafting_skill if (stats := game_data.item_stats(self.code)) else None
+        new_skill_xp = dict(state.skill_xp)
+        if crafting_skill is not None:
+            new_skill_xp[crafting_skill] = new_skill_xp.get(crafting_skill, 0) + self.quantity
+
         return WorldState(
             character=state.character,
             level=state.level,
@@ -88,6 +97,7 @@ class CraftAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            skill_xp=new_skill_xp,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
