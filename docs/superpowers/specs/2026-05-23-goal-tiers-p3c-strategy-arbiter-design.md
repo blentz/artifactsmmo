@@ -35,6 +35,14 @@ flag. Guard/economy/task goals each compute `priority()` from `priorities.py`.
 
 ## Design
 
+> **Implementation note (post-build):** the sections below describe `decide()`
+> emitting guards/means inside `StrategyDecision`. As built, the **driver**
+> composes them instead — it calls `active_guards`/`active_means` (from
+> `tiers/guards.py`/`tiers/means.py`) and combines them with `decide()`'s
+> `chosen_step`. This keeps the pure `StrategyEngine` free of guard/means
+> knowledge and `tiers/strategy.py` unchanged. End behavior is identical; read
+> "decide() emits X" below as "the driver composes X."
+
 ### Total preemption order
 
 ```
