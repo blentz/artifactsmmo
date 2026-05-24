@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
@@ -24,14 +25,11 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import (
-    FALLBACK_BAND,
-    STRATEGY_BAND,
-    MetaGoalAdapter,
     StrategyArbiter,
+    _precedes,
     map_guard,
     map_means,
     objective_step_goal,
-    strategy_goal,
 )
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
@@ -57,62 +55,6 @@ def _ctx(**kw):
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
     base.update(kw)
     return SelectionContext(**base)
-
-
-# ---------------------------------------------------------------------------
-# Existing tests (legacy MetaGoalAdapter / strategy_goal)
-# ---------------------------------------------------------------------------
-
-def test_adapter_delegates_and_fixes_priority():
-    inner = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 6})
-    adapter = MetaGoalAdapter(inner, STRATEGY_BAND)
-    s = make_state(inventory={"ash_plank": 6})
-    assert adapter.is_satisfied(s) == inner.is_satisfied(s)
-    assert adapter.desired_state(s, _gd()) == inner.desired_state(s, _gd())
-    assert adapter.priority(make_state(), _gd()) == STRATEGY_BAND
-    assert adapter.max_depth == inner.max_depth
-    assert "GatherMaterials" in repr(adapter)
-    gd = _gd()
-    s2 = make_state()
-    assert adapter.value(s2, gd) == inner.value(s2, gd)                       # delegates heuristic
-    assert adapter.relevant_actions([], s2, gd) == inner.relevant_actions([], s2, gd)
-
-
-def test_material_obtain_maps_to_gather_materials():
-    g = strategy_goal(ObtainItem("ash_plank", 6), make_state(), _gd(), STRATEGY_BAND, "chicken")
-    assert isinstance(g, MetaGoalAdapter)
-    assert isinstance(g._inner, GatherMaterialsGoal)
-    assert g._inner._needed == {"ash_plank": 6}
-
-
-def test_gear_obtain_maps_to_upgrade_equipment_with_committed_target():
-    g = strategy_goal(ObtainItem("wooden_shield", 1), make_state(), _gd(), STRATEGY_BAND, "chicken")
-    assert isinstance(g._inner, UpgradeEquipmentGoal)
-    assert g._inner._committed_target == ("wooden_shield", "shield_slot")
-
-
-def test_skill_maps_to_level_skill():
-    g = strategy_goal(ReachSkillLevel("mining", 50), make_state(), _gd(), STRATEGY_BAND, "chicken")
-    assert isinstance(g._inner, LevelSkillGoal)
-    assert g._inner._skill_name == "mining" and g._inner._target_level == 50
-
-
-def test_char_level_maps_to_grind_with_initial_xp_and_monster():
-    g = strategy_goal(ReachCharLevel(50), make_state(xp=120), _gd(), STRATEGY_BAND, "chicken")
-    assert isinstance(g._inner, GrindCharacterXPGoal)
-    assert g._inner._target_monster == "chicken" and g._inner._initial_xp == 120
-
-
-def test_char_level_none_when_no_monster():
-    assert strategy_goal(ReachCharLevel(50), make_state(), _gd(), STRATEGY_BAND, None) is None
-
-
-def test_strategy_goal_none_for_none_step():
-    assert strategy_goal(None, make_state(), _gd(), STRATEGY_BAND, "chicken") is None
-
-
-def test_fallback_band_below_strategy_band():
-    assert FALLBACK_BAND < STRATEGY_BAND
 
 
 # ---------------------------------------------------------------------------
@@ -462,3 +404,65 @@ def test_select_guard_clears_committed_repr():
     assert len(plan2) >= 1
     # commitment must be cleared after a guard return
     assert arbiter._committed_repr is None
+
+
+# ---------------------------------------------------------------------------
+# Part B: targeted coverage tests
+# ---------------------------------------------------------------------------
+
+def test_objective_step_goal_none_for_no_step():
+    """objective_step_goal(None, ...) returns None (line 90) and an unrecognized
+    step type also falls through to the final return None (line 106)."""
+    # None step → early return None
+    assert objective_step_goal(None, make_state(), _gd(), _ctx()) is None
+
+    # Unrecognized step type (not ObtainItem / ReachSkillLevel / ReachCharLevel)
+    class _UnknownStep:
+        pass
+
+    assert objective_step_goal(_UnknownStep(), make_state(), _gd(), _ctx()) is None  # type: ignore[arg-type]
+
+
+def test_precedes_false_when_target_absent():
+    """_precedes returns False when b_repr is not present in the candidates list."""
+    goal_a = AcceptTaskGoal()
+    candidates: list[tuple[Goal, bool]] = [(goal_a, True)]
+    # "NotPresent" is not in the list → b_idx is None → return False
+    assert _precedes(candidates, repr(goal_a), "NotPresent") is False
+    # a_repr also absent → a_idx is None → return False
+    assert _precedes(candidates, "AlsoAbsent", "NotPresent") is False
+
+
+def test_select_skips_satisfied_step_goal_continues_to_next():
+    """A candidate step_goal that is_satisfied(state) is skipped; a later
+    plannable discretionary goal (AcceptTask) is returned instead."""
+    planner = GOAPPlanner()
+    gd = _gd()
+    # Give GameData the monster/bank locations AcceptTask needs
+    gd._monster_locations = {"chicken": [(1, 0)]}
+    gd._monster_level = {"chicken": 1}
+    gd._resource_locations = {}
+    gd._workshop_locations = {}
+    gd._bank_location = (4, 0)
+
+    # State already has ash_plank: 6 in inventory so GatherMaterialsGoal is satisfied
+    state = make_state(hp=150, max_hp=150, task_code=None, task_total=0,
+                       inventory={"ash_plank": 6})
+    # chosen_step → GatherMaterialsGoal(needed={"ash_plank": 6}) which is_satisfied → skipped
+    # AcceptTaskAction is available so AcceptTask discretionary goal will plan
+    actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
+    ctx = _ctx(combat_monster="chicken")
+    arbiter = StrategyArbiter(planner, history=None)
+
+    # Use ObtainItem("ash_plank", 6) as chosen_step; state already satisfies it
+    decision = _FakeDecision(chosen_step=ObtainItem("ash_plank", 6))
+    goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, ctx)
+
+    # The satisfied GatherMaterialsGoal must have been skipped (not attempted)
+    attempted_reprs = [e["goal"] for e in goals_tried]
+    gather_repr = repr(GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 6}))
+    assert gather_repr not in attempted_reprs, (
+        f"satisfied goal should be skipped, but appeared in goals_tried: {attempted_reprs}"
+    )
+    assert isinstance(goal, AcceptTaskGoal), f"expected AcceptTaskGoal, got {goal!r}"
+    assert len(plan) >= 1
