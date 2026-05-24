@@ -9,12 +9,12 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.low_yield_cancel import (
     ALTERNATIVE_MARGIN,
     CONFIDENCE_THRESHOLD,
+    LOW_YIELD_CANCEL,
     LowYieldCancelGoal,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.priorities import LOW_YIELD_CANCEL
 from tests.test_ai.fixtures import make_state
 
 
@@ -66,13 +66,13 @@ class TestPriorityGating:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         goal = LowYieldCancelGoal()
         state = make_state(task_code=None, task_total=0)
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 0.0
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == 0.0
         store.close()
 
     def test_zero_when_no_history(self):
         goal = LowYieldCancelGoal()
         state = make_state(task_code="x", task_type="items", task_total=10)
-        assert goal.priority(state, _gd_with_woodcutting_task(), None) == 0.0
+        assert goal.value(state, _gd_with_woodcutting_task(), None) == 0.0
 
     def test_zero_below_confidence_threshold(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
@@ -82,7 +82,7 @@ class TestPriorityGating:
         goal = LowYieldCancelGoal()
         state = make_state(task_code="x", task_type="items",
                            task_total=20, task_progress=3)
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 0.0
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == 0.0
         store.close()
 
     def test_zero_when_no_alternative_history(self, tmp_path):
@@ -93,7 +93,7 @@ class TestPriorityGating:
         goal = LowYieldCancelGoal()
         state = make_state(task_code="x", task_type="items",
                            task_total=50, task_progress=10)
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 0.0
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == 0.0
         store.close()
 
     def test_zero_when_alternative_not_above_margin(self, tmp_path):
@@ -110,7 +110,7 @@ class TestPriorityGating:
         goal = LowYieldCancelGoal()
         state = make_state(task_code="x", task_type="items",
                            task_total=50, task_progress=10)
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 0.0
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == 0.0
         store.close()
 
     def test_fires_when_alternative_clearly_better(self, tmp_path):
@@ -124,7 +124,7 @@ class TestPriorityGating:
         goal = LowYieldCancelGoal()
         state = make_state(task_code="x", task_type="items",
                            task_total=50, task_progress=10)
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 70.0
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == 70.0
         store.close()
 
 
@@ -184,7 +184,7 @@ class TestGHCharXpFastCancel:
         state = make_state(task_code="gudgeon", task_type="items",
                            task_total=347, task_progress=5)
         # Should fire immediately — no need to wait for confidence threshold.
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == LOW_YIELD_CANCEL
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == LOW_YIELD_CANCEL
         store.close()
 
     def test_zero_char_xp_no_alt_doesnt_fire(self, tmp_path):
@@ -195,5 +195,5 @@ class TestGHCharXpFastCancel:
         goal = LowYieldCancelGoal()
         state = make_state(task_code="gudgeon", task_type="items",
                            task_total=347, task_progress=5)
-        assert goal.priority(state, _gd_with_woodcutting_task(), store) == 0.0
+        assert goal.value(state, _gd_with_woodcutting_task(), store) == 0.0
         store.close()

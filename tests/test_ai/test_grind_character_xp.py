@@ -62,24 +62,24 @@ class TestPriority:
     def test_zero_when_satisfied(self):
         goal = GrindCharacterXPGoal("chicken", initial_xp=100)
         state = make_state(xp=200, task_code=None)
-        assert goal.priority(state, _gd_with_monster()) == 0.0
+        assert goal.value(state, _gd_with_monster()) == 0.0
 
     def test_zero_when_task_held(self):
         """Strategic deference: when a task exists, FarmItems/CompleteTask own the cycle."""
         goal = GrindCharacterXPGoal("chicken")
         state = make_state(task_code="gudgeon", task_type="items", task_total=20)
-        assert goal.priority(state, _gd_with_monster()) == 0.0
+        assert goal.value(state, _gd_with_monster()) == 0.0
 
     def test_floor_without_history(self):
         goal = GrindCharacterXPGoal("chicken")
         state = make_state(task_code=None, xp=0)
-        assert goal.priority(state, _gd_with_monster(), history=None) == PRIORITY_FLOOR
+        assert goal.value(state, _gd_with_monster(), history=None) == PRIORITY_FLOOR
 
     def test_floor_with_history_but_no_samples(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         goal = GrindCharacterXPGoal("chicken")
         state = make_state(task_code=None, xp=0)
-        assert goal.priority(state, _gd_with_monster(), store) == PRIORITY_FLOOR
+        assert goal.value(state, _gd_with_monster(), store) == PRIORITY_FLOOR
         store.close()
 
     def test_bonus_caps_at_ceiling(self, tmp_path):
@@ -89,7 +89,7 @@ class TestPriority:
         _seed(store, cycles)
         goal = GrindCharacterXPGoal("chicken")
         state = make_state(task_code=None, xp=0, level=1)
-        p = goal.priority(state, _gd_with_monster(), store)
+        p = goal.value(state, _gd_with_monster(), store)
         store.close()
         assert p == PRIORITY_CEILING
 

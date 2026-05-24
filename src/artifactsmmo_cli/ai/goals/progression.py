@@ -1,6 +1,5 @@
 """Progression goal: equipment upgrades."""
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS, EquipAction, UnequipAction
@@ -9,6 +8,12 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
+
+# Value constants (inlined from retired priorities.py).
+# Relevant-tool upgrade: above FarmItems(35) so the loop interrupts to equip.
+_UPGRADE_EQUIPMENT_RELEVANT_TOOL = 51.0
+# Base upgrade value when no relevant-tool match.
+_UPGRADE_EQUIPMENT_BASE = 35.0
 
 
 class UpgradeEquipmentGoal(Goal):
@@ -35,23 +40,8 @@ class UpgradeEquipmentGoal(Goal):
         # gear because it cuts the per-gather cooldown directly. Bump above
         # FarmItems (35) so the loop interrupts to craft+equip the tool.
         if self._upgrade_is_relevant_tool(upgrade, state, game_data):
-            return priorities.UPGRADE_EQUIPMENT_RELEVANT_TOOL
-        return priorities.UPGRADE_EQUIPMENT_BASE
-
-    def priority(self, state: WorldState, game_data: GameData,
-                 history: LearningStore | None = None) -> float:
-        # Upgrade already in inventory → equip immediately, ahead of gathering (50.0).
-        # Upgrade in bank or needs crafting → normal priority (possibly boosted
-        # by value() above for active-skill tool upgrades).
-        ready = self._find_inventory_only_upgrade(state, game_data)
-        if ready:
-            # Inventory-ready upgrade that boosts the active task's gather
-            # skill: one Equip that speeds all future gathering. Preempt
-            # FarmItems so the bot equips the tool before grinding the task.
-            if self._upgrade_is_relevant_tool(ready, state, game_data):
-                return priorities.UPGRADE_EQUIPMENT_ACTIVE_TOOL_READY
-            return priorities.UPGRADE_EQUIPMENT_INVENTORY_READY
-        return self.value(state, game_data)
+            return _UPGRADE_EQUIPMENT_RELEVANT_TOOL
+        return _UPGRADE_EQUIPMENT_BASE
 
     def _upgrade_is_relevant_tool(self, upgrade: tuple[str, str],
                                    state: WorldState, game_data: GameData) -> bool:

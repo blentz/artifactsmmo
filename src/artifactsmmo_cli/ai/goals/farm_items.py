@@ -1,15 +1,19 @@
 """FarmItemsGoal: gather/craft items required by an items-type task."""
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.learning.dynamic_priority import learned_priority_bonus
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
+
+# Value constants (inlined from retired priorities.py).
+_FARM_ITEMS_BASE = 35.0
+"""FarmItemsGoal base. Outranks FarmMonster cold-start."""
+_FARM_ITEMS_BONUS_CAP = 40.0
+"""Ceiling on learned dynamic bonus. Keeps FarmItems max at 75."""
 
 BATCH_SIZE_RAW = 30
 """Max items per task-trade trip for raw-gather tasks (one Gather per item).
@@ -42,21 +46,7 @@ class FarmItemsGoal(Goal):
             return 0.0
         remaining = state.task_total - state.task_progress
         fraction_remaining = remaining / state.task_total
-        return max(1.0, priorities.FARM_ITEMS_BASE * fraction_remaining)
-
-    def priority(self, state: WorldState, game_data: GameData,
-                 history: LearningStore | None = None) -> float:
-        if self.is_satisfied(state):
-            return 0.0
-        if state.task_type != "items" or not state.task_code or state.task_total == 0:
-            return 0.0
-        # G-F: base 35 (outranks FarmMonster cold-start) + projection-driven
-        # bonus when observed throughput exceeds defaults. Bonus scaled by
-        # sample-count confidence so we don't react to early noise.
-        base = priorities.FARM_ITEMS_BASE
-        bonus = min(priorities.FARM_ITEMS_BONUS_CAP,
-                    learned_priority_bonus(repr(self), state, game_data, history))
-        return base + bonus
+        return max(1.0, _FARM_ITEMS_BASE * fraction_remaining)
 
     def is_satisfied(self, state: WorldState) -> bool:
         if state.task_total > 0 and state.task_progress >= state.task_total:

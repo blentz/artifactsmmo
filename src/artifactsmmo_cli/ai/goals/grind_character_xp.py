@@ -6,7 +6,6 @@ has no task assigned, he should pursue the most XP-rewarding monster he can
 beat reliably, rather than falling back to a low-tier default.
 """
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
@@ -15,11 +14,13 @@ from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-PRIORITY_FLOOR = priorities.GRIND_CHARACTER_XP_FLOOR
+# Lower bound when active — matches FarmMonster cold-start default (from retired priorities.py).
+PRIORITY_FLOOR = 30.0
 """Minimum priority when active. Matches existing FarmMonster default so the
 goal doesn't regress behavior in the cold-start case."""
 
-PRIORITY_CEILING = priorities.GRIND_CHARACTER_XP_CEILING
+# Upper bound — stays under LowYieldCancelGoal(70) and LevelSkillGoal(55).
+PRIORITY_CEILING = 45.0
 """Cap on the projected-scalar contribution. Stays under LowYieldCancelGoal(70),
 LevelSkillGoal(55), and ensures survival/bank goals always dominate."""
 
@@ -37,10 +38,6 @@ class GrindCharacterXPGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        return self.priority(state, game_data, history)
-
-    def priority(self, state: WorldState, game_data: GameData,
-                 history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         # If there's an active task, FarmItems/CompleteTask own the cycle —

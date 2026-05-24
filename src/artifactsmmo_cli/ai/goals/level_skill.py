@@ -6,7 +6,6 @@ grinding through it is reasonable. Drives the planner to craft items in
 that skill family until the skill levels up.
 """
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -20,7 +19,9 @@ MAX_SKILL_GAP = 5
 strategic pivot; better to attempt the current task and let level-ups
 trickle in naturally."""
 
-PRIORITY_WHEN_FIRING = priorities.LEVEL_SKILL
+# Beats FarmItems(35)/UpgradeEquipment(35-50); loses to LowYieldCancelGoal(70).
+# Inlined from retired priorities.py (LEVEL_SKILL = 55.0).
+PRIORITY_WHEN_FIRING = 55.0
 """Beats FarmItems(35)/UpgradeEquipment(35-50) so the loop diverts to
 skill grinding when an upgrade is gated. Loses to LowYieldCancelGoal(70)
 so we still cancel a bad task first."""
@@ -35,10 +36,6 @@ class LevelSkillGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        return self.priority(state, game_data, history)
-
-    def priority(self, state: WorldState, game_data: GameData,
-                 history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         current = state.skills.get(self._skill_name, 0)

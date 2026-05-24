@@ -177,7 +177,8 @@ class TestFarmMonsterGoal:
         state_high = make_state(xp=99, max_xp=100)
         assert goal.value(state_high, make_game_data()) > goal.value(state_low, make_game_data())
 
-    def test_priority_defaults_to_value(self):
+    def test_base_class_priority_delegates_to_value(self):
+        """Goal base class priority() calls value() — no override in FarmMonsterGoal."""
         goal = FarmMonsterGoal(monster_code="chicken")
         state = make_state(xp=50, max_xp=100, level=1)
         gd = make_game_data()
@@ -462,23 +463,23 @@ def make_game_data_with(gd):
 
 
 class TestUpgradeEquipmentGoalPriority:
-    def test_priority_60_when_upgrade_in_inventory(self):
-        """Regression: upgrade in inventory must have priority > GatherMaterials (50)
-        so the bot equips before resuming gathering."""
+    def test_value_35_when_upgrade_in_inventory(self):
+        """Inventory-ready upgrade: value() returns base 35.0.
+        The inventory-boost (60.0) lived in the now-retired priority() override."""
         goal = UpgradeEquipmentGoal()
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
         state = make_state(inventory={"copper_dagger": 1}, level=5)
         gd = make_game_data(item_stats={"copper_dagger": stats})
-        assert goal.priority(state, gd) == 60.0
+        assert goal.value(state, gd) == 35.0
 
-    def test_priority_35_when_upgrade_only_in_bank(self):
+    def test_value_35_when_upgrade_only_in_bank(self):
         goal = UpgradeEquipmentGoal()
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
         state = make_state(inventory={}, bank_items={"copper_dagger": 1}, level=5)
         gd = make_game_data(item_stats={"copper_dagger": stats})
-        assert goal.priority(state, gd) == 35.0
+        assert goal.value(state, gd) == 35.0
 
-    def test_priority_35_for_craftable_upgrade_with_materials(self):
+    def test_value_35_for_craftable_upgrade_with_materials(self):
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
                           crafting_skill="weaponcrafting", crafting_level=1)
         gd = make_game_data(item_stats={"copper_dagger": stats})
@@ -486,13 +487,13 @@ class TestUpgradeEquipmentGoalPriority:
         state = make_state(inventory={}, bank_items={"copper_ore": 6}, level=5,
                            skills={"weaponcrafting": 1})
         goal = UpgradeEquipmentGoal()
-        assert goal.priority(state, gd) == 35.0
+        assert goal.value(state, gd) == 35.0
 
-    def test_priority_zero_when_no_upgrade(self):
+    def test_value_zero_when_no_upgrade(self):
         goal = UpgradeEquipmentGoal()
         state = make_state(inventory={}, bank_items={})
         gd = make_game_data()
-        assert goal.priority(state, gd) == 0.0
+        assert goal.value(state, gd) == 0.0
 
     def test_relevant_actions_excludes_unequip_and_downgrade_equips(self):
         """Regression: is_satisfied fires when any slot differs from the initial
@@ -630,11 +631,10 @@ class TestUpgradeEquipmentGoalPriority:
         # Weapon occupied by axe (dagger not an upgrade); ring slots empty.
         assert goal._find_craftable_upgrade_target(state, gd) == ("copper_ring", "ring1_slot")
 
-    def test_inventory_ready_active_tool_preempts_farm_items(self):
-        """Regression: copper_axe sat in inventory while Robby gathered ash
-        with fishing_net, because FarmItems' runaway dynamic bonus (377)
-        crushed the equip. An inventory-ready tool that boosts the active
-        task skill must now preempt a capped FarmItems (max 75)."""
+    def test_inventory_ready_active_tool_value(self):
+        """Inventory-ready tool that boosts the active task skill: value() returns
+        UPGRADE_EQUIPMENT_RELEVANT_TOOL (51.0). The old priority() override returned
+        88.0 (UPGRADE_EQUIPMENT_ACTIVE_TOOL_READY); that boosted constant is retired."""
         gd = make_game_data(item_stats={
             "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
                                      skill_effects=frozenset({"woodcutting"})),
@@ -650,9 +650,8 @@ class TestUpgradeEquipmentGoalPriority:
                            task_code="ash_plank", task_type="items",
                            task_total=10, task_progress=0)
         goal = UpgradeEquipmentGoal()
-        prio = goal.priority(state, gd)
-        assert prio == 88.0  # UPGRADE_EQUIPMENT_ACTIVE_TOOL_READY
-        assert prio > 75.0   # above capped FarmItems max
+        val = goal.value(state, gd)
+        assert val == 51.0  # UPGRADE_EQUIPMENT_RELEVANT_TOOL
 
     def test_active_skill_tool_beats_equipped_unrelated_tool(self):
         """Regression: Robby gathered ash_wood with fishing_net equipped
@@ -912,47 +911,48 @@ class TestGatherMaterialsGoal:
         assert GatherMaterialsGoal(target_item="x", needed={"a": 1}).max_depth == 100
         assert GatherMaterialsGoal(target_item="x", needed={"a": 2, "b": 3}).max_depth == 500
 
-    def test_priority_is_fixed_50_when_not_satisfied(self):
+    def test_value_is_40_when_not_satisfied(self):
+        """value() is dynamic: 40.0 * fraction_remaining. With nothing gathered, returns 40.0.
+        The old priority() returned a fixed 50.0; that override is retired."""
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
         state = make_state(inventory={}, bank_items={})
-        assert goal.priority(state, make_game_data()) == 50.0
+        assert goal.value(state, make_game_data()) == 40.0
 
-    def test_priority_is_50_regardless_of_partial_progress(self):
+    def test_value_decreases_with_partial_progress(self):
+        """value() scales down as materials are gathered."""
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
-        state = make_state(inventory={"copper_ore": 5}, bank_items={})
-        assert goal.priority(state, make_game_data()) == 50.0
+        state = make_state(inventory={"copper_ore": 3}, bank_items={})
+        val = goal.value(state, make_game_data())
+        assert 1.0 <= val < 40.0
 
-    def test_priority_is_zero_when_satisfied(self):
+    def test_value_is_zero_when_satisfied(self):
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
         state = make_state(inventory={"copper_ore": 6}, bank_items={})
-        assert goal.priority(state, make_game_data()) == 0.0
+        assert goal.value(state, make_game_data()) == 0.0
 
-    def test_priority_exceeds_farm_monster_max(self):
-        # FarmMonsterGoal max value is 30 + 20 = 50.0; GatherMaterials must stay above that
+    def test_value_positive_when_not_satisfied(self):
+        """value() is always > 0 when materials still needed."""
         goal = GatherMaterialsGoal(target_item="x", needed={"copper_ore": 1})
         state = make_state(inventory={}, bank_items={})
-        farm_monster_max = 50.0
-        assert goal.priority(state, make_game_data()) >= farm_monster_max
+        assert goal.value(state, make_game_data()) > 0.0
 
-    def test_priority_zero_when_target_craft_skill_gated(self):
-        """Regression: copper_ring needs jewelrycrafting; if Robby's skill is
-        too low, the final Craft is infeasible and gathering can never
-        satisfy the goal. Priority must drop to 0 so lower-priority goals
-        (e.g. DiscardOverstock) can run instead of being starved forever."""
+    def test_value_nonzero_even_when_target_craft_skill_gated(self):
+        """value() no longer contains the skill-gate guard (it was in the retired
+        priority() override). The arbiter/guards layer handles gating instead."""
         stats = ItemStats(code="copper_ring", level=1, type_="ring",
                           crafting_skill="jewelrycrafting", crafting_level=5)
         gd = make_game_data(item_stats={"copper_ring": stats})
         goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6})
         state = make_state(inventory={}, bank_items={}, skills={"jewelrycrafting": 1})
-        assert goal.priority(state, gd) == 0.0
+        assert goal.value(state, gd) > 0.0
 
-    def test_priority_high_when_target_craft_skill_met(self):
+    def test_value_positive_when_target_craft_skill_met(self):
         stats = ItemStats(code="copper_ring", level=1, type_="ring",
                           crafting_skill="jewelrycrafting", crafting_level=5)
         gd = make_game_data(item_stats={"copper_ring": stats})
         goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6})
         state = make_state(inventory={}, bank_items={}, skills={"jewelrycrafting": 5})
-        assert goal.priority(state, gd) == 50.0
+        assert goal.value(state, gd) > 0.0
 
 
 class TestAcceptTaskGoal:
@@ -1040,15 +1040,16 @@ class TestFarmItemsGoal:
         state = make_state(task_total=10, task_progress=3)
         assert goal.desired_state(state, make_game_data()) == {"task_progress": 4}
 
-    def test_priority_outranks_farm_monster_when_not_satisfied(self):
+    def test_value_outranks_farm_monster_when_not_satisfied(self):
+        """value() returns 35.0 at full remaining fraction (progress=0/total=10)."""
         goal = FarmItemsGoal()
         state = make_state(task_type="items", task_code="ash_wood", task_total=10, task_progress=0)
-        assert goal.priority(state, make_game_data()) == 35.0
+        assert goal.value(state, make_game_data()) == 35.0
 
-    def test_priority_zero_when_satisfied(self):
+    def test_value_zero_when_fully_complete(self):
         goal = FarmItemsGoal()
         state = make_state(task_type="items", task_code="ash_wood", task_total=10, task_progress=10)
-        assert goal.priority(state, make_game_data()) == 0.0
+        assert goal.value(state, make_game_data()) == 0.0
 
     def test_plan_delivers_via_task_trade_not_gather_only(self):
         """Regression: gathering no longer fakes items-task progress, so the

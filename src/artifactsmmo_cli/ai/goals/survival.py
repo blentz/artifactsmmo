@@ -1,6 +1,5 @@
 """Survival goals: HP restoration and inventory management."""
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -8,6 +7,11 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5
+
+# Value returned when HP is critically low (< CRITICAL_HP_FRACTION).
+# Beats every other goal's normal ceiling (UnlockBank=90, LowYieldCancel=70)
+# so the bot heals/consumes before continuing combat.
+_HP_CRITICAL = 110.0
 
 
 class RestoreHPGoal(Goal):
@@ -23,7 +27,7 @@ class RestoreHPGoal(Goal):
     preemptive = True  # HP-critical may interrupt a committed goal when it outranks it
 
     CRITICAL_HP_FRACTION = 0.25
-    CRITICAL_HP_VALUE = priorities.HP_CRITICAL
+    CRITICAL_HP_VALUE = _HP_CRITICAL
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

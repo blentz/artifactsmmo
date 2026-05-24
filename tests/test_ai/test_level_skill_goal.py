@@ -35,23 +35,23 @@ class TestPriority:
     def test_zero_when_already_at_target(self):
         goal = LevelSkillGoal("weaponcrafting", 3)
         state = make_state(skills={"weaponcrafting": 3})
-        assert goal.priority(state, _gd_with_weapon_recipes()) == 0.0
+        assert goal.value(state, _gd_with_weapon_recipes()) == 0.0
 
     def test_zero_when_gap_too_large(self):
         goal = LevelSkillGoal("weaponcrafting", 1 + MAX_SKILL_GAP + 1)
         state = make_state(skills={"weaponcrafting": 1})
-        assert goal.priority(state, _gd_with_weapon_recipes()) == 0.0
+        assert goal.value(state, _gd_with_weapon_recipes()) == 0.0
 
     def test_fires_with_small_gap_and_craftable(self):
         goal = LevelSkillGoal("weaponcrafting", 3)
         state = make_state(skills={"weaponcrafting": 1})
-        assert goal.priority(state, _gd_with_weapon_recipes()) == PRIORITY_WHEN_FIRING
+        assert goal.value(state, _gd_with_weapon_recipes()) == PRIORITY_WHEN_FIRING
 
     def test_zero_when_no_craftable_in_skill(self):
         """Skill exists but no recipe at current skill level → grinding impossible."""
         goal = LevelSkillGoal("weaponcrafting", 3)
         state = make_state(skills={"weaponcrafting": 0})  # below copper_dagger's level 1
-        assert goal.priority(state, _gd_with_weapon_recipes()) == 0.0
+        assert goal.value(state, _gd_with_weapon_recipes()) == 0.0
 
 
 class TestSatisfaction:

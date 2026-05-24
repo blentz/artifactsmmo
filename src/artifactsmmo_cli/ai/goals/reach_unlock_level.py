@@ -7,7 +7,6 @@ required level. Priority sits above DepositInventory's ramp so the bot
 pivots to combat instead of looping on locked-bank failures.
 """
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
@@ -15,7 +14,9 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-PRIORITY_WHEN_BLOCKER_ACTIVE = priorities.REACH_UNLOCK_LEVEL
+# Above DepositInventory's max (80) and FarmItems (35+bonus); below RestoreHP (110).
+# Inlined from retired priorities.py (REACH_UNLOCK_LEVEL = 85.0).
+PRIORITY_WHEN_BLOCKER_ACTIVE = 85.0
 """Above DepositInventory's max (80) and FarmItems (35+bonus) so the bot
 clears the prerequisite first. Below RestoreHP critical (110) and the
 hard survival floor."""
@@ -38,10 +39,6 @@ class ReachUnlockLevelGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        return self.priority(state, game_data, history)
-
-    def priority(self, state: WorldState, game_data: GameData,
-                 history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
         if self._target_level <= 0:

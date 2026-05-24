@@ -259,13 +259,14 @@ class TestIsUpgradeOver:
         state = make_state(inventory={"copper_dagger": 1}, level=5, equipment=equipment)
         assert goal.value(state, gd) > 0.0
 
-    def test_upgrade_equipment_priority_60_with_inventory_starter_upgrade(self):
-        """Priority must be 60 (immediate equip) when craftable replaces starter gear in inventory."""
+    def test_upgrade_equipment_value_35_with_inventory_starter_upgrade(self):
+        """value() returns 35.0 (base) when craftable replaces starter gear in inventory.
+        The old priority() returned 60.0 (inventory-ready boost); that override is retired."""
         goal, gd = self._make_goal_and_gd(["copper_dagger"])
         equipment = {slot: None for slot in ITEM_TYPE_TO_SLOT.values()}
         equipment["weapon_slot"] = "wooden_stick"
         state = make_state(inventory={"copper_dagger": 1}, level=5, equipment=equipment)
-        assert goal.priority(state, gd) == 60.0
+        assert goal.value(state, gd) == 35.0
 
     def test_non_craftable_does_not_beat_same_level_non_craftable(self):
         """Two non-craftable items at same level: no upgrade."""

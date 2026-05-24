@@ -7,7 +7,6 @@ fires only when the learning store has enough samples to make a confident
 projection AND a clear alternative beats the current task.
 """
 
-from artifactsmmo_cli.ai import priorities
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.task import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData
@@ -19,6 +18,11 @@ from artifactsmmo_cli.ai.learning.projections import (
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
+
+# Value returned when the goal fires (inlined from retired priorities.py).
+LOW_YIELD_CANCEL = 70.0
+"""Beats tactical pursuits (FarmItems=35, GatherMaterials=50, LevelSkill=55)
+so a data-confirmed poor task is cancelled before continuing work."""
 
 # Re-export under legacy names so existing importers (tests etc.) still work.
 CONFIDENCE_THRESHOLD = LOW_YIELD_CONFIDENCE_THRESHOLD
@@ -39,12 +43,8 @@ class LowYieldCancelGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        return self.priority(state, game_data, history)
-
-    def priority(self, state: WorldState, game_data: GameData,
-                 history: LearningStore | None = None) -> float:
         if low_yield_cancel_fires(state, history):
-            return priorities.LOW_YIELD_CANCEL
+            return LOW_YIELD_CANCEL
         return 0.0
 
     def is_satisfied(self, state: WorldState) -> bool:
