@@ -116,40 +116,62 @@ Consequence: `_is_winnable` / `_pick_winnable_monster` / `_winnable_farm_target`
 (player.py) now mean "winnable with my best available loadout." No signature
 change — the projection happens inside `predict_win`.
 
-#### 1d. Equip the optimal loadout before grinding (`goals/grind_character_xp.py`)
+#### 1d. Equip the optimal loadout before grinding
 
 The GOAP planner terminates on `goal.is_satisfied(state)` (not `desired_state`),
-and `is_satisfied` takes only `state` — no `game_data`. So the loadout
-prerequisite is expressed through `is_satisfied` with the goal holding the
-context it needs:
+`is_satisfied` takes only `state`, and **the player executes only `plan[0]` per
+cycle** then re-plans (`player.py:354`). This last fact is decisive: encoding the
+loadout requirement in `is_satisfied` alone is insufficient — GOAP could satisfy
+`xp AND loadout-optimal` with either action order at equal total cost, and if
+`plan[0]` is the `Fight`, the bot fights under-geared and may never swap. The
+requirement must be expressed so the swap reliably lands at `plan[0]` when
+under-geared. Two coupled pieces achieve that:
 
-- `GrindCharacterXPGoal` gains a `game_data` constructor argument (so it can
-  compute `pick_loadout(target, state, game_data)` inside `is_satisfied`). The
+**(i) `goals/grind_character_xp.py` — loadout in `is_satisfied`.**
+- `GrindCharacterXPGoal` gains a `game_data` constructor argument (to compute
+  `pick_loadout(target, state, game_data)` inside `is_satisfied`). The
   construction site — the driver's `objective_step_goal` — passes it:
   `GrindCharacterXPGoal(target_monster=..., initial_xp=..., game_data=game_data)`.
-  (Confirm during implementation this is the only live construction site; the
-  P3c cutover removed the player-side fallback grind. Update any others found.)
-- `is_satisfied(state)` becomes: **xp increased this cycle AND the loadout is
-  already optimal for the target** —
-  `state.xp > self._initial_xp and _loadout_optimal(state)`, where
-  `_loadout_optimal(state)` is True when `pick_loadout(self._target, state,
-  self._game_data)` matches `state.equipment` on every slot it would change (i.e.
-  the swap plan is empty). Reuse `OptimizeLoadoutAction`'s own swap-plan logic so
-  "optimal" is defined identically across the goal, the action, and `predict_win`.
-- `relevant_actions`: include the existing `OptimizeLoadoutAction(target_monster)`
-  (already constructed per-monster in the player's action list) in the goal's
-  relevant subset alongside Fight/Rest/UseConsumable/Move.
-- `value` (A* heuristic): when the loadout is not yet optimal, the goal is
-  "further" — keep `value` finite and let `relevant_actions` + `is_satisfied`
-  drive the swap; no negative costs.
+  (Confirm during implementation this is the only live construction site; the P3c
+  cutover removed the player-side fallback grind. Update any others found.)
+- `is_satisfied(state)` becomes `state.xp > self._initial_xp and
+  _loadout_optimal(state)`, where `_loadout_optimal(state)` is True when
+  `pick_loadout(self._target, state, self._game_data)` equals `state.equipment`
+  on every slot (empty swap plan). When `self._game_data is None`, fall back to
+  the old `xp`-only check (keeps non-`game_data` constructions working). This
+  forces the swap to be *part of* every grind plan while under-geared.
+- `relevant_actions` already includes the per-monster `OptimizeLoadoutAction`
+  (alongside `Fight`/recovery) — unchanged.
 
-`OptimizeLoadoutAction.apply` already swaps `state.equipment` toward the optimal
-loadout in simulation (verify; if it does not update `equipment`, fix `apply` to
-set it so the planner can see the post-swap state). The planner then plans
-`OptimizeLoadout → Fight`: after the swap, `_loadout_optimal` is True and a fresh
-`Fight` satisfies the goal. When the loadout is already optimal at cycle start,
-`is_satisfied` needs only xp progress → the plan is just `Fight` (the swap action
-yields an empty plan / is not chosen).
+**(ii) `actions/combat.py` — `FightAction` loadout penalty (the ordering lever).**
+Add a small constant penalty to `FightAction.cost` when the current loadout is
+suboptimal for `monster_code` (i.e. `pick_loadout(monster_code, state,
+game_data)` differs from `state.equipment`):
+
+```python
+LOADOUT_PENALTY = 5.0   # nudge: fighting under-geared costs more than swapping first
+...
+def cost(self, state, game_data, history=None):
+    base = <existing static-or-learned cost>
+    if pick_loadout(self.monster_code, state, game_data) != state.equipment:
+        base += LOADOUT_PENALTY
+    return base
+```
+
+Because the player executes `plan[0]` and re-plans, and the goal requires the
+swap anyway, the two candidate plans are `[Fight_under-geared, OptimizeLoadout]`
+(penalty applies — the fight happens in the suboptimal state) and
+`[OptimizeLoadout, Fight_optimal]` (no penalty — the fight happens after the
+swap). The penalty makes the swap-first plan strictly cheaper, so `plan[0]` is
+reliably `OptimizeLoadout` when under-geared. Once the loadout is optimal,
+`OptimizeLoadout` is not applicable (empty swap) and `Fight` carries no penalty →
+the plan is just `Fight`. Any positive `LOADOUT_PENALTY` breaks the tie; `5.0`
+matches `OptimizeLoadout`'s per-slot scale without overwhelming learned costs.
+
+`actions/combat.py` imports `pick_loadout` from `ai/equipment/scoring.py` (pure;
+`equipment/` imports `actions/equipment` for slot maps but not `actions/combat`,
+so no cycle). `OptimizeLoadoutAction.apply` already updates simulated
+`state.equipment`, so the planner sees the swap take effect.
 
 **Cross-check with P3b.1:** winnability now projects the optimal loadout, and the
 grind goal equips it before fighting — so the stats `predict_win` assumed are the
@@ -200,13 +222,17 @@ Per project standard: 0 errors, 0 warnings, 0 skipped, 100% on changed code.
 - **`predict_win` on optimal loadout:** a monster unwinnable with current gear but
   winnable after equipping a better in-inventory weapon → `predict_win` True; with
   no better gear on hand → identical to the current-stats result.
-- **`GrindCharacterXPGoal`:** `is_satisfied` is False when xp increased but the
-  loadout is not optimal, True only when both hold; with a suboptimal loadout the
-  planner's plan begins with `OptimizeLoadout(target)` then `Fight`; with the
-  optimal loadout already equipped the plan is just `Fight` (no redundant swap).
-- **`OptimizeLoadoutAction.apply`:** updates simulated `state.equipment` to the
-  optimal loadout so the planner sees the swap take effect (and `_loadout_optimal`
-  flips True after it).
+- **`GrindCharacterXPGoal`:** `is_satisfied` False when xp increased but the
+  loadout is not optimal, True only when both hold; `game_data=None` falls back to
+  the xp-only check.
+- **`FightAction.cost`:** higher by `LOADOUT_PENALTY` when `pick_loadout` differs
+  from current equipment for the monster; equal to base when the loadout is
+  already optimal.
+- **Planner integration (the decisive test):** with a suboptimal loadout and a
+  better in-inventory weapon, the grind plan's `plan[0]` is
+  `OptimizeLoadout(target)` (not `Fight`); after the swap, `plan[0]` is `Fight`
+  (no redundant swap). This proves the penalty+is_satisfied combination sequences
+  swap-before-fight under `plan[0]`-only execution.
 - **`UseConsumable.cost`:** `deficit >= restore` → 2.0 (chosen over Rest);
   `deficit < restore` → > 10.0 (Rest chosen); integration: a near-full character
   with a big potion rests; a badly-hurt character with a matching potion drinks it.
@@ -220,12 +246,14 @@ Per project standard: 0 errors, 0 warnings, 0 skipped, 100% on changed code.
 - Modify `src/artifactsmmo_cli/ai/combat.py` — `predict_win` projects the optimal
   loadout's stats for the player side.
 - Modify `src/artifactsmmo_cli/ai/goals/grind_character_xp.py` — `game_data` ctor
-  arg + loadout prerequisite in `is_satisfied`/`relevant_actions`.
+  arg + loadout-optimal term in `is_satisfied`.
+- Modify `src/artifactsmmo_cli/ai/actions/combat.py` — `FightAction.cost` adds
+  `LOADOUT_PENALTY` when the loadout is suboptimal for `monster_code` (the
+  ordering lever that puts `OptimizeLoadout` at `plan[0]`).
 - Modify `src/artifactsmmo_cli/ai/strategy_driver.py` — `objective_step_goal`
   passes `game_data` to `GrindCharacterXPGoal`.
-- Modify `src/artifactsmmo_cli/ai/actions/optimize_loadout.py` — ensure `apply`
-  updates simulated `state.equipment` to the optimal loadout (only if it does not
-  already).
+- (`OptimizeLoadoutAction.apply` already updates simulated `state.equipment` — no
+  change needed; confirmed in code.)
 - Modify `src/artifactsmmo_cli/ai/actions/consumable.py` — overheal-aware `cost`.
 - Tests: `tests/test_ai/test_game_data.py`, new `test_equipment_projection.py`,
   `test_combat.py`, `test_grind_character_xp.py`, `test_actions*` (optimize_loadout,
