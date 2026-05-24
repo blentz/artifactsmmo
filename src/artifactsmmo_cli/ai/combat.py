@@ -7,6 +7,8 @@ a stable verdict, not a sampled fight."""
 
 import math
 
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import ELEMENTS, WorldState
 
@@ -46,14 +48,13 @@ def _expected_hit(
 
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
-    """True if the documented formula says the player beats the monster.
-
-    Player wins when it reduces the monster to 0 HP no later than the monster
-    reduces it to 0 (player-first on an initiative tie). Loses if the kill would
-    take more than MAX_TURNS turns."""
+    """True if the documented formula says the player beats the monster using the
+    best on-hand loadout (inventory + equipped) for it."""
+    loadout = pick_loadout(monster_code, state, game_data)
+    p = project_loadout_stats(state, loadout, game_data)
     player_hit = _expected_hit(
-        state.attack, state.dmg, state.dmg_elements,
-        game_data.monster_resistance(monster_code), state.critical_strike,
+        p.attack, p.dmg, p.dmg_elements,
+        game_data.monster_resistance(monster_code), p.critical_strike,
     )
     if player_hit <= 0:
         return False
@@ -62,10 +63,10 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
         return False
     monster_hit = _expected_hit(
         game_data.monster_attack(monster_code), 0, {},
-        state.resistance, game_data.monster_critical_strike(monster_code),
+        p.resistance, game_data.monster_critical_strike(monster_code),
     )
     if monster_hit <= 0:
         return True
-    rounds_to_die = math.ceil(state.max_hp / monster_hit)
-    player_first = state.initiative >= game_data.monster_initiative(monster_code)
+    rounds_to_die = math.ceil(p.max_hp / monster_hit)
+    player_first = p.initiative >= game_data.monster_initiative(monster_code)
     return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die

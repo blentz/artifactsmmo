@@ -8,7 +8,7 @@ from artifactsmmo_cli.ai.combat import (
     _round_half_up,
     predict_win,
 )
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
 
 
@@ -103,3 +103,26 @@ def test_predict_win_global_dmg_bonus_changes_outcome():
     boosted = make_state(max_hp=10, attack={"fire": 10}, dmg=100, initiative=0)
     assert predict_win(slow, mob, "mob") is False
     assert predict_win(boosted, mob, "mob") is True
+
+
+def test_predict_win_uses_best_inventory_loadout():
+    # Current weapon too weak (1 fire) to kill 200hp in <=100 turns; a strong
+    # staff (80 fire) sits in inventory -> predict_win picks it via pick_loadout.
+    gd = _gd(hp=200, attack={"fire": 1}, initiative=0)   # monster "mob"
+    gd._item_stats = {
+        "twig": ItemStats(code="twig", level=1, type_="weapon", attack={"fire": 1}),
+        "staff": ItemStats(code="staff", level=1, type_="weapon", attack={"fire": 80}),
+    }
+    state = make_state(max_hp=100, attack={"fire": 1}, initiative=50, level=1,
+                       equipment={"weapon_slot": "twig"}, inventory={"staff": 1})
+    assert predict_win(state, gd, "mob") is True
+
+
+def test_predict_win_identity_when_no_inventory_upgrade():
+    # Twig equipped and known; empty inventory -> pick_loadout keeps the twig
+    # (no candidate beats it) -> projection == current stats -> verdict unchanged.
+    gd = _gd(hp=30, attack={"fire": 2}, initiative=0)   # weak monster
+    gd._item_stats = {"twig": ItemStats(code="twig", level=1, type_="weapon", attack={"fire": 5})}
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=50, level=1,
+                       equipment={"weapon_slot": "twig"}, inventory={})
+    assert predict_win(state, gd, "mob") is True
