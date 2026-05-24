@@ -10,7 +10,15 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-_SEARCH_BUDGET_SECONDS = 2.0
+_SEARCH_BUDGET_SECONDS = 90.0
+"""A* wall-clock budget. Set to span a game action cooldown (typically 60s+) so
+the bot can plan the next action during the current one's cooldown. Deep recipe
+chains (e.g. 6 ash_plank = 60 ash_wood) explore ~2800 nodes; with learned costs
+each node issues SQLite queries (action_cost/success_rate/goal_avg_cycles), making
+the search I/O-bound at ~7.5s — far past the old 2s budget, which abandoned such
+reachable goals as false no_plan stalls. 90s is a generous ceiling rarely hit
+(normal plans resolve in <0.1s); the cost is that a genuinely unplannable goal
+now burns up to 90s before the planner gives up."""
 
 
 def _state_key(state: WorldState) -> tuple[object, ...]:

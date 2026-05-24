@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+from artifactsmmo_cli.ai import planner as planner_mod
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -11,6 +12,15 @@ from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
+
+
+def test_search_budget_spans_a_game_cooldown():
+    """Deep recipe chains (e.g. 6 ash_plank = 60 ash_wood, ~2800 search nodes)
+    become I/O-bound when learned costs query SQLite per node — such a search
+    needs ~7.5s. The budget must comfortably exceed that while staying within the
+    game's 60s+ action cooldown (we plan during the prior action's cooldown), so
+    a deep-but-reachable goal is never abandoned as a false no_plan."""
+    assert planner_mod._SEARCH_BUDGET_SECONDS >= 90.0
 
 
 def make_game_data(monster_locs=None, monster_levels=None) -> GameData:
