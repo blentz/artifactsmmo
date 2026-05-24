@@ -1,5 +1,7 @@
 """Character status pane: HP/XP bars, level, gold, current goal, path projection."""
 
+import math
+import time
 from datetime import datetime
 from typing import Any
 
@@ -51,10 +53,30 @@ class StatusPane(Static):
         super().__init__(**kwargs)
         self._eta_task: str | None = None
         self._eta_samples: list[tuple[float, int]] = []
+        self._cooldown_expiry: float | None = None
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self._track_eta(snap)
+        self._cooldown_expiry = (
+            time.monotonic() + snap.cooldown_remaining
+            if snap.cooldown_remaining > 0 else None
+        )
         self.snapshot = snap
+
+    def on_mount(self) -> None:
+        """Tick once a second so the cooldown counts down between AI cycles."""
+        self.set_interval(1.0, self._tick)
+
+    def _tick(self) -> None:
+        if self._cooldown_expiry is not None:
+            self.refresh()
+            if self._cooldown_remaining() <= 0.0:
+                self._cooldown_expiry = None
+
+    def _cooldown_remaining(self) -> float:
+        if self._cooldown_expiry is None:
+            return 0.0
+        return max(0.0, self._cooldown_expiry - time.monotonic())
 
     def _track_eta(self, snap: CycleSnapshot) -> None:
         if not snap.task_code:
@@ -92,9 +114,10 @@ class StatusPane(Static):
         t.add_row("XP", Group(Text(f"{s.xp}/{s.max_xp}", style="cyan"), xp_bar))
         t.add_row("Gold", str(s.gold))
         t.add_row("Pos", f"({s.x},{s.y})")
-        if s.cooldown_remaining > 0:
-            cd_color = "yellow" if s.cooldown_remaining < 10 else "red"
-            t.add_row("Cooldown", f"[{cd_color}]{s.cooldown_remaining:.1f}s[/{cd_color}]")
+        cd_remaining = self._cooldown_remaining()
+        if cd_remaining > 0:
+            cd_color = "yellow" if cd_remaining < 10 else "red"
+            t.add_row("Cooldown", f"[{cd_color}]{math.ceil(cd_remaining)}s[/{cd_color}]")
         else:
             t.add_row("Cooldown", "[green]ready[/green]")
         if s.task_code:

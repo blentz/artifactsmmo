@@ -1,6 +1,7 @@
 """StatusPane rendering tests (no Textual app needed)."""
 
 import io
+import time
 
 from rich.console import Console
 
@@ -96,16 +97,18 @@ class TestStatusPaneCooldown:
         pane.update_snapshot(_snap(cooldown_remaining=0.0))
         assert "ready" in _render(pane)
 
-    def test_cooldown_shows_seconds_when_positive(self):
+    def test_cooldown_shows_seconds_when_positive(self, monkeypatch):
+        monkeypatch.setattr(time, "monotonic", lambda: 500.0)
         pane = StatusPane()
         pane.update_snapshot(_snap(cooldown_remaining=5.5))
-        assert "5.5s" in _render(pane)
+        assert "6s" in _render(pane)
 
-    def test_cooldown_high_value(self):
+    def test_cooldown_high_value(self, monkeypatch):
         """Values >= 10 are colored red, still displays correctly."""
+        monkeypatch.setattr(time, "monotonic", lambda: 500.0)
         pane = StatusPane()
         pane.update_snapshot(_snap(cooldown_remaining=15.0))
-        assert "15.0s" in _render(pane)
+        assert "15s" in _render(pane)
 
 
 class TestStatusPaneTask:
@@ -305,3 +308,56 @@ class TestStatusEtaRow:
         pane = StatusPane()
         pane.update_snapshot(_snap(task_code=None))
         assert "ETA" not in _render(pane)
+
+
+class TestStatusPaneLiveCooldown:
+    def test_update_snapshot_sets_expiry_from_remaining(self, monkeypatch):
+        monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+        pane = StatusPane()
+        pane.update_snapshot(_snap(cooldown_remaining=45.0))
+        assert pane._cooldown_expiry == 1045.0
+
+    def test_update_snapshot_zero_remaining_clears_expiry(self, monkeypatch):
+        monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+        pane = StatusPane()
+        pane.update_snapshot(_snap(cooldown_remaining=0.0))
+        assert pane._cooldown_expiry is None
+
+    def test_remaining_decreases_as_time_advances(self, monkeypatch):
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        pane = StatusPane()
+        pane.update_snapshot(_snap(cooldown_remaining=45.0))
+        clock["t"] = 1030.0
+        assert pane._cooldown_remaining() == 15.0
+        clock["t"] = 1100.0
+        assert pane._cooldown_remaining() == 0.0
+
+    def test_remaining_zero_when_no_expiry(self):
+        assert StatusPane()._cooldown_remaining() == 0.0
+
+    def test_render_shows_live_countdown_not_frozen_snapshot(self, monkeypatch):
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        pane = StatusPane()
+        pane.update_snapshot(_snap(cooldown_remaining=45.0))
+        clock["t"] = 1020.5
+        out = _render(pane)
+        assert "25s" in out and "45" not in out
+
+    def test_render_ready_when_countdown_elapsed(self, monkeypatch):
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        pane = StatusPane()
+        pane.update_snapshot(_snap(cooldown_remaining=5.0))
+        clock["t"] = 1010.0
+        assert "ready" in _render(pane)
+
+    def test_tick_clears_expiry_once_elapsed(self, monkeypatch):
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        pane = StatusPane()
+        pane.update_snapshot(_snap(cooldown_remaining=5.0))
+        clock["t"] = 1010.0
+        pane._tick()
+        assert pane._cooldown_expiry is None
