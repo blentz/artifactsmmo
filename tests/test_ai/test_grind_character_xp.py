@@ -2,9 +2,10 @@
 
 from sqlmodel import Session
 
-from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.combat import LOADOUT_PENALTY, FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import SWAP_COST_PER_SLOT, OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import (
@@ -15,6 +16,7 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import (
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
 
@@ -163,3 +165,47 @@ class TestLoadoutPrerequisite:
         goal = GrindCharacterXPGoal("chicken", initial_xp=100)   # no game_data
         assert goal.is_satisfied(make_state(xp=200)) is True
         assert goal.is_satisfied(make_state(xp=50)) is False
+
+
+def _combat_gd() -> GameData:
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_locations = {"chicken": [(0, 0)]}
+    gd._monster_attack = {"chicken": {"fire": 2}}
+    gd._monster_resistance = {"chicken": {}}
+    gd._monster_hp = {"chicken": 30}
+    gd._item_stats = {
+        "twig": ItemStats(code="twig", level=1, type_="weapon", attack={"fire": 1}),
+        "sword": ItemStats(code="sword", level=1, type_="weapon", attack={"fire": 9}),
+    }
+    return gd
+
+
+class TestFightCostPenalty:
+    def test_fight_cost_penalized_when_loadout_suboptimal(self):
+        gd = _combat_gd()
+        fight = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+        under = make_state(level=1, equipment={"weapon_slot": "twig"}, inventory={"sword": 1}, x=0, y=0)
+        optimal = make_state(level=1, equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
+        assert fight.cost(under, gd) == fight.cost(optimal, gd) + LOADOUT_PENALTY
+
+    def test_planner_swaps_loadout_before_fighting(self):
+        gd = _combat_gd()
+        actions = [
+            FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
+            OptimizeLoadoutAction(target_monster_code="chicken", game_data=gd),
+        ]
+        state = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,
+                           equipment={"weapon_slot": "twig"}, inventory={"sword": 1}, x=0, y=0)
+        goal = GrindCharacterXPGoal("chicken", initial_xp=0, game_data=gd)
+        plan = GOAPPlanner().plan(state, goal, actions, gd, None)
+        assert plan and repr(plan[0]) == "OptimizeLoadout(chicken)"
+
+        equipped = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,
+                              equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
+        plan2 = GOAPPlanner().plan(equipped, goal, actions, gd, None)
+        assert plan2 and repr(plan2[0]) == "Fight(chicken)"
+
+
+def test_loadout_penalty_below_one_swap_cost():
+    assert LOADOUT_PENALTY < SWAP_COST_PER_SLOT * 2

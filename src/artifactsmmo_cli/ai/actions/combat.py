@@ -10,9 +10,16 @@ from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
+
+LOADOUT_PENALTY = 5.0
+"""Added to Fight cost when the loadout is suboptimal for the monster, so the
+planner sequences OptimizeLoadout before the fight (player executes plan[0] only).
+Must stay < one swap's cost (optimize_loadout.SWAP_COST_PER_SLOT * 2) so the
+penalty orders swap-before-fight without making the swap itself non-favorable."""
 
 
 def _nearest(locations: frozenset[tuple[int, int]], state: WorldState) -> tuple[int, int]:
@@ -84,12 +91,14 @@ class FightAction(Action):
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         static = 10.0 + dist
         if history is None:
-            return static
-        learned = history.action_cost(repr(self), default=static, window=50)
-        rate = history.success_rate(repr(self), window=50)
-        if rate < 0.95:
-            return learned / max(rate, 0.1)
-        return learned
+            base = static
+        else:
+            learned = history.action_cost(repr(self), default=static, window=50)
+            rate = history.success_rate(repr(self), window=50)
+            base = learned / max(rate, 0.1) if rate < 0.95 else learned
+        if pick_loadout(self.monster_code, state, game_data) != state.equipment:
+            base += LOADOUT_PENALTY
+        return base
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         dest = _nearest(self.locations, state)
