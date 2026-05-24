@@ -1,6 +1,10 @@
 """Tests for the GOAP planner A* search."""
 
+import os
+import tempfile
 from unittest.mock import patch
+
+import pytest
 
 from artifactsmmo_cli.ai import planner as planner_mod
 from artifactsmmo_cli.ai.actions.movement import MoveAction
@@ -10,8 +14,19 @@ from artifactsmmo_cli.ai.actions.task import AcceptTaskAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
+
+
+@pytest.fixture
+def tmp_db_path():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    yield path
+    if os.path.exists(path):
+        os.unlink(path)
 
 
 def test_search_budget_spans_a_game_cooldown():
@@ -154,3 +169,57 @@ class TestGOAPPlanner:
         plan = planner.plan(state, goal, actions, GameData(), history=None)
         assert len(plan) == 1
         assert isinstance(plan[0], RestAction)
+
+
+def _insert_cycles(store: LearningStore, action_repr: str, cooldowns: list[float]) -> None:
+    """Seed Cycle rows for a given action_repr."""
+    for i, cd in enumerate(cooldowns):
+        store.record_cycle(Cycle(
+            ts=f"2026-05-17T00:00:{i:02d}+00:00",
+            session_id="x", cycle_index=i, character="x", outcome="ok",
+            action_repr=action_repr,
+            actual_cooldown_seconds=cd,
+        ))
+
+
+def test_plan_caches_learned_queries(tmp_db_path):
+    """plan() wraps the search loop in search_cache, so learned-stat queries are
+    issued at most once per distinct (repr, window) key, not per A* node."""
+    store = LearningStore(db_path=tmp_db_path, character="testchar")
+    store.start_session()
+    # Seed enough cycles so success_rate returns a real value (not the default)
+    _insert_cycles(store, str(RestAction()), [12.0] * 10)
+
+    calls: list[int] = []
+    original = store._success_rate_uncached
+
+    def counting_uncached(action_repr: str, window: int) -> float:
+        calls.append(1)
+        return original(action_repr, window)
+
+    store._success_rate_uncached = counting_uncached  # type: ignore[method-assign]
+
+    planner = GOAPPlanner()
+    state = make_state(hp=50, max_hp=100)
+    goal = RestoreHPGoal()
+    actions = [RestAction()]
+    gd = make_game_data()
+
+    plan_with_store = planner.plan(state, goal, actions, gd, history=store)
+    nodes_explored = planner.last_stats.nodes_explored
+
+    # The plan should be correct (RestAction satisfies RestoreHPGoal)
+    assert len(plan_with_store) == 1
+    assert isinstance(plan_with_store[0], RestAction)
+
+    # With caching, uncached was called at most once per (repr, window),
+    # NOT once per node explored
+    assert len(calls) <= nodes_explored
+    # Specifically: success_rate for RestAction should be cached — at most 1 real call
+    assert len(calls) <= 1
+
+    # Verify the plan is the same as without history (correctness regression)
+    plan_no_store = planner.plan(state, goal, actions, gd, history=None)
+    assert len(plan_no_store) == len(plan_with_store)
+
+    store.close()

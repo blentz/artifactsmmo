@@ -2,8 +2,11 @@
 
 import json
 import statistics
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypeVar
 
 from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,6 +15,8 @@ from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session, SkillXpObservation, TaskRewardObservation
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
+
+_T = TypeVar("_T")
 
 
 class LearningStore:
@@ -39,6 +44,7 @@ class LearningStore:
         self._character = character
         self._session_id: str | None = None
         self._session_row_written: bool = False
+        self._search_cache: dict[tuple[object, ...], object] | None = None
 
     def start_session(self) -> str:
         """Allocate session_id. Actual Session row written lazily on first record_cycle."""
@@ -97,8 +103,36 @@ class LearningStore:
         except SQLAlchemyError as e:
             print(f"[learning] record_cycle failed: {e}")
 
+    @contextmanager
+    def search_cache(self) -> Iterator[None]:
+        """Memoize learned-stat queries (action_cost median / success_rate /
+        goal_avg_cycles_to_satisfy) for the duration of one planner search. Safe
+        because the DB is not written during planning. Reentrant: a nested
+        enter reuses the outer cache; the original cache is restored on exit."""
+        prev = self._search_cache
+        if prev is None:
+            self._search_cache = {}
+        try:
+            yield
+        finally:
+            self._search_cache = prev
+
+    def _cached(self, key: tuple[object, ...], compute: Callable[[], _T]) -> _T:
+        if self._search_cache is None:
+            return compute()
+        if key not in self._search_cache:
+            self._search_cache[key] = compute()
+        return self._search_cache[key]  # type: ignore[return-value]
+
     def action_cost(self, action_repr: str, default: float, window: int = 50) -> float:
         """Median actual_cooldown_seconds over last `window` ok cycles, or default if < 5 samples."""
+        median = self._cached(
+            ("action_cost", action_repr, window),
+            lambda: self._action_cost_median(action_repr, window),
+        )
+        return median if median is not None else default
+
+    def _action_cost_median(self, action_repr: str, window: int) -> float | None:
         try:
             with SqlSession(self._engine) as s:
                 stmt = (
@@ -115,13 +149,19 @@ class LearningStore:
                 rows = list(s.exec(stmt))
             non_null = [r for r in rows if r is not None]
             if len(non_null) < 5:
-                return default
+                return None
             return statistics.median(non_null)
         except SQLAlchemyError:
-            return default
+            return None
 
     def success_rate(self, action_repr: str, window: int = 50) -> float:
         """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
+        return self._cached(
+            ("success_rate", action_repr, window),
+            lambda: self._success_rate_uncached(action_repr, window),
+        )
+
+    def _success_rate_uncached(self, action_repr: str, window: int) -> float:
         try:
             with SqlSession(self._engine) as s:
                 stmt = (
@@ -170,6 +210,12 @@ class LearningStore:
 
     def goal_avg_cycles_to_satisfy(self, goal_repr: str, window: int = 20) -> float | None:
         """Median cycles-to-satisfy over last `window` completions. None if < 5 samples."""
+        return self._cached(
+            ("goal_avg", goal_repr, window),
+            lambda: self._goal_avg_cycles_uncached(goal_repr, window),
+        )
+
+    def _goal_avg_cycles_uncached(self, goal_repr: str, window: int) -> float | None:
         try:
             with SqlSession(self._engine) as s:
                 stmt = (

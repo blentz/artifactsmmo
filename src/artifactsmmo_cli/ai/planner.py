@@ -2,6 +2,7 @@
 
 import heapq
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -72,51 +73,53 @@ class GOAPPlanner:
         deadline = time.monotonic() + _SEARCH_BUDGET_SECONDS
         stats = PlanStats()
 
-        h0 = goal.value(state, game_data, history)
-        heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
         visited: set[tuple[object, ...]] = set()
         relevant = goal.relevant_actions(actions, state, game_data)
 
-        while heap:
-            if time.monotonic() >= deadline:
-                stats.timed_out = True
-                break
+        cache_ctx = history.search_cache() if history is not None else nullcontext()
+        with cache_ctx:
+            h0 = goal.value(state, game_data, history)
+            heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
+            while heap:
+                if time.monotonic() >= deadline:
+                    stats.timed_out = True
+                    break
 
-            node = heapq.heappop(heap)
+                node = heapq.heappop(heap)
 
-            key = _state_key(node.state)
-            if key in visited:
-                continue
-            visited.add(key)
-            stats.nodes_explored += 1
-            if node.depth > stats.max_depth_reached:
-                stats.max_depth_reached = node.depth
+                key = _state_key(node.state)
+                if key in visited:
+                    continue
+                visited.add(key)
+                stats.nodes_explored += 1
+                if node.depth > stats.max_depth_reached:
+                    stats.max_depth_reached = node.depth
 
-            if goal.is_satisfied(node.state):
-                # A* pops nodes in f-score order; first satisfied node is optimal.
-                self.last_stats = stats
-                return node.plan
+                if goal.is_satisfied(node.state):
+                    # A* pops nodes in f-score order; first satisfied node is optimal.
+                    self.last_stats = stats
+                    return node.plan
 
-            if node.depth >= max_depth:
-                continue
-
-            for action in relevant:
-                if not action.is_applicable(node.state, game_data):
+                if node.depth >= max_depth:
                     continue
 
-                next_state = action.apply(node.state, game_data)
-                g = node.g_score + action.cost(node.state, game_data, history)
-                h = goal.value(next_state, game_data, history)
-                heapq.heappush(
-                    heap,
-                    _Node(
-                        f_score=g + h,
-                        depth=node.depth + 1,
-                        state=next_state,
-                        plan=node.plan + [action],
-                        g_score=g,
-                    ),
-                )
+                for action in relevant:
+                    if not action.is_applicable(node.state, game_data):
+                        continue
+
+                    next_state = action.apply(node.state, game_data)
+                    g = node.g_score + action.cost(node.state, game_data, history)
+                    h = goal.value(next_state, game_data, history)
+                    heapq.heappush(
+                        heap,
+                        _Node(
+                            f_score=g + h,
+                            depth=node.depth + 1,
+                            state=next_state,
+                            plan=node.plan + [action],
+                            g_score=g,
+                        ),
+                    )
 
         self.last_stats = stats
         return []

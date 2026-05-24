@@ -400,6 +400,96 @@ class TestGoalStatsRollup:
         assert stats.satisfaction_rate == 0.0
 
 
+class TestSearchCache:
+    def test_search_cache_memoizes_repeated_query(self, tmp_db_path):
+        """Inside search_cache context, the same (repr, window) is computed only once."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "X", [10.0] * 5)
+
+        calls: list[int] = []
+        original = store._success_rate_uncached
+
+        def counting_uncached(action_repr: str, window: int) -> float:
+            calls.append(1)
+            return original(action_repr, window)
+
+        store._success_rate_uncached = counting_uncached  # type: ignore[method-assign]
+
+        with store.search_cache():
+            r1 = store.success_rate("X")
+            r2 = store.success_rate("X")
+
+        assert r1 == r2
+        assert len(calls) == 1, "uncached called more than once inside context"
+
+        # Outside the context cache is gone — two more calls → two more invocations
+        r3 = store.success_rate("X")
+        r4 = store.success_rate("X")
+        assert r3 == r4
+        assert len(calls) == 3, "expected 2 more uncached calls outside context"
+
+        store.close()
+
+    def test_action_cost_default_not_cached(self, tmp_db_path):
+        """action_cost caches the median (None when <5 samples); default is applied after."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        # Only 3 samples — median will be None, default should vary per call
+        _insert_cycles(store, "Y", [5.0, 5.0, 5.0])
+
+        with store.search_cache():
+            cost_3 = store.action_cost("Y", default=3.0)
+            cost_9 = store.action_cost("Y", default=9.0)
+
+        assert cost_3 == 3.0
+        assert cost_9 == 9.0
+
+        store.close()
+
+    def test_search_cache_reentrant(self, tmp_db_path):
+        """Nested search_cache contexts reuse the outer cache; after both exit, cache is None."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+
+        with store.search_cache():
+            inner_cache_ref = store._search_cache
+            assert inner_cache_ref is not None
+            with store.search_cache():
+                # Inner context reuses the same dict object
+                assert store._search_cache is inner_cache_ref
+            # After inner exits, still the outer cache
+            assert store._search_cache is inner_cache_ref
+
+        # After outer exits, cache is None
+        assert store._search_cache is None
+
+        store.close()
+
+    def test_no_cache_outside_context(self, tmp_db_path):
+        """Without entering search_cache, _search_cache is None and calls recompute."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Z", [7.0] * 5)
+
+        assert store._search_cache is None
+
+        calls: list[int] = []
+        original = store._action_cost_median
+
+        def counting_median(action_repr: str, window: int) -> float | None:
+            calls.append(1)
+            return original(action_repr, window)
+
+        store._action_cost_median = counting_median  # type: ignore[method-assign]
+
+        store.action_cost("Z", default=1.0)
+        store.action_cost("Z", default=1.0)
+
+        assert len(calls) == 2, "expected two DB calls outside cache context"
+
+        store.close()
+
+
 class TestGAMigration:
     """Phase G-A migration: pre-existing DBs missing delta_skill_xp_json
     must be migrated on open."""
