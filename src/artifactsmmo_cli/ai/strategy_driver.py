@@ -101,7 +101,8 @@ def objective_step_goal(
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None
-        return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
+        return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp,
+                                    game_data=game_data)
     return None
 
 
