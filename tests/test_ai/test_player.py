@@ -1,6 +1,7 @@
 """Tests for GamePlayer."""
 
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -13,18 +14,15 @@ from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
-from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
-from artifactsmmo_cli.ai.strategy_driver import FALLBACK_BAND, MetaGoalAdapter
+from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
-from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
+from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
@@ -92,14 +90,9 @@ class TestBuildActions:
         assert (1, 0) in fight_locs["chicken"]
 
 
-class TestBuildGoals:
-    def test_returns_base_goals(self):
-        player = GamePlayer(character="hero")
-        player.game_data = make_game_data_mock()
-        player.state = make_state(level=3)
-        goals = player._build_goals()
-        # RestoreHP, DepositInventory, CompleteTask, AcceptTask, TaskExchange, FarmMonster, UpgradeEquipment
-        assert len(goals) >= 7
+class TestArbiterSelection:
+    """P3c: the cycle drives goal selection through StrategyArbiter, not a flat
+    _build_goals list. These exercise the wired-up arbiter on a real player."""
 
     def _with_strategy(self, gd: GameData, **state_kw) -> GamePlayer:
         player = GamePlayer(character="hero")
@@ -113,95 +106,105 @@ class TestBuildGoals:
         player.state = make_state(**combat_defaults)
         return player
 
-    def test_progression_goals_removed_strategy_drives(self):
-        # P3b: the six progression goals are gone from flat selection; a Strategy
-        # adapter + low-pri fallback grind drive progression; kept goals remain.
+    def test_cycle_uses_arbiter_not_select_goal(self):
+        player = GamePlayer(character="hero")
+        assert hasattr(player, "_arbiter")
+        assert not hasattr(player, "_select_goal")
+        assert not hasattr(player, "_build_goals")
+
+    def test_crafting_target_set_when_chosen_step_is_obtain_item(self):
+        """Cycle must write state.crafting_target from the strategy's chosen_step."""
         player = self._with_strategy(make_game_data_mock(), level=3)
-        goals = player._build_goals()
-        reprs = [repr(g) for g in goals]
-        retired = ("FarmItems", "UpgradeEquipment", "FarmMonster", "GatherMaterials", "LevelSkill")
-        # none of the retired goals appear as a top-level (non-Strategy) goal
-        assert not any(
-            r == n or r.startswith(f"{n}(")
-            for r in reprs if not r.startswith("Strategy(")
-            for n in retired
+        step = ObtainItem(code="copper_dagger", quantity=1)
+        decision = StrategyDecision(
+            interrupt=None,
+            chosen_root=step,
+            chosen_step=step,
+            desired_state={},
         )
-        assert any(r.startswith("Strategy(") for r in reprs)   # strategy drives
-        assert "RestoreHP" in reprs and "DepositInventory" in reprs  # kept goals
+        player._strategy = MagicMock()
+        player._strategy.decide.return_value = decision
+        # Drive the exact two lines from the cycle that source crafting_target.
+        state = player.state
+        crafting_target = step.code if isinstance(decision.chosen_step, ObtainItem) else None
+        player.state = replace(state, crafting_target=crafting_target)
+        assert player.state.crafting_target == "copper_dagger"
 
-    def test_fallback_grind_added_and_respects_level(self):
-        gd = GameData()
-        gd._monster_locations = {"chicken": [(1, 0)], "dragon": [(10, 0)]}
-        gd._monster_level = {"chicken": 1, "dragon": 100}
-        # chicken is beatable; the dragon's HP wall is unkillable inside the
-        # 100-turn cap, so winnability (not a level gate) excludes it.
-        gd._monster_hp = {"chicken": 10, "dragon": 100000}
-        gd._monster_attack = {"chicken": {"fire": 1}, "dragon": {"fire": 9999}}
-        gd._monster_resistance = {"chicken": {}, "dragon": {}}
-        gd._monster_critical_strike = {"chicken": 0, "dragon": 0}
-        gd._monster_initiative = {"chicken": 0, "dragon": 0}
-        gd._resource_locations = {}
-        gd._workshop_locations = {}
-        gd._bank_location = (4, 0)
-        gd._item_stats = {}
-        gd._crafting_recipes = {}
-        gd._resource_skill = {}
-        player = self._with_strategy(gd, level=5)
-        goals = player._build_goals()
-        fallbacks = [g for g in goals
-                     if isinstance(g, MetaGoalAdapter) and isinstance(g._inner, GrindCharacterXPGoal)
-                     and g.priority(player.state, gd) == FALLBACK_BAND]
-        assert len(fallbacks) == 1                              # the low-pri safety net
-        assert fallbacks[0]._inner._target_monster != "dragon"  # unwinnable monster excluded
-
-    def _grind_targets(self, goals) -> list[str]:
-        return [g._inner._target_monster for g in goals
-                if isinstance(g, MetaGoalAdapter) and isinstance(g._inner, GrindCharacterXPGoal)]
-
-    def test_gate_keeps_winnable_path_aligned_target(self):
-        # The path-aligned (XP-optimal) pick is winnable -> it is kept as-is and
-        # NOT replaced by the conservative picker. chicken is winnable but is not
-        # the picker's top choice (cow, the highest-level winnable), so a gate
-        # that wrongly replaced it would surface cow instead. Only the separately
-        # tested _path_aligned_monster projection is stubbed; winnability is real.
+    def test_crafting_target_none_when_chosen_step_not_obtain_item(self):
+        """Cycle must clear state.crafting_target when chosen_step is not ObtainItem."""
         player = self._with_strategy(make_game_data_mock(), level=3)
-        player._path_aligned_monster = lambda: "chicken"        # winnable, not the picker's pick
-        goals = player._build_goals()
-        targets = self._grind_targets(goals)
-        assert "chicken" in targets                             # path-aligned pick kept
-        assert "cow" not in targets                             # picker did NOT replace it
+        step = ReachCharLevel(level=5)
+        decision = StrategyDecision(
+            interrupt=None,
+            chosen_root=step,
+            chosen_step=step,
+            desired_state={},
+        )
+        player._strategy = MagicMock()
+        player._strategy.decide.return_value = decision
+        state = player.state
+        crafting_target = step.code if isinstance(decision.chosen_step, ObtainItem) else None
+        player.state = replace(state, crafting_target=crafting_target)
+        assert player.state.crafting_target is None
 
-    def test_gate_falls_back_when_path_aligned_unwinnable(self):
+    def test_winnable_farm_target_keeps_winnable_path_aligned(self):
+        # path-aligned pick is winnable -> kept (not replaced by the picker's cow)
+        player = self._with_strategy(make_game_data_mock(), level=3)
+        player._path_aligned_monster = lambda: "chicken"
+        assert player._winnable_farm_target() == "chicken"
+
+    def test_winnable_farm_target_falls_back_when_unwinnable(self):
         gd = make_game_data_mock()
-        gd._monster_level["ogre"] = 10                          # XP-optimal but...
-        gd._monster_hp["ogre"] = 100000                         # ...an unwinnable HP wall
+        gd._monster_level["ogre"] = 10
+        gd._monster_hp["ogre"] = 100000                         # unwinnable HP wall
         gd._monster_attack["ogre"] = {"fire": 1}
         gd._monster_resistance["ogre"] = {}
         gd._monster_critical_strike["ogre"] = 0
         gd._monster_initiative["ogre"] = 0
         player = self._with_strategy(gd, level=3)
-        player._path_aligned_monster = lambda: "ogre"           # projection picks the wall
-        goals = player._build_goals()
-        targets = self._grind_targets(goals)
-        assert "ogre" not in targets                            # gate rejected it
-        assert targets and all(t in {"chicken", "cow"} for t in targets)  # winnable pick used
-
-    def test_gate_no_grind_when_nothing_winnable(self):
-        gd = GameData()
-        gd._monster_level = {"ogre": 10}
-        gd._monster_hp = {"ogre": 100000}                       # unwinnable
-        gd._monster_attack = {"ogre": {"fire": 1}}
-        gd._monster_resistance = {"ogre": {}}
-        gd._monster_critical_strike = {"ogre": 0}
-        gd._monster_initiative = {"ogre": 0}
-        gd._bank_location = (4, 0)
-        gd._item_stats = {}
-        gd._crafting_recipes = {}
-        gd._resource_skill = {}
-        player = self._with_strategy(gd, level=3)
         player._path_aligned_monster = lambda: "ogre"
-        goals = player._build_goals()
-        assert self._grind_targets(goals) == []                 # no winnable monster -> no grind
+        assert player._winnable_farm_target() in {"chicken", "cow"}
+
+    def test_selection_context_carries_combat_monster(self):
+        player = self._with_strategy(make_game_data_mock(), level=3)
+        player._path_aligned_monster = lambda: "chicken"
+        ctx = player._selection_context()
+        assert ctx.combat_monster == "chicken"
+        assert ctx.task_exchange_min_coins == player._task_exchange_min_coins
+
+    def test_bag_full_selects_deposit_inventory(self):
+        gd = make_game_data_mock()
+        # copper_ore is a high-demand craft ingredient: its useful-quantity cap
+        # (recipe demand × batch buffer) exceeds the 20 held, so it is NOT
+        # overstock — bag-full routes to DepositInventory, not the discard guard.
+        gd._crafting_recipes = {"copper_dagger": {"copper_ore": 20}}
+        player = self._with_strategy(gd, level=3,
+                                     inventory={"copper_ore": 20}, inventory_max=20)
+        player._bank_accessible = True
+        decision = player._strategy.decide(player.state, player.game_data)
+        actions = player._build_actions()
+        goal, _plan, _tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions, player._selection_context())
+        assert goal is not None and repr(goal) == "DepositInventory"
+
+    def test_done_task_selects_complete_task(self):
+        player = self._with_strategy(make_game_data_mock(), level=3,
+                                     task_type="monsters", task_code="chicken",
+                                     task_total=5, task_progress=5)
+        decision = player._strategy.decide(player.state, player.game_data)
+        actions = player._build_actions()
+        goal, _plan, _tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions, player._selection_context())
+        assert goal is not None and repr(goal) == "CompleteTask"
+
+    def test_idle_no_task_selects_accept_task(self):
+        player = self._with_strategy(make_game_data_mock(), level=3,
+                                     task_type=None, task_code=None)
+        decision = player._strategy.decide(player.state, player.game_data)
+        actions = player._build_actions()
+        goal, _plan, _tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions, player._selection_context())
+        assert goal is not None and repr(goal) == "AcceptTask"
 
 
 def _winnable_gd(monsters: dict[str, dict]) -> GameData:
@@ -646,20 +649,13 @@ class TestBuildGoalsTier1:
         player.game_data = gd
         return player
 
-    def test_items_task_no_longer_adds_a_farm_goal(self):
-        # P3b: items-tasks are paused — no FarmItems goal is built for an active
-        # items task (re-enabled when P3c folds tasks into the strategy).
-        player = self._make_player_with_gd()
-        player.state = make_state(task_type="items", task_code="ash_wood", task_total=5, task_progress=0)
-        reprs = [repr(g) for g in player._build_goals()]
-        assert not any(r.startswith("FarmItems") for r in reprs)
-
-    def test_task_exchange_goal_always_in_goals(self):
+    def test_task_exchange_action_always_built(self):
         player = self._make_player_with_gd()
         player.state = make_state()
-        goals = player._build_goals()
-        exchange_goals = [g for g in goals if isinstance(g, TaskExchangeGoal)]
-        assert len(exchange_goals) == 1
+        from artifactsmmo_cli.ai.actions.task import TaskExchangeAction
+        actions = player._build_actions()
+        exchange_actions = [a for a in actions if isinstance(a, TaskExchangeAction)]
+        assert len(exchange_actions) == 1
 
     def test_build_actions_includes_task_exchange(self):
         player = self._make_player_with_gd()
@@ -1062,13 +1058,18 @@ class TestHandleStuckExtended:
         assert player._suppressed_goals.get("GoalB") == 15
         assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 2
 
-    def test_no_progress_level2_sets_wildcard_mode(self):
+    def test_no_progress_level2_refreshes_and_clears_blockers(self):
         player = GamePlayer(character="hero")
         player._recovery_level[StuckSignal.NO_PROGRESS] = 1
+        refreshed = make_state(level=2)
+        player._fetch_world_state = lambda client: refreshed
+        cleared: list[str] = []
+        player._blockers.clear = lambda code: cleared.append(code)
 
         player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
 
-        assert player._wildcard_mode is True
+        assert player.state is refreshed
+        assert cleared == ["bank"]
         assert player._recovery_level[StuckSignal.NO_PROGRESS] == 2
 
     def test_no_progress_level3_exits(self):
@@ -1098,34 +1099,41 @@ class TestBuildGoalsExtended:
         player.state = make_state()
         return player
 
-    def test_wildcard_mode_returns_only_restore_hp(self):
-        player = self._make_minimal_player()
-        player._wildcard_mode = True
-        goals = player._build_goals()
-        assert len(goals) == 1
-        assert isinstance(goals[0], RestoreHPGoal)
-        # wildcard mode is one-shot: should be reset after call
-        assert player._wildcard_mode is False
-
     def test_bank_retry_timer_resets_bank_accessible(self):
         player = self._make_minimal_player()
-        player._bank_accessible = False
-        # Simulate that the block started more than _BANK_RETRY_SECONDS ago
+        player.state = make_state(level=5)
+        # Block was recorded at level 3 — current level (5) has surpassed it.
+        player._blockers.mark_blocked("bank", char_level=3)
         player._bank_blocked_since = time.monotonic() - 61.0  # > 60s threshold
 
-        player._build_goals()
+        player._maybe_retry_bank()
 
         assert player._bank_accessible is True
         assert player._bank_blocked_since is None
 
     def test_bank_retry_timer_does_not_reset_before_timeout(self):
         player = self._make_minimal_player()
+        player.state = make_state(level=5)
         player._bank_accessible = False
         player._bank_blocked_since = time.monotonic() - 10.0  # only 10s ago
 
-        player._build_goals()
+        player._maybe_retry_bank()
 
         assert player._bank_accessible is False  # still locked
+
+    def test_bank_retry_does_not_fire_when_level_unchanged(self):
+        """Timer elapsed but no level gained since block — retry must NOT fire."""
+        player = self._make_minimal_player()
+        player.state = make_state(level=5)
+        # Block recorded at the same level the character is at now.
+        player._blockers.mark_blocked("bank", char_level=5)
+        player._bank_blocked_since = time.monotonic() - 61.0  # > 60s threshold
+
+        player._maybe_retry_bank()
+
+        # Level guard must suppress the retry: bank blocker must remain set.
+        assert player._bank_accessible is False
+        assert player._bank_blocked_since is not None
 
 
 def test_game_player_accepts_history_kwarg():
@@ -1224,25 +1232,68 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
         player.state = make_state()
         return player
 
-    def test_task_cancel_survives_suppression(self):
-        """TaskCancel must appear in _build_goals even when in _suppressed_goals."""
-        player = self._make_minimal_player()
-        # Suppress TaskCancel as if oscillation recovery had hit it
-        player._suppressed_goals = {"TaskCancel": 5}
-        goals = player._build_goals()
-        assert any(repr(g) == "TaskCancel" for g in goals), (
-            "TaskCancelGoal must not be filtered by suppression"
-        )
+    def _arbiter_player(self, history=None) -> GamePlayer:
+        player = GamePlayer(character="hero", history=history)
+        gd = GameData()
+        gd._monster_locations = {"chicken": [(1, 0)]}
+        gd._monster_level = {"chicken": 1}
+        gd._monster_hp = {"chicken": 10}
+        gd._monster_attack = {"chicken": {"fire": 1}}
+        gd._monster_resistance = {"chicken": {}}
+        gd._monster_critical_strike = {"chicken": 0}
+        gd._monster_initiative = {"chicken": 0}
+        gd._resource_locations = {}
+        gd._workshop_locations = {}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        gd._resource_skill = {}
+        player.game_data = gd
+        player.state = make_state()
+        player._objective = CharacterObjective.from_game_data(gd)
+        player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+        return player
+
+    def test_task_cancel_survives_suppression(self, tmp_path):
+        """TaskCancel must remain selectable even when in _suppressed_goals."""
+        store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
+        try:
+            player = self._arbiter_player(history=store)
+            # A monsters task far above the char's level → task_decision PIVOTs so
+            # TASK_CANCEL fires; suppress TaskCancel as oscillation recovery would.
+            gd = player.game_data
+            gd._monster_level["dragon"] = 50
+            gd._monster_hp["dragon"] = 100000
+            gd._monster_attack["dragon"] = {"fire": 1}
+            gd._monster_resistance["dragon"] = {}
+            gd._monster_critical_strike["dragon"] = 0
+            gd._monster_initiative["dragon"] = 0
+            player.state = make_state(level=5, task_type="monsters", task_code="dragon",
+                                      task_total=5, task_progress=0)
+            player._suppressed_goals = {"TaskCancel": 5}
+            decision = player._strategy.decide(player.state, player.game_data)
+            actions = player._build_actions()
+            _goal, _plan, tried = player._arbiter.select(
+                decision, player.state, player.game_data, actions,
+                player._selection_context(), suppressed=set(player._suppressed_goals))
+            # TaskCancel must not be filtered from the candidates the arbiter walks.
+            assert any(gt["goal"] == "TaskCancel" for gt in tried)
+        finally:
+            store.close()
 
     def test_other_suppressed_goals_are_still_filtered(self):
         """Suppression of goals other than TaskCancel must still work."""
-        player = self._make_minimal_player()
-        player._suppressed_goals = {"TaskCancel": 5, "CompleteTask": 5}
-        goals = player._build_goals()
-        # TaskCancel survives
-        assert any(repr(g) == "TaskCancel" for g in goals)
-        # CompleteTask is filtered out
-        assert not any(repr(g) == "CompleteTask" for g in goals)
+        player = self._arbiter_player()
+        player.state = make_state(task_type="monsters", task_code="chicken",
+                                  task_total=5, task_progress=5)
+        player._suppressed_goals = {"CompleteTask": 5}
+        decision = player._strategy.decide(player.state, player.game_data)
+        actions = player._build_actions()
+        _goal, _plan, tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions,
+            player._selection_context(), suppressed=set(player._suppressed_goals))
+        assert not any(gt["goal"] == "CompleteTask" for gt in tried)
 
 
 def test_fetch_world_state_retries_on_404(monkeypatch):

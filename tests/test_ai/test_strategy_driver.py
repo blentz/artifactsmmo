@@ -4,7 +4,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task import AcceptTaskAction
+from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal
@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGo
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import (
     FALLBACK_BAND,
@@ -348,6 +349,47 @@ def test_select_returns_none_when_nothing_plans():
     goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, ctx)
     assert goal is None
     assert plan == []
+
+
+def test_select_skips_suppressed_means():
+    """A means whose repr is in `suppressed` is skipped, falling through."""
+    planner = GOAPPlanner()
+    gd = _make_planner_gd()
+    state = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
+    actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
+    ctx = _ctx(combat_monster="chicken")
+    arbiter = StrategyArbiter(planner, history=None)
+    decision = _FakeDecision(chosen_step=ReachCharLevel(5))
+    # Without suppression AcceptTask would be selected; suppress it.
+    goal, plan, tried = arbiter.select(
+        decision, state, gd, actions, ctx, suppressed={"AcceptTask"})
+    assert goal is None or repr(goal) != "AcceptTask"
+    assert not any(gt["goal"] == "AcceptTask" for gt in tried)
+
+
+def test_select_never_suppresses_task_cancel(tmp_path):
+    """TaskCancel is the escape hatch and must never be filtered by suppression."""
+    planner = GOAPPlanner()
+    gd = _make_planner_gd()
+    # A monsters task far above the character's level → task_decision PIVOTs, so
+    # TASK_CANCEL fires (requires a non-None history). No FightAction is given so
+    # nothing else plans, forcing the walk to reach the (suppressed) TaskCancel.
+    gd._monster_level["dragon"] = 50
+    store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
+    try:
+        state = make_state(level=5, hp=150, max_hp=150, task_code="dragon",
+                           task_type="monsters", task_progress=0, task_total=5)
+        actions = [TaskCancelAction(taskmaster_location=(2, 1))]
+        ctx = _ctx()
+        arbiter = StrategyArbiter(planner, history=store)
+        decision = _FakeDecision(chosen_step=None)
+        _goal, _plan, tried = arbiter.select(
+            decision, state, gd, actions, ctx, suppressed={"TaskCancel"})
+        assert any(gt["goal"] == "TaskCancel" for gt in tried), (
+            "TaskCancel must not be skipped even when suppressed"
+        )
+    finally:
+        store.close()
 
 
 def test_select_sticky_keeps_committed_means():

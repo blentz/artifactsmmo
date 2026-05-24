@@ -213,7 +213,8 @@ class TestPlayerRunVerboseAndExecute:
         char_after_rest = make_char_schema(hp=150, max_hp=150)
         client = MagicMock()
 
-        initial_state = make_state(hp=50, max_hp=150)
+        # Below the 25% critical-HP guard threshold so RestoreHP fires as a guard.
+        initial_state = make_state(hp=20, max_hp=150)
         wait_calls = [0]
 
         def fake_wait():
@@ -251,7 +252,8 @@ class TestPlayerRunVerboseAndExecute:
         player = GamePlayer(character="hero", dry_run=True)
         client = MagicMock()
 
-        initial_state = make_state(hp=50, max_hp=150)
+        # Below the 25% critical-HP guard threshold so RestoreHP fires as a guard.
+        initial_state = make_state(hp=20, max_hp=150)
         wait_calls = [0]
 
         def fake_wait():

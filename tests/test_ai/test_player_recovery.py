@@ -15,19 +15,42 @@ def test_player_has_detector_after_init():
     assert player._actions_since_full_refresh == 0
 
 
-def test_build_goals_filters_suppressed_goals():
-    """Goals with names in _suppressed_goals (with positive counter) are excluded."""
-    player = GamePlayer(character="testchar")
-    player.game_data = GameData()
-    player.game_data._monster_level = {"chicken": 1}
-    player._bank_accessible = True
-    player.state = make_state()
-    # Suppress FarmMonster for 5 cycles
-    player._suppressed_goals = {"FarmMonster(chicken)": 5}
+def test_arbiter_skips_suppressed_goals():
+    """A goal whose repr is in _suppressed_goals is skipped by the arbiter."""
+    from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+    from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
+    from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 
-    goals = player._build_goals()
-    names = [repr(g) for g in goals]
-    assert not any("FarmMonster(chicken)" in n for n in names)
+    player = GamePlayer(character="testchar")
+    gd = GameData()
+    gd._monster_locations = {"chicken": [(1, 0)]}
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 10}
+    gd._monster_attack = {"chicken": {"fire": 1}}
+    gd._monster_resistance = {"chicken": {}}
+    gd._monster_critical_strike = {"chicken": 0}
+    gd._monster_initiative = {"chicken": 0}
+    gd._resource_locations = {}
+    gd._workshop_locations = {}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_skill = {}
+    player.game_data = gd
+    player._bank_accessible = True
+    # Idle (no task) → AcceptTask is the discretionary candidate; suppress it.
+    player.state = make_state(task_code=None, task_type=None)
+    player._objective = CharacterObjective.from_game_data(gd)
+    player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+    player._suppressed_goals = {"AcceptTask": 5}
+
+    decision = player._strategy.decide(player.state, gd)
+    actions = player._build_actions()
+    _goal, _plan, tried = player._arbiter.select(
+        decision, player.state, gd, actions, player._selection_context(),
+        suppressed=set(player._suppressed_goals))
+    assert not any(gt["goal"] == "AcceptTask" for gt in tried)
 
 
 def test_suppression_counter_decrements_per_cycle():

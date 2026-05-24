@@ -226,14 +226,22 @@ class StrategyArbiter:
         game_data: GameData,
         actions: list[Action],
         ctx: SelectionContext,
+        suppressed: frozenset[str] | set[str] = frozenset(),
     ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
         """Select the first plannable goal from the ordered candidate list.
 
         decision must have a .chosen_step attribute (MetaGoal | None).
 
+        Candidates whose repr is in `suppressed` are skipped, EXCEPT TaskCancel
+        which is never suppressed (it is the escape hatch for a stuck task).
+
         Returns (goal, plan, goals_tried).
         """
         self.goals_tried = []
+
+        def is_suppressed(goal: Goal) -> bool:
+            r = repr(goal)
+            return r != "TaskCancel" and r in suppressed
 
         chosen_step: MetaGoal | None = getattr(decision, "chosen_step", None)
 
@@ -261,7 +269,8 @@ class StrategyArbiter:
                 (g for g, is_means in candidates if is_means and repr(g) == self._committed_repr),
                 None,
             )
-            if committed_goal is not None and not committed_goal.is_satisfied(state):
+            if (committed_goal is not None and not committed_goal.is_satisfied(state)
+                    and not is_suppressed(committed_goal)):
                 # Check that no guard precedes the committed goal
                 guard_reprs = [repr(g) for g, is_means in candidates if not is_means]
                 guard_precedes = any(
@@ -277,6 +286,9 @@ class StrategyArbiter:
         for goal, is_means in candidates:
             # Skip if already attempted in the sticky block above
             if repr(goal) == tried_repr:
+                continue
+            # Skip suppressed candidates (TaskCancel is never suppressed)
+            if is_suppressed(goal):
                 continue
             # Skip satisfied goals early to avoid unnecessary planning
             if goal.is_satisfied(state):

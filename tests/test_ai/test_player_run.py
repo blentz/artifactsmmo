@@ -155,7 +155,7 @@ class TestPlayerRun:
         mock_sleep.assert_called_with(5)
 
     def test_run_verbose_logs_no_plan(self, capsys):
-        """In verbose mode, run() logs 'No plan for' when a goal can't be planned."""
+        """run() logs 'No plan found' when no goal can be planned (empty actions)."""
         player = GamePlayer(character="hero", verbose=True)
         client = MagicMock()
 
@@ -181,7 +181,7 @@ class TestPlayerRun:
                                             player.run()
 
         output = capsys.readouterr().out
-        assert "No plan for" in output
+        assert "No plan found" in output
 
 
 def test_player_builds_sell_actions_for_sellable_inventory():
@@ -200,16 +200,18 @@ def test_player_builds_sell_actions_for_sellable_inventory():
     assert any(a.item_code == "chicken" and a.npc_code == "cook" for a in sell_actions)
 
 
-def test_player_includes_sell_inventory_goal_when_bank_locked():
-    """When bank is locked, _build_goals should include SellInventoryGoal."""
-    player = GamePlayer(character="testchar")
-    player.game_data = GameData()
-    player.game_data._monster_level = {"chicken": 1}
-    player._bank_accessible = False
-    player.state = make_state()
+def test_sell_means_maps_to_sell_inventory_goal():
+    """The SELL_IDLE/SELL_PRESSURED means map to SellInventoryGoal (bank-locked)."""
+    from artifactsmmo_cli.ai.strategy_driver import map_means
+    from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+    from artifactsmmo_cli.ai.tiers.means import MeansKind
 
-    goals = player._build_goals()
-    assert any(isinstance(g, SellInventoryGoal) for g in goals)
+    gd = GameData()
+    ctx = SelectionContext(bank_accessible=False, bank_required_level=0,
+                           bank_unlock_monster=None, initial_xp=0,
+                           task_exchange_min_coins=1, combat_monster=None)
+    goal = map_means(MeansKind.SELL_IDLE, gd, ctx)
+    assert isinstance(goal, SellInventoryGoal)
 
 
 def test_player_builds_phase_b_actions():
@@ -234,16 +236,18 @@ def test_player_builds_phase_b_actions():
     assert "TaskTradeAction" in classes
 
 
-def test_player_includes_expand_bank_goal():
-    """ExpandBankGoal should appear in _build_goals output."""
-    player = GamePlayer(character="testchar")
-    player.game_data = GameData()
-    player.game_data._monster_level = {"chicken": 1}
-    player._bank_accessible = True
-    player.state = make_state()
+def test_bank_expand_means_maps_to_expand_bank_goal():
+    """The BANK_EXPAND means maps to ExpandBankGoal."""
+    from artifactsmmo_cli.ai.strategy_driver import map_means
+    from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+    from artifactsmmo_cli.ai.tiers.means import MeansKind
 
-    goals = player._build_goals()
-    assert any(isinstance(g, ExpandBankGoal) for g in goals)
+    gd = GameData()
+    ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
+                           bank_unlock_monster=None, initial_xp=0,
+                           task_exchange_min_coins=1, combat_monster=None)
+    goal = map_means(MeansKind.BANK_EXPAND, gd, ctx)
+    assert isinstance(goal, ExpandBankGoal)
 
 
 def test_refresh_if_stale_method_removed():

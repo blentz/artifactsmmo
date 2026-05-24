@@ -44,32 +44,21 @@ from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
-from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal
-from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
-from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
-from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
-from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
-from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
-from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
-from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
-from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
-from artifactsmmo_cli.ai.strategy_driver import (
-    FALLBACK_BAND,
-    STRATEGY_BAND,
-    MetaGoalAdapter,
-    strategy_goal,
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.tiers import (
+    BalancedPersonality,
+    CharacterObjective,
+    ObtainItem,
+    StrategyDecision,
+    StrategyEngine,
 )
-from artifactsmmo_cli.ai.tiers import BalancedPersonality, CharacterObjective, StrategyEngine
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tracing import NullTracer, Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -134,6 +123,8 @@ class GamePlayer:
         self.verbose = verbose
         self.dry_run = dry_run
         self.planner = GOAPPlanner()
+        self._arbiter = StrategyArbiter(self.planner, history)
+        self._last_decision: StrategyDecision | None = None
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
         # Generic blocker registry — replaces what used to be ~5 bank-specific
@@ -145,18 +136,12 @@ class GamePlayer:
         self._actions_since_full_refresh: int = 0
         self._recovery_level: dict[StuckSignal, int] = {}
         self._last_goal_name: str | None = None
-        self._wildcard_mode: bool = False
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
-        self._committed_upgrade_target: tuple[str, str] | None = None
         # Tier-3 strategy engine (built after game-data load); P3a runs it in
         # shadow — its decision is traced each cycle but does not drive the bot.
         self._objective: CharacterObjective | None = None
         self._strategy: StrategyEngine | None = None
-        # Sticky goal commitment: the goal repr we keep pursuing across cycles
-        # until it is satisfied or can no longer plan, so the selector stops
-        # thrashing between near-equal-priority goals every cycle.
-        self._committed_goal_name: str | None = None
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
@@ -281,28 +266,27 @@ class GamePlayer:
                 state = self.state
                 game_data = self.game_data
 
-                goals = self._build_goals()
-                # Snapshot all goal priorities ONCE per cycle so the trace
-                # records what every goal scored at decision time. Avoids
-                # re-calling priority() (some implementations hit the store).
-                goal_priorities: list[tuple[Goal, float]] = [
-                    (g, g.priority(state, game_data, self.history)) for g in goals
-                ]
-                goal_priorities.sort(key=lambda gp: gp[1], reverse=True)
-                goals = [g for g, _ in goal_priorities]
-                # Structured ranking for the trace: every considered goal, sorted.
+                self._maybe_retry_bank()
+
+                assert self._strategy is not None
+                ctx = self._selection_context()
+                decision = self._strategy.decide(state, game_data)
+                self._last_decision = decision
+                step = decision.chosen_step
+                crafting_target = step.code if isinstance(step, ObtainItem) else None
+                self.state = state = replace(state, crafting_target=crafting_target)
+                selected_goal, plan, goals_tried = self._arbiter.select(
+                    decision, state, game_data, actions, ctx,
+                    suppressed=set(self._suppressed_goals),
+                )
+                # Trace ranking: the candidates the arbiter actually tried, in order.
                 goal_rank_trace: list[dict[str, object]] = [
-                    {"goal": repr(g), "priority": round(p, 2)}
-                    for g, p in goal_priorities
+                    {"goal": gt["goal"], "priority": 0.0} for gt in goals_tried
                 ]
 
                 if self.verbose:
-                    goal_summary = "  ".join(f"{repr(g)}={p:.1f}" for g, p in goal_priorities)
-                    print(f"[{self._now()}] Goals: {goal_summary}")
+                    print(f"[{self._now()}] Selected: {selected_goal!r}")
 
-                selected_goal, plan, goals_tried = self._select_goal(
-                    state, game_data, actions, goal_priorities
-                )
                 if selected_goal is not None:
                     self._last_goal_name = repr(selected_goal)
                     self._note_goal_selection(repr(selected_goal), cycle_index=self._cycle_counter)
@@ -389,10 +373,6 @@ class GamePlayer:
                 )
                 if outcome == "ok" and selected_goal.is_satisfied(new_state):
                     cycles_to_satisfy = self._compute_cycles_to_satisfy(repr(selected_goal), self._cycle_counter)
-                    # Goal achieved — release the commitment so the next cycle
-                    # is free to select whatever is now most important.
-                    if repr(selected_goal) == self._committed_goal_name:
-                        self._committed_goal_name = None
                 self._record_learning_cycle(
                     prev_state=prev_state_for_learning,
                     new_state=new_state,
@@ -770,7 +750,10 @@ class GamePlayer:
             "suppressed_goals": list(self._suppressed_goals.keys()),
         }
         if self._strategy is not None and self.game_data is not None:
-            record["strategy"] = self._strategy.decide(self.state, self.game_data).to_trace()
+            decision = self._last_decision
+            if decision is None:
+                decision = self._strategy.decide(self.state, self.game_data)
+            record["strategy"] = decision.to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 
@@ -828,8 +811,9 @@ class GamePlayer:
                 print(f"[{self._now()}] [recovery] NO_PROGRESS L1: forcing full refresh")
                 self.state = self._fetch_world_state(client)
             elif level == 2:
-                self._wildcard_mode = True
-                print(f"[{self._now()}] [recovery] NO_PROGRESS L2: switching to wildcard goals")
+                print(f"[{self._now()}] [recovery] NO_PROGRESS L2: forcing full refresh + clearing blockers")
+                self.state = self._fetch_world_state(client)
+                self._blockers.clear("bank")
             else:
                 print(f"[{self._now()}] [recovery] NO_PROGRESS L3: exiting (manual intervention)")
                 raise SystemExit(2)
@@ -954,93 +938,6 @@ class GamePlayer:
 
         return actions
 
-    def _build_goals(self) -> list[Goal]:
-        """Build goal list. FarmMonsterGoal targets the strongest monster the character can beat."""
-        assert self.game_data is not None
-        assert self.state is not None
-
-        if self._wildcard_mode:
-            # Wildcard mode: only the safest goals
-            self._wildcard_mode = False  # one-shot
-            return [RestoreHPGoal()]
-
-        # Periodically retry bank access after an achievement gate failure (HTTP 496),
-        # but only if there's a reasonable chance the unlock actually happened
-        # since the last attempt — i.e. character has gained at least one level.
-        # Otherwise the flap creates a wasteful Deposit→496→UnlockBank→Deposit loop.
-        if not self._bank_accessible and self._bank_blocked_since is not None:
-            if (time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
-                    and self.state is not None
-                    and self.state.level > self._bank_blocked_at_level):
-                self._blockers.clear("bank")
-
-        # G-I: under max-level root objective, the cheapest-path projection
-        # picks the next monster. The projection maximizes XP/cycle but does NOT
-        # consider winnability, so gate it: if the path-aligned pick isn't
-        # winnable (or there is no projection), fall back to the conservative
-        # winnable picker. When that also yields None, no combat grind is built.
-        farm_target = self._path_aligned_monster()
-        if farm_target is None or not self._is_winnable(farm_target):
-            farm_target = self._pick_winnable_monster()
-
-        # Resolve a STABLE upgrade target. Recomputing the best craftable
-        # upgrade every cycle let a transient inventory change flip the target
-        # (e.g. wooden_shield → fishing_net) mid-gather, so UpgradeEquipment
-        # would craft a different equippable than GatherMaterials was gathering
-        # for. Persist the target until it is equipped or stops being an
-        # upgrade, and feed the SAME target to both goals.
-        probe = UpgradeEquipmentGoal(initial_equipment=self.state.equipment)
-        committed = self._committed_upgrade_target
-        if committed is not None and not self._upgrade_target_still_valid(probe, committed):
-            committed = None
-        if committed is None:
-            committed = probe.find_upgrade_target(self.state, self.game_data)
-        self._committed_upgrade_target = committed
-        # Expose the committed crafting target on the state so every consumer of
-        # active_gathering_skills (tool relevance, gating-XP, scalarizer) counts
-        # the skills the bot gathers for this self-directed craft — e.g. mining
-        # copper ore for copper gear marks mining active so a pickaxe is built.
-        self.state = replace(
-            self.state, crafting_target=committed[0] if committed else None
-        )
-
-        goals: list[Goal] = [
-            RestoreHPGoal(),
-            DepositInventoryGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
-            SellInventoryGoal(bank_accessible=self._bank_accessible),
-            ExpandBankGoal(bank_accessible=self._bank_accessible, game_data=self.game_data),
-            UnlockBankGoal(bank_locked=not self._bank_accessible, initial_xp=self.state.xp,
-                           target_monster=self._bank_unlock_monster),
-            ClaimPendingGoal(),
-            CompleteTaskGoal(),
-            AcceptTaskGoal(),
-            TaskExchangeGoal(min_coins=self._task_exchange_min_coins),
-            TaskCancelGoal(),
-            LowYieldCancelGoal(),
-            # If a remembered blocker requires a higher character level than
-            # we have, drive the grind to reach it before continuing
-            # business-as-usual. Self-disables once level is reached.
-            ReachUnlockLevelGoal(target_level=self._bank_required_level),
-            DiscardOverstockGoal(game_data=self.game_data),
-        ]
-        # Tier-3 strategy drives progression: map its chosen step to a goal at a
-        # fixed band (replaces the old FarmMonster/GrindXP/UpgradeEquipment/
-        # GatherMaterials/LevelSkill/FarmItems goals). A low-priority grind is the
-        # safety net so the bot always has a plannable action if the step can't
-        # plan. Survival/economy/task goals above retain their priorities and
-        # still preempt when urgent.
-        decision = self._strategy.decide(self.state, self.game_data) if self._strategy else None
-        step = decision.chosen_step if decision is not None else None
-        strat = strategy_goal(step, self.state, self.game_data, STRATEGY_BAND, farm_target)
-        if strat is not None:
-            goals.append(strat)
-        if farm_target is not None:
-            goals.append(MetaGoalAdapter(
-                GrindCharacterXPGoal(target_monster=farm_target, initial_xp=self.state.xp),
-                FALLBACK_BAND))
-
-        return [g for g in goals if repr(g) == "TaskCancel" or repr(g) not in self._suppressed_goals]
-
     def _notify_observer(
         self,
         selected_goal_name: str,
@@ -1158,27 +1055,6 @@ class GamePlayer:
             return None
         return plan.next_action_monster
 
-    def _upgrade_target_still_valid(self, probe: UpgradeEquipmentGoal,
-                                    target: tuple[str, str]) -> bool:
-        """True if the persisted upgrade target is still worth pursuing.
-
-        Invalid (→ recompute) when the target item is already equipped in its
-        slot (we got it), or it is no longer an upgrade over whatever now
-        occupies the slot.
-        """
-        assert self.state is not None and self.game_data is not None
-        item_code, slot = target
-        if self.state.equipment.get(slot) == item_code:
-            return False
-        stats = self.game_data.item_stats(item_code)
-        if stats is None:
-            return False
-        current = self.state.equipment.get(slot)
-        current_stats = self.game_data.item_stats(current) if current else None
-        active = frozenset(self.game_data.active_gathering_skills(self.state.task_code, self.state.crafting_target))
-        return probe._is_upgrade_over(item_code, stats, current, current_stats,
-                                      self.game_data, active)
-
     def _is_winnable(self, monster_code: str) -> bool:
         """True when the documented combat-stat prediction says we win AND we
         have not been observed losing this monster (>= MIN_WIN_SAMPLES fights
@@ -1212,121 +1088,38 @@ class GamePlayer:
                 best = (code, level)
         return best[0] if best is not None else None
 
-    def _gating_skill_targets(self, active_skills: set[str]) -> list[tuple[str, int]]:
-        """Find (gating_skill, required_level) pairs for craftable items that:
-        - apply to a slot (i.e. equipable upgrade)
-        - have a positive skill_effect for one of `active_skills`
-        - require a gating crafting_skill level Robby hasn't reached
+    def _winnable_farm_target(self) -> str | None:
+        target = self._path_aligned_monster()
+        if target is None or not self._is_winnable(target):
+            target = self._pick_winnable_monster()
+        return target
 
-        Phase G-E: enables LevelSkillGoal to pivot to skill grinding when a
-        relevant tool is one or two skill levels away.
-        """
+    def _maybe_retry_bank(self) -> None:
+        """Periodically retry bank access after an achievement gate failure
+        (HTTP 496), but only if the character has gained at least one level
+        since the last attempt — otherwise the flap creates a wasteful
+        Deposit→496→UnlockBank→Deposit loop."""
         assert self.state is not None
-        assert self.game_data is not None
-        result: list[tuple[str, int]] = []
-        seen: set[tuple[str, int]] = set()
-        for code, _ in self.game_data._crafting_recipes.items():
-            stats = self.game_data.item_stats(code)
-            if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
-                continue
-            if not any(s in active_skills for s in stats.skill_effects):
-                continue
-            cskill = stats.crafting_skill
-            if not cskill:
-                continue
-            current = self.state.skills.get(cskill, 0)
-            if current >= stats.crafting_level:
-                continue  # already qualified
-            key = (cskill, stats.crafting_level)
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append(key)
-        return result
+        if not self._bank_accessible and self._bank_blocked_since is not None:
+            if (time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
+                    and self.state.level > self._bank_blocked_at_level):
+                self._blockers.clear("bank")
+
+    def _selection_context(self) -> SelectionContext:
+        assert self.state is not None
+        return SelectionContext(
+            bank_accessible=self._bank_accessible,
+            bank_required_level=self._bank_required_level,
+            bank_unlock_monster=self._bank_unlock_monster,
+            initial_xp=self.state.xp,
+            task_exchange_min_coins=self._task_exchange_min_coins,
+            combat_monster=self._winnable_farm_target(),
+        )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
         assert self.state is not None
         suffix = f"  [{_format_plan(plan[1:])}]" if len(plan) > 1 else ""
         print(f"[{self._now()}] → {action!r}{suffix}  (goal: {goal!r})")
-
-    def _select_goal(
-        self,
-        state: WorldState,
-        game_data: GameData,
-        actions: list[Action],
-        goal_priorities: list[tuple[Goal, float]],
-    ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
-        """Choose the goal to pursue this cycle with sticky commitment.
-
-        Order of precedence:
-        1. Preemption — a preemptive goal (HP-critical) that outranks the
-           committed goal's current priority interrupts the commitment.
-        2. Stick — keep the committed goal while it still has positive priority,
-           is not satisfied, and yields a plan. This stops the per-cycle goal
-           thrashing where near-equal priorities flip the selection every cycle.
-        3. Reselect — otherwise pick the highest-priority plannable goal and
-           commit to it.
-
-        Returns (selected_goal, plan, goals_tried). goals_tried records the
-        planner attempts for the trace, exactly as the old inline loop did.
-        """
-        goals_tried: list[dict[str, object]] = []
-
-        def attempt(goal: Goal) -> list[Action]:
-            plan = self.planner.plan(state, goal, actions, game_data, self.history)
-            s = self.planner.last_stats
-            goals_tried.append({
-                "goal": repr(goal),
-                "nodes": s.nodes_explored,
-                "depth": s.max_depth_reached,
-                "timed_out": s.timed_out,
-                "plan_len": len(plan),
-            })
-            if self.verbose and not plan:
-                print(f"[{self._now()}]   No plan for {goal}: nodes={s.nodes_explored} "
-                      f"depth={s.max_depth_reached} timeout={s.timed_out}")
-            return plan
-
-        committed_priority = -float("inf")
-        if self._committed_goal_name is not None:
-            for goal, priority in goal_priorities:
-                if repr(goal) == self._committed_goal_name:
-                    committed_priority = priority
-                    break
-
-        # 1. Preemption: a safety goal that outranks the commitment interrupts it.
-        if self._committed_goal_name is not None:
-            for goal, priority in goal_priorities:
-                if priority <= 0:
-                    break
-                if goal.preemptive and priority > committed_priority and repr(goal) != self._committed_goal_name:
-                    plan = attempt(goal)
-                    if plan:
-                        self._committed_goal_name = repr(goal)
-                        return goal, plan, goals_tried
-
-        # 2. Stick with the committed goal while it remains viable.
-        if self._committed_goal_name is not None:
-            for goal, priority in goal_priorities:
-                if repr(goal) != self._committed_goal_name:
-                    continue
-                if priority > 0 and not goal.is_satisfied(state):
-                    plan = attempt(goal)
-                    if plan:
-                        return goal, plan, goals_tried
-                break  # committed goal present but not viable — fall through
-
-        # 3. Reselect: highest-priority plannable goal; commit to it.
-        for goal, priority in goal_priorities:
-            if priority <= 0:
-                break
-            plan = attempt(goal)
-            if plan:
-                self._committed_goal_name = repr(goal)
-                return goal, plan, goals_tried
-
-        self._committed_goal_name = None
-        return None, [], goals_tried
 
     def _learn_task_exchange_cost(self, action: Action, prev_state: WorldState,
                                   new_state: WorldState, outcome: str) -> None:

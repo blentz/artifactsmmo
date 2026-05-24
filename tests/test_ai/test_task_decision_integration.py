@@ -1,9 +1,8 @@
-"""Integration tests: TaskCancelGoal.value and _build_goals both driven by task_decision."""
+"""Integration tests: TaskCancelGoal.value driven by task_decision."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
 
@@ -26,16 +25,9 @@ def _make_gd() -> GameData:
     return gd
 
 
-def _make_player(gd: GameData, state, history: LearningStore) -> GamePlayer:
-    player = GamePlayer(character="hero", history=history)
-    player.game_data = gd
-    player.state = state
-    return player
-
-
 class TestTaskDecisionIntegration:
-    def test_pivot_case_cancel_fires_and_no_level_skill_goal(self, tmp_path):
-        """PIVOT (alchemy 1, no observations): cancel value > 0 and no LevelSkill goal."""
+    def test_pivot_case_cancel_fires(self, tmp_path):
+        """PIVOT (alchemy 1, no observations): TaskCancel value > 0."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = _make_gd()
         state = make_state(
@@ -47,9 +39,6 @@ class TestTaskDecisionIntegration:
         )
         try:
             assert TaskCancelGoal().value(state, gd, store) > 0
-            player = _make_player(gd, state, store)
-            goals = player._build_goals()
-            assert not any(repr(g) == "LevelSkill(alchemy->5)" for g in goals)
         finally:
             store.close()
 
