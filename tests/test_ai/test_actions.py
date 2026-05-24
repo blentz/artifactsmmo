@@ -507,6 +507,20 @@ class TestUseConsumableAction:
     def test_repr(self):
         assert repr(UseConsumableAction(_item_stats={})) == "UseConsumable"
 
+    def test_consumable_cheap_when_deficit_justifies_it(self):
+        # deficit 60 >= potion restore 50 -> cheap (2.0, beats Rest 10.0)
+        item_stats = {"potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50)}
+        action = UseConsumableAction(_item_stats=item_stats)
+        state = make_state(hp=40, max_hp=100, inventory={"potion": 3})
+        assert action.cost(state, make_game_data()) == 2.0
+
+    def test_consumable_expensive_when_overheal(self):
+        # deficit 10 < potion restore 50 -> overheal -> cost above Rest (10.0)
+        item_stats = {"potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50)}
+        action = UseConsumableAction(_item_stats=item_stats)
+        state = make_state(hp=90, max_hp=100, inventory={"potion": 3})
+        assert action.cost(state, make_game_data()) > 10.0
+
 
 class TestAcceptTaskAction:
     def test_applicable_when_no_task(self):

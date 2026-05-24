@@ -80,7 +80,17 @@ class UseConsumableAction(Action):
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
-        return 2.0
+        # _best_consumable picks the highest-restore potion; if a smaller potion would
+        # fit the deficit without overheal, this still penalizes (planner Rests). Ranking
+        # consumables by fit-to-deficit is a future refinement, out of P4 scope.
+        best = _best_consumable(state.inventory, self._item_stats)
+        if best is None:
+            return 2.0                        # not applicable anyway; cheap default
+        _, restore = best
+        deficit = state.max_hp - state.hp
+        if deficit >= restore:
+            return 2.0                        # heal not wasted -> beats Rest (10.0)
+        return 100.0  # overheal: must exceed RestAction.cost (10.0) so the planner Rests.
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         best = _best_consumable(state.inventory, self._item_stats)
