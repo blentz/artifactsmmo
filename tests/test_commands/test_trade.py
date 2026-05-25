@@ -317,7 +317,7 @@ class TestTradeCommands:
 
                 assert result.exit_code == 0
                 mock_api.assert_called_once_with(
-                    client=mock_client_manager.client, code="iron_ore", seller="testuser", page=1, size=20
+                    client=mock_client_manager.client, code="iron_ore", account="testuser", page=1, size=20
                 )
 
     def test_history_command_personal(self, runner, mock_client_manager, mock_api_response):

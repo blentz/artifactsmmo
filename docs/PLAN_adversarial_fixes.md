@@ -55,11 +55,22 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
 - [ ] Tests are not in mypy scope at all (no files/packages in [tool.mypy]) —
       decide whether to bring tests under mypy (currently test_info.py has 192 errors).
 
+### P10 — latent runtime bugs surfaced by P9 (NEW, mock-hidden)
+- [ ] `APIWrapper.action_fight` calls `action_fight_sync` without required `body`
+      → real TypeError. `combat.py` callers pass body. `# type: ignore[call-arg]`
+      in client_manager.py:107. Fix: accept+forward body; update test.
+- [ ] `commands/trade.py orders` forwards `seller=` but endpoint param is `account=`
+      → real TypeError. `# type: ignore[call-arg]`. test_trade.py:320 asserts the bug.
+- [ ] `client_manager.py:242` timeout int vs httpx.Timeout — benign; test asserts
+      literal int. `# type: ignore[arg-type]`. Lowest priority.
+- All three are W3 made concrete: mocked `.sync` never validated the call signature.
+
 ## Status log
 - 2026-05-25: plan created, baseline captured (2243 pass, 97% cov, 4 warnings).
 - 2026-05-25: P1 DONE — integration tests offline+mocked, no skips/except Exception. Committed.
 - 2026-05-25: P2 DONE — LearningStore weakref.finalize disposes engine; suite is 0-warning under -W error (2244 pass). Committed.
 - 2026-05-25: Discovered P9 — 129 pre-existing mypy-strict errors on main. Added phase.
 - 2026-05-25: P3 DONE — flattened client_manager nested error handling; scalarizer "nesting" was a false positive (sequential single-level trys). Committed.
-- Next: P4 cooldown, P5 C2 (~150 sites), P6 refactor, P7 class-split, P8 cov→100, P9 mypy→0.
-  NOTE P4↔P9 overlap: the cooldown float/int type errors are a big chunk of the 129 mypy errors.
+- 2026-05-25: P9 DONE — mypy --strict 129→0 (5 parallel agents, type-only). Committed.
+  Surfaced 3 mock-hidden latent bugs → logged as P10.
+- Next: P10 (latent bugs), P4 cooldown, P5 C2, P6 refactor, P7 class-split, P8 cov→100.

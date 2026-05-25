@@ -63,6 +63,7 @@ from artifactsmmo_api_client.api.server_details.get_server_details_get import (
     sync as get_server_details_sync,
 )
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.fight_request_schema import FightRequestSchema
 
 from artifactsmmo_cli.config import Config
 
@@ -102,9 +103,7 @@ class APIWrapper:
 
     def action_fight(self, name: str) -> Any:
         try:
-            # The generated client signature requires `body`, but the existing
-            # behavior (and its tests) call without one; keeping it type-only.
-            return action_fight_sync(client=self._client, name=name)  # type: ignore[call-arg]
+            return action_fight_sync(client=self._client, name=name, body=FightRequestSchema())
         except ValueError as e:
             if "is not a valid HTTPStatus" in str(e):
                 # Handle non-standard HTTP status codes by making a direct request
@@ -244,7 +243,7 @@ class ClientManager:
             # AuthenticatedClient declares `Timeout | None`, but it accepts a
             # plain int that httpx coerces identically to httpx.Timeout(int).
             # Passing the int keeps existing behavior (and its test) intact.
-            timeout=config.timeout,  # type: ignore[arg-type]
+            timeout=httpx.Timeout(config.timeout),
             raise_on_unexpected_status=False,
         )
 

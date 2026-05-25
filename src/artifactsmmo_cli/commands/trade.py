@@ -399,10 +399,13 @@ def show_item_orders(
 
         client = ClientManager().client
 
-        # `seller` is not part of the generated endpoint signature; preserved as-is to keep
-        # existing behavior (tests assert the kwarg is forwarded).
+        # The endpoint filters by seller `account`; the CLI exposes it as --seller.
         response = get_ge_orders_grandexchange_orders_get.sync(
-            client=client, code=item if item is not None else UNSET, seller=seller, page=page, size=size  # type: ignore[call-arg]
+            client=client,
+            code=item if item is not None else UNSET,
+            account=seller if seller is not None else UNSET,
+            page=page,
+            size=size,
         )
 
         cli_response = handle_api_response(response)

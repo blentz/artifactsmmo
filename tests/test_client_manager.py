@@ -3,8 +3,10 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.fight_request_schema import FightRequestSchema
 
 from artifactsmmo_cli.client_manager import APIWrapper, ClientManager
 from artifactsmmo_cli.config import Config
@@ -29,7 +31,7 @@ def test_client_manager_initialization():
         mock_client.assert_called_once_with(
             base_url="https://api.artifactsmmo.com",
             token="test-token",
-            timeout=30,
+            timeout=httpx.Timeout(30),
             raise_on_unexpected_status=False,
         )
 
@@ -205,7 +207,11 @@ def test_api_wrapper_action_fight_success():
         return_value=sentinel,
     ) as mock_sync:
         result = wrapper.action_fight("Alice")
-    mock_sync.assert_called_once_with(client=wrapper._client, name="Alice")
+    assert mock_sync.call_count == 1
+    call_kwargs = mock_sync.call_args.kwargs
+    assert call_kwargs["client"] is wrapper._client
+    assert call_kwargs["name"] == "Alice"
+    assert isinstance(call_kwargs["body"], FightRequestSchema)
     assert result is sentinel
 
 
