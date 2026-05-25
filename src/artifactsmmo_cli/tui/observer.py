@@ -1,6 +1,7 @@
 """Thread-safe bridge: bot worker thread → Textual main thread."""
 
 from collections.abc import Callable
+from typing import Any
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 
@@ -13,7 +14,7 @@ class ThreadSafeBridge:
     every widget mutation must go through call_from_thread).
     """
 
-    def __init__(self, app, handler: Callable[[CycleSnapshot], None]) -> None:
+    def __init__(self, app: Any, handler: Callable[[CycleSnapshot], None]) -> None:
         self._app = app
         self._handler = handler
 

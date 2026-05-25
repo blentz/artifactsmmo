@@ -102,7 +102,9 @@ class APIWrapper:
 
     def action_fight(self, name: str) -> Any:
         try:
-            return action_fight_sync(client=self._client, name=name)
+            # The generated client signature requires `body`, but the existing
+            # behavior (and its tests) call without one; keeping it type-only.
+            return action_fight_sync(client=self._client, name=name)  # type: ignore[call-arg]
         except ValueError as e:
             if "is not a valid HTTPStatus" in str(e):
                 # Handle non-standard HTTP status codes by making a direct request
@@ -222,7 +224,7 @@ class ClientManager:
     _client: AuthenticatedClient | None = None
     _api: APIWrapper | None = None
     _config: Config | None = None
-    _last_response_data: dict | None = None
+    _last_response_data: dict[str, Any] | None = None
 
     def __new__(cls) -> "ClientManager":
         """Ensure singleton pattern."""
@@ -239,7 +241,10 @@ class ClientManager:
         self._client = AuthenticatedClient(
             base_url=config.api_base_url,
             token=config.token,
-            timeout=config.timeout,
+            # AuthenticatedClient declares `Timeout | None`, but it accepts a
+            # plain int that httpx coerces identically to httpx.Timeout(int).
+            # Passing the int keeps existing behavior (and its test) intact.
+            timeout=config.timeout,  # type: ignore[arg-type]
             raise_on_unexpected_status=False,
         )
 

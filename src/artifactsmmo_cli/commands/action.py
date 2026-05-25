@@ -536,7 +536,7 @@ def goto_location(
                             )
 
                             # Wait with countdown
-                            for remaining in range(cooldown_seconds, 0, -1):
+                            for remaining in range(math.ceil(cooldown_seconds), 0, -1):
                                 progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
                                 time.sleep(1)
 
@@ -578,7 +578,7 @@ def goto_location(
                             )
 
                             # Wait with countdown
-                            for remaining in range(cooldown_seconds, 0, -1):
+                            for remaining in range(math.ceil(cooldown_seconds), 0, -1):
                                 progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
                                 time.sleep(1)
 

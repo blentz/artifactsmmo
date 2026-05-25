@@ -213,18 +213,21 @@ def _parse_detailed_error_message(error: UnexpectedStatus) -> str | None:
             error_obj = error_data["error"]
             # Get the message if available
             if "message" in error_obj:
-                return error_obj["message"]
+                message: str = error_obj["message"]
+                return message
             # Get details if available
             if "details" in error_obj:
                 return str(error_obj["details"])
 
         # Check for detail field
         if "detail" in error_data:
-            return error_data["detail"]
+            detail: str = error_data["detail"]
+            return detail
 
         # Check for message field
         if "message" in error_data:
-            return error_data["message"]
+            top_message: str = error_data["message"]
+            return top_message
 
     except (json.JSONDecodeError, KeyError, AttributeError):
         pass
@@ -301,7 +304,8 @@ def _parse_api_error_response(error: UnexpectedStatus, fallback_message: str) ->
 def extract_character_data(character_response: dict[str, Any]) -> dict[str, Any]:
     """Extract character data from API response."""
     if "character" in character_response:
-        return character_response["character"]
+        character: dict[str, Any] = character_response["character"]
+        return character
     return character_response
 
 
@@ -309,7 +313,8 @@ def extract_cooldown_info(response: dict[str, Any]) -> int | None:
     """Extract cooldown information from response."""
     cooldown = response.get("cooldown", {})
     if cooldown:
-        return cooldown.get("remaining_seconds", 0)
+        remaining: int = cooldown.get("remaining_seconds", 0)
+        return remaining
     return None
 
 

@@ -1,5 +1,7 @@
 """Information and lookup commands."""
 
+from typing import Any
+
 import httpx
 import typer
 from artifactsmmo_api_client.api.badges import get_all_badges_badges_get, get_badge_badges_code_get
@@ -25,7 +27,7 @@ from artifactsmmo_api_client.api.resources import (
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 from artifactsmmo_api_client.models.map_layer import MapLayer
-from artifactsmmo_api_client.types import UNSET
+from artifactsmmo_api_client.types import UNSET, Unset
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -55,7 +57,7 @@ def list_items(
 
         if item_code:
             # Get specific item
-            response = get_item_items_code_get.sync(client=client, code=item_code)
+            response: Any = get_item_items_code_get.sync(client=client, code=item_code)
             cli_response = handle_api_response(response)
             if cli_response.success and cli_response.data:
                 item = cli_response.data
@@ -85,7 +87,7 @@ def list_items(
                 console.print(format_error_message(cli_response.error or f"Item '{item_code}' not found"))
         else:
             # List items - only pass non-None parameters to avoid API client bugs
-            kwargs = {"client": client, "page": page, "size": size}
+            kwargs: dict[str, Any] = {"client": client, "page": page, "size": size}
             if item_type is not None:
                 kwargs["type_"] = item_type
             if craft_skill is not None:
@@ -186,7 +188,7 @@ def list_monsters(
 
         if monster_code:
             # Get specific monster
-            response = get_monster_monsters_code_get.sync(client=client, code=monster_code)
+            response: Any = get_monster_monsters_code_get.sync(client=client, code=monster_code)
             cli_response = handle_api_response(response)
             if cli_response.success and cli_response.data:
                 monster = cli_response.data
@@ -346,7 +348,7 @@ def get_monster(
 
         # Try to get monster by exact code first
         try:
-            response = get_monster_monsters_code_get.sync(client=client, code=name)
+            response: Any = get_monster_monsters_code_get.sync(client=client, code=name)
             cli_response = handle_api_response(response)
 
             if cli_response.success and cli_response.data:
@@ -401,7 +403,7 @@ def get_monster(
         raise typer.Exit(1)
 
 
-def _display_monster_details(monster, character_data: dict[str, str | int] | None = None) -> None:
+def _display_monster_details(monster: Any, character_data: dict[str, str | int] | None = None) -> None:
     """Display detailed monster information with optional combat analysis.
 
     Args:
@@ -522,7 +524,7 @@ def list_resources(
 
         if resource_code:
             # Get specific resource
-            response = get_resource_resources_code_get.sync(client=client, code=resource_code)
+            response: Any = get_resource_resources_code_get.sync(client=client, code=resource_code)
             cli_response = handle_api_response(response)
             if cli_response.success and cli_response.data:
                 resource = cli_response.data
@@ -566,7 +568,7 @@ def list_resources(
             api_max_level = max_level
 
             # List resources - only pass non-None parameters to avoid API client bugs
-            kwargs = {"client": client, "page": page, "size": size}
+            kwargs: dict[str, Any] = {"client": client, "page": page, "size": size}
 
             # Convert skill string to GatheringSkill enum if provided
             if skill is not None:
@@ -618,13 +620,14 @@ def list_resources(
                                             locations = [
                                                 loc
                                                 for loc in locations
-                                                if abs(loc["x"] - center_x) + abs(loc["y"] - center_y) <= radius
+                                                if abs(int(loc["x"]) - center_x) + abs(int(loc["y"]) - center_y)
+                                                <= radius
                                             ]
                                         else:
                                             # Just sort by distance from center
                                             for loc in locations:
-                                                loc["center_distance"] = abs(loc["x"] - center_x) + abs(
-                                                    loc["y"] - center_y
+                                                loc["center_distance"] = abs(int(loc["x"]) - center_x) + abs(
+                                                    int(loc["y"]) - center_y
                                                 )
                                             locations.sort(key=lambda r: r["center_distance"])
 
@@ -721,7 +724,7 @@ def list_achievements(
 
         if achievement_code:
             # Get specific achievement
-            response = get_badge_badges_code_get.sync(client=client, code=achievement_code)
+            response: Any = get_badge_badges_code_get.sync(client=client, code=achievement_code)
             cli_response = handle_api_response(response)
             if cli_response.success and cli_response.data:
                 badge = cli_response.data
@@ -781,14 +784,11 @@ def show_leaderboard(
 
         client = ClientManager().client
 
+        lb_kwargs: dict[str, Any] = {"client": client, "sort": sort, "page": page, "size": size}
         if board_type.lower() == "characters":
-            response = get_characters_leaderboard_leaderboard_characters_get.sync(
-                client=client, sort=sort, page=page, size=size
-            )
+            response: Any = get_characters_leaderboard_leaderboard_characters_get.sync(**lb_kwargs)
         elif board_type.lower() == "accounts":
-            response = get_accounts_leaderboard_leaderboard_accounts_get.sync(
-                client=client, sort=sort, page=page, size=size
-            )
+            response = get_accounts_leaderboard_leaderboard_accounts_get.sync(**lb_kwargs)
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
             leaderboard = cli_response.data
@@ -843,7 +843,7 @@ def list_events(
         client = ClientManager().client
 
         if active_only:
-            response = get_all_active_events_events_active_get.sync(client=client, page=page, size=size)
+            response: Any = get_all_active_events_events_active_get.sync(client=client, page=page, size=size)
         else:
             response = get_all_events_events_get.sync(client=client, page=page, size=size)
 
@@ -997,7 +997,7 @@ def list_npcs(
                     npc_info = _classify_npc(content_type, content_code)
                     if npc_info:
                         # Apply type filter if specified
-                        if npc_type and npc_type.lower() not in npc_info["type"].lower():
+                        if npc_type and npc_type.lower() not in str(npc_info["type"]).lower():
                             continue
 
                         all_npcs.append(
@@ -1035,8 +1035,8 @@ def list_npcs(
 
                     rows.append(
                         [
-                            npc["name"],
-                            npc["type"],
+                            str(npc["name"]),
+                            str(npc["type"]),
                             f"({npc['x']}, {npc['y']})",
                             services_str,
                         ]
@@ -1095,7 +1095,7 @@ def get_npc(
 
                     # Determine if this is an NPC location
                     npc_info = _classify_npc(content_type, content_code)
-                    if npc_info and name.lower() in npc_info["name"].lower():
+                    if npc_info and name.lower() in str(npc_info["name"]).lower():
                         found_npc = {
                             "name": npc_info["name"],
                             "type": npc_info["type"],
@@ -1116,12 +1116,12 @@ def get_npc(
         if found_npc:
             headers = ["Property", "Value"]
             rows = [
-                ["Name", found_npc["name"]],
-                ["Type", found_npc["type"]],
+                ["Name", str(found_npc["name"])],
+                ["Type", str(found_npc["type"])],
                 ["Location", f"({found_npc['x']}, {found_npc['y']})"],
-                ["Area", found_npc["location_name"]],
-                ["Content Type", found_npc["content_type"]],
-                ["Content Code", found_npc["content_code"]],
+                ["Area", str(found_npc["location_name"])],
+                ["Content Type", str(found_npc["content_type"])],
+                ["Content Code", str(found_npc["content_code"])],
                 ["Services", ", ".join(found_npc["services"])],
             ]
 
@@ -1238,12 +1238,12 @@ def find_nearest_resource(
             for resource in resource_locations:
                 rows.append(
                     [
-                        resource["name"],
-                        resource["type"],
+                        str(resource["name"]),
+                        str(resource["type"]),
                         f"({resource['x']}, {resource['y']})",
                         str(resource["distance"]),
                         str(resource["level"]),
-                        resource["skill"],
+                        str(resource["skill"]),
                     ]
                 )
             title = f"Nearest {resource_name.title()} Resources"
@@ -1255,11 +1255,11 @@ def find_nearest_resource(
             for resource in resource_locations:
                 rows.append(
                     [
-                        resource["name"],
-                        resource["type"],
+                        str(resource["name"]),
+                        str(resource["type"]),
                         f"({resource['x']}, {resource['y']})",
                         str(resource["level"]),
-                        resource["skill"],
+                        str(resource["skill"]),
                     ]
                 )
             title = f"{resource_name.title()} Resource Locations"
@@ -1378,7 +1378,7 @@ def _get_resource_data(resource_name: str, resource_type: str | None = None) -> 
     max_pages = 10
 
     # Convert string resource_type to GatheringSkill enum if provided
-    skill_enum = UNSET
+    skill_enum: GatheringSkill | Unset = UNSET
     if resource_type:
         try:
             skill_enum = GatheringSkill(resource_type.lower())
@@ -1445,7 +1445,7 @@ def _matches_resource_criteria(
     """
     # Check if content_code matches any known resource
     for resource in resource_data:
-        if resource["code"].lower() == content_code:
+        if str(resource["code"]).lower() == content_code:
             return True
 
     # Check for general resource type matching
@@ -1484,7 +1484,7 @@ def _get_resource_info_for_content(
     """
     # Find exact match first
     for resource in resource_data:
-        if resource["code"].lower() == content_code:
+        if str(resource["code"]).lower() == content_code:
             return resource
 
     # If no exact match, create a default entry
@@ -1681,7 +1681,7 @@ def _format_combat_analysis(character: dict[str, str | int], monster: dict[str, 
     return rows
 
 
-def _get_monster_drops(monster) -> list[str]:
+def _get_monster_drops(monster: Any) -> list[str]:
     """Extract monster drop information.
 
     Args:

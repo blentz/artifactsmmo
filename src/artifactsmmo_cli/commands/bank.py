@@ -1,6 +1,7 @@
 """Bank operation commands."""
 
 import time
+from typing import Any
 
 import httpx
 import typer
@@ -60,7 +61,7 @@ DEFAULT_KEEP_ITEMS = {
 }
 
 
-def get_character_inventory(character: str) -> list[dict]:
+def get_character_inventory(character: str) -> list[dict[str, Any]]:
     """Get character's inventory items."""
     try:
         api = ClientManager().api
@@ -84,7 +85,7 @@ def get_character_inventory(character: str) -> list[dict]:
         return []
 
 
-def get_item_info(item_code: str) -> dict | None:
+def get_item_info(item_code: str) -> dict[str, Any] | None:
     """Get item information including type and subtype."""
     try:
         client = ClientManager().client
@@ -107,7 +108,7 @@ def get_item_info(item_code: str) -> dict | None:
         return None
 
 
-def categorize_item(item_info: dict) -> str:
+def categorize_item(item_info: dict[str, Any]) -> str:
     """Categorize an item based on its type and subtype."""
     # Handle both "type" and "type_" for compatibility
     item_type = (item_info.get("type_", "") or item_info.get("type", "")).lower()
@@ -120,7 +121,7 @@ def categorize_item(item_info: dict) -> str:
     return "other"
 
 
-def filter_items_by_type(inventory: list[dict], item_type: str) -> list[dict]:
+def filter_items_by_type(inventory: list[dict[str, Any]], item_type: str) -> list[dict[str, Any]]:
     """Filter inventory items by type category."""
     filtered_items = []
 
@@ -135,7 +136,7 @@ def filter_items_by_type(inventory: list[dict], item_type: str) -> list[dict]:
     return filtered_items
 
 
-def should_keep_item(item_info: dict, keep_equipment: bool = True, keep_consumables: bool = False) -> bool:
+def should_keep_item(item_info: dict[str, Any], keep_equipment: bool = True, keep_consumables: bool = False) -> bool:
     """Determine if an item should be kept based on its category."""
     category = categorize_item(item_info)
 
@@ -149,14 +150,14 @@ def should_keep_item(item_info: dict, keep_equipment: bool = True, keep_consumab
     return False
 
 
-def execute_single_deposit(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, int | None]:
+def execute_single_deposit(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, float | None]:
     """Execute a single deposit operation. Returns (success, error_message, cooldown_remaining)."""
     try:
         client = ClientManager().client
 
         deposit_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync(
-            client=client, name=character, body=deposit_data
+            client=client, name=character, body=[deposit_data]
         )
 
         cli_response = handle_api_response(response, f"Deposited {quantity}x {item_code}")
@@ -176,14 +177,14 @@ def execute_single_deposit(character: str, item_code: str, quantity: int) -> tup
             return False, cli_response.error or str(e), None
 
 
-def execute_single_withdraw(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, int | None]:
+def execute_single_withdraw(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, float | None]:
     """Execute a single withdraw operation. Returns (success, error_message, cooldown_remaining)."""
     try:
         client = ClientManager().client
 
         withdraw_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync(
-            client=client, name=character, body=withdraw_data
+            client=client, name=character, body=[withdraw_data]
         )
 
         cli_response = handle_api_response(response, f"Withdrew {quantity}x {item_code}")
@@ -333,7 +334,7 @@ def deposit_item(
 
         deposit_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync(
-            client=client, name=character, body=deposit_data
+            client=client, name=character, body=[deposit_data]
         )
 
         cli_response = handle_api_response(response, f"Deposited {quantity}x {item_code}")
@@ -370,7 +371,7 @@ def withdraw_item(
 
         withdraw_data = SimpleItemSchema(code=item_code, quantity=quantity)
         response = action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync(
-            client=client, name=character, body=withdraw_data
+            client=client, name=character, body=[withdraw_data]
         )
 
         cli_response = handle_api_response(response, f"Withdrew {quantity}x {item_code}")
@@ -686,7 +687,7 @@ def smart_exchange(
 
 
 def _display_operation_summary(
-    operation_name: str, successful_operations: list[tuple], failed_operations: list[tuple]
+    operation_name: str, successful_operations: list[tuple[Any, ...]], failed_operations: list[tuple[Any, ...]]
 ) -> None:
     """Display a summary of bulk operations."""
     console.print(f"\n[bold]{operation_name} Summary:[/bold]")

@@ -108,13 +108,13 @@ def format_warning_message(message: str) -> Text:
     return Text(f"⚠ {message}", style="bold yellow")
 
 
-def format_cooldown_message(seconds: int) -> Text:
+def format_cooldown_message(seconds: float) -> Text:
     """Format a cooldown message with human-readable time."""
     time_str = format_time_duration(seconds)
     return Text(f"⏱ Action on cooldown for {time_str}", style="bold blue")
 
 
-def format_time_duration(seconds: int) -> str:
+def format_time_duration(seconds: float) -> str:
     """Format seconds into human-readable duration."""
     if seconds < 60:
         return f"{seconds} seconds"

@@ -3,6 +3,7 @@
 import statistics
 from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
 import httpx
 import typer
@@ -20,9 +21,12 @@ from artifactsmmo_api_client.api.my_characters import (
     action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post,
 )
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.data_page_ge_order_history_schema import DataPageGeOrderHistorySchema
+from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
 from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
 from artifactsmmo_api_client.models.ge_order_creationr_schema import GEOrderCreationrSchema
+from artifactsmmo_api_client.types import UNSET
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -46,7 +50,7 @@ console = Console()
 
 
 # Market Analysis Helper Functions
-def calculate_price_stats(orders: list) -> dict[str, float]:
+def calculate_price_stats(orders: list[Any]) -> dict[str, float]:
     """Calculate price statistics from orders."""
     if not orders:
         return {"min": 0, "max": 0, "avg": 0, "median": 0}
@@ -58,7 +62,7 @@ def calculate_price_stats(orders: list) -> dict[str, float]:
     return {"min": min(prices), "max": max(prices), "avg": statistics.mean(prices), "median": statistics.median(prices)}
 
 
-def calculate_volume_stats(orders: list) -> dict[str, int]:
+def calculate_volume_stats(orders: list[Any]) -> dict[str, int]:
     """Calculate volume statistics from orders."""
     if not orders:
         return {"total_quantity": 0, "total_orders": 0, "avg_quantity": 0}
@@ -73,7 +77,7 @@ def calculate_volume_stats(orders: list) -> dict[str, int]:
     }
 
 
-def find_arbitrage_opportunities(all_orders: list, min_profit_margin: float = 0.1) -> list[dict]:
+def find_arbitrage_opportunities(all_orders: list[Any], min_profit_margin: float = 0.1) -> list[dict[str, Any]]:
     """Find potential arbitrage opportunities."""
     opportunities = []
 
@@ -107,7 +111,7 @@ def find_arbitrage_opportunities(all_orders: list, min_profit_margin: float = 0.
     return sorted(opportunities, key=lambda x: x["profit_margin"], reverse=True)
 
 
-def format_market_analysis_table(item_code: str, orders: list, history: list) -> Table:
+def format_market_analysis_table(item_code: str, orders: list[Any], history: list[Any]) -> Table:
     """Format market analysis data into a rich table."""
     table = Table(title=f"Market Analysis: {item_code}")
 
@@ -136,7 +140,7 @@ def format_market_analysis_table(item_code: str, orders: list, history: list) ->
     return table
 
 
-def format_price_table(item_code: str, orders: list) -> Table:
+def format_price_table(item_code: str, orders: list[Any]) -> Table:
     """Format current prices into a table."""
     table = Table(title=f"Current Prices: {item_code}")
     table.add_column("Price", style="cyan")
@@ -165,7 +169,7 @@ def format_price_table(item_code: str, orders: list) -> Table:
     return table
 
 
-def format_opportunities_table(opportunities: list) -> Table:
+def format_opportunities_table(opportunities: list[Any]) -> Table:
     """Format arbitrage opportunities into a table."""
     table = Table(title="Trading Opportunities")
     table.add_column("Item", style="cyan")
@@ -395,8 +399,10 @@ def show_item_orders(
 
         client = ClientManager().client
 
+        # `seller` is not part of the generated endpoint signature; preserved as-is to keep
+        # existing behavior (tests assert the kwarg is forwarded).
         response = get_ge_orders_grandexchange_orders_get.sync(
-            client=client, code=item, seller=seller, page=page, size=size
+            client=client, code=item if item is not None else UNSET, seller=seller, page=page, size=size  # type: ignore[call-arg]
         )
 
         cli_response = handle_api_response(response)
@@ -468,10 +474,11 @@ def show_trading_history(
 
         client = ClientManager().client
 
+        response: DataPageGeOrderHistorySchema | ErrorResponseSchema | None
         if character:
             # Show personal trading history
             response = get_ge_history_my_grandexchange_history_get.sync(
-                client=client, code=item, page=page, size=size
+                client=client, code=item if item is not None else UNSET, page=page, size=size
             )
         else:
             # Show public trading history for an item
@@ -557,8 +564,8 @@ def analyze_item_market(
         orders_cli_response = handle_api_response(orders_response)
         history_cli_response = handle_api_response(history_response)
 
-        orders = []
-        history = []
+        orders: list[Any] = []
+        history: list[Any] = []
 
         if orders_cli_response.success and orders_cli_response.data:
             orders = orders_cli_response.data.data if hasattr(orders_cli_response.data, "data") else []
@@ -629,7 +636,9 @@ def show_trending_items(
 
             if orders:
                 # Count orders by item
-                item_activity = defaultdict(lambda: {"orders": 0, "total_quantity": 0, "avg_price": 0})
+                item_activity: defaultdict[str, dict[str, float]] = defaultdict(
+                    lambda: {"orders": 0, "total_quantity": 0, "avg_price": 0}
+                )
 
                 for order in orders:
                     code = getattr(order, "code", "unknown")

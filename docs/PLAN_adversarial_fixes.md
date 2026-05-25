@@ -60,4 +60,6 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
 - 2026-05-25: P1 DONE — integration tests offline+mocked, no skips/except Exception. Committed.
 - 2026-05-25: P2 DONE — LearningStore weakref.finalize disposes engine; suite is 0-warning under -W error (2244 pass). Committed.
 - 2026-05-25: Discovered P9 — 129 pre-existing mypy-strict errors on main. Added phase.
-- Next: P3 (de-nest error handling) then P4/P5/P6/P7/P8/P9.
+- 2026-05-25: P3 DONE — flattened client_manager nested error handling; scalarizer "nesting" was a false positive (sequential single-level trys). Committed.
+- Next: P4 cooldown, P5 C2 (~150 sites), P6 refactor, P7 class-split, P8 cov→100, P9 mypy→0.
+  NOTE P4↔P9 overlap: the cooldown float/int type errors are a big chunk of the 129 mypy errors.

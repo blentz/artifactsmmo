@@ -10,8 +10,8 @@ from artifactsmmo_api_client.api.my_characters import (
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
-from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
-from artifactsmmo_api_client.types import UNSET
+from artifactsmmo_api_client.models.recycling_schema import RecyclingSchema
+from artifactsmmo_api_client.types import UNSET, Unset
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -83,7 +83,7 @@ def recycle_item(
 
         client = ClientManager().client
 
-        recycle_data = SimpleItemSchema(code=item_code, quantity=quantity)
+        recycle_data = RecyclingSchema(code=item_code, quantity=quantity)
         response = action_recycling_my_name_action_recycling_post.sync(client=client, name=character, body=recycle_data)
 
         cli_response = handle_api_response(response, f"Recycled {quantity}x {item_code}")
@@ -163,7 +163,7 @@ def preview_craft(
         character_data = char_cli_response.data
 
         # Get character inventory
-        inventory = {}
+        inventory: dict[str, int] = {}
         if hasattr(character_data, "inventory") and character_data.inventory:
             for item in character_data.inventory:
                 code = getattr(item, "code", "")
@@ -267,7 +267,7 @@ def list_recipes(
         client = ClientManager().client
 
         # Convert skill string to CraftSkill enum if provided
-        craft_skill_param = UNSET
+        craft_skill_param: CraftSkill | Unset = UNSET
         if skill:
             try:
                 craft_skill_param = CraftSkill(skill)

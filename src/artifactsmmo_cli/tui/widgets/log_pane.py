@@ -1,5 +1,7 @@
 """Scrolling log of per-cycle decisions. Wraps Textual's RichLog."""
 
+from typing import Any
+
 from textual.widgets import RichLog
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -8,7 +10,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 class LogPane(RichLog):
     """Append-only decision log. Auto-scrolls to bottom."""
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(wrap=False, markup=True, auto_scroll=True, **kwargs)
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:

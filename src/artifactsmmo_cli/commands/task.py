@@ -15,7 +15,7 @@ from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 from artifactsmmo_api_client.models.skill import Skill
 from artifactsmmo_api_client.models.task_type import TaskType
-from artifactsmmo_api_client.types import UNSET
+from artifactsmmo_api_client.types import UNSET, Unset
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -300,7 +300,7 @@ def list_tasks(
         client = ClientManager().client
 
         # Convert string parameters to enum values if provided
-        skill_enum = UNSET
+        skill_enum: Skill | Unset = UNSET
         if skill:
             try:
                 skill_enum = Skill(skill.lower())
@@ -308,7 +308,7 @@ def list_tasks(
                 console.print(format_error_message(f"Invalid skill: {skill}. Valid skills: {[s.value for s in Skill]}"))
                 raise typer.Exit(1)
 
-        task_type_enum = UNSET
+        task_type_enum: TaskType | Unset = UNSET
         if task_type:
             try:
                 task_type_enum = TaskType(task_type.lower())
