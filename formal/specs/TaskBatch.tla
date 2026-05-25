@@ -9,7 +9,7 @@ EXTENDS Integers, TLC
 \* returns of 1 for the non-items / no-total / nothing-remaining branches and the
 \* negative-usable case (usable < mats => floor div drives k to 1).
 
-BatchCap == 10   \* BATCH_CAP (task_batch.py:13)
+BatchCap == 10   \* BATCH_CAP (task_batch.py:12)
 MinFree  == 3    \* _MIN_FREE_SLOTS (task_batch.py:16)
 
 Max(a, b) == IF a > b THEN a ELSE b
@@ -26,10 +26,9 @@ Cases == { [it |-> it, tot |-> tot, prog |-> prog, free |-> free, held |-> held,
              it \in Bool, tot \in Totals, prog \in Progs,
              free \in Frees, held \in Helds, mats \in Mats }
 
-\* Python // is floor division. mats > 0 always (Mats = 1..3), so the divisor is
-\* positive; only the dividend `usable` can be negative (free+held < MinFree).
-\* For a<0, b>0 Python floor(a/b) = -ceil(-a/b) = -(((-a)+b-1) \div b); PlusPy
-\* \div truncates toward zero for the negative-dividend case, hence this guard.
+\* Explicit floor division (matches Python //) without relying on PlusPy \div
+\* behaviour for negative dividends: floor(a/b) = -ceil(-a/b) = -((-a+b-1) \div b)
+\* for a < 0, b > 0. (mats is always >= 1, so b > 0 holds.)
 FloorDiv(a, b) == IF a < 0 THEN -(((-a) + b - 1) \div b) ELSE a \div b
 
 BatchSize(c) ==
