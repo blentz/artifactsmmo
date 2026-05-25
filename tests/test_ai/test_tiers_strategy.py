@@ -325,6 +325,10 @@ class TestBasePrior:
         assert eng._base_prior(ReachSkillLevel("mining", 50)) == PRIOR_GATHER_SKILL
         assert eng._base_prior(ReachSkillLevel("alchemy", 50)) == PRIOR_CONSUMABLE_SKILL
 
+    def test_unknown_skill_prior_is_zero(self):
+        eng = _eng(GameData())
+        assert eng._base_prior(ReachSkillLevel("tailoring", 50)) == 0.0   # not a known skill
+
     def test_gear_prior_combat_vs_utility(self):
         gd = GameData()
         gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
