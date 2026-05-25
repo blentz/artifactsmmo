@@ -7,8 +7,9 @@ EXTENDS Integers, FiniteSets, TLC
 \* Verifies (1) emitted direct edges are exact, (2) leaf classification is exact
 \* (gather/monster-drop/buyable terminate the chain), (3) expansion from each
 \* node reaches only recipe-or-leaf nodes (search terminates), and (4) the
-\* combat gate equivalence combat_capable <=> \E monster beatable. The
-\* predict_win refinement itself is Task 6; Beatable is abstracted here.
+\* combat gate equivalence combat_capable <=> \E monster beatable, checked over
+\* all verdict combinations. The per-monster predict_win refinement is in
+\* PredictWin.tla; here the `any` aggregation is what is verified.
 
 Items == {"sword", "blade", "iron", "wood", "gem"}
 \* Empty recipe domain: safe sentinel so DOMAIN Recipe[m] is total over leaf items.
@@ -57,14 +58,17 @@ NodeCorrect(node) ==
   /\ (IsLeaf(node) <=> node \in ExpectedLeaves)
   /\ AllReachableTerminate(node)             \* search terminates
 
-\* combat_capable equivalence: any(predict_win) over monsters
+\* combat_capable == any(predict_win(m) for m in monsters). The per-monster
+\* predict_win verdict is refined operationally in PredictWin.tla; here we verify
+\* the `any` aggregation itself. The verdict is modelled as the SET of beatable
+\* monsters, and the existential is checked against an independent cardinality
+\* oracle over EVERY possible verdict combination (all 2^|Monsters| subsets) — so
+\* both the "some beatable => TRUE" and "none beatable => FALSE" branches bite.
 Monsters == {"chicken", "cow", "wolf"}
-\* Task 6 stub: abstracts predict_win's per-monster verdict (refined in PredictWin.tla)
-Beatable == [ chicken |-> TRUE, cow |-> FALSE, wolf |-> FALSE ]
-CombatCapable == \E m \in Monsters : Beatable[m]
-\* Oracle mirrors any(predict_win) semantics: existence of a beatable monster, not its identity.
-ExpectedCombatCapable == TRUE   \* chicken is beatable
-CombatGateCorrect == CombatCapable = ExpectedCombatCapable
+CombatCapable(beatable) == \E m \in Monsters : m \in beatable
+AnyOracle(beatable)     == Cardinality(beatable) > 0
+CombatGateCorrect == \A beatable \in SUBSET Monsters :
+                       CombatCapable(beatable) = AnyOracle(beatable)
 
 VARIABLE todo
 Init == todo = Items
