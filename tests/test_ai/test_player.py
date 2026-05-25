@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
@@ -513,7 +514,7 @@ class TestExecute:
         buf = io.StringIO()
         with redirect_stdout(buf):
             with patch("artifactsmmo_cli.ai.actions.movement.action_move",
-                       side_effect=RuntimeError("HTTP 499: Character in cooldown")):
+                       side_effect=ApiActionError(499, "Character in cooldown")):
                 with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                         new_state, outcome = player._execute(action, client)
@@ -792,7 +793,7 @@ class TestExecuteHttp496BankLock:
         empty_events.data = []
 
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
-                   side_effect=RuntimeError("HTTP 496 (locked bank_deposit achievement_unlocked)")):
+                   side_effect=ApiActionError(496, "(locked bank_deposit achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
@@ -815,7 +816,7 @@ class TestExecuteHttp496BankLock:
 
         # No achievement code in error message — no match for the regex
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
-                   side_effect=RuntimeError("HTTP 496 bank access denied")):
+                   side_effect=ApiActionError(496, "bank access denied")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)
@@ -837,7 +838,7 @@ class TestExecuteHttp496BankLock:
 
         # HTTP 496 on a non-bank action — bank_accessible must NOT be changed
         with patch("artifactsmmo_cli.ai.actions.movement.action_move",
-                   side_effect=RuntimeError("HTTP 496 some unrelated error")):
+                   side_effect=ApiActionError(496, "some unrelated error")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)
@@ -866,7 +867,7 @@ class TestExecuteHttp496BankLock:
         player._resolve_bank_unlock_monster = fake_resolve  # type: ignore
 
         with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
-                   side_effect=RuntimeError("HTTP 496 (myach achievement_unlocked)")):
+                   side_effect=ApiActionError(496, "(myach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)

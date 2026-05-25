@@ -73,4 +73,7 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
 - 2026-05-25: P3 DONE — flattened client_manager nested error handling; scalarizer "nesting" was a false positive (sequential single-level trys). Committed.
 - 2026-05-25: P9 DONE — mypy --strict 129→0 (5 parallel agents, type-only). Committed.
   Surfaced 3 mock-hidden latent bugs → logged as P10.
-- Next: P10 (latent bugs), P4 cooldown, P5 C2, P6 refactor, P7 class-split, P8 cov→100.
+- 2026-05-25: P10 DONE — fixed action_fight body, trade seller→account, timeout wrap;
+  updated the 3 tests that asserted the bugs. 0 type:ignore in those paths. Committed.
+- Next: P4 cooldown, P7 class-split, P5 C2, P6 refactor, P8 cov→100.
+- Snapshot: 2244 pass / 0 warn / mypy 0 / ruff clean. 5 commits on fix/adversarial-review.

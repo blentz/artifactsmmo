@@ -20,6 +20,7 @@ from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.types import Unset
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
@@ -446,18 +447,17 @@ class GamePlayer:
             if isinstance(action, ClaimPendingItemAction):
                 new_state = self._sync_pending(client, new_state)
             return new_state, "ok"
-        except RuntimeError as e:
-            msg = str(e)
-            if "HTTP 499" in msg:
+        except ApiActionError as e:
+            if e.code == 499:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
-            elif "HTTP 496" in msg and isinstance(action, (DepositAllAction, WithdrawItemAction)):
+            elif e.code == 496 and isinstance(action, (DepositAllAction, WithdrawItemAction)):
                 # Discover unlock monster + compute required level, then push
                 # everything into the blocker registry (which also persists
                 # via the learning store when present).
                 unlock_monster = self._bank_unlock_monster
                 if unlock_monster is None:
-                    match = _ACHIEVEMENT_CODE_RE.search(msg)
+                    match = _ACHIEVEMENT_CODE_RE.search(str(e))
                     if match:
                         unlock_monster = self._resolve_bank_unlock_monster(client, match.group(1))
                 required_level = 0
@@ -474,15 +474,16 @@ class GamePlayer:
                 print(f"[{self._now()}] Bank locked (HTTP 496) — need level {required_level} "
                       f"to fight {unlock_monster or '?'}; remembered for future sessions")
                 outcome = "error:bank_locked"
-            elif msg.startswith("fight_lost"):
+            else:
+                # Finer-grained learning label keyed on the structured code.
+                print(f"[{self._now()}] Action failed: {e} — refreshing state")
+                outcome = f"error:HTTP_{e.code}"
+            return self._fetch_world_state(client), outcome
+        except RuntimeError as e:
+            msg = str(e)
+            if msg.startswith("fight_lost"):
                 print(f"[{self._now()}] Fight lost: {msg} — refreshing state")
                 outcome = "error:fight_lost"
-            elif "HTTP " in msg:
-                # Pull the code out for finer-grained learning labels.
-                http_match = re.search(r"HTTP (\d+)", msg)
-                code = http_match.group(1) if http_match else "unknown"
-                print(f"[{self._now()}] Action failed: {msg} — refreshing state")
-                outcome = f"error:HTTP_{code}"
             else:
                 print(f"[{self._now()}] Action failed: {msg} — refreshing state")
                 outcome = "error:other"
