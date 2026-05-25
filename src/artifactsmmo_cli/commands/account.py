@@ -11,6 +11,7 @@ from artifactsmmo_api_client.errors import UnexpectedStatus
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_error_message,
     format_table,
@@ -35,11 +36,11 @@ def show_account_details() -> None:
             account = cli_response.data
             headers = ["Property", "Value"]
             rows = [
-                ["Username", getattr(account, "username", "N/A")],
-                ["Email", getattr(account, "email", "N/A")],
-                ["Subscribed", str(getattr(account, "subscribed", False))],
-                ["Status", getattr(account, "status", "N/A")],
-                ["Badges", str(getattr(account, "badges", 0))],
+                ["Username", str(display_field(account, "username"))],
+                ["Email", str(display_field(account, "email"))],
+                ["Subscribed", str(display_field(account, "subscribed"))],
+                ["Status", str(display_field(account, "status"))],
+                ["Badges", str(display_field(account, "badges"))],
             ]
 
             # Add subscription info if available
@@ -47,9 +48,9 @@ def show_account_details() -> None:
                 sub = account.subscription
                 rows.extend(
                     [
-                        ["Sub Type", getattr(sub, "type", "N/A")],
-                        ["Sub Status", getattr(sub, "status", "N/A")],
-                        ["Sub Expires", getattr(sub, "expires_at", "N/A")],
+                        ["Sub Type", str(display_field(sub, "type"))],
+                        ["Sub Status", str(display_field(sub, "status"))],
+                        ["Sub Expires", str(display_field(sub, "expires_at"))],
                     ]
                 )
 
@@ -103,12 +104,12 @@ def show_logs(
 
                     rows.append(
                         [
-                            getattr(log, "character", "N/A"),
-                            getattr(log, "type", "N/A"),
+                            str(display_field(log, "character")),
+                            str(display_field(log, "type")),
                             description,
                             content,
-                            str(getattr(log, "cooldown", 0)),
-                            getattr(log, "created_at", "N/A"),
+                            str(display_field(log, "cooldown")),
+                            str(display_field(log, "created_at")),
                         ]
                     )
 

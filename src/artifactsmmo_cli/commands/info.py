@@ -31,6 +31,7 @@ from artifactsmmo_api_client.types import UNSET, Unset
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_error_message,
     format_table,
@@ -63,12 +64,12 @@ def list_items(
                 item = cli_response.data
                 headers = ["Property", "Value"]
                 rows = [
-                    ["Code", getattr(item, "code", "N/A")],
-                    ["Name", getattr(item, "name", "N/A")],
-                    ["Type", getattr(item, "type_", "N/A")],
-                    ["Subtype", getattr(item, "subtype", "N/A")],
-                    ["Level", str(getattr(item, "level", 0))],
-                    ["Description", getattr(item, "description", "N/A")],
+                    ["Code", str(display_field(item, "code"))],
+                    ["Name", str(display_field(item, "name"))],
+                    ["Type", str(display_field(item, "type_"))],
+                    ["Subtype", str(display_field(item, "subtype"))],
+                    ["Level", str(display_field(item, "level"))],
+                    ["Description", str(display_field(item, "description"))],
                 ]
 
                 # Add craft info if available
@@ -76,8 +77,8 @@ def list_items(
                     craft = item.craft
                     rows.extend(
                         [
-                            ["Craft Skill", getattr(craft, "skill", "N/A")],
-                            ["Craft Level", str(getattr(craft, "level", 0))],
+                            ["Craft Skill", str(display_field(craft, "skill"))],
+                            ["Craft Level", str(display_field(craft, "level"))],
                         ]
                     )
 
@@ -112,10 +113,10 @@ def list_items(
 
                         rows.append(
                             [
-                                getattr(item, "code", "N/A"),
-                                getattr(item, "name", "N/A"),
-                                getattr(item, "type_", "N/A"),
-                                str(getattr(item, "level", 0)),
+                                str(display_field(item, "code")),
+                                str(display_field(item, "name")),
+                                str(display_field(item, "type_")),
+                                str(display_field(item, "level")),
                                 description,
                             ]
                         )
@@ -194,18 +195,18 @@ def list_monsters(
                 monster = cli_response.data
                 headers = ["Property", "Value"]
                 rows = [
-                    ["Code", getattr(monster, "code", "N/A")],
-                    ["Name", getattr(monster, "name", "N/A")],
-                    ["Level", str(getattr(monster, "level", 0))],
-                    ["HP", str(getattr(monster, "hp", 0))],
-                    ["Attack Fire", str(getattr(monster, "attack_fire", 0))],
-                    ["Attack Earth", str(getattr(monster, "attack_earth", 0))],
-                    ["Attack Water", str(getattr(monster, "attack_water", 0))],
-                    ["Attack Air", str(getattr(monster, "attack_air", 0))],
-                    ["Res Fire", str(getattr(monster, "res_fire", 0))],
-                    ["Res Earth", str(getattr(monster, "res_earth", 0))],
-                    ["Res Water", str(getattr(monster, "res_water", 0))],
-                    ["Res Air", str(getattr(monster, "res_air", 0))],
+                    ["Code", str(display_field(monster, "code"))],
+                    ["Name", str(display_field(monster, "name"))],
+                    ["Level", str(display_field(monster, "level"))],
+                    ["HP", str(display_field(monster, "hp"))],
+                    ["Attack Fire", str(display_field(monster, "attack_fire"))],
+                    ["Attack Earth", str(display_field(monster, "attack_earth"))],
+                    ["Attack Water", str(display_field(monster, "attack_water"))],
+                    ["Attack Air", str(display_field(monster, "attack_air"))],
+                    ["Res Fire", str(display_field(monster, "res_fire"))],
+                    ["Res Earth", str(display_field(monster, "res_earth"))],
+                    ["Res Water", str(display_field(monster, "res_water"))],
+                    ["Res Air", str(display_field(monster, "res_air"))],
                 ]
 
                 # Add drops information
@@ -233,7 +234,7 @@ def list_monsters(
                     combat_output = format_table(
                         ["Property", "Value"],
                         combat_rows,
-                        title=f"Combat Analysis: {character_data['name']} vs {getattr(monster, 'name', 'Monster')}",
+                        title=f"Combat Analysis: {character_data['name']} vs {display_field(monster, 'name')}",
                     )
                     console.print()
                     console.print(combat_output)
@@ -271,10 +272,10 @@ def list_monsters(
                     rows = []
                     for monster in monsters_list:
                         row = [
-                            getattr(monster, "code", "N/A"),
-                            getattr(monster, "name", "N/A"),
-                            str(getattr(monster, "level", 0)),
-                            str(getattr(monster, "hp", 0)),
+                            str(display_field(monster, "code")),
+                            str(display_field(monster, "name")),
+                            str(display_field(monster, "level")),
+                            str(display_field(monster, "hp")),
                         ]
 
                         # Add combat assessment columns if comparing
@@ -303,10 +304,10 @@ def list_monsters(
                         # Add attack stats
                         row.extend(
                             [
-                                str(getattr(monster, "attack_fire", 0)),
-                                str(getattr(monster, "attack_earth", 0)),
-                                str(getattr(monster, "attack_water", 0)),
-                                str(getattr(monster, "attack_air", 0)),
+                                str(display_field(monster, "attack_fire")),
+                                str(display_field(monster, "attack_earth")),
+                                str(display_field(monster, "attack_water")),
+                                str(display_field(monster, "attack_air")),
                             ]
                         )
 
@@ -413,29 +414,29 @@ def _display_monster_details(monster: Any, character_data: dict[str, str | int] 
     # Basic monster information
     headers = ["Property", "Value"]
     rows = [
-        ["Code", getattr(monster, "code", "N/A")],
-        ["Name", getattr(monster, "name", "N/A")],
-        ["Level", str(getattr(monster, "level", 0))],
-        ["HP", str(getattr(monster, "hp", 0))],
+        ["Code", str(display_field(monster, "code"))],
+        ["Name", str(display_field(monster, "name"))],
+        ["Level", str(display_field(monster, "level"))],
+        ["HP", str(display_field(monster, "hp"))],
     ]
 
     # Attack stats
     rows.extend(
         [
-            ["Attack Fire", str(getattr(monster, "attack_fire", 0))],
-            ["Attack Earth", str(getattr(monster, "attack_earth", 0))],
-            ["Attack Water", str(getattr(monster, "attack_water", 0))],
-            ["Attack Air", str(getattr(monster, "attack_air", 0))],
+            ["Attack Fire", str(display_field(monster, "attack_fire"))],
+            ["Attack Earth", str(display_field(monster, "attack_earth"))],
+            ["Attack Water", str(display_field(monster, "attack_water"))],
+            ["Attack Air", str(display_field(monster, "attack_air"))],
         ]
     )
 
     # Resistance stats
     rows.extend(
         [
-            ["Res Fire", str(getattr(monster, "res_fire", 0))],
-            ["Res Earth", str(getattr(monster, "res_earth", 0))],
-            ["Res Water", str(getattr(monster, "res_water", 0))],
-            ["Res Air", str(getattr(monster, "res_air", 0))],
+            ["Res Fire", str(display_field(monster, "res_fire"))],
+            ["Res Earth", str(display_field(monster, "res_earth"))],
+            ["Res Water", str(display_field(monster, "res_water"))],
+            ["Res Air", str(display_field(monster, "res_air"))],
         ]
     )
 
@@ -456,7 +457,7 @@ def _display_monster_details(monster: Any, character_data: dict[str, str | int] 
         rows.append(["Drops", "None"])
 
     # Display basic monster info
-    monster_name = getattr(monster, "name", "Monster")
+    monster_name = display_field(monster, "name")
     output = format_table(headers, rows, title=f"Monster: {monster_name}")
     console.print(output)
 
@@ -530,17 +531,17 @@ def list_resources(
                 resource = cli_response.data
                 headers = ["Property", "Value"]
                 rows = [
-                    ["Code", getattr(resource, "code", "N/A")],
-                    ["Name", getattr(resource, "name", "N/A")],
-                    ["Skill", getattr(resource, "skill", "N/A")],
-                    ["Level", str(getattr(resource, "level", 0))],
+                    ["Code", str(display_field(resource, "code"))],
+                    ["Name", str(display_field(resource, "name"))],
+                    ["Skill", str(display_field(resource, "skill"))],
+                    ["Level", str(display_field(resource, "level"))],
                 ]
 
                 # Add drops if available
                 if hasattr(resource, "drops") and resource.drops:
                     drops = []
                     for drop in resource.drops:
-                        drops.append(f"{getattr(drop, 'code', 'Unknown')} ({getattr(drop, 'rate', 0)}%)")
+                        drops.append(f"{display_field(drop, 'code')} ({display_field(drop, 'rate')}%)")
                     rows.append(["Drops", ", ".join(drops)])
 
                 # Add location information if available
@@ -659,13 +660,13 @@ def list_resources(
                             drops = []
                             if hasattr(resource, "drops") and resource.drops:
                                 for drop in resource.drops[:3]:  # Show first 3 drops
-                                    drops.append(getattr(drop, "code", "Unknown"))
+                                    drops.append(str(display_field(drop, "code")))
 
                             row = [
                                 resource_code_val,
-                                getattr(resource, "name", "N/A"),
-                                getattr(resource, "skill", "N/A"),
-                                str(getattr(resource, "level", 0)),
+                                str(display_field(resource, "name")),
+                                str(display_field(resource, "skill")),
+                                str(display_field(resource, "level")),
                             ]
 
                             # Add location information if available
@@ -730,9 +731,9 @@ def list_achievements(
                 badge = cli_response.data
                 headers = ["Property", "Value"]
                 rows = [
-                    ["Code", getattr(badge, "code", "N/A")],
-                    ["Name", getattr(badge, "name", "N/A")],
-                    ["Description", getattr(badge, "description", "N/A")],
+                    ["Code", str(display_field(badge, "code"))],
+                    ["Name", str(display_field(badge, "name"))],
+                    ["Description", str(display_field(badge, "description"))],
                 ]
 
                 output = format_table(headers, rows, title=f"Achievement: {achievement_code}")
@@ -754,7 +755,7 @@ def list_achievements(
                         if len(description) > 60:
                             description = description[:57] + "..."
 
-                        rows.append([getattr(badge, "code", "N/A"), getattr(badge, "name", "N/A"), description])
+                        rows.append([str(display_field(badge, "code")), str(display_field(badge, "name")), description])
 
                     output = format_table(headers, rows, title="Achievements")
                     console.print(output)
@@ -800,10 +801,10 @@ def show_leaderboard(
                         rows.append(
                             [
                                 str(i + (page - 1) * size),
-                                getattr(entry, "name", "N/A"),
-                                str(getattr(entry, "level", 0)),
-                                str(getattr(entry, "xp", 0)),
-                                str(getattr(entry, "gold", 0)),
+                                str(display_field(entry, "name")),
+                                str(display_field(entry, "level")),
+                                str(display_field(entry, "xp")),
+                                str(display_field(entry, "gold")),
                             ]
                         )
                 else:  # accounts
@@ -813,9 +814,9 @@ def show_leaderboard(
                         rows.append(
                             [
                                 str(i + (page - 1) * size),
-                                getattr(entry, "username", "N/A"),
-                                str(getattr(entry, "characters_count", 0)),
-                                str(getattr(entry, "achievements_points", 0)),
+                                str(display_field(entry, "username")),
+                                str(display_field(entry, "characters_count")),
+                                str(display_field(entry, "achievements_points")),
                             ]
                         )
 
@@ -856,11 +857,11 @@ def list_events(
                 for event in events.data:
                     rows.append(
                         [
-                            getattr(event, "name", "N/A"),
+                            str(display_field(event, "name")),
                             getattr(event, "map", {}).get("name", "N/A") if hasattr(event, "map") else "N/A",
-                            str(getattr(event, "duration", 0)),
-                            str(getattr(event, "rate", 0)),
-                            getattr(event, "expiration", "N/A"),
+                            str(display_field(event, "duration")),
+                            str(display_field(event, "rate")),
+                            str(display_field(event, "expiration")),
                         ]
                     )
 
@@ -898,9 +899,9 @@ def map_info(
                 map_data = cli_response.data
                 headers = ["Property", "Value"]
                 rows = [
-                    ["Coordinates", f"({getattr(map_data, 'x', 'N/A')}, {getattr(map_data, 'y', 'N/A')})"],
-                    ["Name", getattr(map_data, "name", "N/A")],
-                    ["Skin", getattr(map_data, "skin", "N/A")],
+                    ["Coordinates", f"({display_field(map_data, 'x')}, {display_field(map_data, 'y')})"],
+                    ["Name", str(display_field(map_data, "name"))],
+                    ["Skin", str(display_field(map_data, "skin"))],
                 ]
 
                 # Add content info if available
@@ -908,8 +909,8 @@ def map_info(
                     content = map_data.content
                     rows.extend(
                         [
-                            ["Content Type", getattr(content, "type", "N/A")],
-                            ["Content Code", getattr(content, "code", "N/A")],
+                            ["Content Type", str(display_field(content, "type"))],
+                            ["Content Code", str(display_field(content, "code"))],
                         ]
                     )
 
@@ -931,14 +932,14 @@ def map_info(
                         content_type = ""
                         content_code_val = ""
                         if hasattr(map_item, "content") and map_item.content:
-                            content_type = getattr(map_item.content, "type", "")
-                            content_code_val = getattr(map_item.content, "code", "")
+                            content_type = str(display_field(map_item.content, "type"))
+                            content_code_val = str(display_field(map_item.content, "code"))
 
                         rows.append(
                             [
-                                f"({getattr(map_item, 'x', 'N/A')}, {getattr(map_item, 'y', 'N/A')})",
-                                getattr(map_item, "name", "N/A"),
-                                getattr(map_item, "skin", "N/A"),
+                                f"({display_field(map_item, 'x')}, {display_field(map_item, 'y')})",
+                                str(display_field(map_item, "name")),
+                                str(display_field(map_item, "skin")),
                                 content_type,
                                 content_code_val,
                             ]
@@ -1004,8 +1005,8 @@ def list_npcs(
                             {
                                 "name": npc_info["name"],
                                 "type": npc_info["type"],
-                                "x": getattr(map_item, "x", "N/A"),
-                                "y": getattr(map_item, "y", "N/A"),
+                                "x": str(display_field(map_item, "x")),
+                                "y": str(display_field(map_item, "y")),
                                 "services": npc_info["services"],
                                 "content_code": content_code,
                             }
@@ -1099,12 +1100,12 @@ def get_npc(
                         found_npc = {
                             "name": npc_info["name"],
                             "type": npc_info["type"],
-                            "x": getattr(map_item, "x", "N/A"),
-                            "y": getattr(map_item, "y", "N/A"),
+                            "x": str(display_field(map_item, "x")),
+                            "y": str(display_field(map_item, "y")),
                             "services": npc_info["services"],
                             "content_code": content_code,
                             "content_type": content_type,
-                            "location_name": getattr(map_item, "name", "N/A"),
+                            "location_name": str(display_field(map_item, "name")),
                         }
                         break
 

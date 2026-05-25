@@ -32,6 +32,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_cooldown_message,
     format_error_message,
@@ -160,9 +161,9 @@ def format_price_table(item_code: str, orders: list[Any]) -> Table:
                 created_date = "Unknown"
 
         table.add_row(
-            f"{getattr(order, 'price', 0)} gold",
-            str(getattr(order, "quantity", 0)),
-            getattr(order, "seller", "Unknown"),
+            f"{display_field(order, 'price')} gold",
+            str(display_field(order, "quantity")),
+            str(display_field(order, "seller")),
             created_date,
         )
 
@@ -287,11 +288,11 @@ def list_ge_orders() -> None:
                 for order in orders.data:
                     rows.append(
                         [
-                            getattr(order, "id", "N/A"),
-                            getattr(order, "code", "N/A"),
-                            str(getattr(order, "quantity", 0)),
-                            str(getattr(order, "price", 0)),
-                            getattr(order, "status", "N/A"),
+                            str(display_field(order, "id")),
+                            str(display_field(order, "code")),
+                            str(display_field(order, "quantity")),
+                            str(display_field(order, "price")),
+                            str(display_field(order, "status")),
                         ]
                     )
                 output = format_table(headers, rows, title="Grand Exchange Orders")
@@ -429,10 +430,10 @@ def show_item_orders(
 
                     rows.append(
                         [
-                            getattr(order, "code", "N/A"),
-                            str(getattr(order, "quantity", 0)),
-                            f"{getattr(order, 'price', 0)}g",
-                            getattr(order, "seller", "Unknown"),
+                            str(display_field(order, "code")),
+                            str(display_field(order, "quantity")),
+                            f"{display_field(order, 'price')}g",
+                            str(display_field(order, "seller")),
                             created_date,
                         ]
                     )
@@ -447,8 +448,8 @@ def show_item_orders(
                 console.print(output)
 
                 # Show pagination info
-                total = getattr(cli_response.data, "total", 0)
-                pages = getattr(cli_response.data, "pages", 0)
+                total = display_field(cli_response.data, "total")
+                pages = display_field(cli_response.data, "pages")
                 console.print(f"\n[dim]Page {page} of {pages} | Total orders: {total}[/dim]")
             else:
                 console.print(format_error_message("No orders found"))
@@ -514,11 +515,11 @@ def show_trading_history(
 
                     rows.append(
                         [
-                            getattr(sale, "code", "N/A"),
-                            str(getattr(sale, "quantity", 0)),
-                            f"{getattr(sale, 'price', 0)}g",
-                            getattr(sale, "seller", "Unknown"),
-                            getattr(sale, "buyer", "Unknown"),
+                            str(display_field(sale, "code")),
+                            str(display_field(sale, "quantity")),
+                            f"{display_field(sale, 'price')}g",
+                            str(display_field(sale, "seller")),
+                            str(display_field(sale, "buyer")),
                             sold_date,
                         ]
                     )
@@ -533,8 +534,8 @@ def show_trading_history(
                 console.print(output)
 
                 # Show pagination info
-                total = getattr(cli_response.data, "total", 0)
-                pages = getattr(cli_response.data, "pages", 0)
+                total = display_field(cli_response.data, "total")
+                pages = display_field(cli_response.data, "pages")
                 console.print(f"\n[dim]Page {page} of {pages} | Total sales: {total}[/dim]")
             else:
                 console.print(format_error_message("No trading history found"))

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from artifactsmmo_api_client.errors import UnexpectedStatus
+from rich.console import Console
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.trade import (
@@ -13,6 +14,7 @@ from artifactsmmo_cli.commands.trade import (
     find_arbitrage_opportunities,
     format_price_table,
 )
+from artifactsmmo_cli.utils.api_display import MISSING
 
 
 @pytest.fixture
@@ -633,6 +635,22 @@ class TestTradeCommands:
         table = format_price_table("iron_ore", [order])
         # Just verifying it doesn't raise and returns a Table
         assert table is not None
+
+    def test_format_price_table_missing_fields_show_marker(self):
+        """Absent seller/quantity render the MISSING marker, not fabricated values."""
+        order = Mock(spec=["price", "created_at"])
+        order.price = 100
+        order.created_at = "2023-01-01T12:00:00Z"
+
+        table = format_price_table("iron_ore", [order])
+
+        console = Console()
+        with console.capture() as capture:
+            console.print(table)
+        output = capture.get()
+        # quantity and seller are absent -> MISSING marker, price still rendered
+        assert MISSING in output
+        assert "100 gold" in output
 
     def test_ge_sell_cooldown_response(self, runner, mock_client_manager, mock_api_response):
         """Test GE sell command with cooldown response."""

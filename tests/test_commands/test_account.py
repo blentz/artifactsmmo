@@ -73,8 +73,10 @@ class TestAccountCommands:
             mock_account.email = "test@example.com"
             mock_account.subscribed = False
             mock_account.status = "active"
-            mock_account.badges = 2
             mock_account.subscription = None
+
+            # Absent badges must render as the MISSING marker, not a fabricated 0
+            del mock_account.badges
 
             with patch("artifactsmmo_cli.commands.account.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=True, data=mock_account)
@@ -83,6 +85,7 @@ class TestAccountCommands:
 
                 assert result.exit_code == 0
                 mock_api.assert_called_once()
+                assert "—" in result.stdout
 
     def test_details_error(self, runner, mock_client_manager, mock_api_response):
         """Test account details with error."""

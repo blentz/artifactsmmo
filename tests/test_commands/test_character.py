@@ -641,6 +641,9 @@ class TestStatusCommand:
             mock_character.weapon_slot = None
             mock_character.shield_slot = None
 
+            # Absent gold must render as the MISSING marker, not a fabricated 0
+            del mock_character.gold
+
             mock_handle.return_value = Mock(success=True, data=mock_character)
 
             result = runner.invoke(app, ["status", "testchar"])
@@ -648,6 +651,7 @@ class TestStatusCommand:
             assert result.exit_code == 0
             # Verify that the command runs successfully with minimal data
             assert "testchar's Status" in result.stdout
+            assert "—" in result.stdout
 
     def test_status_character_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test status command with character not found."""

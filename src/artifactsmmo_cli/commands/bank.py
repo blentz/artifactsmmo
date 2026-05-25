@@ -25,6 +25,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from rich.table import Table
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_bank_table,
     format_cooldown_message,
@@ -235,9 +236,9 @@ def bank_details() -> None:
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
             bank_data = cli_response.data
-            console.print(f"Bank Gold: {bank_data.get('gold', 0)}")
-            console.print(f"Bank Slots: {bank_data.get('slots', 0)}")
-            console.print(f"Expansion Cost: {bank_data.get('next_expansion_cost', 'N/A')}")
+            console.print(f"Bank Gold: {display_field(bank_data, 'gold')}")
+            console.print(f"Bank Slots: {display_field(bank_data, 'slots')}")
+            console.print(f"Expansion Cost: {display_field(bank_data, 'next_expansion_cost')}")
         else:
             console.print(format_error_message(cli_response.error or "Could not get bank details"))
             raise typer.Exit(1)

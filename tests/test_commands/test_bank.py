@@ -100,7 +100,7 @@ class TestDetailsCommand:
             mock_api.return_value = mock_api_response
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_data = {"gold": 1000, "slots": 50, "next_expansion_cost": 500}
+                mock_data = Mock(gold=1000, slots=50, next_expansion_cost=500)
                 mock_handle.return_value = Mock(success=True, data=mock_data)
 
                 result = runner.invoke(app, ["details"])
@@ -109,6 +109,21 @@ class TestDetailsCommand:
                 assert "Bank Gold: 1000" in result.stdout
                 assert "Bank Slots: 50" in result.stdout
                 assert "Expansion Cost: 500" in result.stdout
+
+    def test_details_missing_expansion_cost(self, runner, mock_client_manager, mock_api_response):
+        """Test details renders the MISSING marker when an API field is absent."""
+        with patch("artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync") as mock_api:
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_data = Mock(gold=1000, slots=50, next_expansion_cost=None)
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["details"])
+
+                assert result.exit_code == 0
+                assert "Bank Gold: 1000" in result.stdout
+                assert "Expansion Cost: —" in result.stdout
 
     def test_details_error(self, runner, mock_client_manager, mock_api_response):
         """Test details command with error."""

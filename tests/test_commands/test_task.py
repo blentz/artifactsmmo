@@ -140,6 +140,29 @@ class TestTaskCommands:
                 assert result.exit_code == 0
                 mock_api.assert_called_once()
 
+    def test_list_tasks_missing_fields_render_marker(self, runner, mock_client_manager, mock_api_response):
+        """Test list tasks renders the MISSING marker when API task fields are absent."""
+        with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_task = Mock()
+            mock_task.code = None
+            mock_task.type = None
+            mock_task.level = None
+            mock_task.skill = None
+            mock_task.rewards = [Mock(code="gold", quantity=None)]
+
+            mock_data = Mock()
+            mock_data.data = [mock_task]
+
+            with patch("artifactsmmo_cli.commands.task.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["list"])
+
+                assert result.exit_code == 0
+                assert "—" in result.stdout
+
     def test_list_tasks_with_filters(self, runner, mock_client_manager, mock_api_response):
         """Test list tasks command with filters."""
         with patch("artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get.sync") as mock_api:
@@ -586,6 +609,30 @@ class TestTaskCommands:
                     assert "Kill chickens" in result.stdout
                     assert "gold" in result.stdout
                     assert "100" in result.stdout
+
+    def test_task_status_missing_fields_render_marker(self, runner, mock_client_manager, mock_api_response):
+        """Test task status renders the MISSING marker when API task fields are absent."""
+        with patch("artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync") as mock_api:
+            mock_character = Mock()
+            mock_character.task = "chicken"
+            mock_character.task_type = None
+            mock_character.task_progress = None
+            mock_character.task_total = None
+
+            mock_api_response.data = mock_character
+            mock_api.return_value = mock_api_response
+
+            with patch("artifactsmmo_cli.commands.task.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_character)
+
+                with patch("artifactsmmo_api_client.api.tasks.get_task_tasks_list_code_get.sync") as mock_task_api:
+                    mock_task_api.side_effect = UnexpectedStatus(status_code=404, content=b"{}")
+
+                    result = runner.invoke(app, ["status", "testchar"])
+
+                    assert result.exit_code == 0
+                    assert "chicken" in result.stdout
+                    assert "—" in result.stdout
 
     def test_task_status_character_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test task status command when character is not found."""

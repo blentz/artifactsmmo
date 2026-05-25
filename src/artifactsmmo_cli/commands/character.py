@@ -11,6 +11,7 @@ from artifactsmmo_api_client.models.delete_character_schema import DeleteCharact
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_character_table,
     format_error_message,
@@ -148,9 +149,9 @@ def character_inventory(name: str = typer.Argument(..., help="Character name")) 
                 for item in character.inventory:
                     rows.append(
                         [
-                            str(getattr(item, "slot", "N/A")),
-                            getattr(item, "code", "N/A"),
-                            str(getattr(item, "quantity", 0)),
+                            str(display_field(item, "slot")),
+                            str(display_field(item, "code")),
+                            str(display_field(item, "quantity")),
                         ]
                     )
 
@@ -182,7 +183,7 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
             character = cli_response.data
 
             # Print character name as header
-            character_name = getattr(character, "name", "Unknown")
+            character_name = display_field(character, "name")
             console.print(f"\n[bold cyan]═══ {character_name}'s Status ═══[/bold cyan]\n")
 
             # Create and print individual tables
@@ -191,16 +192,16 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
             basic_info = format_table(
                 ["Property", "Value"],
                 [
-                    ["Name", str(getattr(character, "name", "N/A"))],
-                    ["Level", str(getattr(character, "level", 0))],
-                    ["Class", str(getattr(character, "class", "None"))],
-                    ["XP", f"{getattr(character, 'xp', 0)}/{getattr(character, 'max_xp', 0)}"],
-                    ["Gold", str(getattr(character, "gold", 0))],
-                    ["HP", f"{getattr(character, 'hp', 0)}/{getattr(character, 'max_hp', 0)}"],
-                    ["MP", f"{getattr(character, 'mp', 0)}/{getattr(character, 'max_mp', 0)}"],
-                    ["Position", f"({getattr(character, 'x', 0)}, {getattr(character, 'y', 0)})"],
-                    ["Cooldown", str(getattr(character, "cooldown", 0)) + " seconds"],
-                    ["Cooldown Expiration", str(getattr(character, "cooldown_expiration", "N/A"))],
+                    ["Name", str(display_field(character, "name"))],
+                    ["Level", str(display_field(character, "level"))],
+                    ["Class", str(display_field(character, "class"))],
+                    ["XP", f"{display_field(character, 'xp')}/{display_field(character, 'max_xp')}"],
+                    ["Gold", str(display_field(character, "gold"))],
+                    ["HP", f"{display_field(character, 'hp')}/{display_field(character, 'max_hp')}"],
+                    ["MP", f"{display_field(character, 'mp')}/{display_field(character, 'max_mp')}"],
+                    ["Position", f"({display_field(character, 'x')}, {display_field(character, 'y')})"],
+                    ["Cooldown", str(display_field(character, "cooldown")) + " seconds"],
+                    ["Cooldown Expiration", str(display_field(character, "cooldown_expiration"))],
                 ],
                 title="Character Info",
             )
@@ -211,18 +212,19 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
                 [
                     [
                         "Mining",
-                        str(getattr(character, "mining_level", 0)),
-                        f"{getattr(character, 'mining_xp', 0)}/{getattr(character, 'mining_max_xp', 0)}",
+                        str(display_field(character, "mining_level")),
+                        f"{display_field(character, 'mining_xp')}/{display_field(character, 'mining_max_xp')}",
                     ],
                     [
                         "Woodcutting",
-                        str(getattr(character, "woodcutting_level", 0)),
-                        f"{getattr(character, 'woodcutting_xp', 0)}/{getattr(character, 'woodcutting_max_xp', 0)}",
+                        str(display_field(character, "woodcutting_level")),
+                        f"{display_field(character, 'woodcutting_xp')}/"
+                        f"{display_field(character, 'woodcutting_max_xp')}",
                     ],
                     [
                         "Fishing",
-                        str(getattr(character, "fishing_level", 0)),
-                        f"{getattr(character, 'fishing_xp', 0)}/{getattr(character, 'fishing_max_xp', 0)}",
+                        str(display_field(character, "fishing_level")),
+                        f"{display_field(character, 'fishing_xp')}/{display_field(character, 'fishing_max_xp')}",
                     ],
                 ],
                 title="Gathering Skills",
@@ -234,30 +236,31 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
                 [
                     [
                         "Weaponcrafting",
-                        str(getattr(character, "weaponcrafting_level", 0)),
-                        f"{getattr(character, 'weaponcrafting_xp', 0)}/"
-                        f"{getattr(character, 'weaponcrafting_max_xp', 0)}",
+                        str(display_field(character, "weaponcrafting_level")),
+                        f"{display_field(character, 'weaponcrafting_xp')}/"
+                        f"{display_field(character, 'weaponcrafting_max_xp')}",
                     ],
                     [
                         "Gearcrafting",
-                        str(getattr(character, "gearcrafting_level", 0)),
-                        f"{getattr(character, 'gearcrafting_xp', 0)}/{getattr(character, 'gearcrafting_max_xp', 0)}",
+                        str(display_field(character, "gearcrafting_level")),
+                        f"{display_field(character, 'gearcrafting_xp')}/"
+                        f"{display_field(character, 'gearcrafting_max_xp')}",
                     ],
                     [
                         "Jewelrycrafting",
-                        str(getattr(character, "jewelrycrafting_level", 0)),
-                        f"{getattr(character, 'jewelrycrafting_xp', 0)}/"
-                        f"{getattr(character, 'jewelrycrafting_max_xp', 0)}",
+                        str(display_field(character, "jewelrycrafting_level")),
+                        f"{display_field(character, 'jewelrycrafting_xp')}/"
+                        f"{display_field(character, 'jewelrycrafting_max_xp')}",
                     ],
                     [
                         "Cooking",
-                        str(getattr(character, "cooking_level", 0)),
-                        f"{getattr(character, 'cooking_xp', 0)}/{getattr(character, 'cooking_max_xp', 0)}",
+                        str(display_field(character, "cooking_level")),
+                        f"{display_field(character, 'cooking_xp')}/{display_field(character, 'cooking_max_xp')}",
                     ],
                     [
                         "Alchemy",
-                        str(getattr(character, "alchemy_level", 0)),
-                        f"{getattr(character, 'alchemy_xp', 0)}/{getattr(character, 'alchemy_max_xp', 0)}",
+                        str(display_field(character, "alchemy_level")),
+                        f"{display_field(character, 'alchemy_xp')}/{display_field(character, 'alchemy_max_xp')}",
                     ],
                 ],
                 title="Crafting Skills",
@@ -267,10 +270,10 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
             combat_stats = format_table(
                 ["Stat", "Value"],
                 [
-                    ["Haste", str(getattr(character, "haste", 0))],
-                    ["Critical Strike", f"{getattr(character, 'critical_strike', 0)}%"],
-                    ["Wisdom", str(getattr(character, "wisdom", 0))],
-                    ["Prospecting", str(getattr(character, "prospecting", 0))],
+                    ["Haste", str(display_field(character, "haste"))],
+                    ["Critical Strike", f"{display_field(character, 'critical_strike')}%"],
+                    ["Wisdom", str(display_field(character, "wisdom"))],
+                    ["Prospecting", str(display_field(character, "prospecting"))],
                 ],
                 title="Combat Stats",
             )
@@ -279,11 +282,27 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
             attack_stats = format_table(
                 ["Element", "Attack", "Damage %"],
                 [
-                    ["Fire", str(getattr(character, "attack_fire", 0)), f"{getattr(character, 'dmg_fire', 0)}%"],
-                    ["Earth", str(getattr(character, "attack_earth", 0)), f"{getattr(character, 'dmg_earth', 0)}%"],
-                    ["Water", str(getattr(character, "attack_water", 0)), f"{getattr(character, 'dmg_water', 0)}%"],
-                    ["Air", str(getattr(character, "attack_air", 0)), f"{getattr(character, 'dmg_air', 0)}%"],
-                    ["General", "—", f"{getattr(character, 'dmg', 0)}%"],
+                    [
+                        "Fire",
+                        str(display_field(character, "attack_fire")),
+                        f"{display_field(character, 'dmg_fire')}%",
+                    ],
+                    [
+                        "Earth",
+                        str(display_field(character, "attack_earth")),
+                        f"{display_field(character, 'dmg_earth')}%",
+                    ],
+                    [
+                        "Water",
+                        str(display_field(character, "attack_water")),
+                        f"{display_field(character, 'dmg_water')}%",
+                    ],
+                    [
+                        "Air",
+                        str(display_field(character, "attack_air")),
+                        f"{display_field(character, 'dmg_air')}%",
+                    ],
+                    ["General", "—", f"{display_field(character, 'dmg')}%"],
                 ],
                 title="Attack Stats",
             )
@@ -292,10 +311,10 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
             resistance_stats = format_table(
                 ["Element", "Resistance %"],
                 [
-                    ["Fire", f"{getattr(character, 'res_fire', 0)}%"],
-                    ["Earth", f"{getattr(character, 'res_earth', 0)}%"],
-                    ["Water", f"{getattr(character, 'res_water', 0)}%"],
-                    ["Air", f"{getattr(character, 'res_air', 0)}%"],
+                    ["Fire", f"{display_field(character, 'res_fire')}%"],
+                    ["Earth", f"{display_field(character, 'res_earth')}%"],
+                    ["Water", f"{display_field(character, 'res_water')}%"],
+                    ["Air", f"{display_field(character, 'res_air')}%"],
                 ],
                 title="Resistance Stats",
             )
@@ -321,7 +340,7 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
                 if hasattr(character, slot_attr):
                     slot_item = getattr(character, slot_attr)
                     if slot_item and hasattr(slot_item, "code"):
-                        equipment_rows.append([slot_name, str(getattr(slot_item, "code", "N/A"))])
+                        equipment_rows.append([slot_name, str(display_field(slot_item, "code"))])
                     elif slot_item:
                         equipment_rows.append([slot_name, str(slot_item)])
                     else:
@@ -336,8 +355,11 @@ def character_status(name: str = typer.Argument(..., help="Character name")) -> 
                 task_rows.extend(
                     [
                         ["Task Code", str(task_code)],
-                        ["Task Type", str(getattr(character, "task_type", "N/A"))],
-                        ["Progress", f"{getattr(character, 'task_progress', 0)}/{getattr(character, 'task_total', 0)}"],
+                        ["Task Type", str(display_field(character, "task_type"))],
+                        [
+                            "Progress",
+                            f"{display_field(character, 'task_progress')}/{display_field(character, 'task_total')}",
+                        ],
                     ]
                 )
             else:

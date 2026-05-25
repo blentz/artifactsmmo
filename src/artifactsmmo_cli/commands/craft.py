@@ -17,6 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_cooldown_message,
     format_error_message,
@@ -302,13 +303,15 @@ def list_recipes(
                         materials = []
                         if hasattr(craft_info, "items") and craft_info.items:
                             for mat in craft_info.items:
-                                materials.append(f"{getattr(mat, 'quantity', 1)}x {getattr(mat, 'code', 'Unknown')}")
+                                materials.append(
+                                    f"{display_field(mat, 'quantity')}x {display_field(mat, 'code')}"
+                                )
 
                         rows.append(
                             [
-                                getattr(item, "code", "Unknown"),
-                                str(getattr(craft_info, "level", 0)),
-                                getattr(craft_info, "skill", "Unknown"),
+                                str(display_field(item, "code")),
+                                str(display_field(craft_info, "level")),
+                                str(display_field(craft_info, "skill")),
                                 ", ".join(materials) if materials else "None",
                             ]
                         )

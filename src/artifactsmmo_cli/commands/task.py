@@ -19,6 +19,7 @@ from artifactsmmo_api_client.types import UNSET, Unset
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.api_display import display_field
 from artifactsmmo_cli.utils.formatters import (
     format_cooldown_message,
     format_error_message,
@@ -220,10 +221,11 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
                 headers = ["Property", "Value"]
                 rows = [
                     ["Task Code", str(task_code)],
-                    ["Task Type", str(getattr(character_data, "task_type", "N/A"))],
+                    ["Task Type", str(display_field(character_data, "task_type"))],
                     [
                         "Progress",
-                        f"{getattr(character_data, 'task_progress', 0)}/{getattr(character_data, 'task_total', 0)}",
+                        f"{display_field(character_data, 'task_progress')}/"
+                        f"{display_field(character_data, 'task_total')}",
                     ],
                 ]
 
@@ -243,11 +245,11 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
                         detail_rows = []
 
                         if hasattr(task_details, "skill"):
-                            detail_rows.append(["Required Skill", str(getattr(task_details, "skill", "N/A"))])
+                            detail_rows.append(["Required Skill", str(display_field(task_details, "skill"))])
                         if hasattr(task_details, "level"):
-                            detail_rows.append(["Required Level", str(getattr(task_details, "level", "N/A"))])
+                            detail_rows.append(["Required Level", str(display_field(task_details, "level"))])
                         if hasattr(task_details, "description"):
-                            detail_rows.append(["Description", str(getattr(task_details, "description", "N/A"))])
+                            detail_rows.append(["Description", str(display_field(task_details, "description"))])
 
                         if detail_rows:
                             detail_output = format_table(detail_headers, detail_rows, title="Task Details")
@@ -262,8 +264,8 @@ def task_status(character: str = typer.Argument(..., help="Character name")) -> 
                                 if hasattr(reward, "code"):
                                     reward_rows.append(
                                         [
-                                            getattr(reward, "code", "Unknown"),
-                                            str(getattr(reward, "quantity", 1)),
+                                            str(display_field(reward, "code")),
+                                            str(display_field(reward, "quantity")),
                                         ]
                                     )
 
@@ -335,14 +337,14 @@ def list_tasks(
                     if hasattr(task, "rewards") and task.rewards:
                         for reward in task.rewards:
                             if hasattr(reward, "code"):
-                                rewards.append(f"{getattr(reward, 'quantity', 1)}x {reward.code}")
+                                rewards.append(f"{display_field(reward, 'quantity')}x {reward.code}")
 
                     rows.append(
                         [
-                            getattr(task, "code", "Unknown"),
-                            getattr(task, "type", "Unknown"),
-                            str(getattr(task, "level", 0)),
-                            getattr(task, "skill", "Unknown"),
+                            str(display_field(task, "code")),
+                            str(display_field(task, "type")),
+                            str(display_field(task, "level")),
+                            str(display_field(task, "skill")),
                             ", ".join(rewards) if rewards else "None",
                         ]
                     )

@@ -162,6 +162,29 @@ class TestCraftCommands:
                 assert result.exit_code == 0
                 assert "No craftable items found" in result.stdout
 
+    def test_recipes_missing_fields_render_marker(self, runner, mock_client_manager, mock_api_response):
+        """Test recipes renders the MISSING marker when API recipe fields are absent."""
+        with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
+            mock_api.return_value = mock_api_response
+
+            mock_item = Mock()
+            mock_item.code = None
+            mock_item.craft = Mock()
+            mock_item.craft.level = None
+            mock_item.craft.skill = None
+            mock_item.craft.items = [Mock(code=None, quantity=None)]
+
+            mock_data = Mock()
+            mock_data.data = [mock_item]
+
+            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=True, data=mock_data)
+
+                result = runner.invoke(app, ["recipes"])
+
+                assert result.exit_code == 0
+                assert "—" in result.stdout
+
     def test_cooldown_handling(self, runner, mock_client_manager, mock_api_response):
         """Test cooldown handling in craft commands."""
         with patch(
