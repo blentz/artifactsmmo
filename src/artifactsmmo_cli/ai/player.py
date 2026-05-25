@@ -1093,9 +1093,12 @@ class GamePlayer:
     def _task_aligned_monster(self) -> str | None:
         """The active task's monster when it's a PURSUE monster-task; else None.
 
-        A PURSUE monster-task is winnable by definition (task_decision returns
-        PIVOT for combat-gated tasks), so the objective-step grind can advance it
-        directly once retargeted here.
+        A PURSUE monster-task has cleared the level-margin feasibility gate
+        (task_decision returns PIVOT for combat-gated tasks), so the objective-step
+        grind can advance it directly once retargeted here. This bypasses the
+        non-task _is_winnable fallback; a borderline-margin monster is still picked
+        because the task forces the target. A persistent loss loop is caught by the
+        stuck/recovery backstop, not here.
         """
         s = self.state
         if s is None or self.game_data is None or s.task_type != "monsters" or not s.task_code:
