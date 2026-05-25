@@ -5,6 +5,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task import AcceptTaskAction, TaskCancelAction
+from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
@@ -583,23 +584,23 @@ class TestPursueTaskEndToEnd:
         gd = _make_planner_gd()
         # No crafting recipe for copper_bar → task_requirement returns None → feasible
         # State: items task active, one copper_bar already in inventory (so
-        # TaskTradeAction is immediately applicable).
+        # TaskTradeAction is immediately applicable). task_total=1 ensures
+        # task_batch_size returns 1, so PursueTaskGoal(batch=1) is satisfied
+        # after trading the single bar.
         state = make_state(
             level=5, hp=150, max_hp=150, xp=0, max_xp=500,
             task_code="copper_bar", task_type="items",
-            task_progress=0, task_total=20,
+            task_progress=0, task_total=1,
             skills={"weaponcrafting": 5},
             inventory={"copper_bar": 1},
         )
         # TaskTradeAction lets PursueTaskGoal plan in one step.
-        from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
         actions = [TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(2, 1))]
         ctx = _ctx(combat_monster="chicken")
 
         # Use a real (empty) LearningStore so history is not None (required for
         # PURSUE_TASK._fires), but task_decision is patched so it always PURSUEs.
-        from artifactsmmo_cli.ai.learning.store import LearningStore as _LS
-        store = _LS(db_path=str(tmp_path / "e2e.db"), character="testchar")
+        store = LearningStore(db_path=str(tmp_path / "e2e.db"), character="testchar")
         try:
             arbiter = StrategyArbiter(planner, history=store)
             decision = _FakeDecision(chosen_step=ReachCharLevel(50))

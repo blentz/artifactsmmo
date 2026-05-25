@@ -41,7 +41,7 @@ class PursueTaskGoal(Goal):
             return True
         if state.task_progress >= state.task_total:
             return True
-        return state.task_progress > self._initial_progress
+        return state.task_progress >= self._initial_progress + self._batch
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_progress": self._initial_progress + self._batch}

@@ -52,10 +52,11 @@ class TestPursueTaskGoal:
         g = PursueTaskGoal("copper_bar", 5, batch=9)
         assert g.desired_state(_items_task(progress=5), GameData()) == {"task_progress": 14}
 
-    def test_is_satisfied_unaffected_by_batch(self):
+    def test_is_satisfied_requires_full_batch(self):
         g = PursueTaskGoal("copper_bar", 5, batch=9)
         assert not g.is_satisfied(_items_task(progress=5))   # stalled
-        assert g.is_satisfied(_items_task(progress=6))        # any advance trips it
+        assert not g.is_satisfied(_items_task(progress=6))   # partial advance not enough
+        assert g.is_satisfied(_items_task(progress=14))      # exactly batch units delivered
 
     def test_max_depth(self):
         assert PursueTaskGoal("copper_bar", 0).max_depth == 100
@@ -147,3 +148,32 @@ class TestPursueTaskPlans:
         # The plan must end by delivering the item — that's what advances the task.
         assert isinstance(plan[-1], TaskTradeAction)
         assert plan[-1].code == "copper_bar"
+
+    def test_batched_plan_delivers_many_in_one_trade(self):
+        gd = GameData()
+        gd._item_stats = {
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                    crafting_skill="weaponcrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {"copper_bar": {"copper_ore": 1}}   # 1 ore/unit keeps search small
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        state = make_state(
+            task_code="copper_bar", task_type="items", task_progress=0, task_total=20,
+            skills={"weaponcrafting": 1}, inventory={}, inventory_max=100, x=0, y=0,
+        )
+        batch = 3
+        actions = [
+            GatherAction(resource_code="copper_rocks", locations=frozenset({(1, 0)})),
+            CraftAction(code="copper_bar", quantity=batch, workshop_location=(2, 0)),
+            TaskTradeAction(code="copper_bar", quantity=batch, taskmaster_location=(3, 0)),
+            CraftAction(code="copper_bar", quantity=1, workshop_location=(2, 0)),
+            TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(3, 0)),
+            GatherAction(resource_code="iron_rocks", locations=frozenset({(9, 9)})),
+        ]
+        goal = PursueTaskGoal("copper_bar", 0, batch=batch)
+        plan = GOAPPlanner().plan(state, goal, actions, gd, None)
+
+        assert plan, "expected a non-empty plan"
+        traded = sum(a.quantity for a in plan if isinstance(a, TaskTradeAction))
+        assert traded >= batch, "the plan must deliver the whole batch"
+        assert any(isinstance(a, TaskTradeAction) and a.quantity == batch for a in plan)
