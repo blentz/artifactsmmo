@@ -20,6 +20,7 @@ LIB = FORMAL / "vendor" / "PlusPy" / "modules" / "lib"
 MODULES: list[tuple[str, int]] = [
     ("Smoke", 3),
     ("CalculatePath", 625),
+    ("RecipeClosure", 9),
 ]
 
 # Substrings PlusPy emits when an assertion fails.
