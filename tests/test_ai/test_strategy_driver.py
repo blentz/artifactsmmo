@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import (
+    LEVEL_LOOKAHEAD,
     StrategyArbiter,
     _precedes,
     map_guard,
@@ -165,22 +166,22 @@ def test_objective_step_obtain_material():
 
 def test_objective_step_reach_skill_level():
     step = ReachSkillLevel("mining", 10)
-    # make_state() has mining level 3; target should be bounded to 3+1=4
+    # make_state() has mining level 3; target should be bounded to 3+LEVEL_LOOKAHEAD=6
     state = make_state(skills={"mining": 3}, skill_xp={"mining": 42})
     g = objective_step_goal(step, state, _gd(), _ctx())
     assert isinstance(g, LevelSkillGoal)
     assert g._skill_name == "mining"
-    assert g._target_level == 4, f"expected target_level==4 (current+1), got {g._target_level}"
+    assert g._target_level == 6, f"expected target_level==6 (current+LEVEL_LOOKAHEAD), got {g._target_level}"
     assert g._initial_skill_xp == 42, f"expected initial_skill_xp==42, got {g._initial_skill_xp}"
 
 
-def test_objective_step_reach_skill_level_bounds_to_current_plus_one():
-    """objective_step_goal must bound ReachSkillLevel target to current+1."""
+def test_objective_step_reach_skill_level_bounds_to_current_plus_lookahead():
+    """objective_step_goal must bound ReachSkillLevel target to current+LEVEL_LOOKAHEAD."""
     step = ReachSkillLevel("alchemy", 50)
     state = make_state(skills={"alchemy": 1}, skill_xp={"alchemy": 99})
     g = objective_step_goal(step, state, _gd(), _ctx())
     assert isinstance(g, LevelSkillGoal)
-    assert g._target_level == 2, f"expected 2 (1+1), got {g._target_level}"
+    assert g._target_level == 4, f"expected 4 (1+3), got {g._target_level}"
     assert g._initial_skill_xp == 99
 
 
@@ -480,3 +481,22 @@ def test_select_skips_satisfied_step_goal_continues_to_next():
     )
     assert isinstance(goal, AcceptTaskGoal), f"expected AcceptTaskGoal, got {goal!r}"
     assert len(plan) >= 1
+
+
+# ---------------------------------------------------------------------------
+# LEVEL_LOOKAHEAD tests
+# ---------------------------------------------------------------------------
+
+class TestLevelLookahead:
+    def test_constant_is_three(self):
+        assert LEVEL_LOOKAHEAD == 3
+
+    def test_skill_step_targets_current_plus_lookahead(self):
+        state = make_state(skills={"weaponcrafting": 1})
+        goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 50), state, GameData(), _ctx())
+        assert repr(goal) == "LevelSkill(weaponcrafting->4)"   # min(50, 1+3)
+
+    def test_skill_step_caps_at_step_level(self):
+        state = make_state(skills={"weaponcrafting": 48})
+        goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 50), state, GameData(), _ctx())
+        assert repr(goal) == "LevelSkill(weaponcrafting->50)"   # min(50, 48+3)

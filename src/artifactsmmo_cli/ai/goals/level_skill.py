@@ -41,10 +41,11 @@ class LevelSkillGoal(Goal):
             return 0.0
         current = state.skills.get(self._skill_name, 0)
         gap = self._target_level - current
-        # NOTE: the strategy driver bounds target_level to current+1 (gap==1), so
-        # this MAX_SKILL_GAP guard is inert for the objective-step path — the
-        # "don't grind too far" intent is handled by the incremental current+1
-        # march + replan. The guard still protects any other (small-gap) caller.
+        # NOTE: the strategy driver bounds target_level to current+LEVEL_LOOKAHEAD,
+        # so with MAX_SKILL_GAP=5 this guard stays inert for the objective-step
+        # path (gap <= 3). The "don't grind too far" intent is handled by the
+        # bounded target + per-cycle replan. The guard still protects any other
+        # (small-gap) caller.
         if gap <= 0 or gap > MAX_SKILL_GAP:
             return 0.0
         # Don't fire if no craftable item in this skill family exists at the

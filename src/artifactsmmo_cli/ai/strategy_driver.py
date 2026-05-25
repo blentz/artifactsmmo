@@ -34,6 +34,13 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
+LEVEL_LOOKAHEAD = 3
+"""How many levels ahead the objective step / task skill-gate targets, replacing
+the old hard current+1. The planner re-plans every cycle and executes only
+plan[0], so this steers search reachability/direction, not commitment. Tunable:
+raise toward 5 if traces show 90s-budget headroom; deeper risks a no_plan
+timeout on a long recipe chain."""
+
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
@@ -98,7 +105,7 @@ def objective_step_goal(
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
         current = state.skills.get(step.skill, 0)
-        target = min(step.level, current + 1)
+        target = min(step.level, current + LEVEL_LOOKAHEAD)
         return LevelSkillGoal(skill_name=step.skill, target_level=target,
                               initial_skill_xp=state.skill_xp.get(step.skill, 0))
     if isinstance(step, ReachCharLevel):
