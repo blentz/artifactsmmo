@@ -18,6 +18,11 @@ StepToward(c, d) ==
 
 Cheb(c, d)      == Max(Abs(d.x - c.x), Abs(d.y - c.y))
 OptimalLen(s,d) == Cheb(s, d)              \* king-move lower bound
+
+\* Guard: MaxStep must cover the widest pair so Reach[i] is defined for all i.
+ASSUME \A s \in Pts, d \in Pts : Cheb(s, d) <= MaxStep
+
+\* 4-connected distance; a diagonal king-step "saves" 1 vs this bound
 Manhattan(s, d) == Abs(d.x - s.x) + Abs(d.y - s.y)
 
 \* PlusPy has no RECURSIVE operator keyword, but it supports recursive function
