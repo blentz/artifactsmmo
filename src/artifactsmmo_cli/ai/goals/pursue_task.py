@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Matches the retired FarmItems value (35) so task pursuit slots at the same
@@ -47,11 +48,19 @@ class PursueTaskGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData
     ) -> list[Action]:
+        """Scope to the task item's recipe closure (gather its resources, craft
+        its intermediates) plus the TaskTrade that submits it — so the planner
+        doesn't branch across every gather/craft in the game and time out."""
+        needed_resources, craftable_mats = recipe_closure(game_data, [self._task_code])
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
                 result.append(action)
-            elif isinstance(action, (GatherAction, CraftAction, TaskTradeAction)):
+            elif isinstance(action, GatherAction) and action.resource_code in needed_resources:
+                result.append(action)
+            elif isinstance(action, CraftAction) and action.code in craftable_mats:
+                result.append(action)
+            elif isinstance(action, TaskTradeAction) and action.code == self._task_code:
                 result.append(action)
         return result
 

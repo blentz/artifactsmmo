@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -48,25 +49,7 @@ class GatherMaterialsGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         """Restrict planning to gather/smelt/deposit — excludes combat and unrelated gathers."""
-        needed_resources: set[str] = set()
-        craftable_mats: set[str] = set()
-
-        def collect(material: str, visited: set[str]) -> None:
-            if material in visited:
-                return
-            visited.add(material)
-            for resource_code, drop_item in game_data._resource_drops.items():
-                if drop_item == material:
-                    needed_resources.add(resource_code)
-            recipe = game_data._crafting_recipes.get(material) or {}
-            if recipe:
-                craftable_mats.add(material)
-                for sub_mat in recipe:
-                    collect(sub_mat, visited)
-
-        visited: set[str] = set()
-        for mat in self._needed:
-            collect(mat, visited)
+        needed_resources, craftable_mats = recipe_closure(game_data, self._needed)
 
         result: list[Action] = []
         for action in actions:
