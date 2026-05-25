@@ -209,7 +209,7 @@ def test_sell_means_maps_to_sell_inventory_goal():
     ctx = SelectionContext(bank_accessible=False, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,
                            task_exchange_min_coins=1, combat_monster=None)
-    goal = map_means(MeansKind.SELL_IDLE, gd, ctx)
+    goal = map_means(MeansKind.SELL_IDLE, gd, ctx, make_state())
     assert isinstance(goal, SellInventoryGoal)
 
 
@@ -241,7 +241,7 @@ def test_bank_expand_means_maps_to_expand_bank_goal():
     ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,
                            task_exchange_min_coins=1, combat_monster=None)
-    goal = map_means(MeansKind.BANK_EXPAND, gd, ctx)
+    goal = map_means(MeansKind.BANK_EXPAND, gd, ctx, make_state())
     assert isinstance(goal, ExpandBankGoal)
 
 
