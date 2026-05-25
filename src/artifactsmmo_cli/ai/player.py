@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
@@ -932,11 +933,16 @@ class GamePlayer:
             actions.append(WithdrawGoldAction(quantity=q, bank_location=bank, accessible=self._bank_accessible))
         # Task trade is built only when current task is items-type
         if self.state is not None and self.state.task_type == "items" and self.state.task_code:
-            actions.append(TaskTradeAction(
-                code=self.state.task_code,
-                quantity=1,
-                taskmaster_location=taskmaster,
-            ))
+            task_code = self.state.task_code
+            k = task_batch_size(self.state, self.game_data)
+            stats = self.game_data.item_stats(task_code)
+            workshop = (self.game_data.workshop_location(stats.crafting_skill)
+                        if stats is not None and stats.crafting_skill else None)
+            if workshop is not None and k > 1:
+                actions.append(CraftAction(code=task_code, quantity=k, workshop_location=workshop))
+            actions.append(TaskTradeAction(code=task_code, quantity=k, taskmaster_location=taskmaster))
+            if k > 1:
+                actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=taskmaster))
 
         return actions
 

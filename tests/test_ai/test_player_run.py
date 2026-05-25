@@ -4,14 +4,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from tests.test_ai.fixtures import make_state
@@ -392,3 +395,35 @@ def test_run_calls_handle_stuck_after_successful_action():
 
     # STATE_FROZEN L1 should have been invoked
     assert player._recovery_level.get(StuckSignal.STATE_FROZEN) == 1
+
+
+def test_items_task_builds_batched_craft_and_trade():
+    """For an items task the task-item Craft and TaskTrade are built with
+    quantity == task_batch_size, so the planner can produce/deliver a batch."""
+    player = GamePlayer(character="testchar")
+    player.game_data = GameData()
+    player.game_data._bank_location = (4, 0)
+    player.game_data._taskmaster_location = (1, 2)
+    player.game_data._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
+    player.game_data._resource_drops = {"copper_rocks": "copper_ore"}
+    player.game_data._resource_locations = {}
+    player.game_data._monster_locations = {}
+    player.game_data._npc_stock = {}
+    player.game_data._npc_sell_prices = {}
+    player.game_data._item_stats = {
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    player.game_data._workshop_locations = {"weaponcrafting": (2, 0)}
+    player._bank_accessible = True
+    player.state = make_state(task_code="copper_bar", task_type="items",
+                              task_total=20, task_progress=0, inventory={}, inventory_max=100)
+
+    k = task_batch_size(player.state, player.game_data)
+    assert k > 1   # sanity: this state batches
+
+    actions = player._build_actions()
+    trades = [a for a in actions if isinstance(a, TaskTradeAction) and a.code == "copper_bar"]
+    crafts = [a for a in actions if isinstance(a, CraftAction) and a.code == "copper_bar"]
+    assert any(t.quantity == k for t in trades), "expected a TaskTrade with quantity K"
+    assert any(c.quantity == k for c in crafts), "expected a Craft with quantity K"
