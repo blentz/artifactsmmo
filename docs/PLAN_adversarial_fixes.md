@@ -96,6 +96,13 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
   Found+fixed another coverage-gaming bug (bank cooldown tests). Committed.
 - Snapshot: 2410 pass / 100% cov ENFORCED / 0 warn / mypy 0 / ruff clean. 10 commits.
   Done: P1 P2 P3 P4 P5a P5b P7 P8 P9 P10.
-  Remaining:
-    * P6 — refactor god files info.py (1708) + player.py (1282). Now guarded by
-      enforced 100% coverage, so regressions surface immediately.
+- 2026-05-25: P6 DONE — info.py (1708) → commands/info/ package (11 modules),
+  public import paths + Typer app preserved (zero test changes); player.py pure
+  helpers extracted to player_helpers.py (orchestrator left intact to keep patch
+  targets). Committed.
+
+## ALL PHASES COMPLETE (2026-05-25)
+Final: 2410 pass / 100% coverage ENFORCED / 0 warnings / mypy strict 0 / ruff clean.
+11 commits on fix/adversarial-review. Original review verdict was BLOCK; every
+finding (C1, C2, W1-W5, N1-N5) plus 2 discovered phases (P9 mypy, P10 latent
+bugs) is resolved. 3 real runtime bugs the mocked tests hid were fixed in passing.
