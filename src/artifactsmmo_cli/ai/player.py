@@ -57,6 +57,8 @@ from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
+from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost
+from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_batch import task_batch_size
@@ -81,40 +83,6 @@ prediction (below this the sample is too noisy to trust)."""
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
-_PLAN_PREVIEW = 5  # max distinct steps shown in verbose plan output
-
-
-def _delete_cost(item_code: str, game_data: "GameData") -> float:
-    """Cost weight for deleting an item.
-
-    Ingredient-first ordering: an item that's both a craft ingredient AND sellable
-    gets the harsher penalty (50.0), not the milder sellable penalty (25.0).
-    """
-    is_ingredient = any(item_code in recipe for recipe in game_data._crafting_recipes.values())
-    has_sell_price = bool(game_data.npcs_buying_item(item_code))
-    if is_ingredient:
-        return 50.0
-    if has_sell_price:
-        return 25.0
-    return 5.0
-
-
-def _format_plan(plan: list[Action]) -> str:
-    """Summarise a plan as 'A×N → B → C×M … (+K more)' instead of raw repetition."""
-    if not plan:
-        return ""
-    segments: list[str] = []
-    i = 0
-    while i < len(plan) and len(segments) < _PLAN_PREVIEW:
-        step = repr(plan[i])
-        count = 1
-        while i + count < len(plan) and repr(plan[i + count]) == step:
-            count += 1
-        segments.append(f"{step}×{count}" if count > 1 else step)
-        i += count
-    remaining = len(plan) - i
-    suffix = f" … (+{remaining} more)" if remaining > 0 else ""
-    return " → ".join(segments) + suffix
 
 
 class GamePlayer:

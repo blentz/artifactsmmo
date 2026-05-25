@@ -90,8 +90,12 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
   display-only field access in all 7 command files through it (~115 sites); found
   another mock-hidden bug (bank details dict .get on attribute BankSchema). Committed.
 - Snapshot: 2251 pass / 0 warn / mypy 0 / ruff clean. 9 commits.
-  Done: P1 P2 P3 P4 P5a P5b P7 P9 P10.
+- 2026-05-25: P8 DONE — 100% coverage reached (274 lines tested + 4 dead lines
+  deleted, not pragma'd); enforcement wired into pyproject addopts
+  (--strict-markers -W error --cov --cov-fail-under=100). Closes original C1.
+  Found+fixed another coverage-gaming bug (bank cooldown tests). Committed.
+- Snapshot: 2410 pass / 100% cov ENFORCED / 0 warn / mypy 0 / ruff clean. 10 commits.
+  Done: P1 P2 P3 P4 P5a P5b P7 P8 P9 P10.
   Remaining:
-    * P6 — refactor god files info.py (1708) + player.py (1282). HIGH regression risk.
-    * P8 — cover 274 lines (play.py 35%, helpers 80%, craft 93%) then enforce
-      addopts: --cov=src/artifactsmmo_cli --cov-fail-under=100 --strict-markers -W error.
+    * P6 — refactor god files info.py (1708) + player.py (1282). Now guarded by
+      enforced 100% coverage, so regressions surface immediately.
