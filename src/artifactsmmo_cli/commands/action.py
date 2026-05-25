@@ -471,169 +471,57 @@ def goto_location(
                     console.print(format_error_message(f"Could not find location '{parsed_dest}': {str(e)}"))
                     raise typer.Exit(1)
 
-        # Calculate path
-        path_result = calculate_path(start_x, start_y, end_x, end_y)
-
         # Show current position and destination
         console.print(f"[bold cyan]Navigation for {character}[/bold cyan]")
         console.print(f"[dim]From: ({start_x}, {start_y}) → To: ({end_x}, {end_y})[/dim]")
-        console.print(f"[dim]Path: {path_result}[/dim]")
         console.print()
 
         # If no movement needed
-        if path_result.is_empty:
+        if start_x == end_x and start_y == end_y:
             console.print(format_success_message(f"{character} is already at the destination"))
             return
 
-        # Show path if requested
-        if show_path:
-            console.print("[bold]Planned path:[/bold]")
-            for i, step in enumerate(path_result.steps, 1):
-                console.print(f"  {i}. Move to {step}")
-            console.print()
+        # Ask for confirmation if requested
+        if show_path and not typer.confirm(f"Move to ({end_x}, {end_y})?"):
+            console.print("Navigation cancelled.")
+            return
 
-            # Ask for confirmation
-            if not typer.confirm("Execute this path?"):
-                console.print("Navigation cancelled.")
-                return
+        # The server runs A* pathfinding and moves the character all the way to the
+        # destination in a single action (cooldown scales with the path it takes),
+        # so the client issues one move rather than walking tile-by-tile.
+        destination_data = DestinationSchema(x=end_x, y=end_y)
 
-        # Execute navigation
-        console.print(f"[bold cyan]Starting navigation ({len(path_result.steps)} moves)[/bold cyan]")
+        def attempt_move() -> CLIResponse[Any]:
+            response = ClientManager().api.action_move(name=character, body=destination_data)
+            return handle_api_response(response, f"Moved {character} to ({end_x}, {end_y})")
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TextColumn("•"),
-            TextColumn("[progress.percentage]{task.completed}/{task.total}"),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            console=console,
-            transient=False,
-        ) as progress:
-            task = progress.add_task("Navigating", total=len(path_result.steps))
-
-            for i, step in enumerate(path_result.steps):
-                progress.update(task, description=f"Moving to ({step.x}, {step.y})")
-
-                # Execute move
-                try:
-                    api = ClientManager().api
-                    destination_data = DestinationSchema(x=step.x, y=step.y)
-                    response = api.action_move(name=character, body=destination_data)
-
-                    cli_response = handle_api_response(response, f"Moved {character} to ({step.x}, {step.y})")
-
-                    if cli_response.success:
-                        console.print(f"✅ Moved to ({step.x}, {step.y})")
-                        progress.advance(task)
-                    elif cli_response.cooldown_remaining:
-                        cooldown_seconds = cli_response.cooldown_remaining
-                        console.print(format_cooldown_message(cooldown_seconds))
-
-                        if wait_cooldown:
-                            console.print(
-                                f"[blue]⏱ Waiting {format_time_duration(cooldown_seconds)} for cooldown...[/blue]"
-                            )
-
-                            # Wait with countdown
-                            for remaining in range(math.ceil(cooldown_seconds), 0, -1):
-                                progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
-                                time.sleep(1)
-
-                            # Retry the move after cooldown
-                            progress.update(task, description=f"Moving to ({step.x}, {step.y})")
-                            response = api.action_move(name=character, body=destination_data)
-                            cli_response = handle_api_response(
-                                response, f"Moved {character} to ({step.x}, {step.y})"
-                            )
-
-                            if cli_response.success:
-                                console.print(f"✅ Moved to ({step.x}, {step.y})")
-                                progress.advance(task)
-                            else:
-                                error_msg = cli_response.error or "Move failed after cooldown"
-                                console.print(format_error_message(error_msg))
-                                break
-                        else:
-                            console.print(
-                                format_error_message(
-                                    f"Move blocked by cooldown ({format_time_duration(cooldown_seconds)})"
-                                )
-                            )
-                            break
-                    else:
-                        error_msg = cli_response.error or "Move failed"
-                        console.print(format_error_message(error_msg))
-                        break
-
-                except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-                    cli_response = handle_api_error(e)
-                    if cli_response.cooldown_remaining:
-                        cooldown_seconds = cli_response.cooldown_remaining
-                        console.print(format_cooldown_message(cooldown_seconds))
-
-                        if wait_cooldown:
-                            console.print(
-                                f"[blue]⏱ Waiting {format_time_duration(cooldown_seconds)} for cooldown...[/blue]"
-                            )
-
-                            # Wait with countdown
-                            for remaining in range(math.ceil(cooldown_seconds), 0, -1):
-                                progress.update(task, description=f"Waiting for cooldown: {remaining}s remaining")
-                                time.sleep(1)
-
-                            # Retry the move after cooldown
-                            progress.update(task, description=f"Moving to ({step.x}, {step.y})")
-                            try:
-                                response = api.action_move(name=character, body=destination_data)
-                                cli_response = handle_api_response(
-                                    response, f"Moved {character} to ({step.x}, {step.y})"
-                                )
-
-                                if cli_response.success:
-                                    console.print(f"✅ Moved to ({step.x}, {step.y})")
-                                    progress.advance(task)
-                                else:
-                                    error_msg = cli_response.error or "Move failed after cooldown"
-                                    console.print(format_error_message(error_msg))
-                                    break
-                            except (ValueError, UnexpectedStatus, httpx.HTTPError) as retry_e:
-                                retry_cli_response = handle_api_error(retry_e)
-                                console.print(
-                                    format_error_message(
-                                        retry_cli_response.error or f"Move failed after cooldown: {str(retry_e)}"
-                                    )
-                                )
-                                break
-                        else:
-                            console.print(
-                                format_error_message(
-                                    f"Move blocked by cooldown ({format_time_duration(cooldown_seconds)})"
-                                )
-                            )
-                            break
-                    else:
-                        console.print(format_error_message(cli_response.error or f"Move failed: {str(e)}"))
-                        break
-
-                # Small delay between moves
-                if i < len(path_result.steps) - 1:
-                    time.sleep(0.5)
-
-        # Final status
         try:
-            final_x, final_y = get_character_position(character)
-            if final_x == end_x and final_y == end_y:
+            cli_response = attempt_move()
+        except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
+            cli_response = handle_api_error(e)
+
+        # On cooldown: wait and retry once if allowed, otherwise stop.
+        if not cli_response.success and cli_response.cooldown_remaining:
+            cooldown_seconds = cli_response.cooldown_remaining
+            console.print(format_cooldown_message(cooldown_seconds))
+            if not wait_cooldown:
                 console.print(
-                    format_success_message(f"🎯 {character} successfully reached destination ({end_x}, {end_y})")
+                    format_error_message(f"Move blocked by cooldown ({format_time_duration(cooldown_seconds)})")
                 )
-            else:
-                console.print(
-                    f"[yellow]⚠ {character} stopped at ({final_x}, {final_y}), "
-                    f"target was ({end_x}, {end_y})[/yellow]"
-                )
-        except (UnexpectedStatus, httpx.HTTPError):
-            console.print("[yellow]⚠ Could not verify final position[/yellow]")
+                return
+            console.print(f"[blue]⏱ Waiting {format_time_duration(cooldown_seconds)} for cooldown...[/blue]")
+            for remaining in range(math.ceil(cooldown_seconds), 0, -1):
+                console.print(f"[dim]Waiting for cooldown: {remaining}s remaining[/dim]")
+                time.sleep(1)
+            try:
+                cli_response = attempt_move()
+            except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
+                cli_response = handle_api_error(e)
+
+        if cli_response.success:
+            console.print(format_success_message(f"🎯 {character} reached destination ({end_x}, {end_y})"))
+        else:
+            console.print(format_error_message(cli_response.error or "Move failed"))
 
     except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         console.print(format_error_message(f"Navigation failed: {str(e)}"))

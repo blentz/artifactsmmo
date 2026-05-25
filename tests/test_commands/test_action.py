@@ -947,37 +947,24 @@ class TestGatherCommandSuccessNoData:
 class TestGotoCommand:
     """Test goto_location command."""
 
-    def _make_path_result(self, steps=None):
-        """Build a mock PathResult."""
-        if steps is None:
-            steps = []
-        step_objs = [PathStep(x=s[0], y=s[1]) for s in steps]
-        return PathResult(steps=step_objs, total_distance=len(steps), estimated_time=len(steps) * 5)
-
     def test_goto_already_at_destination(self, runner, mock_client_manager):
         """Test goto when character is already at the destination."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(5, 10)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(5, 10)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(5, 10)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([])
-
-                        result = runner.invoke(app, ["goto", "testchar", "5 10"])
-
-                        assert result.exit_code == 0
-                        assert "already at the destination" in result.stdout
-
-    def test_goto_coordinate_args(self, runner, mock_client_manager):
-        """Test goto with separate X Y coordinate arguments."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
-            with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(5, 10)):
-                with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                    mock_path.return_value = self._make_path_result([])
-
-                    result = runner.invoke(app, ["goto", "testchar", "5", "10"])
+                    result = runner.invoke(app, ["goto", "testchar", "5 10"])
 
                     assert result.exit_code == 0
                     assert "already at the destination" in result.stdout
+
+    def test_goto_coordinate_args(self, runner, mock_client_manager):
+        """Test goto with separate X Y coordinate arguments."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(5, 10)):
+            with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(5, 10)):
+                result = runner.invoke(app, ["goto", "testchar", "5", "10"])
+
+                assert result.exit_code == 0
+                assert "already at the destination" in result.stdout
 
     def test_goto_invalid_x_coordinate(self, runner, mock_client_manager):
         """Test goto with invalid X coordinate when Y is provided."""
@@ -988,17 +975,14 @@ class TestGotoCommand:
             assert "not a valid X coordinate" in result.stdout
 
     def test_goto_named_location(self, runner, mock_client_manager):
-        """Test goto with a named location."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
+        """Test goto resolves a named location to coordinates."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(2, 3)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value="bank"):
                 with patch("artifactsmmo_cli.commands.action.resolve_named_location", return_value=(2, 3)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([])
+                    result = runner.invoke(app, ["goto", "testchar", "bank"])
 
-                        result = runner.invoke(app, ["goto", "testchar", "bank"])
-
-                        assert result.exit_code == 0
-                        assert "already at the destination" in result.stdout
+                    assert result.exit_code == 0
+                    assert "already at the destination" in result.stdout
 
     def test_goto_named_location_not_found(self, runner, mock_client_manager):
         """Test goto with a named location that cannot be resolved."""
@@ -1025,300 +1009,203 @@ class TestGotoCommand:
             assert "Could not get character position" in result.stdout
 
     def test_goto_move_success(self, runner, mock_client_manager):
-        """Test goto executes movement steps successfully."""
+        """A single move to the destination is issued (server routes the path)."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(1, 0), (2, 0), (3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.return_value = Mock(success=True, cooldown_remaining=None, error=None)
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.return_value = Mock(success=True, cooldown_remaining=None, error=None)
-
-                            with patch("time.sleep"):
-                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                        result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert result.exit_code == 0
+                        assert "reached destination" in result.stdout
+                        # exactly one move issued — the client does not walk tile-by-tile
+                        mock_client_manager.api.action_move.assert_called_once()
 
     def test_goto_move_cooldown_no_wait(self, runner, mock_client_manager):
         """Test goto with move blocked by cooldown and no-wait-cooldown."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.return_value = Mock(success=False, cooldown_remaining=5, error=None)
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.return_value = Mock(success=False, cooldown_remaining=5, error=None)
-
-                            with patch("time.sleep"):
-                                result = runner.invoke(
-                                    app, ["goto", "testchar", "3 0", "--no-wait-cooldown"]
-                                )
+                        result = runner.invoke(app, ["goto", "testchar", "3 0", "--no-wait-cooldown"])
 
                         assert "Move blocked by cooldown" in result.stdout
 
     def test_goto_move_error(self, runner, mock_client_manager):
-        """Test goto with move step returning an error."""
+        """Test goto with the move returning a non-cooldown error."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.return_value = Mock(success=False, cooldown_remaining=None, error="Move failed")
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.return_value = Mock(success=False, cooldown_remaining=None, error="Move failed")
-
-                            with patch("time.sleep"):
-                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                        result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert "Move failed" in result.stdout
 
     def test_goto_show_path_confirmed(self, runner, mock_client_manager):
-        """Test goto with show_path that user confirms."""
+        """Test goto with --show-path that the user confirms."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(2, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(2, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(1, 0), (2, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.return_value = Mock(success=True, cooldown_remaining=None, error=None)
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.return_value = Mock(success=True, cooldown_remaining=None, error=None)
-
-                            with patch("time.sleep"):
-                                # Provide "y\n" to confirm the path
-                                result = runner.invoke(
-                                    app, ["goto", "testchar", "2 0", "--show-path"], input="y\n"
-                                )
+                        result = runner.invoke(app, ["goto", "testchar", "2 0", "--show-path"], input="y\n")
 
                         assert result.exit_code == 0
-                        assert "Planned path" in result.stdout
+                        assert "Move to (2, 0)?" in result.stdout
+                        assert "reached destination" in result.stdout
 
     def test_goto_show_path_cancelled(self, runner, mock_client_manager):
-        """Test goto with show_path that user cancels."""
+        """Test goto with --show-path that the user cancels."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(2, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(2, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(1, 0), (2, 0)])
+                    result = runner.invoke(app, ["goto", "testchar", "2 0", "--show-path"], input="n\n")
 
-                        result = runner.invoke(app, ["goto", "testchar", "2 0", "--show-path"], input="n\n")
-
-                        assert result.exit_code == 0
-                        assert "cancelled" in result.stdout
+                    assert result.exit_code == 0
+                    assert "cancelled" in result.stdout
+                    mock_client_manager.api.action_move.assert_not_called()
 
     def test_goto_move_cooldown_wait_retry_success(self, runner, mock_client_manager):
-        """Test goto with move cooldown, wait enabled, retry succeeds."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            # First call for starting position, second for final check
-            mock_pos.side_effect = [(0, 0), (3, 0)]
+        """Test goto waits out a cooldown and the retried move succeeds."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = [
+                            Mock(success=False, cooldown_remaining=1, error=None),
+                            Mock(success=True, cooldown_remaining=None, error=None),
+                        ]
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # First call returns cooldown, second returns success (retry)
-                            mock_resp.side_effect = [
-                                Mock(success=False, cooldown_remaining=1, error=None),
-                                Mock(success=True, cooldown_remaining=None, error=None),
-                            ]
-
-                            with patch("time.sleep"):
-                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                        with patch("time.sleep"):
+                            result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert result.exit_code == 0
+                        assert "reached destination" in result.stdout
+                        assert mock_client_manager.api.action_move.call_count == 2
 
     def test_goto_move_cooldown_wait_retry_failure(self, runner, mock_client_manager):
-        """Test goto with move cooldown, wait enabled, retry fails."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            mock_pos.side_effect = [(0, 0), (0, 0)]
+        """Test goto waits out a cooldown but the retried move still fails."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = [
+                            Mock(success=False, cooldown_remaining=1, error=None),
+                            Mock(success=False, cooldown_remaining=None, error="Move failed after cooldown"),
+                        ]
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # First cooldown, second still fails
-                            mock_resp.side_effect = [
-                                Mock(success=False, cooldown_remaining=1, error=None),
-                                Mock(success=False, cooldown_remaining=None, error="Move failed after cooldown"),
-                            ]
-
-                            with patch("time.sleep"):
-                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                        with patch("time.sleep"):
+                            result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert "Move failed after cooldown" in result.stdout
 
     def test_goto_move_exception_no_cooldown(self, runner, mock_client_manager):
-        """Test goto when API raises exception without cooldown."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            mock_pos.side_effect = [(0, 0), (0, 0)]
+        """Test goto when the move raises an exception without a cooldown."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = httpx.ConnectError("Network error")
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.side_effect = httpx.ConnectError("Network error")
+                        with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
+                            mock_err.return_value = Mock(success=False, cooldown_remaining=None, error="Network error")
 
-                            with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
-                                mock_err.return_value = Mock(cooldown_remaining=None, error="Network error")
-
-                                with patch("time.sleep"):
-                                    result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                            result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert "Network error" in result.stdout
 
     def test_goto_move_exception_cooldown_no_wait(self, runner, mock_client_manager):
-        """Test goto when API raises exception with cooldown but no-wait-cooldown."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            mock_pos.side_effect = [(0, 0), (0, 0)]
+        """Test goto when the move raises a cooldown exception with no-wait-cooldown."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = httpx.ConnectError("cooldown error")
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.side_effect = httpx.ConnectError("cooldown error")
+                        with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
+                            mock_err.return_value = Mock(success=False, cooldown_remaining=5, error=None)
 
-                            with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
-                                mock_err.return_value = Mock(cooldown_remaining=5, error=None)
-
-                                with patch("time.sleep"):
-                                    result = runner.invoke(
-                                        app, ["goto", "testchar", "3 0", "--no-wait-cooldown"]
-                                    )
+                            result = runner.invoke(app, ["goto", "testchar", "3 0", "--no-wait-cooldown"])
 
                         assert "Move blocked by cooldown" in result.stdout
 
     def test_goto_move_exception_cooldown_wait_retry_success(self, runner, mock_client_manager):
-        """Test goto when API raises exception with cooldown, wait enabled, retry succeeds."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            mock_pos.side_effect = [(0, 0), (3, 0)]
+        """Test goto recovers when the first move raises a cooldown and the retry succeeds."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = [
+                            httpx.ConnectError("cooldown"),
+                            Mock(success=True, cooldown_remaining=None, error=None),
+                        ]
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # First call raises, retry call succeeds
-                            mock_resp.side_effect = [
-                                httpx.ConnectError("cooldown"),
-                                Mock(success=True, cooldown_remaining=None, error=None),
-                            ]
+                        with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
+                            mock_err.return_value = Mock(success=False, cooldown_remaining=1, error=None)
 
-                            with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
-                                mock_err.return_value = Mock(cooldown_remaining=1, error=None)
-
-                                with patch("time.sleep"):
-                                    result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                            with patch("time.sleep"):
+                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert result.exit_code == 0
+                        assert "reached destination" in result.stdout
 
     def test_goto_move_exception_cooldown_wait_retry_failure(self, runner, mock_client_manager):
-        """Test goto when API raises exception with cooldown, wait, retry also fails."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            mock_pos.side_effect = [(0, 0), (0, 0)]
+        """Test goto when the first move raises a cooldown and the retry returns failure."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = [
+                            httpx.ConnectError("cooldown"),
+                            Mock(success=False, cooldown_remaining=None, error="Move failed after cooldown"),
+                        ]
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # First raises, retry returns failure
-                            mock_resp.side_effect = [
-                                httpx.ConnectError("cooldown"),
-                                Mock(success=False, cooldown_remaining=None, error="Move failed after cooldown"),
-                            ]
+                        with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
+                            mock_err.return_value = Mock(success=False, cooldown_remaining=1, error=None)
 
-                            with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
-                                mock_err.return_value = Mock(cooldown_remaining=1, error=None)
-
-                                with patch("time.sleep"):
-                                    result = runner.invoke(app, ["goto", "testchar", "3 0"])
+                            with patch("time.sleep"):
+                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
                         assert "Move failed after cooldown" in result.stdout
 
     def test_goto_move_exception_cooldown_wait_retry_exception(self, runner, mock_client_manager):
-        """Test goto when retry itself raises an exception."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            mock_pos.side_effect = [(0, 0), (0, 0)]
+        """Test goto when both the first move and the retry raise exceptions."""
+        with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
             with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
                 with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
+                    with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
+                        mock_resp.side_effect = httpx.ConnectError("api error")
 
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # Both calls raise exceptions
-                            mock_resp.side_effect = httpx.ConnectError("api error")
-
-                            with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
-                                # First handle_api_error call has cooldown, retry also raises
-                                mock_err.side_effect = [
-                                    Mock(cooldown_remaining=1, error=None),
-                                    Mock(cooldown_remaining=None, error="Retry failed"),
-                                ]
-
-                                with patch("time.sleep"):
-                                    result = runner.invoke(app, ["goto", "testchar", "3 0"])
-
-                        assert result.exit_code == 0  # graceful handling
-
-    def test_goto_final_position_partial(self, runner, mock_client_manager):
-        """Test goto shows partial arrival when final position doesn't match destination."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            # Initial position, then partial arrival at (1, 0) not (3, 0)
-            mock_pos.side_effect = [(0, 0), (1, 0)]
-            with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
-                with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(1, 0), (2, 0), (3, 0)])
-
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            # First step succeeds, second fails
-                            mock_resp.side_effect = [
-                                Mock(success=True, cooldown_remaining=None, error=None),
-                                Mock(success=False, cooldown_remaining=None, error="Blocked"),
-                                Mock(success=True, cooldown_remaining=None, error=None),
+                        with patch("artifactsmmo_cli.commands.action.handle_api_error") as mock_err:
+                            mock_err.side_effect = [
+                                Mock(success=False, cooldown_remaining=1, error=None),
+                                Mock(success=False, cooldown_remaining=None, error="Retry failed"),
                             ]
 
                             with patch("time.sleep"):
                                 result = runner.invoke(app, ["goto", "testchar", "3 0"])
 
-                        assert "stopped at" in result.stdout or result.exit_code == 0
-
-    def test_goto_final_position_check_error(self, runner, mock_client_manager):
-        """Test goto handles error when verifying final position."""
-        with patch("artifactsmmo_cli.commands.action.get_character_position") as mock_pos:
-            # Initial position ok, final position check raises
-            mock_pos.side_effect = [(0, 0), httpx.ConnectError("Position check failed")]
-            with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
-                with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_path:
-                        mock_path.return_value = self._make_path_result([(3, 0)])
-
-                        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_resp:
-                            mock_resp.return_value = Mock(success=True, cooldown_remaining=None, error=None)
-
-                            with patch("time.sleep"):
-                                result = runner.invoke(app, ["goto", "testchar", "3 0"])
-
-                        assert "Could not verify final position" in result.stdout
+                        assert result.exit_code == 0
+                        assert "Retry failed" in result.stdout
 
     def test_goto_navigation_failed_outer_exception(self, runner, mock_client_manager):
-        """Test goto outer exception handler for unexpected errors."""
+        """Test goto outer exception handler when destination parsing fails."""
         with patch("artifactsmmo_cli.commands.action.get_character_position", return_value=(0, 0)):
-            with patch("artifactsmmo_cli.commands.action.parse_destination", return_value=(3, 0)):
-                with patch("artifactsmmo_cli.commands.action.validate_coordinates", return_value=(3, 0)):
-                    with patch(
-                        "artifactsmmo_cli.commands.action.calculate_path",
-                        side_effect=httpx.ConnectError("Unexpected calculation error"),
-                    ):
-                        result = runner.invoke(app, ["goto", "testchar", "3 0"])
+            with patch(
+                "artifactsmmo_cli.commands.action.parse_destination",
+                side_effect=httpx.ConnectError("Unexpected parse error"),
+            ):
+                result = runner.invoke(app, ["goto", "testchar", "bank"])
 
-                        assert result.exit_code == 1
-                        assert "Navigation failed" in result.stdout
+                assert result.exit_code == 1
+                assert "Navigation failed" in result.stdout
 
 
 class TestShowPathCommand:
