@@ -11,6 +11,7 @@ EXTENDS Integers, FiniteSets, TLC
 \* predict_win refinement itself is Task 6; Beatable is abstracted here.
 
 Items == {"sword", "blade", "iron", "wood", "gem"}
+\* Empty recipe domain: safe sentinel so DOMAIN Recipe[m] is total over leaf items.
 Empty == [ x \in {} |-> 0 ]
 Recipe ==
   [ sword |-> [blade |-> 1],
@@ -58,8 +59,10 @@ NodeCorrect(node) ==
 
 \* combat_capable equivalence: any(predict_win) over monsters
 Monsters == {"chicken", "cow", "wolf"}
+\* Task 6 stub: abstracts predict_win's per-monster verdict (refined in PredictWin.tla)
 Beatable == [ chicken |-> TRUE, cow |-> FALSE, wolf |-> FALSE ]
 CombatCapable == \E m \in Monsters : Beatable[m]
+\* Oracle mirrors any(predict_win) semantics: existence of a beatable monster, not its identity.
 ExpectedCombatCapable == TRUE   \* chicken is beatable
 CombatGateCorrect == CombatCapable = ExpectedCombatCapable
 
@@ -68,6 +71,6 @@ Init == todo = Items
 Next == /\ todo # {}
         /\ \E node \in todo :
               /\ Assert(NodeCorrect(node), <<"PrereqGraph FAIL node", node>>)
-              /\ Assert(CombatGateCorrect, <<"PrereqGraph FAIL combat gate">>)
+              /\ Assert(CombatGateCorrect, <<"PrereqGraph FAIL combat gate">>)  \* whole-spec invariant, not node-scoped; re-checked each step harmlessly
               /\ todo' = todo \ {node}
 ================================================================================
