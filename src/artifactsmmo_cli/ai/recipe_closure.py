@@ -38,3 +38,17 @@ def recipe_closure(game_data: GameData, roots: Iterable[str]) -> tuple[set[str],
     for root in roots:
         collect(root)
     return needed_resources, craftable_mats
+
+
+def raw_material_units(game_data: GameData, item: str, visited: frozenset[str] | None = None) -> int:
+    """Total raw-resource quantity gathered to craft one `item`, multiplying
+    ingredient quantities down the recipe tree. A raw (gathered) or unknown item
+    costs 1. Cyclic recipes terminate via the visited guard (revisit -> 1)."""
+    visited = visited or frozenset()
+    if item in visited:
+        return 1
+    recipe = game_data._crafting_recipes.get(item)
+    if not recipe:
+        return 1
+    deeper = visited | {item}
+    return sum(qty * raw_material_units(game_data, sub, deeper) for sub, qty in recipe.items())

@@ -1,7 +1,7 @@
 """Tests for recipe_closure — the gather/craft action scope for producing items."""
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import raw_material_units, recipe_closure
 
 
 def _gd(recipes, drops):
@@ -60,3 +60,30 @@ def test_cyclic_recipe_terminates():
     resources, craftable = recipe_closure(gd, ["a"])
     assert craftable == {"a", "b"}
     assert resources == set()
+
+
+def test_raw_material_units_single_level():
+    gd = _gd({"copper_bar": {"copper_ore": 10}}, {"copper_rocks": "copper_ore"})
+    assert raw_material_units(gd, "copper_bar") == 10
+
+
+def test_raw_material_units_nested():
+    gd = _gd(
+        {"steel_bar": {"iron_bar": 1, "coal": 2}, "iron_bar": {"iron_ore": 6}},
+        {"iron_rocks": "iron_ore", "coal_rocks": "coal"},
+    )
+    assert raw_material_units(gd, "steel_bar") == 8   # 1*6 + 2*1
+
+
+def test_raw_material_units_raw_resource_is_one():
+    gd = _gd({}, {"ash_tree": "ash_wood"})
+    assert raw_material_units(gd, "ash_wood") == 1
+
+
+def test_raw_material_units_unknown_is_one():
+    assert raw_material_units(_gd({}, {}), "mystery") == 1
+
+
+def test_raw_material_units_cyclic_terminates():
+    gd = _gd({"a": {"b": 1}, "b": {"a": 1}}, {})
+    assert raw_material_units(gd, "a") == 1   # cycle guard returns 1 on revisit
