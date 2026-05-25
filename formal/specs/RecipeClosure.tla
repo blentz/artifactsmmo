@@ -100,7 +100,29 @@ RawUnits(item) == RU[item, {}]
 ExpectedRaw == [ sword |-> 4, blade |-> 2, handle |-> 2, iron |-> 1,
                  wood |-> 1, ring |-> 2, loop |-> 2, a |-> 1, b |-> 1 ]
 
+\* hand-computed transitive recipe-closure oracle. Each value is the set of all
+\* materials reachable by expanding recipes from the item (including the item
+\* itself); raw items close to just themselves. Independent of both ClosureSet
+\* (fixpoint) and AlgoClosure (reachability), so it grounds both rather than
+\* letting them only cross-check each other.
+\* Verified by hand against Recipe above:
+\*   sword -> blade,handle; blade -> iron; handle -> iron,wood  => +iron,wood
+\*   ring <-> loop, a <-> b (cycles close to the 2-element pair)
+\*   iron, wood raw (close to self)
+ExpectedClosure ==
+  [ sword  |-> {"sword", "blade", "handle", "iron", "wood"},
+    blade  |-> {"blade", "iron"},
+    handle |-> {"handle", "iron", "wood"},
+    iron   |-> {"iron"},
+    wood   |-> {"wood"},
+    ring   |-> {"ring", "loop"},
+    loop   |-> {"loop", "ring"},
+    a      |-> {"a", "b"},
+    b      |-> {"b", "a"} ]
+
 Correct(item) ==
+  /\ ClosureSet(item)    = ExpectedClosure[item]
+  /\ AlgoClosure(item)   = ExpectedClosure[item]
   /\ AlgoClosure(item)   = ClosureSet(item)
   /\ AlgoCraftable(item) = OracleCraftable(item)
   /\ AlgoResources(item) = OracleResources(item)
