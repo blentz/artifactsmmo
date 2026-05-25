@@ -1,42 +1,34 @@
-"""Real integration tests for ArtifactsMMO CLI that test against the live API.
+"""Integration tests for the ArtifactsMMO CLI command surface.
 
-These tests make actual API calls to verify the CLI works correctly with real data.
-They are marked with @pytest.mark.integration so they can be run separately.
+These exercise the real command functions end-to-end
+(``list_items``, ``list_monsters``, ``list_resources``, ``list_npcs``,
+``list_characters``, ``show_path_command``) and the ``ClientManager``
+plumbing. Only the HTTP boundary is mocked: the generated
+``artifactsmmo_api_client`` ``.sync`` functions return real schema objects,
+and every assertion is made against the rendered console output or the real
+return values of the code under test.
 
-Requirements:
-    - Valid API token in TOKEN file or ARTIFACTSMMO_TOKEN environment variable
-    - Internet connection to reach ArtifactsMMO API
-    - API server must be accessible and responding
-
-Tests cover:
-    - info items (verify it returns real items)
-    - info monsters (verify it returns real monsters)
-    - info resources (verify it returns real resources)
-    - character list (verify it can list characters)
-    - info npcs (verify NPC discovery)
-    - action path (verify pathfinding calculation)
-    - API connectivity and authentication
-
-Usage:
-    # Run only integration tests
-    uv run pytest tests/test_integration.py -m integration -v
-
-    # Run all tests except integration
-    uv run pytest -m "not integration"
-
-    # Run integration tests directly
-    uv run python tests/test_integration.py
-
-    # Run a specific integration test
-    uv run pytest tests/test_integration.py::TestInfoCommands::test_info_items_list -v
+The tests run fully offline as part of the normal ``uv run pytest`` run:
+no token file, no environment variable, and no network access are required.
+They keep the ``@pytest.mark.integration`` marker so they can still be
+selected with ``-m integration`` when desired.
 """
 
-import os
-from io import StringIO
-from pathlib import Path
-from unittest.mock import patch
-
+import attr
 import pytest
+from artifactsmmo_api_client.models.character_schema import CharacterSchema
+from artifactsmmo_api_client.models.character_skin import CharacterSkin
+from artifactsmmo_api_client.models.item_schema import ItemSchema
+from artifactsmmo_api_client.models.map_layer import MapLayer
+from artifactsmmo_api_client.models.monster_schema import MonsterSchema
+from artifactsmmo_api_client.models.my_characters_list_schema import MyCharactersListSchema
+from artifactsmmo_api_client.models.resource_schema import ResourceSchema
+from artifactsmmo_api_client.models.static_data_page_item_schema import StaticDataPageItemSchema
+from artifactsmmo_api_client.models.static_data_page_map_schema import StaticDataPageMapSchema
+from artifactsmmo_api_client.models.static_data_page_monster_schema import StaticDataPageMonsterSchema
+from artifactsmmo_api_client.models.static_data_page_resource_schema import StaticDataPageResourceSchema
+from artifactsmmo_api_client.models.status_response_schema import StatusResponseSchema
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 from rich.console import Console
 
 from artifactsmmo_cli.client_manager import ClientManager
@@ -51,425 +43,399 @@ from artifactsmmo_cli.commands.info import (
 from artifactsmmo_cli.config import Config
 
 
-class TestSetup:
-    """Setup and teardown for integration tests."""
+def _make_character(name: str = "Hero", level: int = 10, hp: int = 200, x: int = 0, y: int = 0) -> CharacterSchema:
+    """Build a fully-populated, real CharacterSchema for rendering tests.
 
-    @pytest.fixture(scope="session", autouse=True)
-    def setup_api_client(self):
-        """Set up the API client with real authentication for all integration tests."""
-        # Try to load token from TOKEN file first
-        token_file = Path("TOKEN")
-        token = None
+    CharacterSchema has 81 required fields. We fill the typed/enum ones
+    explicitly and default every remaining str field to "" and int field to 0,
+    then override the handful the tests actually assert on.
+    """
+    enum_values = {"skin": CharacterSkin.MEN1, "layer": MapLayer.OVERWORLD}
+    string_values = {"name": name, "account": "test-account", "task_type": ""}
 
-        if token_file.exists():
-            token = token_file.read_text().strip()
-
-        # Fall back to environment variable
-        if not token:
-            token = os.getenv("ARTIFACTSMMO_TOKEN")
-
-        if not token:
-            pytest.skip("No API token found. Create TOKEN file or set ARTIFACTSMMO_TOKEN environment variable.")
-
-        # Initialize the client manager with real config
-        config = Config(token=token)
-        ClientManager().initialize(config)
-
-        yield
-
-        # Cleanup - reset client manager
-        ClientManager()._instance = None
-
-
-@pytest.mark.integration
-class TestInfoCommands(TestSetup):
-    """Test info commands against live API."""
-
-    def test_info_items_list(self):
-        """Test that info items command returns real items from API."""
-        # Capture console output
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
-
-        # Patch the console in the info module
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            # Call the actual command function with no filters (should return items)
-            try:
-                list_items(
-                    item_code=None,
-                    item_type=None,
-                    craft_skill=None,
-                    craft_level=None,
-                    page=1,
-                    size=10,  # Small size for faster test
-                )
-            except SystemExit:
-                # Command might exit on success, that's ok
-                pass
-
-        output = console_output.getvalue()
-
-        # Verify we got real data, not an error
-        assert "Items" in output or "Item:" in output
-        assert "Error" not in output
-        assert "Could not retrieve items" not in output
-        assert "No items found" not in output
-
-        # Should contain table headers or item data
-        assert any(header in output for header in ["Code", "Name", "Type", "Level"])
-
-    def test_info_items_specific(self):
-        """Test that info items command can get a specific item."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
-
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            try:
-                # Test with a common item that should exist
-                list_items(item_code="copper_ore", item_type=None, craft_skill=None, craft_level=None, page=1, size=50)
-            except SystemExit:
-                pass
-
-        output = console_output.getvalue()
-
-        # Should show specific item details
-        assert "copper_ore" in output.lower() or "Item:" in output
-        assert "Error" not in output
-        assert "not found" not in output
-
-    def test_info_monsters_list(self):
-        """Test that info monsters command returns real monsters from API."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
-
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            try:
-                list_monsters(
-                    monster_code=None, level=None, min_level=None, max_level=None, compare=None, page=1, size=10
-                )
-            except SystemExit:
-                pass
-
-        output = console_output.getvalue()
-
-        # Verify we got real monster data
-        assert "Monsters" in output or "Monster:" in output
-        assert "Error" not in output
-        assert "Could not retrieve monsters" not in output
-        assert "No monsters found" not in output
-
-        # Should contain monster-related headers
-        assert any(header in output for header in ["Code", "Name", "Level", "HP"])
-
-    def test_info_monsters_specific(self):
-        """Test that info monsters command can get a specific monster."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
-
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            try:
-                # Test with a common monster that should exist
-                list_monsters(
-                    monster_code="chicken", level=None, min_level=None, max_level=None, compare=None, page=1, size=50
-                )
-            except SystemExit:
-                pass
-
-        output = console_output.getvalue()
-
-        # Should show specific monster details
-        assert "chicken" in output.lower() or "Monster:" in output
-        assert "Error" not in output
-        assert "not found" not in output
-
-    def test_info_resources_list(self):
-        """Test that info resources command returns real resources from API."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
-
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            try:
-                list_resources(
-                    resource_code=None,
-                    skill=None,
-                    level=None,
-                    max_level=None,
-                    resource_type=None,
-                    location=None,
-                    radius=None,
-                    character=None,
-                    page=1,
-                    size=10,
-                )
-            except SystemExit:
-                pass
-
-        output = console_output.getvalue()
-
-        # Verify we got real resource data
-        assert "Resources" in output or "Resource:" in output
-        assert "Error" not in output
-        assert "Could not retrieve resources" not in output
-        assert "No resources found" not in output
-
-        # Should contain resource-related headers
-        assert any(header in output for header in ["Code", "Name", "Skill", "Level"])
-
-    def test_info_resources_specific(self):
-        """Test that info resources command can get a specific resource."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
-
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            try:
-                # Test with a common resource that should exist
-                list_resources(
-                    resource_code="copper_rock",
-                    skill=None,
-                    level=None,
-                    max_level=None,
-                    resource_type=None,
-                    location=None,
-                    radius=None,
-                    character=None,
-                    page=1,
-                    size=50,
-                )
-            except SystemExit:
-                pass
-
-        output = console_output.getvalue()
-
-        # Should show specific resource details or handle API response gracefully
-        # Allow for API not responding or resource not found
-        if "No response received from API" in output:
-            # API might be down or rate limited, that's acceptable for integration test
-            pytest.skip("API not responding for resource lookup")
-
-        # If we got a response, verify it's valid
-        # An HTTP error (e.g. "HTTP 404: ...") is also an acceptable response
-        if output.strip() and "Error" not in output and "HTTP" not in output:
-            assert "copper" in output.lower() or "Resource:" in output
+    kwargs: dict[str, object] = {}
+    for f in attr.fields(CharacterSchema):
+        if f.default is not attr.NOTHING:
+            continue
+        if f.name in enum_values:
+            kwargs[f.name] = enum_values[f.name]
+        elif f.name in string_values:
+            kwargs[f.name] = string_values[f.name]
+        elif f.type is str:
+            kwargs[f.name] = ""
         else:
-            # Allow for resource not found - that's a valid API response
-            assert "not found" in output.lower() or "Error" in output or "HTTP" in output
+            kwargs[f.name] = 0
 
-    def test_info_npcs_list(self):
-        """Test that info npcs command returns NPC discovery."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
+    kwargs["level"] = level
+    kwargs["hp"] = hp
+    kwargs["max_hp"] = hp
+    kwargs["gold"] = 1000
+    kwargs["x"] = x
+    kwargs["y"] = y
 
-        with patch("artifactsmmo_cli.commands.info.console", console):
-            try:
-                list_npcs(npc_type=None, page=1, size=10)
-            except SystemExit:
-                pass
-
-        output = console_output.getvalue()
-
-        # Either the API has NPC map content (a table with NPC details) or it
-        # honestly reports none — we no longer fabricate a fallback table.
-        if "No NPC content data found" in output:
-            # Valid outcome: the live map currently has no NPC content tiles.
-            assert "Error" not in output
-        else:
-            assert "NPCs" in output or "NPC:" in output
-            assert "Error" not in output
-            assert any(term in output for term in ["Name", "Type", "Location", "Services"])
+    return CharacterSchema(**kwargs)
 
 
-@pytest.mark.integration
-class TestCharacterCommands(TestSetup):
-    """Test character commands against live API."""
+@pytest.fixture(autouse=True)
+def client_manager() -> ClientManager:
+    """Initialize the ClientManager singleton with a dummy offline config.
 
-    def test_character_list(self):
-        """Test that character list command works with real API."""
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
+    No TOKEN file is read and no environment variable is consulted. The
+    singleton is reset in teardown so other tests start clean.
+    """
+    manager = ClientManager()
+    manager.initialize(Config(token="test-token"))
+    yield manager
+    ClientManager._instance = None
+    ClientManager._client = None
+    ClientManager._api = None
+    ClientManager._config = None
 
-        with patch("artifactsmmo_cli.commands.character.console", console):
-            try:
-                list_characters()
-            except SystemExit:
-                pass
 
-        output = console_output.getvalue()
+@pytest.fixture
+def captured_console(monkeypatch: pytest.MonkeyPatch):
+    """Patch the console in a target module and return its captured output."""
 
-        # Should either show characters or "No characters found" (both are valid)
-        # Should not show API errors
-        assert "Error" not in output or "No characters found" in output
-        assert "Failed to" not in output
-        assert "Could not" not in output
+    def _install(module_path: str) -> Console:
+        console = Console(width=120)
+        monkeypatch.setattr(module_path, console)
+        return console
 
-        # If there are characters, should show character data
-        if "No characters found" not in output:
-            assert any(header in output for header in ["Name", "Level", "Class", "HP"])
+    return _install
 
 
 @pytest.mark.integration
-class TestActionCommands(TestSetup):
-    """Test action commands against live API."""
+class TestInfoCommands:
+    """Exercise the info command surface with mocked boundary data."""
 
-    def test_action_path_calculation(self):
-        """Test that action path command can calculate paths."""
-        # This test requires a character to exist, so we'll make it conditional
-        console_output = StringIO()
-        console = Console(file=console_output, width=120)
+    def test_info_items_list(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.info.console")
+        page = StaticDataPageItemSchema(
+            data=[
+                ItemSchema(
+                    name="Copper Ore",
+                    code="copper_ore",
+                    level=1,
+                    type_="resource",
+                    subtype="mining",
+                    description="Raw copper ore mined from rocks.",
+                    tradeable=True,
+                ),
+            ],
+            total=1,
+            page=1,
+            size=10,
+            pages=1,
+        )
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.items.get_all_items_items_get.sync",
+            lambda **kwargs: page,
+        )
 
-        # First, check if we have any characters
-        char_console_output = StringIO()
-        char_console = Console(file=char_console_output, width=120)
+        list_items(item_code=None, item_type=None, craft_skill=None, craft_level=None, page=1, size=10)
 
-        with patch("artifactsmmo_cli.commands.character.console", char_console):
-            try:
-                list_characters()
-            except SystemExit:
-                pass
+        output = capsys.readouterr().out
+        assert "Items" in output
+        assert "copper_ore" in output
+        assert "Copper Ore" in output
+        assert "Error" not in output
 
-        char_output = char_console_output.getvalue()
+    def test_info_items_specific(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.info.console")
+        item = ItemSchema(
+            name="Copper Ore",
+            code="copper_ore",
+            level=1,
+            type_="resource",
+            subtype="mining",
+            description="Raw copper ore mined from rocks.",
+            tradeable=True,
+        )
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.items.get_item_items_code_get.sync",
+            lambda **kwargs: item,
+        )
 
-        if "No characters found" in char_output:
-            pytest.skip("No characters available for path testing")
+        list_items(item_code="copper_ore", item_type=None, craft_skill=None, craft_level=None, page=1, size=50)
 
-        # Extract a character name from the output (this is a bit hacky but works for testing)
-        # Look for character names in the table output
-        lines = char_output.split("\n")
-        character_name = None
+        output = capsys.readouterr().out
+        assert "Item: copper_ore" in output
+        assert "Copper Ore" in output
+        assert "Error" not in output
 
-        for line in lines:
-            # Skip header and separator lines
-            if "│" in line and not line.strip().startswith("│ Name") and not line.strip().startswith("│ ─"):
-                # Extract character name from table row
-                parts = [part.strip() for part in line.split("│") if part.strip()]
-                if len(parts) > 0 and parts[0] and not parts[0].startswith("─"):
-                    character_name = parts[0]
-                    break
+    def test_info_monsters_list(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.info.console")
+        page = StaticDataPageMonsterSchema(
+            data=[
+                MonsterSchema(
+                    name="Chicken",
+                    code="chicken",
+                    level=1,
+                    type_="chicken",
+                    hp=60,
+                    attack_fire=0,
+                    attack_earth=0,
+                    attack_water=0,
+                    attack_air=4,
+                    res_fire=0,
+                    res_earth=0,
+                    res_water=0,
+                    res_air=0,
+                    critical_strike=0,
+                    initiative=0,
+                    min_gold=0,
+                    max_gold=5,
+                    drops=[],
+                    effects=[],
+                ),
+            ],
+            total=1,
+            page=1,
+            size=10,
+            pages=1,
+        )
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync",
+            lambda **kwargs: page,
+        )
 
-        if not character_name:
-            pytest.skip("Could not extract character name for path testing")
+        list_monsters(
+            monster_code=None, level=None, min_level=None, max_level=None, compare=None, page=1, size=10
+        )
 
-        # Validate character name meets requirements (at least 3 characters)
-        if len(character_name) < 3:
-            pytest.skip(f"Character name '{character_name}' too short for validation")
+        output = capsys.readouterr().out
+        assert "Monsters" in output
+        assert "chicken" in output
+        assert "Chicken" in output
+        assert "Error" not in output
 
-        # Now test path calculation
-        with patch("artifactsmmo_cli.commands.action.console", console):
-            try:
-                show_path_command(
-                    character=character_name,
-                    destination="5 5",  # Simple coordinate destination
-                    y=None,  # Force "X Y" parse branch; typer's None default isn't applied on direct calls
-                )
-            except SystemExit as e:
-                # SystemExit with code 1 indicates an error, 0 or None is success
-                if e.code == 1:
-                    # Check if it's a validation error we can handle
-                    pass
-                else:
-                    pass  # Success exit
-            except Exception as e:
-                # Handle other exceptions like validation errors
-                if "Character name must be at least 3 characters long" in str(e):
-                    pytest.skip(f"Character name '{character_name}' failed validation")
-                else:
-                    raise
+    def test_info_monsters_specific(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.info.console")
+        monster = MonsterSchema(
+            name="Chicken",
+            code="chicken",
+            level=1,
+            type_="chicken",
+            hp=60,
+            attack_fire=0,
+            attack_earth=0,
+            attack_water=0,
+            attack_air=4,
+            res_fire=0,
+            res_earth=0,
+            res_water=0,
+            res_air=0,
+            critical_strike=0,
+            initiative=0,
+            min_gold=0,
+            max_gold=5,
+            drops=[],
+            effects=[],
+        )
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync",
+            lambda **kwargs: monster,
+        )
 
-        output = console_output.getvalue()
+        list_monsters(
+            monster_code="chicken", level=None, min_level=None, max_level=None, compare=None, page=1, size=50
+        )
 
-        # Verify path calculation worked
-        assert "Path for" in output
-        assert "From:" in output and "To:" in output
-        assert "Error" not in output or "already at the destination" in output
+        output = capsys.readouterr().out
+        assert "Monster: chicken" in output
+        assert "Chicken" in output
+        assert "Error" not in output
 
-        # Should show path information
-        assert any(term in output for term in ["Summary:", "steps", "distance", "already at"])
+    def test_info_resources_list(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.info.console")
+        page = StaticDataPageResourceSchema(
+            data=[
+                ResourceSchema(name="Copper Rocks", code="copper_rock", skill="mining", level=1, drops=[]),
+            ],
+            total=1,
+            page=1,
+            size=10,
+            pages=1,
+        )
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync",
+            lambda **kwargs: page,
+        )
 
-    def test_action_path_calculation_simple(self):
-        """Test path calculation with a simple test case that doesn't require real characters."""
-        # This is a simpler test that just verifies the pathfinding logic works
-        # without needing to extract character names from API responses
+        list_resources(
+            resource_code=None,
+            skill=None,
+            level=None,
+            max_level=None,
+            resource_type=None,
+            location=None,
+            radius=None,
+            character=None,
+            page=1,
+            size=10,
+        )
 
-        # We'll test the pathfinding utility functions directly
-        from artifactsmmo_cli.utils.pathfinding import calculate_path, parse_destination
+        output = capsys.readouterr().out
+        assert "Resources" in output
+        assert "copper_rock" in output
+        assert "Copper Rocks" in output
+        assert "Error" not in output
 
-        # Test coordinate parsing
-        parsed = parse_destination("5 10")
-        assert parsed == (5, 10)
+    def test_info_resources_specific(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.info.console")
+        resource = ResourceSchema(name="Copper Rocks", code="copper_rock", skill="mining", level=1, drops=[])
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.resources.get_resource_resources_code_get.sync",
+            lambda **kwargs: resource,
+        )
 
-        # Test path calculation
-        path_result = calculate_path(0, 0, 5, 5)
-        assert path_result is not None
-        assert hasattr(path_result, "total_distance")
-        assert path_result.total_distance > 0
+        list_resources(
+            resource_code="copper_rock",
+            skill=None,
+            level=None,
+            max_level=None,
+            resource_type=None,
+            location=None,
+            radius=None,
+            character=None,
+            page=1,
+            size=50,
+        )
+
+        output = capsys.readouterr().out
+        assert "Resource: copper_rock" in output
+        assert "Copper Rocks" in output
+        assert "Error" not in output
+
+    def test_info_npcs_list_reports_no_content(self, monkeypatch, capsys, captured_console):
+        """Real MapSchema objects carry no NPC content tiles.
+
+        With genuine schema data (which has no ``content`` attribute) the
+        command honestly reports that no NPC content was found rather than
+        fabricating a fallback table (CLAUDE.md: use only API data or fail).
+        """
+        captured_console("artifactsmmo_cli.commands.info.console")
+        page = StaticDataPageMapSchema(data=[], total=0, page=1, size=100, pages=1)
+        monkeypatch.setattr(
+            "artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync",
+            lambda **kwargs: page,
+        )
+
+        list_npcs(npc_type=None, page=1, size=10)
+
+        output = capsys.readouterr().out
+        assert "No NPC content data found in map API" in output
 
 
 @pytest.mark.integration
-class TestAPIConnectivity(TestSetup):
-    """Test basic API connectivity and client functionality."""
+class TestCharacterCommands:
+    """Exercise the character command surface with mocked boundary data."""
 
-    def test_client_manager_initialization(self):
-        """Test that ClientManager is properly initialized with real config."""
-        client_manager = ClientManager()
+    def test_character_list(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.character.console")
+        characters = MyCharactersListSchema(data=[_make_character(name="Hero", level=12, hp=180, x=2, y=3)])
+        monkeypatch.setattr(
+            "artifactsmmo_cli.client_manager.get_my_characters_sync",
+            lambda **kwargs: characters,
+        )
 
-        # Should be initialized from setup
+        list_characters()
+
+        output = capsys.readouterr().out
+        assert "Characters" in output
+        assert "Hero" in output
+        assert "12" in output
+        assert "180" in output
+
+    def test_character_list_empty(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.character.console")
+        characters = MyCharactersListSchema(data=[])
+        monkeypatch.setattr(
+            "artifactsmmo_cli.client_manager.get_my_characters_sync",
+            lambda **kwargs: characters,
+        )
+
+        list_characters()
+
+        output = capsys.readouterr().out
+        assert "No characters found" in output
+
+
+@pytest.mark.integration
+class TestActionCommands:
+    """Exercise the path/pathfinding command surface with mocked boundary data."""
+
+    def test_action_path_calculation(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.action.console")
+        monkeypatch.setattr(
+            "artifactsmmo_cli.commands.action.get_character_position",
+            lambda character: (0, 0),
+        )
+
+        show_path_command(character="Hero", destination="5 5", y=None)
+
+        output = capsys.readouterr().out
+        assert "Path for Hero" in output
+        assert "From: (0, 0)" in output and "To: (5, 5)" in output
+        assert "Total distance: 10" in output
+
+    def test_action_path_already_at_destination(self, monkeypatch, capsys, captured_console):
+        captured_console("artifactsmmo_cli.commands.action.console")
+        monkeypatch.setattr(
+            "artifactsmmo_cli.commands.action.get_character_position",
+            lambda character: (5, 5),
+        )
+
+        show_path_command(character="Hero", destination="5 5", y=None)
+
+        output = capsys.readouterr().out
+        assert "Path for Hero" in output
+        assert "already at the destination" in output
+
+
+@pytest.mark.integration
+class TestAPIConnectivity:
+    """Exercise ClientManager plumbing and the authenticated boundary calls."""
+
+    def test_client_manager_initialization(self, client_manager):
         assert client_manager.is_initialized()
+        assert client_manager.api is not None
+        assert client_manager.client is not None
+        assert client_manager.config.token == "test-token"
 
-        # Should have valid API client
-        api = client_manager.api
-        assert api is not None
+    def test_api_server_status(self, monkeypatch, client_manager):
+        status = StatusResponseSchema(
+            data=StatusSchema(
+                version="1.0",
+                server_time="2026-05-25T00:00:00Z",
+                max_level=40,
+                max_skill_level=40,
+                characters_online=42,
+                rate_limits=[],
+                season=[],
+            )
+        )
+        monkeypatch.setattr(
+            "artifactsmmo_cli.client_manager.get_server_details_sync",
+            lambda **kwargs: status,
+        )
 
-        # Should have valid HTTP client
-        client = client_manager.client
-        assert client is not None
+        response = client_manager.api.get_server_details()
 
-    def test_api_server_status(self):
-        """Test that we can connect to the API server."""
-        client_manager = ClientManager()
-        api = client_manager.api
+        assert response is not None
+        assert response.data is not None
+        assert response.data.version == "1.0"
+        assert response.data.max_level == 40
 
-        # Try to get server details (this is a simple API call)
-        try:
-            response = api.get_server_details()
+    def test_api_authentication(self, monkeypatch, client_manager):
+        characters = MyCharactersListSchema(data=[_make_character(name="Hero")])
+        monkeypatch.setattr(
+            "artifactsmmo_cli.client_manager.get_my_characters_sync",
+            lambda **kwargs: characters,
+        )
 
-            # Should get a valid response
-            assert response is not None
-            assert hasattr(response, "data")
-            assert response.data is not None
+        response = client_manager.api.get_my_characters()
 
-            # Should have basic server info
-            server_data = response.data
-            assert hasattr(server_data, "version")
-            assert hasattr(server_data, "max_level")
-
-        except Exception as e:
-            pytest.fail(f"Failed to connect to API server: {e}")
-
-    def test_api_authentication(self):
-        """Test that API authentication is working."""
-        client_manager = ClientManager()
-        api = client_manager.api
-
-        # Try to make an authenticated call (get characters)
-        try:
-            response = api.get_my_characters()
-
-            # Should get a response (even if empty)
-            assert response is not None
-
-            # Should not get authentication errors
-            # If we get here without exception, authentication is working
-
-        except Exception as e:
-            # Check if it's an authentication error
-            error_str = str(e).lower()
-            if any(auth_term in error_str for auth_term in ["unauthorized", "authentication", "token", "401"]):
-                pytest.fail(f"API authentication failed: {e}")
-            else:
-                # Other errors might be OK (like rate limiting, server issues, etc.)
-                # As long as it's not an auth error, the test passes
-                pass
-
-
-if __name__ == "__main__":
-    # Allow running this file directly for quick testing
-    pytest.main([__file__, "-v", "-m", "integration"])
+        assert response is not None
+        assert response.data is not None
+        assert response.data[0].name == "Hero"
