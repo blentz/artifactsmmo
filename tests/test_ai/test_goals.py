@@ -3,16 +3,18 @@
 import os
 import tempfile
 
-from artifactsmmo_cli.ai.actions.bank import DepositAllAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal, CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
+from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
+from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
@@ -440,7 +442,8 @@ class TestUpgradeEquipmentGoalPriority:
         (copper_axe → fishing_net, both owned) since that also makes the slot
         differ. relevant_actions must drop UnequipActions and every EquipAction
         except the one for the current upgrade target."""
-        from artifactsmmo_cli.ai.actions.equipment import EquipAction, UnequipAction
+        from artifactsmmo_cli.ai.actions.equip import EquipAction
+        from artifactsmmo_cli.ai.actions.unequip import UnequipAction
         gd = make_game_data(item_stats={
             "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon"),
             "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon"),

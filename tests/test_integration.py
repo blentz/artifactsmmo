@@ -335,7 +335,7 @@ class TestCharacterCommands:
         captured_console("artifactsmmo_cli.commands.character.console")
         characters = MyCharactersListSchema(data=[_make_character(name="Hero", level=12, hp=180, x=2, y=3)])
         monkeypatch.setattr(
-            "artifactsmmo_cli.client_manager.get_my_characters_sync",
+            "artifactsmmo_cli.api_wrapper.get_my_characters_sync",
             lambda **kwargs: characters,
         )
 
@@ -351,7 +351,7 @@ class TestCharacterCommands:
         captured_console("artifactsmmo_cli.commands.character.console")
         characters = MyCharactersListSchema(data=[])
         monkeypatch.setattr(
-            "artifactsmmo_cli.client_manager.get_my_characters_sync",
+            "artifactsmmo_cli.api_wrapper.get_my_characters_sync",
             lambda **kwargs: characters,
         )
 
@@ -416,7 +416,7 @@ class TestAPIConnectivity:
             )
         )
         monkeypatch.setattr(
-            "artifactsmmo_cli.client_manager.get_server_details_sync",
+            "artifactsmmo_cli.api_wrapper.get_server_details_sync",
             lambda **kwargs: status,
         )
 
@@ -430,7 +430,7 @@ class TestAPIConnectivity:
     def test_api_authentication(self, monkeypatch, client_manager):
         characters = MyCharactersListSchema(data=[_make_character(name="Hero")])
         monkeypatch.setattr(
-            "artifactsmmo_cli.client_manager.get_my_characters_sync",
+            "artifactsmmo_cli.api_wrapper.get_my_characters_sync",
             lambda **kwargs: characters,
         )
 

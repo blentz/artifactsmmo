@@ -6,9 +6,10 @@ import pytest
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.types import UNSET
 
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOT, UnequipAction
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOT
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
@@ -78,7 +79,7 @@ class TestUnequipAction:
         char = make_char_schema()
         state = make_state(equipment=equipment)
         client = MagicMock()
-        with patch("artifactsmmo_cli.ai.actions.equipment.action_unequip",
+        with patch("artifactsmmo_cli.ai.actions.unequip.action_unequip",
                    return_value=make_api_result(char)) as mock_api:
             action.execute(state, client)
         mock_api.assert_called_once()

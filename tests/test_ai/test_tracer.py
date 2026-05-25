@@ -4,9 +4,11 @@ import json
 import os
 import tempfile
 
+from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.tracing import FileTracer, NullTracer, Tracer
+from artifactsmmo_cli.ai.tracer import Tracer
 from tests.test_ai.fixtures import make_state
 
 

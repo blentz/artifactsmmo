@@ -1,0 +1,214 @@
+"""APIWrapper: convenient interface over the ArtifactsMMO API client."""
+
+import re
+from typing import Any
+
+import httpx
+from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.characters.create_character_characters_create_post import (
+    sync as create_character_sync,
+)
+from artifactsmmo_api_client.api.characters.delete_character_characters_delete_post import (
+    sync as delete_character_sync,
+)
+from artifactsmmo_api_client.api.characters.get_character_characters_name_get import (
+    sync as get_character_sync,
+)
+from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import (
+    sync as get_bank_details_sync,
+)
+from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import (
+    sync as get_bank_items_sync,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_buy_bank_expansion_my_name_action_bank_buy_expansion_post as buy_expansion_api,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_deposit_bank_gold_my_name_action_bank_deposit_gold_post as deposit_gold_api,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_deposit_bank_item_my_name_action_bank_deposit_item_post as deposit_item_api,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post as withdraw_gold_api,
+)
+from artifactsmmo_api_client.api.my_characters import (
+    action_withdraw_bank_item_my_name_action_bank_withdraw_item_post as withdraw_item_api,
+)
+from artifactsmmo_api_client.api.my_characters.action_equip_item_my_name_action_equip_post import (
+    sync as action_equip_item_sync,
+)
+from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight_post import (
+    sync as action_fight_sync,
+)
+from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_gathering_post import (
+    sync as action_gathering_sync,
+)
+from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_post import (
+    sync as action_move_sync,
+)
+from artifactsmmo_api_client.api.my_characters.action_rest_my_name_action_rest_post import (
+    sync as action_rest_sync,
+)
+from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_action_unequip_post import (
+    sync as action_unequip_item_sync,
+)
+from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post import (
+    sync as action_use_item_sync,
+)
+from artifactsmmo_api_client.api.my_characters.get_my_characters_my_characters_get import (
+    sync as get_my_characters_sync,
+)
+from artifactsmmo_api_client.api.server_details.get_server_details_get import (
+    sync as get_server_details_sync,
+)
+from artifactsmmo_api_client.errors import UnexpectedStatus
+from artifactsmmo_api_client.models.fight_request_schema import FightRequestSchema
+
+
+class APIWrapper:
+    """Wrapper to provide a convenient interface to the API client."""
+
+    def __init__(self, client: AuthenticatedClient):
+        self._client = client
+
+    # Server details
+    def get_server_details(self) -> Any:
+        return get_server_details_sync(client=self._client)
+
+    # Character management
+    def get_my_characters(self) -> Any:
+        return get_my_characters_sync(client=self._client)
+
+    def create_character(self, body: Any) -> Any:
+        return create_character_sync(client=self._client, body=body)
+
+    def delete_character(self, body: Any) -> Any:
+        return delete_character_sync(client=self._client, body=body)
+
+    def get_character(self, name: str) -> Any:
+        return get_character_sync(client=self._client, name=name)
+
+    # Character actions
+    def action_move(self, name: str, body: Any) -> Any:
+        try:
+            return action_move_sync(client=self._client, name=name, body=body)
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/move")
+            raise
+
+    def action_fight(self, name: str) -> Any:
+        try:
+            return action_fight_sync(client=self._client, name=name, body=FightRequestSchema())
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/fight")
+            raise
+
+    def action_gathering(self, name: str) -> Any:
+        try:
+            return action_gathering_sync(client=self._client, name=name)
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/gathering")
+            raise
+
+    def action_rest(self, name: str) -> Any:
+        try:
+            return action_rest_sync(client=self._client, name=name)
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/rest")
+            raise
+
+    def action_equip_item(self, name: str, body: Any) -> Any:
+        try:
+            return action_equip_item_sync(client=self._client, name=name, body=body)
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/equip")
+            raise
+
+    def action_unequip_item(self, name: str, body: Any) -> Any:
+        try:
+            return action_unequip_item_sync(client=self._client, name=name, body=body)
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/unequip")
+            raise
+
+    def action_use_item(self, name: str, body: Any) -> Any:
+        try:
+            return action_use_item_sync(client=self._client, name=name, body=body)
+        except ValueError as e:
+            if "is not a valid HTTPStatus" in str(e):
+                # Handle non-standard HTTP status codes by making a direct request
+                return self._handle_non_standard_status_error(e, "POST", f"/my/{name}/action/use")
+            raise
+
+    # Bank operations
+    def get_bank_items(self) -> Any:
+        return get_bank_items_sync(client=self._client)
+
+    def get_bank_details(self) -> Any:
+        return get_bank_details_sync(client=self._client)
+
+    def action_deposit_bank_gold(self, name: str, body: Any) -> Any:
+        return deposit_gold_api.sync(client=self._client, name=name, body=body)
+
+    def action_withdraw_bank_gold(self, name: str, body: Any) -> Any:
+        return withdraw_gold_api.sync(client=self._client, name=name, body=body)
+
+    def action_deposit_bank_item(self, name: str, body: Any) -> Any:
+        return deposit_item_api.sync(client=self._client, name=name, body=body)
+
+    def action_withdraw_bank_item(self, name: str, body: Any) -> Any:
+        return withdraw_item_api.sync(client=self._client, name=name, body=body)
+
+    def action_buy_bank_expansion(self, name: str) -> Any:
+        return buy_expansion_api.sync(client=self._client, name=name)
+
+    def _handle_non_standard_status_error(self, original_error: ValueError, method: str, endpoint: str) -> Any:
+        """Handle non-standard HTTP status codes by making a direct request to get response data."""
+        try:
+            # Extract the status code from the error message
+            match = re.search(r"(\d+) is not a valid HTTPStatus", str(original_error))
+            if not match:
+                raise original_error
+
+            status_code = int(match.group(1))
+
+            url = f"{self._client._base_url}{endpoint}"
+            headers = {"Authorization": f"Bearer {self._client.token}"}
+
+            with httpx.Client() as client:
+                if method == "POST":
+                    response = client.post(url, headers=headers)
+                elif method == "GET":
+                    response = client.get(url, headers=headers)
+                else:
+                    raise original_error
+
+                # Different status code than expected: nothing to recover.
+                if response.status_code != status_code:
+                    raise original_error
+
+                # Same status code: validate the body is JSON, then surface it
+                # as UnexpectedStatus. A bad body raises JSONDecodeError, which
+                # is a ValueError and is handled by the single except below.
+                response.json()
+                raise UnexpectedStatus(status_code=status_code, content=response.content)
+
+        except UnexpectedStatus:
+            # Re-raise UnexpectedStatus so it can be handled properly
+            raise
+        except (httpx.HTTPError, ValueError):
+            # HTTP error or unparseable body (incl. JSONDecodeError): original error wins
+            raise original_error

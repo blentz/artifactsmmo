@@ -3,7 +3,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
-from artifactsmmo_cli.ai.tracing import Tracer
+from artifactsmmo_cli.ai.tracer import Tracer
 from tests.test_ai.fixtures import make_state
 
 

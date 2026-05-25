@@ -2,18 +2,20 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOT, EquipAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOT, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.goals.combat import CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
+from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from tests.test_ai.fixtures import make_state
 
 

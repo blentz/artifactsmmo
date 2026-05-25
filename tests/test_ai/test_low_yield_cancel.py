@@ -4,7 +4,7 @@ from sqlmodel import Session
 
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task import TaskCancelAction
+from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.low_yield_cancel import (
     ALTERNATIVE_MARGIN,

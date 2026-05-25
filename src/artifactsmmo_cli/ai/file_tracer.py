@@ -1,30 +1,9 @@
-"""JSONL tracing for the GOAP player loop."""
+"""FileTracer: JSONL file tracer — one record per line, appended in order."""
 
 import json
-from abc import ABC, abstractmethod
 from typing import IO
 
-
-class Tracer(ABC):
-    """Write per-cycle records for postmortem analysis."""
-
-    @abstractmethod
-    def write_cycle(self, record: dict[str, object]) -> None:
-        """Write one cycle's record."""
-
-    @abstractmethod
-    def close(self) -> None:
-        """Release any resources."""
-
-
-class NullTracer(Tracer):
-    """No-op tracer — used when tracing is disabled."""
-
-    def write_cycle(self, record: dict[str, object]) -> None:
-        return
-
-    def close(self) -> None:
-        return
+from artifactsmmo_cli.ai.tracer import Tracer
 
 
 class FileTracer(Tracer):

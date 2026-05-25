@@ -4,14 +4,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from artifactsmmo_cli.ai.actions.bank import DepositAllAction, WithdrawItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.equipment import EquipAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
@@ -186,7 +187,7 @@ class TestDepositAllActionExecute:
         client = MagicMock()
         char = make_char_schema()
 
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item", return_value=make_api_result(char)):
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item", return_value=make_api_result(char)):
             new_state = action.execute(state, client)
 
         assert isinstance(new_state, WorldState)
@@ -199,7 +200,7 @@ class TestDepositAllActionExecute:
         move_char = make_char_schema(x=4, y=0)
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", return_value=make_api_result(move_char)):
-            with patch("artifactsmmo_cli.ai.actions.bank.deposit_item", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item", return_value=make_api_result(char)):
                 new_state = action.execute(state, client)
 
         assert isinstance(new_state, WorldState)
@@ -209,7 +210,7 @@ class TestDepositAllActionExecute:
         state = make_state(x=4, y=0, inventory={})
         client = MagicMock()
 
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item") as mock_api:
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item") as mock_api:
             action.execute(state, client)
             mock_api.assert_not_called()
 
@@ -222,7 +223,7 @@ class TestWithdrawItemActionExecute:
         client = MagicMock()
         char = make_char_schema()
 
-        with patch("artifactsmmo_cli.ai.actions.bank.withdraw_item", return_value=make_api_result(char)):
+        with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item", return_value=make_api_result(char)):
             new_state = action.execute(state, client)
 
         assert isinstance(new_state, WorldState)
@@ -235,7 +236,7 @@ class TestWithdrawItemActionExecute:
         move_char = make_char_schema(x=4, y=0)
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", return_value=make_api_result(move_char)):
-            with patch("artifactsmmo_cli.ai.actions.bank.withdraw_item", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item", return_value=make_api_result(char)):
                 new_state = action.execute(state, client)
 
         assert isinstance(new_state, WorldState)
@@ -245,7 +246,7 @@ class TestWithdrawItemActionExecute:
         state = make_state(x=4, y=0, bank_items={"copper_ore": 5})
         client = MagicMock()
 
-        with patch("artifactsmmo_cli.ai.actions.bank.withdraw_item", return_value=None):
+        with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item", return_value=None):
             with pytest.raises(RuntimeError):
                 action.execute(state, client)
 
@@ -293,7 +294,7 @@ class TestEquipActionExecute:
         client = MagicMock()
         char = make_char_schema()
 
-        with patch("artifactsmmo_cli.ai.actions.equipment.action_equip", return_value=make_api_result(char)):
+        with patch("artifactsmmo_cli.ai.actions.equip.action_equip", return_value=make_api_result(char)):
             new_state = action.execute(state, client)
 
         assert isinstance(new_state, WorldState)
@@ -303,7 +304,7 @@ class TestEquipActionExecute:
         state = make_state()
         client = MagicMock()
 
-        with patch("artifactsmmo_cli.ai.actions.equipment.action_equip", return_value=None):
+        with patch("artifactsmmo_cli.ai.actions.equip.action_equip", return_value=None):
             with pytest.raises(RuntimeError):
                 action.execute(state, client)
 

@@ -18,7 +18,7 @@ This is the **artifactsmmo tui interface** project - a TUI interface for operati
 
 - DO NOT use inline imports. Always put imports at the top of the file.
 - DO NOT create "simple" tests; use the test suite.
-- **ONE CLASS PER FILE**: Each Python file should contain only one class definition. This improves code organization, makes imports cleaner, and follows standard Python conventions.
+- **ONE CLASS PER FILE**: Each Python file should contain only one *behavioral* class definition. This improves code organization, makes imports cleaner, and follows standard Python conventions. Exempt: cohesive groups of pure data/schema/enum declarations may share a module — e.g. a set of SQLModel table schemas, a `Protocol` with its small concrete companions, an `Enum` with its related dataclasses, or tightly-coupled `@dataclass`/`BaseModel` value objects. Behavioral classes (Actions, Goals, services, engines) get their own file.
 - **NEVER** use triple-dot ("...") imports. Use absolute imports instead.
 
 ## Testing Guidelines

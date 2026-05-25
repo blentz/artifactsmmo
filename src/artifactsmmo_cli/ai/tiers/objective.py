@@ -6,7 +6,7 @@ precedent."""
 
 from dataclasses import dataclass, field
 
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState

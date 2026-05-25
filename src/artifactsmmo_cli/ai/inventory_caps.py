@@ -5,7 +5,7 @@ safety floor for items currently in use. Anything held over the cap is wasted
 inventory space.
 """
 
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 

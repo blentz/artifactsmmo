@@ -6,7 +6,8 @@ from typing import ClassVar
 from artifactsmmo_api_client import AuthenticatedClient
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.equipment import EquipAction, UnequipAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
+from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore

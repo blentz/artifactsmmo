@@ -6,7 +6,7 @@ cost when an exchange succeeds. No hardcoded cost.
 """
 
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.task import TaskExchangeAction
+from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 

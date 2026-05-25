@@ -7,7 +7,7 @@ from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.goals.survival import MIN_FREE_SLOTS
+from artifactsmmo_cli.ai.goals.deposit_inventory import MIN_FREE_SLOTS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 

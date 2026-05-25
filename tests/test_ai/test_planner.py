@@ -7,13 +7,13 @@ from unittest.mock import patch
 import pytest
 
 from artifactsmmo_cli.ai import planner as planner_mod
+from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task import AcceptTaskAction
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.goals.combat import AcceptTaskGoal
-from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
+from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
+from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner

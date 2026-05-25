@@ -1,6 +1,6 @@
 """Score equipment against a monster's element profile and pick the best loadout."""
 
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState

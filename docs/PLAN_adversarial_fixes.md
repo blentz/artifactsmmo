@@ -75,5 +75,9 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
   Surfaced 3 mock-hidden latent bugs → logged as P10.
 - 2026-05-25: P10 DONE — fixed action_fight body, trade seller→account, timeout wrap;
   updated the 3 tests that asserted the bugs. 0 type:ignore in those paths. Committed.
-- Next: P4 cooldown, P7 class-split, P5 C2, P6 refactor, P8 cov→100.
-- Snapshot: 2244 pass / 0 warn / mypy 0 / ruff clean. 5 commits on fix/adversarial-review.
+- 2026-05-25: P4 DONE — ApiActionError(code) replaces HTTP-string substring matching
+  in player._execute; tests updated to raise the structured type. Committed.
+- Next: P7 class-split (needs decision on enum/dataclass/SQLModel groupings),
+  P5 C2 (~150 sites), P6 refactor god files, P8 cov→100.
+- Snapshot: 2244 pass / 0 warn / mypy 0 / ruff clean. 6 commits on fix/adversarial-review.
+  Done: P1 P2 P3 P4 P9 P10.  Remaining: P5 P6 P7 P8.

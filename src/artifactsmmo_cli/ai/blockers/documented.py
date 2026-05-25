@@ -17,7 +17,7 @@ Optional `max_gap` parameter accepts a per-call cap if a caller wants a
 filtered seed (tests use this). Default None = seed everything.
 """
 
-from artifactsmmo_cli.ai.actions.equipment import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.blockers.registry import BlockerRegistry, BlockerState
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState

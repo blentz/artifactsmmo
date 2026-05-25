@@ -67,7 +67,7 @@ class TestBuildActions:
         player = GamePlayer(character="hero")
         player.game_data = make_game_data_mock()
         actions = player._build_actions()
-        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
         from artifactsmmo_cli.ai.actions.rest import RestAction
         assert any(isinstance(a, RestAction) for a in actions)
         assert any(isinstance(a, DepositAllAction) for a in actions)
@@ -553,7 +553,7 @@ class TestExecute:
         player.game_data = make_game_data_mock()
         client = MagicMock()
 
-        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         bank_slot = MagicMock()
@@ -565,7 +565,7 @@ class TestExecute:
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 0
 
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item", return_value=make_api_result(char)):
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item", return_value=make_api_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_result):
                 with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
                     new_state, outcome = player._execute(action, client)
@@ -653,7 +653,7 @@ class TestBuildGoalsTier1:
     def test_task_exchange_action_always_built(self):
         player = self._make_player_with_gd()
         player.state = make_state()
-        from artifactsmmo_cli.ai.actions.task import TaskExchangeAction
+        from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
         actions = player._build_actions()
         exchange_actions = [a for a in actions if isinstance(a, TaskExchangeAction)]
         assert len(exchange_actions) == 1
@@ -661,7 +661,7 @@ class TestBuildGoalsTier1:
     def test_build_actions_includes_task_exchange(self):
         player = self._make_player_with_gd()
         player.state = make_state()
-        from artifactsmmo_cli.ai.actions.task import TaskExchangeAction
+        from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
         actions = player._build_actions()
         exchange_actions = [a for a in actions if isinstance(a, TaskExchangeAction)]
         assert len(exchange_actions) == 1
@@ -675,7 +675,7 @@ class TestBuildGoalsTier1:
             extra_recipes={"copper_dagger": {"copper_ore": 2}},
         )
         player.state = make_state(skills={"weaponcrafting": 1})
-        from artifactsmmo_cli.ai.actions.bank import WithdrawItemAction
+        from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
         actions = player._build_actions()
         withdraw_codes = {a.code for a in actions if isinstance(a, WithdrawItemAction)}
         assert "copper_dagger" in withdraw_codes
@@ -688,7 +688,7 @@ class TestBuildGoalsTier1:
             extra_recipes={"copper_ring": {"copper_ore": 2}},
         )
         player.state = make_state(skills={"jewelrycrafting": 1})
-        from artifactsmmo_cli.ai.actions.equipment import EquipAction
+        from artifactsmmo_cli.ai.actions.equip import EquipAction
         actions = player._build_actions()
         equip_actions = [a for a in actions if isinstance(a, EquipAction) and a.code == "copper_ring"]
         slots = {a.slot for a in equip_actions}
@@ -701,7 +701,7 @@ class TestLogAction:
         player = GamePlayer(character="hero")
         player.state = make_state()
         from artifactsmmo_cli.ai.actions.rest import RestAction
-        from artifactsmmo_cli.ai.goals.survival import RestoreHPGoal
+        from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
         action = RestAction()
         goal = RestoreHPGoal()
         import io
@@ -786,13 +786,13 @@ class TestExecuteHttp496BankLock:
         player.game_data = make_game_data_mock()
         client = MagicMock()
 
-        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
 
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=ApiActionError(496, "(locked bank_deposit achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
@@ -808,14 +808,14 @@ class TestExecuteHttp496BankLock:
         player.game_data = make_game_data_mock()
         client = MagicMock()
 
-        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
 
         # No achievement code in error message — no match for the regex
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=ApiActionError(496, "bank access denied")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
@@ -852,7 +852,7 @@ class TestExecuteHttp496BankLock:
         player.game_data = make_game_data_mock()
         client = MagicMock()
 
-        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
@@ -866,7 +866,7 @@ class TestExecuteHttp496BankLock:
 
         player._resolve_bank_unlock_monster = fake_resolve  # type: ignore
 
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=ApiActionError(496, "(myach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
@@ -883,7 +883,7 @@ class TestExecuteHttp496BankLock:
         player._bank_unlock_monster = "chicken"  # already resolved
         client = MagicMock()
 
-        from artifactsmmo_cli.ai.actions.bank import DepositAllAction
+        from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
         action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
         char = make_char_schema()
         empty_events = MagicMock()
@@ -897,7 +897,7 @@ class TestExecuteHttp496BankLock:
 
         player._resolve_bank_unlock_monster = fake_resolve  # type: ignore
 
-        with patch("artifactsmmo_cli.ai.actions.bank.deposit_item",
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=RuntimeError("HTTP 496 (newach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):

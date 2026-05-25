@@ -8,7 +8,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
-from artifactsmmo_cli.ai.actions.task import TaskCancelAction
+from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
@@ -81,10 +81,10 @@ class TestTaskCancelAction:
         char = make_char_schema()
         state = make_state(x=0, y=0, task_code="wolf", task_total=5)
         client = MagicMock()
-        with patch("artifactsmmo_cli.ai.actions.task.MoveAction") as MockMove:
+        with patch("artifactsmmo_cli.ai.actions.task_cancel.MoveAction") as MockMove:
             move_instance = MockMove.return_value
             move_instance.execute.return_value = make_state(x=1, y=2)
-            with patch("artifactsmmo_cli.ai.actions.task.action_task_cancel",
+            with patch("artifactsmmo_cli.ai.actions.task_cancel.action_task_cancel",
                        return_value=make_api_result(char)) as mock_api:
                 action.execute(state, client)
         MockMove.assert_called_once_with(x=1, y=2)

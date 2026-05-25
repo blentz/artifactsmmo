@@ -2,7 +2,8 @@
 
 
 
-from artifactsmmo_cli.ai.actions.bank_gold import DepositGoldAction, WithdrawGoldAction
+from artifactsmmo_cli.ai.actions.deposit_gold import DepositGoldAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.game_data import GameData
 from tests.test_ai.fixtures import make_state
 
