@@ -25,11 +25,9 @@ def _best_fighting_weapon(state: WorldState, game_data: GameData) -> str | None:
     return best[1] if best else None
 
 
-def _crafting_target_materials(state: WorldState, game_data: GameData) -> set[str]:
-    """All material codes in the crafting target's recipe tree."""
+def _recipe_materials(roots: list[str], game_data: GameData) -> set[str]:
+    """All material codes in the recipe trees of the given root items."""
     materials: set[str] = set()
-    if not state.crafting_target:
-        return materials
     visited: set[str] = set()
 
     def walk(item: str) -> None:
@@ -41,7 +39,8 @@ def _crafting_target_materials(state: WorldState, game_data: GameData) -> set[st
             materials.add(mat)
             walk(mat)
 
-    walk(state.crafting_target)
+    for root in roots:
+        walk(root)
     return materials
 
 
@@ -56,7 +55,15 @@ def _keep_codes(state: WorldState, game_data: GameData) -> set[str]:
     weapon = _best_fighting_weapon(state, game_data)
     if weapon is not None:
         keep.add(weapon)
-    keep |= _crafting_target_materials(state, game_data)
+    # Protect recipe materials for both the equipment crafting target and the
+    # active items-task item — banking the task's own inputs starves PursueTask
+    # (gather -> craft -> TaskTrade) and freezes task progress.
+    recipe_roots: list[str] = []
+    if state.crafting_target:
+        recipe_roots.append(state.crafting_target)
+    if state.task_type == "items" and state.task_code:
+        recipe_roots.append(state.task_code)
+    keep |= _recipe_materials(recipe_roots, game_data)
     return keep
 
 

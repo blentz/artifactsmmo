@@ -48,6 +48,22 @@ def test_keeps_task_item_and_task_coins():
     assert select_bank_deposits(state, gd) == [("sap", 1)]
 
 
+def test_keeps_items_task_recipe_materials():
+    """Materials needed to craft the active items-task item must not be banked.
+
+    Regression: depositing the task item's own crafting inputs (e.g. iron_bar
+    for an iron_dagger task) starved the PursueTask loop, freezing progress.
+    """
+    gd = _gd()  # iron_dagger recipe = {iron_bar: 6, spruce_plank: 2}
+    state = make_state(
+        inventory={"iron_bar": 12, "spruce_plank": 4, "sap": 1},
+        task_code="iron_dagger",
+        task_type="items",
+    )
+    # iron_bar + spruce_plank are task-recipe inputs -> kept; only sap is bankable.
+    assert select_bank_deposits(state, gd) == [("sap", 1)]
+
+
 def test_keeps_hp_consumables():
     gd = _gd()
     state = make_state(inventory={"cooked_chicken": 4, "sap": 1})
