@@ -48,5 +48,16 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
 - [ ] pyproject addopts: `--cov=src/artifactsmmo_cli --cov-report=term-missing
       --cov-fail-under=100 --strict-markers -W error`.
 
+### P9 — mypy strict is NOT clean (NEW finding, not in original review)
+- [ ] `uv run mypy src` reports **129 errors in 11 files** on main (pre-existing).
+      CLAUDE.md demands strict/0 errors. Mostly float-vs-int arg types in
+      commands/action.py + others. Must reach 0.
+- [ ] Tests are not in mypy scope at all (no files/packages in [tool.mypy]) —
+      decide whether to bring tests under mypy (currently test_info.py has 192 errors).
+
 ## Status log
-- 2026-05-25: plan created, baseline captured. Starting P1.
+- 2026-05-25: plan created, baseline captured (2243 pass, 97% cov, 4 warnings).
+- 2026-05-25: P1 DONE — integration tests offline+mocked, no skips/except Exception. Committed.
+- 2026-05-25: P2 DONE — LearningStore weakref.finalize disposes engine; suite is 0-warning under -W error (2244 pass). Committed.
+- 2026-05-25: Discovered P9 — 129 pre-existing mypy-strict errors on main. Added phase.
+- Next: P3 (de-nest error handling) then P4/P5/P6/P7/P8/P9.

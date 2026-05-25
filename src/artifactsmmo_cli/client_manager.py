@@ -1,6 +1,5 @@
 """Client manager for ArtifactsMMO API."""
 
-import json
 import re
 from typing import Any, Optional
 
@@ -198,24 +197,21 @@ class APIWrapper:
                 else:
                     raise original_error
 
-                # If we get the same status code, parse the response
-                if response.status_code == status_code:
-                    try:
-                        response.json()
-                        # Create an UnexpectedStatus error with the response data
-                        raise UnexpectedStatus(status_code=status_code, content=response.content)
-                    except json.JSONDecodeError:
-                        # If we can't parse JSON, raise the original error
-                        raise original_error
-                else:
-                    # If we get a different status code, raise the original error
+                # Different status code than expected: nothing to recover.
+                if response.status_code != status_code:
                     raise original_error
+
+                # Same status code: validate the body is JSON, then surface it
+                # as UnexpectedStatus. A bad body raises JSONDecodeError, which
+                # is a ValueError and is handled by the single except below.
+                response.json()
+                raise UnexpectedStatus(status_code=status_code, content=response.content)
 
         except UnexpectedStatus:
             # Re-raise UnexpectedStatus so it can be handled properly
             raise
         except (httpx.HTTPError, ValueError):
-            # If an HTTP error or value parsing error occurs, raise the original error
+            # HTTP error or unparseable body (incl. JSONDecodeError): original error wins
             raise original_error
 
 
