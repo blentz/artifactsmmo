@@ -79,5 +79,8 @@ Baseline: 2243 passed, 97% coverage (274 lines uncovered), 4 ResourceWarnings
   in player._execute; tests updated to raise the structured type. Committed.
 - Next: P7 class-split (needs decision on enum/dataclass/SQLModel groupings),
   P5 C2 (~150 sites), P6 refactor god files, P8 cov→100.
-- Snapshot: 2244 pass / 0 warn / mypy 0 / ruff clean. 6 commits on fix/adversarial-review.
-  Done: P1 P2 P3 P4 P9 P10.  Remaining: P5 P6 P7 P8.
+- 2026-05-25: P7 DONE — split 8 behavioral multi-class files (13 new, 7 removed);
+  AGENTS.md amended to exempt cohesive data/enum/Protocol groups. Committed.
+- Next: P5 C2 (~150 sites, behavioral, per-site judgment), P6 refactor, P8 cov→100.
+- Snapshot: 2244 pass / 0 warn / mypy 0 / ruff clean. 7 commits on fix/adversarial-review.
+  Done: P1 P2 P3 P4 P7 P9 P10.  Remaining: P5 P6 P8.

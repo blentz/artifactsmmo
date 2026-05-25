@@ -3,8 +3,10 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
 from artifactsmmo_api_client.types import UNSET
 
+from artifactsmmo_cli.ai.missing_api_data import MissingApiData
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -50,6 +52,20 @@ class TestFromCharacterSchema:
         assert state.max_hp == 100
         assert state.level == 5
         assert state.gold == 30
+
+    def test_unset_required_combat_field_raises(self):
+        """A required combat stat arriving UNSET must fail loudly, not default to 0."""
+        char = make_char()
+        char.critical_strike = UNSET
+        with pytest.raises(MissingApiData, match="critical_strike"):
+            WorldState.from_character_schema(char)
+
+    def test_unset_required_skill_field_raises(self):
+        """A required skill xp field arriving UNSET must fail loudly."""
+        char = make_char()
+        char.mining_xp = UNSET
+        with pytest.raises(MissingApiData, match="mining_xp"):
+            WorldState.from_character_schema(char)
 
     def test_task_fields(self):
         char = make_char(task="chicken", task_type="monsters", task_progress=3, task_total=10)

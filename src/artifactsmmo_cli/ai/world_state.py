@@ -2,9 +2,26 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.types import Unset
+
+from artifactsmmo_cli.ai.missing_api_data import MissingApiData
+
+_MISSING = object()
+
+
+def _require(char: CharacterSchema, field_name: str) -> Any:
+    """Return char.<field_name>, raising MissingApiData if absent or UNSET.
+
+    The field may legitimately hold a falsy-but-present value (0, "") — that
+    is returned as-is; only genuine absence/UNSET is a contract violation.
+    """
+    val = getattr(char, field_name, _MISSING)
+    if val is _MISSING or isinstance(val, Unset):
+        raise MissingApiData(f"CharacterSchema missing required field {field_name!r}")
+    return val
 
 EQUIPMENT_SLOTS = [
     "weapon_slot",
@@ -131,26 +148,26 @@ class WorldState:
 
         equipment: dict[str, str | None] = {}
         for slot_name in EQUIPMENT_SLOTS:
-            val = getattr(char, slot_name, "")
+            val = _require(char, slot_name)
             equipment[slot_name] = val if val else None
 
         skills: dict[str, int] = {}
         skill_xp: dict[str, int] = {}
         for skill in SKILL_NAMES:
-            skills[skill] = getattr(char, f"{skill}_level", 1)
-            skill_xp[skill] = getattr(char, f"{skill}_xp", 0)
+            skills[skill] = _require(char, f"{skill}_level")
+            skill_xp[skill] = _require(char, f"{skill}_xp")
 
         attack: dict[str, int] = {}
         dmg_elements: dict[str, int] = {}
         resistance: dict[str, int] = {}
         for elem in ELEMENTS:
-            atk = getattr(char, f"attack_{elem}", 0)
+            atk = _require(char, f"attack_{elem}")
             if atk != 0:
                 attack[elem] = atk
-            de = getattr(char, f"dmg_{elem}", 0)
+            de = _require(char, f"dmg_{elem}")
             if de != 0:
                 dmg_elements[elem] = de
-            res = getattr(char, f"res_{elem}", 0)
+            res = _require(char, f"res_{elem}")
             if res != 0:
                 resistance[elem] = res
 
@@ -168,7 +185,7 @@ class WorldState:
             gold=char.gold,
             skills=skills,
             skill_xp=skill_xp,
-            wisdom=getattr(char, "wisdom", 0),
+            wisdom=_require(char, "wisdom"),
             x=char.x,
             y=char.y,
             inventory=inventory,
@@ -184,9 +201,9 @@ class WorldState:
             pending_items=pending_items,
             active_events=active_events or {},
             attack=attack,
-            dmg=getattr(char, "dmg", 0),
+            dmg=_require(char, "dmg"),
             dmg_elements=dmg_elements,
             resistance=resistance,
-            critical_strike=getattr(char, "critical_strike", 0),
-            initiative=getattr(char, "initiative", 0),
+            critical_strike=_require(char, "critical_strike"),
+            initiative=_require(char, "initiative"),
         )
