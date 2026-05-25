@@ -49,10 +49,6 @@ class GrindCharacterXPGoal(Goal):
               history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
-        # If there's an active task, FarmItems/CompleteTask own the cycle —
-        # this goal stays out of the way until the task is resolved.
-        if state.task_code:
-            return 0.0
         if history is None:
             return PRIORITY_FLOOR
 

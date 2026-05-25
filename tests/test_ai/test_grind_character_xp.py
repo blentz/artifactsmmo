@@ -66,11 +66,11 @@ class TestPriority:
         state = make_state(xp=200, task_code=None)
         assert goal.value(state, _gd_with_monster()) == 0.0
 
-    def test_zero_when_task_held(self):
-        """Strategic deference: when a task exists, FarmItems/CompleteTask own the cycle."""
+    def test_floor_when_items_task_held(self):
+        """Task-agnostic: an items task no longer forces 0; value depends only on satisfaction."""
         goal = GrindCharacterXPGoal("chicken")
-        state = make_state(task_code="gudgeon", task_type="items", task_total=20)
-        assert goal.value(state, _gd_with_monster()) == 0.0
+        state = make_state(task_code="gudgeon", task_type="items", task_total=20, xp=0)
+        assert goal.value(state, _gd_with_monster()) == PRIORITY_FLOOR
 
     def test_floor_without_history(self):
         goal = GrindCharacterXPGoal("chicken")
@@ -209,3 +209,20 @@ class TestFightCostPenalty:
 
 def test_loadout_penalty_below_one_swap_cost():
     assert LOADOUT_PENALTY < SWAP_COST_PER_SLOT * 2
+
+
+class TestDesiredState:
+    def test_desired_state_xp_increments_initial(self):
+        goal = GrindCharacterXPGoal("chicken", initial_xp=50)
+        result = goal.desired_state(make_state(), GameData())
+        assert result == {"xp": 60}
+
+
+class TestTaskAgnosticValue:
+    def test_value_nonzero_under_monster_task(self):
+        # Under a monster task the grind IS the (retargeted) actuator; it must
+        # value normally rather than self-suppress to 0.
+        state = make_state(task_code="chicken", task_type="monsters",
+                           task_total=20, task_progress=0, xp=0)
+        goal = GrindCharacterXPGoal(target_monster="chicken", initial_xp=0, game_data=GameData())
+        assert goal.value(state, GameData(), None) > 0.0
