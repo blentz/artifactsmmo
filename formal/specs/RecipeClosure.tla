@@ -9,6 +9,7 @@ EXTENDS Integers, FiniteSets, Sequences, TLC
 \*   needing iron) to exercise the visited guard and shared-subrecipe handling.
 
 Items == {"sword", "blade", "iron", "handle", "wood", "ring", "loop", "a", "b"}
+\* Empty function: raw items have no recipe ingredients.
 Empty == [ x \in {} |-> 0 ]
 Recipe ==
   [ sword  |-> [blade |-> 1, handle |-> 1],
@@ -20,10 +21,12 @@ Recipe ==
     loop   |-> [ring |-> 1],
     a      |-> [b |-> 1],
     b      |-> [a |-> 1] ]
+\* Resource node -> raw item it yields (models the game drop table).
 Drops == [ iron_rocks |-> "iron", ash_tree |-> "wood" ]
 Resources == DOMAIN Drops
 HasRecipe(m) == m \in DOMAIN Recipe /\ DOMAIN Recipe[m] # {}
 
+\* Rounds needed for closure to stabilize (see Sat/AReach bound argument).
 N == Cardinality(Items)
 
 \* ---- a deterministic sequence of a set's elements (no RECURSIVE operator) ----
@@ -58,7 +61,11 @@ OracleResources(item) == { r \in Resources : Drops[r] \in ClosureSet(item) }
 \* equality AlgoClosure = ClosureSet is a genuine (re-derived) check, not an
 \* alias. AReach[k] = items within k ingredient-hops of the root.
 \* ============================================================================
+\* Identical expansion step to Expand, defined separately on purpose so
+\* AlgoClosure and ClosureSet are structurally independent derivations (each
+\* also pinned to ExpectedClosure). Do NOT alias them.
 AStep(S) == S \cup UNION { DOMAIN Recipe[m] : m \in { x \in S : HasRecipe(x) } }
+\* Mirrors Sat's structure intentionally (independence) — see AStep note.
 AReach[k \in 0..N, r \in Items] ==
   IF k = 0 THEN {r} ELSE AStep(AReach[k - 1, r])
 AlgoClosure(item) == AReach[N, item]
