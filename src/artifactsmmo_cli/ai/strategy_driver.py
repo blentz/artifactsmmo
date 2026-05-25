@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
 from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
@@ -87,7 +88,9 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             return LevelSkillGoal(skill_name=req.skill, target_level=target,
                                   initial_skill_xp=state.skill_xp.get(req.skill, 0))
         assert state.task_code is not None  # _fires guarantees an active task
-        return PursueTaskGoal(task_code=state.task_code, initial_progress=state.task_progress)
+        return PursueTaskGoal(task_code=state.task_code,
+                              initial_progress=state.task_progress,
+                              batch=task_batch_size(state, game_data))
     if kind is MeansKind.ACCEPT_TASK:
         return AcceptTaskGoal()
     if kind is MeansKind.TASK_EXCHANGE:

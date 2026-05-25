@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
     map_means,
     objective_step_goal,
 )
+from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
@@ -525,6 +526,17 @@ class TestPursueTaskMapping:
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
         goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
         assert repr(goal) == "LevelSkill(weaponcrafting->3)"   # min(gate=3, 1+LEVEL_LOOKAHEAD=4) -> 3
+
+    def test_pursue_task_goal_carries_batch(self):
+        gd = GameData()
+        gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        state = make_state(task_code="copper_bar", task_type="items",
+                           task_total=20, task_progress=2, inventory={}, inventory_max=100)
+        goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
+        expected = 2 + task_batch_size(state, gd)
+        assert goal.desired_state(state, gd) == {"task_progress": expected}
+        assert task_batch_size(state, gd) > 1   # this state genuinely batches
 
 
 # ---------------------------------------------------------------------------
