@@ -61,7 +61,7 @@ Evidence:
 - The endpoint takes a single `DestinationSchema(x, y)` (or a `map_id`) and the
   server routes to it: openapi.json `/my/{name}/action/move` description —
   *"Moves a character on the map using either the map's ID or X and Y position.
-  Provide either 'map_id' or both 'x' and 'y' coordinates."* (openapi.json:467).
+  Provide either 'map_id' or both 'x' and 'y' coordinates."* (openapi.json:468).
   The server, not the client, owns routing: failure code **595 "No path
   available to the destination map"** and **596 "The map is blocked"** are
   server-side path/accessibility verdicts (openapi.json move responses), which
