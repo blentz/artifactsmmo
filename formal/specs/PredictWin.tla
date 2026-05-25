@@ -68,7 +68,7 @@ AllCases == Cases \cup CapCases \cup CapZeroCases   \* 1800 + 4 + 2 = 1806
 MaxPHP  == 6
 MaxMHP  == 250
 
-CeilDiv(a, b) == (a + b - 1) \div b   \* ceil(a/b) for a>=0, b>0
+CeilDiv(a, b) == (a + b - 1) \div b   \* ceil(a/b); assumes a>=0, b>0 (always true at call sites: phit/mhit guarded > 0)
 
 \* ============================================================================
 \* ALGORITHM MODEL: predict_win closed form (combat.py:66-79).
@@ -100,10 +100,11 @@ ClosedForm(ph, phit, mh, mhit, pf) ==
 \* ============================================================================
 \* Both blows of a round are pure subtraction; we evaluate them inline so a
 \* round consumes exactly one turn index, making the MaxTurns cap faithful.
+\* domains must cover ALL case sets (main + cap); PlusPy won't catch an under-declared bound
 Fight[ t \in 0..MaxTurns,
        p \in 0..MaxPHP,
        m \in 0..MaxMHP,
-       phit \in 0..2,        \* per-turn player damage actually exercised (Hit \cup CapPhit)
+       phit \in 0..4,        \* per-turn player damage actually exercised (max(Hit, CapPhit) = 4)
        mhit \in 0..4,        \* per-turn monster damage
        pf \in Bool ] ==
   IF m <= 0 THEN TRUE            \* monster already dead -> player has won
@@ -147,7 +148,8 @@ Init == todo = AllCases
 Next == /\ todo # {}
         /\ \E c \in todo :
               /\ IF c \in CapCases \/ c \in CapZeroCases
-                 THEN Assert(CorrectCap(c), <<"PredictWin CAP FAIL", c>>)
+                 THEN \* monotonicity (MonoOK) is not meaningful for cap cases -- refinement only
+                      Assert(CorrectCap(c), <<"PredictWin CAP FAIL", c>>)
                  ELSE Assert(Correct(c), <<"PredictWin FAIL", c>>)
               /\ todo' = todo \ {c}
 ================================================================================
