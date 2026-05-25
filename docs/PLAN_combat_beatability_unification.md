@@ -29,5 +29,18 @@ Migrate the four sites:
 - Tunable guesses (recovery windows, inventory caps, BATCH_CAP, planner budget): NOT code bugs —
   they need play-data tuning, not a rewrite. Leave with a note unless told otherwise.
 
-## Status
-- starting #1.
+## Status — DONE (2026-05-25)
+- #1: is_winnable predictor added (combat.py); player._is_winnable delegates.
+  DEVIATION: FightAction.is_applicable + task_feasibility kept their cheap +2
+  gate (NOT predict_win). Routing predict_win through the GOAP precondition
+  made fights applicable via best-on-hand loadout → planner fights before a
+  beneficial swap, defeating LOADOUT_PENALTY (confirmed regression via a
+  stashed clean-main comparison). Two-tier design: cheap +2 filters
+  (FightAction + task_feasibility, mutually consistent) + authoritative
+  is_winnable (runtime selection + prerequisite graph). Divergent +1 removed.
+- #2: prerequisite_graph.combat_capable → predict_win. DONE.
+- #3: refresh-before-build ordering fixed + ordering test. DONE.
+- low-pri: tasks_coin → world_state.TASKS_COIN_CODE (was 7 sites / 4 defs). DONE.
+- low-pri tunables (recovery windows, inventory caps, BATCH_CAP, planner budget):
+  intentionally NOT changed — they need play-data tuning, not a code fix.
+- Final: 2416 pass / 100% cov / mypy 0 / ruff clean. Branch fix/unify-combat-beatability.
