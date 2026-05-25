@@ -22,6 +22,7 @@ MODULES: list[tuple[str, int]] = [
     ("CalculatePath", 625),
     ("RecipeClosure", 9),
     ("PrerequisiteGraph", 5),
+    ("PredictWin", 1804),
 ]
 
 # Substrings PlusPy emits when an assertion fails.
