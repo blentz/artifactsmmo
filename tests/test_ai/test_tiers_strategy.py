@@ -1,8 +1,20 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import (
+    BALANCE_MAX,
+    BALANCE_MIN,
+    CHAR_MARGINAL,
+    GEAR_EQUIP_SCALE,
+    PRIOR_CHAR_LEVEL,
+    PRIOR_COMBAT_CRAFT_SKILL,
+    PRIOR_COMBAT_GEAR,
+    PRIOR_CONSUMABLE_SKILL,
+    PRIOR_GATHER_SKILL,
+    PRIOR_UTILITY_GEAR,
+    SKILL_MARGINAL,
     StrategyEngine,
     actionable_step,
     desired_state_of,
@@ -118,6 +130,7 @@ def test_contribution_zero_for_unknown_node_type():
             return False
 
     assert eng._contribution(_Dummy(), obj.gap(make_state()), gd) == 0.0
+    assert eng._value(_Dummy(), make_state(), gd) == 0.0
 
 
 def test_decide_skips_blocked_unmet_root():
@@ -275,3 +288,94 @@ def test_unattainable_gear_not_targeted_but_craftable_is():
     reprs = [rs.root_repr for rs in d.ranking]
     assert any("iron_helm" in r for r in reprs)            # craftable gear is a candidate
     assert all("drop_blade" not in r for r in reprs)
+
+
+def _eng(gd, target_gear=None):
+    obj = CharacterObjective.from_game_data(gd)
+    if target_gear is not None:
+        obj = CharacterObjective(target_char_level=50,
+                                 target_skill_levels=obj.target_skill_levels,
+                                 target_gear=target_gear,
+                                 _game_data=gd)
+    return StrategyEngine(obj, BalancedPersonality())
+
+
+class TestBalancing:
+    def test_leader_suppressed(self):
+        eng = _eng(GameData())
+        state = make_state(skills={"alchemy": 5, "mining": 1, "woodcutting": 1, "fishing": 1,
+                                   "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1})
+        assert eng._balancing(ReachSkillLevel("alchemy", 50), state) == BALANCE_MIN
+
+    def test_laggard_boosted(self):
+        eng = _eng(GameData())
+        state = make_state(skills={"alchemy": 7, "cooking": 1, "mining": 1, "woodcutting": 1,
+                                   "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1})
+        assert eng._balancing(ReachSkillLevel("cooking", 50), state) == BALANCE_MAX
+
+    def test_two_behind_neutral(self):
+        eng = _eng(GameData())
+        state = make_state(skills={"alchemy": 5, "cooking": 3, "mining": 1, "woodcutting": 1,
+                                   "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1})
+        assert eng._balancing(ReachSkillLevel("cooking", 50), state) == 1.0
+
+    def test_balancing_one_for_gear_and_char(self):
+        eng = _eng(GameData())
+        st = make_state()
+        assert eng._balancing(ReachCharLevel(50), st) == 1.0
+        assert eng._balancing(ObtainItem("x"), st) == 1.0
+
+
+class TestBasePrior:
+    def test_char_and_skill_family_priors(self):
+        eng = _eng(GameData())
+        assert eng._base_prior(ReachCharLevel(50)) == PRIOR_CHAR_LEVEL
+        assert eng._base_prior(ReachSkillLevel("weaponcrafting", 50)) == PRIOR_COMBAT_CRAFT_SKILL
+        assert eng._base_prior(ReachSkillLevel("mining", 50)) == PRIOR_GATHER_SKILL
+        assert eng._base_prior(ReachSkillLevel("alchemy", 50)) == PRIOR_CONSUMABLE_SKILL
+
+    def test_gear_prior_combat_vs_utility(self):
+        gd = GameData()
+        gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
+                          "small_potion": ItemStats(code="small_potion", level=1, type_="utility")}
+        eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger", "utility1_slot": "small_potion"})
+        assert eng._base_prior(ObtainItem("copper_dagger")) == PRIOR_COMBAT_GEAR
+        assert eng._base_prior(ObtainItem("small_potion")) == PRIOR_UTILITY_GEAR
+
+
+class TestMarginal:
+    def test_gear_marginal_gain_over_empty_slot(self):
+        gd = GameData()
+        gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 6})}
+        eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger"})
+        state = make_state(equipment={"weapon_slot": None})
+        m = eng._marginal(ObtainItem("copper_dagger"), state, gd)
+        assert m == min(1.0, equip_value(gd.item_stats("copper_dagger")) / GEAR_EQUIP_SCALE)
+        assert m > 0
+
+    def test_gear_marginal_zero_when_no_gain(self):
+        gd = GameData()
+        gd._item_stats = {"wand": ItemStats(code="wand", level=1, type_="weapon", attack={"fire": 3})}
+        eng = _eng(gd, target_gear={"weapon_slot": "wand"})
+        state = make_state(equipment={"weapon_slot": "wand"})
+        assert eng._marginal(ObtainItem("wand"), state, gd) == 0.0
+
+    def test_char_and_skill_marginal_constants(self):
+        eng = _eng(GameData())
+        st = make_state()
+        assert eng._marginal(ReachCharLevel(50), st, GameData()) == CHAR_MARGINAL
+        assert eng._marginal(ReachSkillLevel("mining", 50), st, GameData()) == SKILL_MARGINAL
+
+    def test_gear_marginal_unknown_item_returns_zero(self):
+        eng = _eng(GameData())   # empty item_stats
+        assert eng._marginal(ObtainItem("nonexistent"), make_state(), GameData()) == 0.0
+
+
+class TestValueComposition:
+    def test_value_is_prior_times_marginal_times_balancing(self):
+        eng = _eng(GameData())
+        state = make_state(skills={"alchemy": 5, "cooking": 1, "mining": 1, "woodcutting": 1,
+                                   "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1})
+        root = ReachSkillLevel("alchemy", 50)
+        expected = eng._base_prior(root) * eng._marginal(root, state, GameData()) * eng._balancing(root, state)
+        assert eng._value(root, state, GameData()) == expected

@@ -20,6 +20,26 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # not depend on goals/ (which P3c retires); P3c unifies the source.
 CRITICAL_HP_FRACTION = 0.25
 
+PRIOR_CHAR_LEVEL = 1.0
+PRIOR_COMBAT_GEAR = 1.0
+PRIOR_UTILITY_GEAR = 0.4
+PRIOR_COMBAT_CRAFT_SKILL = 0.6
+PRIOR_GATHER_SKILL = 0.4
+PRIOR_CONSUMABLE_SKILL = 0.3
+SKILL_MARGINAL = 0.2
+CHAR_MARGINAL = 1.0
+GEAR_EQUIP_SCALE = 20.0
+"""Normalizes gear equip-value gain to ~[0,1]; tune so a first-tier upgrade ~0.7-0.9."""
+BALANCE_K = 0.25
+BALANCE_THRESHOLD = 2
+BALANCE_MIN = 0.5
+BALANCE_MAX = 2.0
+_COMBAT_GEAR_SLOTS = frozenset({"weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
+                                "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot", "amulet_slot"})
+_COMBAT_CRAFT_SKILLS = frozenset({"weaponcrafting", "gearcrafting", "jewelrycrafting"})
+_GATHER_SKILLS = frozenset({"mining", "woodcutting", "fishing"})
+_CONSUMABLE_CRAFT_SKILLS = frozenset({"alchemy", "cooking"})
+
 
 def root_category(node: MetaGoal) -> str:
     if isinstance(node, ReachCharLevel):
@@ -159,6 +179,56 @@ class StrategyDecision:
 class StrategyEngine:
     objective: CharacterObjective
     personality: Personality
+
+    def _base_prior(self, root: MetaGoal) -> float:
+        category = root_category(root)
+        weight = self.personality.category_weight(category)
+        if isinstance(root, ReachCharLevel):
+            tier = PRIOR_CHAR_LEVEL
+        elif isinstance(root, ReachSkillLevel):
+            if root.skill in _COMBAT_CRAFT_SKILLS:
+                tier = PRIOR_COMBAT_CRAFT_SKILL
+            elif root.skill in _GATHER_SKILLS:
+                tier = PRIOR_GATHER_SKILL
+            elif root.skill in _CONSUMABLE_CRAFT_SKILLS:
+                tier = PRIOR_CONSUMABLE_SKILL
+            else:
+                tier = 0.0   # unknown skill — no prior, scores zero
+        elif isinstance(root, ObtainItem):
+            slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
+            tier = PRIOR_COMBAT_GEAR if slot in _COMBAT_GEAR_SLOTS else PRIOR_UTILITY_GEAR
+        else:
+            tier = 0.0
+        return tier * weight
+
+    def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
+        if isinstance(root, ReachCharLevel):
+            return CHAR_MARGINAL
+        if isinstance(root, ReachSkillLevel):
+            return SKILL_MARGINAL
+        if isinstance(root, ObtainItem):
+            stats = game_data.item_stats(root.code)
+            if stats is None:
+                return 0.0
+            slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
+            current_code = state.equipment.get(slot) if slot is not None else None
+            current_stats = game_data.item_stats(current_code) if current_code else None
+            current_value = equip_value(current_stats) if current_stats is not None else 0.0
+            gain = max(0.0, equip_value(stats) - current_value)
+            return min(1.0, gain / GEAR_EQUIP_SCALE)
+        return 0.0
+
+    def _balancing(self, root: MetaGoal, state: WorldState) -> float:
+        if not isinstance(root, ReachSkillLevel):
+            return 1.0
+        levels = list(state.skills.values())
+        leader = max(levels) if levels else 0
+        current = state.skills.get(root.skill, 0)
+        raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)
+        return max(BALANCE_MIN, min(BALANCE_MAX, raw))
+
+    def _value(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
+        return self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
 
     def _contribution(self, root: MetaGoal, gap: ObjectiveGap, game_data: GameData) -> float:
         category = root_category(root)
