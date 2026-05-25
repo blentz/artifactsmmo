@@ -11,7 +11,7 @@ EXTENDS Integers, FiniteSets, TLC
 BatchBuffer == 5
 SafetyFloor == 3
 EquipKeep   == 1
-CoinCap     == 9
+CoinCap     == 9  \* ACTION_CONSUMABLES_CAP["tasks_coin"] (inventory_caps.py:25-27)
 
 Max(a, b) == IF a > b THEN a ELSE b
 
@@ -36,6 +36,9 @@ Cap(code, taskItem, remaining, equipped) ==
   THEN Max(1, CapExclEquipped(code, taskItem, remaining))
   ELSE CapExclEquipped(code, taskItem, remaining)
 
+\* Independent oracle — intentionally NOT refactored to call Cap/CapExclEquipped.
+\* Both must compute the same result by different expression paths so CapCorrect
+\* has real verification power (not a tautology). Do NOT DRY these together.
 OracleCap(code, taskItem, remaining, equipped) ==
   LET base == IF RecipeDemand[code] > 0 THEN Max(RecipeDemand[code] * BatchBuffer, SafetyFloor) ELSE 0
       t    == IF code = taskItem THEN remaining ELSE 0
@@ -45,8 +48,8 @@ OracleCap(code, taskItem, remaining, equipped) ==
   IN IF code \in equipped THEN Max(1, m) ELSE m
 
 TaskItems == Items \cup {"none"}
-Remains   == 0..3
-EquipSets == SUBSET {"sword", "ore"}
+Remains   == 0..3  \* task-remaining range; spans the SafetyFloor=3 boundary
+EquipSets == SUBSET {"sword", "ore"}  \* includes "ore" (not equippable) to test the equipped-but-not-equippable edge: cap still >= 1
 
 CapCases == { [code |-> code, ti |-> ti, rem |-> rem, eq |-> eq] :
                 code \in Items, ti \in TaskItems, rem \in Remains, eq \in EquipSets }
@@ -67,10 +70,11 @@ OverCases == {
   [inv |-> [sword |-> 3], ti |-> "none", rem |-> 0, eq |-> {"sword"},
    exp |-> [sword |-> 2]],
   [inv |-> [ore |-> 5], ti |-> "none", rem |-> 0, eq |-> {},
-   exp |-> [c \in {} |-> 0]]
+   exp |-> [c \in {} |-> 0]]  \* ore cap=30, 5<=30 => not overstocked; empty map is the expected result
 }
 OverCorrect(c) == Overstock(c.inv, c.ti, c.rem, c.eq) = c.exp
 
+\* Tagged union so one VARIABLE/Next drives both the cap and overstock case sets.
 Tagged == { [kind |-> "cap", v |-> c] : c \in CapCases }
             \cup { [kind |-> "over", v |-> c] : c \in OverCases }
 CheckTagged(t) == IF t.kind = "cap" THEN CapCorrect(t.v) ELSE OverCorrect(t.v)
