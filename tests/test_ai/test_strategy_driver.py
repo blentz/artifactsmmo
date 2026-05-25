@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal  # noqa: F401 (used in repr checks)
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.survival import DepositInventoryGoal, RestoreHPGoal
@@ -103,45 +104,45 @@ def test_map_guard_unknown_raises():
 # ---------------------------------------------------------------------------
 
 def test_map_means_claim_pending():
-    assert isinstance(map_means(MeansKind.CLAIM_PENDING, GameData(), _ctx()), ClaimPendingGoal)
+    assert isinstance(map_means(MeansKind.CLAIM_PENDING, GameData(), _ctx(), make_state()), ClaimPendingGoal)
 
 
 def test_map_means_complete_task():
-    assert isinstance(map_means(MeansKind.COMPLETE_TASK, GameData(), _ctx()), CompleteTaskGoal)
+    assert isinstance(map_means(MeansKind.COMPLETE_TASK, GameData(), _ctx(), make_state()), CompleteTaskGoal)
 
 
 def test_map_means_sell_pressured():
-    assert isinstance(map_means(MeansKind.SELL_PRESSURED, GameData(), _ctx()), SellInventoryGoal)
+    assert isinstance(map_means(MeansKind.SELL_PRESSURED, GameData(), _ctx(), make_state()), SellInventoryGoal)
 
 
 def test_map_means_sell_idle():
-    assert isinstance(map_means(MeansKind.SELL_IDLE, GameData(), _ctx()), SellInventoryGoal)
+    assert isinstance(map_means(MeansKind.SELL_IDLE, GameData(), _ctx(), make_state()), SellInventoryGoal)
 
 
 def test_map_means_low_yield_cancel():
-    assert isinstance(map_means(MeansKind.LOW_YIELD_CANCEL, GameData(), _ctx()), LowYieldCancelGoal)
+    assert isinstance(map_means(MeansKind.LOW_YIELD_CANCEL, GameData(), _ctx(), make_state()), LowYieldCancelGoal)
 
 
 def test_map_means_task_cancel():
-    assert isinstance(map_means(MeansKind.TASK_CANCEL, GameData(), _ctx()), TaskCancelGoal)
+    assert isinstance(map_means(MeansKind.TASK_CANCEL, GameData(), _ctx(), make_state()), TaskCancelGoal)
 
 
 def test_map_means_accept_task():
-    assert isinstance(map_means(MeansKind.ACCEPT_TASK, GameData(), _ctx()), AcceptTaskGoal)
+    assert isinstance(map_means(MeansKind.ACCEPT_TASK, GameData(), _ctx(), make_state()), AcceptTaskGoal)
 
 
 def test_map_means_task_exchange():
-    g = map_means(MeansKind.TASK_EXCHANGE, GameData(), _ctx(task_exchange_min_coins=3))
+    g = map_means(MeansKind.TASK_EXCHANGE, GameData(), _ctx(task_exchange_min_coins=3), make_state())
     assert isinstance(g, TaskExchangeGoal)
 
 
 def test_map_means_bank_expand():
-    assert isinstance(map_means(MeansKind.BANK_EXPAND, GameData(), _ctx()), ExpandBankGoal)
+    assert isinstance(map_means(MeansKind.BANK_EXPAND, GameData(), _ctx(), make_state()), ExpandBankGoal)
 
 
 def test_map_means_unknown_raises():
     with pytest.raises(ValueError):
-        map_means("bogus", GameData(), _ctx())  # type: ignore[arg-type]
+        map_means("bogus", GameData(), _ctx(), make_state())  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -500,3 +501,51 @@ class TestLevelLookahead:
         state = make_state(skills={"weaponcrafting": 48})
         goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 50), state, GameData(), _ctx())
         assert repr(goal) == "LevelSkill(weaponcrafting->50)"   # min(50, 48+3)
+
+
+# ---------------------------------------------------------------------------
+# PURSUE_TASK mapping tests
+# ---------------------------------------------------------------------------
+
+class TestPursueTaskMapping:
+    def test_feasible_items_task_maps_to_pursue_task(self):
+        # no crafting recipe known -> task_requirement returns None -> feasible
+        state = make_state(task_code="copper_bar", task_type="items",
+                           task_total=20, task_progress=0)
+        goal = map_means(MeansKind.PURSUE_TASK, GameData(), _ctx(), state)
+        assert repr(goal) == "PursueTask(copper_bar)"
+
+    def test_skill_gated_items_task_maps_to_level_skill(self):
+        gd = GameData()
+        gd._item_stats["copper_bar"] = ItemStats(
+            code="copper_bar", type_="resource", level=1,
+            crafting_skill="weaponcrafting", crafting_level=3,
+        )
+        state = make_state(task_code="copper_bar", task_type="items",
+                           task_total=20, task_progress=0, skills={"weaponcrafting": 1})
+        goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
+        assert repr(goal) == "LevelSkill(weaponcrafting->3)"   # min(gate=3, 1+LEVEL_LOOKAHEAD=4) -> 3
+
+
+# ---------------------------------------------------------------------------
+# Items-task grind stand-down tests
+# ---------------------------------------------------------------------------
+
+class TestItemsTaskStandDown:
+    def test_char_step_stands_down_for_items_task(self):
+        state = make_state(task_code="copper_bar", task_type="items",
+                           task_total=20, task_progress=0)
+        assert objective_step_goal(ReachCharLevel(50), state, GameData(),
+                                   _ctx(combat_monster="chicken")) is None
+
+    def test_char_step_grinds_for_monster_task(self):
+        state = make_state(task_code="chicken", task_type="monsters",
+                           task_total=20, task_progress=0)
+        goal = objective_step_goal(ReachCharLevel(50), state, GameData(),
+                                   _ctx(combat_monster="chicken"))
+        assert goal is not None and repr(goal).startswith("GrindCharacterXP")
+
+    def test_char_step_grinds_with_no_task(self):
+        goal = objective_step_goal(ReachCharLevel(50), make_state(), GameData(),
+                                   _ctx(combat_monster="chicken"))
+        assert goal is not None and repr(goal).startswith("GrindCharacterXP")
