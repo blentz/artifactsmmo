@@ -4,6 +4,8 @@ actionable subgoal. Pure; P3a runs it in shadow (traced, not enacted)."""
 from dataclasses import asdict, dataclass, field
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -39,6 +41,11 @@ _COMBAT_GEAR_SLOTS = frozenset({"weapon_slot", "shield_slot", "helmet_slot", "bo
 _COMBAT_CRAFT_SKILLS = frozenset({"weaponcrafting", "gearcrafting", "jewelrycrafting"})
 _GATHER_SKILLS = frozenset({"mining", "woodcutting", "fishing"})
 _CONSUMABLE_CRAFT_SKILLS = frozenset({"alchemy", "cooking"})
+
+LEARN_W_MAX = 0.5
+LEARN_SAMPLE_FULL = 20
+XP_RATE_REFERENCE = 10.0
+"""Observed char-XP/cycle that normalizes to 1.0; tune to a strong grind rate."""
 
 
 def root_category(node: MetaGoal) -> str:
@@ -219,9 +226,22 @@ class StrategyEngine:
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
         return self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
 
-    def decide(self, state: WorldState, game_data: GameData) -> StrategyDecision:
+    def _learned_blend(self, root: MetaGoal, value: float,
+                       history: LearningStore | None, combat_monster: str | None) -> float:
+        if not (isinstance(root, ReachCharLevel) and history is not None and combat_monster):
+            return value
+        y = expected_yield_per_cycle(f"FarmMonster({combat_monster})", history)
+        if y.sample_count <= 0:
+            return value
+        normalized = min(1.0, max(0.0, y.char_xp / XP_RATE_REFERENCE))
+        w = LEARN_W_MAX * min(1.0, y.sample_count / LEARN_SAMPLE_FULL)
+        return (1.0 - w) * value + w * normalized
+
+    def decide(self, state: WorldState, game_data: GameData,
+               history: LearningStore | None = None,
+               combat_monster: str | None = None) -> StrategyDecision:
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
-        candidates: list[tuple[MetaGoal, MetaGoal, float, int]] = []   # root, step, value, effort
+        candidates: list[tuple[MetaGoal, MetaGoal, float, int, float]] = []   # root, step, final, effort, pre
         for root in objective_roots(self.objective):
             if root.is_satisfied(state, game_data):
                 continue
@@ -230,12 +250,13 @@ class StrategyEngine:
             step = actionable_step(root, state, game_data)
             assert step is not None
             value = self._value(root, state, game_data)
+            final = self._learned_blend(root, value, history, combat_monster)
             effort = root_cost(root, state, game_data)
-            candidates.append((root, step, value, effort))
-        candidates.sort(key=lambda c: (-c[2], c[3], repr(c[0])))   # value desc, effort asc, repr last
+            candidates.append((root, step, final, effort, value))
+        candidates.sort(key=lambda c: (-c[2], c[3], repr(c[0])))   # final desc, effort asc, repr last
         ranking = [
-            RootScore(repr(r), root_category(r), value, effort, value, repr(s), False)
-            for (r, s, value, effort) in candidates
+            RootScore(repr(r), root_category(r), pre, effort, final, repr(s), False)
+            for (r, s, final, effort, pre) in candidates
         ]
         if candidates:
             chosen_root: MetaGoal | None = candidates[0][0]

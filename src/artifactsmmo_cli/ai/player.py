@@ -269,8 +269,9 @@ class GamePlayer:
                 self._maybe_retry_bank()
 
                 assert self._strategy is not None
-                ctx = self._selection_context()
-                decision = self._strategy.decide(state, game_data)
+                combat_monster = self._winnable_farm_target()
+                ctx = self._selection_context(combat_monster)
+                decision = self._strategy.decide(state, game_data, history=self.history, combat_monster=combat_monster)
                 self._last_decision = decision
                 step = decision.chosen_step
                 crafting_target = step.code if isinstance(step, ObtainItem) else None
@@ -750,9 +751,9 @@ class GamePlayer:
             "suppressed_goals": list(self._suppressed_goals.keys()),
         }
         if self._strategy is not None and self.game_data is not None:
-            decision = self._last_decision
-            if decision is None:
-                decision = self._strategy.decide(self.state, self.game_data)
+            decision = self._last_decision or self._strategy.decide(
+                self.state, self.game_data, history=self.history,
+                combat_monster=self._winnable_farm_target())
             record["strategy"] = decision.to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
@@ -1105,15 +1106,17 @@ class GamePlayer:
                     and self.state.level > self._bank_blocked_at_level):
                 self._blockers.clear("bank")
 
-    def _selection_context(self) -> SelectionContext:
+    def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
+        if combat_monster is None:
+            combat_monster = self._winnable_farm_target()
         return SelectionContext(
             bank_accessible=self._bank_accessible,
             bank_required_level=self._bank_required_level,
             bank_unlock_monster=self._bank_unlock_monster,
             initial_xp=self.state.xp,
             task_exchange_min_coins=self._task_exchange_min_coins,
-            combat_monster=self._winnable_farm_target(),
+            combat_monster=combat_monster,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

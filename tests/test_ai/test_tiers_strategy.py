@@ -1,4 +1,10 @@
+import pytest
+from sqlmodel import Session
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -8,6 +14,8 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     BALANCE_MIN,
     CHAR_MARGINAL,
     GEAR_EQUIP_SCALE,
+    LEARN_SAMPLE_FULL,
+    LEARN_W_MAX,
     PRIOR_CHAR_LEVEL,
     PRIOR_COMBAT_CRAFT_SKILL,
     PRIOR_COMBAT_GEAR,
@@ -15,6 +23,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     PRIOR_GATHER_SKILL,
     PRIOR_UTILITY_GEAR,
     SKILL_MARGINAL,
+    XP_RATE_REFERENCE,
     StrategyEngine,
     actionable_step,
     desired_state_of,
@@ -391,3 +400,66 @@ class TestValueComposition:
         root = ReachSkillLevel("alchemy", 50)
         expected = eng._base_prior(root) * eng._marginal(root, state, GameData()) * eng._balancing(root, state)
         assert eng._value(root, state, GameData()) == expected
+
+
+class TestLearnedBlend:
+    def test_no_history_is_pure_heuristic(self):
+        eng = _eng(GameData())
+        assert eng._learned_blend(ReachCharLevel(50), 1.0, None, None) == 1.0
+
+    def test_blend_only_applies_to_char_level(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "v.db"), character="hero")
+        eng = _eng(GameData())
+        try:
+            assert eng._learned_blend(ReachSkillLevel("alchemy", 50), 0.3, store, "chicken") == 0.3
+            assert eng._learned_blend(ObtainItem("copper_dagger"), 0.8, store, "chicken") == 0.8
+        finally:
+            store.close()
+
+    def test_char_level_blended_with_observed_xp(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "v.db"), character="hero")
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id, started_at="2026-05-24T00:00:00Z", character="hero"))
+            for i in range(LEARN_SAMPLE_FULL):
+                s.add(Cycle(session_id=store._session_id, ts=f"2026-05-24T00:{i:02d}:00Z", cycle_index=i,
+                            character="hero", selected_goal="FarmMonster(chicken)", action_repr="Fight(chicken)",
+                            action_class="FightAction", outcome="ok", delta_xp=int(XP_RATE_REFERENCE),
+                            delta_gold=0, delta_hp=0, delta_inv_used=0, task_progress=0, task_total=0))
+            s.commit()
+        eng = _eng(GameData())
+        try:
+            # heuristic 0.4 < normalized observed (~1.0); full samples -> w=LEARN_W_MAX -> blended up
+            blended = eng._learned_blend(ReachCharLevel(50), 0.4, store, "chicken")
+            expected = (1 - LEARN_W_MAX) * 0.4 + LEARN_W_MAX * 1.0
+            assert blended == pytest.approx(expected)
+        finally:
+            store.close()
+
+    def test_char_level_suppressed_by_low_observed_xp(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "low.db"), character="hero")
+        store.start_session()
+        with Session(store._engine) as s:
+            s.add(SessionModel(session_id=store._session_id, started_at="2026-05-24T00:00:00Z", character="hero"))
+            for i in range(LEARN_SAMPLE_FULL):
+                s.add(Cycle(session_id=store._session_id, ts=f"2026-05-24T00:{i:02d}:00Z", cycle_index=i,
+                            character="hero", selected_goal="FarmMonster(chicken)", action_repr="Fight(chicken)",
+                            action_class="FightAction", outcome="ok", delta_xp=2,
+                            delta_gold=0, delta_hp=0, delta_inv_used=0, task_progress=0, task_total=0))
+            s.commit()
+        eng = _eng(GameData())
+        try:
+            # heuristic 1.0, normalized = 2/10 = 0.2, w=0.5 -> (0.5)(1.0)+(0.5)(0.2)=0.6 < 1.0
+            blended = eng._learned_blend(ReachCharLevel(50), 1.0, store, "chicken")
+            assert blended < 1.0
+            assert blended == pytest.approx((1 - LEARN_W_MAX) * 1.0 + LEARN_W_MAX * (2 / XP_RATE_REFERENCE))
+        finally:
+            store.close()
+
+    def test_char_level_cold_start_returns_value(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "cold.db"), character="hero")
+        eng = _eng(GameData())
+        try:
+            assert eng._learned_blend(ReachCharLevel(50), 1.0, store, "chicken") == 1.0
+        finally:
+            store.close()
