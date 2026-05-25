@@ -12,6 +12,8 @@ mkdir -p "$VENDOR"
 if [ ! -d "$PLUSPY_DIR/.git" ]; then
   git clone "$PLUSPY_REPO" "$PLUSPY_DIR"
 fi
-git -C "$PLUSPY_DIR" fetch --all --tags
+if ! git -C "$PLUSPY_DIR" cat-file -e "$PLUSPY_COMMIT^{commit}" 2>/dev/null; then
+  git -C "$PLUSPY_DIR" fetch --all --tags
+fi
 git -C "$PLUSPY_DIR" checkout "$PLUSPY_COMMIT"
 echo "PlusPy ready at $PLUSPY_DIR (commit $PLUSPY_COMMIT)"
