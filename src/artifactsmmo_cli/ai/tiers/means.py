@@ -10,7 +10,7 @@ from enum import Enum
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.task_decision import PIVOT, task_decision
+from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -24,6 +24,7 @@ class MeansKind(Enum):
     SELL_PRESSURED = "sell_pressured"
     LOW_YIELD_CANCEL = "low_yield_cancel"
     TASK_CANCEL = "task_cancel"
+    PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
     TASK_EXCHANGE = "task_exchange"
     SELL_IDLE = "sell_idle"
@@ -38,6 +39,7 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     MeansKind.TASK_CANCEL,
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
+    MeansKind.PURSUE_TASK,
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.SELL_IDLE,
@@ -79,6 +81,13 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         if not state.task_code or history is None:
             return False
         return task_decision(state, game_data, history) == PIVOT
+
+    if kind is MeansKind.PURSUE_TASK:
+        return (state.task_type == "items"
+                and bool(state.task_code) and state.task_total > 0
+                and state.task_progress < state.task_total
+                and history is not None
+                and task_decision(state, game_data, history) == PURSUE)
 
     if kind is MeansKind.ACCEPT_TASK:
         return not state.task_code
