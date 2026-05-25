@@ -549,3 +549,53 @@ class TestItemsTaskStandDown:
         goal = objective_step_goal(ReachCharLevel(50), make_state(), GameData(),
                                    _ctx(combat_monster="chicken"))
         assert goal is not None and repr(goal).startswith("GrindCharacterXP")
+
+
+# ---------------------------------------------------------------------------
+# End-to-end arbiter test: items task selects PursueTask, not GrindCharacterXP
+# ---------------------------------------------------------------------------
+
+class TestPursueTaskEndToEnd:
+    """Reconstruct the production stall: copper_bar 0/20 items task, feasible
+    (no skill gap), ReachCharLevel(50) as chosen_step → arbiter must return
+    PursueTask(copper_bar), NOT GrindCharacterXP."""
+
+    def test_items_task_selects_pursue_not_grind(self, monkeypatch, tmp_path):
+        import artifactsmmo_cli.ai.tiers.means as means_module
+
+        # Patch task_decision in means so PURSUE_TASK fires without needing a
+        # populated LearningStore.
+        monkeypatch.setattr(means_module, "task_decision", lambda *_: means_module.PURSUE)
+
+        planner = GOAPPlanner()
+        gd = _make_planner_gd()
+        # No crafting recipe for copper_bar → task_requirement returns None → feasible
+        # State: items task active, one copper_bar already in inventory (so
+        # TaskTradeAction is immediately applicable).
+        state = make_state(
+            level=5, hp=150, max_hp=150, xp=0, max_xp=500,
+            task_code="copper_bar", task_type="items",
+            task_progress=0, task_total=20,
+            skills={"weaponcrafting": 5},
+            inventory={"copper_bar": 1},
+        )
+        # TaskTradeAction lets PursueTaskGoal plan in one step.
+        from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+        actions = [TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(2, 1))]
+        ctx = _ctx(combat_monster="chicken")
+
+        # Use a real (empty) LearningStore so history is not None (required for
+        # PURSUE_TASK._fires), but task_decision is patched so it always PURSUEs.
+        from artifactsmmo_cli.ai.learning.store import LearningStore as _LS
+        store = _LS(db_path=str(tmp_path / "e2e.db"), character="testchar")
+        try:
+            arbiter = StrategyArbiter(planner, history=store)
+            decision = _FakeDecision(chosen_step=ReachCharLevel(50))
+            goal, plan, _ = arbiter.select(decision, state, gd, actions, ctx)
+        finally:
+            store.close()
+
+        assert repr(goal) == "PursueTask(copper_bar)", (
+            f"expected PursueTask(copper_bar), got {goal!r}"
+        )
+        assert len(plan) >= 1
