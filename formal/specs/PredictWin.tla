@@ -21,7 +21,7 @@ MaxTurns == 100   \* combat.py MAX_TURNS (line 16)
 \* Hit includes 0 so the phit<=0 (auto-loss) and mhit<=0 (auto-win) branches are
 \* exercised; HP up to 6 with Hit up to 4 gives multi-round fights and exact
 \* initiative ties (rtk = rtd). Total main case count = 1800. Combined with the
-\* 8 supplementary cap cases below the runner iterates N = 1808 times.
+\* 6 supplementary cap cases below the runner iterates N = 1806 times.
 HP    == 1..6
 Hit   == 0..4
 Bool  == {TRUE, FALSE}
@@ -45,8 +45,21 @@ CapCases == { <<ph, phit, mh, mhit, pf>> :
                 mhit \in {2}, pf \in {TRUE} }   \* 1*2*2*1*1 = 4 cap cases
 \* (4 cap cases. With mh=250 phit in {1,2} both trip the cap; mh=150 phit=1 trips,
 \*  phit=2 does not. So 3 of the 4 reach the cap branch -> non-vacuous.)
+\*
+\* The 4 cap cases above all have mhit=2, ph=3 => the player dies at round 2
+\* (rtd=ceil(3/2)=2) BEFORE the turn horizon, so the operational sim returns a
+\* loss via its player-death path (Fight: p <= 0 => FALSE) and NEVER via its OWN
+\* truncation path (t >= MaxTurns => FALSE). Only ClosedForm's cap branch is
+\* exercised by those. To prove the sim's truncation path is ALSO load-bearing
+\* and agrees, we add two ZERO-DAMAGE cap cases: mhit=0 => the monster never
+\* kills the player, so the sim cannot die-out and MUST run the full MaxTurns
+\* rounds and truncate to a loss, while a 250-HP monster (rtk=250 or 125 > 100)
+\* drives ClosedForm down its cap branch -> FALSE. Both paths must return FALSE.
+CapZeroCases == { <<3, 1, 250, 0, TRUE>>,    \* rtk=250>100; sim truncates at t=100
+                  <<3, 2, 250, 0, FALSE>> }  \* rtk=125>100; sim truncates at t=100
+\* (2 zero-damage cap cases; both force the sim to t=MaxTurns -> truncation loss.)
 
-AllCases == Cases \cup CapCases   \* 1800 + 4 = 1804
+AllCases == Cases \cup CapCases \cup CapZeroCases   \* 1800 + 4 + 2 = 1806
 
 \* Largest monster HP and turn horizon the simulation must cover. The sim is
 \* capped at MaxTurns rounds regardless, but its turn-index domain must reach
@@ -133,7 +146,7 @@ VARIABLE todo
 Init == todo = AllCases
 Next == /\ todo # {}
         /\ \E c \in todo :
-              /\ IF c \in CapCases
+              /\ IF c \in CapCases \/ c \in CapZeroCases
                  THEN Assert(CorrectCap(c), <<"PredictWin CAP FAIL", c>>)
                  ELSE Assert(Correct(c), <<"PredictWin FAIL", c>>)
               /\ todo' = todo \ {c}
