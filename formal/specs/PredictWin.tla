@@ -130,15 +130,25 @@ Simulated(ph, phit, mh, mhit, pf) ==
 Refines(c) == ClosedForm(c[1], c[2], c[3], c[4], c[5])
                 = Simulated(c[1], c[2], c[3], c[4], c[5])
 
-\* Monotonicity (over the MAIN domain): a win must survive (a) the player hitting
-\* harder (phit+1) and (b) the monster being frailer (mh-1). Asserted only when
-\* the perturbed value stays in-domain so the implication is meaningful.
+\* Monotonicity (over the MAIN domain): a win must survive every change that can
+\* only help the player, and never appear from a change that can only hurt them.
+\* (a) player hits harder (phit+1) -> still a win;
+\* (b) monster is frailer (mh-1)   -> still a win;
+\* (c) player is tougher (ph+1)    -> still a win;
+\* (d) monster hits harder: a win at mhit+1 implies a win at mhit (i.e. raising
+\*     the monster's damage never turns a loss into a win).
+\* Each clause is asserted only when the perturbed value stays in-domain so the
+\* implication is meaningful.
 MonoOK(c) ==
   LET ph == c[1] phit == c[2] mh == c[3] mhit == c[4] pf == c[5] IN
   /\ ( (phit + 1 \in Hit /\ ClosedForm(ph, phit, mh, mhit, pf))
         => ClosedForm(ph, phit + 1, mh, mhit, pf) )
   /\ ( (mh - 1 \in HP /\ ClosedForm(ph, phit, mh, mhit, pf))
         => ClosedForm(ph, phit, mh - 1, mhit, pf) )
+  /\ ( (ph + 1 \in HP /\ ClosedForm(ph, phit, mh, mhit, pf))
+        => ClosedForm(ph + 1, phit, mh, mhit, pf) )
+  /\ ( (mhit + 1 \in Hit /\ ClosedForm(ph, phit, mh, mhit + 1, pf))
+        => ClosedForm(ph, phit, mh, mhit, pf) )
 
 Correct(c)    == Refines(c) /\ MonoOK(c)   \* main cases
 CorrectCap(c) == Refines(c)                \* cap cases: refinement only
