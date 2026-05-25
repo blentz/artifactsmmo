@@ -44,6 +44,19 @@ class TestPursueTaskGoal:
     def test_not_satisfied_while_stalled(self):
         assert not PursueTaskGoal("copper_bar", 5).is_satisfied(_items_task(progress=5))
 
+    def test_batch_defaults_to_one(self):
+        g = PursueTaskGoal("copper_bar", 5)
+        assert g.desired_state(_items_task(progress=5), GameData()) == {"task_progress": 6}
+
+    def test_desired_state_reflects_batch(self):
+        g = PursueTaskGoal("copper_bar", 5, batch=9)
+        assert g.desired_state(_items_task(progress=5), GameData()) == {"task_progress": 14}
+
+    def test_is_satisfied_unaffected_by_batch(self):
+        g = PursueTaskGoal("copper_bar", 5, batch=9)
+        assert not g.is_satisfied(_items_task(progress=5))   # stalled
+        assert g.is_satisfied(_items_task(progress=6))        # any advance trips it
+
     def test_max_depth(self):
         assert PursueTaskGoal("copper_bar", 0).max_depth == 100
 

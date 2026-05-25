@@ -25,9 +25,10 @@ PRIORITY_WHEN_FIRING = 35.0
 class PursueTaskGoal(Goal):
     """Drive gather/craft -> TaskTrade to advance an items-type task one unit."""
 
-    def __init__(self, task_code: str, initial_progress: int) -> None:
+    def __init__(self, task_code: str, initial_progress: int, batch: int = 1) -> None:
         self._task_code = task_code
         self._initial_progress = initial_progress
+        self._batch = batch
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -43,7 +44,7 @@ class PursueTaskGoal(Goal):
         return state.task_progress > self._initial_progress
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        return {"task_progress": self._initial_progress + 1}
+        return {"task_progress": self._initial_progress + self._batch}
 
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData
