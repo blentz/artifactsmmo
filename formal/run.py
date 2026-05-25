@@ -4,6 +4,7 @@ PlusPy is an interpreter: each spec enumerates its bounded input domain in
 Next and asserts the correctness property per input via TLC!Assert. A clean
 run exits 0 with no assertion failure; a violated property halts PlusPy with
 the asserted message. This runner invokes PlusPy per module and aggregates.
+Run with `uv run python formal/run.py` from the repo root (or plain `python3 formal/run.py` in environments where `uv` cannot sync the project, e.g. a git worktree); the runner is pure stdlib and spawns PlusPy under the same interpreter that launched it.
 """
 
 import subprocess
@@ -15,7 +16,7 @@ PLUSPY = FORMAL / "vendor" / "PlusPy" / "pluspy.py"
 SPECS = FORMAL / "specs"
 LIB = FORMAL / "vendor" / "PlusPy" / "modules" / "lib"
 
-# (module, iteration count = input-domain size). Counts filled in per task.
+# (module, iteration count = input-domain size). Later tasks append their modules.
 MODULES: list[tuple[str, int]] = [
     ("Smoke", 3),
 ]
@@ -31,6 +32,7 @@ FAILURE_MARKERS = ("Evaluating Assert", "AssertionError")
 def run_module(module: str, count: int) -> tuple[bool, str]:
     if not PLUSPY.exists():
         return False, "PlusPy not found — run ./formal/setup.sh first"
+    # spawn PlusPy under the same interpreter that launched this runner
     proc = subprocess.run(
         [
             sys.executable,
@@ -55,6 +57,9 @@ def main() -> int:
         results.append((module, ok))
         if not ok:
             print(f"--- {module} output ---\n{output}\n")
+    if not results:
+        print("No modules configured.")
+        return 0
     width = max(len(m) for m, _ in results)
     print("\nFormal verification results:")
     for module, ok in results:
