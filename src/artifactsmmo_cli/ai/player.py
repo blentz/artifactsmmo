@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
     CharacterObjective,
@@ -1089,7 +1090,26 @@ class GamePlayer:
                 best = (code, level)
         return best[0] if best is not None else None
 
+    def _task_aligned_monster(self) -> str | None:
+        """The active task's monster when it's a PURSUE monster-task; else None.
+
+        A PURSUE monster-task is winnable by definition (task_decision returns
+        PIVOT for combat-gated tasks), so the objective-step grind can advance it
+        directly once retargeted here.
+        """
+        s = self.state
+        if s is None or self.game_data is None or s.task_type != "monsters" or not s.task_code:
+            return None
+        if s.task_total == 0 or s.task_progress >= s.task_total:
+            return None
+        if task_decision(s, self.game_data, self.history) != PURSUE:
+            return None
+        return s.task_code
+
     def _winnable_farm_target(self) -> str | None:
+        task_monster = self._task_aligned_monster()
+        if task_monster is not None:
+            return task_monster
         target = self._path_aligned_monster()
         if target is None or not self._is_winnable(target):
             target = self._pick_winnable_monster()
