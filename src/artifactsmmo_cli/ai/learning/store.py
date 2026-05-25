@@ -2,6 +2,7 @@
 
 import json
 import statistics
+import weakref
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -26,6 +27,10 @@ class LearningStore:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
         self._engine = create_engine(f"sqlite:///{db_path}")
+        # Dispose the engine's pooled SQLite connection when this store is
+        # garbage-collected, so callers that forget close() don't leak a
+        # connection (raises ResourceWarning). Bound to the engine, not self.
+        self._finalizer = weakref.finalize(self, self._engine.dispose)
         SQLModel.metadata.create_all(self._engine)
 
         with self._engine.connect() as conn:
