@@ -7,7 +7,7 @@ inventory space.
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 BATCH_BUFFER = 5
 """How many craft batches worth of material to keep on hand. With BATCH=5 and
@@ -23,7 +23,7 @@ currently equipped — so the equipment optimizer has it as a swap candidate."""
 
 # Items consumed by API actions (not recipes). Keep enough to use them.
 ACTION_CONSUMABLES_CAP = {
-    "tasks_coin": 9,  # TaskExchange burns 3; keep ~3 batches worth
+    TASKS_COIN_CODE: 9,  # TaskExchange burns 3; keep ~3 batches worth
 }
 
 

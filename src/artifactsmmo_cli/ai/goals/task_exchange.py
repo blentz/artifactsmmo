@@ -3,9 +3,7 @@
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.world_state import WorldState
-
-_TASKS_COIN = "tasks_coin"
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
 class TaskExchangeGoal(Goal):
@@ -27,12 +25,12 @@ class TaskExchangeGoal(Goal):
 
     def is_satisfied(self, state: WorldState) -> bool:
         bank = state.bank_items or {}
-        return state.inventory.get(_TASKS_COIN, 0) + bank.get(_TASKS_COIN, 0) < self._min_coins
+        return state.inventory.get(TASKS_COIN_CODE, 0) + bank.get(TASKS_COIN_CODE, 0) < self._min_coins
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         # After one exchange, inventory drops below the batch threshold.
-        target = max(0, state.inventory.get(_TASKS_COIN, 0) - self._min_coins)
-        return {"inventory": {_TASKS_COIN: target}}
+        target = max(0, state.inventory.get(TASKS_COIN_CODE, 0) - self._min_coins)
+        return {"inventory": {TASKS_COIN_CODE: target}}
 
     def __repr__(self) -> str:
         return "TaskExchange"

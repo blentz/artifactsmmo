@@ -14,7 +14,7 @@ import json
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import Yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 # Weights ----------------------------------------------------------------
 
@@ -87,7 +87,7 @@ def expected_coin_value_with_prices(
             except (TypeError, ValueError):
                 continue
             received += qty_i
-            if code == "tasks_coin":
+            if code == TASKS_COIN_CODE:
                 # Coins received as a reward aren't value (we price spending a
                 # coin, not earning one) — but they DO count toward the
                 # inventory delta, so they're included in `received` above.

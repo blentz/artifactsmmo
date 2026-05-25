@@ -106,6 +106,32 @@ class TestPlayerRun:
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
 
+    def test_run_refreshes_before_building_actions(self):
+        """Periodic refresh must run BEFORE _build_actions so a batched plan's K
+        is baked from the same post-refresh inventory the goal/map_means sees."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        order: list[str] = []
+
+        def fake_wait():
+            raise KeyboardInterrupt
+
+        initial_state = make_state(hp=100, max_hp=150)
+        p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank = _patch_game_data_load()
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank:
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_maybe_periodic_refresh",
+                                               side_effect=lambda c: order.append("refresh")):
+                                with patch.object(player, "_build_actions",
+                                                   side_effect=lambda: order.append("build") or []):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
+        assert order[:2] == ["refresh", "build"]
+
     def test_run_dry_run_uses_apply_not_execute(self):
         """In dry_run mode, the player calls action.apply() instead of action.execute()."""
         player = GamePlayer(character="hero", dry_run=True)

@@ -72,7 +72,7 @@ from artifactsmmo_cli.ai.tiers import (
 )
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tracer import Tracer
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
@@ -230,8 +230,12 @@ class GamePlayer:
 
         try:
             while True:
-                actions = self._build_actions()
+                # Refresh BEFORE building actions so a batched PursueTask plan
+                # bakes its unit count K from the same post-refresh inventory the
+                # goal/map_means later computes K from (else K can diverge on the
+                # ~1-in-20 refresh cycle).
                 self._maybe_periodic_refresh(client)
+                actions = self._build_actions()
                 self._wait_for_cooldown()
 
                 assert self.state is not None
@@ -844,7 +848,7 @@ class GamePlayer:
 
         # Allow withdrawing task coins from bank for exchange
         actions.append(WithdrawItemAction(
-            code="tasks_coin", quantity=1, bank_location=bank, accessible=self._bank_accessible))
+            code=TASKS_COIN_CODE, quantity=1, bank_location=bank, accessible=self._bank_accessible))
 
         # Unequip actions: one per equipment slot
         all_slots = {slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots}
@@ -1125,11 +1129,11 @@ class GamePlayer:
         """
         if not isinstance(action, TaskExchangeAction):
             return
-        before = prev_state.inventory.get("tasks_coin", 0)
+        before = prev_state.inventory.get(TASKS_COIN_CODE, 0)
         if outcome == "error:HTTP_478":
             self._task_exchange_min_coins = max(self._task_exchange_min_coins, before + 1)
         elif outcome == "ok":
-            spent = before - new_state.inventory.get("tasks_coin", 0)
+            spent = before - new_state.inventory.get(TASKS_COIN_CODE, 0)
             if spent > 0:
                 self._task_exchange_min_coins = spent
 

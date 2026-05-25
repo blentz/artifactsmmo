@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 SELL_PRESSURE_FRACTION = 0.85
 BANK_EXPAND_FILL = 0.95
@@ -59,7 +59,7 @@ def _has_sellable(state: WorldState, game_data: GameData) -> bool:
 
 
 def _tasks_coin_total(state: WorldState) -> int:
-    return state.inventory.get("tasks_coin", 0) + (state.bank_items or {}).get("tasks_coin", 0)
+    return state.inventory.get(TASKS_COIN_CODE, 0) + (state.bank_items or {}).get(TASKS_COIN_CODE, 0)
 
 
 def _fires(kind: MeansKind, state: WorldState, game_data: GameData,

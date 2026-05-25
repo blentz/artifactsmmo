@@ -1,9 +1,7 @@
 """Selective bank-deposit policy: what to bank, ordered by sell value."""
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.world_state import WorldState
-
-TASK_COIN_CODE = "tasks_coin"
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
 def _best_fighting_weapon(state: WorldState, game_data: GameData) -> str | None:
@@ -45,7 +43,7 @@ def _recipe_materials(roots: list[str], game_data: GameData) -> set[str]:
 
 
 def _keep_codes(state: WorldState, game_data: GameData) -> set[str]:
-    keep: set[str] = {TASK_COIN_CODE}
+    keep: set[str] = {TASKS_COIN_CODE}
     if state.task_code:
         keep.add(state.task_code)
     for code in state.inventory:

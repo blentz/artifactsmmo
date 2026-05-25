@@ -17,7 +17,7 @@ from sqlmodel import Session, col, select
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 WARMUP_MIN_SAMPLES = 10
 """Minimum cycles for a projection to be considered trustworthy.
@@ -25,8 +25,6 @@ WARMUP_MIN_SAMPLES = 10
 Below this, projection functions return None. Callers should fall back to
 hardcoded defaults (existing goal priorities) when None is returned.
 """
-
-TASKS_COIN_CODE = "tasks_coin"
 
 
 class Yield(BaseModel):

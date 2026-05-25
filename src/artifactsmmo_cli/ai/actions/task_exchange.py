@@ -12,9 +12,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.world_state import WorldState
-
-_TASKS_COIN = "tasks_coin"
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
 @dataclass
@@ -33,16 +31,16 @@ class TaskExchangeAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         # Only inventory counts at execute time (bank coins must be withdrawn
         # separately first). Fewer than the learned minimum returns HTTP 478.
-        return state.inventory.get(_TASKS_COIN, 0) >= self.min_coins
+        return state.inventory.get(TASKS_COIN_CODE, 0) >= self.min_coins
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.taskmaster_location
         new_inventory = dict(state.inventory)
-        remaining = new_inventory.get(_TASKS_COIN, 0) - self.min_coins
+        remaining = new_inventory.get(TASKS_COIN_CODE, 0) - self.min_coins
         if remaining <= 0:
-            new_inventory.pop(_TASKS_COIN, None)
+            new_inventory.pop(TASKS_COIN_CODE, None)
         else:
-            new_inventory[_TASKS_COIN] = remaining
+            new_inventory[TASKS_COIN_CODE] = remaining
         return WorldState(
             character=state.character,
             level=state.level,

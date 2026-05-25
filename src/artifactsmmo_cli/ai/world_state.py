@@ -55,6 +55,9 @@ SKILL_NAMES = [
 
 ELEMENTS = ("fire", "earth", "water", "air")
 
+TASKS_COIN_CODE = "tasks_coin"
+"""The item code for task-reward coins (spent at the taskmaster exchange)."""
+
 
 @dataclass(frozen=True)
 class WorldState:
