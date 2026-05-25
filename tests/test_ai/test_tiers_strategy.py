@@ -233,7 +233,9 @@ def test_is_reachable_false_for_unproducible_and_blocked_material():
 def test_is_reachable_skill_and_char_level():
     gd = _reach_gd()
     assert is_reachable(ReachSkillLevel("mining", 50), make_state(level=1), gd) is True
-    assert is_reachable(ReachCharLevel(50), make_state(level=1), gd) is True
+    # ReachCharLevel reachable because the player can beat a monster once it can
+    # deal damage (combat_capable now uses predict_win, not a level margin).
+    assert is_reachable(ReachCharLevel(50), make_state(level=1, attack={"fire": 10}), gd) is True
 
 
 def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon():

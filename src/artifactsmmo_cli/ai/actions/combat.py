@@ -15,6 +15,9 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
+_MIN_FIGHT_HP_FRACTION = 0.3
+"""Don't start a fight below this HP fraction — rest/heal first."""
+
 LOADOUT_PENALTY = 5.0
 """Added to Fight cost when the loadout is suboptimal for the monster, so the
 planner sequences OptimizeLoadout before the fight (player executes plan[0] only).
@@ -42,8 +45,14 @@ class FightAction(Action):
             return False
         monster_level = game_data.monster_level(self.monster_code)
         min_level = max(1, state.level - 1)
-        if not (state.hp_percent > 0.3 and min_level <= monster_level <= state.level + 2):
+        if not (state.hp_percent > _MIN_FIGHT_HP_FRACTION and min_level <= monster_level <= state.level + 2):
             return False
+        # NOTE: deliberately a CHEAP level+gear pre-filter, not the full predict_win
+        # verdict. predict_win evaluates the best ON-HAND loadout, which makes a
+        # fight applicable before a beneficial weapon swap and lets the planner
+        # fight with a suboptimal loadout (defeating LOADOUT_PENALTY's swap-first
+        # ordering). The authoritative is_winnable verdict is applied upstream at
+        # target selection / feasibility / the prerequisite graph.
         best_eq = max(
             (s.level for code in state.equipment.values()
              if code and (s := game_data.item_stats(code)) is not None),

@@ -10,10 +10,17 @@ import math
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import ELEMENTS, WorldState
 
 MAX_TURNS = 100
 """A fight unresolved by turn 100 is a loss (documented combat cap)."""
+
+WIN_RATE_THRESHOLD = 0.5
+"""Below this observed Fight success rate, the learned-loss veto fires."""
+
+MIN_WIN_SAMPLES = 5
+"""Observed fights required before the loss veto overrides the stat prediction."""
 
 
 def _round_half_up(value: float) -> int:
@@ -70,3 +77,25 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     rounds_to_die = math.ceil(p.max_hp / monster_hit)
     player_first = p.initiative >= game_data.monster_initiative(monster_code)
     return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die
+
+
+def is_winnable(
+    state: WorldState,
+    game_data: GameData,
+    monster_code: str,
+    history: LearningStore | None = None,
+) -> bool:
+    """The single combat-beatability verdict used across planning and runtime.
+
+    Stat prediction (`predict_win`) gated by a learned-loss veto: a monster lost
+    in >= MIN_WIN_SAMPLES observed fights at < WIN_RATE_THRESHOLD success is judged
+    unwinnable regardless of the optimistic formula. A cold/absent history defers
+    to the prediction. Pass history at runtime (target selection); the planning
+    gates call it stat-only since the veto is already applied upstream.
+    """
+    if history is not None:
+        samples = history.sample_count(f"Fight({monster_code})")
+        if (samples >= MIN_WIN_SAMPLES
+                and history.success_rate(f"Fight({monster_code})") < WIN_RATE_THRESHOLD):
+            return False
+    return predict_win(state, game_data, monster_code)

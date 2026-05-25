@@ -3,13 +3,27 @@
 import pytest
 
 from artifactsmmo_cli.ai.combat import (
+    MIN_WIN_SAMPLES,
     _element_damage,
     _expected_hit,
     _round_half_up,
+    is_winnable,
     predict_win,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
+
+
+def _record_losses(store: LearningStore, action_repr: str, n: int) -> None:
+    """Record n lost fights for action_repr so success_rate falls to 0."""
+    store.start_session()
+    for i in range(n):
+        store.record_cycle(Cycle(
+            ts=f"2026-05-25T00:00:{i:02d}+00:00", session_id="x", cycle_index=i,
+            character="x", outcome="error:fight_lost", action_repr=action_repr,
+        ))
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob"):
@@ -41,6 +55,38 @@ def test_expected_hit_sums_elements_and_applies_crit():
     # fire 10 + water 5 = 15 raw; crit 20% -> *1.10
     raw = _expected_hit({"fire": 10, "water": 5}, 0, {}, {}, 20)
     assert raw == pytest.approx(15 * 1.10)
+
+
+def test_is_winnable_true_when_predicted_and_no_history():
+    state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    assert is_winnable(state, gd, "mob", None) is True
+
+
+def test_is_winnable_false_when_prediction_loses():
+    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
+    gd = _gd(hp=1000, attack={"fire": 50}, initiative=100)
+    assert is_winnable(state, gd, "mob", None) is False
+
+
+def test_is_winnable_veto_overrides_optimistic_prediction(tmp_path):
+    """A well-observed loss record vetoes a stat prediction that says we win."""
+    state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_losses(store, "Fight(mob)", MIN_WIN_SAMPLES)
+    assert is_winnable(state, gd, "mob", store) is False
+    store.close()
+
+
+def test_is_winnable_no_veto_below_sample_threshold(tmp_path):
+    """Too few observed fights -> defer to the stat prediction (no veto)."""
+    state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_losses(store, "Fight(mob)", MIN_WIN_SAMPLES - 1)
+    assert is_winnable(state, gd, "mob", store) is True
+    store.close()
 
 
 def test_predict_win_true_when_player_kills_first():

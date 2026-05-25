@@ -51,8 +51,9 @@ def test_obtain_unknown_source_is_leaf():
 
 
 def test_reach_char_level_leaf_when_combat_capable():
-    gd = _gd()  # chicken level 1 → beatable at char level 1
-    assert prerequisites(ReachCharLevel(50), make_state(level=1), gd) == []
+    gd = _gd()  # chicken (0 hp/atk stub) is stat-beatable once the player can hit
+    state = make_state(level=1, attack={"fire": 10})
+    assert prerequisites(ReachCharLevel(50), state, gd) == []
 
 
 def test_reach_char_level_needs_weapon_when_underequipped():
@@ -73,11 +74,20 @@ def test_reach_skill_level_is_leaf():
     assert prerequisites(ReachSkillLevel("mining", 30), make_state(), _gd()) == []
 
 
-def test_combat_capable_boundary():
+def test_combat_capable_uses_stat_prediction_not_level_margin():
     gd = GameData()
-    gd._monster_level = {"m": 6}
-    assert combat_capable(make_state(level=5), gd) is True   # 6 <= 5+1
-    assert combat_capable(make_state(level=4), gd) is False  # 6 > 4+1
+    gd._monster_level = {"weak": 6, "tank": 6}
+    gd._monster_hp = {"weak": 20, "tank": 100000}
+    gd._monster_attack = {"weak": {}, "tank": {"fire": 5}}
+    gd._monster_resistance = {"weak": {}, "tank": {}}
+    gd._monster_critical_strike = {"weak": 0, "tank": 0}
+    gd._monster_initiative = {"weak": 0, "tank": 0}
+    armed = make_state(level=5, attack={"fire": 30}, initiative=50)
+    # weak is killable with the player's attack; combat_capable -> True.
+    assert combat_capable(armed, gd) is True
+    # With no attack the player can't damage anything -> not combat-capable,
+    # even though both monsters are within the old level+1 proxy.
+    assert combat_capable(make_state(level=5), gd) is False
 
 
 def test_best_attainable_weapon_highest_value_with_tiebreak():

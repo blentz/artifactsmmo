@@ -47,7 +47,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
-from artifactsmmo_cli.ai.combat import predict_win
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -75,11 +75,6 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
-WIN_RATE_THRESHOLD = 0.5
-"""Observed win rate at or above which a monster is considered beatable."""
-MIN_WIN_SAMPLES = 5
-"""Minimum recorded fights before an observed win rate can veto a stat
-prediction (below this the sample is too noisy to trust)."""
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
@@ -1040,20 +1035,10 @@ class GamePlayer:
         return plan.next_action_monster
 
     def _is_winnable(self, monster_code: str) -> bool:
-        """True when the documented combat-stat prediction says we win AND we
-        have not been observed losing this monster (>= MIN_WIN_SAMPLES fights
-        under WIN_RATE_THRESHOLD). The learned-loss veto overrides an optimistic
-        stat prediction; a cold/absent history defers to the prediction."""
+        """Runtime beatability: the shared is_winnable predictor with this
+        player's learned history applied as the loss veto."""
         assert self.state is not None and self.game_data is not None
-        if self.history is not None:
-            # Gate on our own sample threshold (not success_rate's internal
-            # small-sample guard) so the veto fires only on a well-observed loss
-            # record; short-circuit avoids the success_rate query when too few.
-            samples = self.history.sample_count(f"Fight({monster_code})")
-            if (samples >= MIN_WIN_SAMPLES
-                    and self.history.success_rate(f"Fight({monster_code})") < WIN_RATE_THRESHOLD):
-                return False
-        return predict_win(self.state, self.game_data, monster_code)
+        return is_winnable(self.state, self.game_data, monster_code, self.history)
 
     def _pick_winnable_monster(self) -> str | None:
         """Highest-level monster that `_is_winnable` (stat prediction not vetoed

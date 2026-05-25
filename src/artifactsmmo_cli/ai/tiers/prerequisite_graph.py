@@ -4,6 +4,7 @@
 derived only from game data. Gathering and unknown-source items are leaves so
 chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -17,10 +18,11 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def combat_capable(state: WorldState, game_data: GameData) -> bool:
-    """True when a beatable monster exists — the documented FightAction gate
-    `char_level >= monster_level - 1`, i.e. monster_level <= char_level + 1.
-    (Win-rate / gear-strength refinement is deferred to P3's search.)"""
-    return any(level <= state.level + 1 for level in game_data._monster_level.values())
+    """True when some monster is stat-beatable with the best on-hand loadout,
+    using the shared `predict_win` verdict (gear + damage formula). Replaces the
+    old `monster_level <= char_level + 1` proxy so the prerequisite graph agrees
+    with FightAction / runtime target selection on what 'beatable' means."""
+    return any(predict_win(state, game_data, code) for code in game_data._monster_level)
 
 
 def best_attainable_weapon(game_data: GameData) -> str | None:
