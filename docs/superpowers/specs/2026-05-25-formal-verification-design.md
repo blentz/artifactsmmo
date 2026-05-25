@@ -11,6 +11,18 @@ declarative specification** of what a correct answer is, and using PlusPy to
 check that the two agree (refinement / equivalence) across a finite, enumerable
 input domain.
 
+**PlusPy execution model (important).** PlusPy is a TLA+ *interpreter*, not a
+model checker (TLC). It does not read a `.cfg`, does not take an `INVARIANT`
+declaration, and does not explore the state space exhaustively — it executes a
+single behavior, applying the `Next` action `-c N` times. To obtain exhaustive
+coverage over the bounded input domain, **each spec's state machine enumerates
+the input set itself**: `Next` advances a cursor over the finite domain,
+computes both the algorithm result and the declarative result for that input,
+and asserts they agree via `TLC!Assert(cond, msg)` (the module `EXTENDS TLC`).
+Running `./pluspy -c<domain-size> <Module>` then drives the machine through
+every input; any `Assert` failure halts PlusPy with a message the runner
+detects. This is genuinely exhaustive over the modeled domain.
+
 These are **executable reference models + machine-checked invariant runs**, not
 TLAPS theorem-prover proofs. Correctness is demonstrated *over a bounded input
 domain* that PlusPy interprets concretely. The README states this scope plainly
@@ -41,11 +53,16 @@ formal/
   .gitignore           # vendor/
   vendor/              # gitignored PlusPy clone (created by setup.sh)
   specs/
-    CalculatePath.tla       + CalculatePath.cfg
-    RecipeClosure.tla       + RecipeClosure.cfg
-    PrerequisiteGraph.tla   + PrerequisiteGraph.cfg
-    PredictWin.tla          + PredictWin.cfg
+    CalculatePath.tla
+    RecipeClosure.tla
+    PrerequisiteGraph.tla
+    PredictWin.tla
 ```
+
+No `.cfg` files — PlusPy does not use them. Each `.tla` `EXTENDS TLC`, bakes its
+bounded input domain into a CONSTANT-free definition (or defaulted CONSTANT),
+enumerates that domain in `Next`, and asserts the correctness property per input
+with `TLC!Assert`.
 
 ## Correctness theorems per module
 
@@ -131,10 +148,12 @@ against `rounds_to_die`, with a `≤` vs `<` tiebreak on initiative
 ## Runner (`run.py`)
 
 - Pure stdlib, invoked as `uv run python formal/run.py`.
-- For each spec: `subprocess` runs PlusPy
-  (`python formal/vendor/<pluspy entry> -c specs/<Module>.cfg specs/<Module>.tla`),
-  checks exit code, scans output for invariant-violation / safety-failure
-  markers.
+- For each spec: `subprocess` runs PlusPy from the vendored clone
+  (`python3 formal/vendor/PlusPy/pluspy.py -c<N> -P formal/specs <Module>`),
+  with `<N>` = that module's input-domain size. A clean run prints no `Assert`
+  failure and exits 0; a violated property halts PlusPy with the asserted
+  message (non-zero exit / error text). The runner checks exit code and scans
+  stdout+stderr for assertion-failure markers.
 - Prints a per-module `PASS`/`FAIL` table; exits non-zero if any module fails or
   errors. Fails loud — no swallowed errors, consistent with the repo's
   no-silent-failure rule.
