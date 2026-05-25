@@ -19,6 +19,7 @@ LIB = FORMAL / "vendor" / "PlusPy" / "modules" / "lib"
 # (module, iteration count = input-domain size). Later tasks append their modules.
 MODULES: list[tuple[str, int]] = [
     ("Smoke", 3),
+    ("CalculatePath", 625),
 ]
 
 # Substrings PlusPy emits when an assertion fails.
