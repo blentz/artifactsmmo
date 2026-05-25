@@ -11,7 +11,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, ObjectiveGap
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import Personality
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots, prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -105,17 +105,6 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
     if isinstance(root, ReachSkillLevel):
         return max(1, root.level - state.skills.get(root.skill, 1))
     return unmet_closure_size(root, state, game_data)
-
-
-def instrumental_skills(objective: CharacterObjective, game_data: GameData) -> set[str]:
-    """Crafting skills that gate target gear — leveling these unlocks gear the
-    objective wants, so they win skill ties."""
-    skills: set[str] = set()
-    for code in objective.target_gear.values():
-        stats = game_data.item_stats(code)
-        if stats is not None and stats.crafting_skill:
-            skills.add(stats.crafting_skill)
-    return skills
 
 
 def _producible(code: str, game_data: GameData) -> bool:
@@ -230,51 +219,23 @@ class StrategyEngine:
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
         return self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
 
-    def _contribution(self, root: MetaGoal, gap: ObjectiveGap, game_data: GameData) -> float:
-        category = root_category(root)
-        weight = self.personality.category_weight(category)
-        if isinstance(root, ReachCharLevel):
-            share = gap.char_level_fraction
-        elif isinstance(root, ReachSkillLevel):
-            share = gap.skill_gaps.get(root.skill, 0) / game_data.max_skill_level
-        elif isinstance(root, ObtainItem):  # gear
-            slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
-            total = sum(
-                equip_value(stats)
-                for c in self.objective.target_gear.values()
-                if (stats := game_data.item_stats(c)) is not None
-            )
-            share = (gap.gear_gaps.get(slot, 0.0) / total) if (slot is not None and total > 0) else 0.0
-        else:
-            share = 0.0
-        return weight * share
-
     def decide(self, state: WorldState, game_data: GameData) -> StrategyDecision:
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
-        gap = self.objective.gap(state)
-        instrumental = instrumental_skills(self.objective, game_data)
-
-        def is_instrumental(root: MetaGoal) -> bool:
-            return isinstance(root, ReachSkillLevel) and root.skill in instrumental
-
-        candidates: list[tuple[MetaGoal, MetaGoal, float, int, float]] = []
+        candidates: list[tuple[MetaGoal, MetaGoal, float, int]] = []   # root, step, value, effort
         for root in objective_roots(self.objective):
             if root.is_satisfied(state, game_data):
                 continue
             if not is_reachable(root, state, game_data):
                 continue
             step = actionable_step(root, state, game_data)
-            # is_reachable guarantees the chain bottoms out in a producible step.
             assert step is not None
-            contribution = self._contribution(root, gap, game_data)
-            cost = root_cost(root, state, game_data)
-            score = contribution / max(cost, 1)
-            candidates.append((root, step, contribution, cost, score))
-        candidates.sort(key=lambda c: (-c[4], 0 if is_instrumental(c[0]) else 1, repr(c[0])))
+            value = self._value(root, state, game_data)
+            effort = root_cost(root, state, game_data)
+            candidates.append((root, step, value, effort))
+        candidates.sort(key=lambda c: (-c[2], c[3], repr(c[0])))   # value desc, effort asc, repr last
         ranking = [
-            RootScore(repr(r), root_category(r), contribution, cost, score, repr(s),
-                      is_instrumental(r))
-            for (r, s, contribution, cost, score) in candidates
+            RootScore(repr(r), root_category(r), value, effort, value, repr(s), False)
+            for (r, s, value, effort) in candidates
         ]
         if candidates:
             chosen_root: MetaGoal | None = candidates[0][0]

@@ -18,7 +18,6 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     StrategyEngine,
     actionable_step,
     desired_state_of,
-    instrumental_skills,
     is_reachable,
     root_category,
     root_cost,
@@ -96,13 +95,16 @@ def test_decide_hp_interrupt_flag_only():
 
 
 def test_personality_reweighting_changes_choice():
-    # Gear-free world so only char-level vs skills compete (leaf goals score
-    # weight/max_level, gap-independent): balanced ties → char wins on repr;
-    # skill-first lifts skills above char.
+    # Gear-free world so only char-level vs skills compete.
+    # Skills: alchemy=5 (leader), others=1 → laggards get balancing boost (raw=1.5).
+    # BalancedPersonality: char_level=1.0 > weaponcrafting=0.6*0.2*1.5=0.18 → char wins.
+    # SkillFirst (10x weight): weaponcrafting=0.6*0.2*1.5*10=1.8 > 1.0 → skill wins.
     gd = GameData()
     gd._monster_level = {"chicken": 1}  # char level reachable (combat-capable)
     obj = CharacterObjective.from_game_data(gd)
-    state = make_state(level=49, skills={s: 1 for s in obj.target_skill_levels})
+    skill_levels = {s: 1 for s in obj.target_skill_levels}
+    skill_levels["alchemy"] = 5  # make alchemy the leader so others are laggards
+    state = make_state(level=1, skills=skill_levels)
 
     class SkillFirst:
         def category_weight(self, category: str) -> float:
@@ -120,7 +122,7 @@ def test_unmet_closure_size_dedups_shared_prereq():
     assert unmet_closure_size(ObtainItem("X"), make_state(), gd) == 4  # X,A,B,C once each
 
 
-def test_contribution_zero_for_unknown_node_type():
+def test_value_zero_for_unknown_node_type():
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(obj, BalancedPersonality())
@@ -129,7 +131,6 @@ def test_contribution_zero_for_unknown_node_type():
         def is_satisfied(self, state, game_data) -> bool:
             return False
 
-    assert eng._contribution(_Dummy(), obj.gap(make_state()), gd) == 0.0
     assert eng._value(_Dummy(), make_state(), gd) == 0.0
 
 
@@ -161,30 +162,11 @@ def test_root_cost_for_gear_uses_closure_size():
     assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
 
 
-def test_instrumental_skills_are_target_gear_crafting_skills():
-    gd = _gd()  # copper_dagger crafted by weaponcrafting is the only equippable
-    obj = CharacterObjective.from_game_data(gd)
-    assert instrumental_skills(obj, gd) == {"weaponcrafting"}
-    assert instrumental_skills(CharacterObjective.from_game_data(GameData()), GameData()) == set()
-
-
-def test_instrumental_skill_wins_tie():
-    gd = _gd()
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(level=50, skills={s: 1 for s in obj.target_skill_levels},
-                       equipment={"weapon_slot": "copper_dagger"})  # gear root satisfied
-    d = StrategyEngine(obj, BalancedPersonality()).decide(state, gd)
-    assert d.chosen_root == ReachSkillLevel("weaponcrafting", 50)
-    chosen_rs = next(rs for rs in d.ranking if rs.root_repr == repr(d.chosen_root))
-    assert chosen_rs.instrumental is True
-
-
-def test_rootscore_instrumental_false_for_non_skill():
+def test_rootscore_instrumental_always_false():
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
     d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
-    char = next((rs for rs in d.ranking if rs.category == "char_level"), None)
-    assert char is not None and char.instrumental is False
+    assert all(rs.instrumental is False for rs in d.ranking)
 
 
 def test_decide_empty_when_nothing_reachable():
@@ -369,6 +351,36 @@ class TestMarginal:
     def test_gear_marginal_unknown_item_returns_zero(self):
         eng = _eng(GameData())   # empty item_stats
         assert eng._marginal(ObtainItem("nonexistent"), make_state(), GameData()) == 0.0
+
+
+class TestAntiDegeneracy:
+    def test_gear_outranks_runaway_leading_skill(self):
+        gd = GameData()
+        gd._item_stats = {
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                       attack={"fire": 6}, crafting_skill="weaponcrafting", crafting_level=1),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}, "copper_bar": {"copper_ore": 10}}
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger"})
+        state = make_state(level=2, equipment={"weapon_slot": None},
+                           skills={"alchemy": 5, "mining": 3, "woodcutting": 1, "fishing": 1,
+                                   "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1})
+        d = eng.decide(state, gd)
+        assert root_category(d.chosen_root) in ("gear", "char_level")
+        assert d.chosen_root != ReachSkillLevel("alchemy", 50)
+
+    def test_lagging_skill_outranks_leader(self):
+        gd = GameData()
+        eng = _eng(gd)
+        state = make_state(level=1, skills={"alchemy": 7, "cooking": 1, "mining": 1, "woodcutting": 1,
+                                            "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1})
+        d = eng.decide(state, gd)
+        skill_scores = {rs.root_repr: rs.score for rs in d.ranking if "ReachSkillLevel" in rs.root_repr}
+        alchemy = skill_scores.get("ReachSkillLevel(skill='alchemy', level=50)", 0.0)
+        assert max(skill_scores.values()) > alchemy   # a laggard beats the leader
 
 
 class TestValueComposition:
