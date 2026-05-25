@@ -60,10 +60,14 @@ extraPaths = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--tb=short"
+addopts = "--tb=short --strict-markers -W error --cov=src/artifactsmmo_cli --cov-report=term-missing --cov-fail-under=100"
 markers = [
     "integration: marks tests as integration tests"
 ]
+
+[tool.coverage.run]
+branch = false
+source = ["src/artifactsmmo_cli"]
 
 [tool.uv.sources]
 artifactsmmo-api-client = { path = "artifactsmmo-api-client", editable = true }

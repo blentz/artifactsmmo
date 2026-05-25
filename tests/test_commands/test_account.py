@@ -217,6 +217,19 @@ class TestAccountCommands:
                 assert result.exit_code == 1
                 assert "API Error" in result.stdout
 
+    def test_logs_api_exception_handler(self, runner, mock_client_manager):
+        """logs command outer exception handler prints the error and exits 1 (lines 125-126)."""
+        with patch("artifactsmmo_api_client.api.my_characters.get_all_characters_logs_my_logs_get.sync") as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"logs crash")
+
+            with patch("artifactsmmo_cli.commands.account.handle_api_error") as mock_err:
+                mock_err.return_value = Mock(error="logs crash")
+
+                result = runner.invoke(app, ["logs"])
+
+                assert result.exit_code == 1
+                assert "logs crash" in result.stdout
+
     def test_logs_error_response(self, runner, mock_client_manager, mock_api_response):
         """Test logs command with error response."""
         with patch("artifactsmmo_api_client.api.my_characters.get_all_characters_logs_my_logs_get.sync") as mock_api:

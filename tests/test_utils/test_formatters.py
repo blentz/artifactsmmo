@@ -430,6 +430,16 @@ class TestFormatCombatResult:
         assert isinstance(result, Text)
         assert "Combat completed" in str(result)
 
+    def test_format_with_non_dict_drop(self):
+        """A non-dict drop entry is stringified directly (line 217)."""
+        fight_data = {"result": "win", "drops": ["mystery_loot", {"code": "ore", "quantity": 1}]}
+
+        result = format_combat_result(fight_data)
+
+        assert isinstance(result, Text)
+        # The bare string drop is rendered via str(drop), alongside the dict drop.
+        assert "Items dropped: mystery_loot, 1x ore" in str(result)
+
 
 class TestFormatGatheringResult:
     """Test format_gathering_result function."""
@@ -457,6 +467,15 @@ class TestFormatGatheringResult:
         assert isinstance(result, Text)
         assert "Gathering completed" in str(result)
         assert "XP gained: 25" in str(result)
+
+    def test_format_gathering_with_non_dict_item(self):
+        """A non-dict gathered item is stringified directly (line 255)."""
+        gather_data = {"xp": 10, "items": ["raw_string_item", {"code": "wood", "quantity": 2}]}
+
+        result = format_gathering_result(gather_data)
+
+        assert isinstance(result, Text)
+        assert "Items gathered: raw_string_item, 2x wood" in str(result)
 
 
 class TestFormatCharacterStatus:
@@ -583,3 +602,17 @@ class TestFormatCharacterStatus:
 
         assert isinstance(result, Panel)
         assert result.title == "[bold cyan]taskless's Status[/bold cyan]"
+
+    def test_format_character_status_equipment_slot_without_code(self):
+        """A truthy equipment slot lacking a `code` attribute renders str(slot_item) (line 403)."""
+        mock_character = Mock()
+        mock_character.name = "equipchar"
+        mock_character.level = 5
+        mock_character.task = None
+        # Truthy slot value that has no `code` attribute -> elif str(slot_item) branch.
+        mock_character.weapon_slot = Mock(spec=[])
+
+        result = format_character_status(mock_character)
+
+        assert isinstance(result, Panel)
+        assert result.title == "[bold cyan]equipchar's Status[/bold cyan]"

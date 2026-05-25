@@ -21,6 +21,12 @@ class TestTaskTradeAction:
         a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))
         assert repr(a) == "TaskTrade(iron_ore×5)"
 
+    def test_not_applicable_without_taskmaster_location(self):
+        a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=None)
+        gd = make_gd()
+        state = make_state(task_code="iron_ore", task_type="items", inventory={"iron_ore": 10})
+        assert a.is_applicable(state, gd) is False
+
     def test_not_applicable_without_items_task(self):
         a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))
         gd = make_gd()

@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -12,6 +14,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -305,6 +308,146 @@ class TestEquipActionExecute:
         client = MagicMock()
 
         with patch("artifactsmmo_cli.ai.actions.equip.action_equip", return_value=None):
+            with pytest.raises(RuntimeError):
+                action.execute(state, client)
+
+
+class TestAcceptTaskActionExecute:
+    def test_moves_then_accepts_and_returns_task_from_server(self):
+        action = AcceptTaskAction(taskmaster_location=(1, 2))
+        state = make_state(x=0, y=0, task_code=None, task_total=0)
+        client = MagicMock()
+        # Server hands back a fresh items task.
+        char = make_char_schema(x=1, y=2, task_progress=0, task_total=6)
+        char.task = "copper_ore"
+        char.task_type = "items"
+        move_char = make_char_schema(x=1, y=2)
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                   return_value=make_api_result(move_char)):
+            with patch("artifactsmmo_cli.ai.actions.accept_task.action_task_new",
+                       return_value=make_api_result(char)) as mock_new:
+                new_state = action.execute(state, client)
+
+        mock_new.assert_called_once()
+        assert new_state.task_code == "copper_ore"
+        assert new_state.task_type == "items"
+        assert new_state.task_total == 6
+
+    def test_skips_move_when_already_at_taskmaster(self):
+        action = AcceptTaskAction(taskmaster_location=(1, 2))
+        state = make_state(x=1, y=2, task_code=None, task_total=0)
+        client = MagicMock()
+        char = make_char_schema(x=1, y=2, task_total=6)
+        char.task = "copper_ore"
+        char.task_type = "items"
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move") as mock_move:
+            with patch("artifactsmmo_cli.ai.actions.accept_task.action_task_new",
+                       return_value=make_api_result(char)):
+                new_state = action.execute(state, client)
+
+        mock_move.assert_not_called()
+        assert new_state.task_code == "copper_ore"
+
+    def test_raises_on_missing_response(self):
+        action = AcceptTaskAction(taskmaster_location=(1, 2))
+        state = make_state(x=1, y=2)
+        client = MagicMock()
+
+        with patch("artifactsmmo_cli.ai.actions.accept_task.action_task_new",
+                   return_value=None):
+            with pytest.raises(RuntimeError):
+                action.execute(state, client)
+
+
+class TestCompleteTaskActionExecute:
+    def test_moves_then_completes_and_clears_task(self):
+        action = CompleteTaskAction(taskmaster_location=(1, 2))
+        state = make_state(x=0, y=0, task_code="copper_ore", task_type="items",
+                           task_progress=6, task_total=6)
+        client = MagicMock()
+        # Server clears the task after turn-in.
+        char = make_char_schema(x=1, y=2, task_progress=0, task_total=0)
+        move_char = make_char_schema(x=1, y=2, task_progress=6, task_total=6)
+        move_char.task = "copper_ore"
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                   return_value=make_api_result(move_char)):
+            with patch("artifactsmmo_cli.ai.actions.complete_task.action_task_complete",
+                       return_value=make_api_result(char)) as mock_complete:
+                new_state = action.execute(state, client)
+
+        mock_complete.assert_called_once()
+        assert new_state.task_code is None
+        assert new_state.task_total == 0
+
+    def test_skips_move_when_already_at_taskmaster(self):
+        action = CompleteTaskAction(taskmaster_location=(1, 2))
+        state = make_state(x=1, y=2, task_code="copper_ore", task_type="items",
+                           task_progress=6, task_total=6)
+        client = MagicMock()
+        char = make_char_schema(x=1, y=2, task_progress=0, task_total=0)
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move") as mock_move:
+            with patch("artifactsmmo_cli.ai.actions.complete_task.action_task_complete",
+                       return_value=make_api_result(char)):
+                new_state = action.execute(state, client)
+
+        mock_move.assert_not_called()
+        assert new_state.task_total == 0
+
+    def test_raises_on_missing_response(self):
+        action = CompleteTaskAction(taskmaster_location=(1, 2))
+        state = make_state(x=1, y=2, task_code="copper_ore", task_type="items",
+                           task_progress=6, task_total=6)
+        client = MagicMock()
+
+        with patch("artifactsmmo_cli.ai.actions.complete_task.action_task_complete",
+                   return_value=None):
+            with pytest.raises(RuntimeError):
+                action.execute(state, client)
+
+
+class TestTaskExchangeActionExecute:
+    def test_moves_then_exchanges_and_returns_server_state(self):
+        action = TaskExchangeAction(taskmaster_location=(1, 2), min_coins=6)
+        state = make_state(x=0, y=0, inventory={"tasks_coin": 6})
+        client = MagicMock()
+        # Server consumed the coins; inventory empty on return.
+        char = make_char_schema(x=1, y=2)
+        move_char = make_char_schema(x=1, y=2)
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                   return_value=make_api_result(move_char)):
+            with patch("artifactsmmo_cli.ai.actions.task_exchange.action_task_exchange",
+                       return_value=make_api_result(char)) as mock_exch:
+                new_state = action.execute(state, client)
+
+        mock_exch.assert_called_once()
+        assert (new_state.x, new_state.y) == (1, 2)
+        assert new_state.inventory.get("tasks_coin", 0) == 0
+
+    def test_skips_move_when_already_at_taskmaster(self):
+        action = TaskExchangeAction(taskmaster_location=(1, 2), min_coins=6)
+        state = make_state(x=1, y=2, inventory={"tasks_coin": 6})
+        client = MagicMock()
+        char = make_char_schema(x=1, y=2)
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move") as mock_move:
+            with patch("artifactsmmo_cli.ai.actions.task_exchange.action_task_exchange",
+                       return_value=make_api_result(char)):
+                action.execute(state, client)
+
+        mock_move.assert_not_called()
+
+    def test_raises_on_missing_response(self):
+        action = TaskExchangeAction(taskmaster_location=(1, 2), min_coins=6)
+        state = make_state(x=1, y=2, inventory={"tasks_coin": 6})
+        client = MagicMock()
+
+        with patch("artifactsmmo_cli.ai.actions.task_exchange.action_task_exchange",
+                   return_value=None):
             with pytest.raises(RuntimeError):
                 action.execute(state, client)
 

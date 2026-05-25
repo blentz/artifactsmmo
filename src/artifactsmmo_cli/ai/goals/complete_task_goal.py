@@ -18,8 +18,6 @@ class CompleteTaskGoal(Goal):
               history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
-        if not state.task_code or state.task_total == 0:
-            return 0.0
         if state.task_progress < state.task_total:
             return 0.0
         # Task is full; turning it in is the next move.

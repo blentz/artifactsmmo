@@ -1,5 +1,8 @@
 """Tests to cover remaining uncovered lines: repr, cost, desired_state, edge cases."""
 
+import os
+import tempfile
+
 import pytest
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -8,6 +11,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOT, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -16,6 +20,8 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
 
@@ -285,6 +291,64 @@ class TestIsUpgradeOver:
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
         gd = make_gd(item_stats={"copper_dagger": stats})
         assert goal._is_upgrade_over("copper_dagger", stats, None, None, gd) is True
+
+
+class TestLearnedCostPenalty:
+    """cost() with a LearningStore: low success rate inflates the learned cost."""
+
+    @pytest.fixture
+    def store(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            path = f.name
+        s = LearningStore(db_path=path, character="testchar")
+        s.start_session()
+        yield s
+        s.close()
+        if os.path.exists(path):
+            os.unlink(path)
+
+    def _record(self, store, action_repr, *, ok_count, fail_count, cooldown):
+        idx = 0
+        for _ in range(ok_count):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{idx:02d}+00:00", session_id="s",
+                cycle_index=idx, character="testchar", action_repr=action_repr,
+                outcome="ok", actual_cooldown_seconds=cooldown,
+            ))
+            idx += 1
+        for _ in range(fail_count):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{idx:02d}+00:00", session_id="s",
+                cycle_index=idx, character="testchar", action_repr=action_repr,
+                outcome="error", actual_cooldown_seconds=None,
+            ))
+            idx += 1
+
+    def test_gather_cost_penalised_by_low_success_rate(self, store):
+        action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]))
+        gd = make_gd(resource_locs={"copper": [(0, 0)]})
+        state = make_state(x=0, y=0)
+        # 9 ok (cooldown=10) + 1 error => rate 0.9 (< 0.95), median learned cost 10.
+        self._record(store, repr(action), ok_count=9, fail_count=1, cooldown=10.0)
+        cost = action.cost(state, gd, history=store)
+        # learned(10) / rate(0.9) = 11.11..., strictly above the learned value.
+        assert cost == pytest.approx(10.0 / 0.9)
+
+    def test_gather_cost_uses_learned_value_when_reliable(self, store):
+        action = GatherAction(resource_code="copper", locations=frozenset([(0, 0)]))
+        gd = make_gd(resource_locs={"copper": [(0, 0)]})
+        state = make_state(x=0, y=0)
+        # All 10 ok => rate 1.0 (>= 0.95): no penalty, just the learned median.
+        self._record(store, repr(action), ok_count=10, fail_count=0, cooldown=10.0)
+        assert action.cost(state, gd, history=store) == pytest.approx(10.0)
+
+    def test_move_cost_penalised_by_low_success_rate(self, store):
+        action = MoveAction(x=5, y=0)
+        gd = make_gd()
+        state = make_state(x=0, y=0)
+        self._record(store, repr(action), ok_count=9, fail_count=1, cooldown=8.0)
+        cost = action.cost(state, gd, history=store)
+        assert cost == pytest.approx(8.0 / 0.9)
 
 
 class TestEdgeCases:

@@ -1,5 +1,9 @@
 """Tests for GamePlayer.run() and sync_bank pagination."""
 
+import os
+import tempfile
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -394,6 +398,147 @@ def test_run_calls_handle_stuck_after_successful_action():
                                             player.run()
 
     # STATE_FROZEN L1 should have been invoked
+    assert player._recovery_level.get(StuckSignal.STATE_FROZEN) == 1
+
+
+def test_run_loads_remembered_bank_blocker(capsys):
+    """run() honors a persisted bank blocker (243-255, 264).
+
+    A real LearningStore persists a bank blocker requiring level 99 for a
+    level-5 character, so run()'s remembered-blocker branch logs and re-marks
+    it before the loop runs (the loop is short-circuited via KeyboardInterrupt).
+    """
+    from artifactsmmo_cli.ai.learning.store import LearningStore
+
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    history = LearningStore(db_path=db_path, character="hero")
+    history.start_session()
+    history.set_blocker("bank", unlock_monster="dragon", required_level=99)
+
+    player = GamePlayer(character="hero", history=history)
+    client = MagicMock()
+    initial_state = make_state(hp=120, max_hp=150, level=5)
+
+    def boom():
+        raise KeyboardInterrupt
+
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank = _patch_game_data_load()
+    try:
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank:
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_build_actions", side_effect=boom):
+                            with pytest.raises(KeyboardInterrupt):
+                                player.run()
+    finally:
+        history.close()
+        if os.path.exists(db_path):
+            os.unlink(db_path)
+
+    out = capsys.readouterr().out
+    assert "Bank blocker remembered" in out
+    b = player._blockers.get("bank")
+    assert b is not None
+    assert b.required_level == 99
+    assert b.unlock_monster == "dragon"
+
+
+def test_run_logs_seeded_documented_blockers(capsys):
+    """run() logs the count when seed_documented_blockers seeds near-future
+    blockers from game data (line 264)."""
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+    initial_state = make_state(hp=120, max_hp=150, level=5)
+
+    def boom():
+        raise KeyboardInterrupt
+
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank = _patch_game_data_load()
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank:
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch("artifactsmmo_cli.ai.player.seed_documented_blockers", return_value=3):
+                        with patch.object(player, "_build_actions", side_effect=boom):
+                            with pytest.raises(KeyboardInterrupt):
+                                player.run()
+
+    out = capsys.readouterr().out
+    assert "Seeded 3 documented near-future blockers" in out
+
+
+class _StubDecision:
+    """Minimal stand-in for StrategyDecision: no ObtainItem step, no crafting."""
+
+    chosen_step = None
+
+    def to_trace(self):
+        return {}
+
+
+def _run_one_action_with(player, action, new_state, outcome, client):
+    """Drive run() through exactly one action-execution cycle by stubbing the
+    strategy/arbiter to return a fixed (goal, [action]) plan, then raising
+    KeyboardInterrupt on the second cooldown wait."""
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+
+    player._strategy = MagicMock()
+    player._strategy.decide.return_value = _StubDecision()
+    player._arbiter = MagicMock()
+    player._arbiter.select.return_value = (goal, [action], [])
+
+    call_count = [0]
+
+    def fake_wait():
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise KeyboardInterrupt
+
+    with patch.object(player, "_build_actions", return_value=[action]):
+        with patch.object(player, "_maybe_periodic_refresh"):
+            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                with patch.object(player, "_winnable_farm_target", return_value=None):
+                    with patch.object(player, "_execute", return_value=(new_state, outcome)):
+                        with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                            with pytest.raises(KeyboardInterrupt):
+                                player.run()
+
+
+def test_run_records_post_action_cooldown_and_handles_stuck():
+    """The post-action branch computes cooldown_remaining from a cooldown-bearing
+    new_state (378) and fires _handle_stuck when the detector trips (436)."""
+    from artifactsmmo_cli.ai.recovery import CycleRecord
+
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+
+    # Game data + initial state so the loop's asserts pass.
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank = _patch_game_data_load()
+
+    initial_state = make_state(hp=120, max_hp=150, level=5)
+    future = datetime.now(tz=timezone.utc) + timedelta(seconds=8)
+    post_action_state = replace(initial_state, cooldown_expires=future)
+
+    # Pre-seed the detector so detect() returns STATE_FROZEN after one more
+    # identical-key successful cycle.
+    frozen_key = (0, 0, 5, (), (), None, 0, False)
+    for _ in range(9):
+        player._detector.record(CycleRecord(
+            state_key=frozen_key, goal_name="StubGoal()", action_name="Rest",
+            planned_depth=1, planner_timed_out=False, succeeded=True,
+        ))
+
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank:
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    _run_one_action_with(player, RestAction(), post_action_state, "ok", client)
+
+    # The detector tripped and recovery ran -> post-action stuck branch reached.
     assert player._recovery_level.get(StuckSignal.STATE_FROZEN) == 1
 
 

@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from artifactsmmo_api_client.errors import UnexpectedStatus
 
 from artifactsmmo_cli.utils.pathfinding import (
     PathResult,
@@ -962,3 +963,109 @@ class TestFindNearestResourceAPISuccess:
 
         with pytest.raises(RuntimeError, match="Resource 'nonexistent' not found"):
             find_nearest_resource("nonexistent", 0, 0)
+
+
+class TestFindNearestPaginationAndErrors:
+    """Cover multi-page scans and the resource error re-raise."""
+
+    @staticmethod
+    def _map_item(content_type, x, y):
+        content = Mock()
+        content.type = content_type
+        content.code = content_type
+        item = Mock()
+        item.content = content
+        item.x = x
+        item.y = y
+        return item
+
+    @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
+    @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
+    @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
+    def test_find_nearest_bank_advances_to_second_page(
+        self, mock_get_maps, mock_handle, mock_client_manager
+    ):
+        """find_nearest_bank increments the page when more pages exist (line 199)."""
+        mock_client_manager.return_value.client = Mock()
+        mock_get_maps.return_value = Mock()
+
+        page1 = Mock()
+        page1.data = [self._map_item("bank", 10, 10)]
+        page1.pages = 2  # more pages remain -> current_page += 1
+        page2 = Mock()
+        page2.data = [self._map_item("bank", 1, 1)]
+        page2.pages = 2
+
+        mock_handle.side_effect = [
+            Mock(success=True, data=page1),
+            Mock(success=True, data=page2),
+        ]
+
+        result = find_nearest_bank(0, 0)
+
+        assert result == (1, 1)  # nearest of the two banks across pages
+        assert mock_get_maps.call_count == 2
+
+    @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
+    @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
+    @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
+    def test_find_nearest_task_master_advances_to_second_page(
+        self, mock_get_maps, mock_handle, mock_client_manager
+    ):
+        """find_nearest_task_master increments the page when more pages exist (line 254)."""
+        mock_client_manager.return_value.client = Mock()
+        mock_get_maps.return_value = Mock()
+
+        page1 = Mock()
+        page1.data = [self._map_item("tasks_master", 9, 9)]
+        page1.pages = 2
+        page2 = Mock()
+        page2.data = [self._map_item("tasks_master", 2, 2)]
+        page2.pages = 2
+
+        mock_handle.side_effect = [
+            Mock(success=True, data=page1),
+            Mock(success=True, data=page2),
+        ]
+
+        result = find_nearest_task_master(0, 0)
+
+        assert result == (2, 2)
+        assert mock_get_maps.call_count == 2
+
+    @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
+    @patch("artifactsmmo_cli.utils.pathfinding.handle_api_response")
+    @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
+    def test_find_nearest_resource_advances_to_second_page(
+        self, mock_get_maps, mock_handle, mock_client_manager
+    ):
+        """find_nearest_resource increments the page when more pages exist (line 317)."""
+        mock_client_manager.return_value.client = Mock()
+        mock_get_maps.return_value = Mock()
+
+        page1 = Mock()
+        page1.data = [self._map_item("iron_rocks", 8, 8)]
+        page1.pages = 2
+        page2 = Mock()
+        page2.data = [self._map_item("iron_rocks", 3, 3)]
+        page2.pages = 2
+
+        mock_handle.side_effect = [
+            Mock(success=True, data=page1),
+            Mock(success=True, data=page2),
+        ]
+
+        result = find_nearest_resource("iron", 0, 0)
+
+        assert result == (3, 3)
+        assert mock_get_maps.call_count == 2
+
+    @patch("artifactsmmo_cli.utils.pathfinding.ClientManager")
+    @patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync")
+    def test_find_nearest_resource_reraises_api_error(self, mock_get_maps, mock_client_manager):
+        """A maps API error inside find_nearest_resource is re-raised (lines 323-324)."""
+        mock_client_manager.return_value.client = Mock()
+        mock_get_maps.side_effect = UnexpectedStatus(status_code=500, content=b"resource crash")
+
+        with pytest.raises(UnexpectedStatus):
+            find_nearest_resource("iron", 0, 0)

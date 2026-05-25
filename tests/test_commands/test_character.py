@@ -581,6 +581,74 @@ class TestStatusCommand:
             # Verify that the command runs successfully and shows character status
             assert "testchar's Status" in result.stdout
 
+    def _build_status_character(self):
+        """Build a fully-populated status character mock for rendering."""
+        mock_character = Mock()
+        mock_character.name = "testchar"
+        mock_character.level = 15
+        mock_character.xp = 1500
+        mock_character.max_xp = 2000
+        mock_character.gold = 500
+        mock_character.hp = 80
+        mock_character.max_hp = 100
+        mock_character.mp = 40
+        mock_character.max_mp = 50
+        mock_character.x = 10
+        mock_character.y = 20
+        mock_character.cooldown = 0
+        mock_character.cooldown_expiration = None
+        for skill in [
+            "mining",
+            "woodcutting",
+            "fishing",
+            "weaponcrafting",
+            "gearcrafting",
+            "jewelrycrafting",
+            "cooking",
+            "alchemy",
+        ]:
+            setattr(mock_character, f"{skill}_level", 1)
+            setattr(mock_character, f"{skill}_xp", 10)
+            setattr(mock_character, f"{skill}_max_xp", 100)
+        for stat in [
+            "haste",
+            "critical_strike",
+            "wisdom",
+            "prospecting",
+            "attack_fire",
+            "attack_earth",
+            "attack_water",
+            "attack_air",
+            "dmg",
+            "dmg_fire",
+            "dmg_earth",
+            "dmg_water",
+            "dmg_air",
+            "res_fire",
+            "res_earth",
+            "res_water",
+            "res_air",
+        ]:
+            setattr(mock_character, stat, 1)
+        mock_character.task = None
+        return mock_character
+
+    def test_status_equipment_slot_without_code(self, runner, mock_client_manager):
+        """A truthy equipment slot lacking a `code` attribute renders its str() (line 345)."""
+        with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:
+            mock_character = self._build_status_character()
+            # Truthy slot value with NO `code` attribute -> hits the elif str(slot_item) branch.
+            mock_character.weapon_slot = Mock(spec=[])
+
+            mock_handle.return_value = Mock(success=True, data=mock_character)
+
+            result = runner.invoke(app, ["status", "testchar"])
+
+            assert result.exit_code == 0
+            assert "testchar's Status" in result.stdout
+            # The Weapon slot is shown even though the item exposed no code field.
+            assert "Weapon" in result.stdout
+
     def test_status_minimal_character(self, runner, mock_client_manager, mock_api_response):
         """Test status command with minimal character data."""
         with patch("artifactsmmo_cli.commands.character.handle_api_response") as mock_handle:

@@ -49,10 +49,6 @@ def main(
 
     Authentication is handled via a TOKEN file or ARTIFACTSMMO_TOKEN environment variable.
     """
-    # Skip initialization for help and completion commands
-    if ctx.invoked_subcommand in ["--help", "--install-completion", "--show-completion"]:
-        return
-
     try:
         # Load configuration
         config = Config.from_token_file(token_file)

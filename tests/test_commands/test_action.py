@@ -748,6 +748,16 @@ class TestBatchCommand:
             assert "Items Collected" in result.stdout
             # Should show accumulated totals: 250 XP, 55 gold, 2x leather + 1x iron_ore
 
+    def test_batch_outer_exception_handler(self, runner, mock_client_manager):
+        """A caught error raised during batch setup hits the outer handler (lines 885-886)."""
+        with patch("artifactsmmo_cli.commands.action.validate_character_name") as mock_validate:
+            mock_validate.side_effect = UnexpectedStatus(status_code=500, content=b"batch crash")
+
+            result = runner.invoke(app, ["batch", "testchar", "gather", "--times", "2"])
+
+            assert result.exit_code == 1
+            assert "Batch operation failed" in result.stdout
+
 
 class TestActionExecutors:
     """Test action executor functions."""

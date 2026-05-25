@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
-from sqlmodel import select
+from sqlmodel import create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -689,3 +689,139 @@ class TestSkillXpPerCycle:
         result = store.skill_xp_per_cycle("alchemy")
         store.close()
         assert result is None
+
+
+def _break_engine(store: LearningStore) -> None:
+    """Swap in a real engine whose SQLite URL points at a directory, so every
+    SqlSession query against it raises OperationalError (a SQLAlchemyError).
+
+    This is a genuine DB-layer fault: the store's own query logic still runs;
+    only the underlying connection fails. It exercises the documented
+    best-effort degradation contract without mocking the unit under test.
+    """
+    bad_dir = tempfile.mkdtemp()
+    store._engine = create_engine(f"sqlite:///{bad_dir}")
+
+
+class TestDegradationOnDbError:
+    """Every query method must return its documented default when the DB layer
+    raises SQLAlchemyError, never propagate the exception (best-effort store)."""
+
+    def test_end_session_swallows_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        # Force the session row to exist so end_session reaches the DB write.
+        store.record_cycle(Cycle(ts="2026-05-17T00:00:00+00:00", cycle_index=0, outcome="ok"))
+        _break_engine(store)
+        # No exception; session id is cleared regardless.
+        store.end_session()
+        assert store._session_id is None
+
+    def test_ensure_session_row_swallows_error(self, tmp_db_path, capsys):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        _break_engine(store)
+        # record_cycle -> _ensure_session_row hits the broken engine first.
+        store.record_cycle(Cycle(ts="2026-05-17T00:00:00+00:00", cycle_index=0, outcome="ok"))
+        out = capsys.readouterr().out
+        assert "_ensure_session_row failed" in out
+
+    def test_record_cycle_swallows_error(self, tmp_db_path, capsys):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        store._session_row_written = True  # skip _ensure_session_row write
+        _break_engine(store)
+        store.record_cycle(Cycle(ts="2026-05-17T00:00:00+00:00", cycle_index=0, outcome="ok"))
+        out = capsys.readouterr().out
+        assert "record_cycle failed" in out
+
+    def test_record_cycle_no_session_is_noop(self, tmp_db_path):
+        """record_cycle returns early (no DB write) when no session was started."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        # start_session was never called -> _session_id is None.
+        store.record_cycle(Cycle(ts="2026-05-17T00:00:00+00:00", cycle_index=0, outcome="ok"))
+        with SqlSession(store._engine) as s:
+            count = len(list(s.exec(select(Cycle))))
+        store.close()
+        assert count == 0
+
+    def test_action_cost_returns_default(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.action_cost("FightAction(chicken)", default=3.5) == 3.5
+
+    def test_success_rate_returns_one(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.success_rate("FightAction(chicken)") == 1.0
+
+    def test_action_effect_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.action_effect("FightAction(chicken)", "delta_gold") is None
+
+    def test_goal_avg_cycles_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.goal_avg_cycles_to_satisfy("ReachCharLevel(5)") is None
+
+    def test_recent_goal_cycles_returns_empty(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.recent_goal_cycles("ReachCharLevel(5)") == []
+
+    def test_skill_xp_per_cycle_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.skill_xp_per_cycle("alchemy") is None
+
+    def test_sample_count_returns_zero(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.sample_count("FightAction(chicken)") == 0
+
+    def test_goal_stats_returns_empty_rollup(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        stats = store.goal_stats("ReachCharLevel(5)")
+        assert stats.goal_repr == "ReachCharLevel(5)"
+        assert stats.sample_count == 0
+        assert stats.avg_cycles_to_satisfy is None
+        assert stats.satisfaction_rate == 0.0
+
+    def test_set_blocker_swallows_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        # No exception raised; nothing persisted.
+        store.set_blocker("bank", unlock_monster="skeleton", required_level=10)
+
+    def test_get_blocker_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.get_blocker("bank") is None
+
+    def test_delete_blocker_swallows_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        store.delete_blocker("bank")
+
+    def test_record_skill_max_xp_swallows_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        store.record_skill_max_xp("alchemy", level=5, max_xp=1000)
+
+    def test_skill_max_xp_observations_returns_empty(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.skill_max_xp_observations("alchemy") == {}
+
+    def test_record_task_reward_value_swallows_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        store.record_task_reward_value(42.0)
+
+    def test_task_reward_values_return_empty(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.task_reward_sample_count() == 0
+        assert store.mean_task_reward_value(default=7.0) == 7.0

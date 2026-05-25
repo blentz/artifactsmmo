@@ -179,6 +179,173 @@ class TestHandleApiError:
         assert result.error == "Unexpected error: Some error"
 
 
+class TestHandleApiErrorBranches:
+    """Cover the error-parsing branches of handle_api_error and its helpers."""
+
+    def test_valueerror_httpstatus_with_cooldown_code(self):
+        """ValueError carrying the 499 cooldown code maps to its message."""
+        error = ValueError("499 is not a valid HTTPStatus")
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Character is on cooldown"
+
+    def test_valueerror_httpstatus_with_known_noncooldown_code(self):
+        """ValueError carrying a known non-499 code maps to its message."""
+        error = ValueError("492 is not a valid HTTPStatus")
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Insufficient gold"
+
+    def test_valueerror_httpstatus_without_match(self):
+        """ValueError mentioning HTTPStatus but with no numeric code falls back."""
+        error = ValueError("xyz is not a valid HTTPStatus")
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Unexpected error: xyz is not a valid HTTPStatus"
+
+    def test_extracted_error_code_overrides_status(self):
+        """A code in the JSON body overrides the HTTP status for message lookup."""
+        # HTTP 400 (unknown), body code 492 -> "Insufficient gold".
+        content = json.dumps({"error": {"code": 492}}).encode()
+        error = UnexpectedStatus(status_code=400, content=content)
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Insufficient gold"
+
+    def test_478_with_detailed_message(self):
+        """478 missing-items appends the parsed detail message."""
+        content = json.dumps({"error": {"message": "need 3 iron"}}).encode()
+        error = UnexpectedStatus(status_code=478, content=content)
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Missing required items or materials: need 3 iron"
+
+    def test_478_without_detailed_message(self):
+        """478 with no parseable detail returns the bare mapped message."""
+        error = UnexpectedStatus(status_code=478, content=b"not json")
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Missing required items or materials"
+
+    def test_httpx_http_status_error(self):
+        """httpx.HTTPStatusError maps via the response status code."""
+        request = httpx.Request("GET", "https://example.test")
+        response = httpx.Response(404, request=request)
+        error = httpx.HTTPStatusError("boom", request=request, response=response)
+        result = handle_api_error(error)
+        assert not result.success
+        assert result.error == "Resource not found"
+
+    def test_extract_error_code_root_level(self):
+        """_extract_error_code reads a root-level integer code."""
+        from artifactsmmo_cli.utils.helpers import _extract_error_code
+
+        error = UnexpectedStatus(status_code=400, content=json.dumps({"code": 492}).encode())
+        assert _extract_error_code(error) == 492
+
+    def test_extract_error_code_nested(self):
+        """_extract_error_code reads a nested error.code."""
+        from artifactsmmo_cli.utils.helpers import _extract_error_code
+
+        error = UnexpectedStatus(status_code=400, content=json.dumps({"error": {"code": 471}}).encode())
+        assert _extract_error_code(error) == 471
+
+    def test_extract_error_code_absent(self):
+        """_extract_error_code returns None when no code present."""
+        from artifactsmmo_cli.utils.helpers import _extract_error_code
+
+        error = UnexpectedStatus(status_code=400, content=json.dumps({"foo": "bar"}).encode())
+        assert _extract_error_code(error) is None
+
+    def test_parse_detailed_message_from_details_field(self):
+        """_parse_detailed_error_message falls back to error.details."""
+        from artifactsmmo_cli.utils.helpers import _parse_detailed_error_message
+
+        content = json.dumps({"error": {"details": ["a", "b"]}}).encode()
+        error = UnexpectedStatus(status_code=400, content=content)
+        assert _parse_detailed_error_message(error) == "['a', 'b']"
+
+    def test_parse_detailed_message_top_level_message(self):
+        """_parse_detailed_error_message falls back to top-level message."""
+        from artifactsmmo_cli.utils.helpers import _parse_detailed_error_message
+
+        content = json.dumps({"message": "top level"}).encode()
+        error = UnexpectedStatus(status_code=400, content=content)
+        assert _parse_detailed_error_message(error) == "top level"
+
+    def test_parse_detailed_message_invalid_json(self):
+        """_parse_detailed_error_message returns None on invalid JSON."""
+        from artifactsmmo_cli.utils.helpers import _parse_detailed_error_message
+
+        error = UnexpectedStatus(status_code=400, content=b"not json")
+        assert _parse_detailed_error_message(error) is None
+
+    def test_cooldown_error_parsed_from_message_regex(self):
+        """_parse_cooldown_error extracts seconds from a free-text message."""
+        from artifactsmmo_cli.utils.helpers import _parse_cooldown_error
+
+        content = json.dumps({"error": {"message": "Wait 2.27 seconds remaining"}}).encode()
+        error = UnexpectedStatus(status_code=499, content=content)
+        result = _parse_cooldown_error(error)
+        assert not result.success
+        assert result.cooldown_remaining == 2.27
+
+    def test_cooldown_error_no_time_found(self):
+        """_parse_cooldown_error falls back when neither object nor regex matches."""
+        from artifactsmmo_cli.utils.helpers import _parse_cooldown_error
+
+        content = json.dumps({"error": {"message": "on cooldown, no number"}}).encode()
+        error = UnexpectedStatus(status_code=499, content=content)
+        result = _parse_cooldown_error(error)
+        assert not result.success
+        assert result.error == "Character is on cooldown"
+
+    def test_parse_api_error_response_detail_field(self):
+        """_parse_api_error_response prefers the detail field."""
+        from artifactsmmo_cli.utils.helpers import _parse_api_error_response
+
+        content = json.dumps({"detail": "the detail"}).encode()
+        error = UnexpectedStatus(status_code=400, content=content)
+        result = _parse_api_error_response(error, "fallback")
+        assert not result.success
+        assert result.error == "the detail"
+
+    def test_parse_api_error_response_message_field(self):
+        """_parse_api_error_response falls back to the message field."""
+        from artifactsmmo_cli.utils.helpers import _parse_api_error_response
+
+        content = json.dumps({"message": "the message"}).encode()
+        error = UnexpectedStatus(status_code=400, content=content)
+        result = _parse_api_error_response(error, "fallback")
+        assert not result.success
+        assert result.error == "the message"
+
+    def test_parse_api_error_response_uses_fallback_when_empty(self):
+        """_parse_api_error_response uses the fallback when no message is present."""
+        from artifactsmmo_cli.utils.helpers import _parse_api_error_response
+
+        content = json.dumps({"unrelated": "x"}).encode()
+        error = UnexpectedStatus(status_code=400, content=content)
+        result = _parse_api_error_response(error, "fallback msg")
+        assert not result.success
+        assert result.error == "fallback msg"
+
+    def test_parse_api_error_response_invalid_json_uses_fallback(self):
+        """_parse_api_error_response returns the fallback on invalid JSON."""
+        from artifactsmmo_cli.utils.helpers import _parse_api_error_response
+
+        error = UnexpectedStatus(status_code=400, content=b"not json")
+        result = _parse_api_error_response(error, "fb")
+        assert not result.success
+        assert result.error == "fb"
+
+    def test_extract_action_result_non_dict_returns_none(self):
+        """extract_action_result returns None for non-dict input."""
+        from artifactsmmo_cli.utils.helpers import extract_action_result
+
+        assert extract_action_result("not a dict", "fight") is None  # type: ignore[arg-type]
+
+
 class TestExtractCharacterData:
     """Test extract_character_data function."""
 

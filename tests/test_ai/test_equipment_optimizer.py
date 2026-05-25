@@ -1,5 +1,9 @@
 """Tests for the equipment optimizer + OptimizeLoadoutAction."""
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score,
@@ -136,6 +140,86 @@ class TestOptimizeLoadoutAction:
         one_swap = OptimizeLoadoutAction(target_monster_code="yellow_slime").cost(state, gd)
         # Cost is positive when a swap is needed
         assert one_swap > 0
+
+    def test_apply_returns_same_state_when_nothing_to_swap(self):
+        gd = _gd_with_combat_items()
+        # Already optimal: fishing_net equipped, nothing better in inventory.
+        state = make_state(
+            level=1, inventory={},
+            equipment={"weapon_slot": "fishing_net"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        result = action.apply(state, gd)
+        assert result is state
+
+    def test_apply_keeps_surplus_of_equipped_item_in_inventory(self):
+        gd = _gd_with_combat_items()
+        # Two fishing_nets in inventory; equipping one must leave one behind.
+        state = make_state(
+            level=1, inventory={"fishing_net": 2},
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        new = action.apply(state, gd)
+        assert new.equipment["weapon_slot"] == "fishing_net"
+        assert new.inventory["fishing_net"] == 1
+        assert new.inventory.get("wooden_stick", 0) == 1
+
+    def test_execute_unequips_old_then_equips_new(self):
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1, inventory={"fishing_net": 1},
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime", game_data=gd)
+        client = MagicMock()
+        unequipped = make_state(
+            level=1, inventory={"fishing_net": 1, "wooden_stick": 1},
+            equipment={"weapon_slot": None},
+        )
+        equipped = make_state(
+            level=1, inventory={"wooden_stick": 1},
+            equipment={"weapon_slot": "fishing_net"},
+        )
+
+        with patch("artifactsmmo_cli.ai.actions.optimize_loadout.UnequipAction") as MockUn:
+            MockUn.return_value.execute.return_value = unequipped
+            with patch("artifactsmmo_cli.ai.actions.optimize_loadout.EquipAction") as MockEq:
+                MockEq.return_value.execute.return_value = equipped
+                result = action.execute(state, client)
+
+        MockUn.assert_called_once_with(slot="weapon_slot")
+        MockEq.assert_called_once_with(code="fishing_net", slot="weapon_slot")
+        assert result.equipment["weapon_slot"] == "fishing_net"
+
+    def test_execute_skips_unequip_when_slot_empty(self):
+        gd = _gd_with_combat_items()
+        # Empty weapon slot: only an equip should fire, no unequip.
+        state = make_state(
+            level=1, inventory={"fishing_net": 1},
+            equipment={"weapon_slot": None},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime", game_data=gd)
+        client = MagicMock()
+        equipped = make_state(
+            level=1, inventory={},
+            equipment={"weapon_slot": "fishing_net"},
+        )
+
+        with patch("artifactsmmo_cli.ai.actions.optimize_loadout.UnequipAction") as MockUn:
+            with patch("artifactsmmo_cli.ai.actions.optimize_loadout.EquipAction") as MockEq:
+                MockEq.return_value.execute.return_value = equipped
+                result = action.execute(state, client)
+
+        MockUn.assert_not_called()
+        MockEq.assert_called_once_with(code="fishing_net", slot="weapon_slot")
+        assert result.equipment["weapon_slot"] == "fishing_net"
+
+    def test_execute_requires_game_data(self):
+        state = make_state(level=1)
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        with pytest.raises(RuntimeError):
+            action.execute(state, MagicMock())
 
     def test_repr(self):
         assert repr(OptimizeLoadoutAction(target_monster_code="chicken")) == "OptimizeLoadout(chicken)"

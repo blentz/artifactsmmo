@@ -1,5 +1,6 @@
 """Tests for main CLI entry point."""
 
+import runpy
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -177,7 +178,16 @@ def test_cli_completion_commands_skip_initialization():
 
 def test_main_module_import():
     """Test that main module can be imported without issues."""
-    # This test covers the if __name__ == "__main__" block
     import artifactsmmo_cli.main
 
     assert hasattr(artifactsmmo_cli.main, "app")
+
+
+def test_main_module_run_as_script_invokes_app():
+    """Running the module as __main__ invokes the Typer app (line 110)."""
+    import artifactsmmo_cli.main as main_module
+
+    module_path = main_module.__file__
+    with patch("typer.Typer.__call__") as mock_call:
+        runpy.run_path(module_path, run_name="__main__")
+        mock_call.assert_called_once_with()

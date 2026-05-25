@@ -80,8 +80,6 @@ class DiscardOverstockGoal(Goal):
             return []
         result: list[Action] = []
         for code, excess_qty in excess.items():
-            if excess_qty <= 0:
-                continue
             buyers = game_data.npcs_buying_item(code)
             npc_loc: tuple[int, int] | None = None
             npc_code: str | None = None

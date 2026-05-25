@@ -1317,3 +1317,114 @@ def test_fetch_world_state_retries_on_404(monkeypatch):
     assert len(attempts) == 3
     assert "404" in str(exc.value)
     assert "TestChar" in str(exc.value)
+
+
+def test_fetch_world_state_retries_on_httperror(monkeypatch):
+    """_fetch_world_state retries on httpx.HTTPError, then raises after 3 attempts."""
+    attempts = []
+
+    def fake_get_character(client, name):
+        attempts.append(name)
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.get_character", fake_get_character)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    player = GamePlayer(character="NetChar")
+    with pytest.raises(RuntimeError) as exc:
+        player._fetch_world_state(client=None)
+    assert len(attempts) == 3
+    assert "NetChar" in str(exc.value)
+
+
+class TestBankBlockerSetters:
+    def test_bank_blocked_since_setter_noop_when_no_blocker(self):
+        """Setting _bank_blocked_since with no bank blocker is a no-op (line 197)."""
+        player = GamePlayer(character="hero")
+        # No bank blocker exists.
+        assert player._blockers.get("bank") is None
+        player._bank_blocked_since = 123.0
+        # Still no blocker created; getter reports None.
+        assert player._blockers.get("bank") is None
+        assert player._bank_blocked_since is None
+
+    def test_bank_unlock_monster_setter_updates_existing(self):
+        """Setting _bank_unlock_monster on an existing blocker updates it (line 218)."""
+        player = GamePlayer(character="hero")
+        player._blockers.mark_blocked("bank", char_level=3)
+        player._bank_unlock_monster = "skeleton"
+        assert player._bank_unlock_monster == "skeleton"
+        assert player._blockers.get("bank").unlock_monster == "skeleton"
+
+    def test_bank_unlock_monster_setter_creates_when_absent(self):
+        """Setting _bank_unlock_monster with no blocker creates an empty one."""
+        player = GamePlayer(character="hero")
+        assert player._blockers.get("bank") is None
+        player._bank_unlock_monster = "wolf"
+        assert player._bank_unlock_monster == "wolf"
+
+
+class TestComputeCyclesToSatisfy:
+    def test_returns_none_when_never_selected(self):
+        """_compute_cycles_to_satisfy returns None for an unseen goal (line 1216)."""
+        player = GamePlayer(character="hero")
+        assert player._compute_cycles_to_satisfy("NeverSeenGoal", current_cycle=10) is None
+
+    def test_returns_delta_after_selection(self):
+        """After _note_goal_selection, returns cycles elapsed then clears the entry."""
+        player = GamePlayer(character="hero")
+        player._note_goal_selection("ReachCharLevel(5)", cycle_index=3)
+        assert player._compute_cycles_to_satisfy("ReachCharLevel(5)", current_cycle=8) == 5
+        # Entry cleared -> a second call returns None.
+        assert player._compute_cycles_to_satisfy("ReachCharLevel(5)", current_cycle=9) is None
+
+
+class TestPathTraceSnapshot:
+    def test_includes_plan_fields_when_plan_present(self):
+        """_path_trace_snapshot merges plan fields when a path plan exists (1042-1046)."""
+        from artifactsmmo_cli.ai.learning.projections import PathPlan, PathSegment
+
+        player = GamePlayer(character="hero")
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._last_path_plan = PathPlan(
+            target_level=10,
+            total_cycles=42.5,
+            segments=[PathSegment(
+                from_level=4, to_level=10, monster_code="cow",
+                estimated_cycles=42.5, xp_per_cycle=10.0, cycles_per_kill=1.5,
+            )],
+        )
+        snap = player._path_trace_snapshot()
+        assert snap["projected_cycles_to_max"] == 42.5
+        assert snap["path_next_action"] == "cow"
+        assert snap["path_blocked"] is False
+
+    def test_infinite_plan_reports_inf(self):
+        """An unreachable (inf) plan reports the string 'inf'."""
+        from artifactsmmo_cli.ai.learning.projections import PathPlan
+
+        player = GamePlayer(character="hero")
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._last_path_plan = PathPlan(
+            target_level=10, total_cycles=float("inf"), segments=[], blocked=True,
+        )
+        snap = player._path_trace_snapshot()
+        assert snap["projected_cycles_to_max"] == "inf"
+        assert snap["path_blocked"] is True
+
+
+class TestNotifyObserverCooldown:
+    def test_cooldown_remaining_computed_from_state(self):
+        """_notify_observer computes cooldown_remaining from state.cooldown_expires (line 987)."""
+        captured = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        future = datetime.now(tz=timezone.utc) + timedelta(seconds=12)
+        player.state = make_state(level=4, cooldown_expires=future)
+        player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
+        assert len(captured) == 1
+        snap = captured[0]
+        assert snap.cooldown_remaining > 0
+        assert snap.cooldown_remaining <= 12.0

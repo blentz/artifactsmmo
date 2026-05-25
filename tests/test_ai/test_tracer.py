@@ -47,6 +47,22 @@ class TestFileTracer:
         finally:
             os.unlink(path)
 
+    def test_write_after_close_is_noop(self):
+        """Writing once the file pointer is closed silently does nothing."""
+        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
+            path = f.name
+        try:
+            t = FileTracer(path)
+            t.write_cycle({"cycle": 1})
+            t.close()
+            t.write_cycle({"cycle": 2})  # fp is None -> no-op, no exception
+            with open(path) as f:
+                lines = f.readlines()
+            assert len(lines) == 1
+            assert json.loads(lines[0]) == {"cycle": 1}
+        finally:
+            os.unlink(path)
+
 
 class TestPlayerTracer:
     def test_player_emits_cycle_record_to_tracer(self):

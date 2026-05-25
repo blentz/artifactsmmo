@@ -3092,6 +3092,81 @@ class TestExceptionHandlers:
                 assert result.exit_code == 1
                 assert "map crash" in result.output
 
+    def test_monsters_exception_handler(self, runner, mock_client_manager):
+        """monsters list command outer exception handler (lines 327-330)."""
+        with patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"monsters crash")
+
+            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
+                mock_err.return_value = Mock(error="monsters crash")
+
+                result = runner.invoke(app, ["monsters"])
+
+                assert result.exit_code == 1
+                assert "monsters crash" in result.output
+
+    def test_monster_list_search_exception_handler(self, runner, mock_client_manager):
+        """monster command outer handler when the name-search API raises (lines 401-404)."""
+        with (
+            patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_code,
+            patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list,
+        ):
+            # Exact-code lookup misses; inner except swallows and falls through to list search.
+            mock_code.side_effect = UnexpectedStatus(status_code=404, content=b"no code")
+            # List search raises -> reaches the outer handler.
+            mock_list.side_effect = UnexpectedStatus(status_code=500, content=b"monster search crash")
+
+            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
+                mock_err.return_value = Mock(error="monster search crash")
+
+                result = runner.invoke(app, ["monster", "wolf"])
+
+                assert result.exit_code == 1
+                assert "monster search crash" in result.output
+
+    def test_resources_exception_handler(self, runner, mock_client_manager):
+        """resources list command outer exception handler (lines 711-713)."""
+        with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"resources crash")
+
+            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
+                mock_err.return_value = Mock(error="resources crash")
+
+                result = runner.invoke(app, ["resources"])
+
+                assert result.exit_code == 1
+                assert "resources crash" in result.output
+
+    def test_leaderboard_exception_handler(self, runner, mock_client_manager):
+        """leaderboard command outer exception handler (lines 831-833)."""
+        with patch(
+            "artifactsmmo_api_client.api.leaderboard.get_characters_leaderboard_leaderboard_characters_get.sync"
+        ) as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"leaderboard crash")
+
+            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
+                mock_err.return_value = Mock(error="leaderboard crash")
+
+                result = runner.invoke(app, ["leaderboard"])
+
+                assert result.exit_code == 1
+                assert "leaderboard crash" in result.output
+
+    def test_nearest_exception_handler(self, runner, mock_client_manager):
+        """nearest command outer handler when the resource API raises (lines 1272-1274)."""
+        # _get_resource_data calls get_all_resources_resources_get.sync, which raises and
+        # propagates up to find_nearest_resource's outer handler.
+        with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"nearest crash")
+
+            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
+                mock_err.return_value = Mock(error="nearest crash")
+
+                result = runner.invoke(app, ["nearest", "iron"])
+
+                assert result.exit_code == 1
+                assert "nearest crash" in result.output
+
 
 class TestNPCsPaginationLoop:
     """Test npcs/npc pagination loop continuation lines."""

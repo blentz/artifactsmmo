@@ -131,40 +131,35 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
             return CLIResponse.error_response(f"Unexpected error: {str(error)}")
 
     if isinstance(error, UnexpectedStatus):
-        # Try to parse error response
-        try:
-            status_code = error.status_code
+        # The _parse_* / _extract_* helpers below each swallow their own parse
+        # errors and return a safe value, and UnexpectedStatus always carries
+        # status_code — so no outer try/except is needed (one layer only).
+        status_code = error.status_code
 
-            # Try to extract the actual error code from the response
-            actual_error_code = _extract_error_code(error)
-            if actual_error_code:
-                status_code = actual_error_code
+        # Try to extract the actual error code from the response
+        actual_error_code = _extract_error_code(error)
+        if actual_error_code:
+            status_code = actual_error_code
 
-            # Get the appropriate error message
-            error_message = get_error_message(status_code)
+        # Get the appropriate error message
+        error_message = get_error_message(status_code)
 
-            # Handle special cases that need additional parsing
-            if status_code == 499:
-                # Character cooldown - try to get cooldown time
-                return _parse_cooldown_error(error)
-            elif status_code == 478:
-                # Missing items - try to get more details
-                detailed_msg = _parse_detailed_error_message(error)
-                if detailed_msg:
-                    return CLIResponse.error_response(f"{error_message}: {detailed_msg}")
-                return CLIResponse.error_response(error_message)
-            else:
-                # For all other errors, try to get additional details
-                detailed_msg = _parse_detailed_error_message(error)
-                if detailed_msg and detailed_msg != error_message:
-                    return CLIResponse.error_response(f"{error_message}: {detailed_msg}")
-                return CLIResponse.error_response(error_message)
-
-        except (AttributeError, ValueError) as parse_error:
-            # If parsing fails, return a safe error message
-            return CLIResponse.error_response(
-                f"API error {error.status_code}: Unable to parse error details ({str(parse_error)})"
-            )
+        # Handle special cases that need additional parsing
+        if status_code == 499:
+            # Character cooldown - try to get cooldown time
+            return _parse_cooldown_error(error)
+        elif status_code == 478:
+            # Missing items - try to get more details
+            detailed_msg = _parse_detailed_error_message(error)
+            if detailed_msg:
+                return CLIResponse.error_response(f"{error_message}: {detailed_msg}")
+            return CLIResponse.error_response(error_message)
+        else:
+            # For all other errors, try to get additional details
+            detailed_msg = _parse_detailed_error_message(error)
+            if detailed_msg and detailed_msg != error_message:
+                return CLIResponse.error_response(f"{error_message}: {detailed_msg}")
+            return CLIResponse.error_response(error_message)
 
     elif isinstance(error, httpx.TimeoutException):
         return CLIResponse.error_response("Request timed out. Please try again.")

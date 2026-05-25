@@ -227,9 +227,12 @@ class TestDepositGoldCommand:
                     assert "API Error" in result.stdout
 
     def test_deposit_gold_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test deposit gold command with API exception and cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        """Deposit gold renders the cooldown message on a cooldown error (line 281)."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters."
+            "action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=15, error=None)
@@ -237,11 +240,15 @@ class TestDepositGoldCommand:
                 result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
 
                 assert result.exit_code == 1
+                assert "15" in result.stdout
 
     def test_withdraw_gold_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test withdraw gold command with API exception and cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        """Withdraw gold renders the cooldown message on a cooldown error (line 316)."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters."
+            "action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=8, error=None)
@@ -249,11 +256,15 @@ class TestDepositGoldCommand:
                 result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
 
                 assert result.exit_code == 1
+                assert "8" in result.stdout
 
     def test_deposit_item_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test deposit item command with API exception and cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        """Deposit item renders the cooldown message on a cooldown error (line 353)."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters."
+            "action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=5, error=None)
@@ -261,11 +272,15 @@ class TestDepositGoldCommand:
                 result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
 
                 assert result.exit_code == 1
+                assert "5" in result.stdout
 
     def test_withdraw_item_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test withdraw item command with API exception and cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        """Withdraw item renders the cooldown message on a cooldown error (line 390)."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters."
+            "action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=12, error=None)
@@ -273,11 +288,15 @@ class TestDepositGoldCommand:
                 result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
 
                 assert result.exit_code == 1
+                assert "12" in result.stdout
 
     def test_expand_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test expand command with API exception and cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-            mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        """Expand renders the cooldown message on a cooldown error (line 418)."""
+        with patch(
+            "artifactsmmo_api_client.api.my_characters."
+            "action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
+        ) as mock_api:
+            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
                 mock_error.return_value = Mock(cooldown_remaining=20, error=None)
@@ -285,6 +304,7 @@ class TestDepositGoldCommand:
                 result = runner.invoke(app, ["expand", "testchar"])
 
                 assert result.exit_code == 1
+                assert "20" in result.stdout
 
 
 class TestWithdrawGoldCommand:
