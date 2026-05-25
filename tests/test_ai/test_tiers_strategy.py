@@ -463,3 +463,32 @@ class TestLearnedBlend:
             assert eng._learned_blend(ReachCharLevel(50), 1.0, store, "chicken") == 1.0
         finally:
             store.close()
+
+
+class TestGearGatedSkillInheritsValue:
+    def test_skill_gated_gear_step_is_scored_under_gear_root(self):
+        # copper_dagger needs weaponcrafting L3; char has weaponcrafting 1 and the
+        # materials ready -> the gear root's actionable_step is the skill gate, and
+        # it is scored at the gear root's value (combat prior * equip-gain), NOT the
+        # skill's 0.2 standalone prior.
+        gd = GameData()
+        gd._item_stats = {
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                       attack={"fire": 6}, crafting_skill="weaponcrafting", crafting_level=3),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+        gd._resource_drops = {}
+        gd._resource_skill = {}
+        eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger"})
+        state = make_state(equipment={"weapon_slot": None},
+                           inventory={"copper_bar": 6},
+                           skills={"weaponcrafting": 1, "alchemy": 1, "mining": 1, "woodcutting": 1,
+                                   "fishing": 1, "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1})
+        d = eng.decide(state, gd)
+        gear_rs = next((rs for rs in d.ranking
+                        if rs.root_repr == "ObtainItem(code='copper_dagger', quantity=1)"), None)
+        assert gear_rs is not None
+        assert gear_rs.step_repr == "ReachSkillLevel(skill='weaponcrafting', level=3)"
+        # value inherited from the gear root, not the skill's standalone 0.2 prior
+        assert gear_rs.score == eng._value(ObtainItem("copper_dagger"), state, gd)
