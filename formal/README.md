@@ -45,6 +45,8 @@ e.g. a git worktree. The runner is pure stdlib.)
 | `TaskFeasibility.tla` | `ai/task_feasibility.py:30,44` | `task_requirement` returns the highest-`required_level` unmet crafting-skill gap over the task item's craft closure (cycle-safe), None iff feasible; the monster branch gates on `monster_level > char_level + 2` (cross-checked at the `4>4` boundary). |
 | `Objective.tla` | `ai/tiers/objective.py:15,57,86` | `is_attainable` = the craft chain bottoms out in gatherables (matches a least-fixpoint grounding, cycle-safe); `from_game_data` picks the highest-equip-value ATTAINABLE item per gear slot; `gap` yields non-negative gaps with `is_complete` iff every gap is zero (fractions are `gap/denom`, in [0,1] since `0 <= gap <= denom`). |
 | `StrategyTraversal.tla` | `ai/tiers/strategy.py:69,91,107,125` | `is_reachable` (path-recursive) equals the well-founded grounding fixpoint (cycles unreachable); `unmet_closure_size` = count of unmet nodes in the prereq closure (min 1); `actionable_step`'s frontier = unmet nodes with all direct prereqs satisfied (producible if obtain), cross-checked by a De Morgan oracle and empty on a cyclic block; `root_cost` floors at 1. |
+| `SkillXpCurve.tla` | `ai/learning/skill_xp_curve.py:34,46,57,65` | `required_xp` is exact on observed levels and 0 below/with no data; `confidence` = observed-in-gap / gap-size in [0,1] with `is_confident` iff full coverage; `cycles_to_level` is 0 when target<=current and infinite when xp/cycle<=0; `total_xp_to_reach` is monotone. (The geometric `growth_ratio**steps` estimate, the ratio mean, and the cycles quotient are abstracted — verified by inspection, like PredictWin's hit math.) |
+| `StuckDetector.tla` | `ai/recovery.py:38,48,55,64,74` | `detect` honors precedence STATE_FROZEN > GOAL_OSCILLATION > NO_PROGRESS; thresholds (4 `<no_plan>` / 8 cycles with exactly 2 distinct goals / 10 cycles with a state recurring >=5); `_recent_since` windows only cycles added after the acknowledge cutoff (index arithmetic pinned at the window boundary), so an acknowledged signal cannot re-fire until fresh cycles accumulate. |
 
 ## Modeling notes
 
@@ -84,6 +86,18 @@ e.g. a git worktree. The runner is pure stdlib.)
   `actionable_step` are therefore verified for all-unmet prerequisite graphs only;
   the satisfied-node pruning branch (Python descends only unmet nodes) is not
   exercised. A satisfied-interior-node fixture is a possible follow-up.
+- The learning/recovery specs (`SkillXpCurve`, `StuckDetector`) complete the pure-component
+  roadmap. `SkillXpCurve` is integer-only: the geometric float estimate (`growth_ratio` mean,
+  `anchor * growth_ratio ** steps`) and the `cycles_to_level` quotient are abstracted (their
+  branch structure and the integer/count properties are proved). `StuckDetector` is a fully
+  modeled deterministic state machine over a bounded history + acknowledge cutoffs; precedence,
+  thresholds, window arithmetic (incl. a boundary scenario that pins the index math), and
+  ack-suppression are verified against hand-computed expected verdicts.
+- **Roadmap complete:** all pure-deterministic AI components with a non-trivial correctness
+  property are now modeled (pathfinding, recipe closure, prerequisite graph, combat prediction,
+  inventory/economy, combat/equipment, strategy/feasibility, learning/recovery). The remaining
+  `ai/` modules are I/O-, learning-store-, or orchestration-bound and have no pure contract
+  PlusPy can check (see the design doc's out-of-scope list).
 
 ## Move-API connectivity finding
 
