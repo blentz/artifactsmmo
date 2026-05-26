@@ -10,6 +10,8 @@ EXTENDS Integers, FiniteSets, Sequences, TLC
 \* not ours; we assert the sort KEY (Key/LE) is a strict total order over the
 \* deposit set, so a well-defined sort exists, instead of building a sequence.
 
+\* Abstract label for the tasks-coin (Python TASKS_COIN_CODE = "tasks_coin").
+\* All item names here are stand-ins in this closed Items universe, not wire strings.
 TasksCoin == "coin"
 
 Items == {"coin", "iron", "wood", "blade", "sword", "potion", "axe", "stick"}
@@ -74,11 +76,14 @@ States == {
   [inv |-> [iron |-> 3, blade |-> 1, axe |-> 1, stick |-> 2],
    equipped |-> {}, taskCode |-> "none", taskType |-> "other",
    craftingTarget |-> "none"],
+  \* s3 = freeze case: items-task item "iron" must be KEPT (via taskCode), never banked.
   [inv |-> [iron |-> 5, wood |-> 2, potion |-> 1],
    equipped |-> {}, taskCode |-> "iron", taskType |-> "items",
    craftingTarget |-> "none"]
 }
 
+\* Independent hand-computed oracle for the keep-set — deliberately NOT derived
+\* from KeepSet, so the keep=ExpectedKeep conjunct is a real check, not a tautology.
 ExpectedKeep == [
   s1 |-> {"coin", "potion", "sword", "blade", "stick", "iron"},
   s2 |-> {"coin"},
@@ -96,7 +101,9 @@ Correct(s) ==
                     THEN {s.taskCode} ELSE {}) \subseteq keep
      \* Sort key is a strict total order over the deposit set, so a well-defined
      \* deterministic .sort exists: totality + antisymmetry on distinct codes.
+     \* totality
      /\ \A a \in dep, b \in dep : LE(Key(a), Key(b)) \/ LE(Key(b), Key(a))
+     \* antisymmetry (distinct codes get distinct keys)
      /\ \A a \in dep, b \in dep : a # b => Key(a) # Key(b)
 
 VARIABLE todo
