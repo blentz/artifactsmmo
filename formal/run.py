@@ -26,7 +26,7 @@ MODULES: list[tuple[str, int]] = [
     ("TaskBatch", 5250),
     ("InventoryCaps", 484),
     ("BankSelection", 3),
-    ("EquipmentScoring", 5),
+    ("EquipmentScoring", 6),
     ("LoadoutProjection", 18),
 ]
 

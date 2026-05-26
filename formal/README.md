@@ -66,6 +66,9 @@ e.g. a git worktree. The runner is pure stdlib.)
   relies on. `LoadoutProjection` models the integer stat fields (attack/resistance
   elements, max_hp, initiative); the remaining scalar fields (dmg, dmg_elements,
   critical_strike) follow the identical additive pattern.
+- `LoadoutProjection` models the pre-`_drop_zeros` accumulator values (plain integers
+  per stat), not `project_loadout_stats`' final dict-shape transform that strips
+  zero-valued entries; `_drop_zeros` is a trivial output filter verified by inspection.
 
 ## Move-API connectivity finding
 

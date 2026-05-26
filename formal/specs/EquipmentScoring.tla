@@ -78,23 +78,34 @@ SlotCorrect(st, slot, monAtk, monRes) ==
           /\ (r # "none" => Feasible(st, r) /\ slot \in SlotsOfType[Type[r]])
           /\ (r # cur => r \in cands)
           /\ (ScoreOf(cur, slot, monAtk, monRes) = MaxScore(st, slot, monAtk, monRes) => r = cur)
+          \* weapon_score's max(0.0, 1-res/100) is a hard floor: a weapon's score is
+          \* never negative even against res > 100. Pins WScore's Max(0, 100-res)
+          \* clamp (dropping it lets fire-res 110 drive iron/wood WScore negative).
+          /\ (slot = "weapon_slot" =>
+                \A c \in cands : ScoreOf(c, slot, monAtk, monRes) >= 0)
 
 MonAtk == [fire |-> 20, earth |-> 10]
 MonRes == [fire |-> 0, earth |-> 0]
+\* fire-res 110 > 100 forces WScore's Max(0, 100 - res) clamp to bite (clamps to 0;
+\* unclamped this drives weapon scores negative, violating SlotCorrect's >= 0 floor)
+MonResHi == [fire |-> 110, earth |-> 0]
 States == {
   \* upgrade: iron_sword beats equipped wood_sword
-  [level |-> 5, inv |-> [iron_sword |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"]],
+  [level |-> 5, inv |-> [iron_sword |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"], monAtk |-> MonAtk, monRes |-> MonRes],
   \* level-gated: iron_sword (lvl5) excluded, keep wood_sword
-  [level |-> 4, inv |-> [iron_sword |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"]],
+  [level |-> 4, inv |-> [iron_sword |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"], monAtk |-> MonAtk, monRes |-> MonRes],
   \* empty-slot fill: leather into body_slot
-  [level |-> 3, inv |-> [leather |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"]],
+  [level |-> 3, inv |-> [leather |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"], monAtk |-> MonAtk, monRes |-> MonRes],
   \* no-downgrade: plate stays, leather not chosen
-  [level |-> 8, inv |-> [leather |-> 1], equip |-> [weapon_slot |-> "none", body_slot |-> "plate", helmet_slot |-> "none"]],
+  [level |-> 8, inv |-> [leather |-> 1], equip |-> [weapon_slot |-> "none", body_slot |-> "plate", helmet_slot |-> "none"], monAtk |-> MonAtk, monRes |-> MonRes],
   \* no candidates: every slot unchanged
-  [level |-> 5, inv |-> [none |-> 0], equip |-> [weapon_slot |-> "none", body_slot |-> "none", helmet_slot |-> "none"]]
+  [level |-> 5, inv |-> [none |-> 0], equip |-> [weapon_slot |-> "none", body_slot |-> "none", helmet_slot |-> "none"], monAtk |-> MonAtk, monRes |-> MonRes],
+  \* clamp: fire-res 110 clamps both weapons' WScore to 0 -> tie -> keep equipped iron;
+  \* also exercises SlotCorrect's weapon-score >= 0 floor (fails if Max(0,..) dropped)
+  [level |-> 5, inv |-> [wood_sword |-> 1], equip |-> [weapon_slot |-> "iron_sword", body_slot |-> "none", helmet_slot |-> "none"], monAtk |-> MonAtk, monRes |-> MonResHi]
 }
 
-Correct(st) == \A slot \in AllSlots : SlotCorrect(st, slot, MonAtk, MonRes)
+Correct(st) == \A slot \in AllSlots : SlotCorrect(st, slot, st.monAtk, st.monRes)
 
 VARIABLE todo
 Init == todo = States
