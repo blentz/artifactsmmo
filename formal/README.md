@@ -40,6 +40,8 @@ e.g. a git worktree. The runner is pure stdlib.)
 | `TaskBatch.tla` | `ai/task_batch.py:19` | `task_batch_size` clamps to `max(1, min(remaining, fit, BATCH_CAP))`: always >=1, never exceeds the task remainder or the depth cap, and a >=1 batch always fits the available inventory space (`K*mats <= free+held-MIN_FREE`). |
 | `InventoryCaps.tla` | `ai/inventory_caps.py:30,82` | `useful_quantity_cap` = max(recipe_demand*buffer floored at safety, task_remaining, action_cap, equip_keep) with equipped => >=1; `overstocked_items` = `{code: qty-cap : qty>cap}` exactly. |
 | `BankSelection.tla` | `ai/bank_selection.py:68` | `select_bank_deposits` deposits exactly the non-kept positive-qty inventory; the keep-set is closed under the recipe-material walk of {crafting_target, items-task item} plus task-coin/HP/best-weapon, so deposits never intersect the keep-set (the PursueTask-freeze invariant); sort key is the total order (-sell_value, code). |
+| `EquipmentScoring.tla` | `ai/equipment/scoring.py:9,23,55` | `pick_loadout` picks, per slot independently, a score-optimal feasible owned item and never downgrades (swap only on strict score improvement; ties keep the current item; below-level items excluded). Scores use an integer surrogate order-equivalent to `weapon_score`/`armor_score`. |
+| `LoadoutProjection.tla` | `ai/equipment/projection.py:30` | `project_loadout_stats` = current totals + Σ over changed slots of (new − old) per stat; equals the unconditional all-slot new−old sum (the changed-slot guard is sound), and the identity loadout reproduces current stats exactly. |
 
 ## Modeling notes
 
@@ -57,6 +59,13 @@ e.g. a git worktree. The runner is pure stdlib.)
   `RecipeClosure.tla`. `TaskBatch` abstracts `raw_material_units`/`recipe_closure`
   (proven separately) as the enumerated `mats_per_unit`/`held_recipe` inputs and
   verifies only the clamp it adds.
+- The combat/equipment specs (`EquipmentScoring`, `LoadoutProjection`) keep all
+  arithmetic integer. `EquipmentScoring` replaces the float `weapon_score`/`armor_score`
+  (`atk*(1-res/100)`) with the order-preserving integer surrogate `atk*max(0,100-res)`
+  — `pick_loadout` only compares scores, so the surrogate proves the exact ordering it
+  relies on. `LoadoutProjection` models the integer stat fields (attack/resistance
+  elements, max_hp, initiative); the remaining scalar fields (dmg, dmg_elements,
+  critical_strike) follow the identical additive pattern.
 
 ## Move-API connectivity finding
 
