@@ -14,10 +14,8 @@ EXTENDS Integers, FiniteSets, TLC
 \* new-minus-old, skip-when-equal pattern (projection.py:58-59, 52-54) and are
 \* verified by that structural identity; modeling them adds no new control flow.
 
-Slots == {"weapon_slot", "body_slot"}
 Field == {"fire", "earth"}   \* element keys for attack/resistance
 
-Items == {"none", "w1", "w2", "b1", "b2"}
 IAtk  == [ none |-> [fire |-> 0, earth |-> 0], w1 |-> [fire |-> 5, earth |-> 0],
            w2 |-> [fire |-> 9, earth |-> 1], b1 |-> [fire |-> 0, earth |-> 0], b2 |-> [fire |-> 0, earth |-> 0] ]
 IResist == [ none |-> [fire |-> 0, earth |-> 0], w1 |-> [fire |-> 0, earth |-> 0],
@@ -41,6 +39,8 @@ ProjInit(st, lo) == st.init
   + (IF ChangedW(st, lo) THEN IInit[lo["weapon_slot"]] - IInit[st.equip["weapon_slot"]] ELSE 0)
   + (IF ChangedB(st, lo) THEN IInit[lo["body_slot"]]   - IInit[st.equip["body_slot"]]   ELSE 0)
 
+\* Do NOT unify Proj* and O*: their structural distinctness (guarded vs
+\* unconditional) IS the cross-check — merging them collapses it to a tautology.
 \* INDEPENDENT oracle: unconditional all-slot (new - old). new==old contributes 0,
 \* so summing over all slots equals summing over changed slots — proves the
 \* ChangedSlots guard is sound. No guard here (structurally distinct from Proj*).
@@ -62,7 +62,8 @@ Correct(c) ==
   /\ ProjInit(st, lo) = OInit(st, lo)
   /\ (lo = st.equip =>
         /\ \A e \in Field : ProjAtk(st, lo, e) = st.atk[e]
-        /\ ProjHp(st, lo) = st.maxhp)
+        /\ ProjHp(st, lo) = st.maxhp)  \* atk+hp suffice as identity witnesses; res/init identity follows from the
+                                        \* Proj*=O* oracle-equality conjuncts above.
 
 BaseEquip == [weapon_slot |-> "w1", body_slot |-> "b1"]
 BaseState == [atk |-> [fire |-> 5, earth |-> 0], res |-> [fire |-> 4, earth |-> 2],
