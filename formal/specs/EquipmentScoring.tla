@@ -22,6 +22,7 @@ EXTENDS Integers, FiniteSets, TLC
 Elements == {"fire", "earth"}
 Max(a, b) == IF a > b THEN a ELSE b
 
+\* mirrors ITEM_TYPE_TO_SLOTS from ai/actions/equip.py
 SlotsOfType == [ weapon |-> {"weapon_slot"}, body |-> {"body_slot"}, helmet |-> {"helmet_slot"} ]
 AllSlots == {"weapon_slot", "body_slot", "helmet_slot"}
 
@@ -43,6 +44,7 @@ AScore(item, monAtk) == LET S(e) == monAtk[e] * Resist[item][e]
 ScoreOf(item, slot, monAtk, monRes) ==
   IF slot = "weapon_slot" THEN WScore(item, monRes) ELSE AScore(item, monAtk)
 
+\* "none" is the empty-slot sentinel; Owned may include it, Feasible filters it out
 Owned(st) == { c \in DOMAIN st.inv : st.inv[c] > 0 } \cup { st.equip[s] : s \in AllSlots }
 Feasible(st, c) == c # "none" /\ st.level >= Level[c]
 Candidates(st, slot) == { c \in Owned(st) : Feasible(st, c) /\ slot \in SlotsOfType[Type[c]] }
@@ -58,6 +60,8 @@ PickSlot(st, slot, monAtk, monRes) ==
              ELSE IF ScoreOf(best, slot, monAtk, monRes) > ScoreOf(cur, slot, monAtk, monRes)
                   THEN best ELSE cur
 
+\* Independent oracle — must NOT delegate to PickSlot. Recomputes the max score
+\* directly so SlotCorrect's score-optimal check is non-circular. Do NOT DRY.
 MaxScore(st, slot, monAtk, monRes) ==
   LET cands == Candidates(st, slot)
   IN CHOOSE v \in { ScoreOf(c, slot, monAtk, monRes) : c \in cands } :
@@ -78,10 +82,15 @@ SlotCorrect(st, slot, monAtk, monRes) ==
 MonAtk == [fire |-> 20, earth |-> 10]
 MonRes == [fire |-> 0, earth |-> 0]
 States == {
+  \* upgrade: iron_sword beats equipped wood_sword
   [level |-> 5, inv |-> [iron_sword |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"]],
+  \* level-gated: iron_sword (lvl5) excluded, keep wood_sword
   [level |-> 4, inv |-> [iron_sword |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"]],
+  \* empty-slot fill: leather into body_slot
   [level |-> 3, inv |-> [leather |-> 1], equip |-> [weapon_slot |-> "wood_sword", body_slot |-> "none", helmet_slot |-> "none"]],
+  \* no-downgrade: plate stays, leather not chosen
   [level |-> 8, inv |-> [leather |-> 1], equip |-> [weapon_slot |-> "none", body_slot |-> "plate", helmet_slot |-> "none"]],
+  \* no candidates: every slot unchanged
   [level |-> 5, inv |-> [none |-> 0], equip |-> [weapon_slot |-> "none", body_slot |-> "none", helmet_slot |-> "none"]]
 }
 
