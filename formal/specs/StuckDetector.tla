@@ -119,7 +119,21 @@ S6 == [ hist |-> << R("A","g1","act"), R("A","g1","act"), R("A","g1","act"), R("
                     R("A","g1","act"), R("A","g1","act") >>,
         counter |-> 15, ackF |-> 10, ackO |-> 0, ackN |-> 0, exp |-> "none" ]
 
-Scenarios == { S1, S2, S3, S4, S5, S6 }
+\* S7 WINDOW-BOUNDARY (pins RecentSince index math): counter=10, L=10 (no eviction,
+\*   start_idx=0), ackF=1, ackO=ackN=0. 10 records: pos 1..5 state "A", pos 6..10 state
+\*   "B"; ALL goals g1; ALL actions "act".
+\*   CORRECT math: pos-i record has global idx start_idx+(i-1)=i-1. Keep where i-1>=1 =>
+\*   positions 2..10 = 9 records. Frozen needs len=10 => 9!=10 => frozen FALSE. osc: last
+\*   8 of 9 kept, goals all g1 => distinct=1!=2 => FALSE. noprog: actions "act" => FALSE.
+\*   So exp="none".
+\*   OFF-BY-ONE (start_idx+i=i): keep where i>=1 => all 10, len=10, A x5/B x5 maxcount=5
+\*   >=5 => frozen TRUE => would return "frozen" != "none". This scenario flips the verdict.
+S7 == [ hist |-> << R("A","g1","act"), R("A","g1","act"), R("A","g1","act"), R("A","g1","act"),
+                    R("A","g1","act"), R("B","g1","act"), R("B","g1","act"), R("B","g1","act"),
+                    R("B","g1","act"), R("B","g1","act") >>,
+        counter |-> 10, ackF |-> 1, ackO |-> 0, ackN |-> 0, exp |-> "none" ]
+
+Scenarios == { S1, S2, S3, S4, S5, S6, S7 }
 
 DetectCorrect(sc) == Detect(sc) = sc.exp
 
