@@ -7,8 +7,9 @@ EXTENDS Integers, FiniteSets, TLC
 \*   from_game_data (:57) -- best-equip-value attainable item per slot/type (argmax,
 \*     ties by code ascending), matching sorted(key=(-value, code)) + attainable filter.
 \*   gap (:86) -- per-axis non-negative gaps; is_complete iff every fraction is 0.
-\* equip_value (tiers/equip_value.py) is modeled as one integer per item. Fractions
-\* are floats in Python; we verify them STRUCTURALLY via integer 0 <= gap <= denom.
+\* equip_value (tiers/equip_value.py) is modeled as one integer per item.
+\* Float fractions (objective.py:102-106) are gap/denom; we assert 0 <= gap <= denom
+\* (integer), which is equivalent to fraction in [0,1] without computing floats.
 
 Max(a, b) == IF a > b THEN a ELSE b
 
@@ -17,6 +18,7 @@ HasRecipe == [ none |-> FALSE, wood_sword |-> TRUE, iron_sword |-> TRUE, gem_swo
                iron |-> FALSE, wood |-> FALSE, gem |-> FALSE ]
 Recipe == [ none |-> {}, wood_sword |-> {"wood"}, iron_sword |-> {"iron"},
             gem_sword |-> {"gem"}, iron |-> {}, wood |-> {}, gem |-> {} ]
+\* gem: IsDrop=FALSE (drop-only, not gatherable) => gem_sword is NOT attainable. Pivotal test case.
 IsDrop == [ none |-> FALSE, wood_sword |-> FALSE, iron_sword |-> FALSE, gem_sword |-> FALSE,
             iron |-> TRUE, wood |-> TRUE, gem |-> FALSE ]
 EquipValue == [ none |-> 0, wood_sword |-> 10, iron_sword |-> 25, gem_sword |-> 40,
@@ -32,6 +34,9 @@ Att[code \in Items, path \in SUBSET Items] ==
   ELSE IsDrop[code]
 IsAttainable(code) == Att[code, {}]
 
+\* Do NOT unify Att and Grounded: independence IS the cross-check. Att is the
+\* path-recursive algorithm model; Grounded is a monotone least-fixpoint oracle.
+\* They must agree (AttainCorrect) yet be structurally distinct — merging defeats it.
 \* independent oracle: least-fixpoint grounding
 N == Cardinality(Items)
 GroundStep(G) == { c \in Items : IF HasRecipe[c] THEN \A m \in Recipe[c] : m \in G ELSE IsDrop[c] }
@@ -55,6 +60,7 @@ GapState == { [lvl |-> l, sk |-> s, gearDef |-> g] :
                 l \in {0, 25, 50}, s \in [Skills -> {0, 50}], g \in {0, 5, 40} }
 CharGap(st) == Max(0, TargetLevel - st.lvl)
 SkillGap(st, sk) == Max(0, MaxSkill - st.sk[sk])
+\* hardcoded to the two-skill fixture (mining, cooking); keep in sync with Skills if extended
 SkillGapSum(st) == SkillGap(st, "mining") + SkillGap(st, "cooking")
 SkillsDenom == Cardinality(Skills) * MaxSkill
 IsComplete(st) == CharGap(st) = 0 /\ SkillGapSum(st) = 0 /\ st.gearDef = 0
