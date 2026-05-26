@@ -25,6 +25,7 @@ MODULES: list[tuple[str, int]] = [
     ("PredictWin", 1806),
     ("TaskBatch", 5250),
     ("InventoryCaps", 484),
+    ("BankSelection", 3),
 ]
 
 # Substrings PlusPy emits when an assertion fails.
