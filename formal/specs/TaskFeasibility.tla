@@ -57,7 +57,19 @@ SkillVecs == {
 ItemCases == { [item |-> i, skills |-> sv] : i \in Items, sv \in SkillVecs }
 
 MonCases == { [mon |-> m, lvl |-> l] : m \in 0..8, l \in 0..6 }
-MonCorrect(c) == MonsterReq(c.mon, c.lvl) <=> (c.mon > 0 /\ c.mon > c.lvl + MonsterMargin)
+
+\* Independent expected verdicts (hand-computed, NOT via the > expression) at points
+\* that pin down the threshold: the boundary 4>4 (false), margin, and the mon=0 guard.
+ExpectedMon == ( <<4,2>> :> FALSE   \* 4 > 2+2=4 is FALSE (boundary: > not >=)
+             @@  <<5,2>> :> TRUE    \* 5 > 4
+             @@  <<0,0>> :> FALSE   \* mon=0 guard
+             @@  <<0,5>> :> FALSE   \* mon=0 guard
+             @@  <<7,2>> :> TRUE    \* 7 > 4
+             @@  <<3,3>> :> FALSE   \* 3 > 5 is FALSE
+             @@  <<6,3>> :> TRUE )  \* 6 > 5
+
+MonCorrect(c) == << c.mon, c.lvl >> \in DOMAIN ExpectedMon =>
+                   (MonsterReq(c.mon, c.lvl) <=> ExpectedMon[<< c.mon, c.lvl >>])
 
 Tagged == { [kind |-> "item", v |-> c] : c \in ItemCases }
             \cup { [kind |-> "mon", v |-> c] : c \in MonCases }
