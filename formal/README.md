@@ -42,6 +42,9 @@ e.g. a git worktree. The runner is pure stdlib.)
 | `BankSelection.tla` | `ai/bank_selection.py:68` | `select_bank_deposits` deposits exactly the non-kept positive-qty inventory; the keep-set is closed under the recipe-material walk of {crafting_target, items-task item} plus task-coin/HP/best-weapon, so deposits never intersect the keep-set (the PursueTask-freeze invariant); sort key is the total order (-sell_value, code). |
 | `EquipmentScoring.tla` | `ai/equipment/scoring.py:9,23,55` | `pick_loadout` picks, per slot independently, a score-optimal feasible owned item and never downgrades (swap only on strict score improvement; ties keep the current item; below-level items excluded). Scores use an integer surrogate order-equivalent to `weapon_score`/`armor_score`. |
 | `LoadoutProjection.tla` | `ai/equipment/projection.py:30` | `project_loadout_stats` = current totals + Σ over changed slots of (new − old) per stat; equals the unconditional all-slot new−old sum (the changed-slot guard is sound), and the identity loadout reproduces current stats exactly. |
+| `TaskFeasibility.tla` | `ai/task_feasibility.py:30,44` | `task_requirement` returns the highest-`required_level` unmet crafting-skill gap over the task item's craft closure (cycle-safe), None iff feasible; the monster branch gates on `monster_level > char_level + 2` (cross-checked at the `4>4` boundary). |
+| `Objective.tla` | `ai/tiers/objective.py:15,57,86` | `is_attainable` = the craft chain bottoms out in gatherables (matches a least-fixpoint grounding, cycle-safe); `from_game_data` picks the highest-equip-value ATTAINABLE item per gear slot; `gap` yields non-negative gaps with `is_complete` iff every gap is zero (fractions are `gap/denom`, in [0,1] since `0 <= gap <= denom`). |
+| `StrategyTraversal.tla` | `ai/tiers/strategy.py:69,91,107,125` | `is_reachable` (path-recursive) equals the well-founded grounding fixpoint (cycles unreachable); `unmet_closure_size` = count of unmet nodes in the prereq closure (min 1); `actionable_step`'s frontier = unmet nodes with all direct prereqs satisfied (producible if obtain), cross-checked by a De Morgan oracle and empty on a cyclic block; `root_cost` floors at 1. |
 
 ## Modeling notes
 
@@ -69,6 +72,14 @@ e.g. a git worktree. The runner is pure stdlib.)
 - `LoadoutProjection` models the pre-`_drop_zeros` accumulator values (plain integers
   per stat), not `project_loadout_stats`' final dict-shape transform that strips
   zero-valued entries; `_drop_zeros` is a trivial output filter verified by inspection.
+- The strategy/feasibility specs (`TaskFeasibility`, `Objective`, `StrategyTraversal`)
+  abstract the prerequisite graph + `is_satisfied` (proven in `PrerequisiteGraph.tla`)
+  and the recipe relation (`RecipeClosure.tla`) as in-spec node/recipe tables, and
+  verify the traversal logic (worst-gap, fixpoint reachability, closure counting,
+  actionable-frontier) against independent fixpoint/cardinality/De-Morgan oracles.
+  `actionable_step`'s DFS pick-order is implementation-defined; the spec verifies the
+  actionable SET, not which node DFS returns. Gap fractions are checked structurally
+  (`0 <= gap <= denom`) to stay integer-only.
 
 ## Move-API connectivity finding
 
