@@ -1,0 +1,9 @@
+name = "Formal"
+defaultTargets = ["Formal", "oracle"]
+
+[[lean_lib]]
+name = "Formal"
+
+[[lean_exe]]
+name = "oracle"
+root = "Oracle"
