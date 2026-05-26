@@ -1,7 +1,7 @@
 # Formal verification of core algorithms (TLA+ / PlusPy)
 
-Executable TLA+ reference models that demonstrate the correctness of four pure
-functions in the AI player. Each spec defines the answer twice — once as the
+Executable TLA+ reference models that demonstrate the correctness of fourteen
+pure functions / core algorithms in the AI player. Each spec defines the answer twice — once as the
 algorithm, once as an independent oracle (hand-computed values or an operational
 simulation) — and PlusPy asserts they agree across an exhaustively enumerated,
 **bounded** input domain.
