@@ -80,6 +80,10 @@ e.g. a git worktree. The runner is pure stdlib.)
   `actionable_step`'s DFS pick-order is implementation-defined; the spec verifies the
   actionable SET, not which node DFS returns. Gap fractions are checked structurally
   (`0 <= gap <= denom`) to stay integer-only.
+- `StrategyTraversal`'s fixture sets every node unmet. `unmet_closure_size` and
+  `actionable_step` are therefore verified for all-unmet prerequisite graphs only;
+  the satisfied-node pruning branch (Python descends only unmet nodes) is not
+  exercised. A satisfied-interior-node fixture is a possible follow-up.
 
 ## Move-API connectivity finding
 

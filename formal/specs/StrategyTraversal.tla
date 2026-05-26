@@ -38,6 +38,11 @@ Grounded == Gnd[NN]
 ReachCorrect(n) == IsReachable(n) = (n \in Grounded)
 
 \* unmet_closure_size: |unmet in prereq closure|, min 1
+\* COVERAGE BOUND: the fixture sets every IsSat = FALSE. Python unmet_closure_size /
+\* actionable_step descend only UNMET nodes (pruning at satisfied boundaries); this
+\* ClosureOf expands all prereqs unconditionally. The two coincide here ONLY because
+\* all nodes are unmet. A satisfied interior node above unmet ones is NOT modeled —
+\* the closure-size / actionable properties are verified for all-unmet graphs only.
 Clo[k \in 0..NN, r \in Nodes] == IF k = 0 THEN {r} ELSE Clo[k-1, r] \cup UNION { Prereqs[m] : m \in Clo[k-1, r] }
 ClosureOf(r) == Clo[NN, r]
 SizeModel(r) == Max(Cardinality({ m \in ClosureOf(r) : ~IsSat[m] }), 1)
