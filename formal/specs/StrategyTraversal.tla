@@ -1,4 +1,5 @@
 ----------------------------- MODULE StrategyTraversal -----------------------------
+\* Mirrors src/artifactsmmo_cli/ai/tiers/strategy.py: is_reachable:125, unmet_closure_size:91, actionable_step:69, root_cost:107
 EXTENDS Integers, FiniteSets, TLC
 Max(a, b) == IF a > b THEN a ELSE b
 
@@ -6,11 +7,11 @@ Nodes == {"g_char", "g_skill", "g_sword", "g_blade", "g_iron", "g_ringA", "g_rin
 Kind == [ g_char |-> "char", g_skill |-> "skill", g_sword |-> "obtain", g_blade |-> "obtain",
           g_iron |-> "obtain", g_ringA |-> "obtain", g_ringB |-> "obtain" ]
 Prereqs == [ g_char |-> {}, g_skill |-> {}, g_sword |-> {"g_blade"}, g_blade |-> {"g_iron"},
-             g_iron |-> {}, g_ringA |-> {"g_ringB"}, g_ringB |-> {"g_ringA"} ]
+             g_iron |-> {}, g_ringA |-> {"g_ringB"}, g_ringB |-> {"g_ringA"} ]  \* g_sword->g_blade->g_iron chain; g_ringA<->g_ringB cycle (tests cycle-safety)
 IsSat == [ g_char |-> FALSE, g_skill |-> FALSE, g_sword |-> FALSE, g_blade |-> FALSE,
            g_iron |-> FALSE, g_ringA |-> FALSE, g_ringB |-> FALSE ]
 Producible == [ g_char |-> TRUE, g_skill |-> TRUE, g_sword |-> TRUE, g_blade |-> TRUE,
-                g_iron |-> TRUE, g_ringA |-> FALSE, g_ringB |-> FALSE ]
+                g_iron |-> TRUE, g_ringA |-> FALSE, g_ringB |-> FALSE ]  \* g_iron is a producible leaf; the cyclic ring nodes are not producible
 NN == Cardinality(Nodes)
 
 \* is_reachable (algorithm model): cycle-safe via path subset
@@ -27,8 +28,12 @@ GroundStep(G) == { n \in Nodes :
                      \/ IsSat[n]
                      \/ Kind[n] = "skill"
                      \/ (Kind[n] = "obtain" /\ Prereqs[n] = {} /\ Producible[n])
+                     \* char/skill (empty prereqs) ground vacuously via \A over {}; non-leaf obtain grounds when all prereqs in G; leaf-obtain handled by the producible disjunct above
                      \/ (~(Kind[n] = "obtain" /\ Prereqs[n] = {}) /\ \A q \in Prereqs[n] : q \in G) }
 Gnd[k \in 0..NN] == IF k = 0 THEN {} ELSE GroundStep(Gnd[k-1])
+\* Two independent reachability formulations are intentional — do NOT unify.
+\* Reach = algorithm model (path-recursive, cycle-safe). Grounded = oracle (monotone
+\* fixpoint). ReachCorrect cross-checks they agree; merging defeats the check.
 Grounded == Gnd[NN]
 ReachCorrect(n) == IsReachable(n) = (n \in Grounded)
 
@@ -44,11 +49,18 @@ SizeCorrect(r) == SizeModel(r) = SizeOracle(r)
 \* (obtain => producible). Model the SET; the function returns one (DFS order picks which).
 Actionables(r) == { m \in ClosureOf(r) :
                       ~IsSat[m] /\ (\A q \in Prereqs[m] : IsSat[q]) /\ (Kind[m] = "obtain" => Producible[m]) }
+\* Independent (De Morgan) re-derivation of the actionable frontier: a node is
+\* actionable iff unmet, has NO unmet direct prereq, and is producible-if-obtain.
+ActionablesOracle(r) == { m \in ClosureOf(r) :
+                            ~IsSat[m]
+                            /\ ~ (\E q \in Prereqs[m] : ~IsSat[q])
+                            /\ (Kind[m] = "obtain" => Producible[m]) }
 StepCorrect(r) ==
-  /\ (Actionables(r) # {} =>
-        \E m \in Actionables(r) :
-           ~IsSat[m] /\ (\A q \in Prereqs[m] : IsSat[q]) /\ (Kind[m] = "obtain" => Producible[m]))
-  \* (the existence characterization; None iff Actionables empty is the contract)
+  /\ Actionables(r) = ActionablesOracle(r)        \* model frontier = independent De Morgan oracle
+  /\ (Actionables(r) = {} <=> ActionablesOracle(r) = {})  \* None iff no actionable node (cyclic/blocked)
+  \* concrete fixture expectations (cyclic ring is blocked; sword chain bottoms out at the iron leaf):
+  /\ (r = "g_ringA" => Actionables(r) = {})
+  /\ (r = "g_sword" => Actionables(r) = {"g_iron"})
 
 \* root_cost: char/skill = max(1, level diff); gear(obtain) = unmet_closure_size
 RootCost(r, charLvl, charTarget, skillLvl, skillTarget) ==
