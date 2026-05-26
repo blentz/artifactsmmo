@@ -37,6 +37,9 @@ e.g. a git worktree. The runner is pure stdlib.)
 | `RecipeClosure.tla` | `ai/recipe_closure.py:15-54` | `craftable_mats`/`needed_resources` = least-fixpoint closure (sound + complete), both pinned to a hand-computed `ExpectedClosure`; `raw_material_units` matches a hand table; cyclic recipes terminate (ring=2, loop=2, a=1, b=1). |
 | `PrerequisiteGraph.tla` | `ai/tiers/prerequisite_graph.py:20-65` | `prerequisites` emits exactly the data-derived direct edges; expansion terminates at leaves; `combat_capable <=> exists monster. predict_win`. |
 | `PredictWin.tla` | `ai/combat.py:57-79` | Closed-form `ceil(hp/hit)` verdict (incl. the `<=`/`<` initiative tiebreak) = outcome of an independent turn-by-turn fight simulation; monotone in player hit / monster HP; MAX_TURNS cap is a sound loss (exercised by high-HP and zero-damage cap cases that drive both the closed-form and the sim's own truncation path). |
+| `TaskBatch.tla` | `ai/task_batch.py:19` | `task_batch_size` clamps to `max(1, min(remaining, fit, BATCH_CAP))`: always >=1, never exceeds the task remainder or the depth cap, and a >=1 batch always fits the available inventory space (`K*mats <= free+held-MIN_FREE`). |
+| `InventoryCaps.tla` | `ai/inventory_caps.py:30,82` | `useful_quantity_cap` = max(recipe_demand*buffer floored at safety, task_remaining, action_cap, equip_keep) with equipped => >=1; `overstocked_items` = `{code: qty-cap : qty>cap}` exactly. |
+| `BankSelection.tla` | `ai/bank_selection.py:68` | `select_bank_deposits` deposits exactly the non-kept positive-qty inventory; the keep-set is closed under the recipe-material walk of {crafting_target, items-task item} plus task-coin/HP/best-weapon, so deposits never intersect the keep-set (the PursueTask-freeze invariant); sort key is the total order (-sell_value, code). |
 
 ## Modeling notes
 
@@ -48,6 +51,12 @@ e.g. a git worktree. The runner is pure stdlib.)
   `predict_win` refinement lives in `PredictWin.tla`.
 - `RecipeClosure.tla` defines the algorithm-DFS closure and the fixpoint closure
   with separate operators (intentionally) and pins both to `ExpectedClosure`.
+- The inventory/economy specs (`TaskBatch`, `InventoryCaps`, `BankSelection`)
+  abstract item attributes (recipe demand, sell value, equippability, HP-restore)
+  as small in-spec tables and reuse the recipe-material closure already proven in
+  `RecipeClosure.tla`. `TaskBatch` abstracts `raw_material_units`/`recipe_closure`
+  (proven separately) as the enumerated `mats_per_unit`/`held_recipe` inputs and
+  verifies only the clamp it adds.
 
 ## Move-API connectivity finding
 
