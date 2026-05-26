@@ -86,7 +86,7 @@ CyclesCorrect(cur, tgt, x) ==
   /\ (tgt > cur /\ x <= 0 => CyclesGuard(cur, tgt, x) = InfSentinel)
   /\ (tgt > cur /\ x > 0 => CyclesGuard(cur, tgt, x) = 1)
 
-\* ---- total_xp_to_reach monotonicity (FIX of the TotalObs placeholder) ----
+\* ---- total_xp_to_reach: monotonicity over the all-observed range ----
 \* Realized as a real bounded recursive function summing RequiredXp over the
 \* contiguous range [lo,hi) for the {1,2,3} curve, where levels 1,2,3 are ALL
 \* observed so every RequiredXp is an exact non-negative integer. Range hi runs
@@ -95,6 +95,7 @@ C123 == CHOOSE c \in Curves : c.obs = {1,2,3}
 TotalObs[lo \in 1..4, hi \in 1..4] ==
   IF hi <= lo THEN 0
   ELSE RequiredXp(C123, hi - 1) + TotalObs[lo, hi - 1]
+\* public operator wrapping the recursive TotalObs function (PlusPy needs [..] form for recursion)
 Total(cur, tgt) == TotalObs[cur, tgt]
 TotalCorrect(cur, tgt) ==
   /\ Total(cur, tgt) >= 0
@@ -103,6 +104,7 @@ TotalCorrect(cur, tgt) ==
 \* ---- growth_ratio: DEFAULT iff <2 consecutive observed (FIX of GrowthCorrect) ----
 ConsecutivePairs(c) == { l \in c.obs : (l + 1) \in c.obs /\ c.xp[l] > 0 }
 UsesDefaultRatio(c) == ConsecutivePairs(c) = {}
+\* ExpectedDefault is an independent hand-table oracle for growth_ratio's default condition (not derived from UsesDefaultRatio) — do not replace with the computed form.
 \* Independent hand table (verified by hand against the Curves' recipe data):
 \*   empty -> TRUE  (no observed levels, no pair)
 \*   {1}   -> TRUE  (single level, no pair)
@@ -118,8 +120,8 @@ GrowthCorrect(c) == UsesDefaultRatio(c) <=> ExpectedDefault[Tag(c)]
 
 \* ---- tagged enumeration ----
 LevelPairs == { <<cur, tgt>> : cur \in Levels, tgt \in (Levels \cup {7}) }
-XpRates == { -5, 0, 10 }   \* milli-units; <=0 exercises the inf branch
-TotalPairs == { <<cur, tgt>> : cur \in 1..3, tgt \in 1..3 }
+XpRates == { -5, 0, 10 }   \* sample values; <=0 exercises the inf branch, >0 the finite branch (magnitude irrelevant in this branch-only check)
+TotalPairs == { <<cur, tgt>> : cur \in 1..3, tgt \in 1..3 }  \* tgt capped at 3 so tgt+1<=4 stays within TotalObs[lo,hi \in 1..4] domain
 Tagged ==
   { [k |-> "req",  c |-> c, lvl |-> l] : c \in Curves, l \in (Levels \cup {7}) }
   \cup { [k |-> "conf", c |-> c, cur |-> p[1], tgt |-> p[2]] : c \in Curves, p \in LevelPairs }
