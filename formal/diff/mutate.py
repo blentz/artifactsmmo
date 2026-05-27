@@ -9,6 +9,7 @@ SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
+PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -92,6 +93,23 @@ PREDICT_WIN_MUTATIONS = [
 ]
 
 
+# loadout_projection mutations -- old strings matched to current projection.py text.
+PROJECTION_MUTATIONS = [
+    # sign flip: new − old becomes old − new on the dmg field (negates the delta).
+    ("loadout_projection: dmg delta sign flip (new-old -> old-new)",
+     "        dmg += (new_s.dmg if new_s else 0) - (old_s.dmg if old_s else 0)",
+     "        dmg += (old_s.dmg if old_s else 0) - (new_s.dmg if new_s else 0)"),
+    # drop a slot's delta: critical_strike no longer accumulates (delta dropped).
+    ("loadout_projection: drop critical_strike delta",
+     "        critical_strike += (new_s.critical_strike if new_s else 0) - (old_s.critical_strike if old_s else 0)",
+     "        critical_strike += 0"),
+    # off-by-one: max_hp delta gains a spurious +1.
+    ("loadout_projection: max_hp delta off-by-one (+1)",
+     "        max_hp += (new_s.hp_bonus if new_s else 0) - (old_s.hp_bonus if old_s else 0)",
+     "        max_hp += (new_s.hp_bonus if new_s else 0) - (old_s.hp_bonus if old_s else 0) + 1"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -126,6 +144,8 @@ def main() -> int:
               "formal/diff/test_inventory_caps_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
+    run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
+              "formal/diff/test_loadout_projection_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

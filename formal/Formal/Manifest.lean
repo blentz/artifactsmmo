@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
 #check @pathFrom_len_eq_cheb   -- optimality-achieved
@@ -26,3 +26,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @maxturns_sound              -- rounds_to_kill > MAX_TURNS ⇒ ¬win
 #check @predict_win_mono_player     -- ↑player raw never flips win→loss
 #check @predict_win_mono_monsterhp  -- ↓monster HP never flips win→loss
+-- LoadoutProjection required roles:
+#check @proj_identity              -- loadout = equipment ⇒ projected = current
+#check @proj_additive              -- projected = current + Σ_all (new − old)
+#check @guarded_eq_unconditional   -- changed-guarded sum = unconditional sum (guard sound)
+#check @dropZeros_preserves_nonzero -- _drop_zeros keeps nonzero entries unchanged
+#check @dropZeros_zero_reads_zero   -- dropped zero reads back as 0 (dict.get(k,0))

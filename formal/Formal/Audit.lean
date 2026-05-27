@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection
 #print axioms pathFrom_valid
 #print axioms pathFrom_len_eq_cheb
 #print axioms kingWalk_len_ge_cheb
@@ -22,3 +22,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms maxturns_sound
 #print axioms predict_win_mono_player
 #print axioms predict_win_mono_monsterhp
+#print axioms proj_identity
+#print axioms proj_additive
+#print axioms guarded_eq_unconditional
+#print axioms dropZeros_preserves_nonzero
+#print axioms dropZeros_zero_reads_zero

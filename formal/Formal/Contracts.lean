@@ -2,7 +2,8 @@ import Formal.CalculatePath
 import Formal.TaskBatch
 import Formal.InventoryCaps
 import Formal.PredictWin
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
+import Formal.LoadoutProjection
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
     changed, the ascription fails to elaborate and the build goes RED. This is the
@@ -136,3 +137,28 @@ example : ∀ (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxH
     predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp playerFirst = true →
     predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp playerFirst = true :=
   @predict_win_mono_monsterhp
+
+/-! ### LoadoutProjection role contracts. -/
+
+-- proj_identity: loadout = equipment ⇒ projected field = current (per field)
+example : ∀ (current : Int) (slots : List SlotData),
+    isIdentity slots → projectedField current slots = current :=
+  @proj_identity
+-- proj_additive: projected = current + UNCONDITIONAL Σ (new − old) (per field)
+example : ∀ (current : Int) (slots : List SlotData),
+    slotsWf slots → projectedField current slots = current + unconditionalSum slots :=
+  @proj_additive
+-- guarded_eq_unconditional: the changed-slot-guarded sum equals the
+-- unconditional all-slot sum (the `continue` guard is sound)
+example : ∀ (slots : List SlotData),
+    slotsWf slots → guardedSum slots = unconditionalSum slots :=
+  @guarded_eq_unconditional
+-- dropZeros_preserves_nonzero: _drop_zeros keeps every nonzero entry's value
+example : ∀ (d : List (Int × Int)) (k v : Int),
+    (k, v) ∈ d → v ≠ 0 → (∀ kv ∈ d, kv.1 = k → kv.2 = v) →
+    lookupD (dropZeros d) k = v :=
+  @dropZeros_preserves_nonzero
+-- dropZeros_zero_reads_zero: a dropped zero reads back as 0 (dict.get(k, 0))
+example : ∀ (d : List (Int × Int)) (k : Int),
+    (∀ kv ∈ d, kv.1 = k → kv.2 = 0) → lookupD (dropZeros d) k = 0 :=
+  @dropZeros_zero_reads_zero

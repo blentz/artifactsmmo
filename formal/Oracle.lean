@@ -2,6 +2,7 @@ import Formal
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
+open Formal.LoadoutProjection
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -51,6 +52,23 @@ def runPredictWin (g : Nat → Int) : Json :=
 /-- Read an Int field (defaulting to 0) from a JSON array of Ints. -/
 def intArg (xs : Array Json) (i : Nat) : Int := (xs[i]!.getInt?).toOption.getD 0
 
+/-- Group a flat Int list into `SlotData` quadruples
+(newCode, oldCode, newC, oldC). Trailing partials are dropped. -/
+def toSlots : List Int → List SlotData
+  | a :: b :: c :: d :: rest => (a, b, c, d) :: toSlots rest
+  | _ => []
+
+/-- Compute one loadout_projection result using the SAME proved `projectedField`.
+
+args layout: [current, then groups of 4: newCode, oldCode, newC, oldC per slot].
+Emits the projected value of ONE stat field (the differential test calls the
+oracle once per field/element, treating dropped-zero element keys as 0). -/
+def runLoadoutProjection (args : Array Json) : Json :=
+  let current := intArg args 0
+  let rest := (List.range (args.size - 1)).map (fun i => intArg args (i + 1))
+  let slots := toSlots rest
+  Json.mkObj [("projected", Json.num (projectedField current slots))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -67,6 +85,8 @@ def runOne (item : Json) : Json :=
       (intArg args 3 != 0) (intArg args 4) (intArg args 5) (intArg args 6 != 0) (intArg args 7)
   else if kind == "predict_win" then
     runPredictWin (fun i => intArg args i)
+  else if kind == "loadout_projection" then
+    runLoadoutProjection args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
