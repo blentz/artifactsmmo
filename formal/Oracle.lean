@@ -2,7 +2,7 @@ import Formal
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
-open Formal.LoadoutProjection Formal.EquipmentScoring
+open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -116,6 +116,44 @@ def runEquipmentScoring (args : Array Json) : Json :=
   Json.mkObj [("picked_code", Json.num pickedCode), ("picked_score", Json.num pickedScore),
     ("max_score", Json.num maxScore), ("cur_score", Json.num curScore)]
 
+/-- Compute one skill_xp_curve result using the SAME proved defs.
+
+args layout:
+* 0:            nObs (number of observed pairs)
+* 1 .. 2*nObs:  observed pairs, flat (level0, xp0, level1, xp1, ...)
+* then:         current, target, xpPerCycle, queryLevel
+
+Emits ONLY the modeled integer/count/branch outputs:
+* `required_xp` of `queryLevel` (exact on observed levels; on the two zero
+  branches it is 0; the abstracted geometric estimate is NOT emitted — the
+  Python diff only queries observed/zero levels).
+* `conf_num` / `conf_den` (exact confidence rational over the gap).
+* `is_confident` (bool).
+* `cycles_branch` (0 / inf-sentinel -1 / 1=finite).
+* `total` over the gap (exact, valid as the Python total only when the range is
+  fully observed; the diff restricts to that case).
+* `uses_default` (bool). -/
+def runSkillXpCurve (args : Array Json) : Json :=
+  let nObs := (intArg args 0).toNat
+  let obs : Observed :=
+    (List.range nObs).map (fun k => (intArg args (1 + 2 * k), intArg args (2 + 2 * k)))
+  let base := 1 + 2 * nObs
+  let current := intArg args base
+  let target := intArg args (base + 1)
+  let xpPerCycle := intArg args (base + 2)
+  let queryLevel := intArg args (base + 3)
+  -- required_xp is emitted with a zero estimate (the diff only queries
+  -- observed/zero-branch levels, where the estimate is unreached).
+  let reqXp := requiredXp (fun _ => 0) obs queryLevel
+  Json.mkObj [
+    ("required_xp", Json.num reqXp),
+    ("conf_num", Json.num (Int.ofNat (confNum obs current target))),
+    ("conf_den", Json.num (Int.ofNat (confDen current target))),
+    ("is_confident", Json.bool (isConfident obs current target)),
+    ("cycles_branch", Json.num (cyclesBranch current target xpPerCycle)),
+    ("total", Json.num (totalXpToReach obs current target)),
+    ("uses_default", Json.bool (usesDefaultRatio obs))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -136,6 +174,8 @@ def runOne (item : Json) : Json :=
     runLoadoutProjection args
   else if kind == "equipment_scoring" then
     runEquipmentScoring args
+  else if kind == "skill_xp_curve" then
+    runSkillXpCurve args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

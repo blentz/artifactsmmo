@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
 #check @pathFrom_len_eq_cheb   -- optimality-achieved
@@ -40,3 +40,13 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @pickslot_empty_fills         -- empty slot + candidate ⇒ filled with argmax
 #check @pickslot_no_candidates_keeps -- no feasible candidate ⇒ slot left as-is
 #check @weapon_score_nonneg          -- WScore ≥ 0 (the clamp earns this)
+-- SkillXpCurve required roles:
+#check @required_xp_observed       -- observed level ⇒ required_xp = stored xp
+#check @required_xp_zero           -- no data ∨ no level below ⇒ 0
+#check @confNum_le_confDen         -- 0 ≤ confNum ≤ confDen (fraction ∈ [0,1])
+#check @is_confident_iff_full      -- is_confident ↔ confNum = confDen
+#check @cycles_zero                -- target ≤ current ⇒ 0
+#check @cycles_inf                 -- target>current ∧ xp_per_cycle≤0 ⇒ inf-sentinel
+#check @total_monotone             -- total(cur,tgt) ≤ total(cur,tgt+1) over observed
+#check @growth_default_iff         -- uses-default ↔ no consecutive observed pair
+#check @growth_nondefault_of_pair  -- consecutive observed pair ⇒ ¬default (witness)

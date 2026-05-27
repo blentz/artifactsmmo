@@ -4,7 +4,8 @@ import Formal.InventoryCaps
 import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring
+import Formal.SkillXpCurve
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
     changed, the ascription fails to elaborate and the build goes RED. This is the
@@ -205,3 +206,48 @@ example : ∀ (score : Item → Int) (playerLevel : Int) (current : Option Item)
 example : ∀ (item : Item) (monsterRes : ElemStats),
     (∀ e ∈ elements, 0 ≤ elemGet item.attack e) → 0 ≤ WScore item monsterRes :=
   @weapon_score_nonneg
+
+/-! ### SkillXpCurve role contracts. -/
+
+-- required_xp_observed: observed level ⇒ required_xp = stored xp (∀ estimate)
+example : ∀ (estimate : Int → Int) (obs : Observed) (level : Int),
+    hasLevel obs level = true → requiredXp estimate obs level = lookup obs level :=
+  @required_xp_observed
+-- required_xp_zero: no data ∨ no level below ⇒ required_xp = 0
+example : ∀ (estimate : Int → Int) (obs : Observed) (level : Int),
+    hasLevel obs level = false →
+    (obs.isEmpty = true ∨ hasBelow obs level = false) →
+    requiredXp estimate obs level = 0 :=
+  @required_xp_zero
+-- confNum_le_confDen: 0 ≤ confNum ≤ confDen (fraction ∈ [0,1])
+example : ∀ (obs : Observed) (current target : Int),
+    confNum obs current target ≤ confDen current target :=
+  @confNum_le_confDen
+-- is_confident_iff_full: is_confident ↔ confNum = confDen (every gap level observed)
+example : ∀ (obs : Observed) (current target : Int),
+    isConfident obs current target = true
+      ↔ confNum obs current target = confDen current target :=
+  @is_confident_iff_full
+-- cycles_zero: target ≤ current ⇒ 0
+example : ∀ (current target xpPerCycle : Int),
+    target ≤ current → cyclesBranch current target xpPerCycle = 0 :=
+  @cycles_zero
+-- cycles_inf: target > current ∧ xp_per_cycle ≤ 0 ⇒ inf-sentinel
+example : ∀ (current target xpPerCycle : Int),
+    target > current → xpPerCycle ≤ 0 →
+    cyclesBranch current target xpPerCycle = cyclesInf :=
+  @cycles_inf
+-- total_monotone: total(cur,tgt) ≤ total(cur,tgt+1) over observed range (term ≥ 0)
+example : ∀ (obs : Observed) (current target : Int),
+    current ≤ target → 0 ≤ lookup obs target →
+    totalXpToReach obs current target ≤ totalXpToReach obs current (target + 1) :=
+  @total_monotone
+-- growth_default_iff: uses-default ↔ no consecutive observed pair (independent count = 0)
+example : ∀ (obs : Observed),
+    usesDefaultRatio obs = true ↔ consecutivePairCount obs = 0 :=
+  @growth_default_iff
+-- growth_nondefault_of_pair: a consecutive observed pair (positive lower xp) ⇒ ¬default
+example : ∀ (obs : Observed) (lvl v : Int),
+    (lvl, v) ∈ obs → v > 0 → hasLevel obs (lvl + 1) = true →
+    usesDefaultRatio obs = false :=
+  @growth_nondefault_of_pair

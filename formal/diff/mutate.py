@@ -11,6 +11,7 @@ INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
+SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -135,6 +136,26 @@ SCORING_MUTATIONS = [
 ]
 
 
+# skill_xp_curve mutations -- old strings matched to current skill_xp_curve.py text.
+SKILL_XP_CURVE_MUTATIONS = [
+    # confidence off-by-one: inflate the observed-gap count by 1.
+    ("skill_xp_curve: confidence off-by-one (observed + 1)",
+     "        observed = sum(1 for lvl in levels if lvl in self.observed)\n"
+     "        return observed / len(levels)",
+     "        observed = sum(1 for lvl in levels if lvl in self.observed)\n"
+     "        return (observed + 1) / len(levels)"),
+    # cycles guard flip: target_level <= current_level -> target_level < current_level
+    # (so target == current no longer returns 0.0 / takes the wrong branch).
+    ("skill_xp_curve: cycles guard flip (<= -> <)",
+     "        if target_level <= current_level:\n            return 0.0",
+     "        if target_level < current_level:\n            return 0.0"),
+    # total non-monotone: drop the last term of the range (range stops one short).
+    ("skill_xp_curve: total drops last term (range -1)",
+     "        return sum(self.required_xp(lvl) for lvl in range(current_level, target_level))",
+     "        return sum(self.required_xp(lvl) for lvl in range(current_level, target_level - 1))"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -173,6 +194,8 @@ def main() -> int:
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
               "formal/diff/test_equipment_scoring_diff.py", survivors)
+    run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
+              "formal/diff/test_skill_xp_curve_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

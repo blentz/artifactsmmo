@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
 #print axioms pathFrom_valid
 #print axioms pathFrom_len_eq_cheb
 #print axioms kingWalk_len_ge_cheb
@@ -34,3 +34,12 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms pickslot_empty_fills
 #print axioms pickslot_no_candidates_keeps
 #print axioms weapon_score_nonneg
+#print axioms required_xp_observed
+#print axioms required_xp_zero
+#print axioms confNum_le_confDen
+#print axioms is_confident_iff_full
+#print axioms cycles_zero
+#print axioms cycles_inf
+#print axioms total_monotone
+#print axioms growth_default_iff
+#print axioms growth_nondefault_of_pair

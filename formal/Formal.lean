@@ -4,4 +4,5 @@ import Formal.InventoryCaps
 import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
+import Formal.SkillXpCurve
 import Formal.Contracts
