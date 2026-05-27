@@ -390,6 +390,80 @@ def runObjectiveGap (args : Array Json) : Json :=
     ("gear_denom", Json.num (Formal.Objective.targetSum gearPairs)),
     ("is_complete", Json.bool (Formal.Objective.isComplete charGap skillPairs gearPairs))]
 
+/-- Build a `StrategyTraversal.Graph` from a flat node encoding and return it
+together with the node count.
+
+args node-graph layout (all Nat ≥ 0), starting at offset `o`:
+* `[o]`        n (number of nodes; node codes are `0 .. n-1`)
+* then n node blocks, each: `isSat(0/1), producible(0/1), kind(0=obtain,1=skill,2=char),
+  nPrereqs, prereq0, prereq1, ...`
+
+Returns `(graph, n, nextOffset)`. Out-of-range nodes default to leaf/unmet/obtain. -/
+def parseGraph (args : Array Json) (o : Nat) :
+    Formal.StrategyTraversal.Graph × Nat × Nat := Id.run do
+  let g := fun i => (intArg args i).toNat
+  let n := g o
+  -- collect per-node (isSat, producible, kind, prereqs) into assoc lists
+  let mut satTbl : List (Nat × Bool) := []
+  let mut prodTbl : List (Nat × Bool) := []
+  let mut kindTbl : List (Nat × Formal.StrategyTraversal.Kind) := []
+  let mut prereqTbl : List (Nat × List Nat) := []
+  let mut p := o + 1
+  for node in List.range n do
+    let isSat := g p != 0
+    let producible := g (p + 1) != 0
+    let kindCode := g (p + 2)
+    let kind : Formal.StrategyTraversal.Kind :=
+      if kindCode == 1 then Formal.StrategyTraversal.Kind.skill
+      else if kindCode == 2 then Formal.StrategyTraversal.Kind.char
+      else Formal.StrategyTraversal.Kind.obtain
+    let nPre := g (p + 3)
+    let prereqs := (List.range nPre).map (fun k => g (p + 4 + k))
+    satTbl := (node, isSat) :: satTbl
+    prodTbl := (node, producible) :: prodTbl
+    kindTbl := (node, kind) :: kindTbl
+    prereqTbl := (node, prereqs) :: prereqTbl
+    p := p + 4 + nPre
+  let lookupBool := fun (tbl : List (Nat × Bool)) (d : Bool) (k : Nat) =>
+    match tbl.find? (fun e => decide (e.1 = k)) with | some e => e.2 | none => d
+  let graph : Formal.StrategyTraversal.Graph := {
+    prereqs := fun k => match prereqTbl.find? (fun e => decide (e.1 = k)) with
+      | some e => e.2 | none => []
+    isSat := fun k => lookupBool satTbl false k
+    producible := fun k => lookupBool prodTbl false k
+    kind := fun k => match kindTbl.find? (fun e => decide (e.1 = k)) with
+      | some e => e.2 | none => Formal.StrategyTraversal.Kind.obtain }
+  return (graph, n, p)
+
+/-- Compute one strategy_traversal result via the proved defs. The `query`
+selects the metric. The node graph is parsed from offset 0; the trailing args
+(after the graph) are `root, fuel` (and for root_cost: `kindCode, target, have`). -/
+def runStrategyTraversal (query : String) (args : Array Json) : Json :=
+  let (g, _, nextOff) := parseGraph args 0
+  let tail := fun i => (intArg args (nextOff + i)).toNat
+  let root := tail 0
+  let fuel := tail 1
+  if query == "is_reachable" then
+    Json.mkObj [("is_reachable",
+      Json.bool (Formal.StrategyTraversal.isReachable g fuel root))]
+  else if query == "closure_size" then
+    Json.mkObj [("closure_size",
+      Json.num (Int.ofNat (Formal.StrategyTraversal.unmetClosureSize g root fuel)))]
+  else if query == "actionable" then
+    match Formal.StrategyTraversal.actionableStep g fuel root with
+    | some r => Json.mkObj [("actionable", Json.num (Int.ofNat r))]
+    | none => Json.mkObj [("actionable", Json.null)]
+  else  -- root_cost: tail = root, fuel, kindCode, target, have
+    let kindCode := tail 2
+    let target := tail 3
+    let have_ := tail 4
+    let kind : Formal.StrategyTraversal.Kind :=
+      if kindCode == 1 then Formal.StrategyTraversal.Kind.skill
+      else if kindCode == 2 then Formal.StrategyTraversal.Kind.char
+      else Formal.StrategyTraversal.Kind.obtain
+    Json.mkObj [("root_cost",
+      Json.num (Int.ofNat (Formal.StrategyTraversal.rootCost g kind target have_ root fuel)))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -428,6 +502,14 @@ def runOne (item : Json) : Json :=
     runObjectiveBestGear args
   else if kind == "objective_gap" then
     runObjectiveGap args
+  else if kind == "strategy_is_reachable" then
+    runStrategyTraversal "is_reachable" args
+  else if kind == "strategy_closure_size" then
+    runStrategyTraversal "closure_size" args
+  else if kind == "strategy_actionable" then
+    runStrategyTraversal "actionable" args
+  else if kind == "strategy_root_cost" then
+    runStrategyTraversal "root_cost" args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

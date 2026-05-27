@@ -9,6 +9,7 @@ import Formal.RecipeClosure
 import Formal.TaskFeasibility
 import Formal.PrerequisiteGraph
 import Formal.Objective
+import Formal.StrategyTraversal
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -498,3 +499,76 @@ example : ∀ (charGap : Int) (skillPairs gearPairs : List (Int × Int)),
 example : ∀ (target have_ : Int),
     Formal.Objective.axisGap target have_ = 0 ↔ target ≤ have_ :=
   @Formal.Objective.axisGap_zero_iff
+
+/-! ### StrategyTraversal role contracts.
+
+`Grounded`, `groundedByN`, `IsMinRound` etc. are namespaced; we fully-qualify the
+`StrategyTraversal` ones to avoid clashes with `Objective` / `RecipeClosure`. -/
+
+-- is_reachable = grounding fixpoint: SOUNDNESS (accept ⇒ Grounded, any fuel) +
+-- COMPLETENESS (Grounded ⇒ accepted for all adequate fuel). A node on a cycle of
+-- un-grounded nodes is NOT Grounded, hence NOT reachable.
+example : ∀ (g : Formal.StrategyTraversal.Graph) (node : Nat),
+    (∀ fuel, Formal.StrategyTraversal.isReachable g fuel node = true →
+        Formal.StrategyTraversal.Grounded g node) ∧
+    (Formal.StrategyTraversal.Grounded g node →
+      ∃ N, ∀ fuel, N ≤ fuel → Formal.StrategyTraversal.isReachable g fuel node = true) :=
+  @Formal.StrategyTraversal.is_reachable_eq_grounding
+-- grounding SOUNDNESS of the saturation.
+example : ∀ (g : Formal.StrategyTraversal.Graph) (n node : Nat),
+    Formal.StrategyTraversal.groundedByN g n node = true →
+      Formal.StrategyTraversal.Grounded g node :=
+  @Formal.StrategyTraversal.groundedByN_sound
+-- grounding COMPLETENESS of the saturation.
+example : ∀ (g : Formal.StrategyTraversal.Graph) {node : Nat},
+    Formal.StrategyTraversal.Grounded g node →
+      ∃ n, Formal.StrategyTraversal.groundedByN g n node = true :=
+  @Formal.StrategyTraversal.grounded_groundedByN
+-- reachAux SOUNDNESS: accept ⇒ Grounded (any path/fuel) — the cycle guard only rejects.
+example : ∀ (g : Formal.StrategyTraversal.Graph) (fuel : Nat) (path : List Nat) (node : Nat),
+    Formal.StrategyTraversal.reachAux g fuel path node = true →
+      Formal.StrategyTraversal.Grounded g node :=
+  @Formal.StrategyTraversal.reachAux_sound
+-- closure_size ≥ 1: the unmet-closure count is floored at 1 (the `max(·,1)`).
+example : ∀ (g : Formal.StrategyTraversal.Graph) (root fuel : Nat),
+    1 ≤ Formal.StrategyTraversal.unmetClosureSize g root fuel :=
+  @Formal.StrategyTraversal.unmetClosureSize_ge_one
+-- closure_size = count of distinct UNMET nodes in the visited set (satisfied-
+-- interior pruning faithful: the count filters out satisfied nodes), floored at 1.
+example : ∀ (g : Formal.StrategyTraversal.Graph) (root fuel : Nat),
+    Formal.StrategyTraversal.unmetClosureSize g root fuel
+      = max ((Formal.StrategyTraversal.unmetSatN g root fuel).eraseDups.filter
+              (fun n => !g.isSat n)).length 1 :=
+  @Formal.StrategyTraversal.unmetClosureSize_eq_count
+-- every counted closure node is UNMET (no satisfied node is ever counted).
+example : ∀ (g : Formal.StrategyTraversal.Graph) (root fuel : Nat) {n : Nat},
+    n ∈ Formal.StrategyTraversal.unmetNodes g root fuel → g.isSat n = false :=
+  @Formal.StrategyTraversal.unmetNodes_unmet
+-- actionable_correct (SOUNDNESS): the RETURNED node (entered on an unmet root) is
+-- ActionableNode — unmet ∧ all direct prereqs satisfied ∧ (obtain ⇒ producible).
+example : ∀ (g : Formal.StrategyTraversal.Graph) (fuel root r : Nat),
+    g.isSat root = false →
+    Formal.StrategyTraversal.actionableStep g fuel root = some r →
+      Formal.StrategyTraversal.ActionableNode g r :=
+  @Formal.StrategyTraversal.actionable_step_sound
+-- actionable_correct (NONE half): eventually-none ↔ NO actionable node is reachable
+-- from root via unmet-prereq descent — an INDEPENDENT De-Morgan characterization of
+-- the actionable set (ActionableNode predicate + UnmetReach relation), not the
+-- function restated.
+example : ∀ (g : Formal.StrategyTraversal.Graph) (root : Nat),
+    g.isSat root = false →
+    ((∃ N, ∀ fuel, N ≤ fuel → Formal.StrategyTraversal.actionableStep g fuel root = none)
+      ↔ ¬ ∃ a, Formal.StrategyTraversal.UnmetReach g root a ∧
+            Formal.StrategyTraversal.ActionableNode g a) :=
+  @Formal.StrategyTraversal.actionable_step_none_iff
+-- the returned node is UnmetReach-able from root (lives in the unmet closure).
+example : ∀ (g : Formal.StrategyTraversal.Graph) (fuel root r : Nat),
+    g.isSat root = false →
+    Formal.StrategyTraversal.actionableStep g fuel root = some r →
+      Formal.StrategyTraversal.UnmetReach g root r :=
+  @Formal.StrategyTraversal.actionable_step_reach
+-- root_cost ≥ 1: the effort proxy is floored at 1 for EVERY root kind.
+example : ∀ (g : Formal.StrategyTraversal.Graph) (kind : Formal.StrategyTraversal.Kind)
+    (target have_ root fuel : Nat),
+    1 ≤ Formal.StrategyTraversal.rootCost g kind target have_ root fuel :=
+  @Formal.StrategyTraversal.rootCost_ge_one

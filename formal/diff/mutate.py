@@ -16,6 +16,7 @@ RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
 OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
+STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -253,6 +254,39 @@ OBJECTIVE_MUTATIONS = [
 ]
 
 
+# strategy_traversal mutations -- old strings matched to current strategy.py text.
+STRATEGY_MUTATIONS = [
+    # cycle-guard flip in is_reachable: a node on the current path becomes wrongly
+    # "reachable" (return True) instead of being rejected — cyclic chains read as
+    # bottoming out (the anti-gaming cycle guard the grounding-fixpoint proof pins).
+    ("strategy: is_reachable cycle-guard flip (return False -> True)",
+     "    if root in path:\n        return False",
+     "    if root in path:\n        return True"),
+    # closure off-by-one: inflate the unmet-closure count by 1 (wrong root_cost /
+    # ranking; the min-1 floor would mask only the empty case).
+    ("strategy: unmet_closure_size off-by-one (max(count, 1) -> max(count + 1, 1))",
+     "    return max(count, 1)",
+     "    return max(count + 1, 1)"),
+    # actionable predicate weakening: drop the producible check, so a NON-producible
+    # obtain leaf is wrongly returned as the actionable step (a node with no real
+    # action). The actionable-correctness contract (obtain ⇒ producible) catches it.
+    ("strategy: actionable_step drop producible check",
+     "            if isinstance(node, ObtainItem) and not _producible(node.code, game_data):\n"
+     "                return None\n"
+     "            return node",
+     "            return node"),
+    # closure descends SATISFIED interior nodes too (drop the satisfied-interior
+    # pruning): count would include satisfied nodes / descend their prereqs — the
+    # historical TLA+-era gap. Push prereqs unconditionally and count regardless.
+    ("strategy: unmet_closure_size drop satisfied-interior pruning",
+     "        if not node.is_satisfied(state, game_data):\n"
+     "            count += 1\n"
+     "            stack.extend(prerequisites(node, state, game_data))",
+     "        count += 1\n"
+     "        stack.extend(prerequisites(node, state, game_data))"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -301,6 +335,8 @@ def main() -> int:
               "formal/diff/test_prerequisite_graph_diff.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_MUTATIONS,
               "formal/diff/test_objective_diff.py", survivors)
+    run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
+              "formal/diff/test_strategy_traversal_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

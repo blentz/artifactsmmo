@@ -92,3 +92,15 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.Objective.charGap_bounds              -- 0 ≤ char gap ≤ target
 #check @Formal.Objective.is_complete_iff             -- is_complete ↔ raw-target form (independent)
 #check @Formal.Objective.axisGap_zero_iff            -- per-axis gap 0 ↔ raw target met
+-- StrategyTraversal required roles:
+#check @Formal.StrategyTraversal.is_reachable_eq_grounding  -- is_reachable = grounding fixpoint (sound+complete)
+#check @Formal.StrategyTraversal.groundedByN_sound          -- saturation SOUND wrt Grounded
+#check @Formal.StrategyTraversal.grounded_groundedByN       -- saturation COMPLETE wrt Grounded
+#check @Formal.StrategyTraversal.reachAux_sound             -- recursion accept ⇒ Grounded (any path/fuel)
+#check @Formal.StrategyTraversal.unmetClosureSize_ge_one    -- closure_size ≥ 1 (the max(·,1) floor)
+#check @Formal.StrategyTraversal.unmetClosureSize_eq_count  -- closure_size = count of distinct unmet visited nodes
+#check @Formal.StrategyTraversal.unmetNodes_unmet           -- counted node ⇒ UNMET (satisfied-interior pruning)
+#check @Formal.StrategyTraversal.actionable_step_sound      -- returned node is ActionableNode
+#check @Formal.StrategyTraversal.actionable_step_none_iff   -- none ⇔ no actionable reachable (De Morgan)
+#check @Formal.StrategyTraversal.actionable_step_reach      -- returned node UnmetReach-able from root
+#check @Formal.StrategyTraversal.rootCost_ge_one            -- root_cost ≥ 1 (every kind)

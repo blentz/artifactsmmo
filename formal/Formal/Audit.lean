@@ -83,3 +83,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.Objective.is_complete_iff
 #print axioms Formal.Objective.axisGap_zero_iff
 #print axioms Formal.PrerequisiteGraph.combat_capable_witness
+#print axioms Formal.StrategyTraversal.is_reachable_eq_grounding
+#print axioms Formal.StrategyTraversal.groundedByN_sound
+#print axioms Formal.StrategyTraversal.grounded_groundedByN
+#print axioms Formal.StrategyTraversal.reachAux_sound
+#print axioms Formal.StrategyTraversal.unmetClosureSize_ge_one
+#print axioms Formal.StrategyTraversal.unmetClosureSize_eq_count
+#print axioms Formal.StrategyTraversal.unmetNodes_unmet
+#print axioms Formal.StrategyTraversal.actionable_step_sound
+#print axioms Formal.StrategyTraversal.actionable_step_none_iff
+#print axioms Formal.StrategyTraversal.actionable_step_reach
+#print axioms Formal.StrategyTraversal.rootCost_ge_one
