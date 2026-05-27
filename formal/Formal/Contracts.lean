@@ -1,7 +1,8 @@
 import Formal.CalculatePath
 import Formal.TaskBatch
 import Formal.InventoryCaps
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps
+import Formal.PredictWin
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
     changed, the ascription fails to elaborate and the build goes RED. This is the
@@ -94,3 +95,44 @@ example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining 
     ¬ (qty > 0 ∧ qty > cap recipeDemand equippable actionCap taskRemaining equipped) →
     overstock recipeDemand equippable actionCap taskRemaining equipped qty = 0 :=
   @overstock_zero_of_not_over
+
+/-! ### PredictWin role contracts. -/
+
+-- predict_win_eq_sim: closed-form verdict = operational fight-sim verdict
+-- (∀ stat tuples in the modeled domain: crit ≥ 0, HP ≥ 1, with enough sim fuel).
+example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp : Int)
+    (playerFirst : Bool),
+    0 ≤ pCrit → 0 ≤ mCrit → 1 ≤ monsterHp → 1 ≤ playerMaxHp →
+    ∀ (fk fd : Nat),
+      (roundsTo monsterHp rawPlayer pCrit).toNat ≤ fk →
+      (roundsTo playerMaxHp rawMonster mCrit).toNat ≤ fd →
+      predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst
+        = (if rawPlayer ≤ 0 then false
+           else
+             let rtk := simRounds monsterHp rawPlayer pCrit fk
+             if rtk > maxTurns then false
+             else if rawMonster ≤ 0 then true
+             else
+               let rtd := simRounds playerMaxHp rawMonster mCrit fd
+               if playerFirst then rtk ≤ rtd else rtk < rtd) :=
+  @predict_win_eq_sim
+-- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win
+example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp : Int)
+    (playerFirst : Bool),
+    0 < rawPlayer → roundsTo monsterHp rawPlayer pCrit > maxTurns →
+    predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst = false :=
+  @maxturns_sound
+-- predict_win_mono_player: increasing player raw never flips a win to a loss
+example : ∀ (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp : Int)
+    (playerFirst : Bool),
+    0 ≤ pCrit → 0 < raw1 → raw1 ≤ raw2 → 0 ≤ monsterHp →
+    predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst = true →
+    predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst = true :=
+  @predict_win_mono_player
+-- predict_win_mono_monsterhp: decreasing monster HP never flips a win to a loss
+example : ∀ (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp : Int)
+    (playerFirst : Bool),
+    0 ≤ pCrit → 0 < rawPlayer → 0 ≤ monsterHp2 → monsterHp2 ≤ monsterHp1 →
+    predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp playerFirst = true →
+    predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp playerFirst = true :=
+  @predict_win_mono_monsterhp

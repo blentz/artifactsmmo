@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
+COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -74,6 +75,23 @@ INVENTORY_CAPS_MUTATIONS = [
 ]
 
 
+# predict_win mutations -- old strings matched to current combat.py text.
+PREDICT_WIN_MUTATIONS = [
+    # initiative tiebreak: flip the player-first `<=` to a strict `<` (combat.py:79).
+    ("predict_win: tiebreak <= -> < (player-first)",
+     "    return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die",
+     "    return rounds_to_kill < rounds_to_die if player_first else rounds_to_kill < rounds_to_die"),
+    # drop the expected critical-strike contribution entirely.
+    ("predict_win: drop crit term in _expected_hit",
+     "    return raw * (1 + (crit / 100) * 0.5)",
+     "    return raw * 1"),
+    # off-by-one in the half-up rounding (ceil-ish): + 0.5 -> + 1.5.
+    ("predict_win: round_half_up off-by-one (+0.5 -> +1.5)",
+     "    return math.floor(value + 0.5)",
+     "    return math.floor(value + 1.5)"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -106,6 +124,8 @@ def main() -> int:
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
     run_group(INVENTORY_CAPS_SRC, INVENTORY_CAPS_MUTATIONS,
               "formal/diff/test_inventory_caps_diff.py", survivors)
+    run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
+              "formal/diff/test_predict_win_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

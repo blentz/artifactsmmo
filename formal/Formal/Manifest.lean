@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
 #check @pathFrom_len_eq_cheb   -- optimality-achieved
@@ -21,3 +21,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps
 #check @overstock_exact         -- overstock = qty-cap iff over, else 0
 #check @overstock_pos_of_over   -- over ⇒ excess > 0
 #check @overstock_zero_of_not_over -- ¬over ⇒ excess = 0
+-- PredictWin required roles:
+#check @predict_win_eq_sim          -- closed-form verdict = operational fight-sim
+#check @maxturns_sound              -- rounds_to_kill > MAX_TURNS ⇒ ¬win
+#check @predict_win_mono_player     -- ↑player raw never flips win→loss
+#check @predict_win_mono_monsterhp  -- ↓monster HP never flips win→loss
