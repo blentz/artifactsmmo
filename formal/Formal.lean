@@ -12,4 +12,5 @@ import Formal.Objective
 import Formal.StrategyTraversal
 import Formal.BankSelection
 import Formal.StuckDetector
+import Formal.PriorityBand
 import Formal.Contracts

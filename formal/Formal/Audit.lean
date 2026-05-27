@@ -118,3 +118,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.StuckDetector.ack_noprog_cannot_fire
 #print axioms Formal.StuckDetector.ack_frozen_cannot_fire
 #print axioms Formal.StuckDetector.ack_osc_cannot_fire
+#print axioms Formal.PriorityBand.clamp_lower_bound
+#print axioms Formal.PriorityBand.clamp_upper_bound
+#print axioms Formal.PriorityBand.clamp_below_survival

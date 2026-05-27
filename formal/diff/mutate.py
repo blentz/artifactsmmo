@@ -19,6 +19,7 @@ OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.
 STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
+PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -362,6 +363,25 @@ STUCK_DETECTOR_MUTATIONS = [
 ]
 
 
+# priority_band mutations -- old strings matched to current priority_band.py text.
+PRIORITY_BAND_MUTATIONS = [
+    # min/max swap: the clamp inverts, so the result can escape the band entirely
+    # (a positive bonus would yield floor, a negative bonus would overshoot).
+    ("priority_band: min/max swap",
+     "    return min(ceiling, max(floor, floor + bonus))",
+     "    return max(ceiling, min(floor, floor + bonus))"),
+    # bonus sign flip: floor + bonus -> floor - bonus (wrong direction of the bonus).
+    ("priority_band: bonus sign flip (floor + bonus -> floor - bonus)",
+     "    return min(ceiling, max(floor, floor + bonus))",
+     "    return min(ceiling, max(floor, floor - bonus))"),
+    # drop the outer ceiling clamp: a large bonus can now exceed the ceiling (and
+    # thus could reach the survival floor) — the survival-safety violation.
+    ("priority_band: drop outer min ceiling clamp",
+     "    return min(ceiling, max(floor, floor + bonus))",
+     "    return max(floor, floor + bonus)"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -392,6 +412,7 @@ _ALL_SRCS = [
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
+    PRIORITY_BAND_SRC,
 ]
 
 
@@ -440,6 +461,8 @@ def main() -> int:
               "formal/diff/test_bank_selection_diff.py", survivors)
     run_group(STUCK_DETECTOR_SRC, STUCK_DETECTOR_MUTATIONS,
               "formal/diff/test_stuck_detector_diff.py", survivors)
+    run_group(PRIORITY_BAND_SRC, PRIORITY_BAND_MUTATIONS,
+              "formal/diff/test_priority_band_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

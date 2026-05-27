@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Lower bound when active — matches FarmMonster cold-start default (from retired priorities.py).
@@ -62,7 +63,7 @@ class GrindCharacterXPGoal(Goal):
         # Floor-clamp so an unlucky run of observed-negative char_xp can't
         # push priority below PRIORITY_FLOOR and permanently suppress the only
         # combat goal (leaving the bot with no plan when no task is held).
-        return min(PRIORITY_CEILING, max(PRIORITY_FLOOR, PRIORITY_FLOOR + bonus))
+        return clamp_into_band(PRIORITY_FLOOR, PRIORITY_CEILING, bonus)
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.xp > self._initial_xp and self._loadout_optimal(state)

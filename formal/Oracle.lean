@@ -3,7 +3,7 @@ import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
-open Formal.BankSelection
+open Formal.BankSelection Formal.PriorityBand
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -577,6 +577,12 @@ def runStuckDetector (args : Array Json) : Json :=
     ("osc_window_len", Json.num (Int.ofNat oscLen)),
     ("noprog_window_len", Json.num (Int.ofNat noprogLen))]
 
+/-- Compute one priority_band result using the SAME proved `clampIntoBand`.
+args: [floor, ceiling, bonus]. Emits the clamped band value. -/
+def runPriorityBand (args : Array Json) : Json :=
+  Json.mkObj [("clamped",
+    Json.num (clampIntoBand (intArg args 0) (intArg args 1) (intArg args 2)))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -627,6 +633,8 @@ def runOne (item : Json) : Json :=
     runBankSelection args
   else if kind == "stuck_detector" then
     runStuckDetector args
+  else if kind == "priority_band" then
+    runPriorityBand args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

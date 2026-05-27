@@ -130,3 +130,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.StuckDetector.ack_noprog_cannot_fire   -- just-acked noprog cannot re-fire
 #check @Formal.StuckDetector.ack_frozen_cannot_fire   -- just-acked frozen cannot re-fire
 #check @Formal.StuckDetector.ack_osc_cannot_fire      -- just-acked osc cannot re-fire
+-- PriorityBand required roles:
+open Formal.PriorityBand
+#check @Formal.PriorityBand.clamp_lower_bound    -- band-lower: floor ≤ clamped result
+#check @Formal.PriorityBand.clamp_upper_bound    -- band-upper: clamped result ≤ ceiling
+#check @Formal.PriorityBand.clamp_below_survival -- survival-floor-safety: ceiling < survival ⇒ clamped < survival
