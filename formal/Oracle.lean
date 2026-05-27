@@ -3,7 +3,7 @@ import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
-open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount
+open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSelection
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -598,6 +598,47 @@ def runOwnedCount (args : Array Json) : Json :=
   let eq : String → Bool := fun _ => equipped
   Json.mkObj [("owned", Json.num (Int.ofNat (ownedCount inv bank eq "x")))]
 
+/-- Build an upgrade `Candidate` from a flat 6-int block:
+`[codeInt, value, level, craftLevel, relevant(0/1), fillsEmpty(0/1)]`. The item
+code is the decimal string of `codeInt` (matching the Python `str(code)`), so the
+String tiebreak in the comparators agrees with Python's string ordering on the
+same codes. -/
+def upgradeCandFromBlock (b : Nat → Int) : Candidate :=
+  { itemCode := toString (b 0), value := b 1, level := b 2, craftLevel := b 3,
+    relevant := b 4 != 0, fillsEmpty := b 5 != 0 }
+
+/-- Emit a candidate as `[codeInt, value]` (the fields the diff compares). -/
+def candJson (c : Candidate) : Json :=
+  Json.mkObj [("code", Json.str c.itemCode), ("value", Json.num c.value)]
+
+/-- Compute one upgrade_selection result using the proved cores.
+
+args layout (Ints):
+* `[0]`   query: 0 = best_by_value, 1 = best_by_key (craftable), 2 = best_by_key
+          (inventory)
+* `[1]`   for query 0: invPresent(0/1); for 1/2: n (number of candidates)
+* For query 0: `[1]`=invPresent, `[2]`=craftPresent, then up to two 6-int blocks
+  (inventory block if present, then craftable block if present).
+* For query 1/2: `[1]`=n, then n 6-int candidate blocks. -/
+def runUpgradeSelection (args : Array Json) : Json :=
+  let q := intArg args 0
+  if q == 0 then
+    let invPresent := intArg args 1 != 0
+    let craftPresent := intArg args 2 != 0
+    let invCand : Option Candidate := if invPresent then some (upgradeCandFromBlock (fun i => intArg args (3 + i))) else none
+    let craftBase := if invPresent then 9 else 3
+    let craftCand : Option Candidate := if craftPresent then some (upgradeCandFromBlock (fun i => intArg args (craftBase + i))) else none
+    match bestByValue invCand craftCand with
+    | some r => Json.mkObj [("present", Json.bool true), ("chosen", candJson r)]
+    | none => Json.mkObj [("present", Json.bool false)]
+  else
+    let n := (intArg args 1).toNat
+    let cands : List Candidate := (List.range n).map (fun k => upgradeCandFromBlock (fun i => intArg args (2 + 6*k + i)))
+    let cmp := if q == 1 then craftableCmp else inventoryCmp
+    match bestByKey cmp cands with
+    | some r => Json.mkObj [("present", Json.bool true), ("chosen", candJson r)]
+    | none => Json.mkObj [("present", Json.bool false)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -652,6 +693,8 @@ def runOne (item : Json) : Json :=
     runPriorityBand args
   else if kind == "owned_count" then
     runOwnedCount args
+  else if kind == "upgrade_selection" then
+    runUpgradeSelection args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

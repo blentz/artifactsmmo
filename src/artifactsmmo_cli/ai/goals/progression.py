@@ -6,6 +6,13 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.upgrade_selection import (
+    UpgradeCandidate,
+    best_by_key,
+    best_by_value,
+    craftable_key,
+    inventory_key,
+)
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -128,6 +135,9 @@ class UpgradeEquipmentGoal(Goal):
         Used to identify what to craft even when materials haven't been gathered yet.
         """
         if self._committed_target is not None:
+            # Committed: return exactly the target. The commitment guarantee
+            # (never substitute another equippable) is enforced by
+            # relevant_actions slot-locking and is_satisfied, not here.
             return self._committed_target
         return self._best_by_value(
             self._find_inventory_upgrade(state, game_data),
@@ -154,13 +164,24 @@ class UpgradeEquipmentGoal(Goal):
         Inventory-first precedence let a junk owned weapon (wooden_stick) beat
         a far better craftable shield just because it was already in the bag.
         Compare by stat value; prefer the owned (inventory) item only on a tie,
-        since equipping it is cheaper than crafting.
-        """
-        if inv is None:
-            return craft
-        if craft is None:
-            return inv
-        return inv if self._value_of(inv, game_data) >= self._value_of(craft, game_data) else craft
+        since equipping it is cheaper than crafting. Delegates to the proved pure
+        core `upgrade_selection.best_by_value` (tie -> inventory)."""
+        inv_cand = self._value_candidate(inv, game_data)
+        craft_cand = self._value_candidate(craft, game_data)
+        chosen = best_by_value(inv_cand, craft_cand)
+        if chosen is None:
+            return None
+        return inv if chosen is inv_cand else craft
+
+    def _value_candidate(self, target: tuple[str, str] | None,
+                         game_data: GameData) -> UpgradeCandidate | None:
+        """Wrap a (item, slot) pick as a value-only UpgradeCandidate for
+        `best_by_value`. The non-value fields are unused by `best_by_value`."""
+        if target is None:
+            return None
+        return UpgradeCandidate(
+            item_code=target[0], value=self._value_of(target, game_data),
+            level=0, craft_level=0, relevant=False, fills_empty=False)
 
     def _committed_upgrade_if_ready(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         assert self._committed_target is not None
@@ -214,28 +235,34 @@ class UpgradeEquipmentGoal(Goal):
         return best
 
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
-        """Best-VALUE upgrade in inventory or bank (bank items need Withdraw first)."""
+        """Best-VALUE upgrade in inventory or bank (bank items need Withdraw first).
+
+        Ranks by the proved `upgrade_selection.inventory_key`
+        (relevant, value, level, item_code) via the deterministic argmax.
+        Determinism is FIRST-WINS over the candidate list: distinct item_codes
+        give a unique max-key ITEM, while the same item mapped to multiple slots
+        emits same-code candidates that tie on the key (slot is not in the key) —
+        the first slot in ITEM_TYPE_TO_SLOTS order wins."""
         active = frozenset(game_data.active_gathering_skills(state.task_code, state.crafting_target))
         bank = state.bank_items or {}
-        best: tuple[str, str] | None = None
-        best_key: tuple[int, float, int, str] = (-1, -float("inf"), -1, "")
+        picks: list[tuple[UpgradeCandidate, tuple[str, str]]] = []
         for item_code in set(state.inventory) | set(bank):
             if state.inventory.get(item_code, 0) + bank.get(item_code, 0) <= 0:
                 continue
             stats = game_data.item_stats(item_code)
             if stats is None or state.level < stats.level:
                 continue
-            relevant = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            relevant = bool(active and any(s in active for s in stats.skill_effects))
             value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active):
                     continue
-                key = (relevant, value, stats.level, item_code)
-                if key > best_key:
-                    best, best_key = (item_code, slot), key
-        return best
+                cand = UpgradeCandidate(item_code=item_code, value=value, level=stats.level,
+                                        craft_level=0, relevant=relevant, fills_empty=False)
+                picks.append((cand, (item_code, slot)))
+        return self._argmax_pick(picks, inventory_key)
 
     def _find_craftable_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find the best craftable upgrade ignoring material availability.
@@ -248,13 +275,16 @@ class UpgradeEquipmentGoal(Goal):
         """
         active = game_data.active_gathering_skills(state.task_code, state.crafting_target)
         equipped = set(state.equipment.values()) - {None}
-        best: tuple[str, str] | None = None
         # Sort key per (item, slot): (relevant_tool, fills_empty_slot, value,
         # -craft_level, item_code). Higher tuple wins. fills_empty ranks an
         # additive equip (empty slot) above a replacement; value ranks better
-        # gear first; item_code is the final deterministic tiebreak so equal
-        # candidates never depend on dict iteration order.
-        best_key: tuple[int, int, float, int, str] = (-1, -1, -float("inf"), -10**9, "")
+        # gear first. Determinism is FIRST-WINS over the candidate list: distinct
+        # item_codes give a unique max-key ITEM (order-independent), while the
+        # same item mapped to multiple slots emits same-code candidates that TIE
+        # on the key (slot is not in the key) — the first slot in
+        # ITEM_TYPE_TO_SLOTS order wins. Ranked via the proved
+        # `upgrade_selection.craftable_key` argmax.
+        picks: list[tuple[UpgradeCandidate, tuple[str, str]]] = []
         bank = state.bank_items or {}
         for item_code in game_data._crafting_recipes:
             # Skip if already owned (inventory, bank, or equipped) — otherwise
@@ -273,24 +303,37 @@ class UpgradeEquipmentGoal(Goal):
             if stats.crafting_skill and state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:
                 continue
             craft_level = stats.crafting_level or 0
-            relevant_tool = 1 if active and any(s in active for s in stats.skill_effects) else 0
+            relevant_tool = bool(active and any(s in active for s in stats.skill_effects))
             value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data):
                     continue
-                fills_empty = 1 if current is None else 0
                 # Rank by VALUE before craft_level: the prior alphabetical
                 # tiebreak made the bot prefer fishing_net (attack 5 + fishing
                 # penalty) or wooden_staff over a wooden_shield purely by
                 # item-code string order. value() puts genuinely better gear
                 # first so the committed target is the best upgrade, not an
                 # alphabetical accident.
-                key = (relevant_tool, fills_empty, value, -craft_level, item_code)
-                if key > best_key:
-                    best, best_key = (item_code, slot), key
-        return best
+                cand = UpgradeCandidate(item_code=item_code, value=value, level=stats.level,
+                                        craft_level=craft_level, relevant=relevant_tool,
+                                        fills_empty=current is None)
+                picks.append((cand, (item_code, slot)))
+        return self._argmax_pick(picks, craftable_key)
+
+    @staticmethod
+    def _argmax_pick(picks: list[tuple[UpgradeCandidate, tuple[str, str]]],
+                     key: object) -> tuple[str, str] | None:
+        """Run the proved deterministic argmax over candidates and return the
+        winning (item, slot) pick. The candidate carries no slot, so we pair each
+        with its (item, slot) and select by candidate identity (each pick holds a
+        distinct candidate instance, so identity is the first-wins argmax)."""
+        cands = [c for c, _ in picks]
+        winner = best_by_key(cands, key)  # type: ignore[arg-type]
+        if winner is None:
+            return None
+        return next(pick for cand, pick in picks if cand is winner)
 
     def _find_craftable_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Return the IDEAL craftable upgrade target only if its materials are in hand.

@@ -140,3 +140,15 @@ open Formal.PriorityBand
 #check @Formal.OwnedCount.ownedCount_eq_total          -- owned-count-sum: count = spares + bank + equipped, unconditionally
 #check @Formal.OwnedCount.ownedCount_counts_equipped   -- owned-count-counts-equipped: equipped ⇒ count ≥ 1 (no re-acquire loop)
 #check @Formal.OwnedCount.ownedCount_monotone          -- owned-count-monotone: count non-decreasing in spares (satisfaction soundness)
+-- UpgradeSelection required roles:
+#check @Formal.UpgradeSelection.best_by_value_not_worse        -- best-no-downgrade: best_by_value never returns the strictly-worse pick
+#check @Formal.UpgradeSelection.best_by_value_tie_inv          -- best-no-downgrade: tie -> inventory pick
+#check @Formal.UpgradeSelection.craftableCmp_trichotomy        -- key-total-order: craftable comparator trichotomous
+#check @Formal.UpgradeSelection.craftableCmp_swap              -- key-total-order: craftable comparator antisymmetric
+#check @Formal.UpgradeSelection.craftableCmp_lt_trans          -- key-total-order: craftable comparator transitive
+#check @Formal.UpgradeSelection.craftableCmp_eq_imp_code       -- key-total-order: craftable eq forces equal item_code (determinism)
+#check @Formal.UpgradeSelection.inventoryCmp_trichotomy        -- key-total-order: inventory comparator trichotomous
+#check @Formal.UpgradeSelection.inventoryCmp_swap              -- key-total-order: inventory comparator antisymmetric
+#check @Formal.UpgradeSelection.inventoryCmp_lt_trans          -- key-total-order: inventory comparator transitive
+#check @Formal.UpgradeSelection.inventoryCmp_eq_imp_code       -- key-total-order: inventory eq forces equal item_code (determinism)
+#check @Formal.UpgradeSelection.bestByKey_sound                -- argmax-sound: result dominates list and is a member (first-wins on ties)

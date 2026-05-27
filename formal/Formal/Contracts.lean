@@ -14,6 +14,7 @@ import Formal.BankSelection
 import Formal.StuckDetector
 import Formal.PriorityBand
 import Formal.OwnedCount
+import Formal.UpgradeSelection
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -806,3 +807,69 @@ example : ∀ (inv inv' bank : String → Nat) (equipped : String → Bool) (cod
     Formal.OwnedCount.ownedCount inv bank equipped code
       ≤ Formal.OwnedCount.ownedCount inv' bank equipped code :=
   @Formal.OwnedCount.ownedCount_monotone
+
+/-! ### UpgradeSelection role contracts.
+
+The pure upgrade-selection cores. Statements pin (1) best_by_value never returns
+the strictly-worse pick and ties go to inventory, (2) the two lexicographic key
+comparators are each a strict total order (trichotomy + antisymmetry +
+transitivity + eq-forces-equal-code determinism), (3) a committed target is
+returned EXACTLY (never substituted), and (4) best_by_key is a sound argmax. -/
+
+-- best-no-downgrade: best_by_value of two picks has value ≥ both (never worse).
+example : ∀ (inv craft : Formal.UpgradeSelection.Candidate),
+    ∃ r, Formal.UpgradeSelection.bestByValue (some inv) (some craft) = some r ∧
+      inv.value ≤ r.value ∧ craft.value ≤ r.value :=
+  @Formal.UpgradeSelection.best_by_value_not_worse
+-- best-no-downgrade: a tie (equal value) returns the inventory pick exactly.
+example : ∀ (inv craft : Formal.UpgradeSelection.Candidate), inv.value = craft.value →
+    Formal.UpgradeSelection.bestByValue (some inv) (some craft) = some inv :=
+  @Formal.UpgradeSelection.best_by_value_tie_inv
+-- key-total-order: craftable comparator is trichotomous.
+example : ∀ (a b : Formal.UpgradeSelection.Candidate),
+    Formal.UpgradeSelection.craftableCmp a b = .lt ∨
+    Formal.UpgradeSelection.craftableCmp a b = .eq ∨
+    Formal.UpgradeSelection.craftableCmp a b = .gt :=
+  @Formal.UpgradeSelection.craftableCmp_trichotomy
+-- key-total-order: craftable comparator is antisymmetric (swap = .swap).
+example : ∀ (a b : Formal.UpgradeSelection.Candidate),
+    Formal.UpgradeSelection.craftableCmp b a = (Formal.UpgradeSelection.craftableCmp a b).swap :=
+  @Formal.UpgradeSelection.craftableCmp_swap
+-- key-total-order: craftable comparator is transitive on `.lt`.
+example : ∀ {a b c : Formal.UpgradeSelection.Candidate},
+    Formal.UpgradeSelection.craftableCmp a b = .lt →
+    Formal.UpgradeSelection.craftableCmp b c = .lt →
+    Formal.UpgradeSelection.craftableCmp a c = .lt :=
+  @Formal.UpgradeSelection.craftableCmp_lt_trans
+-- key-total-order: craftable `eq` forces equal item codes (distinct codes never tie).
+example : ∀ (a b : Formal.UpgradeSelection.Candidate),
+    Formal.UpgradeSelection.craftableCmp a b = .eq → a.itemCode = b.itemCode :=
+  @Formal.UpgradeSelection.craftableCmp_eq_imp_code
+-- key-total-order: inventory comparator is trichotomous.
+example : ∀ (a b : Formal.UpgradeSelection.Candidate),
+    Formal.UpgradeSelection.inventoryCmp a b = .lt ∨
+    Formal.UpgradeSelection.inventoryCmp a b = .eq ∨
+    Formal.UpgradeSelection.inventoryCmp a b = .gt :=
+  @Formal.UpgradeSelection.inventoryCmp_trichotomy
+-- key-total-order: inventory comparator is antisymmetric.
+example : ∀ (a b : Formal.UpgradeSelection.Candidate),
+    Formal.UpgradeSelection.inventoryCmp b a = (Formal.UpgradeSelection.inventoryCmp a b).swap :=
+  @Formal.UpgradeSelection.inventoryCmp_swap
+-- key-total-order: inventory comparator is transitive on `.lt`.
+example : ∀ {a b c : Formal.UpgradeSelection.Candidate},
+    Formal.UpgradeSelection.inventoryCmp a b = .lt →
+    Formal.UpgradeSelection.inventoryCmp b c = .lt →
+    Formal.UpgradeSelection.inventoryCmp a c = .lt :=
+  @Formal.UpgradeSelection.inventoryCmp_lt_trans
+-- key-total-order: inventory `eq` forces equal item codes.
+example : ∀ (a b : Formal.UpgradeSelection.Candidate),
+    Formal.UpgradeSelection.inventoryCmp a b = .eq → a.itemCode = b.itemCode :=
+  @Formal.UpgradeSelection.inventoryCmp_eq_imp_code
+-- argmax-sound: best_by_key over a nonempty list returns a member that dominates
+-- every element (nothing compares strictly greater).
+example : ∀ (cmp : Formal.UpgradeSelection.Candidate → Formal.UpgradeSelection.Candidate → Ordering)
+    [Std.OrientedCmp cmp] [Std.TransCmp cmp]
+    (x : Formal.UpgradeSelection.Candidate) (xs : List Formal.UpgradeSelection.Candidate),
+    ∃ r, Formal.UpgradeSelection.bestByKey cmp (x :: xs) = some r ∧
+      r ∈ (x :: xs) ∧ ∀ y ∈ (x :: xs), cmp y r ≠ .gt :=
+  @Formal.UpgradeSelection.bestByKey_sound

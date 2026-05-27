@@ -14,4 +14,5 @@ import Formal.BankSelection
 import Formal.StuckDetector
 import Formal.PriorityBand
 import Formal.OwnedCount
+import Formal.UpgradeSelection
 import Formal.Contracts

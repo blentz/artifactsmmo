@@ -21,6 +21,7 @@ BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
 OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
+UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -400,6 +401,37 @@ OWNED_COUNT_MUTATIONS = [
 ]
 
 
+# upgrade_selection mutations -- old strings matched to current upgrade_selection.py text.
+UPGRADE_SELECTION_MUTATIONS = [
+    # best_by_value tie flip: >= -> >, so a TIE no longer prefers the (cheaper)
+    # inventory pick and wrongly returns the craftable instead.
+    ("upgrade_selection: best_by_value tie flip (>= -> >)",
+     "    return inv if inv.value >= craft.value else craft",
+     "    return inv if inv.value > craft.value else craft"),
+    # craftable_key field swap: swap fills_empty and value, so the lexicographic
+    # priority is wrong (value would outrank the empty-slot bonus).
+    ("upgrade_selection: craftable_key swap fills_empty/value",
+     "    return (int(c.relevant), int(c.fills_empty), c.value, -c.craft_level, c.item_code)",
+     "    return (int(c.relevant), c.value, int(c.fills_empty), -c.craft_level, c.item_code)"),
+    # craftable_key craft_level sign flip: -craft_level -> craft_level, so the
+    # tiebreak prefers the HIGHER crafting level (breaks linear skill progression).
+    ("upgrade_selection: craftable_key craft_level sign flip (-craft_level -> craft_level)",
+     "    return (int(c.relevant), int(c.fills_empty), c.value, -c.craft_level, c.item_code)",
+     "    return (int(c.relevant), int(c.fills_empty), c.value, c.craft_level, c.item_code)"),
+    # best_by_key argmax flip: k > best_key -> k < best_key, so the WORST candidate
+    # is selected instead of the best.
+    ("upgrade_selection: best_by_key argmax flip (> -> <)",
+     "        if best_key is None or k > best_key:",
+     "        if best_key is None or k < best_key:"),
+    # best_by_key tie-resolution flip: > -> >=, so a later equal-key candidate
+    # DISPLACES the running best (last-wins instead of first-wins). Killed by the
+    # same-code/equal-key tie cases in the diff test.
+    ("upgrade_selection: best_by_key tie flip (> -> >=, first-wins -> last-wins)",
+     "        if best_key is None or k > best_key:",
+     "        if best_key is None or k >= best_key:"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -430,7 +462,7 @@ _ALL_SRCS = [
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
-    PRIORITY_BAND_SRC, OWNED_COUNT_SRC,
+    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC,
 ]
 
 
@@ -483,6 +515,8 @@ def main() -> int:
               "formal/diff/test_priority_band_diff.py", survivors)
     run_group(OWNED_COUNT_SRC, OWNED_COUNT_MUTATIONS,
               "formal/diff/test_owned_count_diff.py", survivors)
+    run_group(UPGRADE_SELECTION_SRC, UPGRADE_SELECTION_MUTATIONS,
+              "formal/diff/test_upgrade_selection_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

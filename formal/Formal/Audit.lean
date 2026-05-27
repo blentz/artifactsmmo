@@ -124,3 +124,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.OwnedCount.ownedCount_eq_total
 #print axioms Formal.OwnedCount.ownedCount_counts_equipped
 #print axioms Formal.OwnedCount.ownedCount_monotone
+#print axioms Formal.UpgradeSelection.best_by_value_not_worse
+#print axioms Formal.UpgradeSelection.best_by_value_tie_inv
+#print axioms Formal.UpgradeSelection.craftableCmp_trichotomy
+#print axioms Formal.UpgradeSelection.craftableCmp_swap
+#print axioms Formal.UpgradeSelection.craftableCmp_lt_trans
+#print axioms Formal.UpgradeSelection.craftableCmp_eq_imp_code
+#print axioms Formal.UpgradeSelection.inventoryCmp_trichotomy
+#print axioms Formal.UpgradeSelection.inventoryCmp_swap
+#print axioms Formal.UpgradeSelection.inventoryCmp_lt_trans
+#print axioms Formal.UpgradeSelection.inventoryCmp_eq_imp_code
+#print axioms Formal.UpgradeSelection.bestByKey_sound
