@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
+INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -54,6 +55,25 @@ TASK_BATCH_MUTATIONS = [
 ]
 
 
+# inventory_caps mutations -- old strings matched to current inventory_caps.py text.
+INVENTORY_CAPS_MUTATIONS = [
+    # drop the equipped floor: equipped items no longer guaranteed >= 1.
+    ("inventory_caps: drop equipped max(1, ...) floor",
+     "        return max(1, useful_quantity_cap_excl_equipped(item_code, state, game_data,\n"
+     "                                                          batch_buffer, safety_floor))",
+     "        return useful_quantity_cap_excl_equipped(item_code, state, game_data,\n"
+     "                                                          batch_buffer, safety_floor)"),
+    # drop the safety-floor clamp: demanded items can fall below safety_floor.
+    ("inventory_caps: drop safety-floor clamp",
+     "        recipe_cap = max(recipe_cap, safety_floor)",
+     "        recipe_cap = recipe_cap"),
+    # overstock off-by-one: record qty - cap + 1 instead of qty - cap.
+    ("inventory_caps: overstock off-by-one (+1)",
+     "            excess[code] = qty - cap",
+     "            excess[code] = qty - cap + 1"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -84,6 +104,8 @@ def main() -> int:
     survivors: list = []
     run_group(SRC, MUTATIONS, "formal/diff/test_calculate_path_diff.py", survivors)
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
+    run_group(INVENTORY_CAPS_SRC, INVENTORY_CAPS_MUTATIONS,
+              "formal/diff/test_inventory_caps_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

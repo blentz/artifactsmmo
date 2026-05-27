@@ -1,6 +1,7 @@
 import Formal.CalculatePath
 import Formal.TaskBatch
-open Formal.CalculatePath Formal.TaskBatch
+import Formal.InventoryCaps
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
     changed, the ascription fails to elaborate and the build goes RED. This is the
@@ -51,3 +52,45 @@ example : ∀ (remaining mats free held : Int),
 example : ∀ (remaining mats free held : Int),
     batchSize false remaining mats free held = 1 :=
   @non_task_one
+
+/-! ### InventoryCaps role contracts. -/
+
+-- cap_eq_max_of_four: ¬equipped ⇒ cap = max(recipeCap, taskCap, actionCap, equipCap)
+example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining : Int),
+    cap recipeDemand equippable actionCap taskRemaining false
+      = max (recipeCap recipeDemand)
+          (max taskRemaining (max actionCap (equipCap equippable))) :=
+  @cap_eq_max_of_four
+-- cap_eq_max_one_of_four: equipped ⇒ cap = max(1, max-of-four)
+example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining : Int),
+    cap recipeDemand equippable actionCap taskRemaining true
+      = max 1 (max (recipeCap recipeDemand)
+          (max taskRemaining (max actionCap (equipCap equippable)))) :=
+  @cap_eq_max_one_of_four
+-- equipped_ge_one: equipped ⇒ 1 ≤ cap
+example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining : Int),
+    1 ≤ cap recipeDemand equippable actionCap taskRemaining true :=
+  @equipped_ge_one
+-- recipe_cap_ge_safety: recipeDemand > 0 ⇒ recipeCap ≥ SAFETY_FLOOR
+example : ∀ (recipeDemand : Int), recipeDemand > 0 → safetyFloor ≤ recipeCap recipeDemand :=
+  @recipe_cap_ge_safety
+-- overstock_exact: excess = (qty - cap) iff (qty > 0 ∧ qty > cap), else 0
+example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining : Int)
+    (equipped : Bool) (qty : Int),
+    overstock recipeDemand equippable actionCap taskRemaining equipped qty
+      = (if qty > 0 ∧ qty > cap recipeDemand equippable actionCap taskRemaining equipped
+         then qty - cap recipeDemand equippable actionCap taskRemaining equipped
+         else 0) :=
+  @overstock_exact
+-- overstock_pos_of_over: over ⇒ excess > 0
+example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining : Int)
+    (equipped : Bool) (qty : Int),
+    qty > 0 → qty > cap recipeDemand equippable actionCap taskRemaining equipped →
+    0 < overstock recipeDemand equippable actionCap taskRemaining equipped qty :=
+  @overstock_pos_of_over
+-- overstock_zero_of_not_over: ¬over ⇒ excess = 0
+example : ∀ (recipeDemand : Int) (equippable : Bool) (actionCap taskRemaining : Int)
+    (equipped : Bool) (qty : Int),
+    ¬ (qty > 0 ∧ qty > cap recipeDemand equippable actionCap taskRemaining equipped) →
+    overstock recipeDemand equippable actionCap taskRemaining equipped qty = 0 :=
+  @overstock_zero_of_not_over

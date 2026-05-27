@@ -1,7 +1,7 @@
 import Formal
 import Lean.Data.Json
 
-open Lean Formal.CalculatePath Formal.TaskBatch
+open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -16,6 +16,13 @@ def runCalculatePath (sx sy ex ey : Int) : Json :=
 def runTaskBatch (taskBranch : Bool) (remaining mats free held : Int) : Json :=
   Json.mkObj [("k", Json.num (batchSize taskBranch remaining mats free held))]
 
+/-- Compute one inventory_caps result using the SAME proved `cap`/`overstock`. -/
+def runInventoryCaps (batchBuf safetyFlr recipeDemand : Int) (equippable : Bool)
+    (actionCap taskRemaining : Int) (equipped : Bool) (qty : Int) : Json :=
+  let c := capWith batchBuf safetyFlr recipeDemand equippable actionCap taskRemaining equipped
+  let o := overstockWith batchBuf safetyFlr recipeDemand equippable actionCap taskRemaining equipped qty
+  Json.mkObj [("cap", Json.num c), ("overstock", Json.num o)]
+
 /-- Read an Int field (defaulting to 0) from a JSON array of Ints. -/
 def intArg (xs : Array Json) (i : Nat) : Int := (xs[i]!.getInt?).toOption.getD 0
 
@@ -29,6 +36,10 @@ def runOne (item : Json) : Json :=
     -- args: [taskBranch(0/1), remaining, mats, free, held]
     runTaskBatch (intArg args 0 != 0) (intArg args 1) (intArg args 2)
       (intArg args 3) (intArg args 4)
+  else if kind == "inventory_caps" then
+    -- args: [batchBuf, safetyFlr, recipeDemand, equippable(0/1), actionCap, taskRemaining, equipped(0/1), qty]
+    runInventoryCaps (intArg args 0) (intArg args 1) (intArg args 2)
+      (intArg args 3 != 0) (intArg args 4) (intArg args 5) (intArg args 6 != 0) (intArg args 7)
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

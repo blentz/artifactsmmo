@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps
 #print axioms pathFrom_valid
 #print axioms pathFrom_len_eq_cheb
 #print axioms kingWalk_len_ge_cheb
@@ -11,3 +11,10 @@ open Formal.CalculatePath Formal.TaskBatch
 #print axioms batch_le_cap
 #print axioms batch_fits
 #print axioms non_task_one
+#print axioms cap_eq_max_of_four
+#print axioms cap_eq_max_one_of_four
+#print axioms equipped_ge_one
+#print axioms recipe_cap_ge_safety
+#print axioms overstock_exact
+#print axioms overstock_pos_of_over
+#print axioms overstock_zero_of_not_over
