@@ -61,3 +61,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.TaskFeasibility.monster_gate_boundary_false
 #print axioms Formal.TaskFeasibility.monster_gate_just_past
 #print axioms Formal.TaskFeasibility.monster_gate_zero_never
+#print axioms Formal.PrerequisiteGraph.prereqs_recipe_with_skill
+#print axioms Formal.PrerequisiteGraph.prereqs_recipe_no_skill
+#print axioms Formal.PrerequisiteGraph.prereqs_membership
+#print axioms Formal.PrerequisiteGraph.prereqs_resource
+#print axioms Formal.PrerequisiteGraph.prereqs_leaf
+#print axioms Formal.PrerequisiteGraph.resource_branch_no_item
+#print axioms Formal.PrerequisiteGraph.firstResSkill_sound
+#print axioms Formal.PrerequisiteGraph.combat_capable_iff
+#print axioms Formal.PrerequisiteGraph.combat_capable_demorgan
+#print axioms Formal.PrerequisiteGraph.combat_capable_empty
+#print axioms Formal.PrerequisiteGraph.combat_capable_witness

@@ -14,6 +14,7 @@ SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
+PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -201,6 +202,31 @@ TASK_FEASIBILITY_MUTATIONS = [
 ]
 
 
+# prerequisite_graph mutations -- old strings matched to current prerequisite_graph.py text.
+PREREQUISITE_GRAPH_MUTATIONS = [
+    # drop the crafting-skill prerequisite edge: a craftable item no longer gates
+    # on ReachSkillLevel(crafting_skill) (wrong edge set, skill edge missing).
+    ("prerequisite_graph: drop crafting-skill prereq edge",
+     "                prereqs.append(ReachSkillLevel(stats.crafting_skill, stats.crafting_level))",
+     "                pass"),
+    # drop the ingredient edges: a craftable item produces no ObtainItem(mat)
+    # edges (wrong edge set, material edges missing).
+    ("prerequisite_graph: drop ingredient ObtainItem edges",
+     "            prereqs.extend(ObtainItem(mat, qty) for mat, qty in recipe.items())",
+     "            prereqs.extend([])"),
+    # drop the resource-skill prereq edge: a resource-drop item becomes a leaf
+    # instead of gating on its gather skill (wrong edge set on the resource branch).
+    ("prerequisite_graph: drop resource-skill prereq edge",
+     "                    return [ReachSkillLevel(skill_level[0], skill_level[1])]",
+     "                    return []"),
+    # combat_capable any -> all: requires EVERY monster beatable rather than SOME
+    # (the anti-gaming aggregation flip the De Morgan contract catches).
+    ("prerequisite_graph: combat_capable any -> all",
+     "    return any(predict_win(state, game_data, code) for code in game_data._monster_level)",
+     "    return all(predict_win(state, game_data, code) for code in game_data._monster_level)"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -245,6 +271,8 @@ def main() -> int:
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
               "formal/diff/test_task_feasibility_diff.py", survivors)
+    run_group(PREREQUISITE_GRAPH_SRC, PREREQUISITE_GRAPH_MUTATIONS,
+              "formal/diff/test_prerequisite_graph_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

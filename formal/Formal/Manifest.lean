@@ -70,3 +70,13 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.TaskFeasibility.monster_gate_boundary_false -- monster at clvl+2 does NOT gate (off-by-one anchor)
 #check @Formal.TaskFeasibility.monster_gate_just_past      -- monster at clvl+3 DOES gate
 #check @Formal.TaskFeasibility.monster_gate_zero_never     -- monster_level 0 never gates
+-- PrerequisiteGraph required roles:
+#check @Formal.PrerequisiteGraph.prereqs_recipe_with_skill -- craftable+skill ⇒ skill edge :: item edges
+#check @Formal.PrerequisiteGraph.prereqs_recipe_no_skill   -- craftable, no skill ⇒ item edges only
+#check @Formal.PrerequisiteGraph.prereqs_membership        -- EXACT edge set (skill ∨ ingredient item)
+#check @Formal.PrerequisiteGraph.prereqs_resource          -- resource-drop ⇒ single resource-skill edge
+#check @Formal.PrerequisiteGraph.prereqs_leaf              -- non-craftable, non-resource ⇒ leaf
+#check @Formal.PrerequisiteGraph.resource_branch_no_item   -- resource branch emits no item edge
+#check @Formal.PrerequisiteGraph.combat_capable_iff        -- combat_capable ↔ ∃ beatable monster
+#check @Formal.PrerequisiteGraph.combat_capable_demorgan   -- ¬capable ↔ all unbeatable (any≠all)
+#check @Formal.PrerequisiteGraph.combat_capable_empty      -- no monsters ⇒ not capable

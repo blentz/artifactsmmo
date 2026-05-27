@@ -244,6 +244,64 @@ def runTaskFeasibilityItems (args : Array Json) : Json :=
   let worst := Formal.TaskFeasibility.worstLevel r [taskItem] fuel hasSkill craftLevel skillLevel
   Json.mkObj [("required_level", Json.num (Int.ofNat worst))]
 
+/-- Compute one prerequisite_graph edge list using the proved `prereqEdges`.
+
+Models the DATA-DERIVED edges of an unsatisfied `ObtainItem code`.
+
+args layout (all Nat ≥ 0):
+* `[0]`              hasRecipe (0/1)
+* `[1]`              nIngredients
+* `[2 .. 2*n+1]`     ingredients flat: mat0 qty0 mat1 qty1 ...  (only read when hasRecipe=1)
+* next: hasCraftSkill (0/1), craftSkill, craftLevel  (skill/level only meaningful when 1)
+* next: nDrops, then `(res, drop, hasSkill(0/1), skill, level)` quintuples flat
+* next: code
+
+Emits the edge list as tagged JSON objects:
+`{"kind":"skill","a":skill,"b":level}` or `{"kind":"item","a":code,"b":qty}`. -/
+def runPrerequisiteGraph (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let hasRecipe := g 0 != 0
+  let nIng := g 1
+  let ingredients : List (Nat × Nat) :=
+    (List.range nIng).map (fun k => (g (2 + 2*k), g (3 + 2*k)))
+  let p1 := 2 + 2*nIng
+  let hasCraftSkill := g p1 != 0
+  let craftSkill : Option (Nat × Nat) :=
+    if hasCraftSkill then some (g (p1 + 1), g (p1 + 2)) else none
+  let p2 := p1 + 3
+  let nDrops := g p2
+  let resDrops : List (Nat × Nat × Option (Nat × Nat)) :=
+    (List.range nDrops).map (fun k =>
+      let base := p2 + 1 + 5*k
+      let res := g base
+      let drop := g (base + 1)
+      let skill : Option (Nat × Nat) :=
+        if g (base + 2) != 0 then some (g (base + 3), g (base + 4)) else none
+      (res, drop, skill))
+  let p3 := p2 + 1 + 5*nDrops
+  let code := g p3
+  let recipe : Option (List (Nat × Nat)) := if hasRecipe then some ingredients else none
+  let edges := Formal.PrerequisiteGraph.prereqEdges recipe craftSkill resDrops code
+  let edgeJson := fun (e : Formal.PrerequisiteGraph.Edge) => match e with
+    | Formal.PrerequisiteGraph.Edge.skill s l =>
+      Json.mkObj [("kind", Json.str "skill"), ("a", Json.num (Int.ofNat s)),
+        ("b", Json.num (Int.ofNat l))]
+    | Formal.PrerequisiteGraph.Edge.item c q =>
+      Json.mkObj [("kind", Json.str "item"), ("a", Json.num (Int.ofNat c)),
+        ("b", Json.num (Int.ofNat q))]
+  Json.mkObj [("edges", Json.arr ((edges.map edgeJson).toArray))]
+
+/-- Compute one combat_capable verdict using the proved `combatCapable`.
+
+args layout: `[n, beatable0, beatable1, ...]` — n monster verdicts (each 0/1).
+The monster CODE is its index. Emits the `any` aggregation bool. -/
+def runCombatCapable (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let beatableList := (List.range n).map (fun k => intArg args (1 + k) != 0)
+  let monsters := List.range n
+  let beatable : Nat → Bool := fun m => (beatableList[m]?).getD false
+  Json.mkObj [("capable", Json.bool (Formal.PrerequisiteGraph.combatCapable beatable monsters))]
+
 /-- Compute one task_feasibility MONSTER gate using the proved `monsterGates`.
 args: [monsterLevel, charLevel]. Emits the gate bool. -/
 def runTaskFeasibilityMonster (args : Array Json) : Json :=
@@ -279,6 +337,10 @@ def runOne (item : Json) : Json :=
     runTaskFeasibilityItems args
   else if kind == "task_feasibility_monster" then
     runTaskFeasibilityMonster args
+  else if kind == "prerequisite_graph" then
+    runPrerequisiteGraph args
+  else if kind == "combat_capable" then
+    runCombatCapable args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

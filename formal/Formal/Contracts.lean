@@ -7,6 +7,7 @@ import Formal.EquipmentScoring
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
+import Formal.PrerequisiteGraph
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -372,3 +373,64 @@ example : ∀ (charLevel : Nat),
 example : ∀ (charLevel : Nat),
     Formal.TaskFeasibility.monsterGates 0 charLevel = false :=
   @Formal.TaskFeasibility.monster_gate_zero_never
+
+/-! ### PrerequisiteGraph role contracts. -/
+
+-- prereqs_recipe_with_skill: craftable item WITH a crafting skill ⇒ EXACTLY the
+-- skill edge first, then one item edge per ingredient (data-derived edge set).
+example : ∀ (ingredients : List (Nat × Nat)) (s l : Nat)
+    (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat),
+    Formal.PrerequisiteGraph.prereqEdges (some ingredients) (some (s, l)) resDrops code
+      = Formal.PrerequisiteGraph.Edge.skill s l ::
+          ingredients.map (fun p => Formal.PrerequisiteGraph.Edge.item p.1 p.2) :=
+  @Formal.PrerequisiteGraph.prereqs_recipe_with_skill
+-- prereqs_recipe_no_skill: craftable item with NO crafting skill ⇒ EXACTLY one
+-- item edge per ingredient and NO skill edge.
+example : ∀ (ingredients : List (Nat × Nat))
+    (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat),
+    Formal.PrerequisiteGraph.prereqEdges (some ingredients) none resDrops code
+      = ingredients.map (fun p => Formal.PrerequisiteGraph.Edge.item p.1 p.2) :=
+  @Formal.PrerequisiteGraph.prereqs_recipe_no_skill
+-- prereqs_membership: EXACT edge set for a craftable item — an edge is present
+-- IFF it is the skill edge (skill present) OR an item edge of some ingredient.
+example : ∀ (ingredients : List (Nat × Nat)) (craftSkill : Option (Nat × Nat))
+    (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat)
+    (e : Formal.PrerequisiteGraph.Edge),
+    e ∈ Formal.PrerequisiteGraph.prereqEdges (some ingredients) craftSkill resDrops code
+      ↔ (∃ s l, craftSkill = some (s, l) ∧ e = Formal.PrerequisiteGraph.Edge.skill s l)
+        ∨ (∃ mat qty, (mat, qty) ∈ ingredients ∧ e = Formal.PrerequisiteGraph.Edge.item mat qty) :=
+  @Formal.PrerequisiteGraph.prereqs_membership
+-- prereqs_resource: NON-craftable item whose first matching resource drop has a
+-- skill ⇒ EXACTLY that single resource-skill edge.
+example : ∀ (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code s l : Nat),
+    Formal.PrerequisiteGraph.firstResSkill resDrops code = some (s, l) →
+    Formal.PrerequisiteGraph.prereqEdges none none resDrops code
+      = [Formal.PrerequisiteGraph.Edge.skill s l] :=
+  @Formal.PrerequisiteGraph.prereqs_resource
+-- prereqs_leaf: NON-craftable, non-resource item ⇒ LEAF (no prerequisites).
+example : ∀ (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat),
+    Formal.PrerequisiteGraph.firstResSkill resDrops code = none →
+    Formal.PrerequisiteGraph.prereqEdges none none resDrops code = [] :=
+  @Formal.PrerequisiteGraph.prereqs_leaf
+-- resource_branch_no_item: the resource branch NEVER emits an item edge (recipe
+-- is the only source of item edges).
+example : ∀ (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code c q : Nat),
+    Formal.PrerequisiteGraph.Edge.item c q
+      ∉ Formal.PrerequisiteGraph.prereqEdges none none resDrops code :=
+  @Formal.PrerequisiteGraph.resource_branch_no_item
+-- combat_capable_iff: combat_capable ↔ ∃ beatable monster (independent
+-- existential, NOT the any-fold reapplied).
+example : ∀ (beatable : Nat → Bool) (monsters : List Nat),
+    Formal.PrerequisiteGraph.combatCapable beatable monsters = true
+      ↔ ∃ m ∈ monsters, beatable m = true :=
+  @Formal.PrerequisiteGraph.combat_capable_iff
+-- combat_capable_demorgan: ¬combat_capable ↔ EVERY monster unbeatable (De Morgan
+-- dual — catches an any→all mutation).
+example : ∀ (beatable : Nat → Bool) (monsters : List Nat),
+    Formal.PrerequisiteGraph.combatCapable beatable monsters = false
+      ↔ ∀ m ∈ monsters, beatable m = false :=
+  @Formal.PrerequisiteGraph.combat_capable_demorgan
+-- combat_capable_empty: no monsters ⇒ never capable (any of [] = false, ≠ all).
+example : ∀ (beatable : Nat → Bool),
+    Formal.PrerequisiteGraph.combatCapable beatable [] = false :=
+  @Formal.PrerequisiteGraph.combat_capable_empty
