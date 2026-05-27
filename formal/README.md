@@ -37,10 +37,26 @@ uv sync --dev
 
 ## Coverage
 
+**14/14 pure-logic AI components proven** (kernel-checked ∀ inputs, sorry-free, axioms = {propext, Classical.choice, Quot.sound}). Each row has a Lean def + role theorems + a `Contracts.lean` statement-pin + a real-Python differential test + mutation coverage.
+
 | Component | Lean | Roles proved |
 |---|---|---|
-| `calculate_path` (`utils/pathfinding.py:44`) | `Formal/CalculatePath.lean` | validity, optimality (lower-bound + achieved), cost (length≤Manhattan, Chebyshev≤Manhattan), estimated_time |
+| `calculate_path` (`utils/pathfinding.py:44`) | `CalculatePath.lean` | validity, optimality (lower-bound + achieved), cost (length≤Manhattan, Chebyshev≤Manhattan), estimated_time |
+| `task_batch_size` (`ai/task_batch.py:19`) | `TaskBatch.lean` | clamp bounds: ≥1, ≤remaining, ≤cap, fits available space |
+| `useful_quantity_cap`/`overstocked_items` (`ai/inventory_caps.py`) | `InventoryCaps.lean` | cap = max-of-four + equipped floor; overstock exact |
+| `predict_win` (`ai/combat.py:57`) | `PredictWin.lean` | **exact** documented arithmetic; closed-form = operational fight-sim; monotonicity; MAX_TURNS soundness |
+| `project_loadout_stats` (`ai/equipment/projection.py`) | `LoadoutProjection.lean` | additive delta; identity; guarded sum = unconditional sum |
+| `pick_loadout` (`ai/equipment/scoring.py`) | `EquipmentScoring.lean` | per-slot score-optimal, no-downgrade, ties-keep-current, feasible, clamp≥0 |
+| `SkillXpCurve` (`ai/learning/skill_xp_curve.py`) | `SkillXpCurve.lean` | required_xp branches, confidence∈[0,1], is_confident iff full, cycles guards, total monotone, default-ratio condition (geometric float estimate abstracted) |
+| `recipe_closure`/`raw_material_units` (`ai/recipe_closure.py`) | `RecipeClosure.lean` | closure = least fixpoint (sound+complete); cyclic termination; quantity cost |
+| `task_requirement` (`ai/task_feasibility.py`) | `TaskFeasibility.lean` | worst = max unmet over closure; none-iff-feasible; monster gate threshold |
+| `prerequisites`/`combat_capable` (`ai/tiers/prerequisite_graph.py`) | `PrerequisiteGraph.lean` | exact direct edges; combat_capable = ∃ beatable (De Morgan) |
+| `is_attainable`/`gap`/gear (`ai/tiers/objective.py`) | `Objective.lean` | is_attainable = grounding fixpoint; best-attainable gear argmax; gap bounds; is_complete iff targets met |
+| `is_reachable`/`actionable_step`/`unmet_closure_size`/`root_cost` (`ai/tiers/strategy.py`) | `StrategyTraversal.lean` | reachable = grounding fixpoint; closure count; actionable correctness (none-iff, De Morgan); root_cost floored |
+| `select_bank_deposits` (`ai/bank_selection.py`) | `BankSelection.lean` | deposits exact; **freeze invariant** (deposits ∩ keep = ∅); task inputs protected; keep-closure |
+| `StuckDetector` (`ai/recovery.py`) | `StuckDetector.lean` | detect precedence; thresholds; `_recent_since` window index arithmetic; ack suppression |
 
-Backfill of the remaining components: see the design doc
-(`docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md`). The retired
+The float-heavy parts modeled exactly where reducible (predict_win); the inherently-heuristic geometric estimate in `SkillXpCurve` is abstracted and disclosed in that file's header. Components depending on others' verdicts (e.g. `combat_capable` on `predict_win`) abstract the dependency as an input — the dependency itself is proven in its own module.
+
+Design doc: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md`. The retired
 TLA+/PlusPy predecessor: `docs/postmortems/2026-05-26-tlaplus-pluspy-formal-verification.md`.
