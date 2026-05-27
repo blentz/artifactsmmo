@@ -53,3 +53,11 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms rawUnits_revisit
 #print axioms remaining_decreasing
 #print axioms rawUnits_fuel_stable
+#print axioms Formal.TaskFeasibility.worst_eq_max_unmet
+#print axioms Formal.TaskFeasibility.worst_is_max
+#print axioms Formal.TaskFeasibility.none_iff_no_unmet
+#print axioms Formal.TaskFeasibility.worst_is_real_gap
+#print axioms Formal.TaskFeasibility.monster_gate
+#print axioms Formal.TaskFeasibility.monster_gate_boundary_false
+#print axioms Formal.TaskFeasibility.monster_gate_just_past
+#print axioms Formal.TaskFeasibility.monster_gate_zero_never

@@ -6,6 +6,7 @@ import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
+import Formal.TaskFeasibility
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -308,3 +309,66 @@ example : ∀ (r : Recipe) (univ : List Nat), UnivClosed r univ →
       item ∈ univ → remaining univ visited ≤ f → remaining univ visited ≤ f' →
       rawUnitsAux r f visited item = rawUnitsAux r f' visited item :=
   @rawUnits_fuel_stable
+
+/-! ### TaskFeasibility role contracts.
+
+`Recipe`, `Reachable`, `satN`, `closureItems` clash with `RecipeClosure`'s
+definitions of the same names; we fully-qualify the `TaskFeasibility` ones. -/
+
+-- worst_eq_max_unmet: returned required_level = MAX craftLevel over the UNMET
+-- items in the craft closure of the task item.
+example : ∀ (r : Formal.TaskFeasibility.Recipe) (roots : List Nat) (fuel : Nat)
+    (hasSkill : Formal.TaskFeasibility.HasSkill) (craftLevel : Formal.TaskFeasibility.CraftLevel)
+    (skillLevel : Formal.TaskFeasibility.SkillLevel),
+    Formal.TaskFeasibility.worstLevel r roots fuel hasSkill craftLevel skillLevel
+      = Formal.TaskFeasibility.listMax craftLevel
+          (Formal.TaskFeasibility.unmetItems r roots fuel hasSkill craftLevel skillLevel) :=
+  @Formal.TaskFeasibility.worst_eq_max_unmet
+-- worst_is_max: every unmet closure item's craftLevel ≤ the returned worst (it
+-- truly is the maximum).
+example : ∀ (r : Formal.TaskFeasibility.Recipe) (roots : List Nat) (fuel : Nat)
+    (hasSkill : Formal.TaskFeasibility.HasSkill) (craftLevel : Formal.TaskFeasibility.CraftLevel)
+    (skillLevel : Formal.TaskFeasibility.SkillLevel) {m : Nat},
+    m ∈ Formal.TaskFeasibility.unmetItems r roots fuel hasSkill craftLevel skillLevel →
+    craftLevel m ≤ Formal.TaskFeasibility.worstLevel r roots fuel hasSkill craftLevel skillLevel :=
+  @Formal.TaskFeasibility.worst_is_max
+-- none_iff_no_unmet: under positive craft levels, result is None (worst = 0) IFF
+-- no closure item is unmet — the operational feasibility condition.
+example : ∀ (r : Formal.TaskFeasibility.Recipe) (roots : List Nat) (fuel : Nat)
+    (hasSkill : Formal.TaskFeasibility.HasSkill) (craftLevel : Formal.TaskFeasibility.CraftLevel)
+    (skillLevel : Formal.TaskFeasibility.SkillLevel),
+    (∀ m ∈ Formal.TaskFeasibility.closureItems r roots fuel,
+        Formal.TaskFeasibility.unmet hasSkill craftLevel skillLevel m = true → 0 < craftLevel m) →
+    (Formal.TaskFeasibility.worstLevel r roots fuel hasSkill craftLevel skillLevel = 0
+      ↔ ∀ m ∈ Formal.TaskFeasibility.closureItems r roots fuel,
+          Formal.TaskFeasibility.unmet hasSkill craftLevel skillLevel m = false) :=
+  @Formal.TaskFeasibility.none_iff_no_unmet
+-- worst_is_real_gap: a positive result is a GENUINE gap — ∃ reachable item that
+-- is unmet at exactly the returned level.
+example : ∀ (r : Formal.TaskFeasibility.Recipe) (roots : List Nat) (fuel : Nat)
+    (hasSkill : Formal.TaskFeasibility.HasSkill) (craftLevel : Formal.TaskFeasibility.CraftLevel)
+    (skillLevel : Formal.TaskFeasibility.SkillLevel),
+    0 < Formal.TaskFeasibility.worstLevel r roots fuel hasSkill craftLevel skillLevel →
+    ∃ m, Formal.TaskFeasibility.Reachable r roots m ∧
+      Formal.TaskFeasibility.unmet hasSkill craftLevel skillLevel m = true ∧
+      craftLevel m = Formal.TaskFeasibility.worstLevel r roots fuel hasSkill craftLevel skillLevel :=
+  @Formal.TaskFeasibility.worst_is_real_gap
+-- monster_gate: the gate fires IFF 0 < monster_level ∧ char_level + 2 < monster_level
+-- (independent arithmetic spec, not X ↔ X).
+example : ∀ (monsterLevel charLevel : Nat),
+    Formal.TaskFeasibility.monsterGates monsterLevel charLevel = true
+      ↔ (0 < monsterLevel ∧ charLevel + 2 < monsterLevel) :=
+  @Formal.TaskFeasibility.monster_gate
+-- monster_gate_boundary_false: monster EXACTLY at char_level + 2 does NOT gate
+-- (off-by-one anchor — would be TRUE under a ≥-margin bug).
+example : ∀ (charLevel : Nat),
+    Formal.TaskFeasibility.monsterGates (charLevel + 2) charLevel = false :=
+  @Formal.TaskFeasibility.monster_gate_boundary_false
+-- monster_gate_just_past: monster at char_level + 3 DOES gate (other side of anchor).
+example : ∀ (charLevel : Nat),
+    Formal.TaskFeasibility.monsterGates (charLevel + 3) charLevel = true :=
+  @Formal.TaskFeasibility.monster_gate_just_past
+-- monster_gate_zero_never: monster_level = 0 never gates.
+example : ∀ (charLevel : Nat),
+    Formal.TaskFeasibility.monsterGates 0 charLevel = false :=
+  @Formal.TaskFeasibility.monster_gate_zero_never

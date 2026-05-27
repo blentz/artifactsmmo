@@ -61,3 +61,12 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @rawUnits_revisit            -- cyclic guard: revisit ⇒ cost 1
 #check @remaining_decreasing        -- termination measure strictly decreases
 #check @rawUnits_fuel_stable        -- adequate fuel ⇒ fuel-independent (terminates)
+-- TaskFeasibility required roles:
+#check @Formal.TaskFeasibility.worst_eq_max_unmet  -- required_level = MAX craftLevel over unmet closure
+#check @Formal.TaskFeasibility.worst_is_max        -- every unmet closure item ≤ returned worst
+#check @Formal.TaskFeasibility.none_iff_no_unmet   -- result None ⇔ no unmet gap in closure
+#check @Formal.TaskFeasibility.worst_is_real_gap   -- positive result ⇒ ∃ genuine unmet item at that level
+#check @Formal.TaskFeasibility.monster_gate        -- gate ⇔ 0<mlvl ∧ clvl+2<mlvl (independent spec)
+#check @Formal.TaskFeasibility.monster_gate_boundary_false -- monster at clvl+2 does NOT gate (off-by-one anchor)
+#check @Formal.TaskFeasibility.monster_gate_just_past      -- monster at clvl+3 DOES gate
+#check @Formal.TaskFeasibility.monster_gate_zero_never     -- monster_level 0 never gates

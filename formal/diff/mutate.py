@@ -13,6 +13,7 @@ PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "proje
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
+TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -178,6 +179,28 @@ RECIPE_CLOSURE_MUTATIONS = [
 ]
 
 
+# task_feasibility mutations -- old strings matched to current task_feasibility.py text.
+TASK_FEASIBILITY_MUTATIONS = [
+    # worst -> min instead of max: pick the SMALLEST gap rather than the highest
+    # required_level (flip the comparison so a smaller sub replaces worst).
+    ("task_feasibility: worst max -> min (> becomes <)",
+     "        if sub is not None and (worst is None or sub.required_level > worst.required_level):",
+     "        if sub is not None and (worst is None or sub.required_level < worst.required_level):"),
+    # drop the closure recursion: only consider the FIRST ingredient, missing the
+    # rest of the craft closure (incomplete worst gap).
+    ("task_feasibility: closure recurse first ingredient only",
+     "    for ingredient in recipe:\n"
+     "        sub = _item_skill_gap(ingredient, state, game_data, seen)",
+     "    for ingredient in list(recipe)[:1]:\n"
+     "        sub = _item_skill_gap(ingredient, state, game_data, seen)"),
+    # monster margin off-by-one: > MARGIN becomes >= MARGIN, so a monster EXACTLY
+    # at char_level + 2 (the boundary) would wrongly gate.
+    ("task_feasibility: monster margin off-by-one (> -> >=)",
+     "        if monster_level > 0 and monster_level > state.level + MONSTER_LEVEL_MARGIN:",
+     "        if monster_level > 0 and monster_level >= state.level + MONSTER_LEVEL_MARGIN:"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -220,6 +243,8 @@ def main() -> int:
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
+    run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
+              "formal/diff/test_task_feasibility_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

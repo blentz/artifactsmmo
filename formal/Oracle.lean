@@ -194,6 +194,63 @@ def runRecipeClosure (args : Array Json) : Json :=
   Json.mkObj [("needed_resources", toJson needed), ("craftable_mats", toJson craft),
     ("raw_material_units", Json.num (Int.ofNat (rawUnits r fuel queryItem)))]
 
+/-- Build a `TaskFeasibility.Recipe` (Nat → List Nat, ingredient codes only)
+from a list of `(item, sub)` pairs: `r item` = every `sub` whose pair's first
+component is `item`, in encounter order. -/
+def tfRecipeFromPairs (pairs : List (Nat × Nat)) : Formal.TaskFeasibility.Recipe :=
+  fun item => (pairs.filter (fun p => decide (p.1 = item))).map Prod.snd
+
+/-- Build a per-item lookup table from a flat assoc list, defaulting to `d`. -/
+def tableLookup (tbl : List (Nat × Nat)) (d : Nat) : Nat → Nat :=
+  fun k => match tbl.find? (fun p => decide (p.1 = k)) with
+    | some p => p.2
+    | none => d
+
+/-- Compute one task_feasibility ITEMS result using the proved `worstLevel`.
+
+args layout (all Nat ≥ 0):
+* `[0]`                   nEdges (number of `(item, sub)` recipe edges)
+* `[1 .. 2*nEdges]`       edges flat: item0 sub0 item1 sub1 ...
+* next: nSkillItems, then `(item, hasSkill(0/1))` pairs flat
+* next: nCraft, then `(item, craftLevel)` pairs flat
+* next: nSkillLvl, then `(item, charSkillLevelForThatItem)` pairs flat
+* next: taskItem, fuel
+
+Emits the worst required_level (0 = none / feasible). -/
+def runTaskFeasibilityItems (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nEdges := g 0
+  let pairs : List (Nat × Nat) :=
+    (List.range nEdges).map (fun k => (g (1 + 2*k), g (2 + 2*k)))
+  let p1 := 1 + 2*nEdges
+  let nSkill := g p1
+  let skillTbl : List (Nat × Nat) :=
+    (List.range nSkill).map (fun k => (g (p1 + 1 + 2*k), g (p1 + 2 + 2*k)))
+  let p2 := p1 + 1 + 2*nSkill
+  let nCraft := g p2
+  let craftTbl : List (Nat × Nat) :=
+    (List.range nCraft).map (fun k => (g (p2 + 1 + 2*k), g (p2 + 2 + 2*k)))
+  let p3 := p2 + 1 + 2*nCraft
+  let nLvl := g p3
+  let lvlTbl : List (Nat × Nat) :=
+    (List.range nLvl).map (fun k => (g (p3 + 1 + 2*k), g (p3 + 2 + 2*k)))
+  let p4 := p3 + 1 + 2*nLvl
+  let taskItem := g p4
+  let fuel := g (p4 + 1)
+  let r := tfRecipeFromPairs pairs
+  let hasSkill : Formal.TaskFeasibility.HasSkill := fun k => tableLookup skillTbl 0 k != 0
+  let craftLevel : Formal.TaskFeasibility.CraftLevel := tableLookup craftTbl 0
+  let skillLevel : Formal.TaskFeasibility.SkillLevel := tableLookup lvlTbl 0
+  let worst := Formal.TaskFeasibility.worstLevel r [taskItem] fuel hasSkill craftLevel skillLevel
+  Json.mkObj [("required_level", Json.num (Int.ofNat worst))]
+
+/-- Compute one task_feasibility MONSTER gate using the proved `monsterGates`.
+args: [monsterLevel, charLevel]. Emits the gate bool. -/
+def runTaskFeasibilityMonster (args : Array Json) : Json :=
+  let monsterLevel := (intArg args 0).toNat
+  let charLevel := (intArg args 1).toNat
+  Json.mkObj [("gates", Json.bool (Formal.TaskFeasibility.monsterGates monsterLevel charLevel))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -218,6 +275,10 @@ def runOne (item : Json) : Json :=
     runSkillXpCurve args
   else if kind == "recipe_closure" then
     runRecipeClosure args
+  else if kind == "task_feasibility_items" then
+    runTaskFeasibilityItems args
+  else if kind == "task_feasibility_monster" then
+    runTaskFeasibilityMonster args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
