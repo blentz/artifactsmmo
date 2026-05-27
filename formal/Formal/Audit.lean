@@ -104,3 +104,17 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.BankSelection.recipeMaterialList_complete
 #print axioms Formal.BankSelection.best_weapon_argmax
 #print axioms Formal.BankSelection.best_weapon_is_fighting
+#print axioms Formal.StuckDetector.recent_since_window
+#print axioms Formal.StuckDetector.recentSince_mem_global
+#print axioms Formal.StuckDetector.detect_precedence
+#print axioms Formal.StuckDetector.detect_frozen_wins
+#print axioms Formal.StuckDetector.detect_osc_over_noprog
+#print axioms Formal.StuckDetector.noprog_threshold
+#print axioms Formal.StuckDetector.osc_threshold
+#print axioms Formal.StuckDetector.frozen_threshold
+#print axioms Formal.StuckDetector.ack_suppression_noprog
+#print axioms Formal.StuckDetector.ack_suppression_frozen
+#print axioms Formal.StuckDetector.ack_suppression_osc
+#print axioms Formal.StuckDetector.ack_noprog_cannot_fire
+#print axioms Formal.StuckDetector.ack_frozen_cannot_fire
+#print axioms Formal.StuckDetector.ack_osc_cannot_fire

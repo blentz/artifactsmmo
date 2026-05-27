@@ -115,3 +115,18 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.BankSelection.recipeMaterialList_complete  -- material capture COMPLETE within fuel
 #check @Formal.BankSelection.best_weapon_argmax           -- best weapon = max-attack non-tool over inv∪equip
 #check @Formal.BankSelection.best_weapon_is_fighting      -- best weapon is a non-tool weapon
+-- StuckDetector required roles:
+#check @Formal.StuckDetector.recent_since_window      -- _recent_since = keep global idx ≥ cutoff, last count
+#check @Formal.StuckDetector.recentSince_mem_global   -- every kept record's global index clears cutoff
+#check @Formal.StuckDetector.detect_precedence        -- strict frozen > osc > noprog, else none
+#check @Formal.StuckDetector.detect_frozen_wins       -- frozen check ⇒ frozen (even if osc/noprog fire)
+#check @Formal.StuckDetector.detect_osc_over_noprog   -- osc beats noprog when frozen false
+#check @Formal.StuckDetector.noprog_threshold         -- noprog ↔ last-4 full ∧ all <no_plan>
+#check @Formal.StuckDetector.osc_threshold            -- osc ↔ last-8 full ∧ exactly 2 distinct goals
+#check @Formal.StuckDetector.frozen_threshold         -- frozen ↔ last-10 full ∧ some state ≥ 5
+#check @Formal.StuckDetector.ack_suppression_noprog   -- post-ack noprog window empty
+#check @Formal.StuckDetector.ack_suppression_frozen   -- post-ack frozen window empty
+#check @Formal.StuckDetector.ack_suppression_osc      -- post-ack osc window empty
+#check @Formal.StuckDetector.ack_noprog_cannot_fire   -- just-acked noprog cannot re-fire
+#check @Formal.StuckDetector.ack_frozen_cannot_fire   -- just-acked frozen cannot re-fire
+#check @Formal.StuckDetector.ack_osc_cannot_fire      -- just-acked osc cannot re-fire

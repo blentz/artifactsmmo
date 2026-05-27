@@ -18,6 +18,7 @@ PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "p
 OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
 STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
+STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -323,6 +324,44 @@ BANK_SELECTION_MUTATIONS = [
 ]
 
 
+# stuck_detector mutations -- old strings matched to current recovery.py text.
+STUCK_DETECTOR_MUTATIONS = [
+    # detect precedence swap: check NO_PROGRESS before STATE_FROZEN, so a window
+    # that is simultaneously frozen AND noprog reports noprog (wrong precedence).
+    ("stuck_detector: detect precedence swap (noprog before frozen)",
+     "        if self._check_state_frozen():\n"
+     "            return StuckSignal.STATE_FROZEN\n"
+     "        if self._check_goal_oscillation():\n"
+     "            return StuckSignal.GOAL_OSCILLATION\n"
+     "        if self._check_no_progress():\n"
+     "            return StuckSignal.NO_PROGRESS",
+     "        if self._check_no_progress():\n"
+     "            return StuckSignal.NO_PROGRESS\n"
+     "        if self._check_state_frozen():\n"
+     "            return StuckSignal.STATE_FROZEN\n"
+     "        if self._check_goal_oscillation():\n"
+     "            return StuckSignal.GOAL_OSCILLATION"),
+    # threshold off-by-one: frozen window requires len < 10 -> len < 9, so a 9-record
+    # window wrongly satisfies the length gate (fires one record early).
+    ("stuck_detector: frozen threshold off-by-one (count=10 -> 9)",
+     "        window = self._recent_since(cutoff, count=10)\n"
+     "        if len(window) < 10:",
+     "        window = self._recent_since(cutoff, count=9)\n"
+     "        if len(window) < 9:"),
+    # _recent_since index off-by-one: start_idx + i becomes start_idx + i + 1, so a
+    # boundary record at exactly the cutoff is wrongly excluded (the window-boundary
+    # case lands the kept length on 10/4/8, so this flips the verdict). Pins the math.
+    ("stuck_detector: _recent_since index off-by-one (start_idx + i -> + i + 1)",
+     "            if start_idx + i >= cutoff_cycle",
+     "            if start_idx + i + 1 >= cutoff_cycle"),
+    # _recent_since index off-by-one the OTHER way: start_idx + i - 1, wrongly
+    # INCLUDES an at-cutoff record (over-counts the window on the boundary).
+    ("stuck_detector: _recent_since index off-by-one (start_idx + i -> + i - 1)",
+     "            if start_idx + i >= cutoff_cycle",
+     "            if start_idx + i - 1 >= cutoff_cycle"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -375,6 +414,8 @@ def main() -> int:
               "formal/diff/test_strategy_traversal_diff.py", survivors)
     run_group(BANK_SELECTION_SRC, BANK_SELECTION_MUTATIONS,
               "formal/diff/test_bank_selection_diff.py", survivors)
+    run_group(STUCK_DETECTOR_SRC, STUCK_DETECTOR_MUTATIONS,
+              "formal/diff/test_stuck_detector_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

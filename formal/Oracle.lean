@@ -535,6 +535,48 @@ def runBankSelection (args : Array Json) : Json :=
     (fun cq => Json.arr #[Json.num (Int.ofNat cq.1), Json.num (Int.ofNat cq.2)])).toArray)
   Json.mkObj [("keep", keepJson), ("deposits", depsJson)]
 
+/-- Compute one stuck_detector result using the proved `detect` / `recentSince`.
+
+args layout (all Nat ≥ 0):
+* `[0]`            counter (global cycle counter; ≥ history length)
+* `[1]`            ackFrozen cutoff
+* `[2]`            ackOsc cutoff
+* `[3]`            ackNoprog cutoff
+* `[4]`            n (history length)
+* `[5 .. 5+3n-1]`  n records flat: state0 goal0 noPlan0(0/1) state1 ...
+  (oldest first, mirroring `list(deque)`)
+
+Emits the `detect()` verdict ("frozen"/"osc"/"noprog"/"none") and the three
+window lengths (to pin `_recent_since`'s index arithmetic). -/
+def runStuckDetector (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let counter := g 0
+  let ackFrozen := g 1
+  let ackOsc := g 2
+  let ackNoprog := g 3
+  let n := g 4
+  let history : List Formal.StuckDetector.Rec :=
+    (List.range n).map (fun k =>
+      { state := g (5 + 3*k), goal := g (6 + 3*k), noPlan := g (7 + 3*k) != 0 })
+  let d : Formal.StuckDetector.Detector :=
+    { history := history, counter := counter,
+      ackFrozen := ackFrozen, ackOsc := ackOsc, ackNoprog := ackNoprog }
+  let verdict : String := match Formal.StuckDetector.detect d with
+    | some Formal.StuckDetector.Signal.frozen => "frozen"
+    | some Formal.StuckDetector.Signal.osc => "osc"
+    | some Formal.StuckDetector.Signal.noprog => "noprog"
+    | none => "none"
+  let frozenLen := (Formal.StuckDetector.recentSince d ackFrozen
+    Formal.StuckDetector.frozenThreshold).length
+  let oscLen := (Formal.StuckDetector.recentSince d ackOsc
+    Formal.StuckDetector.oscThreshold).length
+  let noprogLen := (Formal.StuckDetector.recentSince d ackNoprog
+    Formal.StuckDetector.noprogThreshold).length
+  Json.mkObj [("detect", Json.str verdict),
+    ("frozen_window_len", Json.num (Int.ofNat frozenLen)),
+    ("osc_window_len", Json.num (Int.ofNat oscLen)),
+    ("noprog_window_len", Json.num (Int.ofNat noprogLen))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -583,6 +625,8 @@ def runOne (item : Json) : Json :=
     runStrategyTraversal "root_cost" args
   else if kind == "bank_selection" then
     runBankSelection args
+  else if kind == "stuck_detector" then
+    runStuckDetector args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

@@ -11,6 +11,7 @@ import Formal.PrerequisiteGraph
 import Formal.Objective
 import Formal.StrategyTraversal
 import Formal.BankSelection
+import Formal.StuckDetector
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -646,3 +647,115 @@ example : ∀ (s : Formal.BankSelection.State) (c : Nat),
     Formal.BankSelection.bestWeaponCode s = some c →
       Formal.BankSelection.isFightingWeapon s c = true :=
   @Formal.BankSelection.best_weapon_is_fighting
+
+/-! ### StuckDetector role contracts.
+
+The deterministic stuck-state machine. Statements pin the INDEX ARITHMETIC of
+`_recent_since` (the historical off-by-one), the strict detect precedence, the
+exact thresholds, and acknowledge suppression. -/
+
+-- recent_since_window: `_recent_since(cutoff,count)` = keep buffered records whose
+-- GLOBAL index `startIdx + i ≥ cutoff`, then take the LAST `count` (the exact index
+-- arithmetic; a `± 1` start-index perturbation is a different function).
+example : ∀ (d : Formal.StuckDetector.Detector) (cutoff count : Nat),
+    Formal.StuckDetector.recentSince d cutoff count
+      = Formal.StuckDetector.takeLast count
+          (((List.range d.history.length).zip d.history
+            |>.filter (fun p => decide (Formal.StuckDetector.startIdx d + p.1 ≥ cutoff))).map
+              Prod.snd) :=
+  @Formal.StuckDetector.recent_since_window
+-- recentSince_mem_global: every kept record came from a buffer position whose
+-- GLOBAL index clears the cutoff (the filter genuinely uses `startIdx + i`).
+example : ∀ (d : Formal.StuckDetector.Detector) (cutoff count : Nat) (r : Formal.StuckDetector.Rec),
+    r ∈ Formal.StuckDetector.recentSince d cutoff count →
+      ∃ i, i < d.history.length ∧
+        Formal.StuckDetector.startIdx d + i ≥ cutoff ∧ d.history[i]? = some r :=
+  @Formal.StuckDetector.recentSince_mem_global
+-- detect_precedence: strict order frozen > osc > noprog, else none (the cascade).
+example : ∀ (d : Formal.StuckDetector.Detector),
+    (Formal.StuckDetector.checkStateFrozen d = true →
+      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.frozen) ∧
+    (Formal.StuckDetector.checkStateFrozen d = false →
+      Formal.StuckDetector.checkGoalOscillation d = true →
+      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.osc) ∧
+    (Formal.StuckDetector.checkStateFrozen d = false →
+      Formal.StuckDetector.checkGoalOscillation d = false →
+      Formal.StuckDetector.checkNoProgress d = true →
+      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.noprog) ∧
+    (Formal.StuckDetector.checkStateFrozen d = false →
+      Formal.StuckDetector.checkGoalOscillation d = false →
+      Formal.StuckDetector.checkNoProgress d = false →
+      Formal.StuckDetector.detect d = none) :=
+  @Formal.StuckDetector.detect_precedence
+-- detect_frozen_wins: frozen check holding forces frozen even if osc/noprog hold.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkStateFrozen d = true →
+      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.frozen :=
+  @Formal.StuckDetector.detect_frozen_wins
+-- detect_osc_over_noprog: frozen false ∧ osc true ⇒ osc wins over noprog.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkStateFrozen d = false →
+    Formal.StuckDetector.checkGoalOscillation d = true →
+      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.osc :=
+  @Formal.StuckDetector.detect_osc_over_noprog
+-- noprog_threshold: noprog ↔ post-ack last-4 window is full (= 4) ∧ all <no_plan>.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkNoProgress d = true
+      ↔ ((Formal.StuckDetector.recentSince d d.ackNoprog
+            Formal.StuckDetector.noprogThreshold).length = Formal.StuckDetector.noprogThreshold ∧
+          (Formal.StuckDetector.recentSince d d.ackNoprog
+            Formal.StuckDetector.noprogThreshold).all (fun r => r.noPlan) = true) :=
+  @Formal.StuckDetector.noprog_threshold
+-- osc_threshold: osc ↔ post-ack last-8 window full (= 8) ∧ EXACTLY 2 distinct goals.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkGoalOscillation d = true
+      ↔ ((Formal.StuckDetector.recentSince d d.ackOsc
+            Formal.StuckDetector.oscThreshold).length = Formal.StuckDetector.oscThreshold ∧
+          (Formal.StuckDetector.distinctGoals (Formal.StuckDetector.recentSince d d.ackOsc
+            Formal.StuckDetector.oscThreshold)).length = 2) :=
+  @Formal.StuckDetector.osc_threshold
+-- frozen_threshold: frozen ↔ post-ack last-10 window full (= 10) ∧ some state ≥ 5.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkStateFrozen d = true
+      ↔ ((Formal.StuckDetector.recentSince d d.ackFrozen
+            Formal.StuckDetector.frozenThreshold).length = Formal.StuckDetector.frozenThreshold ∧
+          ∃ r ∈ Formal.StuckDetector.recentSince d d.ackFrozen Formal.StuckDetector.frozenThreshold,
+            Formal.StuckDetector.stateCount r.state
+              (Formal.StuckDetector.recentSince d d.ackFrozen
+                Formal.StuckDetector.frozenThreshold) ≥ 5) :=
+  @Formal.StuckDetector.frozen_threshold
+-- ack_suppression (noprog): immediately after acknowledge(noprog) the noprog
+-- window is EMPTY (cutoff = counter excludes every buffered record).
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.recentSince (Formal.StuckDetector.acknowledge d
+        Formal.StuckDetector.Signal.noprog)
+      (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.noprog).ackNoprog
+      Formal.StuckDetector.noprogThreshold = [] :=
+  @Formal.StuckDetector.ack_suppression_noprog
+-- ack_suppression (frozen) / (osc): same emptiness for the other windows.
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.recentSince (Formal.StuckDetector.acknowledge d
+        Formal.StuckDetector.Signal.frozen)
+      (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.frozen).ackFrozen
+      Formal.StuckDetector.frozenThreshold = [] :=
+  @Formal.StuckDetector.ack_suppression_frozen
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.recentSince (Formal.StuckDetector.acknowledge d
+        Formal.StuckDetector.Signal.osc)
+      (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.osc).ackOsc
+      Formal.StuckDetector.oscThreshold = [] :=
+  @Formal.StuckDetector.ack_suppression_osc
+-- ack_*_cannot_fire: an empty post-ack window can never meet the threshold, so
+-- the just-acked signal cannot re-fire until ≥ threshold fresh records accumulate.
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.checkNoProgress (Formal.StuckDetector.acknowledge d
+      Formal.StuckDetector.Signal.noprog) = false :=
+  @Formal.StuckDetector.ack_noprog_cannot_fire
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.checkStateFrozen (Formal.StuckDetector.acknowledge d
+      Formal.StuckDetector.Signal.frozen) = false :=
+  @Formal.StuckDetector.ack_frozen_cannot_fire
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.checkGoalOscillation (Formal.StuckDetector.acknowledge d
+      Formal.StuckDetector.Signal.osc) = false :=
+  @Formal.StuckDetector.ack_osc_cannot_fire
