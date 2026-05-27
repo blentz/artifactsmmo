@@ -388,7 +388,31 @@ def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
         src.write_text(orig)
 
 
+_ALL_SRCS = [
+    SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
+    SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
+    OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
+]
+
+
+def _assert_sources_clean() -> None:
+    """Abort if any mutation target is already dirty in git. The runner mutates
+    production source in place and restores it in `finally`; a previous run killed
+    mid-mutation could leave a target mutated. Refusing to start on a dirty target
+    prevents compounding a leaked mutation (or letting one ship unnoticed)."""
+    rels = [str(p.relative_to(ROOT)) for p in _ALL_SRCS]
+    rc = subprocess.run(["git", "diff", "--quiet", "--", *rels], cwd=ROOT).returncode
+    if rc != 0:
+        dirty = subprocess.run(["git", "diff", "--name-only", "--", *rels],
+                               cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        print("MUTATION GATE ABORT: target source(s) already dirty — a prior "
+              f"mutation run may have left a mutation in place:\n{dirty}\n"
+              "Run `git checkout -- <files>` and retry.")
+        sys.exit(2)
+
+
 def main() -> int:
+    _assert_sources_clean()
     survivors: list = []
     run_group(SRC, MUTATIONS, "formal/diff/test_calculate_path_diff.py", survivors)
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
