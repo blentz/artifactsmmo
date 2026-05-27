@@ -71,4 +71,15 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.PrerequisiteGraph.combat_capable_iff
 #print axioms Formal.PrerequisiteGraph.combat_capable_demorgan
 #print axioms Formal.PrerequisiteGraph.combat_capable_empty
+#print axioms Formal.Objective.is_attainable_eq_grounding
+#print axioms Formal.Objective.groundedByN_sound
+#print axioms Formal.Objective.grounded_groundedByN
+#print axioms Formal.Objective.attainAux_sound
+#print axioms Formal.Objective.best_gear_argmax
+#print axioms Formal.Objective.bestGear_optimal
+#print axioms Formal.Objective.gapSum_nonneg
+#print axioms Formal.Objective.gapSum_le_targetSum
+#print axioms Formal.Objective.charGap_bounds
+#print axioms Formal.Objective.is_complete_iff
+#print axioms Formal.Objective.axisGap_zero_iff
 #print axioms Formal.PrerequisiteGraph.combat_capable_witness

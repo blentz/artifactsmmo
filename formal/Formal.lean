@@ -8,4 +8,5 @@ import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
 import Formal.PrerequisiteGraph
+import Formal.Objective
 import Formal.Contracts

@@ -80,3 +80,15 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.PrerequisiteGraph.combat_capable_iff        -- combat_capable ↔ ∃ beatable monster
 #check @Formal.PrerequisiteGraph.combat_capable_demorgan   -- ¬capable ↔ all unbeatable (any≠all)
 #check @Formal.PrerequisiteGraph.combat_capable_empty      -- no monsters ⇒ not capable
+-- Objective required roles:
+#check @Formal.Objective.is_attainable_eq_grounding  -- is_attainable = grounding fixpoint (sound+complete)
+#check @Formal.Objective.groundedByN_sound           -- saturation SOUND wrt Grounded
+#check @Formal.Objective.grounded_groundedByN        -- saturation COMPLETE wrt Grounded
+#check @Formal.Objective.attainAux_sound             -- recursion accept ⇒ Grounded (any path/fuel)
+#check @Formal.Objective.best_gear_argmax            -- first-slot pick = argmax over attainable
+#check @Formal.Objective.bestGear_optimal            -- bestGear dominates every member by (-value,code)
+#check @Formal.Objective.gapSum_nonneg               -- gap numerator ≥ 0
+#check @Formal.Objective.gapSum_le_targetSum         -- gap ≤ denom (fraction ∈ [0,1], integer-only)
+#check @Formal.Objective.charGap_bounds              -- 0 ≤ char gap ≤ target
+#check @Formal.Objective.is_complete_iff             -- is_complete ↔ raw-target form (independent)
+#check @Formal.Objective.axisGap_zero_iff            -- per-axis gap 0 ↔ raw target met

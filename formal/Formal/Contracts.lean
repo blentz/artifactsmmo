@@ -8,6 +8,7 @@ import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
 import Formal.PrerequisiteGraph
+import Formal.Objective
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -434,3 +435,66 @@ example : ∀ (beatable : Nat → Bool) (monsters : List Nat),
 example : ∀ (beatable : Nat → Bool),
     Formal.PrerequisiteGraph.combatCapable beatable [] = false :=
   @Formal.PrerequisiteGraph.combat_capable_empty
+
+/-! ### Objective role contracts.
+
+`Recipe` clashes with `RecipeClosure`/`TaskFeasibility`; we fully-qualify the
+`Objective` ones. -/
+
+-- is_attainable = grounding fixpoint: SOUNDNESS (accept ⇒ Grounded, any fuel) +
+-- COMPLETENESS (Grounded ⇒ accepted for all adequate fuel). A cyclic recipe or a
+-- drop-only-but-not-grounded component is NOT Grounded, hence NOT attainable.
+example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe)
+    (drop : Formal.Objective.IsDrop) (item : Nat),
+    (∀ fuel, Formal.Objective.isAttainable r hasRec drop fuel item = true →
+        Formal.Objective.Grounded r hasRec drop item) ∧
+    (Formal.Objective.Grounded r hasRec drop item →
+      ∃ N, ∀ fuel, N ≤ fuel → Formal.Objective.isAttainable r hasRec drop fuel item = true) :=
+  @Formal.Objective.is_attainable_eq_grounding
+-- grounding SOUNDNESS of the saturation: groundedByN accepts only Grounded items.
+example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe)
+    (drop : Formal.Objective.IsDrop) (n item : Nat),
+    Formal.Objective.groundedByN r hasRec drop n item = true →
+      Formal.Objective.Grounded r hasRec drop item :=
+  @Formal.Objective.groundedByN_sound
+-- grounding COMPLETENESS of the saturation: every Grounded item appears in a round.
+example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe)
+    (drop : Formal.Objective.IsDrop) {item : Nat},
+    Formal.Objective.Grounded r hasRec drop item →
+      ∃ n, Formal.Objective.groundedByN r hasRec drop n item = true :=
+  @Formal.Objective.grounded_groundedByN
+-- best_gear_argmax: the chosen first-slot item IS attainable, IS a candidate, and
+-- ranks ≥ every attainable candidate under (-value, code) — the genuine argmax.
+example : ∀ (attain : Formal.Objective.Gear → Bool) (items : List Formal.Objective.Gear)
+    (chosen : Formal.Objective.Gear),
+    Formal.Objective.bestAttainableGear attain items = some chosen →
+    attain chosen = true ∧ chosen ∈ items ∧
+    (∀ y ∈ items, attain y = true →
+      chosen.value > y.value ∨ (chosen.value = y.value ∧ chosen.code ≤ y.code)) :=
+  @Formal.Objective.best_gear_argmax
+-- gap_nonneg: the gap-sum numerator is ≥ 0 (each per-axis gap is max(0, …)).
+example : ∀ (pairs : List (Int × Int)), 0 ≤ Formal.Objective.gapSum pairs :=
+  @Formal.Objective.gapSum_nonneg
+-- gap_le_denom: nonneg haves AND nonneg targets ⇒ gapSum ≤ targetSum, so with
+-- gapSum_nonneg the fraction gapSum/targetSum ∈ [0,1] (integer-only bound).
+example : ∀ (pairs : List (Int × Int)),
+    (∀ p ∈ pairs, 0 ≤ p.2) → (∀ p ∈ pairs, 0 ≤ p.1) →
+    Formal.Objective.gapSum pairs ≤ Formal.Objective.targetSum pairs :=
+  @Formal.Objective.gapSum_le_targetSum
+-- charGap_bounds: 0 ≤ char gap ≤ target (so the char fraction ∈ [0,1]).
+example : ∀ (targetLevel level : Int), 0 ≤ level → 0 ≤ targetLevel →
+    0 ≤ Formal.Objective.axisGap targetLevel level ∧
+    Formal.Objective.axisGap targetLevel level ≤ targetLevel :=
+  @Formal.Objective.charGap_bounds
+-- is_complete_iff: is_complete ↔ INDEPENDENT raw-target form (char gap 0 ∧ every
+-- skill gap 0 ∧ every gear gap 0) — NOT a restatement of is_complete's own body.
+example : ∀ (charGap : Int) (skillPairs gearPairs : List (Int × Int)),
+    Formal.Objective.isComplete charGap skillPairs gearPairs = true ↔
+      (charGap = 0 ∧
+       (∀ p ∈ skillPairs, Formal.Objective.axisGap p.1 p.2 = 0) ∧
+       (∀ p ∈ gearPairs, Formal.Objective.axisGap p.1 p.2 = 0)) :=
+  @Formal.Objective.is_complete_iff
+-- axisGap_zero_iff: a per-axis gap is 0 ↔ the raw target is met (have ≥ target).
+example : ∀ (target have_ : Int),
+    Formal.Objective.axisGap target have_ = 0 ↔ target ≤ have_ :=
+  @Formal.Objective.axisGap_zero_iff

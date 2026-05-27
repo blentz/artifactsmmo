@@ -309,6 +309,87 @@ def runTaskFeasibilityMonster (args : Array Json) : Json :=
   let charLevel := (intArg args 1).toNat
   Json.mkObj [("gates", Json.bool (Formal.TaskFeasibility.monsterGates monsterLevel charLevel))]
 
+/-- Build an `Objective.Recipe` (Nat → List Nat, materials only) and the
+`hasRecipe` / `isDrop` predicates from flat args, then run `isAttainable`.
+
+args layout (all Nat ≥ 0):
+* `[0]`              nEdges (number of `(item, mat)` recipe-material edges)
+* `[1 .. 2*nEdges]`  edges flat: item0 mat0 item1 mat1 ...
+* next: nHasRecipe, then the item codes that HAVE a recipe
+* next: nDrops, then the drop-item codes (resource-drop values)
+* next: queryItem, fuel
+
+Emits `is_attainable` (bool). -/
+def runObjectiveAttainable (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nEdges := g 0
+  let edges : List (Nat × Nat) :=
+    (List.range nEdges).map (fun k => (g (1 + 2*k), g (2 + 2*k)))
+  let p1 := 1 + 2*nEdges
+  let nHas := g p1
+  let hasList : List Nat := (List.range nHas).map (fun k => g (p1 + 1 + k))
+  let p2 := p1 + 1 + nHas
+  let nDrops := g p2
+  let dropList : List Nat := (List.range nDrops).map (fun k => g (p2 + 1 + k))
+  let p3 := p2 + 1 + nDrops
+  let queryItem := g p3
+  let fuel := g (p3 + 1)
+  let r : Formal.Objective.Recipe := fun item =>
+    (edges.filter (fun e => decide (e.1 = item))).map Prod.snd
+  let hasRec : Formal.Objective.HasRecipe := fun item => decide (item ∈ hasList)
+  let drop : Formal.Objective.IsDrop := fun item => decide (item ∈ dropList)
+  Json.mkObj [("is_attainable",
+    Json.bool (Formal.Objective.isAttainable r hasRec drop fuel queryItem))]
+
+/-- Run `bestAttainableGear`: choose the first-slot item for a gear type.
+
+args layout: `[n, code0, value0, attain0, code1, value1, attain1, ...]` — `n`
+items, each `(code, equip_value, attainable(0/1))`. Emits the chosen code (or -1
+if none attainable), and its equip_value. -/
+def runObjectiveBestGear (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let items : List Formal.Objective.Gear :=
+    (List.range n).map (fun k =>
+      { code := intArg args (1 + 3*k), value := intArg args (2 + 3*k) })
+  let attainBits : List Bool :=
+    (List.range n).map (fun k => intArg args (3 + 3*k) != 0)
+  -- attain by position: map each gear to its bit via code+value identity is
+  -- fragile under dup codes, so we attach the bit by index using a parallel list.
+  let codeVal := fun (it : Formal.Objective.Gear) => (it.code, it.value)
+  let pairs : List (Formal.Objective.Gear × Bool) := items.zip attainBits
+  let attain : Formal.Objective.Gear → Bool := fun it =>
+    match pairs.find? (fun p => decide (codeVal p.1 = codeVal it)) with
+    | some p => p.2
+    | none => false
+  let chosen := Formal.Objective.bestAttainableGear attain items
+  let code : Int := match chosen with | some it => it.code | none => -1
+  let val : Int := match chosen with | some it => it.value | none => 0
+  Json.mkObj [("chosen_code", Json.num code), ("chosen_value", Json.num val)]
+
+/-- Run the `gap` integer numerators/denominators and `is_complete`.
+
+args layout (Ints): `[targetLevel, level, nSkills, (target, have)*nSkills,
+nGear, (target, have)*nGear]`. Emits char gap, skill gap sum + denom, gear gap
+sum + denom, and is_complete. -/
+def runObjectiveGap (args : Array Json) : Json :=
+  let targetLevel := intArg args 0
+  let level := intArg args 1
+  let charGap := Formal.Objective.axisGap targetLevel level
+  let nSkills := (intArg args 2).toNat
+  let skillPairs : List (Int × Int) :=
+    (List.range nSkills).map (fun k => (intArg args (3 + 2*k), intArg args (4 + 2*k)))
+  let p := 3 + 2*nSkills
+  let nGear := (intArg args p).toNat
+  let gearPairs : List (Int × Int) :=
+    (List.range nGear).map (fun k => (intArg args (p + 1 + 2*k), intArg args (p + 2 + 2*k)))
+  Json.mkObj [
+    ("char_gap", Json.num charGap),
+    ("skill_gap_sum", Json.num (Formal.Objective.gapSum skillPairs)),
+    ("skill_denom", Json.num (Formal.Objective.targetSum skillPairs)),
+    ("gear_gap_sum", Json.num (Formal.Objective.gapSum gearPairs)),
+    ("gear_denom", Json.num (Formal.Objective.targetSum gearPairs)),
+    ("is_complete", Json.bool (Formal.Objective.isComplete charGap skillPairs gearPairs))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -341,6 +422,12 @@ def runOne (item : Json) : Json :=
     runPrerequisiteGraph args
   else if kind == "combat_capable" then
     runCombatCapable args
+  else if kind == "objective_attainable" then
+    runObjectiveAttainable args
+  else if kind == "objective_best_gear" then
+    runObjectiveBestGear args
+  else if kind == "objective_gap" then
+    runObjectiveGap args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

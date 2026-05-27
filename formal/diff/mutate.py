@@ -15,6 +15,7 @@ SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "sk
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
+OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -227,6 +228,31 @@ PREREQUISITE_GRAPH_MUTATIONS = [
 ]
 
 
+# objective mutations -- old strings matched to current objective.py text.
+OBJECTIVE_MUTATIONS = [
+    # drop the attainability filter in gear selection: a non-attainable (higher
+    # equip_value) item can be wrongly chosen for the slot.
+    ("objective: drop attainability filter in gear selection",
+     "            attainable = [(value, code) for (value, code) in ranked\n"
+     "                          if is_attainable(code, game_data)]",
+     "            attainable = [(value, code) for (value, code) in ranked]"),
+    # char_level_gap sign flip: state.level - target instead of target - level
+    # (negates the deficit; max(0, ...) then masks real gaps as 0).
+    ("objective: char_level_gap sign flip (target-level -> level-target)",
+     "        char_level_gap = max(0, self.target_char_level - state.level)",
+     "        char_level_gap = max(0, state.level - self.target_char_level)"),
+    # is_complete weakening: require only ONE fraction zero (and -> or), so a
+    # partially-complete sheet is wrongly reported complete.
+    ("objective: is_complete weakening (and -> or)",
+     "        return (self.char_level_fraction == 0.0\n"
+     "                and self.skills_fraction == 0.0\n"
+     "                and self.gear_fraction == 0.0)",
+     "        return (self.char_level_fraction == 0.0\n"
+     "                or self.skills_fraction == 0.0\n"
+     "                or self.gear_fraction == 0.0)"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -273,6 +299,8 @@ def main() -> int:
               "formal/diff/test_task_feasibility_diff.py", survivors)
     run_group(PREREQUISITE_GRAPH_SRC, PREREQUISITE_GRAPH_MUTATIONS,
               "formal/diff/test_prerequisite_graph_diff.py", survivors)
+    run_group(OBJECTIVE_SRC, OBJECTIVE_MUTATIONS,
+              "formal/diff/test_objective_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
