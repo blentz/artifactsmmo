@@ -5,3 +5,4 @@ open Formal.CalculatePath
 #print axioms kingWalk_len_ge_cheb
 #print axioms pathFrom_cost
 #print axioms cheb_le_manhattan
+#print axioms estimatedTime_eq_cheb

@@ -27,6 +27,10 @@ MUTATIONS = [
     ("total_distance: drop abs(end_y - start_y) term",
      "    total_distance = abs(end_x - start_x) + abs(end_y - start_y)",
      "    total_distance = abs(end_x - start_x)"),
+    # estimated_time: change the per-step factor 5 -> 6
+    ("estimated_time factor",
+     "estimated_time = len(steps) * 5",
+     "estimated_time = len(steps) * 6"),
 ]
 
 

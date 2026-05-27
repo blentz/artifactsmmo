@@ -361,4 +361,16 @@ theorem kingWalk_len_ge_cheb (start dst : Coord) (p : List Coord)
   have := cheb_nonneg start dst
   omega
 
+/-! ### Estimated time: 5 seconds per produced step. -/
+
+/-- Estimated traversal time: 5 (sec) per produced step.
+    -- mirrors pathfinding.py:87 (estimated_time = len(steps) * 5) -/
+def estimatedTime (start dst : Coord) : Nat := (pathFrom start dst).length * 5
+
+/-- The estimated time equals 5 × Chebyshev distance (via `pathFrom_len_eq_cheb`). -/
+theorem estimatedTime_eq_cheb (start dst : Coord) :
+    estimatedTime start dst = (cheb start dst).toNat * 5 := by
+  unfold estimatedTime
+  rw [pathFrom_len_eq_cheb]
+
 end Formal.CalculatePath

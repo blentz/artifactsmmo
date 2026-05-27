@@ -14,3 +14,4 @@ def test_python_matches_lean(sx, sy, ex, ey):
     lean = run_oracle([(sx, sy, ex, ey)])[0]
     assert [[s.x, s.y] for s in py.steps] == lean["steps"]
     assert py.total_distance == lean["total_distance"]
+    assert py.estimated_time == lean["estimated_time"]

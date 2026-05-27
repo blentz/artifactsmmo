@@ -6,3 +6,4 @@ open Formal.CalculatePath
 #check @kingWalk_len_ge_cheb   -- optimality-lower-bound
 #check @pathFrom_cost          -- cost (length <= manhattan)
 #check @cheb_le_manhattan      -- cost (chebyshev <= manhattan)
+#check @estimatedTime_eq_cheb  -- estimated_time (= cheb * 5)
