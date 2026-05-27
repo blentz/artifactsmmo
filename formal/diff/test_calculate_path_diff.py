@@ -11,7 +11,7 @@ coord = st.integers(min_value=-40, max_value=40)
 @given(sx=coord, sy=coord, ex=coord, ey=coord)
 def test_python_matches_lean(sx, sy, ex, ey):
     py = calculate_path(sx, sy, ex, ey)
-    lean = run_oracle([(sx, sy, ex, ey)])[0]
+    lean = run_oracle("calculate_path", [[sx, sy, ex, ey]])[0]
     assert [[s.x, s.y] for s in py.steps] == lean["steps"]
     assert py.total_distance == lean["total_distance"]
     assert py.estimated_time == lean["estimated_time"]

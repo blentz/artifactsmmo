@@ -4,7 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[2] / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
+ROOT = Path(__file__).resolve().parents[2]
+SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
+TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -35,31 +37,53 @@ MUTATIONS = [
 ]
 
 
-def run_diff() -> int:
+# task_batch mutations -- old strings matched to the actual current task_batch.py text.
+TASK_BATCH_MUTATIONS = [
+    # invert the max(1, ...) floor: drop the floor so a 0-fit case yields 0, not 1.
+    ("task_batch: drop max(1, ...) floor",
+     "    return max(1, min(remaining, fit, BATCH_CAP))",
+     "    return min(remaining, fit, BATCH_CAP)"),
+    # drop the BATCH_CAP clamp entirely (allows results > 10).
+    ("task_batch: drop BATCH_CAP clamp",
+     "    return max(1, min(remaining, fit, BATCH_CAP))",
+     "    return max(1, min(remaining, fit))"),
+    # off-by-one on remaining (use task_total instead of task_total - progress).
+    ("task_batch: off-by-one remaining (+1)",
+     "    remaining = state.task_total - state.task_progress",
+     "    remaining = state.task_total - state.task_progress + 1"),
+]
+
+
+def run_diff(test_path: str) -> int:
     return subprocess.run(
-        ["uv", "run", "pytest", "formal/diff/test_calculate_path_diff.py", "-q", "--no-cov", "-x"],
-        cwd=Path(__file__).resolve().parents[2],
+        ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
+        cwd=ROOT,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     ).returncode
 
 
-def main() -> int:
-    orig = SRC.read_text()
-    survivors = []
+def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
+    orig = src.read_text()
     try:
-        for desc, old, new in MUTATIONS:
+        for desc, old, new in mutations:
             if old not in orig:
                 print(f"STALE MUTATION (text not found): {desc}")
                 survivors.append(desc + " (stale)")
                 continue
-            SRC.write_text(orig.replace(old, new, 1))
-            if run_diff() == 0:
+            src.write_text(orig.replace(old, new, 1))
+            if run_diff(test_path) == 0:
                 print(f"SURVIVED: {desc}")
                 survivors.append(desc)
             else:
                 print(f"killed: {desc}")
     finally:
-        SRC.write_text(orig)
+        src.write_text(orig)
+
+
+def main() -> int:
+    survivors: list = []
+    run_group(SRC, MUTATIONS, "formal/diff/test_calculate_path_diff.py", survivors)
+    run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
