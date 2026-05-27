@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 #print axioms pathFrom_valid
 #print axioms pathFrom_len_eq_cheb
 #print axioms kingWalk_len_ge_cheb
@@ -43,3 +43,13 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms total_monotone
 #print axioms growth_default_iff
 #print axioms growth_nondefault_of_pair
+#print axioms reachable_iff_satN
+#print axioms reachable_least
+#print axioms closureItems_sound
+#print axioms closureItems_complete
+#print axioms craftableList_isCraftable
+#print axioms neededList_isNeeded
+#print axioms rawUnits_eq_cost
+#print axioms rawUnits_revisit
+#print axioms remaining_decreasing
+#print axioms rawUnits_fuel_stable

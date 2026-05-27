@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
 #check @pathFrom_len_eq_cheb   -- optimality-achieved
@@ -50,3 +50,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @total_monotone             -- total(cur,tgt) ≤ total(cur,tgt+1) over observed
 #check @growth_default_iff         -- uses-default ↔ no consecutive observed pair
 #check @growth_nondefault_of_pair  -- consecutive observed pair ⇒ ¬default (witness)
+-- RecipeClosure required roles:
+#check @reachable_iff_satN          -- DFS closure = least fixpoint (sound + complete)
+#check @reachable_least             -- Reachable is the SMALLEST closed set
+#check @closureItems_sound          -- computed closure ⊆ Reachable (no extra)
+#check @closureItems_complete       -- reachable-within-budget ⊆ computed closure
+#check @craftableList_isCraftable   -- craftable_mats member ⇒ Reachable ∧ has recipe
+#check @neededList_isNeeded         -- needed_resources member ⇒ drop Reachable
+#check @rawUnits_eq_cost            -- raw_material_units = Σ qty * units(sub)
+#check @rawUnits_revisit            -- cyclic guard: revisit ⇒ cost 1
+#check @remaining_decreasing        -- termination measure strictly decreases
+#check @rawUnits_fuel_stable        -- adequate fuel ⇒ fuel-independent (terminates)

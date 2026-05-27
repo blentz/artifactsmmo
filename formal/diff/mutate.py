@@ -12,6 +12,7 @@ COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
+RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -156,6 +157,27 @@ SKILL_XP_CURVE_MUTATIONS = [
 ]
 
 
+# recipe_closure mutations -- old strings matched to current recipe_closure.py text.
+RECIPE_CLOSURE_MUTATIONS = [
+    # drop the visited guard in recipe_closure: revisits no longer short-circuit
+    # (cyclic graphs would loop forever / over-collect). Replace the early return
+    # with a no-op so the function over-explores (and diverges on cycles).
+    ("recipe_closure: drop visited guard (no early return on revisit)",
+     "        if material in visited:\n            return\n        visited.add(material)",
+     "        visited.add(material)"),
+    # omit a recipe edge: recurse only into the FIRST sub-material, missing the
+    # rest of the closure (incomplete craftable_mats / needed_resources).
+    ("recipe_closure: omit recipe edges (recurse first sub only)",
+     "            for sub_mat in recipe:\n                collect(sub_mat)",
+     "            for sub_mat in list(recipe)[:1]:\n                collect(sub_mat)"),
+    # alter the qty factor in raw_material_units: drop the qty multiplier so
+    # quantities no longer multiply down the tree (wrong units total).
+    ("raw_material_units: drop qty factor (qty * units -> units)",
+     "    return sum(qty * raw_material_units(game_data, sub, deeper) for sub, qty in recipe.items())",
+     "    return sum(raw_material_units(game_data, sub, deeper) for sub, qty in recipe.items())"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -196,6 +218,8 @@ def main() -> int:
               "formal/diff/test_equipment_scoring_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
+    run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
+              "formal/diff/test_recipe_closure_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -5,7 +5,8 @@ import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillXpCurve
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
+import Formal.RecipeClosure
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
     changed, the ascription fails to elaborate and the build goes RED. This is the
@@ -251,3 +252,59 @@ example : ∀ (obs : Observed) (lvl v : Int),
     (lvl, v) ∈ obs → v > 0 → hasLevel obs (lvl + 1) = true →
     usesDefaultRatio obs = false :=
   @growth_nondefault_of_pair
+
+/-! ### RecipeClosure role contracts. -/
+
+-- closure = least fixpoint: a material is Reachable IFF it appears in some
+-- bounded saturation round (soundness + completeness of the DFS).
+example : ∀ (r : Recipe) (roots : List Nat) (m : Nat),
+    Reachable r roots m ↔ ∃ n, m ∈ satN r roots n :=
+  @reachable_iff_satN
+-- LEAST: any set containing the roots and closed under the recipe-child relation
+-- contains every Reachable item (Reachable is the smallest fixpoint).
+example : ∀ (r : Recipe) (roots : List Nat) (S : Nat → Prop),
+    (∀ m ∈ roots, S m) →
+    (∀ item child, S item → child ∈ (r item).map Prod.fst → S child) →
+    ∀ {m : Nat}, Reachable r roots m → S m :=
+  @reachable_least
+-- SOUNDNESS of the computed closure: every produced item is Reachable.
+example : ∀ (r : Recipe) (roots : List Nat) (fuel : Nat) {m : Nat},
+    m ∈ closureItems r roots fuel → Reachable r roots m :=
+  @closureItems_sound
+-- COMPLETENESS of the computed closure: an item appearing at round n ≤ fuel is
+-- in the computed closure (nothing reachable within budget is missed).
+example : ∀ (r : Recipe) (roots : List Nat) (fuel n : Nat),
+    n ≤ fuel → ∀ {m : Nat}, m ∈ satN r roots n → m ∈ closureItems r roots fuel :=
+  @closureItems_complete
+-- craftable_mats soundness: a craftable-list member is Reachable ∧ has a recipe.
+example : ∀ (r : Recipe) (roots : List Nat) (fuel : Nat) {m : Nat},
+    m ∈ craftableList r roots fuel → isCraftable r roots m :=
+  @craftableList_isCraftable
+-- needed_resources soundness: a needed-list member's drop is Reachable.
+example : ∀ (r : Recipe) (roots : List Nat) (drops : List (Nat × Nat)) (fuel : Nat) {res : Nat},
+    res ∈ neededList r roots drops fuel → isNeeded r roots drops res :=
+  @neededList_isNeeded
+-- raw_units_eq_cost: documented quantity math — Σ qty * units(sub) over the recipe.
+example : ∀ (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat),
+    item ∉ visited → ∀ (rcp : List (Nat × Nat)), r item = rcp → rcp ≠ [] →
+    rawUnitsAux r (n + 1) visited item
+      = (rcp.map (fun p => p.2 * rawUnitsAux r n (item :: visited) p.1)).sum :=
+  @rawUnits_eq_cost
+-- raw_units cyclic guard: a revisited item costs exactly 1 (cycle-safe).
+example : ∀ (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat),
+    item ∈ visited → rawUnitsAux r (n + 1) visited item = 1 :=
+  @rawUnits_revisit
+-- TERMINATION on cyclic recipes: the remaining-universe measure strictly
+-- decreases on each recursive descent (well-founded ⇒ terminates).
+example : ∀ (univ visited : List Nat) (item : Nat),
+    item ∈ univ → item ∉ visited →
+    remaining univ (item :: visited) < remaining univ visited :=
+  @remaining_decreasing
+-- TERMINATION / well-definedness: with adequate fuel (≥ remaining universe) the
+-- cost is fuel-independent — the recursion has fully bottomed out (no divergence
+-- even on cycles).
+example : ∀ (r : Recipe) (univ : List Nat), UnivClosed r univ →
+    ∀ (f f' : Nat) (visited : List Nat) (item : Nat),
+      item ∈ univ → remaining univ visited ≤ f → remaining univ visited ≤ f' →
+      rawUnitsAux r f visited item = rawUnitsAux r f' visited item :=
+  @rawUnits_fuel_stable

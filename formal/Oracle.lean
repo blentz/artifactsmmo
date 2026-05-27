@@ -2,7 +2,7 @@ import Formal
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
-open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve
+open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -154,6 +154,46 @@ def runSkillXpCurve (args : Array Json) : Json :=
     ("total", Json.num (totalXpToReach obs current target)),
     ("uses_default", Json.bool (usesDefaultRatio obs))]
 
+/-- Build a `Recipe` (Nat → List (Nat × Nat)) from a list of `(item, sub, qty)`
+triples: `r item` = every `(sub, qty)` whose triple's first component is `item`,
+in encounter order (mirrors a Python dict's insertion-ordered ingredient map). -/
+def recipeFromTriples (triples : List (Nat × Nat × Nat)) : Recipe :=
+  fun item => (triples.filter (fun t => decide (t.1 = item))).map (fun t => (t.2.1, t.2.2))
+
+/-- Compute one recipe_closure result using the proved `craftableList` /
+`neededList` / `rawUnits`.
+
+args layout (all Nat, encoded as Int ≥ 0):
+* `[0]`            nRecipe (number of `(item, sub, qty)` triples)
+* `[1 .. 3*nRecipe]`   the triples, flat: item0 sub0 qty0 item1 sub1 qty1 ...
+* next: nDrops, then `(res, drop)` pairs flat
+* next: nRoots, then roots
+* next: queryItem (for raw_material_units), fuel
+
+Emits sorted `needed_resources` / `craftable_mats` lists and the
+`raw_material_units(queryItem)` value. -/
+def runRecipeClosure (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nRecipe := g 0
+  let triples : List (Nat × Nat × Nat) :=
+    (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
+  let p1 := 1 + 3*nRecipe
+  let nDrops := g p1
+  let drops : List (Nat × Nat) :=
+    (List.range nDrops).map (fun k => (g (p1 + 1 + 2*k), g (p1 + 2 + 2*k)))
+  let p2 := p1 + 1 + 2*nDrops
+  let nRoots := g p2
+  let roots : List Nat := (List.range nRoots).map (fun k => g (p2 + 1 + k))
+  let p3 := p2 + 1 + nRoots
+  let queryItem := g p3
+  let fuel := g (p3 + 1)
+  let r := recipeFromTriples triples
+  let needed := (neededList r roots drops fuel).mergeSort (· ≤ ·) |>.eraseDups
+  let craft := (craftableList r roots fuel).mergeSort (· ≤ ·) |>.eraseDups
+  let toJson := fun (xs : List Nat) => Json.arr ((xs.map (fun n => Json.num (Int.ofNat n))).toArray)
+  Json.mkObj [("needed_resources", toJson needed), ("craftable_mats", toJson craft),
+    ("raw_material_units", Json.num (Int.ofNat (rawUnits r fuel queryItem)))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -176,6 +216,8 @@ def runOne (item : Json) : Json :=
     runEquipmentScoring args
   else if kind == "skill_xp_curve" then
     runSkillXpCurve args
+  else if kind == "recipe_closure" then
+    runRecipeClosure args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

@@ -5,4 +5,5 @@ import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillXpCurve
+import Formal.RecipeClosure
 import Formal.Contracts
