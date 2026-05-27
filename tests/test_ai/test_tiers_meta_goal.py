@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     owned_count,
 )
+from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from tests.test_ai.fixtures import make_state
 
 GD = GameData()
@@ -30,6 +31,22 @@ def test_owned_count_inventory_bank_equipped():
     assert owned_count(s, "copper_ore") == 7
     assert owned_count(s, "copper_dagger") == 1   # equipped counts as 1
     assert owned_count(s, "absent") == 0
+
+
+def test_owned_count_without_bank_visited():
+    # bank_items None (bank not yet visited) ⇒ bank branch contributes nothing.
+    s = make_state(inventory={"copper_ore": 2}, bank_items=None,
+                   equipment={"weapon_slot": "copper_dagger"})
+    assert owned_count(s, "copper_ore") == 2
+    assert owned_count(s, "copper_dagger") == 1
+
+
+def test_owned_count_pure_disjointness_no_double_count():
+    # The API/model invariant: an equipped code is NOT also in inventory, so the
+    # equipped +1 never double-counts. Mirror it directly on the pure core.
+    assert owned_count_pure({"copper_ore": 5}, {"copper_ore": 2},
+                            ["copper_dagger"], "copper_dagger") == 1
+    assert owned_count_pure({"copper_ore": 5}, None, [], "copper_ore") == 5
 
 
 def test_obtain_item_satisfaction_against_quantity():

@@ -20,6 +20,7 @@ STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
+OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -382,6 +383,23 @@ PRIORITY_BAND_MUTATIONS = [
 ]
 
 
+# owned_count mutations -- old strings matched to current owned_count.py text.
+OWNED_COUNT_MUTATIONS = [
+    # drop the bank branch entirely: bank contents no longer counted.
+    ("owned_count: drop bank branch",
+     "    if bank is not None:\n        total += bank.get(code, 0)",
+     "    if bank is not None:\n        pass"),
+    # equipped contributes +2 instead of +1: over-counts an equipped item.
+    ("owned_count: equipped +1 -> +2",
+     "    if code in equipped_codes:\n        total += 1",
+     "    if code in equipped_codes:\n        total += 2"),
+    # drop the equipped membership guard: ALWAYS add 1, even when not equipped.
+    ("owned_count: drop `code in equipped_codes` guard (always +1)",
+     "    if code in equipped_codes:\n        total += 1",
+     "    if True:\n        total += 1"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -412,7 +430,7 @@ _ALL_SRCS = [
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
-    PRIORITY_BAND_SRC,
+    PRIORITY_BAND_SRC, OWNED_COUNT_SRC,
 ]
 
 
@@ -463,6 +481,8 @@ def main() -> int:
               "formal/diff/test_stuck_detector_diff.py", survivors)
     run_group(PRIORITY_BAND_SRC, PRIORITY_BAND_MUTATIONS,
               "formal/diff/test_priority_band_diff.py", survivors)
+    run_group(OWNED_COUNT_SRC, OWNED_COUNT_MUTATIONS,
+              "formal/diff/test_owned_count_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

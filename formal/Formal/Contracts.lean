@@ -13,6 +13,7 @@ import Formal.StrategyTraversal
 import Formal.BankSelection
 import Formal.StuckDetector
 import Formal.PriorityBand
+import Formal.OwnedCount
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -779,3 +780,29 @@ example : ∀ (floor ceiling bonus : Int), floor ≤ ceiling →
 example : ∀ (floor ceiling bonus survival : Int), floor ≤ ceiling → ceiling < survival →
     Formal.PriorityBand.clampIntoBand floor ceiling bonus < survival :=
   @Formal.PriorityBand.clamp_below_survival
+
+/-! ### OwnedCount role contracts.
+
+The owned-count satisfaction primitive. The equipped copy lives in a separate
+server slot from the inventory list (equipping decrements inventory), so the
+count is the unconditional sum of three disjoint stores: spares + bank + equipped.
+Statements pin (1) that exact summation, (2) that an item owned only by wearing it
+still counts (no re-acquire loop), and (3) monotonicity in the spare store. -/
+
+-- owned-count-sum: count = spares + bank + (1 if equipped), unconditionally.
+example : ∀ (inv bank : String → Nat) (equipped : String → Bool) (code : String),
+    Formal.OwnedCount.ownedCount inv bank equipped code
+      = inv code + bank code + (if equipped code then 1 else 0) :=
+  @Formal.OwnedCount.ownedCount_eq_total
+-- owned-count-counts-equipped: an equipped item counts as owned (≥ 1) even with
+-- zero spares and zero bank.
+example : ∀ (inv bank : String → Nat) (equipped : String → Bool) (code : String),
+    equipped code = true →
+    Formal.OwnedCount.ownedCount inv bank equipped code ≥ 1 :=
+  @Formal.OwnedCount.ownedCount_counts_equipped
+-- owned-count-monotone: count is non-decreasing in the spare store.
+example : ∀ (inv inv' bank : String → Nat) (equipped : String → Bool) (code : String),
+    inv code ≤ inv' code →
+    Formal.OwnedCount.ownedCount inv bank equipped code
+      ≤ Formal.OwnedCount.ownedCount inv' bank equipped code :=
+  @Formal.OwnedCount.ownedCount_monotone

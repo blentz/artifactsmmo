@@ -121,3 +121,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.PriorityBand.clamp_lower_bound
 #print axioms Formal.PriorityBand.clamp_upper_bound
 #print axioms Formal.PriorityBand.clamp_below_survival
+#print axioms Formal.OwnedCount.ownedCount_eq_total
+#print axioms Formal.OwnedCount.ownedCount_counts_equipped
+#print axioms Formal.OwnedCount.ownedCount_monotone

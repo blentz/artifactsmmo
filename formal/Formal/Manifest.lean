@@ -1,4 +1,5 @@
 import Formal
+import Formal.OwnedCount
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -135,3 +136,7 @@ open Formal.PriorityBand
 #check @Formal.PriorityBand.clamp_lower_bound    -- band-lower: floor ≤ clamped result
 #check @Formal.PriorityBand.clamp_upper_bound    -- band-upper: clamped result ≤ ceiling
 #check @Formal.PriorityBand.clamp_below_survival -- survival-floor-safety: ceiling < survival ⇒ clamped < survival
+-- OwnedCount required roles:
+#check @Formal.OwnedCount.ownedCount_eq_total          -- owned-count-sum: count = spares + bank + equipped, unconditionally
+#check @Formal.OwnedCount.ownedCount_counts_equipped   -- owned-count-counts-equipped: equipped ⇒ count ≥ 1 (no re-acquire loop)
+#check @Formal.OwnedCount.ownedCount_monotone          -- owned-count-monotone: count non-decreasing in spares (satisfaction soundness)

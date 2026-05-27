@@ -3,7 +3,7 @@ import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
-open Formal.BankSelection Formal.PriorityBand
+open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -583,6 +583,21 @@ def runPriorityBand (args : Array Json) : Json :=
   Json.mkObj [("clamped",
     Json.num (clampIntoBand (intArg args 0) (intArg args 1) (intArg args 2)))]
 
+/-- Compute one owned_count result using the SAME proved `ownedCount`.
+
+The query is scalarized to the single code of interest: args are the queried
+code's three store contributions — `[invCount, bankCount, equipped(0/1)]`. The
+proved `ownedCount` is instantiated with constant count functions returning those
+values at the query code (any code; the value is the same). Emits the count. -/
+def runOwnedCount (args : Array Json) : Json :=
+  let invCount := (intArg args 0).toNat
+  let bankCount := (intArg args 1).toNat
+  let equipped := intArg args 2 != 0
+  let inv : String → Nat := fun _ => invCount
+  let bank : String → Nat := fun _ => bankCount
+  let eq : String → Bool := fun _ => equipped
+  Json.mkObj [("owned", Json.num (Int.ofNat (ownedCount inv bank eq "x")))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -635,6 +650,8 @@ def runOne (item : Json) : Json :=
     runStuckDetector args
   else if kind == "priority_band" then
     runPriorityBand args
+  else if kind == "owned_count" then
+    runOwnedCount args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

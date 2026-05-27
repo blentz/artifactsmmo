@@ -5,18 +5,24 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def owned_count(state: WorldState, code: str) -> int:
     """How many of `code` the character has across inventory, bank, and the
-    equipped slots (an equipped item counts as one)."""
-    count = state.inventory.get(code, 0)
-    if state.bank_items:
-        count += state.bank_items.get(code, 0)
-    if code in state.equipment.values():
-        count += 1
-    return count
+    equipped slots (an equipped item counts as one).
+
+    `state.inventory` counts only UNEQUIPPED (spare) copies: the API stores
+    equipped items in dedicated equipment slots, separate from the inventory
+    list, and `EquipAction.apply` decrements inventory by 1 when equipping. So
+    the equipped `+1` counts the worn copy, which is not in the inventory count;
+    spare copies of an equipped item may still sit in inventory and are summed
+    correctly (1 worn + 1 spare = 2 owned). There is no disjointness-of-codes
+    invariant. See `owned_count_pure` and `EquipAction.apply`.
+    """
+    equipped_codes = [c for c in state.equipment.values() if c is not None]
+    return owned_count_pure(state.inventory, state.bank_items, equipped_codes, code)
 
 
 class MetaGoal(Protocol):
