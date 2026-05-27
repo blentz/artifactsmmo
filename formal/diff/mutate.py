@@ -1,4 +1,5 @@
 """Mutation runner: each mutant the diff test fails to kill is a survivor -> gate fails."""
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -38,6 +39,7 @@ def run_diff() -> int:
     return subprocess.run(
         ["uv", "run", "pytest", "formal/diff/test_calculate_path_diff.py", "-q", "--no-cov", "-x"],
         cwd=Path(__file__).resolve().parents[2],
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     ).returncode
 
 
