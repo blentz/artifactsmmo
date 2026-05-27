@@ -3,7 +3,8 @@ import Formal.TaskBatch
 import Formal.InventoryCaps
 import Formal.PredictWin
 import Formal.LoadoutProjection
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection
+import Formal.EquipmentScoring
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
     changed, the ascription fails to elaborate and the build goes RED. This is the
@@ -162,3 +163,45 @@ example : ∀ (d : List (Int × Int)) (k v : Int),
 example : ∀ (d : List (Int × Int)) (k : Int),
     (∀ kv ∈ d, kv.1 = k → kv.2 = 0) → lookupD (dropZeros d) k = 0 :=
   @dropZeros_zero_reads_zero
+
+/-! ### EquipmentScoring role contracts. -/
+
+-- pickslot_score_optimal: the picked best dominates EVERY feasible candidate's score
+example : ∀ (score : Item → Int) (playerLevel : Int) (items : List Item)
+    (c : Item) (cs : List Item),
+    candidates playerLevel items = c :: cs →
+    ∀ y ∈ candidates playerLevel items, score y ≤ score (argmaxBy score c cs) :=
+  @pickslot_score_optimal
+-- pickslot_no_downgrade: with a current item, the result's score ≥ current's score
+example : ∀ (score : Item → Int) (playerLevel : Int) (cur : Item) (items : List Item),
+    ∃ r, pickSlot score playerLevel (some cur) items = some r ∧ score cur ≤ score r :=
+  @pickslot_no_downgrade
+-- pickslot_best_feasible: the freshly-picked best is level-feasible ∧ slot-fitting
+example : ∀ (score : Item → Int) (playerLevel : Int) (items : List Item)
+    (c : Item) (cs : List Item),
+    candidates playerLevel items = c :: cs →
+    feasible playerLevel (argmaxBy score c cs) = true :=
+  @pickslot_best_feasible
+-- pickslot_ties_keep_current: argmax score = current's score ⇒ result = current
+example : ∀ (score : Item → Int) (playerLevel : Int) (cur : Item) (items : List Item)
+    (c : Item) (cs : List Item),
+    candidates playerLevel items = c :: cs →
+    score (argmaxBy score c cs) = score cur →
+    pickSlot score playerLevel (some cur) items = some cur :=
+  @pickslot_ties_keep_current
+-- pickslot_empty_fills: empty slot + feasible candidate ⇒ fill with argmax best
+example : ∀ (score : Item → Int) (playerLevel : Int) (items : List Item)
+    (c : Item) (cs : List Item),
+    candidates playerLevel items = c :: cs →
+    pickSlot score playerLevel none items = some (argmaxBy score c cs) :=
+  @pickslot_empty_fills
+-- pickslot_no_candidates_keeps: no feasible candidate ⇒ slot left as-is
+example : ∀ (score : Item → Int) (playerLevel : Int) (current : Option Item)
+    (items : List Item),
+    candidates playerLevel items = [] →
+    pickSlot score playerLevel current items = current :=
+  @pickslot_no_candidates_keeps
+-- weapon_score_nonneg: nonneg per-element attacks ⇒ WScore ≥ 0 (the clamp earns this)
+example : ∀ (item : Item) (monsterRes : ElemStats),
+    (∀ e ∈ elements, 0 ≤ elemGet item.attack e) → 0 ≤ WScore item monsterRes :=
+  @weapon_score_nonneg

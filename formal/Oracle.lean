@@ -2,7 +2,7 @@ import Formal
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
-open Formal.LoadoutProjection
+open Formal.LoadoutProjection Formal.EquipmentScoring
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -69,6 +69,53 @@ def runLoadoutProjection (args : Array Json) : Json :=
   let slots := toSlots rest
   Json.mkObj [("projected", Json.num (projectedField current slots))]
 
+/-- Build a model `Item` from a flat 11-int block:
+`[code, level, fits(0/1), atk0..atk3, res0..res3]`. Element keys are 0..3. -/
+def itemFromBlock (b : Nat → Int) : Item :=
+  { code := b 0, level := b 1, fits := b 2 != 0,
+    attack := [(0, b 3), (1, b 4), (2, b 5), (3, b 6)],
+    resistance := [(0, b 7), (1, b 8), (2, b 9), (3, b 10)] }
+
+/-- Build an `ElemStats` (monster atk OR res) from 4 ints at offset `o`. -/
+def elemFromArgs (args : Array Json) (o : Nat) : ElemStats :=
+  [(0, intArg args o), (1, intArg args (o+1)), (2, intArg args (o+2)), (3, intArg args (o+3))]
+
+/-- Compute one equipment_scoring per-slot pick using the SAME proved `pickSlot`.
+
+args layout:
+* 0:        playerLevel
+* 1:        scoreKind (0 = weapon, 1 = armor)
+* 2..5:     monster element stats (resistance for weapon, attack for armor)
+* 6:        currentPresent (0/1)
+* 7..17:    current item block (11 ints; ignored when currentPresent = 0)
+* 18..:     candidate item blocks, 11 ints each
+
+Emits the picked item's CODE (or -1 = none / leave-as-is), its SCORE, the MAX
+feasible score, and the current item's score (for the no-downgrade assertion). -/
+def runEquipmentScoring (args : Array Json) : Json :=
+  let playerLevel := intArg args 0
+  let isWeapon := intArg args 1 == 0
+  let monStats := elemFromArgs args 2
+  let score : Item → Int :=
+    if isWeapon then (fun it => WScore it monStats) else (fun it => AScore it monStats)
+  let curPresent := intArg args 6 != 0
+  let current : Option Item :=
+    if curPresent then some (itemFromBlock (fun i => intArg args (7 + i))) else none
+  -- candidate blocks start at 18, 11 ints each
+  let nCand := (args.size - 18) / 11
+  let items : List Item :=
+    (List.range nCand).map (fun k => itemFromBlock (fun i => intArg args (18 + k * 11 + i)))
+  let picked := pickSlot score playerLevel current items
+  let pickedCode : Int := match picked with | some it => it.code | none => -1
+  let pickedScore : Int := match picked with | some it => score it | none => 0
+  let cands := candidates playerLevel items
+  let maxScore : Int := match cands with
+    | [] => (match current with | some it => score it | none => 0)
+    | c :: cs => score (argmaxBy score c cs)
+  let curScore : Int := match current with | some it => score it | none => 0
+  Json.mkObj [("picked_code", Json.num pickedCode), ("picked_score", Json.num pickedScore),
+    ("max_score", Json.num maxScore), ("cur_score", Json.num curScore)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -87,6 +134,8 @@ def runOne (item : Json) : Json :=
     runPredictWin (fun i => intArg args i)
   else if kind == "loadout_projection" then
     runLoadoutProjection args
+  else if kind == "equipment_scoring" then
+    runEquipmentScoring args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

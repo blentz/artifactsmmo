@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring
 #print axioms pathFrom_valid
 #print axioms pathFrom_len_eq_cheb
 #print axioms kingWalk_len_ge_cheb
@@ -27,3 +27,10 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms guarded_eq_unconditional
 #print axioms dropZeros_preserves_nonzero
 #print axioms dropZeros_zero_reads_zero
+#print axioms pickslot_score_optimal
+#print axioms pickslot_no_downgrade
+#print axioms pickslot_best_feasible
+#print axioms pickslot_ties_keep_current
+#print axioms pickslot_empty_fills
+#print axioms pickslot_no_candidates_keeps
+#print axioms weapon_score_nonneg

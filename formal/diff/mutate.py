@@ -10,6 +10,7 @@ TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
+SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -110,6 +111,30 @@ PROJECTION_MUTATIONS = [
 ]
 
 
+# equipment_scoring mutations -- old strings matched to current scoring.py text.
+SCORING_MUTATIONS = [
+    # drop the level filter in _candidates_for_slot: below-level items become
+    # eligible, so an above-level higher-score item can be (wrongly) picked.
+    ("equipment_scoring: drop level filter in _candidates_for_slot",
+     "        if stats is None or state.level < stats.level:",
+     "        if stats is None:"),
+    # drop the no-downgrade guard on the weapon branch: always swap to the argmax
+    # candidate even when it is strictly WORSE than the equipped item.
+    ("equipment_scoring: drop weapon no-downgrade guard (always swap)",
+     "        if slot == \"weapon_slot\":\n"
+     "            if weapon_score(best, monster_res) > weapon_score(current_stats, monster_res):\n"
+     "                result[slot] = best.code",
+     "        if slot == \"weapon_slot\":\n"
+     "            result[slot] = best.code"),
+    # drop the weapon clamp: max(0.0, 1 - res/100) -> (1 - res/100), letting a
+    # high-resistance monster make a strong weapon score NEGATIVE (so a weak weapon
+    # could be preferred / scores go below 0).
+    ("equipment_scoring: drop weapon clamp max(0.0, ...)",
+     "        score += atk * max(0.0, 1.0 - res_pct / 100.0)",
+     "        score += atk * (1.0 - res_pct / 100.0)"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -146,6 +171,8 @@ def main() -> int:
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
+    run_group(SCORING_SRC, SCORING_MUTATIONS,
+              "formal/diff/test_equipment_scoring_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -1,5 +1,5 @@
 import Formal
-open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection
+open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
 #check @pathFrom_len_eq_cheb   -- optimality-achieved
@@ -32,3 +32,11 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @guarded_eq_unconditional   -- changed-guarded sum = unconditional sum (guard sound)
 #check @dropZeros_preserves_nonzero -- _drop_zeros keeps nonzero entries unchanged
 #check @dropZeros_zero_reads_zero   -- dropped zero reads back as 0 (dict.get(k,0))
+-- EquipmentScoring required roles:
+#check @pickslot_score_optimal       -- best = max score over feasible candidates
+#check @pickslot_no_downgrade        -- result score ≥ current score (never downgrade)
+#check @pickslot_best_feasible       -- the picked best is level-feasible ∧ slot-fitting
+#check @pickslot_ties_keep_current   -- tie at max ⇒ keep current (no swap)
+#check @pickslot_empty_fills         -- empty slot + candidate ⇒ filled with argmax
+#check @pickslot_no_candidates_keeps -- no feasible candidate ⇒ slot left as-is
+#check @weapon_score_nonneg          -- WScore ≥ 0 (the clamp earns this)
