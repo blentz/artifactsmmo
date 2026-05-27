@@ -10,6 +10,7 @@ import Formal.TaskFeasibility
 import Formal.PrerequisiteGraph
 import Formal.Objective
 import Formal.StrategyTraversal
+import Formal.BankSelection
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -572,3 +573,76 @@ example : ∀ (g : Formal.StrategyTraversal.Graph) (kind : Formal.StrategyTraver
     (target have_ root fuel : Nat),
     1 ≤ Formal.StrategyTraversal.rootCost g kind target have_ root fuel :=
   @Formal.StrategyTraversal.rootCost_ge_one
+
+/-! ### BankSelection role contracts.
+
+`Recipe`, `Reachable`, `satN`, `closureItems`, `childrenOf` are REUSED from
+`RecipeClosure` (opened above); the `BankSelection` defs are namespaced. -/
+
+-- deposits_exact: the deposit candidates are EXACTLY the inventory entries with
+-- qty>0 and code ∉ keep (membership characterization, pre-sort).
+example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
+    cq ∈ Formal.BankSelection.depositCandidates s fuel
+      ↔ cq ∈ s.inventory ∧ cq.2 > 0 ∧ cq.1 ∉ Formal.BankSelection.keepList s fuel :=
+  @Formal.BankSelection.deposits_exact
+-- deposits_mem_iff: the SORTED deposit list deposits exactly the same entries
+-- (the sort is a permutation — same set, reordered).
+example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
+    cq ∈ Formal.BankSelection.deposits s fuel
+      ↔ cq ∈ s.inventory ∧ cq.2 > 0 ∧ cq.1 ∉ Formal.BankSelection.keepList s fuel :=
+  @Formal.BankSelection.deposits_mem_iff
+-- freeze_invariant: NO deposited code is in the keep set (deposits ∩ keep = ∅) —
+-- the PursueTask-freeze guarantee, a protected item is NEVER banked.
+example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
+    cq ∈ Formal.BankSelection.deposits s fuel →
+      cq.1 ∉ Formal.BankSelection.keepList s fuel :=
+  @Formal.BankSelection.freeze_invariant
+-- task_inputs_protected: every captured recipe material of the protected roots
+-- (crafting target ∪ items-task code) is in the keep set.
+example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) {m : Nat},
+    m ∈ Formal.BankSelection.recipeMaterialList s fuel →
+      m ∈ Formal.BankSelection.keepList s fuel :=
+  @Formal.BankSelection.task_inputs_protected
+-- task_material_not_deposited: a protected recipe material is NEVER deposited (the
+-- direct freeze guarantee for task inputs — the documented Robby-8/20 freeze).
+example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
+    cq.1 ∈ Formal.BankSelection.recipeMaterialList s fuel →
+      cq ∉ Formal.BankSelection.deposits s fuel :=
+  @Formal.BankSelection.task_material_not_deposited
+-- keep_closed: every captured recipe material is BOTH in the keep set AND a
+-- genuine StepReachable material (the reused least-fixpoint walk is sound + the
+-- keep set contains it).
+example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) {m : Nat},
+    m ∈ Formal.BankSelection.recipeMaterialList s fuel →
+      m ∈ Formal.BankSelection.keepList s fuel ∧ Formal.BankSelection.recipeMaterials s m :=
+  @Formal.BankSelection.keep_closed
+-- recipeMaterials_closed: the recipe-material set is CLOSED under taking further
+-- recipe children — once a material is protected, all its sub-materials are too
+-- (the closure property of the walk over the reused recipe-child relation).
+example : ∀ (s : Formal.BankSelection.State) {item child : Nat},
+    Formal.BankSelection.recipeMaterials s item →
+    child ∈ (s.recipe item).map Prod.fst →
+      Formal.BankSelection.recipeMaterials s child :=
+  @Formal.BankSelection.recipeMaterials_closed
+-- recipeMaterialList_complete: any material reached via a recipe edge from an item
+-- captured at round n ≤ fuel is in the material list (COMPLETENESS — with adequate
+-- fuel the full StepReachable closure is kept).
+example : ∀ (s : Formal.BankSelection.State) (fuel n : Nat), n ≤ fuel →
+    ∀ {item m : Nat}, item ∈ satN s.recipe (Formal.BankSelection.recipeRoots s) n →
+    m ∈ (s.recipe item).map Prod.fst →
+      m ∈ Formal.BankSelection.recipeMaterialList s fuel :=
+  @Formal.BankSelection.recipeMaterialList_complete
+-- best_weapon_argmax: the best fighting weapon's attack is ≥ EVERY fighting-weapon
+-- candidate's attack — the genuine argmax (max-attack non-tool weapon) over
+-- inventory ∪ equipped.
+example : ∀ (s : Formal.BankSelection.State) (c : Nat),
+    Formal.BankSelection.bestWeaponCode s = some c →
+    ∀ y ∈ Formal.BankSelection.weaponCandidates s,
+      Formal.BankSelection.isFightingWeapon s y = true → s.attack y ≤ s.attack c :=
+  @Formal.BankSelection.best_weapon_argmax
+-- best_weapon_is_fighting: the chosen best weapon is a fighting weapon (a weapon,
+-- not a tool) — tools (skill_effects) are excluded.
+example : ∀ (s : Formal.BankSelection.State) (c : Nat),
+    Formal.BankSelection.bestWeaponCode s = some c →
+      Formal.BankSelection.isFightingWeapon s c = true :=
+  @Formal.BankSelection.best_weapon_is_fighting

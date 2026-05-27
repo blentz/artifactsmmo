@@ -94,3 +94,13 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.StrategyTraversal.actionable_step_none_iff
 #print axioms Formal.StrategyTraversal.actionable_step_reach
 #print axioms Formal.StrategyTraversal.rootCost_ge_one
+#print axioms Formal.BankSelection.deposits_exact
+#print axioms Formal.BankSelection.deposits_mem_iff
+#print axioms Formal.BankSelection.freeze_invariant
+#print axioms Formal.BankSelection.task_inputs_protected
+#print axioms Formal.BankSelection.task_material_not_deposited
+#print axioms Formal.BankSelection.keep_closed
+#print axioms Formal.BankSelection.recipeMaterials_closed
+#print axioms Formal.BankSelection.recipeMaterialList_complete
+#print axioms Formal.BankSelection.best_weapon_argmax
+#print axioms Formal.BankSelection.best_weapon_is_fighting

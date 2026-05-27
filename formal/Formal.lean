@@ -10,4 +10,5 @@ import Formal.TaskFeasibility
 import Formal.PrerequisiteGraph
 import Formal.Objective
 import Formal.StrategyTraversal
+import Formal.BankSelection
 import Formal.Contracts

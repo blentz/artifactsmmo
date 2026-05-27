@@ -3,6 +3,7 @@ import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
+open Formal.BankSelection
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -464,6 +465,76 @@ def runStrategyTraversal (query : String) (args : Array Json) : Json :=
     Json.mkObj [("root_cost",
       Json.num (Int.ofNat (Formal.StrategyTraversal.rootCost g kind target have_ root fuel)))]
 
+/-- Build a `Nat → α` lookup from an assoc list of `(code, value)` Int pairs via a
+projection `f`, defaulting to `d`. -/
+def attrLookup {α : Type} (tbl : List (Nat × Int)) (f : Int → α) (d : α) : Nat → α :=
+  fun k => match tbl.find? (fun p => decide (p.1 = k)) with
+    | some p => f p.2
+    | none => d
+
+/-- Compute one bank_selection result using the proved `keepList` / `deposits`.
+
+args layout (Ints; codes/qtys/flags are Nat ≥ 0, attack/sellValue may be any Int):
+* `[0]`            tasksCoin
+* `[1]`            hasTask (0/1)
+* `[2]`            taskCode (meaningful only when hasTask = 1)
+* `[3]`            taskIsItems (0/1)
+* `[4]`            hasCraftTarget (0/1)
+* `[5]`            craftingTarget (meaningful only when hasCraftTarget = 1)
+* `[6]`            nInv, then nInv pairs flat: code0 qty0 code1 qty1 ...
+* next: nEquip, then equip codes flat
+* next: nRecipe, then `(item, sub, qty)` triples flat
+* next: nAttr, then per-item 6-int blocks:
+  `code, attack, isWeapon(0/1), isTool(0/1), hpRestore, sellValue`
+* next: fuel
+
+Emits the sorted keep-set codes and the deposit list (codes, in sort order). -/
+def runBankSelection (args : Array Json) : Json :=
+  let gN := fun i => (intArg args i).toNat
+  let tasksCoin := gN 0
+  let taskCode : Option Nat := if intArg args 1 != 0 then some (gN 2) else none
+  let taskIsItems := intArg args 3 != 0
+  let craftingTarget : Option Nat := if intArg args 4 != 0 then some (gN 5) else none
+  let nInv := gN 6
+  let inventory : List (Nat × Nat) :=
+    (List.range nInv).map (fun k => (gN (7 + 2*k), gN (8 + 2*k)))
+  let p1 := 7 + 2*nInv
+  let nEquip := gN p1
+  let equipped : List Nat := (List.range nEquip).map (fun k => gN (p1 + 1 + k))
+  let p2 := p1 + 1 + nEquip
+  let nRecipe := gN p2
+  let triples : List (Nat × Nat × Nat) :=
+    (List.range nRecipe).map (fun k => (gN (p2 + 1 + 3*k), gN (p2 + 2 + 3*k), gN (p2 + 3 + 3*k)))
+  let p3 := p2 + 1 + 3*nRecipe
+  let nAttr := gN p3
+  let attackTbl : List (Nat × Int) :=
+    (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 2 + 6*k)))
+  let weaponTbl : List (Nat × Int) :=
+    (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 3 + 6*k)))
+  let toolTbl : List (Nat × Int) :=
+    (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 4 + 6*k)))
+  let hpTbl : List (Nat × Int) :=
+    (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 5 + 6*k)))
+  let sellTbl : List (Nat × Int) :=
+    (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 6 + 6*k)))
+  let p4 := p3 + 1 + 6*nAttr
+  let fuel := gN p4
+  let s : State := {
+    tasksCoin := tasksCoin, taskCode := taskCode, taskIsItems := taskIsItems,
+    craftingTarget := craftingTarget, inventory := inventory, equipped := equipped,
+    recipe := recipeFromTriples triples,
+    attack := attrLookup attackTbl id 0,
+    isWeapon := attrLookup weaponTbl (fun v => decide (v != 0)) false,
+    isTool := attrLookup toolTbl (fun v => decide (v != 0)) false,
+    hpRestore := attrLookup hpTbl id 0,
+    sellValue := attrLookup sellTbl id 0 }
+  let keep := (keepList s fuel).mergeSort (· ≤ ·) |>.eraseDups
+  let deps := deposits s fuel
+  let keepJson := Json.arr ((keep.map (fun n => Json.num (Int.ofNat n))).toArray)
+  let depsJson := Json.arr ((deps.map
+    (fun cq => Json.arr #[Json.num (Int.ofNat cq.1), Json.num (Int.ofNat cq.2)])).toArray)
+  Json.mkObj [("keep", keepJson), ("deposits", depsJson)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -510,6 +581,8 @@ def runOne (item : Json) : Json :=
     runStrategyTraversal "actionable" args
   else if kind == "strategy_root_cost" then
     runStrategyTraversal "root_cost" args
+  else if kind == "bank_selection" then
+    runBankSelection args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

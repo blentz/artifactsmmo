@@ -17,6 +17,7 @@ TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibil
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
 OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
 STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
+BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -287,6 +288,41 @@ STRATEGY_MUTATIONS = [
 ]
 
 
+# bank_selection mutations -- old strings matched to current bank_selection.py text.
+BANK_SELECTION_MUTATIONS = [
+    # drop task-input protection: no longer protect the items-task item's recipe
+    # materials, so banking the task's own inputs becomes possible (the freeze bug).
+    ("bank_selection: drop items-task recipe-material protection",
+     '    if state.task_type == "items" and state.task_code:\n'
+     "        recipe_roots.append(state.task_code)",
+     '    if state.task_type == "items" and state.task_code:\n'
+     "        pass"),
+    # drop HP-consumable protection: HP-restore items become depositable (wrong keep).
+    ("bank_selection: drop HP-restore protection",
+     "        if stats is not None and stats.hp_restore > 0:\n"
+     "            keep.add(code)",
+     "        if stats is not None and stats.hp_restore > 0:\n"
+     "            pass"),
+    # drop best-fighting-weapon protection: the combat weapon becomes depositable.
+    ("bank_selection: drop best-weapon protection",
+     "    weapon = _best_fighting_weapon(state, game_data)\n"
+     "    if weapon is not None:\n"
+     "        keep.add(weapon)",
+     "    weapon = _best_fighting_weapon(state, game_data)\n"
+     "    if weapon is not None:\n"
+     "        pass"),
+    # wrong deposit filter: deposit kept items too (drop the `not in keep` guard),
+    # so protected items get banked — the freeze invariant the proof pins.
+    ("bank_selection: deposit filter includes kept items",
+     "        if qty > 0 and code not in keep",
+     "        if qty > 0"),
+    # weapon tie/argmax flip: prefer LOWER attack (> becomes <), wrong best weapon.
+    ("bank_selection: best-weapon argmax flip (attack > -> <)",
+     "        if best is None or attack > best[0] or (attack == best[0] and code < best[1]):",
+     "        if best is None or attack < best[0] or (attack == best[0] and code < best[1]):"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -337,6 +373,8 @@ def main() -> int:
               "formal/diff/test_objective_diff.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
+    run_group(BANK_SELECTION_SRC, BANK_SELECTION_MUTATIONS,
+              "formal/diff/test_bank_selection_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

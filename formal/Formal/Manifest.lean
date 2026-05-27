@@ -104,3 +104,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.StrategyTraversal.actionable_step_none_iff   -- none ⇔ no actionable reachable (De Morgan)
 #check @Formal.StrategyTraversal.actionable_step_reach      -- returned node UnmetReach-able from root
 #check @Formal.StrategyTraversal.rootCost_ge_one            -- root_cost ≥ 1 (every kind)
+-- BankSelection required roles:
+#check @Formal.BankSelection.deposits_exact                -- candidates = qty>0 inventory ∉ keep
+#check @Formal.BankSelection.deposits_mem_iff              -- sorted list = same set (permutation)
+#check @Formal.BankSelection.freeze_invariant             -- deposits ∩ keep = ∅ (never bank protected)
+#check @Formal.BankSelection.task_inputs_protected        -- recipe materials of protected roots ⊆ keep
+#check @Formal.BankSelection.task_material_not_deposited   -- a protected material is NEVER deposited
+#check @Formal.BankSelection.keep_closed                  -- material captured ⇒ kept ∧ StepReachable
+#check @Formal.BankSelection.recipeMaterials_closed       -- materials closed under recipe children
+#check @Formal.BankSelection.recipeMaterialList_complete  -- material capture COMPLETE within fuel
+#check @Formal.BankSelection.best_weapon_argmax           -- best weapon = max-attack non-tool over inv∪equip
+#check @Formal.BankSelection.best_weapon_is_fighting      -- best weapon is a non-tool weapon
