@@ -161,3 +161,10 @@ open Formal.PriorityBand
 #check @Formal.Scalarizer.skillSum_mono_one           -- mono-skillxp: scalar non-decreasing in one skill's xp (weight ≥ 0)
 #check @Formal.Scalarizer.relevant_weight_dominates   -- weight-dominance: relevant weight ≥ baseline weight per xp unit
 #check @Formal.Scalarizer.coinsSpent_inverts          -- coin-inversion: received - coinsSpent received delta = delta
+-- PlannerAdmissibility required roles (REFUTATION of planner.py:99 "first satisfied = optimal"):
+#check @Formal.PlannerAdmissibility.fScore_eq_g_at_goal_of_admissible -- conditional intent: admissible h ⇒ popped f = plan cost at goal
+#check @Formal.PlannerAdmissibility.not_admissible_of_fScore_gt_g_at_goal -- lever: f>g at a goal node ⇒ h not admissible
+#check @Formal.PlannerAdmissibility.CE_not_admissible            -- urgency value() is NOT admissible (h=50 > true 2)
+#check @Formal.PlannerAdmissibility.CE_rest_popped_before_move   -- Rest-node f=10 popped before Move-node f=51
+#check @Formal.PlannerAdmissibility.CE_first_satisfied_not_optimal -- BUG: returned plan cost 10 > optimal 3
+#check @Formal.PlannerAdmissibility.CE_admissible_would_be_optimal -- what admissibility WOULD buy (f=g at optimum)

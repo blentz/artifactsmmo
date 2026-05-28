@@ -23,6 +23,7 @@ PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py
 OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
+PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -484,6 +485,36 @@ SCALAR_CORE_MUTATIONS = [
 ]
 
 
+# planner mutations -- old strings matched to current planner.py text.
+# NOTE (refutation context): planner.py CURRENTLY ships the bug — it uses the
+# inadmissible urgency `goal.value` as the A* heuristic, so the diff test PINS the
+# resulting NON-OPTIMAL plan ([Rest], cost 10). Each mutation here perturbs the
+# search's f = g + h logic; any such change moves the returned plan/cost off the
+# pinned value, so the test fails -> the mutant is "killed". This proves the test
+# is genuinely sensitive to the search/heuristic logic (not vacuous), and would
+# flip to assert optimality once the heuristic is fixed.
+PLANNER_MUTATIONS = [
+    # zero the per-node heuristic: f = g + 0 makes the search Dijkstra (optimal),
+    # so it would return the CHEAP plan instead of the pinned costly one.
+    ("planner: zero step heuristic h (g + value -> g + 0, Dijkstra)",
+     "                    h = goal.value(next_state, game_data, history)",
+     "                    h = 0.0"),
+    # invert h's contribution: f = g - h. The Move-prefix node's huge h drives its
+    # f sharply NEGATIVE so it pops before the satisfied Rest-node, the search
+    # expands toward the cheap plan, and returns the OPTIMAL [Move, UseConsumable]
+    # instead of the pinned [Rest]. (The pure-greedy mutation `f = h` is not
+    # discriminating on this single instance — at every satisfied node h = 0 so
+    # f-by-h orders satisfied nodes identically to f-by-g+h, and the bug repeats.)
+    ("planner: invert h in f (g + h -> g - h)",
+     "                            f_score=g + h,",
+     "                            f_score=g - h,"),
+    # drop h from f: f = g (Dijkstra via a different edit), changing the result.
+    ("planner: drop h from f (g + h -> g)",
+     "                            f_score=g + h,",
+     "                            f_score=g,"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -515,6 +546,7 @@ _ALL_SRCS = [
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
+    PLANNER_SRC,
 ]
 
 
@@ -573,6 +605,8 @@ def main() -> int:
               "formal/diff/test_upgrade_selection_diff.py", survivors)
     run_group(SCALAR_CORE_SRC, SCALAR_CORE_MUTATIONS,
               "formal/diff/test_scalarizer_diff.py", survivors)
+    run_group(PLANNER_SRC, PLANNER_MUTATIONS,
+              "formal/diff/test_planner_admissibility_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

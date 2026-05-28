@@ -16,6 +16,7 @@ import Formal.PriorityBand
 import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
+import Formal.PlannerAdmissibility
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -942,3 +943,34 @@ example : ∀ (baselineW relevantW xp : Rat),
 example : ∀ (received delta : Int),
     received - Formal.Scalarizer.coinsSpent received delta = delta :=
   @Formal.Scalarizer.coinsSpent_inverts
+
+/-! ### PlannerAdmissibility role contracts. REFUTATION of planner.py:99
+    "A* pops nodes in f-score order; first satisfied node is optimal." -/
+-- conditional intent: an ADMISSIBLE heuristic forces f = g at a satisfied node —
+-- the load-bearing fact that would make "first popped satisfied = least cost" sound.
+example : ∀ {α : Type} (h trueRemaining : α → Nat) (sat : α → Prop),
+    Formal.PlannerAdmissibility.Admissible h trueRemaining →
+    Formal.PlannerAdmissibility.GoalZero trueRemaining sat →
+    ∀ (s : α) (g : Nat), sat s → Formal.PlannerAdmissibility.fScore g (h s) = g :=
+  @Formal.PlannerAdmissibility.fScore_eq_g_at_goal_of_admissible
+-- the urgency heuristic value() (RestoreHPGoal) is NOT admissible.
+example : ¬ Formal.PlannerAdmissibility.Admissible
+    Formal.PlannerAdmissibility.CEh Formal.PlannerAdmissibility.CEtrueRemaining :=
+  Formal.PlannerAdmissibility.CE_not_admissible
+-- best-first pops the expensive Rest-node (f=10) before the cheap Move-node (f=55).
+example : Formal.PlannerAdmissibility.fScore 10
+      (Formal.PlannerAdmissibility.CEh Formal.PlannerAdmissibility.CEState.rested)
+    < Formal.PlannerAdmissibility.fScore 5
+      (Formal.PlannerAdmissibility.CEh Formal.PlannerAdmissibility.CEState.moved) :=
+  Formal.PlannerAdmissibility.CE_rest_popped_before_move
+-- THE BUG: the returned plan (cost 10) is strictly costlier than optimal (cost 7).
+example : Formal.PlannerAdmissibility.CEoptimalPlanCost
+    < Formal.PlannerAdmissibility.CEfirstSatPlanCost :=
+  Formal.PlannerAdmissibility.CE_first_satisfied_not_optimal
+-- what admissibility WOULD buy: f = g at the genuine optimum.
+example : ∀ (h : Formal.PlannerAdmissibility.CEState → Nat),
+    Formal.PlannerAdmissibility.Admissible h Formal.PlannerAdmissibility.CEtrueRemaining →
+    Formal.PlannerAdmissibility.fScore Formal.PlannerAdmissibility.CEoptimalPlanCost
+        (h Formal.PlannerAdmissibility.CEState.eaten)
+      = Formal.PlannerAdmissibility.CEoptimalPlanCost :=
+  @Formal.PlannerAdmissibility.CE_admissible_would_be_optimal

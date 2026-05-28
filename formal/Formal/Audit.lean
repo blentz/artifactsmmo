@@ -144,3 +144,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.Scalarizer.skillSum_mono_one
 #print axioms Formal.Scalarizer.relevant_weight_dominates
 #print axioms Formal.Scalarizer.coinsSpent_inverts
+#print axioms Formal.PlannerAdmissibility.fScore_eq_g_at_goal_of_admissible
+#print axioms Formal.PlannerAdmissibility.not_admissible_of_fScore_gt_g_at_goal
+#print axioms Formal.PlannerAdmissibility.CE_not_admissible
+#print axioms Formal.PlannerAdmissibility.CE_rest_popped_before_move
+#print axioms Formal.PlannerAdmissibility.CE_first_satisfied_not_optimal
+#print axioms Formal.PlannerAdmissibility.CE_admissible_would_be_optimal
