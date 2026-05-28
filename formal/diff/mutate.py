@@ -28,6 +28,8 @@ ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
+STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy_blend.py"
+DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -655,6 +657,77 @@ LOW_YIELD_MUTATIONS = [
 ]
 
 
+# strategy_blend mutations -- old strings matched to current strategy_blend.py text.
+STRATEGY_BLEND_MUTATIONS = [
+    # flip the slope sign: + BALANCE_K -> - BALANCE_K. The monotonicity in
+    # (leader - current) breaks; at gap = 4 the python is < 1 and the lean is
+    # > 1 — the diff fires for any gap ≠ 2.
+    ("strategy_blend: balancing slope sign flip (+ K -> - K)",
+     "    raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)",
+     "    raw = 1.0 - BALANCE_K * (leader - current - BALANCE_THRESHOLD)"),
+    # drop the lower band clamp: max(BALANCE_MIN, ...) -> the inner min only.
+    # A skill far ahead of the leader now produces a multiplier below 0.5 (and
+    # possibly negative). The proved lower bound + threshold tests both fire.
+    ("strategy_blend: drop lower band clamp (max -> bare inner min)",
+     "    return max(BALANCE_MIN, min(BALANCE_MAX, raw))",
+     "    return min(BALANCE_MAX, raw)"),
+    # swap BALANCE_K 0.25 -> 1.0: multiplier amplification per gap-unit is 4x
+    # too strong; clamp kicks in much sooner (essentially everywhere) and the
+    # threshold identity (gap=2 ⇒ 1.0) is preserved BUT the gap=4 → 1.5 test
+    # and the hypothesis-driven mid-band values fail.
+    ("strategy_blend: BALANCE_K 0.25 -> 1.0",
+     "BALANCE_K = 0.25",
+     "BALANCE_K = 1.0"),
+    # learned_blend: flip (1 - w) to w. Now blend = w*value + w*normalized,
+    # destroying the convex combination. The convex-bound / warm-up tests fire.
+    ("strategy_blend: learned_blend (1 - w) -> w (drop the complement)",
+     "    return (1.0 - w) * value + w * normalized",
+     "    return w * value + w * normalized"),
+    # learned_blend: + -> - between the two terms (subtract normalized rather
+    # than blend toward it). The convex bound + monotonicity tests fire.
+    ("strategy_blend: learned_blend + -> - between terms",
+     "    return (1.0 - w) * value + w * normalized",
+     "    return (1.0 - w) * value - w * normalized"),
+    # learned_blend: drop the w cap on `normalized` (multiply by w*2): the
+    # blend can exceed `max(value, normalized)` — the anti-Phase-1 unbounded
+    # bonus property breaks. The convex-bound assertion fires.
+    ("strategy_blend: learned_blend doubles the normalized contribution",
+     "    return (1.0 - w) * value + w * normalized",
+     "    return (1.0 - w) * value + 2 * w * normalized"),
+]
+
+
+# decide_key mutations -- old strings matched to current decide_key.py text.
+DECIDE_KEY_MUTATIONS = [
+    # swap negFinal and effort in the tuple: the lex order flips priority;
+    # for any inputs with distinct effort the comparator returns a different
+    # ordering vs the Lean oracle (which sorts by negFinal first). The
+    # Hypothesis driver finds a counterexample quickly.
+    ("decide_key: swap negFinal/effort in the sort tuple",
+     "    return (neg_final, effort, root_repr)",
+     "    return (effort, neg_final, root_repr)"),
+    # drop the rootRepr tiebreak: two same-(negFinal, effort) keys with
+    # different reprs now compare equal — but Python's list.sort is stable, so
+    # the repr-tiebreak assertion still passes via stability... we instead
+    # break the assertion by RETURNING the third field as a CONSTANT (any
+    # constant string), which violates the proved `eq_imp_repr` lemma at the
+    # tuple level. The test fires when two distinct reprs collide.
+    ("decide_key: drop rootRepr tiebreak (constant third field)",
+     "    return (neg_final, effort, root_repr)",
+     '    return (neg_final, effort, "")'),
+    # GuardKind dispatch: drop one variant entirely (KeyError at runtime, but
+    # the parametrized exhaustiveness test fires immediately). We swap one
+    # mapping to wrong text so the diff-against-Lean fires.
+    ("decide_key: HP_CRITICAL repr corrupted",
+     "    GuardKind.HP_CRITICAL: \"RestoreHP\",",
+     "    GuardKind.HP_CRITICAL: \"WRONG\","),
+    # MeansKind dispatch: similar — corrupt the PURSUE_TASK mapping.
+    ("decide_key: PURSUE_TASK repr corrupted",
+     "    MeansKind.PURSUE_TASK: \"PursueTask\",",
+     "    MeansKind.PURSUE_TASK: \"WRONG\","),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -687,7 +760,7 @@ _ALL_SRCS = [
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
-    LOW_YIELD_BOUNDARY_SRC,
+    LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
 ]
 
 
@@ -756,6 +829,10 @@ def main() -> int:
               "formal/diff/test_weighted_remaining_diff.py", survivors)
     run_group(LOW_YIELD_BOUNDARY_SRC, LOW_YIELD_MUTATIONS,
               "formal/diff/test_low_yield_cancel_diff.py", survivors)
+    run_group(STRATEGY_BLEND_SRC, STRATEGY_BLEND_MUTATIONS,
+              "formal/diff/test_strategy_blend_diff.py", survivors)
+    run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
+              "formal/diff/test_decide_key_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

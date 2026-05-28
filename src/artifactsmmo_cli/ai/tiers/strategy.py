@@ -13,9 +13,15 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.tiers.decide_key import decide_key
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import Personality
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots, prerequisites
+from artifactsmmo_cli.ai.tiers.strategy_blend import (
+    balancing as _balancing_pure,
+    blend_weight,
+    learned_blend as _learned_blend_pure,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Mirrors RestoreHPGoal.CRITICAL_HP_FRACTION. Kept local so the tiers layer does
@@ -220,8 +226,7 @@ class StrategyEngine:
         levels = list(state.skills.values())
         leader = max(levels) if levels else 0
         current = state.skills.get(root.skill, 0)
-        raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)
-        return max(BALANCE_MIN, min(BALANCE_MAX, raw))
+        return _balancing_pure(leader, current)
 
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
         return self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
@@ -234,8 +239,8 @@ class StrategyEngine:
         if y.sample_count <= 0:
             return value
         normalized = min(1.0, max(0.0, y.char_xp / XP_RATE_REFERENCE))
-        w = LEARN_W_MAX * min(1.0, y.sample_count / LEARN_SAMPLE_FULL)
-        return (1.0 - w) * value + w * normalized
+        w = blend_weight(y.sample_count)
+        return _learned_blend_pure(value, normalized, w)
 
     def decide(self, state: WorldState, game_data: GameData,
                history: LearningStore | None = None,
@@ -253,7 +258,7 @@ class StrategyEngine:
             final = self._learned_blend(root, value, history, combat_monster)
             effort = root_cost(root, state, game_data)
             candidates.append((root, step, final, effort, value))
-        candidates.sort(key=lambda c: (-c[2], c[3], repr(c[0])))   # final desc, effort asc, repr last
+        candidates.sort(key=lambda c: decide_key(-c[2], c[3], repr(c[0])))   # final desc, effort asc, repr last
         ranking = [
             RootScore(repr(r), root_category(r), pre, effort, final, repr(s), False)
             for (r, s, final, effort, pre) in candidates

@@ -21,4 +21,6 @@ import Formal.ArbiterSelect
 import Formal.TaskDecision
 import Formal.WeightedRemaining
 import Formal.LowYieldCancel
+import Formal.StrategyBlend
+import Formal.DecideKey
 import Formal.Contracts

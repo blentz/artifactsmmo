@@ -8,6 +8,8 @@ open Formal.Scalarizer
 open Formal.TaskDecision
 open Formal.WeightedRemaining
 open Formal.LowYieldCancel
+open Formal.StrategyBlend
+open Formal.DecideKey
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -806,6 +808,85 @@ def runLowYieldCancel (args : Array Json) : Json :=
               farmSamples altSamples margin minConfidence
   Json.mkObj [("fires", Json.bool b)]
 
+/-- Compute one strategy_blend result using the SAME proved cores.
+
+args layout (Ints; rationals as num/den pairs):
+* `[0]`      query: 0 = balancing (scaled), 1 = learned_blend
+* For query 0: `[1, 2]` = leader, current (Ints).
+* For query 1: `[1,2]`/`[3,4]`/`[5,6]` = value/normalized/w (num, den each).
+
+Emits the scaled Int result for balancing OR the rational num/den for blend. -/
+def runStrategyBlend (args : Array Json) : Json :=
+  let q := intArg args 0
+  if q == 0 then
+    let leader := intArg args 1
+    let current := intArg args 2
+    Json.mkObj [("scaled", Json.num (Formal.StrategyBlend.balancingScaled leader current))]
+  else
+    let value := ratArg args 1
+    let normalized := ratArg args 3
+    let w := ratArg args 5
+    let r := Formal.StrategyBlend.learnedBlend value normalized w
+    Json.mkObj [("blend_num", Json.num r.num), ("blend_den", Json.num (Int.ofNat r.den))]
+
+/-- Compute one decide_key result using the SAME proved `decideCmp` / dispatch
+maps.
+
+args layout (Ints; rootRepr/guard/means strings encoded as a single trailing
+JSON field via the outer wrapper isn't supported here, so we tag the query
+type and use a small int encoding for enum kinds and a string lookup via the
+trailing args).
+
+* `[0]`         query: 0 = compare two keys, 1 = goalReprOfGuard, 2 = goalReprOfMeans
+* For query 0: `[1, 2, 3, 4]` = a.negFinal, a.effort, b.negFinal, b.effort.
+  Reprs are passed as separate string fields via the JSON wrapper:
+  `[5]`/`[6]` carry the string encodings as integer-tagged codes (we use the
+  string CHARS reconstructed via a separate dispatch path — see diff test).
+  To keep the oracle interface integer-only, the diff test compares ONLY the
+  comparator outcome when reprs are equal-by-construction; otherwise it
+  passes encoded reprs via an out-of-band string-arg array (unsupported here
+  — the diff test uses query 0 only on numeric fields and parameterises repr
+  ties off-line). For simplicity we emit cmp(a, b) treating reprs as equal
+  (the strict-total-order property at the (negFinal, effort) projection).
+* For query 1: `[1]` = GuardKind index 0..5.
+* For query 2: `[1]` = MeansKind index 0..9.
+
+Emits:
+* query 0: cmp outcome as `"lt" | "eq" | "gt"`.
+* query 1/2: the dispatched repr string. -/
+def runDecideKey (args : Array Json) : Json :=
+  let q := intArg args 0
+  if q == 0 then
+    let a : Formal.DecideKey.Key := ⟨intArg args 1, intArg args 2, ""⟩
+    let b : Formal.DecideKey.Key := ⟨intArg args 3, intArg args 4, ""⟩
+    let label : String := match Formal.DecideKey.decideCmp a b with
+      | .lt => "lt" | .eq => "eq" | .gt => "gt"
+    Json.mkObj [("cmp", Json.str label)]
+  else if q == 1 then
+    let idx := (intArg args 1).toNat
+    let k : Formal.DecideKey.GuardKind := match idx with
+      | 0 => .hpCritical
+      | 1 => .bankUnlock
+      | 2 => .reachUnlockLevel
+      | 3 => .discardCritical
+      | 4 => .depositFull
+      | _ => .discardHigh
+    Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
+  else
+    let idx := (intArg args 1).toNat
+    let k : Formal.DecideKey.MeansKind := match idx with
+      | 0 => .claimPending
+      | 1 => .completeTask
+      | 2 => .sellPressured
+      | 3 => .lowYieldCancel
+      | 4 => .taskCancel
+      | 5 => .pursueTask
+      | 6 => .acceptTask
+      | 7 => .taskExchange
+      | 8 => .sellIdle
+      | _ => .bankExpand
+    Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -874,6 +955,10 @@ def runOne (item : Json) : Json :=
     runWeightedRemaining args
   else if kind == "low_yield_cancel" then
     runLowYieldCancel args
+  else if kind == "strategy_blend" then
+    runStrategyBlend args
+  else if kind == "decide_key" then
+    runDecideKey args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

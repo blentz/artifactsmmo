@@ -196,3 +196,26 @@ open Formal.PriorityBand
 #check @Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness -- zero-fast-path WITNESS (confidence < gate, alt_samples = 1)
 #check @Formal.LowYieldCancel.positive_current_fires_implies_margin            -- soundness: positive currentXp ∧ fires ⇒ altXp ≥ currentXp * margin
 #check @Formal.LowYieldCancel.positive_current_fires_implies_confidence        -- soundness: positive currentXp ∧ fires ⇒ confidence ≥ minConfidence
+-- StrategyBlend required roles:
+#check @Formal.StrategyBlend.balancingScaled_ge_min                -- band-lower: result ≥ balanceMinScaled (= 4 * 0.5 = 2)
+#check @Formal.StrategyBlend.balancingScaled_le_max                -- band-upper: result ≤ balanceMaxScaled (= 4 * 2.0 = 8)
+#check @Formal.StrategyBlend.balancingScaled_at_threshold          -- threshold-identity: leader-current = 2 ⇒ scaled result = 4 (= 4 * 1)
+#check @Formal.StrategyBlend.balancingScaled_at_equal_clamps_to_min -- equal-clamp: leader = current ⇒ scaled result = balanceMinScaled
+#check @Formal.StrategyBlend.balancingScaled_mono                  -- monotone: ↑(leader - current) never decreases the multiplier
+#check @Formal.StrategyBlend.learnedBlend_w_zero                   -- warm-up identity: w = 0 ⇒ blend = value
+#check @Formal.StrategyBlend.learnedBlend_w_one                    -- w = 1 ⇒ blend = normalized (far endpoint)
+#check @Formal.StrategyBlend.learnedBlend_ge_value_when_le         -- convex-bound: value ≤ normalized ⇒ value ≤ blend
+#check @Formal.StrategyBlend.learnedBlend_le_normalized_when_le    -- convex-bound: value ≤ normalized ⇒ blend ≤ normalized
+#check @Formal.StrategyBlend.learnedBlend_ge_normalized_when_ge    -- convex-bound: normalized ≤ value ⇒ normalized ≤ blend
+#check @Formal.StrategyBlend.learnedBlend_le_value_when_ge         -- convex-bound: normalized ≤ value ⇒ blend ≤ value
+#check @Formal.StrategyBlend.learnedBlend_mono_normalized          -- monotone-normalized: ↑normalized never decreases the blend (w ≥ 0)
+#check @Formal.StrategyBlend.learnedBlend_mono_value               -- monotone-value: ↑value never decreases the blend (w ≤ 1)
+-- DecideKey required roles:
+#check @Formal.DecideKey.decideCmp_trichotomy                      -- key-total-order: trichotomous
+#check @Formal.DecideKey.decideCmp_swap                            -- key-total-order: antisymmetric (oriented)
+#check @Formal.DecideKey.decideCmp_lt_trans                        -- key-total-order: transitive
+#check @Formal.DecideKey.decideCmp_eq_imp_repr                     -- key-determinism: eq ⇒ equal rootRepr (final tiebreak)
+#check @Formal.DecideKey.decideCmp_eq_imp_negFinal                 -- key-determinism: eq ⇒ equal negFinal
+#check @Formal.DecideKey.decideCmp_eq_imp_effort                   -- key-determinism: eq ⇒ equal effort
+#check @Formal.DecideKey.goalReprOfGuard_nonempty                  -- exhaustiveness: every GuardKind variant yields a non-empty repr (total dispatcher)
+#check @Formal.DecideKey.goalReprOfMeans_nonempty                  -- exhaustiveness: every MeansKind variant yields a non-empty repr (total dispatcher)

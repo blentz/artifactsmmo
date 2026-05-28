@@ -19,6 +19,8 @@ import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.TaskDecision
 import Formal.LowYieldCancel
+import Formal.StrategyBlend
+import Formal.DecideKey
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1081,3 +1083,89 @@ example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
         farmSamples altSamples margin minConfidence = true →
     confidence ≥ minConfidence :=
   @Formal.LowYieldCancel.positive_current_fires_implies_confidence
+
+/-! ### StrategyBlend role contracts. -/
+
+example : ∀ (leader current : Int),
+    Formal.StrategyBlend.balanceMinScaled
+      ≤ Formal.StrategyBlend.balancingScaled leader current :=
+  @Formal.StrategyBlend.balancingScaled_ge_min
+example : ∀ (leader current : Int),
+    Formal.StrategyBlend.balancingScaled leader current
+      ≤ Formal.StrategyBlend.balanceMaxScaled :=
+  @Formal.StrategyBlend.balancingScaled_le_max
+example : ∀ (leader current : Int),
+    leader - current = Formal.StrategyBlend.balanceThresh →
+    Formal.StrategyBlend.balancingScaled leader current = 4 :=
+  @Formal.StrategyBlend.balancingScaled_at_threshold
+example : ∀ (s : Int),
+    Formal.StrategyBlend.balancingScaled s s = Formal.StrategyBlend.balanceMinScaled :=
+  @Formal.StrategyBlend.balancingScaled_at_equal_clamps_to_min
+example : ∀ (leader current leader' current' : Int),
+    leader - current ≤ leader' - current' →
+    Formal.StrategyBlend.balancingScaled leader current
+      ≤ Formal.StrategyBlend.balancingScaled leader' current' :=
+  @Formal.StrategyBlend.balancingScaled_mono
+example : ∀ (value normalized : Rat),
+    Formal.StrategyBlend.learnedBlend value normalized 0 = value :=
+  @Formal.StrategyBlend.learnedBlend_w_zero
+example : ∀ (value normalized : Rat),
+    Formal.StrategyBlend.learnedBlend value normalized 1 = normalized :=
+  @Formal.StrategyBlend.learnedBlend_w_one
+example : ∀ (value normalized w : Rat),
+    0 ≤ w → value ≤ normalized →
+    value ≤ Formal.StrategyBlend.learnedBlend value normalized w :=
+  @Formal.StrategyBlend.learnedBlend_ge_value_when_le
+example : ∀ (value normalized w : Rat),
+    w ≤ 1 → value ≤ normalized →
+    Formal.StrategyBlend.learnedBlend value normalized w ≤ normalized :=
+  @Formal.StrategyBlend.learnedBlend_le_normalized_when_le
+example : ∀ (value normalized w : Rat),
+    w ≤ 1 → normalized ≤ value →
+    normalized ≤ Formal.StrategyBlend.learnedBlend value normalized w :=
+  @Formal.StrategyBlend.learnedBlend_ge_normalized_when_ge
+example : ∀ (value normalized w : Rat),
+    0 ≤ w → normalized ≤ value →
+    Formal.StrategyBlend.learnedBlend value normalized w ≤ value :=
+  @Formal.StrategyBlend.learnedBlend_le_value_when_ge
+example : ∀ (value n n' w : Rat),
+    0 ≤ w → n ≤ n' →
+    Formal.StrategyBlend.learnedBlend value n w
+      ≤ Formal.StrategyBlend.learnedBlend value n' w :=
+  @Formal.StrategyBlend.learnedBlend_mono_normalized
+example : ∀ (v v' normalized w : Rat),
+    w ≤ 1 → v ≤ v' →
+    Formal.StrategyBlend.learnedBlend v normalized w
+      ≤ Formal.StrategyBlend.learnedBlend v' normalized w :=
+  @Formal.StrategyBlend.learnedBlend_mono_value
+
+/-! ### DecideKey role contracts. -/
+
+example : ∀ (a b : Formal.DecideKey.Key),
+    Formal.DecideKey.decideCmp a b = .lt
+      ∨ Formal.DecideKey.decideCmp a b = .eq
+      ∨ Formal.DecideKey.decideCmp a b = .gt :=
+  @Formal.DecideKey.decideCmp_trichotomy
+example : ∀ (a b : Formal.DecideKey.Key),
+    Formal.DecideKey.decideCmp b a = (Formal.DecideKey.decideCmp a b).swap :=
+  @Formal.DecideKey.decideCmp_swap
+example : ∀ {a b c : Formal.DecideKey.Key},
+    Formal.DecideKey.decideCmp a b = .lt →
+    Formal.DecideKey.decideCmp b c = .lt →
+    Formal.DecideKey.decideCmp a c = .lt :=
+  @Formal.DecideKey.decideCmp_lt_trans
+example : ∀ (a b : Formal.DecideKey.Key),
+    Formal.DecideKey.decideCmp a b = .eq → a.rootRepr = b.rootRepr :=
+  @Formal.DecideKey.decideCmp_eq_imp_repr
+example : ∀ (a b : Formal.DecideKey.Key),
+    Formal.DecideKey.decideCmp a b = .eq → a.negFinal = b.negFinal :=
+  @Formal.DecideKey.decideCmp_eq_imp_negFinal
+example : ∀ (a b : Formal.DecideKey.Key),
+    Formal.DecideKey.decideCmp a b = .eq → a.effort = b.effort :=
+  @Formal.DecideKey.decideCmp_eq_imp_effort
+example : ∀ (k : Formal.DecideKey.GuardKind),
+    (Formal.DecideKey.goalReprOfGuard k).length > 0 :=
+  @Formal.DecideKey.goalReprOfGuard_nonempty
+example : ∀ (k : Formal.DecideKey.MeansKind),
+    (Formal.DecideKey.goalReprOfMeans k).length > 0 :=
+  @Formal.DecideKey.goalReprOfMeans_nonempty
