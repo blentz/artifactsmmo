@@ -676,6 +676,52 @@ def runScalarizer (args : Array Json) : Json :=
     coinValue charScale goldUnit
   Json.mkObj [("scalar_num", Json.num r.num), ("scalar_den", Json.num (Int.ofNat r.den))]
 
+/-- Compute one arbiter_select result using the SAME proved `selectPure`.
+
+args layout:
+* `[0]`          = nCands
+* per-candidate block (5 Ints, repeated nCands times starting at index 1):
+  `[id, isMeans(0/1), plannable(0/1), satisfied(0/1), suppressed(0/1)]`
+* trailing: `[committed_present(0/1), committed_id]`
+
+The per-candidate `plannable/satisfied/suppressed` flags encode the closures
+the Python passes in. The oracle reconstructs an `id → Bool` table keyed by
+`Candidate.id` (assumes ids are unique across the candidate list — the
+production guarantee captured by `idsDisjoint`-style well-formedness in the
+diff generator).
+
+Emits the chosen id (or -1), is-means flag, and new committed id (or -1). -/
+def runArbiterSelect (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let cands : List Formal.ArbiterSelect.Candidate :=
+    (List.range n).map (fun k =>
+      let base := 1 + 5 * k
+      ⟨(intArg args base).toNat, intArg args (base + 1) != 0⟩)
+  -- Build (id → Bool) tables.
+  let lookup (offset : Nat) (id : Nat) : Bool :=
+    let rec loop : Nat → Bool
+      | 0 => false
+      | k + 1 =>
+        let base := 1 + 5 * (n - k - 1)
+        if (intArg args base).toNat = id then intArg args (base + offset) != 0
+        else loop k
+    loop n
+  let plannable := lookup 2
+  let satisfied := lookup 3
+  let suppressed := lookup 4
+  let commPresent := intArg args (1 + 5 * n) != 0
+  let commId := intArg args (2 + 5 * n)
+  let committed : Option Nat := if commPresent then some commId.toNat else none
+  let (chosen, newCommitted) := Formal.ArbiterSelect.selectPure cands committed plannable satisfied suppressed
+  let chosenId : Int := match chosen with | some c => Int.ofNat c.id | none => -1
+  let chosenIsMeans : Bool := match chosen with | some c => c.isMeans | none => false
+  let newCommittedId : Int := match newCommitted with | some i => Int.ofNat i | none => -1
+  Json.mkObj [
+    ("chosen_id", Json.num chosenId),
+    ("chosen_is_means", Json.bool chosenIsMeans),
+    ("new_committed_id", Json.num newCommittedId)
+  ]
+
 /-- Compute one coins_spent result using the SAME proved `coinsSpent`.
 args: [received, delta]. Emits coins_spent and the inverted delta (received-cs). -/
 def runCoinsSpent (args : Array Json) : Json :=
@@ -744,6 +790,8 @@ def runOne (item : Json) : Json :=
     runScalarizer args
   else if kind == "coins_spent" then
     runCoinsSpent args
+  else if kind == "arbiter_select" then
+    runArbiterSelect args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

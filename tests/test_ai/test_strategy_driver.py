@@ -29,10 +29,10 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
-    _precedes,
     map_guard,
     map_means,
     objective_step_goal,
@@ -445,9 +445,9 @@ def test_objective_step_goal_none_for_no_step():
 
 
 def test_precedes_false_when_target_absent():
-    """_precedes returns False when b_repr is not present in the candidates list."""
+    """_precedes returns False when either repr is not present in the candidates list."""
     goal_a = AcceptTaskGoal()
-    candidates: list[tuple[Goal, bool]] = [(goal_a, True)]
+    candidates = [Candidate(goal=goal_a, is_means=True, repr_=repr(goal_a))]
     # "NotPresent" is not in the list → b_idx is None → return False
     assert _precedes(candidates, repr(goal_a), "NotPresent") is False
     # a_repr also absent → a_idx is None → return False

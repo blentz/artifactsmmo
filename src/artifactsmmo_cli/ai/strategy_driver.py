@@ -5,6 +5,7 @@ Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle.""
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -136,19 +137,6 @@ def objective_step_goal(
     return None
 
 
-def _precedes(
-    candidates: list[tuple[Goal, bool]],
-    a_repr: str,
-    b_repr: str,
-) -> bool:
-    """Return True if the candidate with repr a_repr appears before b_repr in the list."""
-    a_idx = next((i for i, (g, _) in enumerate(candidates) if repr(g) == a_repr), None)
-    b_idx = next((i for i, (g, _) in enumerate(candidates) if repr(g) == b_repr), None)
-    if a_idx is None or b_idx is None:
-        return False
-    return a_idx < b_idx
-
-
 class StrategyArbiter:
     """Compose guards → collect-reward → objective step → discretionary.
 
@@ -213,54 +201,32 @@ class StrategyArbiter:
 
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx)
 
-        # Build ordered candidates: (goal, is_means)
-        candidates: list[tuple[Goal, bool]] = []
+        # Build ordered candidates: guards, collect, step, discretionary.
+        candidates: list[Candidate] = []
         for gk in guard_kinds:
-            candidates.append((map_guard(gk, game_data, ctx), False))
+            g = map_guard(gk, game_data, ctx)
+            candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g)))
         for mk in collect_kinds:
-            candidates.append((map_means(mk, game_data, ctx, state), True))
+            g = map_means(mk, game_data, ctx, state)
+            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
         if step_goal is not None:
-            candidates.append((step_goal, True))
+            candidates.append(Candidate(goal=step_goal, is_means=True, repr_=repr(step_goal)))
         for mk in discretionary_kinds:
-            candidates.append((map_means(mk, game_data, ctx, state), True))
+            g = map_means(mk, game_data, ctx, state)
+            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
 
-        # Sticky: if we have a committed means repr, check if it still fires and plans
-        # (and no guard candidate precedes it)
-        tried_repr: str | None = None
-        if self._committed_repr is not None:
-            committed_goal: Goal | None = next(
-                (g for g, is_means in candidates if is_means and repr(g) == self._committed_repr),
-                None,
-            )
-            if (committed_goal is not None and not committed_goal.is_satisfied(state)
-                    and not is_suppressed(committed_goal)):
-                # Check that no guard precedes the committed goal
-                guard_reprs = [repr(g) for g, is_means in candidates if not is_means]
-                guard_precedes = any(
-                    _precedes(candidates, gr, self._committed_repr) for gr in guard_reprs
-                )
-                if not guard_precedes:
-                    plan = self._plans(committed_goal, state, game_data, actions)
-                    tried_repr = self._committed_repr
-                    if plan:
-                        return committed_goal, plan, self.goals_tried
+        def try_plan(goal: Goal) -> list[Action]:
+            return self._plans(goal, state, game_data, actions)
 
-        # Walk candidates in order; return first that plans
-        for goal, is_means in candidates:
-            # Skip if already attempted in the sticky block above
-            if repr(goal) == tried_repr:
-                continue
-            # Skip suppressed candidates (TaskCancel is never suppressed)
-            if is_suppressed(goal):
-                continue
-            # Skip satisfied goals early to avoid unnecessary planning
-            if goal.is_satisfied(state):
-                continue
-            plan = self._plans(goal, state, game_data, actions)
-            if plan:
-                self._committed_repr = repr(goal) if is_means else None
-                return goal, plan, self.goals_tried
+        def satisfied(goal: Goal) -> bool:
+            return goal.is_satisfied(state)
 
-        # Nothing plans
-        self._committed_repr = None
-        return None, [], self.goals_tried
+        chosen, plan, new_committed = select_pure(
+            candidates=candidates,
+            committed_repr=self._committed_repr,
+            try_plan=try_plan,
+            is_satisfied=satisfied,
+            is_suppressed=is_suppressed,
+        )
+        self._committed_repr = new_committed
+        return chosen, plan, self.goals_tried

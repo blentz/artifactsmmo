@@ -151,3 +151,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.PlannerAdmissibility.RHP_optimal_popped_before_rest
 #print axioms Formal.PlannerAdmissibility.RHP_first_satisfied_is_optimal
 #print axioms Formal.PlannerAdmissibility.RHP_optimal_strictly_cheaper_than_rest
+#print axioms Formal.ArbiterSelect.select_pure_guard_wins
+#print axioms Formal.ArbiterSelect.select_pure_sticky_idempotent
+#print axioms Formal.ArbiterSelect.select_pure_no_commitment_is_walk
+#print axioms Formal.ArbiterSelect.walk_returns_head
+#print axioms Formal.ArbiterSelect.guardPrecedes_of_head_guard
+#print axioms Formal.ArbiterSelect.findCommitted_some_props

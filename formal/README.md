@@ -37,7 +37,7 @@ uv sync --dev
 
 ## Coverage
 
-**18/18 AI components proven** (kernel-checked ∀ inputs, sorry-free, axioms = {propext, Classical.choice, Quot.sound}). Each row has a Lean def + role theorems + a `Contracts.lean` statement-pin + a real-Python differential test + mutation coverage. The first 14 are pure-logic components; the last 4 are decision-logic cores extracted from the impure AI orchestration (Phase 1, 2026-05-27).
+**19/19 AI components proven** (kernel-checked ∀ inputs, sorry-free, axioms = {propext, Classical.choice, Quot.sound}). Each row has a Lean def + role theorems + a `Contracts.lean` statement-pin + a real-Python differential test + mutation coverage. The first 14 are pure-logic components; the last 4 are decision-logic cores extracted from the impure AI orchestration (Phase 1, 2026-05-27).
 
 | Component | Lean | Roles proved |
 |---|---|---|
@@ -60,6 +60,7 @@ uv sync --dev
 | `best_by_value`/keys/argmax (`ai/goals/upgrade_selection.py`) | `UpgradeSelection.lean` | best_by_value never downgrades (tie→inventory); key comparators trichotomous/antisymmetric/transitive; argmax dominates + is a member (first-wins on same-code ties) |
 | `scalar_yield`/coin-inversion (`ai/learning/scalar_core.py`) | `Scalarizer.lean` | **over ℚ**: monotone non-decreasing in char_xp/skill_xp/gold/coins; relevant weight (2) ≥ baseline (1/5); coins_spent = received − delta inverts exactly |
 | `GOAPPlanner.plan` A* heuristic (`ai/planner.py:81,112`) | `PlannerAdmissibility.lean` | **OPTIMALITY (post-fix)**: conditional intent (`fScore_eq_g_at_goal_of_admissible`) + general A* optimality (`firstSatisfied_least_cost_of_admissible`) + `zero_h_admissible` and the RestoreHP instance showing the planner's now-zero h is admissible and the cheap plan (cost 7) is the one popped first, not [Rest] (cost 10). See Phase-2 findings. |
+| `select_pure` (`ai/arbiter_select.py`, extracted from `StrategyArbiter.select`) | `ArbiterSelect.lean` | **sticky-safety**: head-guard plannable ⇒ guard returned regardless of `committed` (sticky cannot keep a means ahead of a firing plannable guard); sticky-idempotence (no guards ∧ committed plans ⇒ committed kept); no-commit ⇒ walk in band order. Well-formedness: guard ids disjoint from means ids (Python `repr` collision-free across distinct Goal classes). |
 
 The float-heavy parts modeled exactly where reducible (predict_win); the inherently-heuristic geometric estimate in `SkillXpCurve` is abstracted and disclosed in that file's header. Components depending on others' verdicts (e.g. `combat_capable` on `predict_win`) abstract the dependency as an input — the dependency itself is proven in its own module.
 

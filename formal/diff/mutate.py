@@ -24,6 +24,7 @@ OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_co
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
+ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -518,6 +519,51 @@ PLANNER_MUTATIONS = [
 ]
 
 
+# arbiter_select mutations -- old strings matched to current arbiter_select.py text.
+ARBITER_SELECT_MUTATIONS = [
+    # drop the guard_precedes check: sticky-committed means survives a firing
+    # plannable guard. This is the bug-likely safety-violation the proof pins.
+    ("arbiter_select: drop guard_precedes check (sticky wins over guard)",
+     "            if not guard_precedes:\n"
+     "                plan = try_plan(committed_cand.goal)\n"
+     "                tried_repr = committed_repr\n"
+     "                if plan:\n"
+     "                    return committed_cand.goal, plan, committed_repr",
+     "            if True:\n"
+     "                plan = try_plan(committed_cand.goal)\n"
+     "                tried_repr = committed_repr\n"
+     "                if plan:\n"
+     "                    return committed_cand.goal, plan, committed_repr"),
+    # sticky always wins: skip the walk entirely if committed is found. Even
+    # when committed is not plannable, the function returns None instead of
+    # falling through.
+    ("arbiter_select: sticky always wins (return committed unconditionally)",
+     "            if not guard_precedes:\n"
+     "                plan = try_plan(committed_cand.goal)\n"
+     "                tried_repr = committed_repr\n"
+     "                if plan:\n"
+     "                    return committed_cand.goal, plan, committed_repr",
+     "            plan = try_plan(committed_cand.goal)\n"
+     "            return committed_cand.goal, plan, committed_repr"),
+    # reverse the precedes comparison: a_idx < b_idx -> a_idx > b_idx, so a
+    # guard at index 0 no longer "precedes" a means at index ≥ 1. guard_precedes
+    # becomes false when it should be true, and sticky can override a guard.
+    ("arbiter_select: precedes comparison flip (< -> >)",
+     "    return a_idx < b_idx",
+     "    return a_idx > b_idx"),
+    # walk's plannable check inverted: returns first NON-plannable goal,
+    # corrupting the band-order first-plannable contract.
+    ("arbiter_select: walk plannable check inverted (if plan -> if not plan)",
+     "        plan = try_plan(cand.goal)\n        if plan:\n",
+     "        plan = try_plan(cand.goal)\n        if not plan:\n"),
+    # drop the is_means commitment guard: a guard win wrongly sets new_committed
+    # to the guard's repr (commitment should clear on guard wins).
+    ("arbiter_select: commit on guard win (drop is_means guard)",
+     "            new_committed = cand.repr_ if cand.is_means else None",
+     "            new_committed = cand.repr_"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -549,7 +595,7 @@ _ALL_SRCS = [
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
-    PLANNER_SRC,
+    PLANNER_SRC, ARBITER_SELECT_SRC,
 ]
 
 
@@ -610,6 +656,8 @@ def main() -> int:
               "formal/diff/test_scalarizer_diff.py", survivors)
     run_group(PLANNER_SRC, PLANNER_MUTATIONS,
               "formal/diff/test_planner_admissibility_diff.py", survivors)
+    run_group(ARBITER_SELECT_SRC, ARBITER_SELECT_MUTATIONS,
+              "formal/diff/test_arbiter_select_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
