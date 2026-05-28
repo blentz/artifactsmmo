@@ -78,7 +78,17 @@ class GOAPPlanner:
 
         cache_ctx = history.search_cache() if history is not None else nullcontext()
         with cache_ctx:
-            h0 = goal.value(state, game_data, history)
+            # Heuristic h = 0 makes this Dijkstra / uniform-cost search.  Every
+            # `action.cost(...)` in this codebase returns a non-negative float
+            # (see e.g. rest.py:51 = 10.0, movement.py:58 = max(d*5, 1.0) ≥ 1.0,
+            # consumable.py:93 = 2.0, gathering.py:86, combat.py:97, crafting.py:103
+            # — all ≥ 0).  With h ≡ 0 (trivially admissible & consistent) and
+            # non-negative edge costs, A*'s "first satisfied node popped is least
+            # cost" reduces to Dijkstra optimality, which holds absolutely. A
+            # previous version used `goal.value(...)` as h (urgency, not seconds),
+            # which was non-admissible and made the planner return strictly
+            # suboptimal plans — see formal/Formal/PlannerAdmissibility.lean.
+            h0 = 0.0
             heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
             while heap:
                 if time.monotonic() >= deadline:
@@ -96,7 +106,12 @@ class GOAPPlanner:
                     stats.max_depth_reached = node.depth
 
                 if goal.is_satisfied(node.state):
-                    # A* pops nodes in f-score order; first satisfied node is optimal.
+                    # Dijkstra / uniform-cost search: with h ≡ 0 and non-negative
+                    # `action.cost(...)` (verified across all Action subclasses),
+                    # f-score equals g-score, so the first satisfied node popped
+                    # is provably least-cost.  Proven in
+                    # formal/Formal/PlannerAdmissibility.lean
+                    # (`firstSatisfied_least_cost_of_admissible` applied with h=0).
                     self.last_stats = stats
                     return node.plan
 
@@ -109,7 +124,10 @@ class GOAPPlanner:
 
                     next_state = action.apply(node.state, game_data)
                     g = node.g_score + action.cost(node.state, game_data, history)
-                    h = goal.value(next_state, game_data, history)
+                    # h ≡ 0 (Dijkstra): see h0 above.  `goal.value` remains used
+                    # by goal *selection* (StrategyArbiter, learning) — only the
+                    # planner's heuristic role is zeroed for provable optimality.
+                    h = 0.0
                     heapq.heappush(
                         heap,
                         _Node(

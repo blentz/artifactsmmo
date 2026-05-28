@@ -485,33 +485,36 @@ SCALAR_CORE_MUTATIONS = [
 ]
 
 
-# planner mutations -- old strings matched to current planner.py text.
-# NOTE (refutation context): planner.py CURRENTLY ships the bug — it uses the
-# inadmissible urgency `goal.value` as the A* heuristic, so the diff test PINS the
-# resulting NON-OPTIMAL plan ([Rest], cost 10). Each mutation here perturbs the
-# search's f = g + h logic; any such change moves the returned plan/cost off the
-# pinned value, so the test fails -> the mutant is "killed". This proves the test
-# is genuinely sensitive to the search/heuristic logic (not vacuous), and would
-# flip to assert optimality once the heuristic is fixed.
+# planner mutations -- old strings matched to the post-fix planner.py text.
+# NOTE (affirmation context): planner.py now uses `h = 0.0` (Dijkstra), and the
+# diff test pins the OPTIMAL plan ([Move, EatAtTile], cost 7). Each mutation
+# here perturbs the search so the planner returns something other than the
+# optimal plan (cost 7), so the affirmative test fails -> the mutant is killed.
 PLANNER_MUTATIONS = [
-    # zero the per-node heuristic: f = g + 0 makes the search Dijkstra (optimal),
-    # so it would return the CHEAP plan instead of the pinned costly one.
-    ("planner: zero step heuristic h (g + value -> g + 0, Dijkstra)",
-     "                    h = goal.value(next_state, game_data, history)",
-     "                    h = 0.0"),
-    # invert h's contribution: f = g - h. The Move-prefix node's huge h drives its
-    # f sharply NEGATIVE so it pops before the satisfied Rest-node, the search
-    # expands toward the cheap plan, and returns the OPTIMAL [Move, UseConsumable]
-    # instead of the pinned [Rest]. (The pure-greedy mutation `f = h` is not
-    # discriminating on this single instance — at every satisfied node h = 0 so
-    # f-by-h orders satisfied nodes identically to f-by-g+h, and the bug repeats.)
-    ("planner: invert h in f (g + h -> g - h)",
+    # Re-introduce the historical bug: per-node heuristic becomes `goal.value`
+    # (urgency, inadmissible). With h huge at non-goal HP-50 states, the
+    # Move-prefix node sinks to the back of the heap and [Rest] (cost 10) pops
+    # before [Move, Eat] — the now-affirmative optimality test fails.
+    ("planner: re-introduce urgency heuristic (h = 0.0 -> goal.value)",
+     "                    # h ≡ 0 (Dijkstra): see h0 above.  `goal.value` remains used\n"
+     "                    # by goal *selection* (StrategyArbiter, learning) — only the\n"
+     "                    # planner's heuristic role is zeroed for provable optimality.\n"
+     "                    h = 0.0",
+     "                    h = goal.value(next_state, game_data, history)"),
+    # Negate `g` in the priority: `f_score=g + h` -> `f_score=-g + h`. With h=0
+    # this orders the heap by -g (largest g first), so deep / expensive plans
+    # pop first and the planner returns something other than the cheap optimum.
+    ("planner: negate g in f (g + h -> -g + h)",
      "                            f_score=g + h,",
-     "                            f_score=g - h,"),
-    # drop h from f: f = g (Dijkstra via a different edit), changing the result.
-    ("planner: drop h from f (g + h -> g)",
-     "                            f_score=g + h,",
-     "                            f_score=g,"),
+     "                            f_score=-g + h,"),
+    # Skip the `is_applicable` filter: useless / inapplicable actions get
+    # expanded into the heap with no state change but accumulating cost,
+    # corrupting g and the returned plan. The optimality assertion fails.
+    ("planner: skip is_applicable filter (always expand)",
+     "                    if not action.is_applicable(node.state, game_data):\n"
+     "                        continue",
+     "                    if False:\n"
+     "                        continue"),
 ]
 
 

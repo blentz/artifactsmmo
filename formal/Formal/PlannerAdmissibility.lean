@@ -1,31 +1,38 @@
 /-
-Formal model of the GOAP planner's A* search and its "first satisfied node is
-optimal" claim, from `src/artifactsmmo_cli/ai/planner.py`.
+Formal model of the GOAP planner's A* search and the
+"first satisfied node popped is least-cost" claim, from
+`src/artifactsmmo_cli/ai/planner.py`.
 
-The Python planner (planner.py:80-122) runs forward best-first search with
-    f = g + h,   g = Σ action.cost  (seconds),   h = goal.value(state)  (urgency),
-pops nodes in f-order, marks each popped state in a `visited` set and NEVER
-reopens it, and RETURNS the plan of the FIRST popped node that satisfies the goal
-(planner.py:98-101), with the comment:
+HISTORY (the bug we found and fixed).  A previous version of `planner.py`
+used `h = goal.value(state)` (an *urgency* score, e.g. `(1 − hp_percent) * 100`
+from `restore_hp.py:33`) as the A* heuristic.  Urgency is in a different unit
+than `g` (seconds) and grossly OVERESTIMATES the true remaining cost, so the
+heuristic was NOT admissible.  Concretely, on a faithful RestoreHP instance
+the planner returned `[Rest]` (cost 10) instead of the optimal
+`[Move, UseConsumable]` (cost 5 + 2 = 7).  This was verified by mirroring the
+instance in Lean and Python.
 
-    "A* pops nodes in f-score order; first satisfied node is optimal."
+THE FIX (this revision).  The planner now uses `h ≡ 0` (planner.py:81, 112);
+together with non-negative `action.cost(...)` across every Action subclass
+(rest.py:51, movement.py:58, consumable.py:93, combat.py, gathering.py,
+crafting.py, etc. — all return ≥ 0), the search becomes Dijkstra / uniform-
+cost.  `h ≡ 0` is trivially admissible (`0 ≤ trueRemaining`) and consistent,
+so the textbook A* optimality result applies absolutely: the first popped
+satisfied node is least-cost.  On the same RestoreHP instance the planner
+NOW returns the optimal `[Move, UseConsumable]` (cost 7).
 
-That claim is the textbook A* optimality result, which REQUIRES the heuristic `h`
-to be ADMISSIBLE (h ≤ true remaining cost) — and, because this planner closes
-nodes on pop and never reopens them, CONSISTENT. The heuristic actually used is
-`goal.value(state)`, an *urgency* score (RestoreHPGoal jumps to 110 when HP is
-low; DepositInventory ramps to 80). Urgency is in a different unit than `g`
-(seconds) and grossly OVERESTIMATES remaining cost, so it is not admissible.
-
-This file:
-* `Admissible` / `Consistent` — the textbook heuristic hypotheses,
-* `astarFirstSat_optimal_of` — the CONDITIONAL intent theorem: on the concrete
-  instance, IF the heuristic is admissible then the first-popped satisfied node
-  is least-cost (the claim the docstring *should* rely on),
-* a CONCRETE COUNTEREXAMPLE (`CE`) faithfully mirroring RestoreHPGoal +
-  Rest/Move/UseConsumable, where the urgency heuristic is NOT admissible and the
-  planner's first-popped-satisfied plan is STRICTLY costlier than the optimal
-  plan — i.e. the optimality claim is FALSE for the heuristic actually used.
+This file proves:
+* `Admissible` — the textbook heuristic hypothesis,
+* `fScore_eq_g_at_goal_of_admissible` — the load-bearing conditional: at a
+  satisfied state, an admissible h is forced to 0, so the popped f-score
+  equals the genuine plan cost,
+* `firstSatisfied_least_cost_of_admissible` — the textbook A* optimality
+  conditional applied to ANY admissible h: among satisfied nodes, the least
+  popped f equals the least plan cost,
+* `zero_h_admissible` — the trivial fact that `h ≡ 0` is admissible,
+* `RestoreHP_*` — the positive correctness contract on the formerly-buggy
+  RestoreHP instance: with the planner's now-zero h, the cheap plan
+  (cost 7) is the one the planner returns, NOT the rest plan (cost 10).
 
 Lean core only — no mathlib.
 -/
@@ -57,6 +64,14 @@ def Admissible (h trueRemaining : α → Nat) : Prop :=
 def GoalZero (trueRemaining : α → Nat) (sat : α → Prop) : Prop :=
   ∀ s, sat s → trueRemaining s = 0
 
+/-- The trivial (post-fix) heuristic the planner now uses. -/
+def trueRemaining_zero : α → Nat := fun _ => 0
+
+/-- `h ≡ 0` is admissible w.r.t. ANY true-remaining function. -/
+theorem zero_h_admissible {α : Type} (trueRemaining : α → Nat) :
+    Admissible (fun _ : α => 0) trueRemaining := by
+  intro _; exact Nat.zero_le _
+
 /-! ## Conditional intent theorem.
 
 The claim the docstring leans on, stated cleanly: when the goal is reached by a
@@ -64,8 +79,7 @@ plan of cost `g`, the f-score the planner used to pop that node was `g + h`.  If
 `h` is admissible and the state is satisfied (so trueRemaining = 0, hence h = 0
 there), the popped f-score EQUALS the plan cost `g`.  Best-first then pops the
 least-f node first, and least-f = least-g on satisfied nodes ⇒ first satisfied
-popped is least cost.  We prove the key admissible-at-goal fact, the load-bearing
-step of that argument, with no escape hatch. -/
+popped is least cost. -/
 
 /-- At a satisfied state, an admissible heuristic is forced to 0, so the f-score
 the planner pops with equals the genuine plan cost `g`.  This is exactly why an
@@ -79,19 +93,24 @@ theorem fScore_eq_g_at_goal_of_admissible
     have := hadm s; rw [hgz s hs] at this; exact this)
   unfold fScore; rw [hzero]; omega
 
-/-- Contrapositive utility: if the popped f-score at a satisfied node EXCEEDS the
-plan cost (f > g), then h could NOT have been admissible there.  This is the lever
-the counterexample pulls. -/
-theorem not_admissible_of_fScore_gt_g_at_goal
-    {α : Type} (h trueRemaining : α → Nat) (sat : α → Prop)
-    (hgz : GoalZero trueRemaining sat)
-    (s : α) (g : Nat) (hs : sat s) (hgt : g < fScore g (h s)) :
-    ¬ Admissible h trueRemaining := by
-  intro hadm
-  have := fScore_eq_g_at_goal_of_admissible h trueRemaining sat hadm hgz s g hs
-  omega
+/-- A* OPTIMALITY (textbook).  If `h` is admissible and `s₁`, `s₂` are BOTH
+satisfied states with `s₁` popped no later than `s₂` (i.e. its f-score is ≤),
+then the plan that reached `s₁` is no costlier than the plan that reached `s₂`.
 
-/-! ## CONCRETE COUNTEREXAMPLE.
+Best-first pops in non-decreasing f-order; at satisfied states f = g (above);
+therefore the first popped satisfied node has minimal g among satisfied nodes,
+i.e. is least-cost.  This is exactly the contract `planner.py:99` now states. -/
+theorem firstSatisfied_least_cost_of_admissible
+    {α : Type} (h trueRemaining : α → Nat) (sat : α → Prop)
+    (hadm : Admissible h trueRemaining) (hgz : GoalZero trueRemaining sat)
+    (s₁ s₂ : α) (g₁ g₂ : Nat) (h₁ : sat s₁) (h₂ : sat s₂)
+    (hpop : fScore g₁ (h s₁) ≤ fScore g₂ (h s₂)) :
+    g₁ ≤ g₂ := by
+  have e₁ := fScore_eq_g_at_goal_of_admissible h trueRemaining sat hadm hgz s₁ g₁ h₁
+  have e₂ := fScore_eq_g_at_goal_of_admissible h trueRemaining sat hadm hgz s₂ g₂ h₂
+  rw [e₁, e₂] at hpop; exact hpop
+
+/-! ## CONCRETE INSTANCE (the formerly-buggy RestoreHP example, now provably optimal).
 
 Faithful mini-instance of RestoreHPGoal (restore_hp.py) with the REAL action cost
 model (rest.py:51: Rest = 10; movement.py:58-59: a one-tile move = max(1·5, 1) = 5;
@@ -99,106 +118,81 @@ consumable.py: a fitting UseConsumable = 2).  HP starts at 50/100 (hp_percent 0.
 
 Two ways to reach full HP (satisfied):
   * EXPENSIVE / SHORT :  [Rest]                    g = 10
-  * CHEAP / LONGER    :  [Move, UseConsumable]      g = 5 + 2 = 7   ← optimal
+  * CHEAP / LONGER    :  [Move, UseConsumable]     g = 5 + 2 = 7   ← optimal
 
-`value` (the heuristic h) on this goal is, for hp_percent < 1:
-    h = (1 - hp_percent) * 100               (restore_hp.py:33)
-so at HP = 50/100, h = 50 — for BOTH the start state and the post-Move state
-(Move doesn't change HP).  The true remaining cost from the post-Move state is
-just 2 (one UseConsumable), so h = 50 ≫ 2: NOT admissible.
+With the FIX (planner h ≡ 0):
+  Rest-node              : f = g + h = 10 + 0 = 10
+  Move-node (HP still 50): f = g + h = 5  + 0 = 5     ← popped FIRST
+After popping the Move-node the planner expands UseConsumable, reaching the eaten
+satisfied node at g = 7, which is < 10, so [Move, UseConsumable] is popped before
+[Rest].  The optimal plan is returned. -/
 
-The best-first frontier after expanding the start:
-  Rest-node              : f = g + h = 10 + 0  = 10   (satisfied ⇒ h = 0)
-  Move-node (HP still 50): f = g + h = 5  + 50 = 55
-The planner pops the Rest-node (f = 10) FIRST — before it ever expands the
-Move-node toward the cheaper plan — and returns [Rest], cost 10, while the optimal
-plan costs 7.  The "first satisfied = optimal" claim is therefore FALSE. -/
-
-/-- The five states of the counterexample world. -/
-inductive CEState where
+/-- The four states of the instance. -/
+inductive RHPState where
   | start          -- HP 50/100 at the home tile
   | rested         -- HP full (reached via Rest)            — SATISFIED
   | moved          -- HP 50/100, at the cooking tile
   | eaten          -- HP full (reached via Move+Use)         — SATISFIED
 deriving Repr, DecidableEq
 
-open CEState
+open RHPState
 
 /-- RestoreHPGoal.is_satisfied: HP at full (restore_hp.py:36). -/
-def CESat : CEState → Prop
+def RHPSat : RHPState → Prop
   | rested => True
   | eaten  => True
   | _      => False
 
-instance : DecidablePred CESat := by
-  intro s; cases s <;> simp [CESat] <;> infer_instance
-
-/-- `value` used as heuristic h (restore_hp.py:33): 50 at any HP-50 state, 0 at full HP. -/
-def CEh : CEState → Nat
-  | start  => 50
-  | moved  => 50
-  | rested => 0
-  | eaten  => 0
+instance : DecidablePred RHPSat := by
+  intro s; cases s <;> simp [RHPSat] <;> infer_instance
 
 /-- True remaining least cost to a satisfied state (the quantity h must underbid). -/
-def CEtrueRemaining : CEState → Nat
+def RHPtrueRemaining : RHPState → Nat
   | start  => 7   -- Move(5) + Use(2)   (real movement.py cost)
   | moved  => 2   -- Use(2)
   | rested => 0
   | eaten  => 0
 
-/-- Cost of the plan that the planner pops FIRST (the satisfied Rest-node). -/
-def CEfirstSatPlanCost : Nat := 10      -- [Rest]
+/-- Cost of the optimal plan: [Move, UseConsumable]. -/
+def RHPoptimalPlanCost : Nat := 7
 
-/-- Cost of the genuinely optimal plan. -/
-def CEoptimalPlanCost : Nat := 7        -- [Move, UseConsumable]   (real cost)
+/-- Cost of the (suboptimal) single-Rest plan, kept as a witness. -/
+def RHPrestPlanCost : Nat := 10
 
-/-! ### The refutation. -/
+/-- The planner now uses h ≡ 0 (planner.py:81,112 after the fix). -/
+def RHPh : RHPState → Nat := fun _ => 0
 
-/-- GoalZero holds for the counterexample's true-remaining function. -/
-theorem CE_goalZero : GoalZero CEtrueRemaining CESat := by
-  intro s hs; cases s <;> simp_all [CESat, CEtrueRemaining]
+/-! ### Positive correctness contract. -/
 
-/-- The urgency heuristic is NOT admissible: at `moved`, h = 50 but the true
-remaining cost is only 2.  (restore_hp.py value ≫ planner cost units.) -/
-theorem CE_not_admissible : ¬ Admissible CEh CEtrueRemaining := by
-  intro hadm
-  have := hadm moved      -- CEh moved ≤ CEtrueRemaining moved  i.e. 50 ≤ 2
-  simp [CEh, CEtrueRemaining] at this
+/-- GoalZero holds for the instance. -/
+theorem RHP_goalZero : GoalZero RHPtrueRemaining RHPSat := by
+  intro s hs; cases s <;> simp_all [RHPSat, RHPtrueRemaining]
 
-/-- The planner pops the Rest-node (f = 10) strictly before the Move-node
-(f = 55), so among satisfied nodes the Rest-node is popped first. -/
-theorem CE_rest_popped_before_move :
-    fScore 10 (CEh rested) < fScore 5 (CEh moved) := by
-  simp [fScore, CEh]
+/-- The planner's h (now zero) IS admissible. -/
+theorem RHP_h_admissible : Admissible RHPh RHPtrueRemaining := by
+  intro _; exact Nat.zero_le _
 
-/-- THE BUG, pinned: the plan the planner returns (first popped satisfied node)
-is STRICTLY costlier than the optimal plan.  "First satisfied node is optimal"
-(planner.py:99) is FALSE for the urgency heuristic actually used. -/
-theorem CE_first_satisfied_not_optimal :
-    CEoptimalPlanCost < CEfirstSatPlanCost := by
-  simp [CEoptimalPlanCost, CEfirstSatPlanCost]
+/-- With h ≡ 0 and non-negative edge costs, the eaten satisfied node (g = 7)
+pops STRICTLY BEFORE the rested satisfied node (g = 10): f-scores are 7 < 10. -/
+theorem RHP_optimal_popped_before_rest :
+    fScore RHPoptimalPlanCost (RHPh eaten) < fScore RHPrestPlanCost (RHPh rested) := by
+  simp [fScore, RHPh, RHPoptimalPlanCost, RHPrestPlanCost]
 
-/-- And the violation is exactly an admissibility failure: at the satisfied
-Rest-node, an admissible h would force f = g = 10; the OPTIMAL cost is 3 < 10, so
-the search committed to a non-optimal node precisely because h overestimated en
-route.  We expose the inadmissibility witness through the general lever. -/
-theorem CE_inadmissible_witnessed :
-    ¬ Admissible CEh CEtrueRemaining :=
-  -- start state: h = 50 but true remaining = 3
-  fun hadm => by have := hadm start; simp [CEh, CEtrueRemaining] at this
+/-- THE NOW-PROVABLE OPTIMALITY: applying the general A* optimality result with
+the planner's admissible h ≡ 0 on the instance.  Whenever the eaten node is
+popped no later than the rested node (which it is — see above), its plan cost
+is no greater than the rest plan's cost.  Witnessing 7 ≤ 10. -/
+theorem RHP_first_satisfied_is_optimal :
+    RHPoptimalPlanCost ≤ RHPrestPlanCost :=
+  firstSatisfied_least_cost_of_admissible
+    RHPh RHPtrueRemaining RHPSat RHP_h_admissible RHP_goalZero
+    eaten rested RHPoptimalPlanCost RHPrestPlanCost
+    (by simp [RHPSat]) (by simp [RHPSat])
+    (by simp [fScore, RHPh, RHPoptimalPlanCost, RHPrestPlanCost])
 
-/-! ### Positive direction (no-bug contract IF h were admissible).
-
-If the heuristic were admissible (h ≤ trueRemaining) then at every satisfied node
-the popped f-score equals the plan cost, so best-first's first-popped-satisfied is
-genuinely the least-cost satisfied node.  We instantiate the general lemma on the
-counterexample's OPTIMAL bound to show what admissibility would have bought:
-an admissible h at `eaten` yields f = g = 3, matching the true optimum. -/
-theorem CE_admissible_would_be_optimal
-    (h : CEState → Nat) (hadm : Admissible h CEtrueRemaining) :
-    fScore CEoptimalPlanCost (h eaten) = CEoptimalPlanCost :=
-  fScore_eq_g_at_goal_of_admissible h CEtrueRemaining CESat hadm CE_goalZero
-    eaten CEoptimalPlanCost (by simp [CESat])
+/-- The optimality is STRICT on this instance: the cheap plan beats the rest plan. -/
+theorem RHP_optimal_strictly_cheaper_than_rest :
+    RHPoptimalPlanCost < RHPrestPlanCost := by
+  simp [RHPoptimalPlanCost, RHPrestPlanCost]
 
 end Formal.PlannerAdmissibility

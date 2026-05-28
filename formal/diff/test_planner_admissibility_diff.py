@@ -1,24 +1,20 @@
-"""Counterexample test pinning the GOAP planner's NON-OPTIMAL plan.
+"""Differential test asserting the GOAP planner returns the OPTIMAL plan.
 
-Phase-2 Task 2 finding (REFUTATION). `planner.py:99` claims:
+Phase-2 finding (FIX). `planner.py` used to use `h = goal.value(state)` (urgency)
+as the A* heuristic; that heuristic is inadmissible (it overestimates the true
+remaining cost in seconds), so the planner returned strictly suboptimal plans.
+The fix sets `h = 0.0` (planner.py:81,112), making the search Dijkstra /
+uniform-cost over non-negative `action.cost(...)` — so the textbook A* optimality
+result applies absolutely. Proved in `Formal.PlannerAdmissibility`:
+`RHP_first_satisfied_is_optimal` (7 ≤ 10) via the general
+`firstSatisfied_least_cost_of_admissible` applied with the admissible `h ≡ 0`.
 
-    "A* pops nodes in f-score order; first satisfied node is optimal."
-
-That is the textbook A* result, which requires the heuristic `h` to be
-ADMISSIBLE (h <= true remaining cost). The planner uses `h = goal.value(state)`
-(planner.py:81,112), an *urgency* score in different units than `g` (seconds);
-for RestoreHPGoal it is `(1 - hp_percent) * 100` (restore_hp.py:33), which grossly
-overestimates remaining cost. The Lean module `Formal.PlannerAdmissibility` proves
-the urgency heuristic is NOT admissible and that the resulting first-popped plan is
-strictly costlier than optimal (CE_first_satisfied_not_optimal: 3 < 10).
-
-This test runs the REAL Python planner on the SAME counterexample instance and
-asserts it returns the COSTLIER [Rest] plan (cost 10) rather than the optimal
-[Move, UseConsumable] plan (cost 3) — the concrete non-optimality the Lean
-counterexample predicts. It is a regression PIN on the live bug, not a check that
-the planner is correct. When the heuristic is fixed (made admissible / zeroed so
-the search is Dijkstra-optimal), this test SHOULD start failing and be updated to
-assert optimality.
+This test runs the real Python planner on the SAME instance the Lean module
+models and asserts:
+* it returns the optimal `[Move, EatAtTile]` plan (cost 7), NOT the rest plan
+  (cost 10) — the now-true optimality;
+* the planner's ordering by `g` alone (h = 0) lets a cheap-prefix multi-step
+  beat an expensive single-step — the behavioural consequence of Dijkstra.
 """
 from dataclasses import dataclass
 
@@ -116,24 +112,12 @@ def _instance():
     return gd, state, goal, actions
 
 
-def test_urgency_heuristic_is_not_admissible_at_start():
-    """value() at HP=50/100 returns 50 (restore_hp.py:33) while the true remaining
-    cost to full HP is only 7 (real Move cost 5 + Eat cost 2): h >> remaining, NOT
-    admissible. Matches Lean CE_not_admissible / CE_inadmissible_witnessed."""
-    gd, state, goal, _ = _instance()
-    h_start = goal.value(state, gd, None)
-    assert h_start == 50.0  # (1 - 0.5) * 100
-    # true remaining cost (least-cost plan) is 7 — proved minimal by brute force below
-    assert h_start > 7.0
-
-
-def test_planner_returns_costlier_plan_than_optimal():
-    """The live bug: A* with the inadmissible urgency heuristic pops the satisfied
-    Rest-node (f = 10 + 0) before the Move-node (f = 5 + 50) toward the cheaper
-    plan, and RETURNS [Rest] (cost 10) — not [Move, Eat] (cost 7).
-
-    Mirrors Lean CE_first_satisfied_not_optimal (7 < 10). REGRESSION PIN: update to
-    assert optimality once the heuristic is made admissible (zero h -> Dijkstra)."""
+def test_planner_returns_optimal_plan_after_fix():
+    """With h ≡ 0 the search is Dijkstra over non-negative `action.cost`. On the
+    RestoreHP instance the Move-prefix node (f = g = 5) pops before the Rest-node
+    (f = g = 10); the planner expands UseConsumable from there and returns the
+    optimal `[Move, EatAtTile]` plan (cost 5 + 2 = 7), strictly cheaper than the
+    `[Rest]` plan (cost 10). Mirrors Lean `RHP_first_satisfied_is_optimal`."""
     gd, state, goal, actions = _instance()
 
     planner = GOAPPlanner()
@@ -142,11 +126,38 @@ def test_planner_returns_costlier_plan_than_optimal():
 
     bf = _brute_force_min_cost(state, goal, actions, gd, max_depth=goal.max_depth)
 
-    # Optimal is the cheap 2-step plan (cost 7 = real Move 5 + Eat 2); ground truth.
+    # Ground-truth optimum from brute force.
     assert bf["cost"] == 7.0
     assert [repr(a) for a in bf["plan"]] == ["Move(1,0)", "EatAtTile(1,0)"]
 
-    # The planner returns the EXPENSIVE 1-step plan (cost 10) — strictly worse.
-    assert [repr(a) for a in plan] == ["Rest"]
-    assert returned_cost == 10.0
-    assert returned_cost > bf["cost"]  # NON-OPTIMAL: the refuted claim
+    # The planner returns the brute-force optimum (the previously-buggy
+    # `[Rest]` cost-10 plan is no longer chosen).
+    assert [repr(a) for a in plan] == ["Move(1,0)", "EatAtTile(1,0)"]
+    assert returned_cost == bf["cost"] == 7.0
+
+
+def test_zero_heuristic_is_admissible_and_planner_is_dijkstra():
+    """h ≡ 0 is admissible w.r.t. ANY true-remaining function, so the planner
+    is uniform-cost. Behavioural witness: a cheap-prefix multi-step plan
+    (Move 5 + Eat 2 = 7) beats an expensive single-step plan (Rest 10), even
+    though the multi-step plan is longer. Under the old urgency heuristic the
+    single-step satisfied node was popped first (f = 10 + 0 = 10) before the
+    Move-prefix node (f = 5 + 50 = 55), and the planner returned [Rest]. With
+    h = 0 the Move node (f = 5) pops first and the optimal plan wins."""
+    gd, state, goal, actions = _instance()
+
+    # Brute-force confirms the multi-step prefix is genuinely the cheaper route.
+    bf = _brute_force_min_cost(state, goal, actions, gd, max_depth=goal.max_depth)
+    assert bf["cost"] == 7.0
+    assert len(bf["plan"]) == 2  # multi-step
+
+    # Rest alone is shorter (1 step) but strictly costlier (10 > 7).
+    rest_only = [RestAction()]
+    rest_cost = _plan_cost(state, rest_only, gd)
+    assert rest_cost == 10.0
+    assert rest_cost > bf["cost"]
+
+    # The planner picks the cheaper multi-step plan — Dijkstra ordering by g.
+    plan = GOAPPlanner().plan(state, goal, actions, gd)
+    assert len(plan) == 2
+    assert _plan_cost(state, plan, gd) == bf["cost"]
