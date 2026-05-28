@@ -188,3 +188,11 @@ open Formal.PriorityBand
 #check @Formal.WeightedRemaining.bug_teeth_witness       -- bug-teeth: zero-weight ⇒ equivalence fails (witness)
 #check @Formal.WeightedRemaining.mono_head               -- monotone-nondecreasing in head fraction (weight ≥ 0)
 #check @Formal.WeightedRemaining.nonneg                  -- non-negativity under all-non-negative inputs
+-- LowYieldCancel required roles:
+#check @Formal.LowYieldCancel.no_task_never_fires                              -- shell-safety: ¬hasTask ⇒ never fires
+#check @Formal.LowYieldCancel.no_samples_blocks                                -- sample-gate: farm=0 ∨ alt=0 ⇒ never fires
+#check @Formal.LowYieldCancel.fires_monotone_in_alt                            -- margin-monotone: ↑altXp preserves fire (positive currentXp, conf above gate)
+#check @Formal.LowYieldCancel.zero_fast_path_fires_unconditionally             -- zero-fast-path: currentXp = 0 ∧ altXp > 0 ⇒ fires unconditionally
+#check @Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness -- zero-fast-path WITNESS (confidence < gate, alt_samples = 1)
+#check @Formal.LowYieldCancel.positive_current_fires_implies_margin            -- soundness: positive currentXp ∧ fires ⇒ altXp ≥ currentXp * margin
+#check @Formal.LowYieldCancel.positive_current_fires_implies_confidence        -- soundness: positive currentXp ∧ fires ⇒ confidence ≥ minConfidence

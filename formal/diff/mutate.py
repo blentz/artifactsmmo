@@ -27,6 +27,7 @@ PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
+LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -628,6 +629,32 @@ WEIGHTED_REMAINING_MUTATIONS = [
 ]
 
 
+# low_yield_boundary mutations -- old strings matched to current low_yield_boundary.py text.
+LOW_YIELD_MUTATIONS = [
+    # Flip the confidence comparator `<` → `<=`. At the exact 0.5 boundary the
+    # rule should fire (gate is `>=`); flipping to `<=` makes 0.5 reject.
+    # The `test_confidence_boundary_at` test pins this.
+    ("low_yield: confidence < -> <= (boundary flip)",
+     "    if confidence < min_confidence:\n        return False",
+     "    if confidence <= min_confidence:\n        return False"),
+    # Flip the margin comparator `>=` → `>`. At the exact margin boundary
+    # (`alt = current * margin`) the rule should fire; flipping to `>` makes
+    # it reject. The `test_margin_boundary_at` test (alt=3 == 2*1.5) catches
+    # this — strict `>` would reject equality.
+    ("low_yield: alt >= current*margin -> > (boundary flip)",
+     "    return alt_xp >= current_xp * margin",
+     "    return alt_xp > current_xp * margin"),
+    # Drop the zero-fast-path entirely. Then the Robby gudgeon scenario (and
+    # the `test_zero_fast_path_witness`, `test_zero_fast_path_fires_when_alt_positive`)
+    # would no longer fire because confidence=0 < 0.5 gate blocks.
+    ("low_yield: drop zero-fast-path",
+     "    # Zero-char-XP fast-path: any positive alternative dominates.\n"
+     "    if current_xp == 0 and alt_xp > 0:\n"
+     "        return True\n",
+     ""),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -660,6 +687,7 @@ _ALL_SRCS = [
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
+    LOW_YIELD_BOUNDARY_SRC,
 ]
 
 
@@ -726,6 +754,8 @@ def main() -> int:
               "formal/diff/test_task_decision_diff.py", survivors)
     run_group(OBJECTIVE_COMPLETION_SRC, WEIGHTED_REMAINING_MUTATIONS,
               "formal/diff/test_weighted_remaining_diff.py", survivors)
+    run_group(LOW_YIELD_BOUNDARY_SRC, LOW_YIELD_MUTATIONS,
+              "formal/diff/test_low_yield_cancel_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -173,3 +173,10 @@ open Formal.WeightedRemaining in
 #print axioms mono_head
 open Formal.WeightedRemaining in
 #print axioms nonneg
+#print axioms Formal.LowYieldCancel.no_task_never_fires
+#print axioms Formal.LowYieldCancel.no_samples_blocks
+#print axioms Formal.LowYieldCancel.fires_monotone_in_alt
+#print axioms Formal.LowYieldCancel.zero_fast_path_fires_unconditionally
+#print axioms Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness
+#print axioms Formal.LowYieldCancel.positive_current_fires_implies_margin
+#print axioms Formal.LowYieldCancel.positive_current_fires_implies_confidence

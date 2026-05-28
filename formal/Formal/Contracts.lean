@@ -18,6 +18,7 @@ import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.TaskDecision
+import Formal.LowYieldCancel
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1025,3 +1026,58 @@ example : ∀ (v v' baseline margin confidence : Rat),
     Formal.TaskDecision.taskDecisionPure false false true v' baseline margin confidence
       = Formal.TaskDecision.Decision.PURSUE :=
   @Formal.TaskDecision.decision_pursue_vpc_monotone
+
+/-! ### LowYieldCancel role contracts. -/
+-- shell-safety: ¬hasTask ⇒ never fires (unconditional).
+example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
+    (farmSamples altSamples : Nat),
+    Formal.LowYieldCancel.lowYieldFiresPure false currentXp altXp confidence
+        farmSamples altSamples margin minConfidence = false :=
+  @Formal.LowYieldCancel.no_task_never_fires
+-- sample-gate: farm=0 ∨ alt=0 ⇒ never fires.
+example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
+    (farmSamples altSamples : Nat),
+    farmSamples = 0 ∨ altSamples = 0 →
+    Formal.LowYieldCancel.lowYieldFiresPure true currentXp altXp confidence
+        farmSamples altSamples margin minConfidence = false :=
+  @Formal.LowYieldCancel.no_samples_blocks
+-- margin-monotone: under positive currentXp and confidence ≥ gate, raising altXp
+-- preserves a fire.
+example : ∀ (currentXp alt alt' confidence margin minConfidence : Rat)
+    (farmSamples altSamples : Nat),
+    farmSamples ≠ 0 → altSamples ≠ 0 →
+    currentXp > 0 → confidence ≥ minConfidence → alt ≤ alt' →
+    Formal.LowYieldCancel.lowYieldFiresPure true currentXp alt confidence
+        farmSamples altSamples margin minConfidence = true →
+    Formal.LowYieldCancel.lowYieldFiresPure true currentXp alt' confidence
+        farmSamples altSamples margin minConfidence = true :=
+  @Formal.LowYieldCancel.fires_monotone_in_alt
+-- zero-fast-path: currentXp = 0 ∧ altXp > 0 ⇒ fires regardless of confidence/sample count
+-- (beyond > 0). INTENTIONAL — Robby gudgeon scenario; see LowYieldCancel.lean header.
+example : ∀ (altXp confidence margin minConfidence : Rat)
+    (farmSamples altSamples : Nat),
+    farmSamples ≠ 0 → altSamples ≠ 0 → altXp > 0 →
+    Formal.LowYieldCancel.lowYieldFiresPure true 0 altXp confidence
+        farmSamples altSamples margin minConfidence = true :=
+  @Formal.LowYieldCancel.zero_fast_path_fires_unconditionally
+-- zero-fast-path concrete witness: confidence = 0 (< 1/2 gate) AND alt_samples = 1
+-- AND fires. Pins the bypass as the intended contract.
+example :
+    Formal.LowYieldCancel.lowYieldFiresPure true 0 1 0 1 1 (3/2) (1/2) = true :=
+  Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness
+-- margin soundness: positive currentXp ∧ fires ⇒ altXp ≥ currentXp * margin.
+example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
+    (farmSamples altSamples : Nat),
+    currentXp > 0 →
+    Formal.LowYieldCancel.lowYieldFiresPure true currentXp altXp confidence
+        farmSamples altSamples margin minConfidence = true →
+    altXp ≥ currentXp * margin :=
+  @Formal.LowYieldCancel.positive_current_fires_implies_margin
+-- confidence soundness: positive currentXp ∧ fires ⇒ confidence ≥ minConfidence.
+example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
+    (farmSamples altSamples : Nat),
+    currentXp > 0 →
+    Formal.LowYieldCancel.lowYieldFiresPure true currentXp altXp confidence
+        farmSamples altSamples margin minConfidence = true →
+    confidence ≥ minConfidence :=
+  @Formal.LowYieldCancel.positive_current_fires_implies_confidence

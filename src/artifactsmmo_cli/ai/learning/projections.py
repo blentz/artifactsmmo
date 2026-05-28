@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -380,6 +381,10 @@ def low_yield_cancel_fires(state: WorldState, history: LearningStore | None) -> 
     either the current char-XP/cycle is 0 while the alternative is positive
     (zero fast-path), OR project_task_completion confidence >= 0.5 and the
     alternative rate >= current rate * 1.5.
+
+    The pure decision boundary is delegated to `low_yield_fires_pure` in
+    `low_yield_boundary.py`; this function is the impure shell that fetches
+    the LearningStore aggregates.
     """
     if history is None or not state.task_code or state.task_total <= 0:
         return False
@@ -397,13 +402,18 @@ def low_yield_cancel_fires(state: WorldState, history: LearningStore | None) -> 
         return False
     alternative_char_xp_per_cycle = alt_yield.char_xp
 
-    # Zero-char-XP task case: any positive alternative beats it immediately.
-    if current_char_xp_per_cycle == 0 and alternative_char_xp_per_cycle > 0:
-        return True
-
-    # Positive-but-low task case: confidence gate + margin.
     projection = project_task_completion(state, history)
-    if projection is None or projection.confidence < LOW_YIELD_CONFIDENCE_THRESHOLD:
-        return False
+    # Projection.None contributes confidence 0.0, which the pure boundary
+    # rejects via the min_confidence gate UNLESS the zero-fast-path fires.
+    confidence = projection.confidence if projection is not None else 0.0
 
-    return alternative_char_xp_per_cycle >= current_char_xp_per_cycle * LOW_YIELD_ALTERNATIVE_MARGIN
+    return low_yield_fires_pure(
+        has_task=True,
+        current_xp=current_char_xp_per_cycle,
+        alt_xp=alternative_char_xp_per_cycle,
+        confidence=confidence,
+        farm_samples=farm_items_yield.sample_count,
+        alt_samples=alt_yield.sample_count,
+        margin=LOW_YIELD_ALTERNATIVE_MARGIN,
+        min_confidence=LOW_YIELD_CONFIDENCE_THRESHOLD,
+    )

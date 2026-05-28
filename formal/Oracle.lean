@@ -7,6 +7,7 @@ open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSe
 open Formal.Scalarizer
 open Formal.TaskDecision
 open Formal.WeightedRemaining
+open Formal.LowYieldCancel
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -778,6 +779,33 @@ def runWeightedRemaining (args : Array Json) : Json :=
     ("wr_den", Json.num (Int.ofNat r.den)),
     ("is_complete", Json.bool (decide (Formal.WeightedRemaining.isComplete terms)))]
 
+/-- Compute one low_yield_cancel result using the SAME proved
+`lowYieldFiresPure`.
+
+args layout (Ints; rationals as num/den pairs):
+* `[0]`      hasTask (0/1)
+* `[1,2]`    currentXp (num, den)
+* `[3,4]`    altXp (num, den)
+* `[5,6]`    confidence (num, den)
+* `[7]`      farmSamples (Nat)
+* `[8]`      altSamples (Nat)
+* `[9,10]`   margin (num, den)
+* `[11,12]`  minConfidence (num, den)
+
+Emits `fires` as a Bool. -/
+def runLowYieldCancel (args : Array Json) : Json :=
+  let hasTask := intArg args 0 != 0
+  let currentXp := ratArg args 1
+  let altXp := ratArg args 3
+  let confidence := ratArg args 5
+  let farmSamples := (intArg args 7).toNat
+  let altSamples := (intArg args 8).toNat
+  let margin := ratArg args 9
+  let minConfidence := ratArg args 11
+  let b := lowYieldFiresPure hasTask currentXp altXp confidence
+              farmSamples altSamples margin minConfidence
+  Json.mkObj [("fires", Json.bool b)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -844,6 +872,8 @@ def runOne (item : Json) : Json :=
     runTaskDecision args
   else if kind == "weighted_remaining" then
     runWeightedRemaining args
+  else if kind == "low_yield_cancel" then
+    runLowYieldCancel args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
