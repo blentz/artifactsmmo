@@ -12,6 +12,7 @@ open Formal.StrategyBlend
 open Formal.DecideKey
 open Formal.CyclesForProgress
 open Formal.GatherApply
+open Formal.ActionCostNonneg
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -949,6 +950,33 @@ def runGatherApply (args : Array Json) : Json :=
     Json.mkObj [("used", Json.num (Int.ofNat post.used)),
                 ("cap", Json.num (Int.ofNat post.cap))]
 
+/-- Compute one action_cost_nonneg result using the proved structural cores.
+
+Dispatches on `args[0]`:
+* `0`: constant cost  — `[0, k]`               → `{"cost": k}`
+* `1`: distance cost  — `[1, base, d]`         → `{"cost": base + d}`
+* `2`: qty cost       — `[2, base, qty, d, perUnit]` → `{"cost": base + perUnit*qty + d}`
+* `3`: delete cost    — `[3, branch]`          → `{"cost": deleteCost branch}`
+
+Reuses the proved Nat cores directly. The `Rat`-valued history-fraction
+core is exercised on the Python side against the structural formula. -/
+def runActionCostNonneg (args : Array Json) : Json :=
+  let q := intArg args 0
+  let cost : Nat :=
+    if q == 0 then
+      Formal.ActionCostNonneg.constantCost (intArg args 1).toNat
+    else if q == 1 then
+      Formal.ActionCostNonneg.distanceCost (intArg args 1).toNat (intArg args 2).toNat
+    else if q == 2 then
+      Formal.ActionCostNonneg.qtyCost (intArg args 1).toNat (intArg args 2).toNat
+        (intArg args 3).toNat (intArg args 4).toNat
+    else if q == 3 then
+      Formal.ActionCostNonneg.deleteCost (intArg args 1).toNat
+    else
+      0
+  Json.mkObj [("cost", Json.num (Int.ofNat cost)),
+              ("nonneg", Json.bool true)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1025,6 +1053,8 @@ def runOne (item : Json) : Json :=
     runCyclesForProgress args
   else if kind == "gather_apply" then
     runGatherApply args
+  else if kind == "action_cost_nonneg" then
+    runActionCostNonneg args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

@@ -23,6 +23,7 @@ import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
+import Formal.ActionCostNonneg
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1234,3 +1235,51 @@ example : ∀ (i : Formal.GatherApply.Inv) (n : Nat),
     i.used ≤ i.cap → n ≤ i.cap - i.used →
     (Formal.GatherApply.applyN i n).used ≤ i.cap :=
   @Formal.GatherApply.chain_safe
+
+-- ActionCostNonneg statement contracts. Pin the role theorems' exact types.
+-- bucket 1: constant cost ≥ 0
+example : ∀ (k : Nat), 0 ≤ Formal.ActionCostNonneg.constantCost k :=
+  @Formal.ActionCostNonneg.constantCost_nonneg
+-- bucket 2: distance cost ≥ 0
+example : ∀ (base d : Nat), 0 ≤ Formal.ActionCostNonneg.distanceCost base d :=
+  @Formal.ActionCostNonneg.distanceCost_nonneg
+-- bucket 3: qty cost ≥ 0
+example : ∀ (base qty d perUnit : Nat),
+    0 ≤ Formal.ActionCostNonneg.qtyCost base qty d perUnit :=
+  @Formal.ActionCostNonneg.qtyCost_nonneg
+-- bucket 4 (history fraction): learned ≥ 0 ∧ rateFloor > 0 ⇒ learned/max(rate,floor) ≥ 0
+example : ∀ (learned rate rateFloor : Rat),
+    0 ≤ learned → 0 < rateFloor →
+    0 ≤ Formal.ActionCostNonneg.learnedFraction learned rate rateFloor :=
+  @Formal.ActionCostNonneg.learnedFraction_nonneg
+-- bucket 5: history-dependent full switch ≥ 0 under writer invariants
+example : ∀ (static learned rate rateFloor confidentThreshold : Rat) (hasHistory : Bool),
+    0 ≤ static → 0 ≤ learned → 0 < rateFloor →
+    0 ≤ Formal.ActionCostNonneg.learnedCost static learned rate rateFloor
+          confidentThreshold hasHistory :=
+  @Formal.ActionCostNonneg.learnedCost_nonneg
+-- production rate floor positivity (the load-bearing constant)
+example : 0 < Formal.ActionCostNonneg.rateFloorProd :=
+  @Formal.ActionCostNonneg.rateFloorProd_pos
+-- per-action history-dependent ≥ 0
+example : ∀ (dist : Nat) (learned rate loadoutPenalty : Rat),
+    0 ≤ learned → 0 ≤ loadoutPenalty →
+    0 ≤ Formal.ActionCostNonneg.fightCost dist learned rate loadoutPenalty :=
+  @Formal.ActionCostNonneg.fight_cost_nonneg
+example : ∀ (dist : Nat) (learned rate : Rat),
+    0 ≤ learned →
+    0 ≤ Formal.ActionCostNonneg.gatherCost dist learned rate :=
+  @Formal.ActionCostNonneg.gather_cost_nonneg
+example : ∀ (dist : Nat) (learned rate : Rat),
+    0 ≤ learned →
+    0 ≤ Formal.ActionCostNonneg.moveCost dist learned rate :=
+  @Formal.ActionCostNonneg.move_cost_nonneg
+-- instance-parameterized delete branches all ≥ 0
+example : ∀ (b : Nat), 0 ≤ Formal.ActionCostNonneg.deleteCost b :=
+  @Formal.ActionCostNonneg.delete_cost_nonneg
+-- HEADLINE: the Phase-2 admissibility precondition (every concrete Action ≥ 0)
+example : ∀ (t : Formal.ActionCostNonneg.ActionTag),
+    (∀ s l r rf ct h, t = .hist s l r rf ct h →
+      0 ≤ s ∧ 0 ≤ l ∧ 0 < rf) →
+    0 ≤ Formal.ActionCostNonneg.evalCost t :=
+  @Formal.ActionCostNonneg.all_actions_cost_nonneg

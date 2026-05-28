@@ -236,3 +236,18 @@ open Formal.PriorityBand
 #check @Formal.GatherApply.chain_safe_min_free_witness -- non-vacuous witness at MIN_FREE_SLOTS
 #check @Formal.GatherApply.is_applicable_boundary_witness     -- witness: applies at the boundary
 #check @Formal.GatherApply.is_applicable_off_boundary_witness -- witness: fails one slot past
+-- ActionCostNonneg required roles:
+#check @Formal.ActionCostNonneg.constantCost_nonneg          -- bucket 1: constant cost ≥ 0
+#check @Formal.ActionCostNonneg.distanceCost_nonneg          -- bucket 2: base + dist ≥ 0
+#check @Formal.ActionCostNonneg.qtyCost_nonneg               -- bucket 3: base + per_unit*qty + dist ≥ 0
+#check @Formal.ActionCostNonneg.qtyCost_ge_per_unit          -- bucket 3: qty ≥ 1 ⇒ cost ≥ base + per_unit
+#check @Formal.ActionCostNonneg.ratMax_ge_right              -- rate floor: max(rate, floor) ≥ floor
+#check @Formal.ActionCostNonneg.ratMax_pos_of_right_pos      -- rate floor: floor > 0 ⇒ max > 0
+#check @Formal.ActionCostNonneg.learnedFraction_nonneg       -- history fraction: learned/max(rate,floor) ≥ 0
+#check @Formal.ActionCostNonneg.learnedCost_nonneg           -- bucket 5: full static-or-learned switch ≥ 0
+#check @Formal.ActionCostNonneg.rateFloorProd_pos            -- production rate floor 1/10 > 0
+#check @Formal.ActionCostNonneg.fight_cost_nonneg            -- Fight.cost ≥ 0
+#check @Formal.ActionCostNonneg.gather_cost_nonneg           -- Gather.cost ≥ 0
+#check @Formal.ActionCostNonneg.move_cost_nonneg             -- Move.cost ≥ 0
+#check @Formal.ActionCostNonneg.delete_cost_nonneg           -- DeleteItemAction.cost_weight ≥ 0 (all branches)
+#check @Formal.ActionCostNonneg.all_actions_cost_nonneg      -- headline: every concrete Action's cost ≥ 0 (seals PlannerAdmissibility)

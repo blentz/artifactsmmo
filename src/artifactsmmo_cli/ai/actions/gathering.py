@@ -9,6 +9,7 @@ from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_g
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
     GatherInv,
     gather_apply_pure,
@@ -99,12 +100,10 @@ class GatherAction(Action):
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         static = 6.0 + dist
         if history is None:
-            return static
+            return learned_cost_pure(static, 0.0, 1.0, has_history=False)
         learned = history.action_cost(repr(self), default=static, window=50)
         rate = history.success_rate(repr(self), window=50)
-        if rate < 0.95:
-            return learned / max(rate, 0.1)
-        return learned
+        return learned_cost_pure(static, learned, rate, has_history=True)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         dest = _nearest(self.locations, state)

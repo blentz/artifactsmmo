@@ -32,6 +32,7 @@ STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strat
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
+COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -765,6 +766,7 @@ _ALL_SRCS = [
     LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
+    COST_CORE_SRC,
 ]
 
 
@@ -814,6 +816,31 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# cost_core mutations -- old strings matched to current cost_core.py text.
+# These attack the Phase-2 Dijkstra-optimality precondition: every
+# Action.cost(...) must return ≥ 0. Each mutation breaks the non-negativity
+# contract on at least one branch; the diff test kills them.
+COST_CORE_MUTATIONS = [
+    # distance_cost: flip the additive base + dist to subtraction. Any
+    # `dist > base` produces a negative cost, breaking ≥ 0.
+    ("cost_core: distance_cost_pure + -> -",
+     "    return base + dist",
+     "    return base - dist"),
+    # qty_cost: flip the per_unit*qty term to subtraction. With base=0 and
+    # qty >= 1, the result is negative.
+    ("cost_core: qty_cost_pure base + per_unit*qty + dist -> base - per_unit*qty + dist",
+     "    return base + per_unit * qty + dist",
+     "    return base - per_unit * qty + dist"),
+    # learned_cost: drop the max(rate, rate_floor) clamp. When rate <= 0 (a
+    # writer-invariant corner), the divisor is zero or negative — the
+    # learned-fraction branch returns NaN/-inf, breaking the assertion in
+    # `test_learned_cost_pure_nonneg`.
+    ("cost_core: learned_cost_pure drop max() rate_floor clamp",
+     "        return learned / max(rate, rate_floor)",
+     "        return learned / rate if rate != 0 else float('-inf')"),
 ]
 
 
@@ -890,6 +917,8 @@ def main() -> int:
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
               "formal/diff/test_gather_apply_diff.py", survivors)
+    run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
+              "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

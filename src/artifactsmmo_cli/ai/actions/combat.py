@@ -9,6 +9,7 @@ from artifactsmmo_api_client.models.fight_request_schema import FightRequestSche
 from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
@@ -100,11 +101,11 @@ class FightAction(Action):
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         static = 10.0 + dist
         if history is None:
-            base = static
+            base = learned_cost_pure(static, 0.0, 1.0, has_history=False)
         else:
             learned = history.action_cost(repr(self), default=static, window=50)
             rate = history.success_rate(repr(self), window=50)
-            base = learned / max(rate, 0.1) if rate < 0.95 else learned
+            base = learned_cost_pure(static, learned, rate, has_history=True)
         if pick_loadout(self.monster_code, state, game_data) != state.equipment:
             base += LOADOUT_PENALTY
         return base

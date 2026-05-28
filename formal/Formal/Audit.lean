@@ -216,3 +216,17 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GatherApply.chain_safe_min_free_witness
 #print axioms Formal.GatherApply.is_applicable_boundary_witness
 #print axioms Formal.GatherApply.is_applicable_off_boundary_witness
+#print axioms Formal.ActionCostNonneg.constantCost_nonneg
+#print axioms Formal.ActionCostNonneg.distanceCost_nonneg
+#print axioms Formal.ActionCostNonneg.qtyCost_nonneg
+#print axioms Formal.ActionCostNonneg.qtyCost_ge_per_unit
+#print axioms Formal.ActionCostNonneg.ratMax_ge_right
+#print axioms Formal.ActionCostNonneg.ratMax_pos_of_right_pos
+#print axioms Formal.ActionCostNonneg.learnedFraction_nonneg
+#print axioms Formal.ActionCostNonneg.learnedCost_nonneg
+#print axioms Formal.ActionCostNonneg.rateFloorProd_pos
+#print axioms Formal.ActionCostNonneg.fight_cost_nonneg
+#print axioms Formal.ActionCostNonneg.gather_cost_nonneg
+#print axioms Formal.ActionCostNonneg.move_cost_nonneg
+#print axioms Formal.ActionCostNonneg.delete_cost_nonneg
+#print axioms Formal.ActionCostNonneg.all_actions_cost_nonneg

@@ -10,6 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_p
 from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -58,12 +59,10 @@ class MoveAction(Action):
         distance = abs(self.x - state.x) + abs(self.y - state.y)
         static = max(distance * 5.0, 1.0)
         if history is None:
-            return static
+            return learned_cost_pure(static, 0.0, 1.0, has_history=False)
         learned = history.action_cost(repr(self), default=static, window=50)
         rate = history.success_rate(repr(self), window=50)
-        if rate < 0.95:
-            return learned / max(rate, 0.1)
-        return learned
+        return learned_cost_pure(static, learned, rate, has_history=True)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = DestinationSchema(x=self.x, y=self.y)
