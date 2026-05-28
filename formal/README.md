@@ -37,7 +37,7 @@ uv sync --dev
 
 ## Coverage
 
-**14/14 pure-logic AI components proven** (kernel-checked ∀ inputs, sorry-free, axioms = {propext, Classical.choice, Quot.sound}). Each row has a Lean def + role theorems + a `Contracts.lean` statement-pin + a real-Python differential test + mutation coverage.
+**18/18 AI components proven** (kernel-checked ∀ inputs, sorry-free, axioms = {propext, Classical.choice, Quot.sound}). Each row has a Lean def + role theorems + a `Contracts.lean` statement-pin + a real-Python differential test + mutation coverage. The first 14 are pure-logic components; the last 4 are decision-logic cores extracted from the impure AI orchestration (Phase 1, 2026-05-27).
 
 | Component | Lean | Roles proved |
 |---|---|---|
@@ -55,8 +55,27 @@ uv sync --dev
 | `is_reachable`/`actionable_step`/`unmet_closure_size`/`root_cost` (`ai/tiers/strategy.py`) | `StrategyTraversal.lean` | reachable = grounding fixpoint; closure count; actionable correctness (none-iff, De Morgan); root_cost floored |
 | `select_bank_deposits` (`ai/bank_selection.py`) | `BankSelection.lean` | deposits exact; **freeze invariant** (deposits ∩ keep = ∅); task inputs protected; keep-closure |
 | `StuckDetector` (`ai/recovery.py`) | `StuckDetector.lean` | detect precedence; thresholds; `_recent_since` window index arithmetic; ack suppression |
+| `clamp_into_band` (`ai/priority_band.py`) | `PriorityBand.lean` | result ∈ [floor, ceiling]; ceiling < survival floor ⇒ result < floor (a learned bonus can never reorder a discretionary goal above a survival goal) |
+| `owned_count` (`ai/tiers/owned_count.py`) | `OwnedCount.lean` | summation contract; equipped ⇒ count ≥ 1 (item owned only by wearing it still satisfies ObtainItem); monotone per store |
+| `best_by_value`/keys/argmax (`ai/goals/upgrade_selection.py`) | `UpgradeSelection.lean` | best_by_value never downgrades (tie→inventory); key comparators trichotomous/antisymmetric/transitive; argmax dominates + is a member (first-wins on same-code ties) |
+| `scalar_yield`/coin-inversion (`ai/learning/scalar_core.py`) | `Scalarizer.lean` | **over ℚ**: monotone non-decreasing in char_xp/skill_xp/gold/coins; relevant weight (2) ≥ baseline (1/5); coins_spent = received − delta inverts exactly |
 
 The float-heavy parts modeled exactly where reducible (predict_win); the inherently-heuristic geometric estimate in `SkillXpCurve` is abstracted and disclosed in that file's header. Components depending on others' verdicts (e.g. `combat_capable` on `predict_win`) abstract the dependency as an input — the dependency itself is proven in its own module.
 
-Design doc: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md`. The retired
+### Phase 1 decision-logic findings (2026-05-27)
+
+The four decision-logic targets were chosen as *suspected* bugs. Outcomes:
+
+- **`learned_priority_bonus` — real defect, removed.** An unbounded additive priority bonus that could push a discretionary goal above the survival floor (base 45 + bonus 50 = 95 ≥ 70). It was also dead (no callers) and a duplicate of the live `GrindCharacterXPGoal` band-clamp. Deleted; the sound band-clamp was extracted to `clamp_into_band` and proved safe by construction.
+- **`owned_count`, `best_by_value`/argmax, `scalar_yield` — correct code; no behavioral bug.**
+
+What the proofs *did* catch in this phase was **dishonest formalization** — proofs that compiled green but told a false story about correct code (the failure mode this gate exists to prevent). Each was corrected so the proof states the truth:
+- `owned_count`'s first proof asserted a *false* disjointness invariant ("equipped items never in inventory") and mislabeled correct spare-counting as a "double-count." Reworked to the true server-slot mechanism with unconditional summation + the load-bearing equipped⇒≥1 property.
+- `upgrade_selection`'s first proof claimed the sort key is a tie-free strict total order (false — multi-slot items tie), with a `unique=True`-rigged differential test hiding it, plus a `select_committed` proof-theater call. Corrected to first-wins determinism, the tie case now exercised, the theater removed.
+- `scalar_yield`'s first proof modeled an `Int` ×1000 surrogate and tested only integers, while the real domain is fractional. Remodeled over `ℚ` (Lean core `Rat`) with exact rational weights; the differential test now feeds exact `Fraction`s.
+
+These were caught by a mandatory adversarial review reading each proof against reachable states — `lake build` + axiom lint + mutation green is *necessary but not sufficient* for an honest proof.
+
+Design docs: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md` (gate architecture),
+`docs/superpowers/specs/2026-05-27-lean-decision-logic-design.md` (decision-logic expansion). The retired
 TLA+/PlusPy predecessor: `docs/postmortems/2026-05-26-tlaplus-pluspy-formal-verification.md`.
