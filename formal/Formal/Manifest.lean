@@ -175,3 +175,10 @@ open Formal.PriorityBand
 #check @Formal.ArbiterSelect.select_pure_no_commitment_is_walk   -- no-commit: select = walk in band order
 #check @Formal.ArbiterSelect.walk_returns_head                   -- walk-head: head plannable & non-skipped ⇒ head returned
 #check @Formal.ArbiterSelect.guardPrecedes_of_head_guard         -- structural: head guard with id ≠ committed precedes committed means in rest
+-- TaskDecision required roles:
+#check @Formal.TaskDecision.combat_or_no_history_pivots          -- combat-pivots: combat ∨ ¬history ⇒ PIVOT
+#check @Formal.TaskDecision.req_none_pursues                     -- already-feasible: req None ⇒ PURSUE
+#check @Formal.TaskDecision.no_div_by_zero_from_invariant        -- no-div-by-zero: cross-file invariant ⇒ total_cycles ≥ 1
+#check @Formal.TaskDecision.requiredVpc_antitone_in_confidence   -- confidence-monotone: threshold antitone in confidence
+#check @Formal.TaskDecision.decision_pursue_confidence_monotone  -- confidence-monotone: PURSUE preserved by ↑confidence
+#check @Formal.TaskDecision.decision_pursue_vpc_monotone         -- vpc-monotone: PURSUE preserved by ↑skill_up_vpc

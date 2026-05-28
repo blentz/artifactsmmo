@@ -157,3 +157,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.ArbiterSelect.walk_returns_head
 #print axioms Formal.ArbiterSelect.guardPrecedes_of_head_guard
 #print axioms Formal.ArbiterSelect.findCommitted_some_props
+#print axioms Formal.TaskDecision.combat_or_no_history_pivots
+#print axioms Formal.TaskDecision.req_none_pursues
+#print axioms Formal.TaskDecision.no_div_by_zero_from_invariant
+#print axioms Formal.TaskDecision.requiredVpc_antitone_in_confidence
+#print axioms Formal.TaskDecision.decision_pursue_confidence_monotone
+#print axioms Formal.TaskDecision.decision_pursue_vpc_monotone

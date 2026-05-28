@@ -18,4 +18,5 @@ import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.ArbiterSelect
+import Formal.TaskDecision
 import Formal.Contracts

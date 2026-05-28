@@ -5,6 +5,7 @@ open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.Pred
 open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSelection
 open Formal.Scalarizer
+open Formal.TaskDecision
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -730,6 +731,33 @@ def runCoinsSpent (args : Array Json) : Json :=
   let cs := Formal.Scalarizer.coinsSpent received delta
   Json.mkObj [("coins_spent", Json.num cs), ("inverted_delta", Json.num (received - cs))]
 
+/-- Compute one task_decision result using the SAME proved `taskDecisionPure`.
+
+args layout (Ints; rationals as num/den pairs):
+* `[0]`     reqIsNone (0/1)
+* `[1]`     reqIsCombat (0/1)
+* `[2]`     historyPresent (0/1)
+* `[3,4]`   skillUpVpc  (num, den)
+* `[5,6]`   baseline    (num, den)
+* `[7,8]`   margin      (num, den)
+* `[9,10]`  confidence  (num, den)
+
+Emits the decision label as a string. -/
+def runTaskDecision (args : Array Json) : Json :=
+  let reqIsNone := intArg args 0 != 0
+  let reqIsCombat := intArg args 1 != 0
+  let historyPresent := intArg args 2 != 0
+  let skillUpVpc := ratArg args 3
+  let baseline := ratArg args 5
+  let margin := ratArg args 7
+  let confidence := ratArg args 9
+  let d := taskDecisionPure reqIsNone reqIsCombat historyPresent
+              skillUpVpc baseline margin confidence
+  let label := match d with
+    | Decision.PURSUE => "pursue"
+    | Decision.PIVOT => "pivot"
+  Json.mkObj [("decision", Json.str label)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -792,6 +820,8 @@ def runOne (item : Json) : Json :=
     runCoinsSpent args
   else if kind == "arbiter_select" then
     runArbiterSelect args
+  else if kind == "task_decision" then
+    runTaskDecision args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

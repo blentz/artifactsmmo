@@ -25,6 +25,7 @@ UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "up
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
+TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -564,6 +565,35 @@ ARBITER_SELECT_MUTATIONS = [
 ]
 
 
+# task_decision_core mutations -- old strings matched to actual task_decision_core.py text.
+TASK_DECISION_MUTATIONS = [
+    # Flip the comparator: `>=` → `>`. At equality (vpc == required) decision flips
+    # PURSUE → PIVOT. The boundary test (vpc=20, conf=0, threshold=20) catches it.
+    ("task_decision: >= -> > (boundary flip)",
+     "    return PURSUE if skill_up_vpc >= required_vpc(\n"
+     "        baseline_vpc, confidence_margin, confidence) else PIVOT",
+     "    return PURSUE if skill_up_vpc > required_vpc(\n"
+     "        baseline_vpc, confidence_margin, confidence) else PIVOT"),
+    # Reverse the confidence direction inside required_vpc: `(1 - confidence)` → `confidence`.
+    # At confidence=0 threshold drops to baseline (=5) instead of 4*baseline (=20);
+    # at confidence=1 threshold becomes 4*baseline (=20) instead of baseline (=5).
+    # The confidence-boundary tests catch both flips.
+    ("task_decision: (1 - confidence) -> confidence (reverse antitone)",
+     "    return baseline_vpc * (1.0 + confidence_margin * (1.0 - confidence))",
+     "    return baseline_vpc * (1.0 + confidence_margin * confidence)"),
+    # Drop the combat / no-history short-circuit entirely.
+    ("task_decision: drop PIVOT short-circuit (combat / no-history)",
+     "    if req_is_combat or not history_present:\n"
+     "        return PIVOT\n"
+     "    return PURSUE if skill_up_vpc >= required_vpc(",
+     "    return PURSUE if skill_up_vpc >= required_vpc("),
+    # Drop the req_is_none short-circuit (return PIVOT for already-feasible tasks).
+    ("task_decision: drop req_is_none -> PURSUE short-circuit",
+     "    if req_is_none:\n        return PURSUE\n",
+     ""),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -595,7 +625,7 @@ _ALL_SRCS = [
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
-    PLANNER_SRC, ARBITER_SELECT_SRC,
+    PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC,
 ]
 
 
@@ -658,6 +688,8 @@ def main() -> int:
               "formal/diff/test_planner_admissibility_diff.py", survivors)
     run_group(ARBITER_SELECT_SRC, ARBITER_SELECT_MUTATIONS,
               "formal/diff/test_arbiter_select_diff.py", survivors)
+    run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
+              "formal/diff/test_task_decision_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

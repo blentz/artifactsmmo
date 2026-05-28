@@ -17,6 +17,7 @@ import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
+import Formal.TaskDecision
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -981,3 +982,46 @@ example : Formal.PlannerAdmissibility.RHPoptimalPlanCost
 example : Formal.PlannerAdmissibility.RHPoptimalPlanCost
     < Formal.PlannerAdmissibility.RHPrestPlanCost :=
   Formal.PlannerAdmissibility.RHP_optimal_strictly_cheaper_than_rest
+
+/-! ### TaskDecision role contracts. -/
+-- combat-pivots: combat ∨ ¬history ⇒ PIVOT (unconditional safety short-circuit).
+example : ∀ (reqIsCombat historyPresent : Bool)
+    (skillUpVpc baseline margin confidence : Rat),
+    reqIsCombat = true ∨ historyPresent = false →
+    Formal.TaskDecision.taskDecisionPure false reqIsCombat historyPresent
+        skillUpVpc baseline margin confidence = Formal.TaskDecision.Decision.PIVOT :=
+  @Formal.TaskDecision.combat_or_no_history_pivots
+-- already-feasible: req None ⇒ PURSUE.
+example : ∀ (reqIsCombat historyPresent : Bool)
+    (skillUpVpc baseline margin confidence : Rat),
+    Formal.TaskDecision.taskDecisionPure true reqIsCombat historyPresent
+        skillUpVpc baseline margin confidence = Formal.TaskDecision.Decision.PURSUE :=
+  @Formal.TaskDecision.req_none_pursues
+-- no-div-by-zero: cross-file invariant (task_total ≥ 1 when reqIsNone = false)
+-- forces total_cycles ≥ 1 ⇒ caller's divide-by-total_cycles is safe.
+example : ∀ (reqIsNone : Bool) (skillCycles taskTotal : Nat),
+    (reqIsNone = false → taskTotal ≥ 1) →
+    reqIsNone = false → skillCycles + taskTotal ≥ 1 :=
+  @Formal.TaskDecision.no_div_by_zero_from_invariant
+-- confidence-monotone (threshold): required_vpc antitone in confidence.
+example : ∀ (baseline margin c c' : Rat),
+    0 ≤ baseline → 0 ≤ margin → c ≤ c' →
+    Formal.TaskDecision.requiredVpc baseline margin c'
+      ≤ Formal.TaskDecision.requiredVpc baseline margin c :=
+  @Formal.TaskDecision.requiredVpc_antitone_in_confidence
+-- confidence-monotone (decision): PURSUE at c is preserved at any c' ≥ c.
+example : ∀ (skillUpVpc baseline margin c c' : Rat),
+    0 ≤ baseline → 0 ≤ margin → c ≤ c' →
+    Formal.TaskDecision.taskDecisionPure false false true skillUpVpc baseline margin c
+      = Formal.TaskDecision.Decision.PURSUE →
+    Formal.TaskDecision.taskDecisionPure false false true skillUpVpc baseline margin c'
+      = Formal.TaskDecision.Decision.PURSUE :=
+  @Formal.TaskDecision.decision_pursue_confidence_monotone
+-- vpc-monotone: PURSUE at v is preserved at any v' ≥ v.
+example : ∀ (v v' baseline margin confidence : Rat),
+    v ≤ v' →
+    Formal.TaskDecision.taskDecisionPure false false true v baseline margin confidence
+      = Formal.TaskDecision.Decision.PURSUE →
+    Formal.TaskDecision.taskDecisionPure false false true v' baseline margin confidence
+      = Formal.TaskDecision.Decision.PURSUE :=
+  @Formal.TaskDecision.decision_pursue_vpc_monotone

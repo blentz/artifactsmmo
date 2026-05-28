@@ -8,17 +8,23 @@ Confidence is used as a margin, not a gate: a fully-unobserved skill gap demands
 4x the baseline value/cycle before committing to the grind; a fully-observed gap
 demands exactly the baseline. This means PURSUE is reachable even with zero
 observations as long as the expected value is high enough.
+
+The pure decision predicate (PURSUE vs PIVOT, given precomputed scalars) lives
+in `task_decision_core.py` and is formally verified in
+`formal/Formal/TaskDecision.lean`.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.scalarizer import DEFAULT_COIN_VALUE_GOLD
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.task_decision_core import task_decision_pure
+from artifactsmmo_cli.ai.task_decision_labels import PIVOT, PURSUE
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.world_state import WorldState
 
-PURSUE = "pursue"
-PIVOT = "pivot"
+__all__ = ["PIVOT", "PURSUE", "DEFAULT_SKILL_XP_PER_CYCLE",
+           "DEFAULT_TASK_REWARD_VALUE", "LOW_CONFIDENCE_MARGIN", "task_decision"]
 
 DEFAULT_SKILL_XP_PER_CYCLE = 10.0
 """Fallback skill-XP gain rate per cycle before a rate has been learned."""
@@ -41,9 +47,16 @@ def task_decision(state: WorldState, game_data: GameData,
                   history: LearningStore | None) -> str:
     req = task_requirement(state, game_data)
     if req is None:
-        return PURSUE  # already feasible
+        return task_decision_pure(
+            req_is_none=True, req_is_combat=False, history_present=history is not None,
+            skill_up_vpc=0.0, baseline_vpc=DEFAULT_COIN_VALUE_GOLD,
+            confidence_margin=LOW_CONFIDENCE_MARGIN, confidence=0.0)
     if req.skill == "combat" or history is None:
-        return PIVOT  # combat-gated: no skill-grind path here
+        return task_decision_pure(
+            req_is_none=False, req_is_combat=(req.skill == "combat"),
+            history_present=history is not None,
+            skill_up_vpc=0.0, baseline_vpc=DEFAULT_COIN_VALUE_GOLD,
+            confidence_margin=LOW_CONFIDENCE_MARGIN, confidence=0.0)
     curve = SkillXpCurve(observed=history.skill_max_xp_observations(req.skill))
     rate = history.skill_xp_per_cycle(req.skill) or DEFAULT_SKILL_XP_PER_CYCLE
     skill_cycles = curve.cycles_to_level(req.current_level, req.required_level, rate)
@@ -53,5 +66,7 @@ def task_decision(state: WorldState, game_data: GameData,
     reward = history.mean_task_reward_value(default=DEFAULT_TASK_REWARD_VALUE)
     skill_up_vpc = reward / total_cycles
     confidence = curve.confidence(req.current_level, req.required_level)
-    required_vpc = DEFAULT_COIN_VALUE_GOLD * (1.0 + LOW_CONFIDENCE_MARGIN * (1.0 - confidence))
-    return PURSUE if skill_up_vpc >= required_vpc else PIVOT
+    return task_decision_pure(
+        req_is_none=False, req_is_combat=False, history_present=True,
+        skill_up_vpc=skill_up_vpc, baseline_vpc=DEFAULT_COIN_VALUE_GOLD,
+        confidence_margin=LOW_CONFIDENCE_MARGIN, confidence=confidence)
