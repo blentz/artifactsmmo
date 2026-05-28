@@ -226,3 +226,13 @@ open Formal.PriorityBand
 #check @Formal.CyclesForProgress.satisfyIntervals_pos                    -- positivity: every satisfy interval > 0 (the > 0 gate)
 #check @Formal.CyclesForProgress.strictIntervals_pos                     -- positivity: every strict-increase interval > 0 (monotone cycleIndex)
 #check @Formal.CyclesForProgress.allIntervals_pos                        -- positivity: every appended interval > 0 ⇒ median > 0 (seals or-15 fallback)
+-- GatherApply required roles:
+#check @Formal.GatherApply.is_applicable_imp_free_ge   -- is_applicable lower bound: passing check ⇒ at least k free slots
+#check @Formal.GatherApply.apply_inventory_safe        -- per-step safety: is_applicable ∧ k ≥ 1 ⇒ post.used ≤ cap
+#check @Formal.GatherApply.apply_inventory_safe_prod   -- per-step safety at MIN_FREE_SLOTS = 3
+#check @Formal.GatherApply.applyN_used                 -- applyN bookkeeping: used' = used + n
+#check @Formal.GatherApply.applyN_cap                  -- applyN bookkeeping: cap unchanged
+#check @Formal.GatherApply.chain_safe                  -- chain safety: n ≤ free ⇒ n-step chain stays in cap
+#check @Formal.GatherApply.chain_safe_min_free_witness -- non-vacuous witness at MIN_FREE_SLOTS
+#check @Formal.GatherApply.is_applicable_boundary_witness     -- witness: applies at the boundary
+#check @Formal.GatherApply.is_applicable_off_boundary_witness -- witness: fails one slot past

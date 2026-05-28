@@ -9,6 +9,11 @@ from artifactsmmo_api_client.api.my_characters.action_gathering_my_name_action_g
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.gather_apply_core import (
+    GatherInv,
+    gather_apply_pure,
+    gather_is_applicable_pure,
+)
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -33,17 +38,22 @@ class GatherAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.locations:
             return False
+        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
+                        item_count=state.inventory)
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is None:
-            return state.inventory_free >= self._MIN_FREE_SLOTS
+            return gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS)
         skill, level = skill_req
-        return state.skills.get(skill, 1) >= level and state.inventory_free >= self._MIN_FREE_SLOTS
+        return (state.skills.get(skill, 1) >= level
+                and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS))
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = _nearest(self.locations, state)
-        new_inventory = dict(state.inventory)
         drop_item = game_data.resource_drop_item(self.resource_code) or self.resource_code
-        new_inventory[drop_item] = new_inventory.get(drop_item, 0) + 1
+        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
+                        item_count=state.inventory)
+        post = gather_apply_pure(inv, drop_item)
+        new_inventory = dict(post.item_count)
         # Gathering NEVER advances an items-task: the server only counts items
         # when they are DELIVERED to the taskmaster (TaskTradeAction). Modelling
         # gather as +progress made FarmItems "satisfied" by a single gather, so

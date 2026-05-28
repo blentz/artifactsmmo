@@ -31,6 +31,7 @@ LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" /
 STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy_blend.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
+GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -763,6 +764,7 @@ _ALL_SRCS = [
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
     LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
+    GATHER_APPLY_SRC,
 ]
 
 
@@ -791,6 +793,27 @@ CYCLES_FOR_PROGRESS_MUTATIONS = [
     ("cycles_for_progress: strict-increase > -> >= (off-by-one predicate)",
      "            if cycle.task_progress > prev_progress:",
      "            if cycle.task_progress >= prev_progress:"),
+]
+
+
+# gather_apply mutations -- old strings matched to current gather_apply_core.py text.
+GATHER_APPLY_MUTATIONS = [
+    # Drop the slot precondition: apply is now unguarded by free-slot count.
+    # The is_applicable diff (with k = MIN_FREE_SLOTS at boundary) catches it.
+    ("gather_apply: is_applicable always-true (drop slot check)",
+     "    return (inv.cap - inv.used) >= min_free",
+     "    return True"),
+    # Off-by-one on the mint: +1 becomes +2 (apply mints two items, blowing the cap
+    # boundary). The diff test pins post.used == used + 1 against the Lean oracle.
+    ("gather_apply: mint +1 -> +2 (off-by-one)",
+     "    return replace(inv, used=inv.used + 1, item_count=new_counts)",
+     "    return replace(inv, used=inv.used + 2, item_count=new_counts)"),
+    # Tighten >= to > on the slot check: at exactly k free slots the precondition
+    # should hold, but now it spuriously refuses. The boundary test
+    # `test_boundary_exactly_three_free_is_applicable_against_lean` fires.
+    ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
+     "    return (inv.cap - inv.used) >= min_free",
+     "    return (inv.cap - inv.used) > min_free"),
 ]
 
 
@@ -865,6 +888,8 @@ def main() -> int:
               "formal/diff/test_decide_key_diff.py", survivors)
     run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
+    run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
+              "formal/diff/test_gather_apply_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -207,3 +207,12 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CyclesForProgress.satisfyIntervals_pos
 #print axioms Formal.CyclesForProgress.strictIntervals_pos
 #print axioms Formal.CyclesForProgress.allIntervals_pos
+#print axioms Formal.GatherApply.is_applicable_imp_free_ge
+#print axioms Formal.GatherApply.apply_inventory_safe
+#print axioms Formal.GatherApply.apply_inventory_safe_prod
+#print axioms Formal.GatherApply.applyN_used
+#print axioms Formal.GatherApply.applyN_cap
+#print axioms Formal.GatherApply.chain_safe
+#print axioms Formal.GatherApply.chain_safe_min_free_witness
+#print axioms Formal.GatherApply.is_applicable_boundary_witness
+#print axioms Formal.GatherApply.is_applicable_off_boundary_witness

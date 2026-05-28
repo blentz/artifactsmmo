@@ -22,6 +22,7 @@ import Formal.LowYieldCancel
 import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.CyclesForProgress
+import Formal.GatherApply
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1203,3 +1204,33 @@ example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
     Formal.CyclesForProgress.monoChrono rows →
     ∀ x ∈ Formal.CyclesForProgress.allIntervals rows, 0 < x :=
   @Formal.CyclesForProgress.allIntervals_pos
+
+/-! ### GatherApply role contracts. -/
+
+-- is_applicable lower bound: passing check ⇒ free ≥ k (Nat-truncating)
+example : ∀ (i : Formal.GatherApply.Inv) (k : Nat),
+    Formal.GatherApply.isApplicable i k = true → k ≤ i.cap - i.used :=
+  @Formal.GatherApply.is_applicable_imp_free_ge
+-- per-step safety: k ≥ 1 ∧ is_applicable ⇒ post.used ≤ cap
+example : ∀ (i : Formal.GatherApply.Inv) (k : Nat),
+    1 ≤ k → Formal.GatherApply.isApplicable i k = true →
+    (Formal.GatherApply.apply i).used ≤ i.cap :=
+  @Formal.GatherApply.apply_inventory_safe
+-- per-step safety at production constant MIN_FREE_SLOTS = 3
+example : ∀ (i : Formal.GatherApply.Inv),
+    Formal.GatherApply.isApplicable i Formal.GatherApply.MIN_FREE_SLOTS = true →
+    (Formal.GatherApply.apply i).used ≤ i.cap :=
+  @Formal.GatherApply.apply_inventory_safe_prod
+-- applyN bookkeeping: used' = used + n
+example : ∀ (i : Formal.GatherApply.Inv) (n : Nat),
+    (Formal.GatherApply.applyN i n).used = i.used + n :=
+  @Formal.GatherApply.applyN_used
+-- applyN bookkeeping: cap unchanged
+example : ∀ (i : Formal.GatherApply.Inv) (n : Nat),
+    (Formal.GatherApply.applyN i n).cap = i.cap :=
+  @Formal.GatherApply.applyN_cap
+-- chain safety: wellformed start + n ≤ free ⇒ chain stays in cap
+example : ∀ (i : Formal.GatherApply.Inv) (n : Nat),
+    i.used ≤ i.cap → n ≤ i.cap - i.used →
+    (Formal.GatherApply.applyN i n).used ≤ i.cap :=
+  @Formal.GatherApply.chain_safe

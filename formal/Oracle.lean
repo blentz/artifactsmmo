@@ -11,6 +11,7 @@ open Formal.LowYieldCancel
 open Formal.StrategyBlend
 open Formal.DecideKey
 open Formal.CyclesForProgress
+open Formal.GatherApply
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -923,6 +924,31 @@ def runCyclesForProgress (args : Array Json) : Json :=
     Json.mkObj [("present", Json.bool false),
                 ("num", Json.num 0), ("den", Json.num 1)]
 
+/-- Compute one gather_apply result.
+
+Two queries (chosen by `args[0]`):
+* query 0 = `is_applicable` slot check. args: `[0, used, cap, k]`. Emits
+  `{"applicable": Bool, "free": Int}`.
+* query 1 = `apply` projection. args: `[1, used, cap, n]` where `n` is the
+  number of chained applies (typically 1). Emits the post-state
+  `{"used": Int, "cap": Int}` after `applyN n`.
+
+Reuses the proved `Formal.GatherApply.isApplicable` / `applyN` directly. -/
+def runGatherApply (args : Array Json) : Json :=
+  let q := intArg args 0
+  let used := (intArg args 1).toNat
+  let cap := (intArg args 2).toNat
+  let i : Formal.GatherApply.Inv := { used := used, cap := cap }
+  if q == 0 then
+    let k := (intArg args 3).toNat
+    Json.mkObj [("applicable", Json.bool (Formal.GatherApply.isApplicable i k)),
+                ("free", Json.num (Int.ofNat (Formal.GatherApply.free i)))]
+  else
+    let n := (intArg args 3).toNat
+    let post := Formal.GatherApply.applyN i n
+    Json.mkObj [("used", Json.num (Int.ofNat post.used)),
+                ("cap", Json.num (Int.ofNat post.cap))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -997,6 +1023,8 @@ def runOne (item : Json) : Json :=
     runDecideKey args
   else if kind == "cycles_for_progress" then
     runCyclesForProgress args
+  else if kind == "gather_apply" then
+    runGatherApply args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
