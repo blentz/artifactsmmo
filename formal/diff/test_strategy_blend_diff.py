@@ -108,7 +108,11 @@ def test_learned_blend_matches_lean(
     normalized = min(Fraction(1), Fraction(normalized_num, normalized_den))
     # w ∈ [0, 1] (bound theorem hypothesis)
     w = min(Fraction(1), Fraction(w_num, w_den))
-    py = (Fraction(1) - w) * value + w * normalized
+    # Call the REAL production function so source mutations are caught (Fraction
+    # arithmetic in `learned_blend` stays exact, since `*` and `+` on Fractions
+    # are exact). Earlier this inlined the formula locally and let three
+    # `learned_blend` mutations survive the gate.
+    py = learned_blend(value, normalized, w)
     lean = run_oracle("strategy_blend", [_fraction_args(value, normalized, w)])[0]
     assert Fraction(lean["blend_num"], lean["blend_den"]) == py
     # Convex bound (the anti-Phase-1 property).
@@ -117,25 +121,34 @@ def test_learned_blend_matches_lean(
 
 def test_learned_blend_w_zero_identity_against_lean() -> None:
     """w = 0 ⇒ blend = value, INDEPENDENT of normalized."""
-    args = _fraction_args(Fraction(3, 10), Fraction(99, 100), Fraction(0))
+    value, normalized, w = Fraction(3, 10), Fraction(99, 100), Fraction(0)
+    py = learned_blend(value, normalized, w)
+    args = _fraction_args(value, normalized, w)
     lean = run_oracle("strategy_blend", [args])[0]
-    assert Fraction(lean["blend_num"], lean["blend_den"]) == Fraction(3, 10)
+    assert py == Fraction(3, 10)
+    assert Fraction(lean["blend_num"], lean["blend_den"]) == py
 
 
 def test_learned_blend_w_one_picks_normalized_against_lean() -> None:
     """w = 1 ⇒ blend = normalized."""
-    args = _fraction_args(Fraction(3, 10), Fraction(99, 100), Fraction(1))
+    value, normalized, w = Fraction(3, 10), Fraction(99, 100), Fraction(1)
+    py = learned_blend(value, normalized, w)
+    args = _fraction_args(value, normalized, w)
     lean = run_oracle("strategy_blend", [args])[0]
-    assert Fraction(lean["blend_num"], lean["blend_den"]) == Fraction(99, 100)
+    assert py == Fraction(99, 100)
+    assert Fraction(lean["blend_num"], lean["blend_den"]) == py
 
 
 def test_learned_blend_convex_endpoint_witnesses() -> None:
     """Concrete boundary witnesses for the convex bound: at value = 3/10 and
     normalized = 8/10, blend(w=1/4) lies strictly between."""
-    args = _fraction_args(Fraction(3, 10), Fraction(8, 10), Fraction(1, 4))
+    value, normalized, w = Fraction(3, 10), Fraction(8, 10), Fraction(1, 4)
+    py = learned_blend(value, normalized, w)
+    args = _fraction_args(value, normalized, w)
     lean = run_oracle("strategy_blend", [args])[0]
     blend = Fraction(lean["blend_num"], lean["blend_den"])
-    assert blend == Fraction(17, 40)
+    assert py == Fraction(17, 40)
+    assert blend == py
     assert Fraction(3, 10) < blend < Fraction(8, 10)
 
 
