@@ -20,6 +20,27 @@ from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 _T = TypeVar("_T")
 
 
+def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
+    """Extract one skill's per-cycle xp delta from a stored JSON row.
+
+    Returns 0 when the row is None, malformed JSON, not a dict, or holds a
+    non-numeric value for `skill`. Mirrors `projections._parse_skill_xp`'s
+    tolerance so a single bad row never crashes the average.
+    """
+    if raw is None:
+        return 0
+    try:
+        delta = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return 0
+    if not isinstance(delta, dict):
+        return 0
+    try:
+        return int(delta.get(skill, 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 class LearningStore:
     """Event log + queryable learned stats. Best-effort: errors degrade to defaults."""
 
@@ -268,6 +289,8 @@ class LearningStore:
 
         Only cycles with a positive delta for the given skill are included.
         Returns None when no such data exists (caller falls back to a default).
+        Malformed `delta_skill_xp_json` rows are skipped (matching the guard in
+        `projections._parse_skill_xp`) so they do not crash the average.
         """
         try:
             with SqlSession(self._engine) as s:
@@ -280,8 +303,7 @@ class LearningStore:
                 rows = list(s.exec(stmt))
             values: list[int] = []
             for raw in rows:
-                delta: dict[str, int] = json.loads(raw)
-                xp = delta.get(skill, 0)
+                xp = _parse_skill_xp_value(raw, skill)
                 if xp > 0:
                     values.append(xp)
             if not values:

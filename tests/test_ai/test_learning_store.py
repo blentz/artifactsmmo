@@ -690,6 +690,50 @@ class TestSkillXpPerCycle:
         store.close()
         assert result is None
 
+    def test_malformed_json_row_is_skipped(self, tmp_db_path):
+        """A malformed `delta_skill_xp_json` row must NOT crash the average —
+        json.loads inside skill_xp_per_cycle is guarded the same way as the
+        parser in projections._parse_skill_xp. Insert several bad rows
+        alongside valid alchemy=10 and alchemy=20 rows and assert the average
+        is 15."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        with SqlSession(store._engine) as s:
+            s.add(Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id=store._session_id, cycle_index=0,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json="not-json-at-all",
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:01+00:00",
+                session_id=store._session_id, cycle_index=1,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='[1, 2, 3]',  # valid JSON but not a dict
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:02+00:00",
+                session_id=store._session_id, cycle_index=2,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": "not-a-number"}',
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:03+00:00",
+                session_id=store._session_id, cycle_index=3,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 10}',
+            ))
+            s.add(Cycle(
+                ts="2026-05-17T00:00:04+00:00",
+                session_id=store._session_id, cycle_index=4,
+                character="testchar", outcome="ok",
+                delta_skill_xp_json='{"alchemy": 20}',
+            ))
+            s.commit()
+        result = store.skill_xp_per_cycle("alchemy")
+        store.close()
+        assert result == 15.0
+
 
 def _break_engine(store: LearningStore) -> None:
     """Swap in a real engine whose SQLite URL points at a directory, so every
