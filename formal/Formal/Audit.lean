@@ -94,6 +94,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.StrategyTraversal.actionable_step_none_iff
 #print axioms Formal.StrategyTraversal.actionable_step_reach
 #print axioms Formal.StrategyTraversal.rootCost_ge_one
+#print axioms Formal.StrategyTraversal.reachable_implies_actionable
+#print axioms Formal.StrategyTraversal.grounded_unmet_has_actionable
 #print axioms Formal.BankSelection.deposits_exact
 #print axioms Formal.BankSelection.deposits_mem_iff
 #print axioms Formal.BankSelection.freeze_invariant

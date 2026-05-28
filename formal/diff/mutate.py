@@ -293,6 +293,34 @@ STRATEGY_MUTATIONS = [
 ]
 
 
+# reachability-invariant mutations: target the DIVERGENCE locus between
+# is_reachable (per-path `path`) and actionable_step (shared `visited`). Each
+# breaks `is_reachable ⇒ actionable_step ≠ None` or the oracle agreement, and is
+# caught by test_reachability_diff.py.
+REACHABILITY_MUTATIONS = [
+    # flip actionable_step's cycle-guard membership test: a FRESH node is wrongly
+    # treated as already-visited (returns None) — actionable nodes get dropped, so
+    # a reachable root yields no step (the production-assert crash) and the oracle
+    # none/some agreement breaks.
+    ("reachability: actionable_step cycle-guard membership flip (in -> not in)",
+     "        if node in visited:\n            return None",
+     "        if node not in visited:\n            return None"),
+    # drop actionable_step's visited.add: on a cyclic graph the DFS no longer marks
+    # nodes, so it recurses forever (RecursionError) — the cyclic test graphs catch
+    # it. The visited set is the termination guard.
+    ("reachability: actionable_step drop visited.add (no cycle termination)",
+     "        if node in visited:\n            return None\n        visited.add(node)",
+     "        if node in visited:\n            return None"),
+    # is_reachable bottoms out a cyclic node as reachable: drop the per-path cycle
+    # guard so a node on its own path reads reachable. Then is_reachable=True on a
+    # cycle while actionable_step (still guarded) returns None — the EXACT divergence
+    # the invariant forbids; test_reachability_diff's well-formed invariant fires.
+    ("reachability: is_reachable drop path cycle guard (cyclic node reads reachable)",
+     "    if root in path:\n        return False\n",
+     ""),
+]
+
+
 # bank_selection mutations -- old strings matched to current bank_selection.py text.
 BANK_SELECTION_MUTATIONS = [
     # drop task-input protection: no longer protect the items-task item's recipe
@@ -531,6 +559,8 @@ def main() -> int:
               "formal/diff/test_objective_diff.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
+    run_group(STRATEGY_SRC, REACHABILITY_MUTATIONS,
+              "formal/diff/test_reachability_diff.py", survivors)
     run_group(BANK_SELECTION_SRC, BANK_SELECTION_MUTATIONS,
               "formal/diff/test_bank_selection_diff.py", survivors)
     run_group(STUCK_DETECTOR_SRC, STUCK_DETECTOR_MUTATIONS,

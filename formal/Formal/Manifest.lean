@@ -105,6 +105,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.StrategyTraversal.actionable_step_none_iff   -- none ⇔ no actionable reachable (De Morgan)
 #check @Formal.StrategyTraversal.actionable_step_reach      -- returned node UnmetReach-able from root
 #check @Formal.StrategyTraversal.rootCost_ge_one            -- root_cost ≥ 1 (every kind)
+#check @Formal.StrategyTraversal.reachable_implies_actionable -- reachable-implies-actionable: is_reachable ⇒ actionable_step ≠ none (the decide assert)
+#check @Formal.StrategyTraversal.grounded_unmet_has_actionable -- bridge: unmet Grounded node has reachable ActionableNode
 -- BankSelection required roles:
 #check @Formal.BankSelection.deposits_exact                -- candidates = qty>0 inventory ∉ keep
 #check @Formal.BankSelection.deposits_mem_iff              -- sorted list = same set (permutation)

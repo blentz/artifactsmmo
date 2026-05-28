@@ -578,6 +578,27 @@ example : ∀ (g : Formal.StrategyTraversal.Graph) (kind : Formal.StrategyTraver
     (target have_ root fuel : Nat),
     1 ≤ Formal.StrategyTraversal.rootCost g kind target have_ root fuel :=
   @Formal.StrategyTraversal.rootCost_ge_one
+-- reachable-implies-actionable (THE PRODUCTION ASSERT, strategy.decide:251): for a
+-- WELL-FORMED graph and an UNMET root, `is_reachable root = true` (the decide guard)
+-- ⇒ for all adequate fuel `actionable_step root ≠ none`. So `assert step is not None`
+-- never fires. The two functions' DIFFERENT cycle-trackers (per-path `path` vs shared
+-- `visited`) cannot diverge: an actionable node has no unmet prereqs so it is returned
+-- the FIRST time reached — the shared visited set never blocks a reachable one.
+example : ∀ (g : Formal.StrategyTraversal.Graph),
+    Formal.StrategyTraversal.WellFormed g →
+    ∀ (fuel root : Nat), g.isSat root = false →
+      Formal.StrategyTraversal.isReachable g fuel root = true →
+        ∃ N, ∀ fuel', N ≤ fuel' →
+          Formal.StrategyTraversal.actionableStep g fuel' root ≠ none :=
+  @Formal.StrategyTraversal.reachable_implies_actionable
+-- the bridge graph-fact: an unmet Grounded (reachable) node has a reachable
+-- ActionableNode descendant (independent of cycle-tracking).
+example : ∀ (g : Formal.StrategyTraversal.Graph),
+    Formal.StrategyTraversal.WellFormed g →
+    ∀ {node : Nat}, Formal.StrategyTraversal.Grounded g node → g.isSat node = false →
+      ∃ a, Formal.StrategyTraversal.UnmetReach g node a ∧
+           Formal.StrategyTraversal.ActionableNode g a :=
+  @Formal.StrategyTraversal.grounded_unmet_has_actionable
 
 /-! ### BankSelection role contracts.
 

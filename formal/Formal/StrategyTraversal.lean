@@ -1026,4 +1026,133 @@ example :
       kind := fun _ => Kind.obtain }
     unmetClosureSize g 0 8 = 1 := by decide
 
+/-! ### THE PRODUCTION ASSERT: `is_reachable ⇒ actionable_step ≠ none`.
+
+`strategy.decide` (strategy.py:248-251) does, for an UNMET root:
+
+```
+if not is_reachable(root, ...): continue
+step = actionable_step(root, ...)
+assert step is not None          # <-- this assert
+```
+
+The two functions use DIFFERENT cycle-trackers — `is_reachable` a per-DFS-path
+`path` frozenset, `actionable_step` a single mutable `visited` set shared across
+ALL recursive branches. The SUSPECTED BUG: a root that `is_reachable` accepts but
+for which `actionable_step` returns `None`, crashing the assert.
+
+We prove the assert HOLDS. The bridge is a graph-theoretic fact independent of
+either cycle-tracker: a `Grounded` (= reachable) unmet node always has a
+reachable ACTIONABLE descendant. Cycle-tracking (path vs visited) only affects
+which TERMINATION the search hits, never whether a reachable-actionable node
+EXISTS — and an actionable node, having no unmet prereqs, is returned the FIRST
+time the search reaches it, so the shared `visited` set never blocks it. The
+Python differential test (`test_reachability_diff.py`) locks the REAL shared-
+`visited` `actionable_step` to this invariant.
+
+### The well-formedness hypothesis (faithful to `prerequisites` / `_producible`).
+
+`prerequisites` gives an unmet `ObtainItem` NONEMPTY prereqs ONLY when it has a
+crafting recipe (the materials); and `_producible` is true EXACTLY when there is
+a recipe OR a resource drop. Hence in the REAL graph an `obtain` node with
+nonempty prereqs is ALWAYS producible. We make this the explicit structural
+hypothesis `WellFormed` — it is a genuine property of the production graph, NOT a
+proof-rigging restriction. (A non-producible `obtain` node is necessarily a leaf
+with no prereqs; `is_reachable` would already reject it as unreachable, so it
+never gates the assert.) -/
+
+/-- The production graph invariants, both genuine properties of `prerequisites`:
+* an `obtain` node with nonempty direct prereqs is producible (nonempty prereqs
+  come from a crafting recipe, and a recipe ⇒ `_producible`);
+* a `skill` node (`ReachSkillLevel`) is a LEAF — `prerequisites` returns `[]` for
+  it (materials enter only via `ObtainItem` chains, strategy/prerequisite_graph.py).
+Neither is a proof-rigging restriction; both hold for every graph the production
+code constructs. -/
+def WellFormed (g : Graph) : Prop :=
+  (∀ n, g.kind n = Kind.obtain → g.prereqs n ≠ [] → g.producible n = true) ∧
+  (∀ n, g.kind n = Kind.skill → g.prereqs n = [])
+
+/-- BRIDGE (core graph fact): an UNMET `Grounded` node has a `UnmetReach`-able
+`ActionableNode` descendant. Induction on the grounding derivation: a satisfied
+node is excluded by hypothesis; a `skill` / producible-`leaf` node with all
+direct prereqs satisfied (vacuously / by being a leaf) is itself actionable; a
+`node` either has all prereqs satisfied (then IT is actionable — obtain ⇒
+producible via `WellFormed`) or has an unmet (hence still-grounded) prereq from
+which an actionable node is reachable, lifted through `UnmetReach.head`. -/
+theorem grounded_unmet_has_actionable (g : Graph) (hwf : WellFormed g) :
+    ∀ {node : Nat}, Grounded g node → g.isSat node = false →
+      ∃ a, UnmetReach g node a ∧ ActionableNode g a := by
+  intro node h
+  induction h with
+  | @sat n hs => intro hns; rw [hs] at hns; exact absurd hns (by simp)
+  | @skill n hk =>
+    intro hns
+    -- skill node: a leaf (WellFormed.2), hence trivially all prereqs satisfied;
+    -- kind=skill ≠ obtain so the producible obligation is vacuous → actionable.
+    have hempty : g.prereqs n = [] := hwf.2 n hk
+    refine ⟨n, UnmetReach.refl hns, hns, ?_, ?_⟩
+    · intro p hpmem; rw [hempty] at hpmem; simp at hpmem
+    · intro hko; rw [hk] at hko; exact absurd hko (by simp)
+  | @leaf n hns' hk hempty hp =>
+    intro hns
+    refine ⟨n, UnmetReach.refl hns, hns, ?_, ?_⟩
+    · intro p hpmem; rw [hempty] at hpmem; simp at hpmem
+    · intro _; exact hp
+  | @node n hns' hk hobt hall ih =>
+    intro hns
+    -- Case split: are all direct prereqs satisfied?
+    by_cases hallsat : ∀ p ∈ g.prereqs n, g.isSat p = true
+    · -- n itself is actionable: unmet, all prereqs satisfied, obtain ⇒ producible.
+      refine ⟨n, UnmetReach.refl hns, hns, hallsat, ?_⟩
+      intro hko
+      -- obtain node: hobt gives prereqs ≠ [], so WellFormed.1 gives producible.
+      exact hwf.1 n hko (hobt hko)
+    · -- some direct prereq p is UNMET; it is grounded (hall), recurse.
+      -- Extract the witnessing unmet prereq without push_neg/mathlib, via the
+      -- decidable `List.find?` over the prereqs for an unmet one.
+      have hex : ∃ p, p ∈ g.prereqs n ∧ g.isSat p = false := by
+        cases hf : (g.prereqs n).find? (fun p => !g.isSat p) with
+        | some q =>
+          have hmem := List.find?_some hf
+          have hmem2 : q ∈ g.prereqs n := List.mem_of_find?_eq_some hf
+          refine ⟨q, hmem2, ?_⟩
+          simpa using hmem
+        | none =>
+          exfalso
+          apply hallsat
+          intro p hpmem
+          have := List.find?_eq_none.mp hf p hpmem
+          simpa using this
+      obtain ⟨p, hpmem, hpns'⟩ := hex
+      obtain ⟨a, hra, haa⟩ := ih p hpmem hpns'
+      have hpunmet : p ∈ unmetPrereqs g n := by
+        unfold unmetPrereqs; rw [List.mem_filter]
+        exact ⟨hpmem, by simp [hpns']⟩
+      exact ⟨a, UnmetReach.head hns hpunmet hra, haa⟩
+
+/-- `reachable_implies_actionable` (THE HEADLINE — the production assert is safe).
+For a WELL-FORMED graph and an UNMET root: if `is_reachable` accepts the root
+(for some fuel), then for all sufficiently large fuel `actionable_step` returns
+`some` (≠ `none`). Hence `decide`'s `assert step is not None` never fires:
+`is_reachable=true` (the guard) ⇒ a step exists.
+
+Soundness of `is_reachable` (`reachAux_sound`) gives `Grounded`; the bridge gives
+a reachable actionable node; `actionable_step_none_iff` (its contrapositive)
+turns "a reachable actionable node exists" into "`actionable_step ≠ none` for
+adequate fuel". -/
+theorem reachable_implies_actionable (g : Graph) (hwf : WellFormed g)
+    (fuel root : Nat) (hroot : g.isSat root = false)
+    (hreach : isReachable g fuel root = true) :
+    ∃ N, ∀ fuel', N ≤ fuel' → actionableStep g fuel' root ≠ none := by
+  -- reachable ⇒ Grounded
+  have hg : Grounded g root := reachAux_sound g fuel [] root hreach
+  -- Grounded unmet root ⇒ reachable actionable node
+  obtain ⟨a, hra, haa⟩ := grounded_unmet_has_actionable g hwf hg hroot
+  -- a reachable actionable node ⇒ `actionable_step ≠ none` for adequate fuel
+  -- (the minimal-act-round completeness; the cycle guard never blocks it).
+  obtain ⟨n, hn⟩ := actReachN_complete g root a hra haa
+  obtain ⟨m, hm⟩ := exists_minActRound g ⟨n, hn⟩
+  refine ⟨m, fun fuel' hfuel' => ?_⟩
+  exact actStep_complete_min g m root [] hroot hm (by intro x hx; simp at hx) fuel' hfuel'
+
 end Formal.StrategyTraversal
