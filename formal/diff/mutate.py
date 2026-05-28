@@ -681,19 +681,19 @@ STRATEGY_BLEND_MUTATIONS = [
     # learned_blend: flip (1 - w) to w. Now blend = w*value + w*normalized,
     # destroying the convex combination. The convex-bound / warm-up tests fire.
     ("strategy_blend: learned_blend (1 - w) -> w (drop the complement)",
-     "    return (1.0 - w) * value + w * normalized",
+     "    return (1 - w) * value + w * normalized",
      "    return w * value + w * normalized"),
     # learned_blend: + -> - between the two terms (subtract normalized rather
     # than blend toward it). The convex bound + monotonicity tests fire.
     ("strategy_blend: learned_blend + -> - between terms",
-     "    return (1.0 - w) * value + w * normalized",
-     "    return (1.0 - w) * value - w * normalized"),
+     "    return (1 - w) * value + w * normalized",
+     "    return (1 - w) * value - w * normalized"),
     # learned_blend: drop the w cap on `normalized` (multiply by w*2): the
     # blend can exceed `max(value, normalized)` — the anti-Phase-1 unbounded
     # bonus property breaks. The convex-bound assertion fires.
     ("strategy_blend: learned_blend doubles the normalized contribution",
-     "    return (1.0 - w) * value + w * normalized",
-     "    return (1.0 - w) * value + 2 * w * normalized"),
+     "    return (1 - w) * value + w * normalized",
+     "    return (1 - w) * value + 2 * w * normalized"),
 ]
 
 

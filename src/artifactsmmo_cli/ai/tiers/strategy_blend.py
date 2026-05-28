@@ -83,4 +83,4 @@ def learned_blend(value: float, normalized: float, w: float) -> float:
     * `min(value, normalized) ≤ blend ≤ max(value, normalized)` (convex bound)
     * monotone non-decreasing in `normalized` (given `w ≥ 0`).
     """
-    return (1.0 - w) * value + w * normalized
+    return (1 - w) * value + w * normalized
