@@ -26,6 +26,7 @@ SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scala
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
+OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -251,15 +252,11 @@ OBJECTIVE_MUTATIONS = [
     ("objective: char_level_gap sign flip (target-level -> level-target)",
      "        char_level_gap = max(0, self.target_char_level - state.level)",
      "        char_level_gap = max(0, state.level - self.target_char_level)"),
-    # is_complete weakening: require only ONE fraction zero (and -> or), so a
-    # partially-complete sheet is wrongly reported complete.
-    ("objective: is_complete weakening (and -> or)",
-     "        return (self.char_level_fraction == 0.0\n"
-     "                and self.skills_fraction == 0.0\n"
-     "                and self.gear_fraction == 0.0)",
-     "        return (self.char_level_fraction == 0.0\n"
-     "                or self.skills_fraction == 0.0\n"
-     "                or self.gear_fraction == 0.0)"),
+    # NOTE: the historical `is_complete` weakening mutation (and -> or) MOVED to
+    # `objective_completion.py` after the pure-core extraction (the property
+    # `ObjectiveGap.is_complete` now delegates to `is_complete_pure`). The
+    # equivalent mutation lives in WEIGHTED_REMAINING_MUTATIONS
+    # ("is_complete == flipped to !="), killed by test_weighted_remaining_diff.py.
 ]
 
 
@@ -594,6 +591,43 @@ TASK_DECISION_MUTATIONS = [
 ]
 
 
+# objective_completion mutations -- old strings matched to current objective_completion.py text.
+WEIGHTED_REMAINING_MUTATIONS = [
+    # Drop the third weight*fraction summand: the gear-category contribution
+    # is silently zeroed, so any partial gear gap is invisible to the scalar.
+    # The exact-rational diff with positive weights catches the missing term;
+    # the bug-teeth diff also catches it (the zeroed third category mimics
+    # the latent zero-weight defect in a way the equivalence forbids).
+    ("objective_completion: drop third weight*fraction summand",
+     "    return (weights[0] * fractions[0]\n"
+     "            + weights[1] * fractions[1]\n"
+     "            + weights[2] * fractions[2])",
+     "    return (weights[0] * fractions[0]\n"
+     "            + weights[1] * fractions[1])"),
+    # is_complete `==` flipped to `!=`: an all-zero objective wrongly reports
+    # INCOMPLETE (and vice versa). The positive-equivalence diff catches it
+    # via the is_complete agreement check at a complete triple.
+    ("objective_completion: is_complete == flipped to !=",
+     "    return (fractions[0] == 0.0\n"
+     "            and fractions[1] == 0.0\n"
+     "            and fractions[2] == 0.0)",
+     "    return (fractions[0] != 0.0\n"
+     "            and fractions[1] != 0.0\n"
+     "            and fractions[2] != 0.0)"),
+    # weighted_remaining substitutes `max` for the sum: the scalar becomes the
+    # largest weight*fraction term, not the sum. Three weight*fraction terms
+    # produce different totals between sum and max whenever ≥ 2 are nonzero,
+    # which the diff exercises broadly.
+    ("objective_completion: weighted_remaining sum -> max",
+     "    return (weights[0] * fractions[0]\n"
+     "            + weights[1] * fractions[1]\n"
+     "            + weights[2] * fractions[2])",
+     "    return max(weights[0] * fractions[0],\n"
+     "               weights[1] * fractions[1],\n"
+     "               weights[2] * fractions[2])"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -625,7 +659,7 @@ _ALL_SRCS = [
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
-    PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC,
+    PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
 ]
 
 
@@ -690,6 +724,8 @@ def main() -> int:
               "formal/diff/test_arbiter_select_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
               "formal/diff/test_task_decision_diff.py", survivors)
+    run_group(OBJECTIVE_COMPLETION_SRC, WEIGHTED_REMAINING_MUTATIONS,
+              "formal/diff/test_weighted_remaining_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

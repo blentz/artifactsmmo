@@ -163,3 +163,13 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.TaskDecision.requiredVpc_antitone_in_confidence
 #print axioms Formal.TaskDecision.decision_pursue_confidence_monotone
 #print axioms Formal.TaskDecision.decision_pursue_vpc_monotone
+open Formal.WeightedRemaining in
+#print axioms complete_imp_zero
+open Formal.WeightedRemaining in
+#print axioms zero_iff_complete_pos
+open Formal.WeightedRemaining in
+#print axioms bug_teeth_witness
+open Formal.WeightedRemaining in
+#print axioms mono_head
+open Formal.WeightedRemaining in
+#print axioms nonneg

@@ -182,3 +182,9 @@ open Formal.PriorityBand
 #check @Formal.TaskDecision.requiredVpc_antitone_in_confidence   -- confidence-monotone: threshold antitone in confidence
 #check @Formal.TaskDecision.decision_pursue_confidence_monotone  -- confidence-monotone: PURSUE preserved by ↑confidence
 #check @Formal.TaskDecision.decision_pursue_vpc_monotone         -- vpc-monotone: PURSUE preserved by ↑skill_up_vpc
+-- WeightedRemaining required roles:
+#check @Formal.WeightedRemaining.complete_imp_zero       -- complete ⇒ scalar 0 (unconditional)
+#check @Formal.WeightedRemaining.zero_iff_complete_pos   -- positive-weight equivalence: scalar 0 ↔ complete
+#check @Formal.WeightedRemaining.bug_teeth_witness       -- bug-teeth: zero-weight ⇒ equivalence fails (witness)
+#check @Formal.WeightedRemaining.mono_head               -- monotone-nondecreasing in head fraction (weight ≥ 0)
+#check @Formal.WeightedRemaining.nonneg                  -- non-negativity under all-non-negative inputs

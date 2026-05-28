@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
@@ -39,9 +40,8 @@ class ObjectiveGap:
 
     @property
     def is_complete(self) -> bool:
-        return (self.char_level_fraction == 0.0
-                and self.skills_fraction == 0.0
-                and self.gear_fraction == 0.0)
+        return is_complete_pure(
+            (self.char_level_fraction, self.skills_fraction, self.gear_fraction))
 
 
 @dataclass(frozen=True)

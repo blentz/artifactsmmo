@@ -6,6 +6,7 @@ open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal
 open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSelection
 open Formal.Scalarizer
 open Formal.TaskDecision
+open Formal.WeightedRemaining
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -758,6 +759,25 @@ def runTaskDecision (args : Array Json) : Json :=
     | Decision.PIVOT => "pivot"
   Json.mkObj [("decision", Json.str label)]
 
+/-- Compute one weighted_remaining + is_complete result over the proved
+`weightedRemaining` / `isComplete`.
+
+args layout (Ints; rationals as num/den pairs):
+* `[0]`        nTerms
+* per-term block (4 Ints): `[weightNum, weightDen, fractionNum, fractionDen]`
+
+Emits `wr_num`/`wr_den` (the exact scalar over `ℚ`), and `is_complete`. -/
+def runWeightedRemaining (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let terms : List Formal.WeightedRemaining.Term :=
+    (List.range n).map (fun k =>
+      (ratArg args (1 + 4 * k), ratArg args (3 + 4 * k)))
+  let r := Formal.WeightedRemaining.weightedRemaining terms
+  Json.mkObj [
+    ("wr_num", Json.num r.num),
+    ("wr_den", Json.num (Int.ofNat r.den)),
+    ("is_complete", Json.bool (decide (Formal.WeightedRemaining.isComplete terms)))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -822,6 +842,8 @@ def runOne (item : Json) : Json :=
     runArbiterSelect args
   else if kind == "task_decision" then
     runTaskDecision args
+  else if kind == "weighted_remaining" then
+    runWeightedRemaining args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

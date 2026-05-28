@@ -19,4 +19,5 @@ import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.ArbiterSelect
 import Formal.TaskDecision
+import Formal.WeightedRemaining
 import Formal.Contracts
