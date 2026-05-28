@@ -103,30 +103,6 @@ class TestValueOf:
         assert goal._value_of(None, GameData()) == -float("inf")
 
 
-class TestInventoryOnlyUpgrade:
-    def _gd(self) -> GameData:
-        gd = GameData()
-        gd._item_stats = {
-            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
-            "steel_sword": ItemStats(code="steel_sword", level=20, type_="weapon"),
-        }
-        gd._crafting_recipes = {}
-        return gd
-
-    def test_skips_zero_quantity_and_overlevel_items(self):
-        """A zero-qty entry is skipped (line 200); an item above the char's
-        level is skipped (line 203). Only the usable copper_dagger is picked."""
-        gd = self._gd()
-        goal = UpgradeEquipmentGoal()
-        state = make_state(
-            level=5,
-            inventory={"copper_dagger": 1, "ghost_item": 0, "steel_sword": 1},
-            equipment={"weapon_slot": None},
-        )
-        pick = goal._find_inventory_only_upgrade(state, gd)
-        assert pick == ("copper_dagger", "weapon_slot")
-
-
 class TestInventoryUpgradeSkipsZeroQty:
     def test_zero_qty_inventory_item_skipped(self):
         """An inventory entry with combined inv+bank qty <= 0 is skipped

@@ -240,15 +240,6 @@ class TestIsUpgradeOver:
         )
         return goal, gd
 
-    def test_craftable_beats_same_level_non_craftable_in_inventory(self):
-        """copper_dagger (craftable, level 1) in inventory should upgrade wooden_stick (starter, level 1)."""
-        goal, gd = self._make_goal_and_gd(["copper_dagger"])
-        equipment = {slot: None for slot in ITEM_TYPE_TO_SLOT.values()}
-        equipment["weapon_slot"] = "wooden_stick"
-        state = make_state(inventory={"copper_dagger": 1}, level=5, equipment=equipment)
-        result = goal._find_inventory_only_upgrade(state, gd)
-        assert result == ("copper_dagger", "weapon_slot")
-
     def test_upgrade_equipment_value_nonzero_with_starter_gear(self):
         """UpgradeEquipment.value() must be >0 when copper_dagger is in inventory vs wooden_stick."""
         goal, gd = self._make_goal_and_gd(["copper_dagger"])
@@ -265,17 +256,6 @@ class TestIsUpgradeOver:
         equipment["weapon_slot"] = "wooden_stick"
         state = make_state(inventory={"copper_dagger": 1}, level=5, equipment=equipment)
         assert goal.value(state, gd) == 35.0
-
-    def test_non_craftable_does_not_beat_same_level_non_craftable(self):
-        """Two non-craftable items at same level: no upgrade."""
-        goal = UpgradeEquipmentGoal()
-        stick_stats = ItemStats(code="wooden_stick", level=1, type_="weapon")
-        stick2_stats = ItemStats(code="other_stick", level=1, type_="weapon")
-        gd = make_gd(item_stats={"wooden_stick": stick_stats, "other_stick": stick2_stats}, recipes={})
-        equipment = {slot: None for slot in ITEM_TYPE_TO_SLOT.values()}
-        equipment["weapon_slot"] = "wooden_stick"
-        state = make_state(inventory={"other_stick": 1}, level=5, equipment=equipment)
-        assert goal._find_inventory_only_upgrade(state, gd) is None
 
     def test_is_upgrade_over_higher_level_wins_regardless(self):
         """Higher level always beats lower level (basic sanity check)."""
