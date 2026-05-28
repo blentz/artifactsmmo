@@ -10,6 +10,7 @@ open Formal.WeightedRemaining
 open Formal.LowYieldCancel
 open Formal.StrategyBlend
 open Formal.DecideKey
+open Formal.CyclesForProgress
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -887,6 +888,41 @@ def runDecideKey (args : Array Json) : Json :=
       | _ => .bankExpand
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
+/-- Compute one cycles_for_progress result using the SAME proved
+`cyclesForProgressPure`.
+
+args layout (all Ints):
+* `[0]`        warmupMinSamples (Nat)
+* `[1]`        nRows
+* per row (5 Ints, repeated nRows times starting at index 2):
+  `[cycleIndex, hasTaskProgress(0/1), taskProgress, hasCyclesToSatisfy(0/1),
+    cyclesToSatisfy]`
+
+Rows are passed newest-first (as `recent_goal_cycles` returns them).
+
+Emits the result as `{"present": Bool, "num": Int, "den": Int}`. When
+`present = false`, num/den are 0. -/
+def runCyclesForProgress (args : Array Json) : Json :=
+  let warmup := (intArg args 0).toNat
+  let n := (intArg args 1).toNat
+  let rows : List Formal.CyclesForProgress.CycleRow :=
+    (List.range n).map (fun k =>
+      let base := 2 + 5 * k
+      let cyc := intArg args base
+      let tpPresent := intArg args (base + 1) != 0
+      let tp : Option Int := if tpPresent then some (intArg args (base + 2)) else none
+      let csPresent := intArg args (base + 3) != 0
+      let cs : Option Int := if csPresent then some (intArg args (base + 4)) else none
+      { cycleIndex := cyc, taskProgress := tp, cyclesToSatisfy := cs })
+  match Formal.CyclesForProgress.cyclesForProgressPure rows warmup with
+  | some r =>
+    Json.mkObj [("present", Json.bool true),
+                ("num", Json.num r.num),
+                ("den", Json.num (Int.ofNat r.den))]
+  | none =>
+    Json.mkObj [("present", Json.bool false),
+                ("num", Json.num 0), ("den", Json.num 1)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -959,6 +995,8 @@ def runOne (item : Json) : Json :=
     runStrategyBlend args
   else if kind == "decide_key" then
     runDecideKey args
+  else if kind == "cycles_for_progress" then
+    runCyclesForProgress args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

@@ -201,3 +201,9 @@ open Formal.WeightedRemaining in
 #print axioms Formal.DecideKey.decideCmp_eq_imp_effort
 #print axioms Formal.DecideKey.goalReprOfGuard_nonempty
 #print axioms Formal.DecideKey.goalReprOfMeans_nonempty
+#print axioms Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat
+#print axioms Formal.CyclesForProgress.warmup_blocks
+#print axioms Formal.CyclesForProgress.empty_none
+#print axioms Formal.CyclesForProgress.satisfyIntervals_pos
+#print axioms Formal.CyclesForProgress.strictIntervals_pos
+#print axioms Formal.CyclesForProgress.allIntervals_pos

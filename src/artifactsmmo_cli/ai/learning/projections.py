@@ -8,13 +8,16 @@ Spec: docs/superpowers/specs/2026-05-18-strategic-reasoning-design.md §2.
 """
 
 import json
-import statistics
 
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
+    CycleRow,
+    cycles_for_progress_pure,
+)
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -136,30 +139,18 @@ def cycles_for_progress(goal_repr: str, store: LearningStore, window: int = 100)
     so callers fall back to defaults during warm-up.
     """
     rows = store.recent_goal_cycles(goal_repr, window=window)
-    if not rows:
-        return None
-    # rows are newest-first; reverse to chronological for delta detection.
-    chrono = list(reversed(rows))
-
-    intervals: list[int] = []
-    last_progress_at: int | None = None
-    prev_progress: int | None = None
-    for cycle in chrono:
-        if prev_progress is not None and cycle.task_progress is not None:
-            if cycle.task_progress > prev_progress:
-                if last_progress_at is not None:
-                    intervals.append(cycle.cycle_index - last_progress_at)
-                last_progress_at = cycle.cycle_index
-        prev_progress = cycle.task_progress
-
-    # Also include cycles_to_satisfy events as 1-cycle progress markers.
-    for cycle in chrono:
-        if cycle.cycles_to_satisfy is not None and cycle.cycles_to_satisfy > 0:
-            intervals.append(cycle.cycles_to_satisfy)
-
-    if len(intervals) < WARMUP_MIN_SAMPLES:
-        return None
-    return statistics.median(intervals)
+    # Pure-core delegation. The two-append-loop semantics is intentional —
+    # see `cycles_for_progress_core.py` header and the Lean proof
+    # `Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat`.
+    projected = [
+        CycleRow(
+            cycle_index=row.cycle_index,
+            task_progress=row.task_progress,
+            cycles_to_satisfy=row.cycles_to_satisfy,
+        )
+        for row in rows
+    ]
+    return cycles_for_progress_pure(projected, WARMUP_MIN_SAMPLES)
 
 
 class PathSegment(BaseModel):

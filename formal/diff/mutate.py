@@ -30,6 +30,7 @@ OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / 
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
 STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy_blend.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
+CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -761,6 +762,35 @@ _ALL_SRCS = [
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
     LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
+    CYCLES_FOR_PROGRESS_SRC,
+]
+
+
+# cycles_for_progress mutations -- old strings matched to current cycles_for_progress_core.py text.
+CYCLES_FOR_PROGRESS_MUTATIONS = [
+    # Drop the SATISFY append loop entirely: only strict-increase intervals
+    # contribute. The verdict-(b) intentional-both-signal contract breaks;
+    # `test_satisfy_only_branch` and `test_both_on_single_cycle_intentional_double_signal`
+    # fire (the satisfy interval would no longer appear in the median).
+    ("cycles_for_progress: drop the satisfy append loop",
+     "    for cycle in chrono:\n"
+     "        if cycle.cycles_to_satisfy is not None and cycle.cycles_to_satisfy > 0:\n"
+     "            intervals.append(cycle.cycles_to_satisfy)\n",
+     ""),
+    # Flip `is not None` to `is None` in the satisfy gate: the recorded
+    # `cycles_to_satisfy` values are SKIPPED and the (sparse) None-rows would
+    # blow up on the `> 0` check (TypeError). Hypothesis quickly produces a
+    # row with `cycles_to_satisfy = None`.
+    ("cycles_for_progress: satisfy gate is not None -> is None",
+     "        if cycle.cycles_to_satisfy is not None and cycle.cycles_to_satisfy > 0:",
+     "        if cycle.cycles_to_satisfy is None and cycle.cycles_to_satisfy > 0:"),
+    # Off-by-one on the strict-increase predicate: `>` becomes `>=`. A flat
+    # `task_progress` row now also counts as a strict increase, inflating the
+    # interval count. The general diff test fires whenever progress holds
+    # steady for any chronological pair.
+    ("cycles_for_progress: strict-increase > -> >= (off-by-one predicate)",
+     "            if cycle.task_progress > prev_progress:",
+     "            if cycle.task_progress >= prev_progress:"),
 ]
 
 
@@ -833,6 +863,8 @@ def main() -> int:
               "formal/diff/test_strategy_blend_diff.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
               "formal/diff/test_decide_key_diff.py", survivors)
+    run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,
+              "formal/diff/test_cycles_for_progress_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

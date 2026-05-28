@@ -219,3 +219,10 @@ open Formal.PriorityBand
 #check @Formal.DecideKey.decideCmp_eq_imp_effort                   -- key-determinism: eq ⇒ equal effort
 #check @Formal.DecideKey.goalReprOfGuard_nonempty                  -- exhaustiveness: every GuardKind variant yields a non-empty repr (total dispatcher)
 #check @Formal.DecideKey.goalReprOfMeans_nonempty                  -- exhaustiveness: every MeansKind variant yields a non-empty repr (total dispatcher)
+-- CyclesForProgress required roles:
+#check @Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat   -- contract: pure = median(strict ++ satisfy)
+#check @Formal.CyclesForProgress.warmup_blocks                           -- warm-up gate: < W intervals ⇒ none
+#check @Formal.CyclesForProgress.empty_none                              -- empty input ⇒ none
+#check @Formal.CyclesForProgress.satisfyIntervals_pos                    -- positivity: every satisfy interval > 0 (the > 0 gate)
+#check @Formal.CyclesForProgress.strictIntervals_pos                     -- positivity: every strict-increase interval > 0 (monotone cycleIndex)
+#check @Formal.CyclesForProgress.allIntervals_pos                        -- positivity: every appended interval > 0 ⇒ median > 0 (seals or-15 fallback)

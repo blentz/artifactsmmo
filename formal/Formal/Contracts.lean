@@ -21,6 +21,7 @@ import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.StrategyBlend
 import Formal.DecideKey
+import Formal.CyclesForProgress
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1169,3 +1170,36 @@ example : ∀ (k : Formal.DecideKey.GuardKind),
 example : ∀ (k : Formal.DecideKey.MeansKind),
     (Formal.DecideKey.goalReprOfMeans k).length > 0 :=
   @Formal.DecideKey.goalReprOfMeans_nonempty
+
+/-! ### CyclesForProgress role contracts. -/
+
+example : ∀ (rows : List Formal.CyclesForProgress.CycleRow) (W : Nat),
+    rows ≠ [] →
+    ¬ (Formal.CyclesForProgress.allIntervals
+          (Formal.CyclesForProgress.revList rows)).length < W →
+    Formal.CyclesForProgress.cyclesForProgressPure rows W
+      = some (Formal.CyclesForProgress.medianQ
+          (Formal.CyclesForProgress.strictIntervals
+            (Formal.CyclesForProgress.revList rows)
+           ++ Formal.CyclesForProgress.satisfyIntervals
+            (Formal.CyclesForProgress.revList rows))) :=
+  @Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat
+example : ∀ (rows : List Formal.CyclesForProgress.CycleRow) (W : Nat),
+    (Formal.CyclesForProgress.allIntervals
+        (Formal.CyclesForProgress.revList rows)).length < W →
+    Formal.CyclesForProgress.cyclesForProgressPure rows W = none :=
+  @Formal.CyclesForProgress.warmup_blocks
+example : ∀ (W : Nat),
+    Formal.CyclesForProgress.cyclesForProgressPure [] W = none :=
+  @Formal.CyclesForProgress.empty_none
+example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
+    ∀ x ∈ Formal.CyclesForProgress.satisfyIntervals rows, 0 < x :=
+  @Formal.CyclesForProgress.satisfyIntervals_pos
+example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
+    Formal.CyclesForProgress.monoChrono rows →
+    ∀ x ∈ Formal.CyclesForProgress.strictIntervals rows, 0 < x :=
+  @Formal.CyclesForProgress.strictIntervals_pos
+example : ∀ (rows : List Formal.CyclesForProgress.CycleRow),
+    Formal.CyclesForProgress.monoChrono rows →
+    ∀ x ∈ Formal.CyclesForProgress.allIntervals rows, 0 < x :=
+  @Formal.CyclesForProgress.allIntervals_pos
