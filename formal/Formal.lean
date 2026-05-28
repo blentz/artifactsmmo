@@ -15,4 +15,5 @@ import Formal.StuckDetector
 import Formal.PriorityBand
 import Formal.OwnedCount
 import Formal.UpgradeSelection
+import Formal.Scalarizer
 import Formal.Contracts

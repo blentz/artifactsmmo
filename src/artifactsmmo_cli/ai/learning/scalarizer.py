@@ -13,6 +13,7 @@ import json
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import Yield
+from artifactsmmo_cli.ai.learning.scalar_core import coins_spent_from_delta, scalar_yield_pure
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -95,7 +96,7 @@ def expected_coin_value_with_prices(
             cycle_value += qty_i * sell_back_price.get(str(code), 0)
         # TaskExchange adds `received` items and removes the coins spent, so
         # delta_inv_used = received - coins_spent  =>  coins_spent = received - delta.
-        coins_spent = received - cycle.delta_inv_used
+        coins_spent = coins_spent_from_delta(received, cycle.delta_inv_used)
         if coins_spent <= 0:
             continue  # implausible (bad/partial data) — skip
         total_value += cycle_value
@@ -132,23 +133,24 @@ def scalar_yield(
     - gold / GOLD_PER_XP_EQUIVALENT
     - tasks_coins * expected_coin_value / GOLD_PER_XP_EQUIVALENT
     """
-    char_xp_component = yield_.char_xp * CHARACTER_XP_LEVEL_SCALAR * (state.level + 1)
-
     active_skills = game_data.active_gathering_skills(state.task_code, state.crafting_target)
-    skill_xp_component = 0.0
-    for skill_name, delta in yield_.skill_xp.items():
-        weight = (SKILL_XP_RELEVANT_TOOL_WEIGHT
-                  if skill_name in active_skills
-                  else SKILL_XP_BASELINE_WEIGHT)
-        skill_xp_component += delta * weight
-
-    gold_component = yield_.gold / GOLD_PER_XP_EQUIVALENT
 
     if store is not None and yield_.tasks_coins > 0:
         prices = _max_sell_back_price(game_data)
         coin_value = expected_coin_value_with_prices(store, prices)
     else:
         coin_value = DEFAULT_COIN_VALUE_GOLD
-    coin_component = yield_.tasks_coins * coin_value / GOLD_PER_XP_EQUIVALENT
 
-    return char_xp_component + skill_xp_component + gold_component + coin_component
+    return scalar_yield_pure(
+        yield_.char_xp,
+        state.level,
+        yield_.skill_xp,
+        active_skills,
+        yield_.gold,
+        yield_.tasks_coins,
+        coin_value,
+        baseline_w=SKILL_XP_BASELINE_WEIGHT,
+        relevant_w=SKILL_XP_RELEVANT_TOOL_WEIGHT,
+        gold_per_xp=GOLD_PER_XP_EQUIVALENT,
+        char_scalar=CHARACTER_XP_LEVEL_SCALAR,
+    )

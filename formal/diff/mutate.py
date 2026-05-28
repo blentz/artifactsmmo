@@ -22,6 +22,7 @@ STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
 OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
+SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -432,6 +433,29 @@ UPGRADE_SELECTION_MUTATIONS = [
 ]
 
 
+# scalar_core mutations -- old strings matched to current scalar_core.py text.
+SCALAR_CORE_MUTATIONS = [
+    # coins_spent sign flip: received - delta -> delta - received (the inversion
+    # identity received - coins_spent == delta breaks).
+    ("scalar_core: coins_spent sign flip (received - delta -> delta - received)",
+     "    return received - delta_inv_used",
+     "    return delta_inv_used - received"),
+    # swap relevant/baseline weights: active skills now weighted 0.2 and inactive
+    # 2.0, inverting the weight-dominance the scalar relies on.
+    ("scalar_core: swap relevant/baseline weight",
+     "        weight = relevant_w if skill_name in active_skills else baseline_w",
+     "        weight = baseline_w if skill_name in active_skills else relevant_w"),
+    # gold sign flip: gold component subtracted instead of added (+gold -> -gold).
+    ("scalar_core: gold component sign flip (+ -> -)",
+     "    gold_component = gold / gold_per_xp",
+     "    gold_component = -gold / gold_per_xp"),
+    # coin component dropped: tasks_coins no longer contribute to the scalar.
+    ("scalar_core: drop coin component (coin_value -> 0)",
+     "    coin_component = tasks_coins * coin_value / gold_per_xp",
+     "    coin_component = tasks_coins * 0 / gold_per_xp"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -462,7 +486,7 @@ _ALL_SRCS = [
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
-    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC,
+    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
 ]
 
 
@@ -517,6 +541,8 @@ def main() -> int:
               "formal/diff/test_owned_count_diff.py", survivors)
     run_group(UPGRADE_SELECTION_SRC, UPGRADE_SELECTION_MUTATIONS,
               "formal/diff/test_upgrade_selection_diff.py", survivors)
+    run_group(SCALAR_CORE_SRC, SCALAR_CORE_MUTATIONS,
+              "formal/diff/test_scalarizer_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -4,6 +4,7 @@ import Lean.Data.Json
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
 open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSelection
+open Formal.Scalarizer
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -639,6 +640,50 @@ def runUpgradeSelection (args : Array Json) : Json :=
     | some r => Json.mkObj [("present", Json.bool true), ("chosen", candJson r)]
     | none => Json.mkObj [("present", Json.bool false)]
 
+/-- Read a rational field from a flat Int arg list as a (numerator, denominator)
+pair starting at index `i`. The Python diff feeds EXACT `fractions.Fraction`
+inputs split into their numerator/denominator, so the oracle reconstructs the
+exact `Rat` (the fractional domain the bot really compares). -/
+def ratArg (xs : Array Json) (i : Nat) : Rat :=
+  mkRat (intArg xs i) (intArg xs (i + 1)).toNat
+
+/-- Compute one scalarizer result using the SAME proved `scalarYield`, over the
+EXACT RATIONAL domain (no scaling). Each rational input is a (num, den) pair.
+
+args layout (Ints, read as rational num/den pairs):
+* `[0,1]`          charXp      (num, den)
+* `[2,3]`          level       (num, den)
+* `[4,5]`          gold        (num, den)
+* `[6,7]`          tasksCoins  (num, den)
+* `[8,9]`          coinValue   (num, den)
+* `[10,11]`        charScale   (num, den; production = 1/1)
+* `[12,13]`        goldUnit    (num, den; production = 1/100)
+* `[14]`           nSkills, then nSkills (weightNum, weightDen, xpNum, xpDen) quads
+
+Emits the exact scalar as separate numerator / denominator integers. -/
+def runScalarizer (args : Array Json) : Json :=
+  let charXp := ratArg args 0
+  let level := ratArg args 2
+  let gold := ratArg args 4
+  let tasksCoins := ratArg args 6
+  let coinValue := ratArg args 8
+  let charScale := ratArg args 10
+  let goldUnit := ratArg args 12
+  let nSkills := (intArg args 14).toNat
+  let skills : List Formal.Scalarizer.SkillTerm :=
+    (List.range nSkills).map (fun k => (ratArg args (15 + 4*k), ratArg args (17 + 4*k)))
+  let r := Formal.Scalarizer.scalarYield charXp level skills gold tasksCoins
+    coinValue charScale goldUnit
+  Json.mkObj [("scalar_num", Json.num r.num), ("scalar_den", Json.num (Int.ofNat r.den))]
+
+/-- Compute one coins_spent result using the SAME proved `coinsSpent`.
+args: [received, delta]. Emits coins_spent and the inverted delta (received-cs). -/
+def runCoinsSpent (args : Array Json) : Json :=
+  let received := intArg args 0
+  let delta := intArg args 1
+  let cs := Formal.Scalarizer.coinsSpent received delta
+  Json.mkObj [("coins_spent", Json.num cs), ("inverted_delta", Json.num (received - cs))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -695,6 +740,10 @@ def runOne (item : Json) : Json :=
     runOwnedCount args
   else if kind == "upgrade_selection" then
     runUpgradeSelection args
+  else if kind == "scalarizer" then
+    runScalarizer args
+  else if kind == "coins_spent" then
+    runCoinsSpent args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

@@ -152,3 +152,10 @@ open Formal.PriorityBand
 #check @Formal.UpgradeSelection.inventoryCmp_lt_trans          -- key-total-order: inventory comparator transitive
 #check @Formal.UpgradeSelection.inventoryCmp_eq_imp_code       -- key-total-order: inventory eq forces equal item_code (determinism)
 #check @Formal.UpgradeSelection.bestByKey_sound                -- argmax-sound: result dominates list and is a member (first-wins on ties)
+-- Scalarizer required roles:
+#check @Formal.Scalarizer.scalarYield_mono_charxp     -- mono-charxp: scalar non-decreasing in char_xp (level ≥ 0)
+#check @Formal.Scalarizer.scalarYield_mono_gold       -- mono-gold: scalar non-decreasing in gold (goldUnit ≥ 0)
+#check @Formal.Scalarizer.scalarYield_mono_coins      -- mono-coins: scalar non-decreasing in tasks_coins (coinValue,goldUnit ≥ 0)
+#check @Formal.Scalarizer.skillSum_mono_one           -- mono-skillxp: scalar non-decreasing in one skill's xp (weight ≥ 0)
+#check @Formal.Scalarizer.relevant_weight_dominates   -- weight-dominance: relevant weight ≥ baseline weight per xp unit
+#check @Formal.Scalarizer.coinsSpent_inverts          -- coin-inversion: received - coinsSpent received delta = delta

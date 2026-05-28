@@ -15,6 +15,7 @@ import Formal.StuckDetector
 import Formal.PriorityBand
 import Formal.OwnedCount
 import Formal.UpgradeSelection
+import Formal.Scalarizer
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -873,3 +874,50 @@ example : ∀ (cmp : Formal.UpgradeSelection.Candidate → Formal.UpgradeSelecti
     ∃ r, Formal.UpgradeSelection.bestByKey cmp (x :: xs) = some r ∧
       r ∈ (x :: xs) ∧ ∀ y ∈ (x :: xs), cmp y r ≠ .gt :=
   @Formal.UpgradeSelection.bestByKey_sound
+
+/-! ### Scalarizer role contracts.
+
+The pure cores of `scalar_yield`/`coins_spent`. The model is EXACT over the
+rationals (`Rat`) — the bot's Yield fields are fractional averages, so the
+scalar is modeled with no scaling and the proved orderings are faithful to the
+real fractional formula. Statements pin: monotonicity in each
+non-negative-contribution component (char_xp given level ≥ 0; gold;
+tasks_coins given coin_value ≥ 0; a single skill's xp given its weight ≥ 0), the
+relevant ≥ baseline weight dominance, and the coin-inversion identity (delta =
+received - coins_spent inverts exactly; counts are integers so this stays Int). -/
+
+-- mono-charxp: scalar non-decreasing in char_xp, given level ≥ 0 (game level ≥ 1)
+-- and the non-negative char scale.
+example : ∀ (charXp charXp' level : Rat) (skills : List Formal.Scalarizer.SkillTerm)
+    (gold tasksCoins coinValue charScale goldUnit : Rat),
+    0 ≤ level → 0 ≤ charScale → charXp ≤ charXp' →
+    Formal.Scalarizer.scalarYield charXp level skills gold tasksCoins coinValue charScale goldUnit
+      ≤ Formal.Scalarizer.scalarYield charXp' level skills gold tasksCoins coinValue charScale goldUnit :=
+  @Formal.Scalarizer.scalarYield_mono_charxp
+-- mono-gold: scalar non-decreasing in gold, given the non-negative gold unit.
+example : ∀ (charXp level : Rat) (skills : List Formal.Scalarizer.SkillTerm)
+    (gold gold' tasksCoins coinValue charScale goldUnit : Rat),
+    0 ≤ goldUnit → gold ≤ gold' →
+    Formal.Scalarizer.scalarYield charXp level skills gold tasksCoins coinValue charScale goldUnit
+      ≤ Formal.Scalarizer.scalarYield charXp level skills gold' tasksCoins coinValue charScale goldUnit :=
+  @Formal.Scalarizer.scalarYield_mono_gold
+-- mono-coins: scalar non-decreasing in tasks_coins, given coin_value ≥ 0 and unit ≥ 0.
+example : ∀ (charXp level : Rat) (skills : List Formal.Scalarizer.SkillTerm)
+    (gold tasksCoins tasksCoins' coinValue charScale goldUnit : Rat),
+    0 ≤ coinValue → 0 ≤ goldUnit → tasksCoins ≤ tasksCoins' →
+    Formal.Scalarizer.scalarYield charXp level skills gold tasksCoins coinValue charScale goldUnit
+      ≤ Formal.Scalarizer.scalarYield charXp level skills gold tasksCoins' coinValue charScale goldUnit :=
+  @Formal.Scalarizer.scalarYield_mono_coins
+-- mono-skillxp: skill sum non-decreasing in one skill's xp, given its weight ≥ 0.
+example : ∀ (w xp xp' : Rat) (rest : List Formal.Scalarizer.SkillTerm),
+    0 ≤ w → xp ≤ xp' →
+    Formal.Scalarizer.skillSum ((w, xp) :: rest) ≤ Formal.Scalarizer.skillSum ((w, xp') :: rest) :=
+  @Formal.Scalarizer.skillSum_mono_one
+-- weight-dominance: relevant weight ≥ baseline weight per non-negative xp unit.
+example : ∀ (baselineW relevantW xp : Rat),
+    baselineW ≤ relevantW → 0 ≤ xp → baselineW * xp ≤ relevantW * xp :=
+  @Formal.Scalarizer.relevant_weight_dominates
+-- coin-inversion: received - coinsSpent received delta = delta (no sign error).
+example : ∀ (received delta : Int),
+    received - Formal.Scalarizer.coinsSpent received delta = delta :=
+  @Formal.Scalarizer.coinsSpent_inverts

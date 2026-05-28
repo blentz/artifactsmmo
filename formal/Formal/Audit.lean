@@ -135,3 +135,10 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.UpgradeSelection.inventoryCmp_lt_trans
 #print axioms Formal.UpgradeSelection.inventoryCmp_eq_imp_code
 #print axioms Formal.UpgradeSelection.bestByKey_sound
+#print axioms Formal.Scalarizer.scalarYield_eq_components
+#print axioms Formal.Scalarizer.scalarYield_mono_charxp
+#print axioms Formal.Scalarizer.scalarYield_mono_gold
+#print axioms Formal.Scalarizer.scalarYield_mono_coins
+#print axioms Formal.Scalarizer.skillSum_mono_one
+#print axioms Formal.Scalarizer.relevant_weight_dominates
+#print axioms Formal.Scalarizer.coinsSpent_inverts
