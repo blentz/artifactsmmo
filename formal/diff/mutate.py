@@ -140,14 +140,16 @@ SCORING_MUTATIONS = [
     ("equipment_scoring: drop level filter in _candidates_for_slot",
      "        if stats is None or state.level < stats.level:",
      "        if stats is None:"),
-    # drop the no-downgrade guard on the weapon branch: always swap to the argmax
-    # candidate even when it is strictly WORSE than the equipped item.
-    ("equipment_scoring: drop weapon no-downgrade guard (always swap)",
+    # drop the no-downgrade guard: force `improves = True` so the selector
+    # always swaps to the argmax candidate even when it is strictly WORSE than
+    # the equipped item. After the multi-slot claim refactor the same property
+    # lives in the shared `improves` flag used by both weapon and armor slots.
+    ("equipment_scoring: drop no-downgrade guard (improves forced True)",
      "        if slot == \"weapon_slot\":\n"
-     "            if weapon_score(best, monster_res) > weapon_score(current_stats, monster_res):\n"
-     "                result[slot] = best.code",
-     "        if slot == \"weapon_slot\":\n"
-     "            result[slot] = best.code"),
+     "            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)\n"
+     "        else:\n"
+     "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)",
+     "        improves = True"),
     # drop the weapon clamp: max(0.0, 1 - res/100) -> (1 - res/100), letting a
     # high-resistance monster make a strong weapon score NEGATIVE (so a weak weapon
     # could be preferred / scores go below 0).
