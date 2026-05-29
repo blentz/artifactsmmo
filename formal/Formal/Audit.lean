@@ -230,3 +230,10 @@ open Formal.WeightedRemaining in
 #print axioms Formal.ActionCostNonneg.move_cost_nonneg
 #print axioms Formal.ActionCostNonneg.delete_cost_nonneg
 #print axioms Formal.ActionCostNonneg.all_actions_cost_nonneg
+#print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
+#print axioms Formal.RealizableLoadout.apply_cur_ge_1
+#print axioms Formal.RealizableLoadout.ownership_counts_equipped
+#print axioms Formal.RealizableLoadout.regression_ring_pair_realizable
+#print axioms Formal.RealizableLoadout.regression_buggy_output_not_realizable
+#print axioms Formal.RealizableLoadout.empty_loadout_realizable
+#print axioms Formal.RealizableLoadout.isRealizable_mono_inv

@@ -206,6 +206,18 @@ def test_python_matches_lean(mon_atk, mon_res, level, item_types, item_levels,
     monster_atk = {e: v for e, v in zip(ELEMENTS, mon_atk, strict=True)}
     monster_res = {e: v for e, v in zip(ELEMENTS, mon_res, strict=True)}
     inventory = {code: 1 for code, keep in zip(_ITEM_CODES, inv_pick, strict=True) if keep}
+    # Post-fix realizability: pick_loadout's claimed-codes accumulator threads
+    # across slots, so a code equipped into a SLOT IT DOESN'T FIT (a malformed
+    # state) is claimed by that slot's fallback and becomes unavailable to its
+    # natural slot. To keep this per-slot scoring test independent (the Lean
+    # `pickslot` oracle has no cross-slot view), restrict each slot's current
+    # code to items that actually fit it; otherwise the diff would compare
+    # cross-slot-aware Python against per-slot-only Lean and (correctly) flag
+    # them as different at malformed states.
+    if equip_w is not None and table[equip_w].type_ != "weapon":
+        equip_w = None
+    if equip_b is not None and table[equip_b].type_ != "body_armor":
+        equip_b = None
     equipment = {"weapon_slot": equip_w, "body_armor_slot": equip_b}
     _check(table, monster_atk, monster_res, level, inventory, equipment,
            ["weapon_slot", "body_armor_slot"])

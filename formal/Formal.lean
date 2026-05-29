@@ -27,3 +27,4 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.Contracts
 import Formal.ActionCostNonneg
+import Formal.RealizableLoadout

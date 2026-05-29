@@ -251,3 +251,11 @@ open Formal.PriorityBand
 #check @Formal.ActionCostNonneg.move_cost_nonneg             -- Move.cost ≥ 0
 #check @Formal.ActionCostNonneg.delete_cost_nonneg           -- DeleteItemAction.cost_weight ≥ 0 (all branches)
 #check @Formal.ActionCostNonneg.all_actions_cost_nonneg      -- headline: every concrete Action's cost ≥ 0 (seals PlannerAdmissibility)
+-- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
+#check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
+#check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement
+#check @Formal.RealizableLoadout.ownership_counts_equipped             -- per-slot +1: equipped copy contributes to ownership
+#check @Formal.RealizableLoadout.regression_ring_pair_realizable       -- bug-witness: post-fix output for the ring1=A+ring2=B case is realizable
+#check @Formal.RealizableLoadout.regression_buggy_output_not_realizable -- anti-witness: pre-fix output (both rings = B) is NOT realizable
+#check @Formal.RealizableLoadout.empty_loadout_realizable               -- edge: empty loadout is vacuously realizable
+#check @Formal.RealizableLoadout.isRealizable_mono_inv                  -- monotone: more inventory preserves realizability

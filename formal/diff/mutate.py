@@ -157,6 +157,41 @@ SCORING_MUTATIONS = [
 ]
 
 
+# realizable_loadout mutations -- target the claimed-codes accumulator in
+# scoring.pick_loadout (the multi-slot bug fix). Each mutation breaks the
+# realizability invariant `is_realizable(pick_loadout(...), inv, equip)`,
+# killed by formal/diff/test_realizable_loadout_diff.py.
+REALIZABLE_LOADOUT_MUTATIONS = [
+    # Drop the claimed-codes feasibility filter: every candidate is feasible
+    # regardless of how many copies have already been claimed by peer slots.
+    # Resurrects the original bug — multi-slot peers (ring1/ring2, etc.) all
+    # pick the same scarce code.
+    ("realizable_loadout: drop claimed-codes feasibility filter",
+     "        feasible: list[ItemStats] = [\n"
+     "            cand for cand in candidates if _effective_available(cand.code) >= 1\n"
+     "        ]",
+     "        feasible: list[ItemStats] = list(candidates)"),
+    # Drop the claim increment on a SWAP-TO-BEST decision: a code can be
+    # selected by every slot in sequence because no slot ever records its
+    # claim. The is_applicable / first slot still sees `>= 1` feasibility,
+    # but downstream peers see the same `>= 1` because nothing was claimed.
+    ("realizable_loadout: drop _claim(best.code) on improve-swap",
+     "        if improves:\n"
+     "            result[slot] = best.code\n"
+     "            _claim(best.code)",
+     "        if improves:\n"
+     "            result[slot] = best.code"),
+    # Make `_effective_available` ignore the claim count entirely: the
+    # feasibility check degenerates to raw ownership, so peer slots see
+    # the same physical item as available again. (Bypasses the accumulator.)
+    ("realizable_loadout: _effective_available ignores claimed_codes",
+     "    def _effective_available(code: str) -> int:\n"
+     "        return ownership(code, state.inventory, state.equipment) - claimed_codes.get(code, 0)",
+     "    def _effective_available(code: str) -> int:\n"
+     "        return ownership(code, state.inventory, state.equipment)"),
+]
+
+
 # skill_xp_curve mutations -- old strings matched to current skill_xp_curve.py text.
 SKILL_XP_CURVE_MUTATIONS = [
     # confidence off-by-one: inflate the observed-gap count by 1.
@@ -873,6 +908,8 @@ def main() -> int:
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
               "formal/diff/test_equipment_scoring_diff.py", survivors)
+    run_group(SCORING_SRC, REALIZABLE_LOADOUT_MUTATIONS,
+              "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,

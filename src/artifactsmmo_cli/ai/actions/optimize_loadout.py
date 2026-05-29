@@ -49,14 +49,28 @@ class OptimizeLoadoutAction(Action):
             return state
         new_equipment = dict(state.equipment)
         new_inventory = dict(state.inventory)
-        for slot, new_code in swaps.items():
+        # Two-pass apply: unequip-all-first then equip-all. The realizability
+        # invariant from pick_loadout is over the whole loadout (count of code
+        # C in result ≤ ownership(C, inv, equip)); applying the swaps slot-by-
+        # slot can transiently violate that ordering when a peer slot still
+        # holds a copy that hasn't been returned to inventory yet. Doing all
+        # the unequips first restores every old-equipment copy to inventory
+        # before any equip consumes from it, so the per-step assert sees the
+        # full ownership pool the invariant accounts for.
+        for slot in swaps:
             old_code = new_equipment.get(slot)
             if old_code is not None:
                 new_inventory[old_code] = new_inventory.get(old_code, 0) + 1
+                new_equipment[slot] = None
+        for slot, new_code in swaps.items():
             if new_code is not None:
                 cur = new_inventory.get(new_code, 0)
+                assert cur >= 1, (
+                    f"OptimizeLoadout.apply: cur=0 for {new_code} — "
+                    "pick_loadout produced an impossible (non-realizable) loadout"
+                )
                 if cur <= 1:
-                    new_inventory.pop(new_code, None)
+                    del new_inventory[new_code]
                 else:
                     new_inventory[new_code] = cur - 1
             new_equipment[slot] = new_code
