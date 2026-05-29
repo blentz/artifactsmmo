@@ -194,6 +194,37 @@ class TestNpcBuyAction:
         assert new_state.gold == 80  # 100 - 2 * 10
         assert new_state.inventory.get("cooked_chicken") == 2
 
+    def test_not_applicable_when_insufficient_inventory_slots(self):
+        """REAL BUG #6 regression-pin: pre-fix is_applicable lacked the slot
+        check, so apply minted past inventory_max. Post-fix the slot floor
+        catches the verified counterexample (inventory_used=9, inventory_max=10,
+        quantity=5 — would overflow by 4)."""
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1))
+        gd = make_gd(npc_stock={"cook": {"cooked_chicken": 1}})
+        # used=9 (filler), max=10 → only 1 free slot, quantity=5 → must refuse.
+        state = make_state(gold=1000, inventory={"filler": 9}, inventory_max=10)
+        assert action.is_applicable(state, gd) is False
+
+    def test_applicable_at_quantity_equals_free_boundary(self):
+        """Boundary: quantity == inventory_free is accepted (post-fix)."""
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1))
+        gd = make_gd(npc_stock={"cook": {"cooked_chicken": 1}})
+        state = make_state(gold=1000, inventory={"filler": 5}, inventory_max=10)
+        assert action.is_applicable(state, gd) is True
+
+    def test_apply_asserts_on_precondition_bypass(self):
+        """Defense in depth: apply() asserts the slot precondition before
+        mutating. If a caller bypasses is_applicable (planner bug, manual
+        invocation) the action crashes loudly rather than silently overflowing
+        the inventory cap. Phase-3 OptimizeLoadout-shape."""
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1))
+        gd = make_gd(npc_stock={"cook": {"cooked_chicken": 1}})
+        state = make_state(gold=1000, inventory={"filler": 9}, inventory_max=10)
+        # is_applicable would return False (slot floor), but if a caller skips
+        # that check, apply() raises with a clear diagnostic.
+        with pytest.raises(AssertionError, match="is_applicable invariant violated"):
+            action.apply(state, gd)
+
     def test_cost_includes_distance_and_gold(self):
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(4, 0))
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 100}})

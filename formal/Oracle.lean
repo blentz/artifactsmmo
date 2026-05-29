@@ -950,6 +950,35 @@ def runGatherApply (args : Array Json) : Json :=
     Json.mkObj [("used", Json.num (Int.ofNat post.used)),
                 ("cap", Json.num (Int.ofNat post.cap))]
 
+/-- Compute one npc_buy_inventory result.
+
+Two queries (chosen by `args[0]`):
+* query 0 = `is_applicable` slot+gold check. args:
+  `[0, used, cap, quantity, gold, price]`. Emits
+  `{"applicable": Bool, "free": Int}`.
+* query 1 = `apply` projection: chain ONE buy of `quantity`. args:
+  `[1, used, cap, quantity, _gold, _price]`. Emits the post-state
+  `{"used": Int, "cap": Int}` after `apply` once.
+
+Reuses the proved `Formal.NpcBuyInventory.isApplicable` / `apply` directly. -/
+def runNpcBuyInventory (args : Array Json) : Json :=
+  let q := intArg args 0
+  let used := (intArg args 1).toNat
+  let cap := (intArg args 2).toNat
+  let i : Formal.NpcBuyInventory.Inv := { used := used, cap := cap }
+  if q == 0 then
+    let quantity := (intArg args 3).toNat
+    let gold := (intArg args 4).toNat
+    let price := (intArg args 5).toNat
+    Json.mkObj
+      [("applicable", Json.bool (Formal.NpcBuyInventory.isApplicable i quantity gold price)),
+       ("free", Json.num (Int.ofNat (Formal.NpcBuyInventory.free i)))]
+  else
+    let quantity := (intArg args 3).toNat
+    let post := Formal.NpcBuyInventory.apply i quantity
+    Json.mkObj [("used", Json.num (Int.ofNat post.used)),
+                ("cap", Json.num (Int.ofNat post.cap))]
+
 /-- Compute one action_cost_nonneg result using the proved structural cores.
 
 Dispatches on `args[0]`:
@@ -1053,6 +1082,8 @@ def runOne (item : Json) : Json :=
     runCyclesForProgress args
   else if kind == "gather_apply" then
     runGatherApply args
+  else if kind == "npc_buy_inventory" then
+    runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then
     runActionCostNonneg args
   else

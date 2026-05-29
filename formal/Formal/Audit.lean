@@ -216,6 +216,17 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GatherApply.chain_safe_min_free_witness
 #print axioms Formal.GatherApply.is_applicable_boundary_witness
 #print axioms Formal.GatherApply.is_applicable_off_boundary_witness
+#print axioms Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge
+#print axioms Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge
+#print axioms Formal.NpcBuyInventory.npc_buy_apply_inventory_safe
+#print axioms Formal.NpcBuyInventory.applyN_used
+#print axioms Formal.NpcBuyInventory.applyN_cap
+#print axioms Formal.NpcBuyInventory.npc_buy_chain_safe
+#print axioms Formal.NpcBuyInventory.boundary_quantity_eq_free_witness
+#print axioms Formal.NpcBuyInventory.regression_used9_cap10_qty5_refused
+#print axioms Formal.NpcBuyInventory.chain_safe_boundary_witness
+#print axioms Formal.NpcBuyInventory.gold_short_refused_witness
+#print axioms Formal.NpcBuyInventory.gold_exact_min_accepted_witness
 #print axioms Formal.ActionCostNonneg.constantCost_nonneg
 #print axioms Formal.ActionCostNonneg.distanceCost_nonneg
 #print axioms Formal.ActionCostNonneg.qtyCost_nonneg

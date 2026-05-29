@@ -25,6 +25,7 @@ import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
+import Formal.NpcBuyInventory
 import Formal.Contracts
 import Formal.ActionCostNonneg
 import Formal.RealizableLoadout

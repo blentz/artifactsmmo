@@ -13,6 +13,10 @@ from artifactsmmo_api_client.models.npc_merchant_buy_schema import NpcMerchantBu
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.npc_buy_core import (
+    npc_buy_apply_pure,
+    npc_buy_is_applicable_pure,
+)
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -36,7 +40,16 @@ class NpcBuyAction(Action):
         price = game_data.npc_sells_item(self.npc_code, self.item_code)
         if price is None:
             return False
-        if state.gold < price * self.quantity:
+        # Slot-floor + gold gate (delegates to the proved pure core).
+        # The slot precondition mirrors GatherAction's MIN_FREE_SLOTS shape:
+        # without it, `apply` would mint past `inventory_max` (REAL BUG #6).
+        if not npc_buy_is_applicable_pure(
+            inv_used=state.inventory_used,
+            inv_max=state.inventory_max,
+            quantity=self.quantity,
+            gold=state.gold,
+            price=price,
+        ):
             return False
         return event_npc_tradeable(
             self.npc_code, game_data,
@@ -46,10 +59,18 @@ class NpcBuyAction(Action):
         )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        # Defense in depth: assert the slot-floor precondition before mutating.
+        # Matches Phase-3 OptimizeLoadoutAction.apply shape — any precondition
+        # bypass (planner skipped is_applicable, etc.) crashes loudly rather
+        # than silently overflowing the inventory cap.
+        if state.inventory_free < self.quantity:
+            raise AssertionError(
+                f"NpcBuyAction.apply: inventory_free={state.inventory_free} "
+                f"< quantity={self.quantity} — is_applicable invariant violated"
+            )
         price = game_data.npc_sells_item(self.npc_code, self.item_code) or 0
         new_gold = state.gold - price * self.quantity
-        new_inventory = dict(state.inventory)
-        new_inventory[self.item_code] = new_inventory.get(self.item_code, 0) + self.quantity
+        new_inventory = npc_buy_apply_pure(state.inventory, self.item_code, self.quantity)
         dest = self.npc_location or (state.x, state.y)
         return dataclasses.replace(
             state,

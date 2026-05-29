@@ -35,6 +35,7 @@ DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_ke
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
+NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
 APPLY_EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.py"
@@ -809,6 +810,7 @@ _ALL_SRCS = [
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     COST_CORE_SRC,
+    NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
 ]
@@ -860,6 +862,43 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# npc_buy mutations -- REAL BUG #6. Each resurrects the inventory overflow
+# by dropping the slot floor, flipping the boundary, or minting too many items.
+# Killed by formal/diff/test_npc_buy_inventory_diff.py.
+NPC_BUY_MUTATIONS = [
+    # Drop the slot-free check: resurrects the original bug — apply mints past
+    # inventory_max. The regression-pin (used=9, cap=10, quantity=5) fires.
+    ("npc_buy: drop inventory_free check in is_applicable",
+     "    free = inv_max - inv_used\n"
+     "    if free < quantity:\n"
+     "        return False\n"
+     "    if gold < price * quantity:\n"
+     "        return False\n"
+     "    return True",
+     "    if gold < price * quantity:\n"
+     "        return False\n"
+     "    return True"),
+    # Flip the slot-floor inequality: `free < quantity` -> `free <= quantity`.
+    # Off-by-one — quantity exactly at free is now wrongly refused. The
+    # boundary test (used=5, cap=10, quantity=5) fires.
+    ("npc_buy: flip < to <= on slot floor (off-by-one)",
+     "    free = inv_max - inv_used\n"
+     "    if free < quantity:\n"
+     "        return False",
+     "    free = inv_max - inv_used\n"
+     "    if free <= quantity:\n"
+     "        return False"),
+    # Apply mints +quantity+1 instead of +quantity: even with the precondition
+    # satisfied, the post-state overflows the cap by 1. The diff's
+    # `test_apply_matches_lean` Lean-oracle agreement fires.
+    ("npc_buy: apply mints +quantity+1 instead of +quantity",
+     "    new_inventory[item_code] = new_inventory.get(item_code, 0) + quantity\n"
+     "    return new_inventory",
+     "    new_inventory[item_code] = new_inventory.get(item_code, 0) + quantity + 1\n"
+     "    return new_inventory"),
 ]
 
 
@@ -1082,6 +1121,8 @@ def main() -> int:
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
+    run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
+              "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(APPLY_MOVE_SRC, APPLY_MOVE_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_EQUIP_SRC, APPLY_EQUIP_MUTATIONS,

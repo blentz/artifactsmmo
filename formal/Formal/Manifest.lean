@@ -236,6 +236,18 @@ open Formal.PriorityBand
 #check @Formal.GatherApply.chain_safe_min_free_witness -- non-vacuous witness at MIN_FREE_SLOTS
 #check @Formal.GatherApply.is_applicable_boundary_witness     -- witness: applies at the boundary
 #check @Formal.GatherApply.is_applicable_off_boundary_witness -- witness: fails one slot past
+-- NpcBuyInventory required roles (REAL BUG #6: NpcBuyAction.apply overflows inventory_max):
+#check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge -- passing check ⇒ quantity ≤ free
+#check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge -- passing check ⇒ price*quantity ≤ gold
+#check @Formal.NpcBuyInventory.npc_buy_apply_inventory_safe      -- per-step safety: is_applicable ⇒ post.used ≤ cap
+#check @Formal.NpcBuyInventory.applyN_used                       -- applyN bookkeeping: used' = used + qs.sum
+#check @Formal.NpcBuyInventory.applyN_cap                        -- applyN bookkeeping: cap unchanged
+#check @Formal.NpcBuyInventory.npc_buy_chain_safe                -- chain safety: qs.sum ≤ free ⇒ chain stays in cap
+#check @Formal.NpcBuyInventory.boundary_quantity_eq_free_witness -- non-vacuous witness: quantity == free succeeds
+#check @Formal.NpcBuyInventory.regression_used9_cap10_qty5_refused -- regression-pin: verified bug counterexample now refused
+#check @Formal.NpcBuyInventory.chain_safe_boundary_witness        -- non-vacuous witness: 2-step chain at boundary
+#check @Formal.NpcBuyInventory.gold_short_refused_witness         -- witness: gold gate failure
+#check @Formal.NpcBuyInventory.gold_exact_min_accepted_witness    -- witness: gold at exact minimum accepted
 -- ActionCostNonneg required roles:
 #check @Formal.ActionCostNonneg.constantCost_nonneg          -- bucket 1: constant cost ≥ 0
 #check @Formal.ActionCostNonneg.distanceCost_nonneg          -- bucket 2: base + dist ≥ 0

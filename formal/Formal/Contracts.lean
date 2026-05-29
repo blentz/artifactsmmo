@@ -23,6 +23,7 @@ import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
+import Formal.NpcBuyInventory
 import Formal.ActionCostNonneg
 import Formal.ApplyBaseline
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
@@ -1236,6 +1237,38 @@ example : ∀ (i : Formal.GatherApply.Inv) (n : Nat),
     i.used ≤ i.cap → n ≤ i.cap - i.used →
     (Formal.GatherApply.applyN i n).used ≤ i.cap :=
   @Formal.GatherApply.chain_safe
+
+/-! ### NpcBuyInventory role contracts (REAL BUG #6). -/
+
+-- is_applicable lower bound (slot): passing check ⇒ quantity ≤ free
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (quantity gold price : Nat),
+    Formal.NpcBuyInventory.isApplicable i quantity gold price = true →
+    quantity ≤ i.cap - i.used :=
+  @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge
+-- is_applicable lower bound (gold): passing check ⇒ price*quantity ≤ gold
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (quantity gold price : Nat),
+    Formal.NpcBuyInventory.isApplicable i quantity gold price = true →
+    price * quantity ≤ gold :=
+  @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge
+-- per-step safety: wellformed + is_applicable ⇒ post.used ≤ cap (chain-safe contract)
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (quantity gold price : Nat),
+    i.used ≤ i.cap →
+    Formal.NpcBuyInventory.isApplicable i quantity gold price = true →
+    (Formal.NpcBuyInventory.apply i quantity).used ≤ i.cap :=
+  @Formal.NpcBuyInventory.npc_buy_apply_inventory_safe
+-- applyN bookkeeping: used' = used + qs.sum
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (qs : List Nat),
+    (Formal.NpcBuyInventory.applyN i qs).used = i.used + qs.sum :=
+  @Formal.NpcBuyInventory.applyN_used
+-- applyN bookkeeping: cap unchanged
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (qs : List Nat),
+    (Formal.NpcBuyInventory.applyN i qs).cap = i.cap :=
+  @Formal.NpcBuyInventory.applyN_cap
+-- chain safety: wellformed start + qs.sum ≤ free ⇒ chain stays in cap
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (qs : List Nat),
+    i.used ≤ i.cap → qs.sum ≤ i.cap - i.used →
+    (Formal.NpcBuyInventory.applyN i qs).used ≤ i.cap :=
+  @Formal.NpcBuyInventory.npc_buy_chain_safe
 
 -- ActionCostNonneg statement contracts. Pin the role theorems' exact types.
 -- bucket 1: constant cost ≥ 0
