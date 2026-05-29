@@ -33,6 +33,7 @@ def make_state(**overrides) -> WorldState:
         task_total=0,
         bank_items=None,
         bank_gold=None,
+        bank_capacity=None,
         pending_items=None,
     )
     defaults.update(overrides)

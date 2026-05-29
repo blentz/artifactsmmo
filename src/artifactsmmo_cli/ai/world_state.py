@@ -87,6 +87,13 @@ class WorldState:
     # skill_name -> current XP within level. Default empty so callers that don't
     # need skill-XP attribution (most action.apply paths) keep working. Filled
     # from `<skill>_xp` on the API schema by from_character_schema.
+    bank_capacity: int | None = None
+    """Bank slot capacity per the API; None means the bank hasn't been visited
+    yet (we don't yet know capacity). Projected through
+    BuyBankExpansionAction.apply (+BANK_EXPANSION_SLOTS per buy). OUTSIDE the
+    Phase-4 ApplyBaseline 8-field stat contract — Action.apply may mutate it
+    (only BuyBankExpansionAction does so today); every other apply preserves
+    it automatically via `dataclasses.replace`."""
     skill_xp: dict[str, int] = field(default_factory=dict)
     projected_skill_xp_delta: dict[str, int] = field(default_factory=dict)
     """Per-plan-path projected skill XP delta accumulated by Gather/Craft.apply.
@@ -148,6 +155,7 @@ class WorldState:
         char: CharacterSchema,
         bank_items: dict[str, int] | None = None,
         bank_gold: int | None = None,
+        bank_capacity: int | None = None,
         pending_items: "tuple[tuple[str, str], ...] | None" = None,
         active_events: dict[str, datetime] | None = None,
     ) -> "WorldState":
@@ -210,6 +218,7 @@ class WorldState:
             task_total=char.task_total,
             bank_items=bank_items,
             bank_gold=bank_gold,
+            bank_capacity=bank_capacity,
             pending_items=pending_items,
             active_events=active_events or {},
             attack=attack,

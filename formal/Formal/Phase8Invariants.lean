@@ -13,14 +13,24 @@ Phase 8 mixed batch: four targets from the recon shortlist.
   Post-fix: both probes refused. We model the slot-floor and skill-gate as
   a `chain_safe` instantiation of the existing template.
 
-* Target B — `BuyBankExpansionAction.apply` (BLOCKED-FOR-DECISION):
-  `ExpandBankGoal.is_satisfied` reads `len(bank_items) < capacity*0.9` where
-  `capacity = game_data._bank_capacity`. `BuyBankExpansionAction.apply` does
-  NOT modify `game_data._bank_capacity` (game_data is read-only at planning
-  time) and does NOT modify `state.bank_items`. So no plan composed from
-  the exposed action set ever flips the goal's `is_satisfied` from `False`
-  to `True` — the goal is unreachable through projection. We prove a
-  `bank_expansion_projection_gap` lemma stating exactly this.
+* Target B — `BuyBankExpansionAction.apply` (REAL BUG #15, FIXED):
+  Pre-fix `ExpandBankGoal.is_satisfied` read `len(bank_items) < capacity*0.9`
+  where `capacity = game_data._bank_capacity` (read-only at planning time)
+  and `BuyBankExpansionAction.apply` did NOT modify any capacity field. So no
+  plan composed from the exposed action set ever flipped the goal from
+  `False` to `True` — the goal was unreachable through projection.
+  Post-fix: a new `state.bank_capacity` field (Option-1 design) participates
+  in projection. `BuyBankExpansionAction.apply` mints
+  `bank_capacity := pre + BANK_EXPANSION_SLOTS` (20 per the OpenAPI contract
+  `POST /my/{name}/action/bank/buy_expansion` — "Buy a 20 slots bank
+  expansion"). `ExpandBankGoal.is_satisfied` reads `state.bank_capacity`
+  (fallback to game_data when None). We prove:
+    (a) `bank_expansion_apply_increments_capacity` — apply is +20.
+    (b) `bank_expansion_chain_reaches_satisfied` — after N applies where
+        capacity grows past `bankItems / 0.9`, the goal is satisfied.
+  The pre-fix projection gap is preserved as an anti-witness
+  `bank_expansion_pre_fix_projection_gap` (the BLOCKED counterexample,
+  pinned for regression).
 
 * Target C — Task-sentinel cross-action invariant:
   `AcceptTaskAction.apply` sets `task_code = "__pending__"` and `task_total
@@ -185,10 +195,20 @@ theorem recycle_no_workshop_refused :
     }
     recycleIsApplicable ctx 0 = false := by decide
 
-/-! ### Target B — Bank expansion projection gap (BLOCKED-FOR-DECISION). -/
+/-! ### Target B — Bank expansion projection (REAL BUG #15, FIXED).
+
+The post-fix design adds `bank_capacity` to WorldState. `apply` mints
+`+BANK_EXPANSION_SLOTS = 20` into `bank_capacity` and the goal reads
+`state.bank_capacity` instead of the planning-time-constant
+`game_data._bank_capacity`. Projection now reaches the goal. -/
+
+/-- Mirrors `src/.../actions/bank_expansion.py:BANK_EXPANSION_SLOTS`,
+sourced from OpenAPI `POST /my/{name}/action/bank/buy_expansion`
+description "Buy a 20 slots bank expansion." -/
+def BANK_EXPANSION_SLOTS : Nat := 20
 
 /-- The relevant projection for the goal. `bankItems` is the count of slots
-filled, `capacity` is `game_data._bank_capacity`, fixed during planning. -/
+filled, `capacity` is `state.bank_capacity` (NOW projected by apply). -/
 structure BankProj where
   bankItems : Nat
   capacity : Nat
@@ -203,47 +223,116 @@ edge case is satisfied by definition (matches the Python). -/
 def expandBankIsSatisfied (b : BankProj) : Bool :=
   decide (b.capacity = 0) || decide (10 * b.bankItems < 9 * b.capacity)
 
-/-- The Python apply: subtracts `expansionCost` from `gold`. Does NOT
-touch `bankItems` or `capacity`. -/
+/-- **Post-fix** Python apply: deducts gold AND increments capacity by
+`BANK_EXPANSION_SLOTS`. -/
 def buyBankExpansionApply (b : BankProj) : BankProj :=
+  { b with
+      gold := b.gold - b.expansionCost,
+      capacity := b.capacity + BANK_EXPANSION_SLOTS }
+
+/-- Pre-fix (BUG) apply: only deducts gold. Pinned to keep the regression
+counterexample available. -/
+def buyBankExpansionApplyPreFix (b : BankProj) : BankProj :=
   { b with gold := b.gold - b.expansionCost }
 
-/-- The projection gap: any number of bank-expansion applies leave both
-`bankItems` and `capacity` unchanged. -/
+/-- Iterated post-fix apply. -/
 def buyBankExpansionApplyN : BankProj → Nat → BankProj
   | b, 0 => b
   | b, n + 1 => buyBankExpansionApplyN (buyBankExpansionApply b) n
 
+/-- Iterated pre-fix apply (BUG branch). -/
+def buyBankExpansionApplyPreFixN : BankProj → Nat → BankProj
+  | b, 0 => b
+  | b, n + 1 => buyBankExpansionApplyPreFixN (buyBankExpansionApplyPreFix b) n
+
+/-! #### Post-fix invariants. -/
+
+/-- bankItems is unchanged by apply (only capacity & gold move). -/
 theorem buyBankExpansion_preserves_bankItems (b : BankProj) (n : Nat) :
     (buyBankExpansionApplyN b n).bankItems = b.bankItems := by
   induction n generalizing b with
   | zero => rfl
   | succ m ih => simp [buyBankExpansionApplyN, buyBankExpansionApply, ih]
 
-theorem buyBankExpansion_preserves_capacity (b : BankProj) (n : Nat) :
-    (buyBankExpansionApplyN b n).capacity = b.capacity := by
+/-- **Headline (a): per-step capacity increment.** -/
+theorem bank_expansion_apply_increments_capacity (b : BankProj) :
+    (buyBankExpansionApply b).capacity = b.capacity + BANK_EXPANSION_SLOTS := by
+  rfl
+
+/-- N-step capacity bookkeeping: `cap' = cap + N * SLOTS`. -/
+theorem buyBankExpansion_capacityN (b : BankProj) (n : Nat) :
+    (buyBankExpansionApplyN b n).capacity = b.capacity + n * BANK_EXPANSION_SLOTS := by
+  induction n generalizing b with
+  | zero => simp [buyBankExpansionApplyN]
+  | succ m ih =>
+    simp [buyBankExpansionApplyN, ih, buyBankExpansionApply, Nat.succ_mul]
+    omega
+
+/-- **Headline (b): the chain reaches `is_satisfied`.** Given a target gap
+expressed as `n * SLOTS` slots of headroom past the
+`10 * items < 9 * capacity` threshold, after N applies the goal flips true.
+-/
+theorem bank_expansion_chain_reaches_satisfied (b : BankProj) (n : Nat)
+    (h : 10 * b.bankItems < 9 * (b.capacity + n * BANK_EXPANSION_SLOTS)) :
+    expandBankIsSatisfied (buyBankExpansionApplyN b n) = true := by
+  unfold expandBankIsSatisfied
+  rw [buyBankExpansion_preserves_bankItems, buyBankExpansion_capacityN]
+  -- second disjunct fires
+  have : decide (10 * b.bankItems < 9 * (b.capacity + n * BANK_EXPANSION_SLOTS)) = true :=
+    decide_eq_true h
+  simp [this]
+
+/-- Concrete witness: cap=30, items=30 (the BLOCKED counterexample). A
+single +20 expansion lifts cap to 50, and `10 * 30 = 300 < 9 * 50 = 450`,
+so the goal flips satisfied. -/
+theorem bank_expansion_post_fix_witness :
+    let b : BankProj := { bankItems := 30, capacity := 30, gold := 1000, expansionCost := 100 }
+    expandBankIsSatisfied b = false ∧
+      expandBankIsSatisfied (buyBankExpansionApplyN b 1) = true := by
+  refine ⟨by decide, ?_⟩
+  apply bank_expansion_chain_reaches_satisfied
+  decide
+
+/-- Concrete witness for the per-step contract on a small case. -/
+theorem bank_expansion_apply_increments_capacity_witness :
+    let b : BankProj := { bankItems := 30, capacity := 30, gold := 1000, expansionCost := 100 }
+    (buyBankExpansionApply b).capacity = 50 := by
+  decide
+
+/-! #### Pre-fix anti-witness — the BUG counterexample, pinned. -/
+
+theorem buyBankExpansionPreFix_preserves_capacity (b : BankProj) (n : Nat) :
+    (buyBankExpansionApplyPreFixN b n).capacity = b.capacity := by
   induction n generalizing b with
   | zero => rfl
-  | succ m ih => simp [buyBankExpansionApplyN, buyBankExpansionApply, ih]
+  | succ m ih => simp [buyBankExpansionApplyPreFixN, buyBankExpansionApplyPreFix, ih]
 
-/-- **The projection gap.** If `expandBankIsSatisfied` is false initially,
-no chain of bank-expansion applies makes it true. -/
-theorem bank_expansion_projection_gap (b : BankProj) (n : Nat)
+theorem buyBankExpansionPreFix_preserves_bankItems (b : BankProj) (n : Nat) :
+    (buyBankExpansionApplyPreFixN b n).bankItems = b.bankItems := by
+  induction n generalizing b with
+  | zero => rfl
+  | succ m ih => simp [buyBankExpansionApplyPreFixN, buyBankExpansionApplyPreFix, ih]
+
+/-- **The pre-fix projection gap** (regression anchor): if
+`expandBankIsSatisfied` is false initially, the BUGGED chain never flips
+it. The fact that this still holds under `buyBankExpansionApplyPreFix`
+proves the FIX is load-bearing. -/
+theorem bank_expansion_pre_fix_projection_gap (b : BankProj) (n : Nat)
     (h : expandBankIsSatisfied b = false) :
-    expandBankIsSatisfied (buyBankExpansionApplyN b n) = false := by
-  simp [expandBankIsSatisfied, buyBankExpansion_preserves_bankItems,
-        buyBankExpansion_preserves_capacity]
+    expandBankIsSatisfied (buyBankExpansionApplyPreFixN b n) = false := by
+  simp [expandBankIsSatisfied, buyBankExpansionPreFix_preserves_bankItems,
+        buyBankExpansionPreFix_preserves_capacity]
   simp [expandBankIsSatisfied] at h
   exact h
 
-/-- Witness: a concrete unsatisfied state where the gap fires. cap=30,
-items=30 (100% fill — the trigger condition), expansion mints gold. -/
-theorem bank_expansion_gap_witness :
+/-- The same concrete state is BLOCKED under the pre-fix apply: 5 applies
+still report unsatisfied. -/
+theorem bank_expansion_pre_fix_gap_witness :
     let b : BankProj := { bankItems := 30, capacity := 30, gold := 1000, expansionCost := 100 }
     expandBankIsSatisfied b = false ∧
-      expandBankIsSatisfied (buyBankExpansionApplyN b 5) = false := by
+      expandBankIsSatisfied (buyBankExpansionApplyPreFixN b 5) = false := by
   refine ⟨by decide, ?_⟩
-  apply bank_expansion_projection_gap
+  apply bank_expansion_pre_fix_projection_gap
   decide
 
 /-! ### Target C — Task sentinel cross-action invariant. -/

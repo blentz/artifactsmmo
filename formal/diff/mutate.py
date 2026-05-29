@@ -46,6 +46,8 @@ TASK_CANCEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_c
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 STORE_WARMUP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store_warmup_core.py"
+BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
+EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -781,6 +783,48 @@ DECIDE_KEY_MUTATIONS = [
 ]
 
 
+# bank_expansion mutations (REAL BUG #15: BuyBankExpansionAction.apply must
+# project +BANK_EXPANSION_SLOTS into state.bank_capacity, otherwise the
+# planner cannot ever reach ExpandBankGoal.is_satisfied).
+BANK_EXPANSION_MUTATIONS = [
+    # Mutation 1: REVERT to pre-fix (drop the bank_capacity update). This
+    # restores the BLOCKED projection gap.
+    ("bank_expansion: drop the capacity update entirely (pre-fix revert)",
+     "        return dataclasses.replace(\n"
+     "            state,\n"
+     "            gold=state.gold - game_data._next_expansion_cost,\n"
+     "            x=dest[0],\n"
+     "            y=dest[1],\n"
+     "            cooldown_expires=None,\n"
+     "            bank_capacity=pre_cap + BANK_EXPANSION_SLOTS,\n"
+     "        )",
+     "        return dataclasses.replace(\n"
+     "            state,\n"
+     "            gold=state.gold - game_data._next_expansion_cost,\n"
+     "            x=dest[0],\n"
+     "            y=dest[1],\n"
+     "            cooldown_expires=None,\n"
+     "        )"),
+    # Mutation 2: off-by-one on the expansion size (wrong slot count).
+    ("bank_expansion: BANK_EXPANSION_SLOTS off-by-one (20 → 19)",
+     "BANK_EXPANSION_SLOTS = 20",
+     "BANK_EXPANSION_SLOTS = 19"),
+]
+
+# expand_bank goal mutations (REAL BUG #15 sibling: reverting the goal to read
+# game_data instead of state.bank_capacity defeats the projection).
+EXPAND_BANK_GOAL_MUTATIONS = [
+    ("expand_bank: is_satisfied reverts to reading game_data._bank_capacity only",
+     "        if state.bank_capacity is not None:\n"
+     "            capacity = state.bank_capacity\n"
+     "        elif self._game_data is not None:\n"
+     "            capacity = self._game_data._bank_capacity\n"
+     "        else:\n"
+     "            capacity = 0",
+     "        capacity = self._game_data._bank_capacity if self._game_data is not None else 0"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -1332,6 +1376,10 @@ def main() -> int:
               "formal/diff/test_phase7_invariants_diff.py", survivors)
     run_group(STORE_WARMUP_SRC, STORE_WARMUP_MUTATIONS,
               "formal/diff/test_store_warmup_diff.py", survivors)
+    run_group(BANK_EXPANSION_SRC, BANK_EXPANSION_MUTATIONS,
+              "formal/diff/test_bank_expansion_diff.py", survivors)
+    run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_GOAL_MUTATIONS,
+              "tests/test_ai/test_goals_expand_bank.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

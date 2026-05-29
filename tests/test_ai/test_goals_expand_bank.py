@@ -1,5 +1,18 @@
-"""Tests for ExpandBankGoal."""
+"""Tests for ExpandBankGoal.
 
+After the Phase-8b bank-capacity projection fix:
+  - `is_satisfied` reads `state.bank_capacity` first (None → game_data fallback).
+  - `value` still reads `game_data._bank_capacity` for the cycle-time trigger.
+
+So tests that previously pinned the goal via `game_data=` keep working through
+the fallback path, and new tests pin the projection path by setting
+`bank_capacity` on the state directly.
+"""
+
+from artifactsmmo_cli.ai.actions.bank_expansion import (
+    BANK_EXPANSION_SLOTS,
+    BuyBankExpansionAction,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from tests.test_ai.fixtures import make_state
@@ -51,32 +64,62 @@ class TestExpandBankGoal:
         assert goal.is_satisfied(state) is True
 
     def test_is_satisfied_when_capacity_used_below_90pct(self):
-        goal = ExpandBankGoal(bank_accessible=True, game_data=make_gd(bank_capacity=30))
+        # state.bank_capacity is the new projection-aware source-of-truth.
+        goal = ExpandBankGoal(bank_accessible=True)
         # 20 < 30*0.9 (27) → satisfied
-        state = make_state(bank_items={f"item_{i}": 1 for i in range(20)})
+        state = make_state(bank_items={f"item_{i}": 1 for i in range(20)}, bank_capacity=30)
         assert goal.is_satisfied(state) is True
 
     def test_is_not_satisfied_when_capacity_at_or_above_90pct(self):
-        goal = ExpandBankGoal(bank_accessible=True, game_data=make_gd(bank_capacity=30))
-        state = make_state(bank_items={f"item_{i}": 1 for i in range(27)})
+        goal = ExpandBankGoal(bank_accessible=True)
+        state = make_state(bank_items={f"item_{i}": 1 for i in range(27)}, bank_capacity=30)
         assert goal.is_satisfied(state) is False
 
     def test_re_triggers_after_expansion_to_larger_bank(self):
         """Regression: a hardcoded `< 27` made the goal report satisfied at
         100% of a post-expansion 60-slot bank. With actual capacity, a bank
         expanded to 60 is unsatisfied at 55 used."""
-        goal = ExpandBankGoal(bank_accessible=True, game_data=make_gd(bank_capacity=60))
-        state = make_state(bank_items={f"item_{i}": 1 for i in range(55)})
+        goal = ExpandBankGoal(bank_accessible=True)
+        state = make_state(bank_items={f"item_{i}": 1 for i in range(55)}, bank_capacity=60)
         assert goal.is_satisfied(state) is False
 
     def test_value_zero_when_satisfied_even_if_otherwise_triggered(self):
         """Value/is_satisfied consistency — never report urgency when already satisfied."""
         goal = ExpandBankGoal(bank_accessible=True)
         gd = make_gd(bank_capacity=30, next_expansion_cost=1000)
-        # Bank at 80% — satisfied (below 90% threshold)
+        # Bank at 80% — satisfied (below 90% threshold). is_satisfied falls
+        # back to game_data._bank_capacity because state.bank_capacity is None.
         state = make_state(gold=2000, bank_items={f"item_{i}": 1 for i in range(24)})
         assert goal.is_satisfied(state) is True
         assert goal.value(state, gd) == 0.0
+
+    def test_state_capacity_takes_precedence_over_game_data(self):
+        """The projection path: state.bank_capacity overrides game_data._bank_capacity.
+        Without this, BuyBankExpansionAction.apply could never flip the goal."""
+        goal = ExpandBankGoal(bank_accessible=True, game_data=make_gd(bank_capacity=30))
+        # 27 fills 30-slot bank to 90% (unsatisfied under game_data) but only
+        # 54% of a projected 50-slot bank (satisfied under state).
+        state = make_state(bank_items={f"item_{i}": 1 for i in range(27)}, bank_capacity=50)
+        assert goal.is_satisfied(state) is True
+
+    def test_projection_chain_flips_goal_satisfied(self):
+        """End-to-end: a chain of BuyBankExpansionAction.apply over an
+        unsatisfied state reaches the satisfied region. This is the bug-fix
+        contract that closes REAL BUG #15."""
+        action = BuyBankExpansionAction(bank_location=(4, 0), accessible=True)
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        # Bank at 100% fill on a 30-slot bank — unsatisfied.
+        state = make_state(
+            gold=1000, x=4, y=0,
+            bank_items={f"item_{i}": 1 for i in range(30)},
+            bank_capacity=30,
+        )
+        assert goal.is_satisfied(state) is False
+        # One expansion mints 20 slots → capacity 50, 30 items = 60% < 90%.
+        post = action.apply(state, gd)
+        assert post.bank_capacity == 30 + BANK_EXPANSION_SLOTS
+        assert goal.is_satisfied(post) is True
 
     def test_repr(self):
         assert repr(ExpandBankGoal()) == "ExpandBank"

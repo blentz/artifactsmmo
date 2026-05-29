@@ -533,12 +533,14 @@ class GamePlayer:
 
         bank_items = self.state.bank_items if self.state else None
         bank_gold = self.state.bank_gold if self.state else None
+        bank_capacity = self.state.bank_capacity if self.state else None
         pending_items = self.state.pending_items if self.state else None
         active_events = self._fetch_active_events(client)
         state = WorldState.from_character_schema(
             last_result.data,
             bank_items=bank_items,
             bank_gold=bank_gold,
+            bank_capacity=bank_capacity,
             pending_items=pending_items,
             active_events=active_events,
         )
@@ -563,9 +565,11 @@ class GamePlayer:
             page += 1
 
         bank_gold: int | None = None
+        bank_capacity: int | None = state.bank_capacity
         details = get_bank_details(client=client)
         if details is not None and hasattr(details, "data") and details.data is not None:
             bank_gold = details.data.gold
+            bank_capacity = details.data.slots
 
         return WorldState(
             character=state.character,
@@ -588,6 +592,7 @@ class GamePlayer:
             task_total=state.task_total,
             bank_items=bank_items,
             bank_gold=bank_gold,
+            bank_capacity=bank_capacity,
             pending_items=state.pending_items,
             active_events=state.active_events,
         )
@@ -626,6 +631,7 @@ class GamePlayer:
             task_total=state.task_total,
             bank_items=state.bank_items,
             bank_gold=state.bank_gold,
+            bank_capacity=state.bank_capacity,
             pending_items=pending,
             active_events=state.active_events,
         )

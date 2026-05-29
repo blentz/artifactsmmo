@@ -360,3 +360,10 @@ open Formal.PriorityBand
 #check @Formal.ApplyBaseline.headline_preserves_baseline    -- headline-preserves-baseline (∀ modeled action)
 #check @Formal.ApplyBaseline.preservesBaseline_refl         -- reflexivity (state preserves its own baseline)
 #check @Formal.ApplyBaseline.preservesBaseline_trans        -- transitivity (composition of preserving steps)
+-- Phase8Invariants Target B — Bank expansion projection (REAL BUG #15):
+#check @Formal.Phase8Invariants.bank_expansion_apply_increments_capacity  -- apply +SLOTS
+#check @Formal.Phase8Invariants.buyBankExpansion_capacityN                -- N-step bookkeeping
+#check @Formal.Phase8Invariants.bank_expansion_chain_reaches_satisfied    -- the bug fix
+#check @Formal.Phase8Invariants.bank_expansion_post_fix_witness           -- 30-cap witness (1 apply → satisfied)
+#check @Formal.Phase8Invariants.bank_expansion_pre_fix_projection_gap     -- regression anchor (pre-fix is the bug)
+#check @Formal.Phase8Invariants.bank_expansion_pre_fix_gap_witness        -- regression anchor (BLOCKED counterexample pinned)

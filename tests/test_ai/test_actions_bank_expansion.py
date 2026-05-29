@@ -4,7 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
+from artifactsmmo_cli.ai.actions.bank_expansion import (
+    BANK_EXPANSION_SLOTS,
+    BuyBankExpansionAction,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
@@ -46,6 +49,35 @@ class TestBuyBankExpansionAction:
         state = make_state(x=4, y=0, gold=2000)
         new_state = a.apply(state, gd)
         assert new_state.gold == 1000
+
+    def test_apply_increments_bank_capacity_from_state(self):
+        """Post-fix Phase-8b: apply mints +BANK_EXPANSION_SLOTS into
+        state.bank_capacity so ExpandBankGoal.is_satisfied can flip."""
+        a = BuyBankExpansionAction(bank_location=(4, 0), accessible=True)
+        gd = make_gd(bank_capacity=999, next_expansion_cost=1000)  # game_data is a decoy
+        state = make_state(x=4, y=0, gold=2000, bank_capacity=30)
+        new_state = a.apply(state, gd)
+        assert new_state.bank_capacity == 30 + BANK_EXPANSION_SLOTS
+
+    def test_apply_seeds_bank_capacity_from_game_data_when_state_none(self):
+        """When state.bank_capacity is None (bank not yet visited), apply
+        seeds from game_data._bank_capacity (the cycle snapshot) so the
+        projection still produces a faithful post-buy capacity."""
+        a = BuyBankExpansionAction(bank_location=(4, 0), accessible=True)
+        gd = make_gd(bank_capacity=30, next_expansion_cost=1000)
+        state = make_state(x=4, y=0, gold=2000, bank_capacity=None)
+        new_state = a.apply(state, gd)
+        assert new_state.bank_capacity == 30 + BANK_EXPANSION_SLOTS
+
+    def test_apply_chained_increments_compound(self):
+        """N applies → capacity grows by N * SLOTS. This is the GOAP
+        projection contract that closes the BLOCKED projection gap."""
+        a = BuyBankExpansionAction(bank_location=(4, 0), accessible=True)
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        state = make_state(x=4, y=0, gold=10000, bank_capacity=30)
+        for _ in range(3):
+            state = a.apply(state, gd)
+        assert state.bank_capacity == 30 + 3 * BANK_EXPANSION_SLOTS
 
     def test_cost_includes_distance_and_gold(self):
         a = BuyBankExpansionAction(bank_location=(4, 0), accessible=True)

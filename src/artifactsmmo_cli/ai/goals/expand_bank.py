@@ -46,10 +46,17 @@ class ExpandBankGoal(Goal):
         used = _bank_fill_known(state)
         if used is None:
             return True
-        # Use the ACTUAL bank capacity. A fixed `< 27` (90% of an assumed
-        # 30-slot bank) meant that after the first expansion the goal reported
-        # satisfied even at 100% of the larger bank, so it never re-triggered.
-        capacity = self._game_data._bank_capacity if self._game_data is not None else 0
+        # Read capacity from the projected WorldState so the planner can flip
+        # this goal False→True by simulating BuyBankExpansionAction.apply
+        # (which mints +BANK_EXPANSION_SLOTS into state.bank_capacity). Falling
+        # back to game_data._bank_capacity preserves the cycle-time snapshot
+        # when the projection hasn't run yet (None == "use API as-of-now").
+        if state.bank_capacity is not None:
+            capacity = state.bank_capacity
+        elif self._game_data is not None:
+            capacity = self._game_data._bank_capacity
+        else:
+            capacity = 0
         if capacity <= 0:
             return True
         return used < capacity * _SATISFIED_FILL

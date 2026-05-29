@@ -28,6 +28,7 @@ import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
 import Formal.ApplyBaseline
 import Formal.Phase7Invariants
+import Formal.Phase8Invariants
 import Formal.StoreWarmup
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
@@ -1546,3 +1547,31 @@ example : ∀ (okCount total : Nat),
 example : ∀ (okCount total : Nat),
     0 ≤ Formal.StoreWarmup.warmupGatedSuccessRate okCount total :=
   @Formal.StoreWarmup.warmupGatedSuccessRate_nonneg
+
+/-! ### Phase8Invariants Target B — Bank expansion projection (REAL BUG #15). -/
+
+-- Headline (a): per-step capacity increment by exactly BANK_EXPANSION_SLOTS.
+example : ∀ (b : Formal.Phase8Invariants.BankProj),
+    (Formal.Phase8Invariants.buyBankExpansionApply b).capacity =
+      b.capacity + Formal.Phase8Invariants.BANK_EXPANSION_SLOTS :=
+  @Formal.Phase8Invariants.bank_expansion_apply_increments_capacity
+
+-- Bookkeeping: N applies add N * SLOTS to capacity.
+example : ∀ (b : Formal.Phase8Invariants.BankProj) (n : Nat),
+    (Formal.Phase8Invariants.buyBankExpansionApplyN b n).capacity =
+      b.capacity + n * Formal.Phase8Invariants.BANK_EXPANSION_SLOTS :=
+  @Formal.Phase8Invariants.buyBankExpansion_capacityN
+
+-- Headline (b): the projection chain reaches `is_satisfied`.
+example : ∀ (b : Formal.Phase8Invariants.BankProj) (n : Nat),
+    10 * b.bankItems < 9 * (b.capacity + n * Formal.Phase8Invariants.BANK_EXPANSION_SLOTS) →
+    Formal.Phase8Invariants.expandBankIsSatisfied
+      (Formal.Phase8Invariants.buyBankExpansionApplyN b n) = true :=
+  @Formal.Phase8Invariants.bank_expansion_chain_reaches_satisfied
+
+-- Regression anchor: the pre-fix (buggy) apply never lifts the gap.
+example : ∀ (b : Formal.Phase8Invariants.BankProj) (n : Nat),
+    Formal.Phase8Invariants.expandBankIsSatisfied b = false →
+    Formal.Phase8Invariants.expandBankIsSatisfied
+      (Formal.Phase8Invariants.buyBankExpansionApplyPreFixN b n) = false :=
+  @Formal.Phase8Invariants.bank_expansion_pre_fix_projection_gap
