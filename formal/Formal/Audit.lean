@@ -237,3 +237,9 @@ open Formal.WeightedRemaining in
 #print axioms Formal.RealizableLoadout.regression_buggy_output_not_realizable
 #print axioms Formal.RealizableLoadout.empty_loadout_realizable
 #print axioms Formal.RealizableLoadout.isRealizable_mono_inv
+#print axioms Formal.ApplyBaseline.moveApply_preserves_baseline
+#print axioms Formal.ApplyBaseline.equipApply_preserves_baseline
+#print axioms Formal.ApplyBaseline.claimApply_preserves_baseline
+#print axioms Formal.ApplyBaseline.headline_preserves_baseline
+#print axioms Formal.ApplyBaseline.preservesBaseline_refl
+#print axioms Formal.ApplyBaseline.preservesBaseline_trans

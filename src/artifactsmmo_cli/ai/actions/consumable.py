@@ -1,5 +1,6 @@
 """UseConsumableAction: eat food from inventory to restore HP."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -53,30 +54,11 @@ class UseConsumableAction(Action):
         new_inventory[item_code] -= 1
         if new_inventory[item_code] == 0:
             del new_inventory[item_code]
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
+        return dataclasses.replace(
+            state,
             hp=state.max_hp,  # full-heal assumption: planning treats food as solving the problem
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=state.x,
-            y=state.y,
             inventory=new_inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-            skill_xp=state.skill_xp,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

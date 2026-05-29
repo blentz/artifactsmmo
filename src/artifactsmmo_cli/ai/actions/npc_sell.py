@@ -1,5 +1,6 @@
 """NpcSellAction: sell an item to an NPC merchant for gold."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import ClassVar
@@ -53,29 +54,13 @@ class NpcSellAction(Action):
         else:
             new_inventory[self.item_code] = remaining
         dest = self.npc_location or (state.x, state.y)
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
+        return dataclasses.replace(
+            state,
             gold=new_gold,
-            skills=state.skills,
             x=dest[0],
             y=dest[1],
             inventory=new_inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

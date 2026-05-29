@@ -1,5 +1,6 @@
 """Rest action for GOAP planning."""
 
+import dataclasses
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -20,31 +21,7 @@ class RestAction(Action):
         return state.hp < state.max_hp
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.max_hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=state.x,
-            y=state.y,
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
-            cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-            skill_xp=state.skill_xp,
-        )
+        return dataclasses.replace(state, hp=state.max_hp, cooldown_expires=None)
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:

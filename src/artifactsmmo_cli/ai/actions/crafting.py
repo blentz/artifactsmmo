@@ -1,5 +1,6 @@
 """Craft action for GOAP planning."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -65,39 +66,16 @@ class CraftAction(Action):
 
         dest = self.workshop_location or (state.x, state.y)
 
-        # Simulated skill-progress sentinel (NOT modeled XP): a positive delta lets
-        # LevelSkillGoal.is_satisfied (skill_xp > initial) trip after one family
-        # craft, so the planner can reach the goal. Magnitude is irrelevant — only
-        # "did progress happen" matters.
-        crafting_skill = stats.crafting_skill if (stats := game_data.item_stats(self.code)) else None
-        new_skill_xp = dict(state.skill_xp)
-        if crafting_skill is not None:
-            new_skill_xp[crafting_skill] = new_skill_xp.get(crafting_skill, 0) + self.quantity
-
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
+        # skill_xp is a server-snapshot baseline field (see WorldState docstring);
+        # the planner never simulates it locally — apply preserves it. The next
+        # real API call returns the updated server values.
+        return dataclasses.replace(
+            state,
             x=dest[0],
             y=dest[1],
             inventory=new_inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
             task_progress=new_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-            skill_xp=new_skill_xp,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

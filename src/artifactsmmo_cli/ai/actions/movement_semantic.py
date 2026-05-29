@@ -1,5 +1,6 @@
 """Semantic move action: move to a named location type."""
 
+import dataclasses
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -31,30 +32,7 @@ class MoveTo(Action):
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = min(self.destinations)  # deterministic choice for visited-set consistency
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=dest[0],
-            y=dest[1],
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
-            cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-        )
+        return dataclasses.replace(state, x=dest[0], y=dest[1], cooldown_expires=None)
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:

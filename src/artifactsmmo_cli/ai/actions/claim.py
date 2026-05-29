@@ -1,5 +1,6 @@
 """ClaimPendingItemAction: claim the first available pending item."""
 
+import dataclasses
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -35,29 +36,11 @@ class ClaimPendingItemAction(Action):
         remaining = state.pending_items[1:]
         new_inventory = dict(state.inventory)
         new_inventory[item_code] = new_inventory.get(item_code, 0) + 1
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=state.x,
-            y=state.y,
+        return dataclasses.replace(
+            state,
             inventory=new_inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
             pending_items=remaining if remaining else None,
-            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

@@ -1,5 +1,6 @@
 """Gather action for GOAP planning."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -61,37 +62,15 @@ class GatherAction(Action):
         # the bot gathered the task item forever without ever delivering, filled
         # its inventory, and then deadlocked (gather no longer applicable, no
         # plan). Only TaskTradeAction increments task_progress.
-        # Simulated skill-progress sentinel (NOT modeled XP): one gather trips
-        # LevelSkillGoal.is_satisfied for the gather skill so the planner can reach
-        # the goal. Magnitude is irrelevant — only that progress happened.
-        new_skill_xp = dict(state.skill_xp)
-        skill_level = game_data.resource_skill_level(self.resource_code)
-        if skill_level is not None:
-            new_skill_xp[skill_level[0]] = new_skill_xp.get(skill_level[0], 0) + 1
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
+        # skill_xp is a server-snapshot baseline field (see WorldState docstring);
+        # the planner never simulates it locally — apply preserves it. The next
+        # real API call returns the updated server values.
+        return dataclasses.replace(
+            state,
             x=dest[0],
             y=dest[1],
             inventory=new_inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-            skill_xp=new_skill_xp,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

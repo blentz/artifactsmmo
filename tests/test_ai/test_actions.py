@@ -317,14 +317,15 @@ class TestGatherAction:
         assert new_state.inventory.get("copper_ore", 0) == 1
         assert (new_state.x, new_state.y) == (2, 0)  # nearest
 
-    def test_apply_bumps_skill_xp_for_gather_skill(self):
-        """GatherAction.apply must increment skill_xp for the gather skill by 1."""
+    def test_apply_preserves_skill_xp_baseline(self):
+        """GatherAction.apply must NOT mutate skill_xp — it is a server-snapshot
+        baseline field (see ApplyBaseline contract / WorldState docstring)."""
         action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
         gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 5})
         new_state = action.apply(state, gd)
-        assert new_state.skill_xp["mining"] == 6
+        assert new_state.skill_xp == state.skill_xp
 
     def test_apply_preserves_other_skill_xp_entries(self):
         """GatherAction.apply must not wipe unrelated skill_xp entries."""
@@ -333,7 +334,7 @@ class TestGatherAction:
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         state = make_state(x=0, y=0, inventory={}, skill_xp={"mining": 0, "alchemy": 200})
         new_state = action.apply(state, gd)
-        assert new_state.skill_xp["alchemy"] == 200
+        assert new_state.skill_xp == state.skill_xp
 
     def test_apply_falls_back_to_resource_code_when_no_drop_mapping(self):
         action = GatherAction(resource_code="copper", locations=frozenset([(2, 0)]))
@@ -455,8 +456,9 @@ class TestCraftAction:
         assert new_state.inventory["copper_dagger"] == 1
         assert (new_state.x, new_state.y) == (3, 0)
 
-    def test_apply_bumps_skill_xp_by_quantity(self):
-        """CraftAction.apply must increment skill_xp[crafting_skill] by quantity."""
+    def test_apply_preserves_skill_xp_baseline(self):
+        """CraftAction.apply must NOT mutate skill_xp — it is a server-snapshot
+        baseline field (see ApplyBaseline contract / WorldState docstring)."""
         action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(3, 0))
         stats = ItemStats(
             code="copper_dagger", level=1, type_="weapon",
@@ -473,7 +475,7 @@ class TestCraftAction:
             recipes={"copper_dagger": {"copper_ore": 6}},
         )
         new_state = action.apply(state, gd)
-        assert new_state.skill_xp["weaponcrafting"] == 13  # 10 + quantity(3)
+        assert new_state.skill_xp == state.skill_xp
 
     def test_apply_preserves_other_skill_xp_entries(self):
         """CraftAction.apply must carry forward unrelated skill_xp entries."""

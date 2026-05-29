@@ -1,5 +1,6 @@
 """Movement action for GOAP planning."""
 
+import dataclasses
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,30 +30,7 @@ class MoveAction(Action):
         return state.x != self.x or state.y != self.y
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=self.x,
-            y=self.y,
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
-            cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-        )
+        return dataclasses.replace(state, x=self.x, y=self.y, cooldown_expires=None)
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:

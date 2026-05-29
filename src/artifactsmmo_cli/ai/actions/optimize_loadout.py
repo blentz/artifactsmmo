@@ -1,5 +1,6 @@
 """OptimizeLoadoutAction: swap equipment to optimal loadout for a target monster."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -74,30 +75,11 @@ class OptimizeLoadoutAction(Action):
                 else:
                     new_inventory[new_code] = cur - 1
             new_equipment[slot] = new_code
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=state.x,
-            y=state.y,
+        return dataclasses.replace(
+            state,
             inventory=new_inventory,
-            inventory_max=state.inventory_max,
             equipment=new_equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            skill_xp=state.skill_xp,
-            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

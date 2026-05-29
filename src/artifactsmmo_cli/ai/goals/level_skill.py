@@ -55,9 +55,12 @@ class LevelSkillGoal(Goal):
         return PRIORITY_WHEN_FIRING
 
     def is_satisfied(self, state: WorldState) -> bool:
-        if state.skills.get(self._skill_name, 0) >= self._target_level:
-            return True
-        return state.skill_xp.get(self._skill_name, 0) > self._initial_skill_xp
+        # NOTE: skill_xp is a server-snapshot baseline field; Action.apply does
+        # NOT mutate it (see ApplyBaseline contract). Satisfaction is therefore
+        # gated on the `skills` dict, which Craft/Gather likewise don't simulate
+        # — the planner reaches the goal via desired_state{"skills": …} matching
+        # after a real API call advances the snapshot.
+        return state.skills.get(self._skill_name, 0) >= self._target_level
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"skills": {self._skill_name: self._target_level}}

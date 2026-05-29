@@ -1,5 +1,6 @@
 """DepositGoldAction: deposit gold from character into bank."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -18,20 +19,13 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def _gold_apply(state: WorldState, dest: tuple[int, int], gold_delta: int, bank_gold_delta: int) -> WorldState:
     new_bank_gold = (state.bank_gold or 0) + bank_gold_delta if state.bank_gold is not None else None
-    return WorldState(
-        character=state.character,
-        level=state.level, xp=state.xp, max_xp=state.max_xp,
-        hp=state.hp, max_hp=state.max_hp,
+    return dataclasses.replace(
+        state,
         gold=state.gold + gold_delta,
-        skills=state.skills, x=dest[0], y=dest[1],
-        inventory=state.inventory, inventory_max=state.inventory_max,
-        equipment=state.equipment, cooldown_expires=None,
-        task_code=state.task_code, task_type=state.task_type,
-        task_progress=state.task_progress, task_total=state.task_total,
-        bank_items=state.bank_items,
+        x=dest[0],
+        y=dest[1],
+        cooldown_expires=None,
         bank_gold=new_bank_gold,
-        pending_items=state.pending_items,
-        active_events=state.active_events,
     )
 
 

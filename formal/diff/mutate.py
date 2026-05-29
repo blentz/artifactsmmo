@@ -33,6 +33,9 @@ DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_ke
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
+APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
+APPLY_EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
+APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -804,6 +807,7 @@ _ALL_SRCS = [
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     COST_CORE_SRC,
+    APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
 ]
 
 
@@ -853,6 +857,83 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# apply-baseline mutations -- each resurrects REAL BUG #5 (the silent drop of
+# all 8 server-snapshot stat-baseline fields by reverting an action's apply()
+# to an explicit `WorldState(...)` construction that omits them). The
+# differential test's `_assert_preserved` fires on every dropped field.
+APPLY_MOVE_MUTATIONS = [
+    (
+        "apply-baseline-move: revert MoveAction.apply to explicit WorldState(...) dropping baseline",
+        "    def apply(self, state: WorldState, game_data: GameData) -> WorldState:\n"
+        "        return dataclasses.replace(state, x=self.x, y=self.y, cooldown_expires=None)",
+        "    def apply(self, state: WorldState, game_data: GameData) -> WorldState:\n"
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "            skills=state.skills, x=self.x, y=self.y,\n"
+        "            inventory=state.inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
+APPLY_EQUIP_MUTATIONS = [
+    (
+        "apply-baseline-equip: revert EquipAction.apply to explicit WorldState(...) dropping baseline",
+        "        return dataclasses.replace(\n"
+        "            state,\n"
+        "            inventory=new_inventory,\n"
+        "            equipment=new_equipment,\n"
+        "            cooldown_expires=None,\n"
+        "        )",
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "            skills=state.skills, x=state.x, y=state.y,\n"
+        "            inventory=new_inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=new_equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
+APPLY_CLAIM_MUTATIONS = [
+    (
+        "apply-baseline-claim: revert ClaimPendingItemAction.apply to explicit WorldState(...) dropping baseline",
+        "        return dataclasses.replace(\n"
+        "            state,\n"
+        "            inventory=new_inventory,\n"
+        "            cooldown_expires=None,\n"
+        "            pending_items=remaining if remaining else None,\n"
+        "        )",
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "            skills=state.skills, x=state.x, y=state.y,\n"
+        "            inventory=new_inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=remaining if remaining else None,\n"
+        "            active_events=state.active_events,\n"
+        "        )",
+    ),
 ]
 
 
@@ -958,6 +1039,12 @@ def main() -> int:
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
+    run_group(APPLY_MOVE_SRC, APPLY_MOVE_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_EQUIP_SRC, APPLY_EQUIP_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_CLAIM_SRC, APPLY_CLAIM_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

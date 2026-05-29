@@ -1,5 +1,6 @@
 """Fight action for GOAP planning."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -70,29 +71,14 @@ class FightAction(Action):
             if state.task_type == "monsters" and state.task_code == self.monster_code
             else state.task_progress
         )
-        return WorldState(
-            character=state.character,
-            level=state.level,
+        return dataclasses.replace(
+            state,
             xp=state.xp + 10,
-            max_xp=state.max_xp,
             hp=new_hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
             x=dest[0],
             y=dest[1],
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
-            task_code=state.task_code,
-            task_type=state.task_type,
             task_progress=new_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

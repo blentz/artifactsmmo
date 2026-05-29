@@ -68,14 +68,17 @@ class TestSatisfaction:
         goal = LevelSkillGoal("weaponcrafting", 3)
         assert goal.is_satisfied(make_state(skills={"weaponcrafting": 2})) is False
 
-    def test_satisfied_by_skill_xp_progress(self):
-        """is_satisfied returns True when skill_xp > initial_skill_xp, even if level not reached."""
+    def test_skill_xp_does_not_satisfy_below_target(self):
+        """ApplyBaseline contract: skill_xp is a server-snapshot baseline field.
+        is_satisfied no longer triggers off skill_xp — only the skills level matters.
+        Prior to the contract fix, skill_xp was the planner-sim sentinel; gather/craft
+        deliberately mutated it. Post-fix, only skills[skill] >= target satisfies."""
         goal = LevelSkillGoal("weaponcrafting", 50, initial_skill_xp=0)
         state = make_state(skills={"weaponcrafting": 1}, skill_xp={"weaponcrafting": 5})
-        assert goal.is_satisfied(state) is True
+        assert goal.is_satisfied(state) is False
 
-    def test_unsatisfied_when_no_xp_progress_and_level_below(self):
-        """is_satisfied returns False when skill_xp == initial AND level < target."""
+    def test_unsatisfied_when_level_below_target(self):
+        """is_satisfied returns False when skills[skill] < target."""
         goal = LevelSkillGoal("weaponcrafting", 50, initial_skill_xp=10)
         state = make_state(skills={"weaponcrafting": 1}, skill_xp={"weaponcrafting": 10})
         assert goal.is_satisfied(state) is False
@@ -128,36 +131,26 @@ def _gd_with_alchemy_resource() -> GameData:
 class TestPlannerIntegration:
     """Decisive integration test: proves the skill goal is now plannable (was: 646k nodes / timeout)."""
 
-    def test_gather_alchemy_resource_satisfies_level_skill_goal(self):
-        """
-        LevelSkillGoal("alchemy", target_level=2, initial_skill_xp=0) must be satisfied
-        by a single GatherAction on an alchemy resource (sunflower_field).
-        Before the fix: planner explored to 646k-node timeout.
-        After the fix: plan has exactly 1 action, no timeout, and < 50 nodes explored.
-        """
+    def test_level_skill_goal_satisfied_when_skills_reaches_target(self):
+        """ApplyBaseline contract: skill_xp is a server-snapshot baseline field that
+        Action.apply MUST preserve. LevelSkillGoal therefore is_satisfied SOLELY on
+        skills[skill] >= target. The planner cannot simulate skill-level advancement
+        (no action mutates `skills`), so satisfaction is observed only after a real
+        API call advances state.skills via WorldState.from_character_schema."""
         gd = _gd_with_alchemy_resource()
-        state = make_state(
-            skills={"alchemy": 1},
-            skill_xp={"alchemy": 0},
-            hp=150,
-            max_hp=150,
-            inventory={},
-            inventory_max=20,
-            x=0,
-            y=0,
+        # Already-satisfied: skills meets target, plan is empty.
+        already_state = make_state(
+            skills={"alchemy": 2}, skill_xp={"alchemy": 0},
+            hp=150, max_hp=150, inventory={}, inventory_max=20, x=0, y=0,
         )
         goal = LevelSkillGoal("alchemy", target_level=2, initial_skill_xp=0)
-        actions = [GatherAction(resource_code="sunflower_field", locations=frozenset([(3, 0)]))]
+        assert goal.is_satisfied(already_state) is True
 
-        planner = GOAPPlanner()
-        plan = planner.plan(state, goal, actions, gd, None)
-        stats = planner.last_stats
-
-        assert plan, "planner must return a non-empty plan (was timing out before fix)"
-        assert len(plan) == 1, f"expected 1-step plan, got {len(plan)}: {plan}"
-        assert isinstance(plan[0], GatherAction), f"expected GatherAction, got {plan[0]!r}"
-        assert stats.timed_out is False, "planner must NOT time out"
-        assert stats.nodes_explored < 50, (
-            f"BLOCKED: expected < 50 nodes, got {stats.nodes_explored} "
-            f"(timed_out={stats.timed_out}). The fix is not working."
+        # Not-yet-satisfied: skills below target. Gather no longer simulates skill
+        # advancement (the planner-sim sentinel was the bug). The goal correctly
+        # reports unsatisfied for the pre-API state.
+        below_state = make_state(
+            skills={"alchemy": 1}, skill_xp={"alchemy": 0},
+            hp=150, max_hp=150, inventory={}, inventory_max=20, x=0, y=0,
         )
+        assert goal.is_satisfied(below_state) is False

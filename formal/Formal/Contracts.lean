@@ -24,6 +24,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.ActionCostNonneg
+import Formal.ApplyBaseline
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1283,3 +1284,31 @@ example : ∀ (t : Formal.ActionCostNonneg.ActionTag),
       0 ≤ s ∧ 0 ≤ l ∧ 0 < rf) →
     0 ≤ Formal.ActionCostNonneg.evalCost t :=
   @Formal.ActionCostNonneg.all_actions_cost_nonneg
+
+/-! ### ApplyBaseline role contracts (REAL BUG #5 — silent stat-baseline drop). -/
+
+-- apply-preserves-baseline-move: MoveAction.apply preserves all 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldState) (newX newY : Int),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.moveApply s newX newY) :=
+  @Formal.ApplyBaseline.moveApply_preserves_baseline
+-- apply-preserves-baseline-equip: EquipAction.apply preserves all 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldState) (newInv : List (String × Nat)),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.equipApply s newInv) :=
+  @Formal.ApplyBaseline.equipApply_preserves_baseline
+-- apply-preserves-baseline-claim: ClaimPendingItemAction.apply preserves all 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldState) (newInv : List (String × Nat)),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.claimApply s newInv) :=
+  @Formal.ApplyBaseline.claimApply_preserves_baseline
+-- headline-preserves-baseline: every modeled apply preserves the 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldState) (a : Formal.ApplyBaseline.ModeledApply),
+    Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
+  @Formal.ApplyBaseline.headline_preserves_baseline
+-- reflexivity: a state preserves its own baseline (identity apply / Transition).
+example : ∀ (s : Formal.ApplyBaseline.WorldState),
+    Formal.ApplyBaseline.preservesBaseline s s :=
+  @Formal.ApplyBaseline.preservesBaseline_refl
+-- transitivity: a chain of preserving applys still preserves (planner sim composition).
+example : ∀ {a b c : Formal.ApplyBaseline.WorldState},
+    Formal.ApplyBaseline.preservesBaseline a b → Formal.ApplyBaseline.preservesBaseline b c →
+    Formal.ApplyBaseline.preservesBaseline a c :=
+  @Formal.ApplyBaseline.preservesBaseline_trans

@@ -259,3 +259,10 @@ open Formal.PriorityBand
 #check @Formal.RealizableLoadout.regression_buggy_output_not_realizable -- anti-witness: pre-fix output (both rings = B) is NOT realizable
 #check @Formal.RealizableLoadout.empty_loadout_realizable               -- edge: empty loadout is vacuously realizable
 #check @Formal.RealizableLoadout.isRealizable_mono_inv                  -- monotone: more inventory preserves realizability
+-- ApplyBaseline required roles (REAL BUG #5: silent stat-baseline drop in Action.apply):
+#check @Formal.ApplyBaseline.moveApply_preserves_baseline   -- apply-preserves-baseline-move
+#check @Formal.ApplyBaseline.equipApply_preserves_baseline  -- apply-preserves-baseline-equip
+#check @Formal.ApplyBaseline.claimApply_preserves_baseline  -- apply-preserves-baseline-claim
+#check @Formal.ApplyBaseline.headline_preserves_baseline    -- headline-preserves-baseline (∀ modeled action)
+#check @Formal.ApplyBaseline.preservesBaseline_refl         -- reflexivity (state preserves its own baseline)
+#check @Formal.ApplyBaseline.preservesBaseline_trans        -- transitivity (composition of preserving steps)

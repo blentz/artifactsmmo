@@ -1,5 +1,6 @@
 """TaskCancelAction: move to the taskmaster and cancel the current task."""
 
+import dataclasses
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -28,29 +29,15 @@ class TaskCancelAction(Action):
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.taskmaster_location
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
+        return dataclasses.replace(
+            state,
             x=dest[0],
             y=dest[1],
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
             cooldown_expires=None,
             task_code=None,
             task_type=None,
             task_progress=0,
             task_total=0,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
         )
 
     def cost(self, state: WorldState, game_data: GameData,
