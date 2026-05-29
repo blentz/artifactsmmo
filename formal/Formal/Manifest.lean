@@ -315,6 +315,44 @@ open Formal.PriorityBand
 #check @Formal.InventoryChainSafe.task_cancel_boundary_witness          -- boundary witness (coins=1 ⇒ post=0)
 #check @Formal.InventoryChainSafe.task_cancel_no_coin_refused           -- regression-pin: no coin ⇒ refused
 #check @Formal.InventoryChainSafe.task_cancel_no_task_refused           -- shell-safety: no task ⇒ refused
+-- Phase7Invariants required roles (Phase-7 batch: A, D, E):
+#check @Formal.Phase7Invariants.baseValue_nonpos_zero
+#check @Formal.Phase7Invariants.baseValue_pos_ge_one
+#check @Formal.Phase7Invariants.baseValue_nonneg
+#check @Formal.Phase7Invariants.baseValue_total
+#check @Formal.Phase7Invariants.baseValue_total_needed_zero_returns_zero
+#check @Formal.Phase7Invariants.baseValue_total_needed_neg_returns_zero
+#check @Formal.Phase7Invariants.isApplicable_imp_slot_in_table
+#check @Formal.Phase7Invariants.isApplicable_imp_inv_pos
+#check @Formal.Phase7Invariants.isApplicable_imp_level_ge
+#check @Formal.Phase7Invariants.isApplicable_slot_mismatch_refused
+#check @Formal.Phase7Invariants.isApplicable_no_stats_refused
+#check @Formal.Phase7Invariants.isApplicable_boundary_witness
+#check @Formal.Phase7Invariants.isApplicable_ring_into_helmet_refused
+#check @Formal.Phase7Invariants.inventoryUsed_nonneg
+#check @Formal.Phase7Invariants.inventoryUsed_eq_sum
+#check @Formal.Phase7Invariants.inventoryFree_eq_diff
+#check @Formal.Phase7Invariants.inventoryFree_plus_used_eq_max
+#check @Formal.Phase7Invariants.hpPercent_maxhp_zero
+#check @Formal.Phase7Invariants.hpPercent_maxhp_pos
+#check @Formal.Phase7Invariants.hpPercent_nonneg
+#check @Formal.Phase7Invariants.inventoryUsed_empty
+#check @Formal.Phase7Invariants.inventoryFree_empty
+#check @Formal.Phase7Invariants.inventoryFree_at_full_is_zero
+#check @Formal.Phase7Invariants.hpPercent_max_hp_zero_witness
+-- StoreWarmup required roles (Phase-7 Target F: LearningStore warmup gates):
+#check @Formal.StoreWarmup.warmupGatedMedian_below_gate
+#check @Formal.StoreWarmup.warmupGatedMedian_at_or_above_gate
+#check @Formal.StoreWarmup.warmupGatedMedian_boundary_witness
+#check @Formal.StoreWarmup.warmupGatedMedian_off_boundary_refused
+#check @Formal.StoreWarmup.warmupGatedMedian_empty_refused
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_below_gate
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_at_or_above_gate
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_nonneg
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_boundary_all_ok
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_boundary_none_ok
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_off_boundary_default
+#check @Formal.StoreWarmup.warmupGatedSuccessRate_empty_default
 -- ApplyBaseline required roles (REAL BUG #5: silent stat-baseline drop in Action.apply):
 #check @Formal.ApplyBaseline.moveApply_preserves_baseline   -- apply-preserves-baseline-move
 #check @Formal.ApplyBaseline.equipApply_preserves_baseline  -- apply-preserves-baseline-equip

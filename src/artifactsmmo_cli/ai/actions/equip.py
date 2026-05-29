@@ -54,6 +54,14 @@ class EquipAction(Action):
         stats = game_data.item_stats(self.code)
         if stats is None:
             return False
+        # Slot/type compatibility: the planner enumerates EquipAction over
+        # ITEM_TYPE_TO_SLOTS[stats.type_] in player.py, so the matched slot
+        # must be one of those for this item's type. A mismatched slot (e.g.
+        # equipping a ring code into a helmet slot) would project successfully
+        # but fail execute on the server. Without this gate, a stale or buggy
+        # caller could produce a non-executable plan.
+        if self.slot not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+            return False
         return state.level >= stats.level
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:

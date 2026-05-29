@@ -14,6 +14,8 @@ open Formal.CyclesForProgress
 open Formal.GatherApply
 open Formal.ActionCostNonneg
 open Formal.InventoryChainSafe
+open Formal.Phase7Invariants
+open Formal.StoreWarmup
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1065,6 +1067,81 @@ def runInventoryChainSafe (args : Array Json) : Json :=
                   ("post_used", Json.num (Int.ofNat post.used)),
                   ("cap", Json.num (Int.ofNat post.cap))]
 
+/-- Compute one phase7_invariants result. Three sub-queries:
+* `0` = baseValue: `[0, totalNeeded, effectiveNum, effectiveDen]` → `{value_num, value_den}`
+* `1` = isApplicable: `[1, invQty, charLevel, hasStats(0/1), itemType, level,
+  slot, nSlots, slot0, slot1, ...]` → `{applicable: Bool}`
+* `2` = WS invariants: `[2, query, nInv, code0, qty0, …, invMax, hp, maxHp]`
+  where query=0 emits inventoryUsed, query=1 emits inventoryFree,
+  query=2 emits hpPercent (as num/den).
+-/
+def runPhase7Invariants (args : Array Json) : Json :=
+  let q := intArg args 0
+  if q == 0 then
+    let totalNeeded := intArg args 1
+    let effective : Rat := ratArg args 2
+    let v := Formal.Phase7Invariants.baseValue totalNeeded effective
+    Json.mkObj [("value_num", Json.num v.num),
+                ("value_den", Json.num (Int.ofNat v.den))]
+  else if q == 1 then
+    let invQty := (intArg args 1).toNat
+    let charLevel := (intArg args 2).toNat
+    let hasStats := intArg args 3 != 0
+    let itemType := (intArg args 4).toNat
+    let level := (intArg args 5).toNat
+    let slot := (intArg args 6).toNat
+    let nSlots := (intArg args 7).toNat
+    let slots : List Nat := (List.range nSlots).map (fun k => (intArg args (8 + k)).toNat)
+    let tbl : Formal.Phase7Invariants.SlotTable := fun t =>
+      if t = itemType then slots else []
+    let st : Formal.Phase7Invariants.EquipState := { invQty := invQty, charLevel := charLevel }
+    let stats : Option Formal.Phase7Invariants.ItemStats :=
+      if hasStats then some { itemType := itemType, level := level } else none
+    let app := Formal.Phase7Invariants.isApplicable st stats slot tbl
+    Json.mkObj [("applicable", Json.bool app)]
+  else
+    let subq := intArg args 1
+    let nInv := (intArg args 2).toNat
+    let inv : List (Nat × Nat) :=
+      (List.range nInv).map (fun k =>
+        ((intArg args (3 + 2*k)).toNat, (intArg args (4 + 2*k)).toNat))
+    let p := 3 + 2*nInv
+    let invMax := (intArg args p).toNat
+    let hp := (intArg args (p + 1)).toNat
+    let maxHp := (intArg args (p + 2)).toNat
+    let s : Formal.Phase7Invariants.WS :=
+      { inventory := inv, invMax := invMax, hp := hp, maxHp := maxHp }
+    if subq == 0 then
+      Json.mkObj [("used", Json.num (Int.ofNat (Formal.Phase7Invariants.inventoryUsed s)))]
+    else if subq == 1 then
+      Json.mkObj [("free", Json.num (Int.ofNat (Formal.Phase7Invariants.inventoryFree s)))]
+    else
+      let hpp := Formal.Phase7Invariants.hpPercent s
+      Json.mkObj [("hp_percent_num", Json.num hpp.num),
+                  ("hp_percent_den", Json.num (Int.ofNat hpp.den))]
+
+/-- Compute one store_warmup result. Two sub-queries:
+* `0` = median: `[0, nSamples, median, sample0, sample1, ...]` → emits the
+  warmup-gated median as `{present, value}`.
+* `1` = success_rate: `[1, okCount, total]` → emits the rational rate as
+  `{rate_num, rate_den}`.
+-/
+def runStoreWarmup (args : Array Json) : Json :=
+  let q := intArg args 0
+  if q == 0 then
+    let nSamples := (intArg args 1).toNat
+    let median := intArg args 2
+    let samples : List Int := (List.range nSamples).map (fun k => intArg args (3 + k))
+    match Formal.StoreWarmup.warmupGatedMedian samples median with
+    | some v => Json.mkObj [("present", Json.bool true), ("value", Json.num v)]
+    | none => Json.mkObj [("present", Json.bool false), ("value", Json.num 0)]
+  else
+    let okCount := (intArg args 1).toNat
+    let total := (intArg args 2).toNat
+    let r := Formal.StoreWarmup.warmupGatedSuccessRate okCount total
+    Json.mkObj [("rate_num", Json.num r.num),
+                ("rate_den", Json.num (Int.ofNat r.den))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1147,6 +1224,10 @@ def runOne (item : Json) : Json :=
     runActionCostNonneg args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
+  else if kind == "phase7_invariants" then
+    runPhase7Invariants args
+  else if kind == "store_warmup" then
+    runStoreWarmup args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

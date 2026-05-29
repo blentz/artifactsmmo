@@ -32,6 +32,12 @@ class GatherMaterialsGoal(Goal):
         if self.is_satisfied(state):
             return 0.0
         total_needed = sum(self._needed.values())
+        # Guard: a malformed `needed` (e.g. mixed-sign quantities summing to 0)
+        # would otherwise raise ZeroDivisionError below. The early `is_satisfied`
+        # return only saves the all-non-positive case; non-positive total with at
+        # least one positive entry still reaches here.
+        if total_needed <= 0:
+            return 0.0
         bank = state.bank_items or {}
         total_effective = 0.0
         for mat, qty_needed in self._needed.items():

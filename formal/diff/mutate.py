@@ -43,6 +43,9 @@ WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "with
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
 TASK_CANCEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_cancel.py"
+GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
+EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
+STORE_WARMUP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store_warmup_core.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -1182,6 +1185,48 @@ TASK_CANCEL_MUTATIONS = [
 ]
 
 
+# Phase-7 mutations.
+# Target A: GatherMaterialsGoal._compute_base_value div-by-zero guard.
+GATHERING_GOAL_MUTATIONS = [
+    ("gathering: drop totalNeeded<=0 guard (resurrects div-by-zero)",
+     "        if total_needed <= 0:\n"
+     "            return 0.0\n",
+     ""),
+    ("gathering: flip <= to < on totalNeeded guard (off-by-one)",
+     "        if total_needed <= 0:",
+     "        if total_needed < 0:"),
+]
+# Target D: EquipAction.is_applicable slot/type gate.
+EQUIP_MUTATIONS = [
+    ("equip: drop slot/type membership check (resurrects mismatch bug)",
+     "        if self.slot not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):\n"
+     "            return False\n",
+     ""),
+    ("equip: invert slot/type check (use 'in' instead of 'not in')",
+     "        if self.slot not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):",
+     "        if self.slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):"),
+]
+# Target F: store_warmup_core warmup gates.
+STORE_WARMUP_MUTATIONS = [
+    ("store_warmup: drop median warmup gate (< 5 ⇒ should return None)",
+     "    if len(samples) < WARMUP_MIN_SAMPLES:\n"
+     "        return None\n",
+     ""),
+    ("store_warmup: flip < to <= on median gate (off-by-one)",
+     "    if len(samples) < WARMUP_MIN_SAMPLES:",
+     "    if len(samples) <= WARMUP_MIN_SAMPLES:"),
+    ("store_warmup: drop success_rate warmup gate (< 5 ⇒ should return 1.0)",
+     "    if len(outcomes) < WARMUP_MIN_SAMPLES:\n"
+     "        return 1.0\n",
+     ""),
+    ("store_warmup: change default to 0.0 on success_rate gate",
+     "    if len(outcomes) < WARMUP_MIN_SAMPLES:\n"
+     "        return 1.0",
+     "    if len(outcomes) < WARMUP_MIN_SAMPLES:\n"
+     "        return 0.0"),
+]
+
+
 def _assert_sources_clean() -> None:
     """Abort if any mutation target is already dirty in git. The runner mutates
     production source in place and restores it in `finally`; a previous run killed
@@ -1281,6 +1326,12 @@ def main() -> int:
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     run_group(TASK_CANCEL_SRC, TASK_CANCEL_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
+    run_group(GATHERING_GOAL_SRC, GATHERING_GOAL_MUTATIONS,
+              "formal/diff/test_phase7_invariants_diff.py", survivors)
+    run_group(EQUIP_SRC, EQUIP_MUTATIONS,
+              "formal/diff/test_phase7_invariants_diff.py", survivors)
+    run_group(STORE_WARMUP_SRC, STORE_WARMUP_MUTATIONS,
+              "formal/diff/test_store_warmup_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -27,6 +27,8 @@ import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
 import Formal.ApplyBaseline
+import Formal.Phase7Invariants
+import Formal.StoreWarmup
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1447,3 +1449,100 @@ example : ∀ (p : Formal.InventoryChainSafe.CoinPurse) (hasTask : Bool),
 example : ∀ (p : Formal.InventoryChainSafe.CoinPurse) (n : Nat),
     (Formal.InventoryChainSafe.taskCancelApplyN p n).coins = p.coins - n :=
   @Formal.InventoryChainSafe.task_cancel_applyN_coin
+
+/-! ### Phase7Invariants role contracts (Phase-7 batch: A, D, E). -/
+
+-- Target A: baseValue non-positive totalNeeded ⇒ 0 (the div-by-zero guard).
+example : ∀ (totalEffective : Rat) (totalNeeded : Int),
+    totalNeeded ≤ 0 → Formal.Phase7Invariants.baseValue totalNeeded totalEffective = 0 :=
+  @Formal.Phase7Invariants.baseValue_nonpos_zero
+-- Target A: positive totalNeeded ⇒ result ≥ 1 (the clamp floor).
+example : ∀ (totalEffective : Rat) (totalNeeded : Int),
+    0 < totalNeeded → 1 ≤ Formal.Phase7Invariants.baseValue totalNeeded totalEffective :=
+  @Formal.Phase7Invariants.baseValue_pos_ge_one
+-- Target A: baseValue ≥ 0 unconditionally.
+example : ∀ (totalEffective : Rat) (totalNeeded : Int),
+    0 ≤ Formal.Phase7Invariants.baseValue totalNeeded totalEffective :=
+  @Formal.Phase7Invariants.baseValue_nonneg
+
+-- Target D: passing precondition ⇒ slot ∈ table[itemType].
+example : ∀ (st : Formal.Phase7Invariants.EquipState)
+    (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
+    (tbl : Formal.Phase7Invariants.SlotTable),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl = true →
+      ∃ s, stats = some s ∧ slot ∈ tbl s.itemType :=
+  @Formal.Phase7Invariants.isApplicable_imp_slot_in_table
+-- Target D: passing precondition ⇒ inventory has code.
+example : ∀ (st : Formal.Phase7Invariants.EquipState)
+    (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
+    (tbl : Formal.Phase7Invariants.SlotTable),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl = true → 0 < st.invQty :=
+  @Formal.Phase7Invariants.isApplicable_imp_inv_pos
+-- Target D: passing precondition ⇒ level requirement met.
+example : ∀ (st : Formal.Phase7Invariants.EquipState)
+    (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
+    (tbl : Formal.Phase7Invariants.SlotTable),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl = true →
+      ∃ s, stats = some s ∧ s.level ≤ st.charLevel :=
+  @Formal.Phase7Invariants.isApplicable_imp_level_ge
+-- Target D: slot mismatch ⇒ refused (the load-bearing Phase-7 gate).
+example : ∀ (st : Formal.Phase7Invariants.EquipState)
+    (s : Formal.Phase7Invariants.ItemStats) (slot : Nat)
+    (tbl : Formal.Phase7Invariants.SlotTable),
+    0 < st.invQty → s.level ≤ st.charLevel → slot ∉ tbl s.itemType →
+    Formal.Phase7Invariants.isApplicable st (some s) slot tbl = false :=
+  @Formal.Phase7Invariants.isApplicable_slot_mismatch_refused
+
+-- Target E: inventory_used = Σ qty (bookkeeping equality).
+example : ∀ (s : Formal.Phase7Invariants.WS),
+    Formal.Phase7Invariants.inventoryUsed s = (s.inventory.map Prod.snd).sum :=
+  @Formal.Phase7Invariants.inventoryUsed_eq_sum
+-- Target E: inventory_free = invMax - inventoryUsed.
+example : ∀ (s : Formal.Phase7Invariants.WS),
+    Formal.Phase7Invariants.inventoryFree s = s.invMax - Formal.Phase7Invariants.inventoryUsed s :=
+  @Formal.Phase7Invariants.inventoryFree_eq_diff
+-- Target E: at well-formed states (used ≤ max), free + used = max.
+example : ∀ (s : Formal.Phase7Invariants.WS),
+    Formal.Phase7Invariants.inventoryUsed s ≤ s.invMax →
+    Formal.Phase7Invariants.inventoryFree s + Formal.Phase7Invariants.inventoryUsed s = s.invMax :=
+  @Formal.Phase7Invariants.inventoryFree_plus_used_eq_max
+-- Target E: hp_percent div-zero guard = 1 when maxHp = 0.
+example : ∀ (s : Formal.Phase7Invariants.WS),
+    s.maxHp = 0 → Formal.Phase7Invariants.hpPercent s = 1 :=
+  @Formal.Phase7Invariants.hpPercent_maxhp_zero
+-- Target E: hp_percent = hp / maxHp when maxHp > 0.
+example : ∀ (s : Formal.Phase7Invariants.WS),
+    s.maxHp ≠ 0 → Formal.Phase7Invariants.hpPercent s = (s.hp : Rat) / (s.maxHp : Rat) :=
+  @Formal.Phase7Invariants.hpPercent_maxhp_pos
+-- Target E: hp_percent ≥ 0 unconditionally.
+example : ∀ (s : Formal.Phase7Invariants.WS),
+    0 ≤ Formal.Phase7Invariants.hpPercent s :=
+  @Formal.Phase7Invariants.hpPercent_nonneg
+
+/-! ### StoreWarmup role contracts (Phase-7 Target F). -/
+
+-- Below the warmup gate ⇒ median returns none.
+example : ∀ (samples : List Int) (median : Int),
+    samples.length < Formal.StoreWarmup.warmupMinSamples →
+    Formal.StoreWarmup.warmupGatedMedian samples median = none :=
+  @Formal.StoreWarmup.warmupGatedMedian_below_gate
+-- At or above the gate ⇒ median returns some.
+example : ∀ (samples : List Int) (median : Int),
+    Formal.StoreWarmup.warmupMinSamples ≤ samples.length →
+    Formal.StoreWarmup.warmupGatedMedian samples median = some median :=
+  @Formal.StoreWarmup.warmupGatedMedian_at_or_above_gate
+-- Below the gate ⇒ success rate = 1 (the warm-up default).
+example : ∀ (okCount total : Nat),
+    total < Formal.StoreWarmup.warmupMinSamples →
+    Formal.StoreWarmup.warmupGatedSuccessRate okCount total = 1 :=
+  @Formal.StoreWarmup.warmupGatedSuccessRate_below_gate
+-- At or above the gate ⇒ success rate = okCount / total.
+example : ∀ (okCount total : Nat),
+    Formal.StoreWarmup.warmupMinSamples ≤ total →
+    Formal.StoreWarmup.warmupGatedSuccessRate okCount total =
+      (okCount : Rat) / (total : Rat) :=
+  @Formal.StoreWarmup.warmupGatedSuccessRate_at_or_above_gate
+-- Success rate is non-negative on every branch.
+example : ∀ (okCount total : Nat),
+    0 ≤ Formal.StoreWarmup.warmupGatedSuccessRate okCount total :=
+  @Formal.StoreWarmup.warmupGatedSuccessRate_nonneg

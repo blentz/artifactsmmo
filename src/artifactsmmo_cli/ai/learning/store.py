@@ -1,7 +1,6 @@
 """SQLModel-backed learning store for autoregressive GOAP planning."""
 
 import json
-import statistics
 import weakref
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -15,6 +14,10 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session, SkillXpObservation, TaskRewardObservation
+from artifactsmmo_cli.ai.learning.store_warmup_core import (
+    warmup_gated_median,
+    warmup_gated_success_rate,
+)
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 _T = TypeVar("_T")
@@ -174,9 +177,7 @@ class LearningStore:
                 )
                 rows = list(s.exec(stmt))
             non_null = [r for r in rows if r is not None]
-            if len(non_null) < 5:
-                return None
-            return statistics.median(non_null)
+            return warmup_gated_median(non_null)
         except SQLAlchemyError:
             return None
 
@@ -200,9 +201,7 @@ class LearningStore:
                     .limit(window)
                 )
                 outcomes = list(s.exec(stmt))
-            if len(outcomes) < 5:
-                return 1.0
-            return sum(1 for o in outcomes if o == "ok") / len(outcomes)
+            return warmup_gated_success_rate(outcomes)
         except SQLAlchemyError:
             return 1.0
 
@@ -228,9 +227,7 @@ class LearningStore:
                 )
                 rows = list(s.exec(stmt))
             non_null: list[float] = [float(r) for r in rows if r is not None]
-            if len(non_null) < 5:
-                return None
-            return statistics.median(non_null)
+            return warmup_gated_median(non_null)
         except SQLAlchemyError:
             return None
 
@@ -256,9 +253,7 @@ class LearningStore:
                 )
                 rows = list(s.exec(stmt))
             non_null = [r for r in rows if r is not None]
-            if len(non_null) < 5:
-                return None
-            return statistics.median(non_null)
+            return warmup_gated_median(non_null)
         except SQLAlchemyError:
             return None
 
@@ -357,7 +352,7 @@ class LearningStore:
             sample_count = len(rows)
             satisfied = [r for r in rows if r is not None]
             sat_rate = (len(satisfied) / sample_count) if sample_count else 0.0
-            avg = statistics.median(satisfied) if len(satisfied) >= 5 else None
+            avg = warmup_gated_median(satisfied)
             return GoalStats(
                 goal_repr=goal_repr,
                 sample_count=sample_count,
