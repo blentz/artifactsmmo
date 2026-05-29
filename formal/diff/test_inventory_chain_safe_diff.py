@@ -192,6 +192,19 @@ def test_unequip_regression_pin_full_bag_blocked():
     assert lean["applicable"] is False
 
 
+def test_unequip_free_eq_one_accepted():
+    """Boundary pin: at exactly inventory_free=1 (1 free slot for the displaced
+    item) Unequip must be applicable. This pins the `>=` comparator in
+    is_applicable against off-by-one mutations (`> 1` would reject at the
+    boundary)."""
+    state = _mkstate(inventory={"x": 9}, inventory_max=10,
+                     equipment={"weapon_slot": "sword"})
+    a = UnequipAction(slot="weapon_slot")
+    assert a.is_applicable(state, _GD) is True
+    lean = run_oracle("inventory_chain_safe", [[2, 9, 10, 1]])[0]
+    assert lean["applicable"] is True
+
+
 def test_unequip_empty_slot_blocked():
     state = _mkstate(inventory_max=10, equipment={"weapon_slot": None})
     a = UnequipAction(slot="weapon_slot")
