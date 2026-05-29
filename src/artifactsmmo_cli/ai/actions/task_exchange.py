@@ -32,9 +32,25 @@ class TaskExchangeAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         # Only inventory counts at execute time (bank coins must be withdrawn
         # separately first). Fewer than the learned minimum returns HTTP 478.
-        return state.inventory.get(TASKS_COIN_CODE, 0) >= self.min_coins
+        # Defense in depth (chain_safe shape): the exchange grants at least one
+        # reward item per execute. Without a slot-free check, a full bag would
+        # have the reward overflow inventory_max on the server. The reward
+        # grant size is not exposed as API data, so we use the safe lower bound
+        # of >= 1 free slot.
+        if state.inventory.get(TASKS_COIN_CODE, 0) < self.min_coins:
+            return False
+        return state.inventory_free >= 1
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        assert (
+            state.inventory.get(TASKS_COIN_CODE, 0) >= self.min_coins
+            and state.inventory_free >= 1
+        ), (
+            f"TaskExchangeAction.apply requires coins >= min_coins and "
+            f"inventory_free >= 1 "
+            f"(coins={state.inventory.get(TASKS_COIN_CODE, 0)}, "
+            f"min_coins={self.min_coins}, free={state.inventory_free})"
+        )
         dest = self.taskmaster_location
         new_inventory = dict(state.inventory)
         remaining = new_inventory.get(TASKS_COIN_CODE, 0) - self.min_coins

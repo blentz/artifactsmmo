@@ -247,7 +247,9 @@ def test_complete_task() -> None:
 
 
 def test_task_cancel() -> None:
-    state = _make_state(task_code="x", task_type="monsters", task_total=5)
+    # Post-fix (REAL BUG #11): TaskCancel requires holding a tasks_coin.
+    state = _make_state(task_code="x", task_type="monsters", task_total=5,
+                        inventory={"tasks_coin": 1})
     _assert_preserved(state, TaskCancelAction(taskmaster_location=(1, 0)).apply(state, _make_game_data_basic()))
 
 

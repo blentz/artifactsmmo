@@ -24,6 +24,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.NpcBuyInventory
+import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
 import Formal.ApplyBaseline
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
@@ -1345,3 +1346,104 @@ example : ∀ {a b c : Formal.ApplyBaseline.WorldState},
     Formal.ApplyBaseline.preservesBaseline a b → Formal.ApplyBaseline.preservesBaseline b c →
     Formal.ApplyBaseline.preservesBaseline a c :=
   @Formal.ApplyBaseline.preservesBaseline_trans
+
+/-! ### InventoryChainSafe role contracts (REAL BUGS #7-#10 inventory + #11 task-cancel coin). -/
+
+-- Template: per-step safety
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (k : Nat),
+    i.used ≤ i.cap →
+    Formal.InventoryChainSafe.isApplicableK i k = true →
+    (Formal.InventoryChainSafe.applyK i k).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.applyK_inventory_safe
+-- Template: chain safety
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (ks : List Nat),
+    i.used ≤ i.cap → ks.sum ≤ i.cap - i.used →
+    (Formal.InventoryChainSafe.applyKN i ks).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.chain_safe_template
+
+-- Withdraw: precondition implies inventory headroom AND bank availability.
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (quantity bankQty : Nat),
+    Formal.InventoryChainSafe.withdrawIsApplicable i quantity bankQty = true →
+    quantity ≤ i.cap - i.used :=
+  @Formal.InventoryChainSafe.withdraw_is_applicable_imp_free_ge
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (quantity bankQty : Nat),
+    Formal.InventoryChainSafe.withdrawIsApplicable i quantity bankQty = true →
+    quantity ≤ bankQty :=
+  @Formal.InventoryChainSafe.withdraw_is_applicable_imp_bank_ge
+-- Withdraw: per-step safety
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (quantity bankQty : Nat),
+    i.used ≤ i.cap →
+    Formal.InventoryChainSafe.withdrawIsApplicable i quantity bankQty = true →
+    (Formal.InventoryChainSafe.withdrawApply i quantity).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.withdraw_apply_inventory_safe
+-- Withdraw: chain safety
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (qs : List Nat),
+    i.used ≤ i.cap → qs.sum ≤ i.cap - i.used →
+    (Formal.InventoryChainSafe.applyKN i qs).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.withdraw_chain_safe
+
+-- Claim: precondition implies inventory headroom.
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (hasPending : Bool),
+    Formal.InventoryChainSafe.claimIsApplicable i hasPending = true → 1 ≤ i.cap - i.used :=
+  @Formal.InventoryChainSafe.claim_is_applicable_imp_free_ge
+-- Claim: per-step safety
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (hasPending : Bool),
+    i.used ≤ i.cap →
+    Formal.InventoryChainSafe.claimIsApplicable i hasPending = true →
+    (Formal.InventoryChainSafe.claimApply i).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.claim_apply_inventory_safe
+-- Claim: chain safety (n claims at +1 each)
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (n : Nat),
+    i.used ≤ i.cap → n ≤ i.cap - i.used →
+    (Formal.InventoryChainSafe.applyKN i (List.replicate n 1)).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.claim_chain_safe
+
+-- Unequip: precondition implies inventory headroom.
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (slotNonEmpty : Bool),
+    Formal.InventoryChainSafe.unequipIsApplicable i slotNonEmpty = true → 1 ≤ i.cap - i.used :=
+  @Formal.InventoryChainSafe.unequip_is_applicable_imp_free_ge
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (slotNonEmpty : Bool),
+    i.used ≤ i.cap →
+    Formal.InventoryChainSafe.unequipIsApplicable i slotNonEmpty = true →
+    (Formal.InventoryChainSafe.unequipApply i).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.unequip_apply_inventory_safe
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (n : Nat),
+    i.used ≤ i.cap → n ≤ i.cap - i.used →
+    (Formal.InventoryChainSafe.applyKN i (List.replicate n 1)).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.unequip_chain_safe
+
+-- TaskExchange: precondition implies inventory headroom AND coins headroom.
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (coins minCoins : Nat),
+    Formal.InventoryChainSafe.taskExchangeIsApplicable i coins minCoins = true →
+    1 ≤ i.cap - i.used :=
+  @Formal.InventoryChainSafe.task_exchange_is_applicable_imp_free_ge
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (coins minCoins : Nat),
+    Formal.InventoryChainSafe.taskExchangeIsApplicable i coins minCoins = true →
+    minCoins ≤ coins :=
+  @Formal.InventoryChainSafe.task_exchange_is_applicable_imp_coins_ge
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (coins minCoins : Nat),
+    i.used ≤ i.cap →
+    Formal.InventoryChainSafe.taskExchangeIsApplicable i coins minCoins = true →
+    (Formal.InventoryChainSafe.taskExchangeApply i 1).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.task_exchange_apply_inventory_safe
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (rewards : List Nat),
+    i.used ≤ i.cap → rewards.sum ≤ i.cap - i.used →
+    (Formal.InventoryChainSafe.applyKN i rewards).used ≤ i.cap :=
+  @Formal.InventoryChainSafe.task_exchange_chain_safe
+
+-- TaskCancel coin: precondition implies coin ≥ 1.
+example : ∀ (p : Formal.InventoryChainSafe.CoinPurse) (hasTask : Bool),
+    Formal.InventoryChainSafe.taskCancelIsApplicable p hasTask = true → 1 ≤ p.coins :=
+  @Formal.InventoryChainSafe.task_cancel_is_applicable_imp_coin_ge
+-- TaskCancel: apply decrements by exactly 1.
+example : ∀ (p : Formal.InventoryChainSafe.CoinPurse) (hasTask : Bool),
+    Formal.InventoryChainSafe.taskCancelIsApplicable p hasTask = true →
+    (Formal.InventoryChainSafe.taskCancelApply p).coins = p.coins - 1 :=
+  @Formal.InventoryChainSafe.task_cancel_apply_coin_eq_pre_minus_one
+example : ∀ (p : Formal.InventoryChainSafe.CoinPurse) (hasTask : Bool),
+    Formal.InventoryChainSafe.taskCancelIsApplicable p hasTask = true →
+    (Formal.InventoryChainSafe.taskCancelApply p).coins < p.coins :=
+  @Formal.InventoryChainSafe.task_cancel_apply_strictly_decreases
+example : ∀ (p : Formal.InventoryChainSafe.CoinPurse) (n : Nat),
+    (Formal.InventoryChainSafe.taskCancelApplyN p n).coins = p.coins - n :=
+  @Formal.InventoryChainSafe.task_cancel_applyN_coin

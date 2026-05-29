@@ -31,9 +31,23 @@ class WithdrawItemAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.accessible or state.bank_items is None:
             return False
-        return state.bank_items.get(self.code, 0) >= self.quantity and state.inventory_free > 0
+        # Defense in depth: the slot floor must cover the full withdraw quantity,
+        # not just a single slot. Pre-fix `>= 1` allowed a withdraw of N items
+        # while only 1 slot was free, and apply minted `+N`, overflowing the cap.
+        # The post-fix is the chain_safe shape used by NpcBuy / Gather.
+        return (
+            state.bank_items.get(self.code, 0) >= self.quantity
+            and state.inventory_free >= self.quantity
+        )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        # Mirror the is_applicable precondition. The planner re-checks
+        # is_applicable on every popped node; this assert is the
+        # chain_safe defense that crashes loudly if a caller bypasses the gate.
+        assert state.inventory_free >= self.quantity, (
+            f"WithdrawItemAction.apply requires inventory_free >= quantity "
+            f"({state.inventory_free} < {self.quantity})"
+        )
         dest = self.bank_location
         new_inventory = dict(state.inventory)
         new_inventory[self.code] = new_inventory.get(self.code, 0) + self.quantity

@@ -27,11 +27,21 @@ class ClaimPendingItemAction(Action):
     tags: ClassVar[frozenset[str]] = frozenset({"claim"})
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return bool(state.pending_items)
+        # Defense in depth: claiming mints `+1` of the pending item into
+        # inventory. Without a slot-floor check, a claim on a full bag would
+        # overflow inventory_max (apply produced used=cap+1). Mirrors the
+        # NpcBuy / Gather chain_safe shape.
+        if not state.pending_items:
+            return False
+        return state.inventory_free >= 1
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         if not state.pending_items:
             return state
+        assert state.inventory_free >= 1, (
+            f"ClaimPendingItemAction.apply requires inventory_free >= 1 "
+            f"({state.inventory_free} < 1)"
+        )
         item_id, item_code = state.pending_items[0]
         remaining = state.pending_items[1:]
         new_inventory = dict(state.inventory)

@@ -26,9 +26,20 @@ class UnequipAction(Action):
     slot: str
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return state.equipment.get(self.slot) is not None
+        # Defense in depth: unequipping pushes the slot item into inventory
+        # (`+1`). Without a free-slot check, an unequip on a full bag overflows
+        # inventory_max (apply produced used=cap+1). Mirrors NpcBuy / Gather
+        # chain_safe shape. The slot-non-empty check stays as the action-level
+        # gate (an empty slot has nothing to unequip).
+        if state.equipment.get(self.slot) is None:
+            return False
+        return state.inventory_free >= 1
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        assert state.equipment.get(self.slot) is not None and state.inventory_free >= 1, (
+            f"UnequipAction.apply requires non-empty slot and inventory_free >= 1 "
+            f"(slot={self.slot}, free={state.inventory_free})"
+        )
         new_equipment = dict(state.equipment)
         item_code = new_equipment.pop(self.slot, None)
         new_equipment[self.slot] = None

@@ -271,6 +271,50 @@ open Formal.PriorityBand
 #check @Formal.RealizableLoadout.regression_buggy_output_not_realizable -- anti-witness: pre-fix output (both rings = B) is NOT realizable
 #check @Formal.RealizableLoadout.empty_loadout_realizable               -- edge: empty loadout is vacuously realizable
 #check @Formal.RealizableLoadout.isRealizable_mono_inv                  -- monotone: more inventory preserves realizability
+-- InventoryChainSafe required roles (REAL BUGS #7-#11: four chain_safe instantiations + TaskCancel coin):
+#check @Formal.InventoryChainSafe.isApplicableK_imp_free_ge       -- template: passing precondition ⇒ k ≤ free
+#check @Formal.InventoryChainSafe.applyK_inventory_safe           -- template: per-step safety
+#check @Formal.InventoryChainSafe.applyKN_used                    -- template: chain bookkeeping (used' = used + sum)
+#check @Formal.InventoryChainSafe.applyKN_cap                     -- template: chain bookkeeping (cap unchanged)
+#check @Formal.InventoryChainSafe.chain_safe_template             -- template: chain safety (Σ ≤ free ⇒ stays in cap)
+-- Withdraw role contracts:
+#check @Formal.InventoryChainSafe.withdraw_is_applicable_imp_free_ge  -- passing check ⇒ quantity ≤ free
+#check @Formal.InventoryChainSafe.withdraw_is_applicable_imp_bank_ge  -- passing check ⇒ quantity ≤ bankQty
+#check @Formal.InventoryChainSafe.withdraw_apply_inventory_safe       -- per-step safety
+#check @Formal.InventoryChainSafe.withdraw_chain_safe                 -- chain safety
+#check @Formal.InventoryChainSafe.withdraw_boundary_quantity_eq_free_witness  -- boundary witness (quantity == free)
+#check @Formal.InventoryChainSafe.withdraw_regression_used9_cap10_qty5_refused -- regression-pin: verified probe refused
+-- Claim role contracts:
+#check @Formal.InventoryChainSafe.claim_is_applicable_imp_free_ge  -- passing check ⇒ 1 ≤ free
+#check @Formal.InventoryChainSafe.claim_apply_inventory_safe       -- per-step safety
+#check @Formal.InventoryChainSafe.claim_chain_safe                 -- chain safety
+#check @Formal.InventoryChainSafe.claim_boundary_witness           -- boundary witness (used = cap - 1)
+#check @Formal.InventoryChainSafe.claim_regression_full_bag_refused -- regression-pin: full bag refused
+#check @Formal.InventoryChainSafe.claim_no_pending_refused          -- shell-safety: no pending ⇒ refused
+-- Unequip role contracts:
+#check @Formal.InventoryChainSafe.unequip_is_applicable_imp_free_ge -- passing check ⇒ 1 ≤ free
+#check @Formal.InventoryChainSafe.unequip_apply_inventory_safe      -- per-step safety
+#check @Formal.InventoryChainSafe.unequip_chain_safe                -- chain safety
+#check @Formal.InventoryChainSafe.unequip_boundary_witness          -- boundary witness
+#check @Formal.InventoryChainSafe.unequip_regression_full_bag_refused -- regression-pin: full bag refused
+#check @Formal.InventoryChainSafe.unequip_empty_slot_refused        -- shell-safety: empty slot ⇒ refused
+-- TaskExchange role contracts:
+#check @Formal.InventoryChainSafe.task_exchange_is_applicable_imp_free_ge  -- passing check ⇒ 1 ≤ free
+#check @Formal.InventoryChainSafe.task_exchange_is_applicable_imp_coins_ge -- passing check ⇒ minCoins ≤ coins
+#check @Formal.InventoryChainSafe.task_exchange_apply_inventory_safe       -- per-step safety
+#check @Formal.InventoryChainSafe.task_exchange_chain_safe                 -- chain safety
+#check @Formal.InventoryChainSafe.task_exchange_boundary_witness           -- boundary witness
+#check @Formal.InventoryChainSafe.task_exchange_regression_full_bag_refused -- regression-pin
+#check @Formal.InventoryChainSafe.task_exchange_coin_short_refused          -- shell-safety: coins short ⇒ refused
+-- TaskCancel coin contracts (REAL BUG #11):
+#check @Formal.InventoryChainSafe.task_cancel_is_applicable_imp_coin_ge -- passing check ⇒ coins ≥ 1
+#check @Formal.InventoryChainSafe.task_cancel_apply_coin_eq_pre_minus_one -- apply decrements by exactly 1
+#check @Formal.InventoryChainSafe.task_cancel_apply_strictly_decreases  -- strict decrement under precondition
+#check @Formal.InventoryChainSafe.task_cancel_applyN_coin               -- chain bookkeeping
+#check @Formal.InventoryChainSafe.task_cancel_chain_coin_safe           -- chain safety (n ≤ coins)
+#check @Formal.InventoryChainSafe.task_cancel_boundary_witness          -- boundary witness (coins=1 ⇒ post=0)
+#check @Formal.InventoryChainSafe.task_cancel_no_coin_refused           -- regression-pin: no coin ⇒ refused
+#check @Formal.InventoryChainSafe.task_cancel_no_task_refused           -- shell-safety: no task ⇒ refused
 -- ApplyBaseline required roles (REAL BUG #5: silent stat-baseline drop in Action.apply):
 #check @Formal.ApplyBaseline.moveApply_preserves_baseline   -- apply-preserves-baseline-move
 #check @Formal.ApplyBaseline.equipApply_preserves_baseline  -- apply-preserves-baseline-equip

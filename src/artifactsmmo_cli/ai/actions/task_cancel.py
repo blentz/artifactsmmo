@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
 @dataclass
@@ -25,14 +25,30 @@ class TaskCancelAction(Action):
     taskmaster_location: tuple[int, int]
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return bool(state.task_code) and state.task_total > 0
+        # Server requires 1 task coin to cancel (HTTP 478 otherwise). Without
+        # the coin gate, the planner would propose a cancel that the server
+        # then refuses, freezing the agent on the failed step.
+        if not state.task_code or state.task_total <= 0:
+            return False
+        return state.inventory.get(TASKS_COIN_CODE, 0) >= 1
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        assert state.inventory.get(TASKS_COIN_CODE, 0) >= 1, (
+            f"TaskCancelAction.apply requires a task coin "
+            f"(have {state.inventory.get(TASKS_COIN_CODE, 0)})"
+        )
         dest = self.taskmaster_location
+        new_inventory = dict(state.inventory)
+        remaining = new_inventory.get(TASKS_COIN_CODE, 0) - 1
+        if remaining <= 0:
+            new_inventory.pop(TASKS_COIN_CODE, None)
+        else:
+            new_inventory[TASKS_COIN_CODE] = remaining
         return dataclasses.replace(
             state,
             x=dest[0],
             y=dest[1],
+            inventory=new_inventory,
             cooldown_expires=None,
             task_code=None,
             task_type=None,

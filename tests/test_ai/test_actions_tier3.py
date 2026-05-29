@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
@@ -36,38 +37,67 @@ class TestTaskCancelAction:
         assert repr(TaskCancelAction(taskmaster_location=(1, 2))) == "TaskCancel"
 
     def test_applicable_when_task_active(self):
+        # Post-fix: TaskCancel also requires a task coin (server HTTP 478).
         action = TaskCancelAction(taskmaster_location=(1, 2))
-        state = make_state(task_code="chicken", task_total=10, task_progress=3)
+        state = make_state(task_code="chicken", task_total=10, task_progress=3,
+                           inventory={TASKS_COIN_CODE: 1})
         assert action.is_applicable(state, make_gd()) is True
 
     def test_not_applicable_without_task(self):
         action = TaskCancelAction(taskmaster_location=(1, 2))
-        state = make_state(task_code=None, task_total=0)
+        state = make_state(task_code=None, task_total=0,
+                           inventory={TASKS_COIN_CODE: 1})
         assert action.is_applicable(state, make_gd()) is False
 
     def test_not_applicable_when_task_total_zero(self):
         action = TaskCancelAction(taskmaster_location=(1, 2))
-        state = make_state(task_code="chicken", task_total=0)
+        state = make_state(task_code="chicken", task_total=0,
+                           inventory={TASKS_COIN_CODE: 1})
+        assert action.is_applicable(state, make_gd()) is False
+
+    def test_not_applicable_without_task_coin(self):
+        """REAL BUG #11: cancel without a coin must be refused (server 478)."""
+        action = TaskCancelAction(taskmaster_location=(1, 2))
+        state = make_state(task_code="chicken", task_total=10, task_progress=3)
         assert action.is_applicable(state, make_gd()) is False
 
     def test_apply_clears_task(self):
         action = TaskCancelAction(taskmaster_location=(1, 2))
-        state = make_state(task_code="chicken", task_total=10, task_progress=5)
+        state = make_state(task_code="chicken", task_total=10, task_progress=5,
+                           inventory={TASKS_COIN_CODE: 1})
         new_state = action.apply(state, make_gd())
         assert new_state.task_code is None
         assert new_state.task_total == 0
         assert new_state.task_progress == 0
 
+    def test_apply_decrements_task_coin(self):
+        """REAL BUG #11: apply must debit one task coin."""
+        action = TaskCancelAction(taskmaster_location=(1, 2))
+        state = make_state(task_code="wolf", task_total=5,
+                           inventory={TASKS_COIN_CODE: 3})
+        new_state = action.apply(state, make_gd())
+        assert new_state.inventory[TASKS_COIN_CODE] == 2
+
+    def test_apply_removes_task_coin_when_last_one_spent(self):
+        action = TaskCancelAction(taskmaster_location=(1, 2))
+        state = make_state(task_code="wolf", task_total=5,
+                           inventory={TASKS_COIN_CODE: 1})
+        new_state = action.apply(state, make_gd())
+        assert TASKS_COIN_CODE not in new_state.inventory
+
     def test_apply_moves_to_taskmaster(self):
         action = TaskCancelAction(taskmaster_location=(3, 4))
-        state = make_state(x=0, y=0, task_code="wolf", task_total=5)
+        state = make_state(x=0, y=0, task_code="wolf", task_total=5,
+                           inventory={TASKS_COIN_CODE: 1})
         new_state = action.apply(state, make_gd())
         assert new_state.x == 3
         assert new_state.y == 4
 
     def test_apply_preserves_pending_items(self):
         action = TaskCancelAction(taskmaster_location=(1, 2))
-        state = make_state(task_code="wolf", task_total=5, pending_items=(("id1", "copper_ore"),))
+        state = make_state(task_code="wolf", task_total=5,
+                           inventory={TASKS_COIN_CODE: 1},
+                           pending_items=(("id1", "copper_ore"),))
         new_state = action.apply(state, make_gd())
         assert new_state.pending_items == (("id1", "copper_ore"),)
 

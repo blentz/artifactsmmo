@@ -39,6 +39,10 @@ NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_b
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
 APPLY_EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.py"
+WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
+UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
+TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
+TASK_CANCEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_cancel.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -812,6 +816,7 @@ _ALL_SRCS = [
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
+    WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
 ]
 
@@ -1044,6 +1049,139 @@ COST_CORE_MUTATIONS = [
 ]
 
 
+# inventory_chain_safe mutations — REAL BUGS #7-#11. Each resurrects the bug
+# by dropping the precondition, flipping the boundary, or dropping the apply
+# assert / coin decrement. Killed by
+# `formal/diff/test_inventory_chain_safe_diff.py`.
+WITHDRAW_ITEM_MUTATIONS = [
+    # Drop the slot-floor check: resurrects REAL BUG #7 (pre-fix >0). The
+    # regression-pin (used=9 cap=10 qty=5) fires.
+    ("withdraw_item: drop inventory_free check",
+     "        return (\n"
+     "            state.bank_items.get(self.code, 0) >= self.quantity\n"
+     "            and state.inventory_free >= self.quantity\n"
+     "        )",
+     "        return state.bank_items.get(self.code, 0) >= self.quantity"),
+    # Off-by-one: flip >= to > on the slot floor.
+    ("withdraw_item: flip >= to > on inventory_free check",
+     "            and state.inventory_free >= self.quantity",
+     "            and state.inventory_free > self.quantity"),
+    # Drop the apply assert: even if is_applicable is correct, the planner
+    # could (incorrectly) call apply without going through it; the assert is
+    # the chain_safe defense. The diff test exercises apply via is_applicable,
+    # so dropping the assert alone wouldn't fail an oracle-agreement test
+    # — but the diff's `post.inventory_used <= post.inventory_max` invariant
+    # still holds because is_applicable is unchanged. We instead loosen the
+    # is_applicable AND drop the assert in one mutation, mirroring NpcBuy.
+    ("withdraw_item: weaken is_applicable to >= 1 only",
+     "            and state.inventory_free >= self.quantity",
+     "            and state.inventory_free >= 1"),
+]
+
+CLAIM_MUTATIONS = [
+    # Drop the slot-floor check: resurrects REAL BUG #8.
+    ("claim: drop inventory_free >= 1 check",
+     "        if not state.pending_items:\n"
+     "            return False\n"
+     "        return state.inventory_free >= 1",
+     "        return bool(state.pending_items)"),
+    # Flip >= to > on the slot floor (off-by-one): full bag still rejected,
+    # but exactly-one-free slot is now wrongly refused. The boundary test
+    # `test_claim_boundary_one_free_slot_accepted` fires.
+    ("claim: flip >= to > on inventory_free check",
+     "        return state.inventory_free >= 1",
+     "        return state.inventory_free > 1"),
+    # Drop the apply assert. The diff test's post-state invariant on apply
+    # passes under the unchanged is_applicable, so we couple this with a
+    # loosened precondition: drop the pending-items guard too.
+    ("claim: drop pending_items guard",
+     "        if not state.pending_items:\n"
+     "            return False\n"
+     "        return state.inventory_free >= 1",
+     "        return state.inventory_free >= 1"),
+]
+
+UNEQUIP_MUTATIONS = [
+    # Drop the slot-floor check: resurrects REAL BUG #9.
+    ("unequip: drop inventory_free >= 1 check",
+     "        if state.equipment.get(self.slot) is None:\n"
+     "            return False\n"
+     "        return state.inventory_free >= 1",
+     "        return state.equipment.get(self.slot) is not None"),
+    # Flip >= to > on the slot floor (off-by-one).
+    ("unequip: flip >= to > on inventory_free check",
+     "        return state.inventory_free >= 1",
+     "        return state.inventory_free > 1"),
+    # Drop the slot-non-empty guard: empty slot now wrongly applicable.
+    ("unequip: drop slot-non-empty guard",
+     "        if state.equipment.get(self.slot) is None:\n"
+     "            return False\n"
+     "        return state.inventory_free >= 1",
+     "        return state.inventory_free >= 1"),
+]
+
+TASK_EXCHANGE_MUTATIONS = [
+    # Drop the slot-floor check: resurrects REAL BUG #10.
+    ("task_exchange: drop inventory_free >= 1 check",
+     "        if state.inventory.get(TASKS_COIN_CODE, 0) < self.min_coins:\n"
+     "            return False\n"
+     "        return state.inventory_free >= 1",
+     "        return state.inventory.get(TASKS_COIN_CODE, 0) >= self.min_coins"),
+    # Flip >= to > on the slot floor (off-by-one).
+    ("task_exchange: flip >= to > on inventory_free check",
+     "        return state.inventory_free >= 1",
+     "        return state.inventory_free > 1"),
+    # Drop the coin gate.
+    ("task_exchange: drop coin gate",
+     "        if state.inventory.get(TASKS_COIN_CODE, 0) < self.min_coins:\n"
+     "            return False\n"
+     "        return state.inventory_free >= 1",
+     "        return state.inventory_free >= 1"),
+]
+
+TASK_CANCEL_MUTATIONS = [
+    # Drop the coin check: resurrects REAL BUG #11 (pre-fix is_applicable).
+    ("task_cancel: drop coin check in is_applicable",
+     "        if not state.task_code or state.task_total <= 0:\n"
+     "            return False\n"
+     "        return state.inventory.get(TASKS_COIN_CODE, 0) >= 1",
+     "        return bool(state.task_code) and state.task_total > 0"),
+    # Off-by-one: require 2 coins instead of 1.
+    ("task_cancel: require 2 coins instead of 1",
+     "        return state.inventory.get(TASKS_COIN_CODE, 0) >= 1",
+     "        return state.inventory.get(TASKS_COIN_CODE, 0) >= 2"),
+    # Drop the coin decrement in apply: post-state still shows full coin count.
+    ("task_cancel: drop coin decrement in apply",
+     "        new_inventory = dict(state.inventory)\n"
+     "        remaining = new_inventory.get(TASKS_COIN_CODE, 0) - 1\n"
+     "        if remaining <= 0:\n"
+     "            new_inventory.pop(TASKS_COIN_CODE, None)\n"
+     "        else:\n"
+     "            new_inventory[TASKS_COIN_CODE] = remaining\n"
+     "        return dataclasses.replace(\n"
+     "            state,\n"
+     "            x=dest[0],\n"
+     "            y=dest[1],\n"
+     "            inventory=new_inventory,\n"
+     "            cooldown_expires=None,\n"
+     "            task_code=None,\n"
+     "            task_type=None,\n"
+     "            task_progress=0,\n"
+     "            task_total=0,\n"
+     "        )",
+     "        return dataclasses.replace(\n"
+     "            state,\n"
+     "            x=dest[0],\n"
+     "            y=dest[1],\n"
+     "            cooldown_expires=None,\n"
+     "            task_code=None,\n"
+     "            task_type=None,\n"
+     "            task_progress=0,\n"
+     "            task_total=0,\n"
+     "        )"),
+]
+
+
 def _assert_sources_clean() -> None:
     """Abort if any mutation target is already dirty in git. The runner mutates
     production source in place and restores it in `finally`; a previous run killed
@@ -1133,6 +1271,16 @@ def main() -> int:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(LEVEL_SKILL_GOAL_SRC, LEVEL_SKILL_GOAL_MUTATIONS,
               "tests/test_ai/test_level_skill_goal.py", survivors)
+    run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
+              "formal/diff/test_inventory_chain_safe_diff.py", survivors)
+    run_group(APPLY_CLAIM_SRC, CLAIM_MUTATIONS,
+              "formal/diff/test_inventory_chain_safe_diff.py", survivors)
+    run_group(UNEQUIP_SRC, UNEQUIP_MUTATIONS,
+              "formal/diff/test_inventory_chain_safe_diff.py", survivors)
+    run_group(TASK_EXCHANGE_SRC, TASK_EXCHANGE_MUTATIONS,
+              "formal/diff/test_inventory_chain_safe_diff.py", survivors)
+    run_group(TASK_CANCEL_SRC, TASK_CANCEL_MUTATIONS,
+              "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

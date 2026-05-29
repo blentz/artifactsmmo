@@ -13,6 +13,7 @@ open Formal.DecideKey
 open Formal.CyclesForProgress
 open Formal.GatherApply
 open Formal.ActionCostNonneg
+open Formal.InventoryChainSafe
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1006,6 +1007,64 @@ def runActionCostNonneg (args : Array Json) : Json :=
   Json.mkObj [("cost", Json.num (Int.ofNat cost)),
               ("nonneg", Json.bool true)]
 
+/-- Compute one inventory_chain_safe result. Single shared dispatcher for the
+four chain_safe instantiations and the TaskCancel coin step.
+
+Sub-kinds (chosen by `args[0]`):
+* `0` = withdraw: `[0, used, cap, quantity, bankQty]` → applicable / free / post.used
+* `1` = claim:    `[1, used, cap, hasPending(0/1)]` → applicable / free / post.used
+* `2` = unequip:  `[2, used, cap, slotNonEmpty(0/1)]` → applicable / free / post.used
+* `3` = task_exchange: `[3, used, cap, coins, minCoins]` → applicable / free / post.used (reward=1)
+* `4` = task_cancel coin: `[4, coins, hasTask(0/1)]` → applicable / post.coins -/
+def runInventoryChainSafe (args : Array Json) : Json :=
+  let q := intArg args 0
+  if q == 4 then
+    let coins := (intArg args 1).toNat
+    let hasTask := intArg args 2 != 0
+    let p : Formal.InventoryChainSafe.CoinPurse := { coins := coins }
+    let app := Formal.InventoryChainSafe.taskCancelIsApplicable p hasTask
+    let post := Formal.InventoryChainSafe.taskCancelApply p
+    Json.mkObj [("applicable", Json.bool app),
+                ("post_coins", Json.num (Int.ofNat post.coins))]
+  else
+    let used := (intArg args 1).toNat
+    let cap := (intArg args 2).toNat
+    let i : Formal.InventoryChainSafe.Inv := { used := used, cap := cap }
+    if q == 0 then
+      let quantity := (intArg args 3).toNat
+      let bankQty := (intArg args 4).toNat
+      let app := Formal.InventoryChainSafe.withdrawIsApplicable i quantity bankQty
+      let post := Formal.InventoryChainSafe.withdrawApply i quantity
+      Json.mkObj [("applicable", Json.bool app),
+                  ("free", Json.num (Int.ofNat (Formal.InventoryChainSafe.free i))),
+                  ("post_used", Json.num (Int.ofNat post.used)),
+                  ("cap", Json.num (Int.ofNat post.cap))]
+    else if q == 1 then
+      let hasPending := intArg args 3 != 0
+      let app := Formal.InventoryChainSafe.claimIsApplicable i hasPending
+      let post := Formal.InventoryChainSafe.claimApply i
+      Json.mkObj [("applicable", Json.bool app),
+                  ("free", Json.num (Int.ofNat (Formal.InventoryChainSafe.free i))),
+                  ("post_used", Json.num (Int.ofNat post.used)),
+                  ("cap", Json.num (Int.ofNat post.cap))]
+    else if q == 2 then
+      let slotNonEmpty := intArg args 3 != 0
+      let app := Formal.InventoryChainSafe.unequipIsApplicable i slotNonEmpty
+      let post := Formal.InventoryChainSafe.unequipApply i
+      Json.mkObj [("applicable", Json.bool app),
+                  ("free", Json.num (Int.ofNat (Formal.InventoryChainSafe.free i))),
+                  ("post_used", Json.num (Int.ofNat post.used)),
+                  ("cap", Json.num (Int.ofNat post.cap))]
+    else
+      let coins := (intArg args 3).toNat
+      let minCoins := (intArg args 4).toNat
+      let app := Formal.InventoryChainSafe.taskExchangeIsApplicable i coins minCoins
+      let post := Formal.InventoryChainSafe.taskExchangeApply i 1
+      Json.mkObj [("applicable", Json.bool app),
+                  ("free", Json.num (Int.ofNat (Formal.InventoryChainSafe.free i))),
+                  ("post_used", Json.num (Int.ofNat post.used)),
+                  ("cap", Json.num (Int.ofNat post.cap))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1086,6 +1145,8 @@ def runOne (item : Json) : Json :=
     runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then
     runActionCostNonneg args
+  else if kind == "inventory_chain_safe" then
+    runInventoryChainSafe args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

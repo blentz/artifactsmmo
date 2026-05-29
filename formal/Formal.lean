@@ -26,6 +26,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.NpcBuyInventory
+import Formal.InventoryChainSafe
 import Formal.Contracts
 import Formal.ActionCostNonneg
 import Formal.RealizableLoadout
