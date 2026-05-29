@@ -18,5 +18,10 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-settings.register_profile("formal", database=None, derandomize=True)
+# `deadline=None` disables Hypothesis's per-example 200ms timeout. Each diff test
+# invokes the Lean `oracle` subprocess for the comparison, which under heavy gate
+# load (mutate.py runs the full diff suite per mutation) can push some examples
+# past 200ms — a perf-flake, not a correctness signal. The differential properties
+# are deterministic; we don't need the deadline as a regression-finder here.
+settings.register_profile("formal", database=None, derandomize=True, deadline=None)
 settings.load_profile("formal")
