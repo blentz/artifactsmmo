@@ -89,7 +89,8 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             current = state.skills.get(req.skill, 0)
             target = min(req.required_level, current + LEVEL_LOOKAHEAD)
             return LevelSkillGoal(skill_name=req.skill, target_level=target,
-                                  initial_skill_xp=state.skill_xp.get(req.skill, 0))
+                                  initial_skill_xp=state.skill_xp.get(req.skill, 0),
+                                  xp_curve=ctx.skill_xp_curves.get(req.skill))
         assert state.task_code is not None  # _fires guarantees an active task
         return PursueTaskGoal(task_code=state.task_code,
                               initial_progress=state.task_progress,
@@ -125,7 +126,8 @@ def objective_step_goal(
         current = state.skills.get(step.skill, 0)
         target = min(step.level, current + LEVEL_LOOKAHEAD)
         return LevelSkillGoal(skill_name=step.skill, target_level=target,
-                              initial_skill_xp=state.skill_xp.get(step.skill, 0))
+                              initial_skill_xp=state.skill_xp.get(step.skill, 0),
+                              xp_curve=ctx.skill_xp_curves.get(step.skill))
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None

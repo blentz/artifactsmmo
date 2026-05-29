@@ -54,6 +54,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
+from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
@@ -1104,6 +1105,15 @@ class GamePlayer:
         assert self.state is not None
         if combat_monster is None:
             combat_monster = self._winnable_farm_target()
+        # Build per-skill SkillXpCurve from observed learning history; empty
+        # dict if no history (no projection-based satisfaction available —
+        # LevelSkillGoal falls back to the server-snapshot path).
+        skill_xp_curves: dict[str, SkillXpCurve] = {}
+        if self.history is not None:
+            for skill in self.state.skills:
+                observed = self.history.skill_max_xp_observations(skill)
+                if observed:
+                    skill_xp_curves[skill] = SkillXpCurve(observed=observed)
         return SelectionContext(
             bank_accessible=self._bank_accessible,
             bank_required_level=self._bank_required_level,
@@ -1111,6 +1121,7 @@ class GamePlayer:
             initial_xp=self.state.xp,
             task_exchange_min_coins=self._task_exchange_min_coins,
             combat_monster=combat_monster,
+            skill_xp_curves=skill_xp_curves,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

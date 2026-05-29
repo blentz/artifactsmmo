@@ -10,6 +10,8 @@ TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
+GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
+LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
@@ -808,6 +810,7 @@ _ALL_SRCS = [
     GATHER_APPLY_SRC,
     COST_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
+    GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
 ]
 
 
@@ -937,6 +940,46 @@ APPLY_CLAIM_MUTATIONS = [
 ]
 
 
+# projected_skill_xp_delta mutations -- the Phase-4 LevelSkillGoal predictability
+# fix. Each mutant either (a) drops the GatherAction.apply delta update so the
+# projected accumulator stays at 0 (LevelSkillGoal can never see plan-projected
+# satisfaction), (b) flips the += into a -= (corrupts the delta), or (c) drops
+# the projected-delta check in LevelSkillGoal.is_satisfied. Each killed by
+# `formal/diff/test_apply_baseline_diff.py::test_gather_increments_projected_skill_xp_delta`
+# (for a/b) or by the test_level_skill_goal projection tests (for c).
+GATHERING_APPLY_MUTATIONS = [
+    (
+        "gathering.apply: drop projected_skill_xp_delta update (no XP accumulation)",
+        "        new_delta = dict(state.projected_skill_xp_delta)\n"
+        "        skill_req = game_data.resource_skill_level(self.resource_code)\n"
+        "        if skill_req is not None:\n"
+        "            skill_name, _ = skill_req\n"
+        "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1",
+        "        new_delta = dict(state.projected_skill_xp_delta)",
+    ),
+    (
+        "gathering.apply: flip += to -= on projected delta",
+        "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1",
+        "            new_delta[skill_name] = new_delta.get(skill_name, 0) - 1",
+    ),
+]
+
+
+LEVEL_SKILL_GOAL_MUTATIONS = [
+    (
+        "level_skill_goal.is_satisfied: drop projected-delta check (only skills snapshot path)",
+        "        current_level = state.skills.get(self._skill_name, 0)\n"
+        "        required = self._xp_curve.required_xp(current_level)\n"
+        "        if required <= 0:\n"
+        "            return False\n"
+        "        current_xp = state.skill_xp.get(self._skill_name, 0)\n"
+        "        projected = state.projected_skill_xp_delta.get(self._skill_name, 0)\n"
+        "        return current_xp + projected >= required",
+        "        return False",
+    ),
+]
+
+
 # cost_core mutations -- old strings matched to current cost_core.py text.
 # These attack the Phase-2 Dijkstra-optimality precondition: every
 # Action.cost(...) must return ≥ 0. Each mutation breaks the non-negativity
@@ -1045,6 +1088,10 @@ def main() -> int:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_CLAIM_SRC, APPLY_CLAIM_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(LEVEL_SKILL_GOAL_SRC, LEVEL_SKILL_GOAL_MUTATIONS,
+              "tests/test_ai/test_level_skill_goal.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

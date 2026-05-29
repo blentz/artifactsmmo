@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -30,10 +31,16 @@ so we still cancel a bad task first."""
 class LevelSkillGoal(Goal):
     """Level a specific skill to `target_level` by crafting items in its family."""
 
-    def __init__(self, skill_name: str, target_level: int, initial_skill_xp: int = 0) -> None:
+    def __init__(self, skill_name: str, target_level: int, initial_skill_xp: int = 0,
+                 xp_curve: SkillXpCurve | None = None) -> None:
         self._skill_name = skill_name
         self._target_level = target_level
         self._initial_skill_xp = initial_skill_xp
+        # SkillXpCurve maps current skill_level -> XP needed to advance. Empty
+        # curve (no observations) means the planner has no learned XP-to-next-
+        # level estimate; projection-based satisfaction is disabled in that
+        # case and the goal falls back to the skills-level snapshot check.
+        self._xp_curve = xp_curve if xp_curve is not None else SkillXpCurve()
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -55,12 +62,28 @@ class LevelSkillGoal(Goal):
         return PRIORITY_WHEN_FIRING
 
     def is_satisfied(self, state: WorldState) -> bool:
-        # NOTE: skill_xp is a server-snapshot baseline field; Action.apply does
-        # NOT mutate it (see ApplyBaseline contract). Satisfaction is therefore
-        # gated on the `skills` dict, which Craft/Gather likewise don't simulate
-        # — the planner reaches the goal via desired_state{"skills": …} matching
-        # after a real API call advances the snapshot.
-        return state.skills.get(self._skill_name, 0) >= self._target_level
+        # Two satisfaction paths:
+        #   (1) Server-snapshot path: skills[skill] already at/above target.
+        #       This is the post-API truth (skills only advances after a real
+        #       API call refreshes the snapshot via from_character_schema).
+        #   (2) Planner-projection path: the per-plan-path
+        #       `projected_skill_xp_delta` accumulator (mutated by Gather/Craft
+        #       .apply, NOT a baseline field) has pushed
+        #       `state.skill_xp + projected_delta` past the XP threshold needed
+        #       to reach `target_level`. The threshold is `required_xp` from
+        #       the learned SkillXpCurve at the goal's current observed level;
+        #       with no observations (default empty curve) projection-based
+        #       satisfaction is disabled (the curve returns 0, which we treat
+        #       as "no estimate" — only path (1) applies).
+        if state.skills.get(self._skill_name, 0) >= self._target_level:
+            return True
+        current_level = state.skills.get(self._skill_name, 0)
+        required = self._xp_curve.required_xp(current_level)
+        if required <= 0:
+            return False
+        current_xp = state.skill_xp.get(self._skill_name, 0)
+        projected = state.projected_skill_xp_delta.get(self._skill_name, 0)
+        return current_xp + projected >= required
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"skills": {self._skill_name: self._target_level}}

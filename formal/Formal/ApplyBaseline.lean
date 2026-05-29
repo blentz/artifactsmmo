@@ -37,6 +37,23 @@ fields; the baseline fields are untouched syntactically. The preservation
 property is then trivial by `rfl` per-field.
 
 Lean core only — no mathlib. Axioms ⊆ {propext, Classical.choice, Quot.sound}.
+
+# Phase-4 addendum: `projected_skill_xp_delta`
+
+A NEW Python field `WorldState.projected_skill_xp_delta : dict[str, int]` was
+added (post the 8-field baseline contract) as a per-plan-path XP accumulator
+for `LevelSkillGoal.is_satisfied`. It is intentionally OUTSIDE the modeled
+baseline: it is NOT a server-snapshot field, and Gather/Craft.apply DO mutate
+it (by design — the planner needs projection-based satisfaction).
+
+The choice here is option (1) of the Phase-4 spec: leave the Lean model fixed
+at the original 8 baseline fields. The new field's mutation property is pinned
+by the Python differential test
+`formal/diff/test_apply_baseline_diff.py::test_gather_increments_projected_skill_xp_delta`
+and `…::test_craft_increments_projected_skill_xp_delta_by_quantity`. The 8
+baseline-preservation theorems below remain valid AS STATED (they quantify
+over the modeled `WorldState` structure, which has no
+`projected_skill_xp_delta` field).
 -/
 
 namespace Formal.ApplyBaseline

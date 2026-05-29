@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.goals.level_skill import (
     PRIORITY_WHEN_FIRING,
     LevelSkillGoal,
 )
+from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
@@ -88,6 +89,43 @@ class TestSatisfaction:
         goal = LevelSkillGoal("weaponcrafting", 5, initial_skill_xp=999)
         state = make_state(skills={"weaponcrafting": 5}, skill_xp={"weaponcrafting": 999})
         assert goal.is_satisfied(state) is True
+
+    def test_satisfied_by_projected_xp_progress(self):
+        """With a learned SkillXpCurve, the projected XP delta (mutated by
+        Gather/Craft.apply) can cross the required threshold so the planner
+        sees the goal as plannable-satisfiable."""
+        # Curve: at current_level=1, 100 XP needed to reach level 2.
+        curve = SkillXpCurve(observed={1: 100})
+        goal = LevelSkillGoal("alchemy", target_level=2, xp_curve=curve)
+        state = make_state(
+            skills={"alchemy": 1},
+            skill_xp={"alchemy": 50},
+            projected_skill_xp_delta={"alchemy": 60},  # 50 + 60 >= 100
+        )
+        assert goal.is_satisfied(state) is True
+
+    def test_unsatisfied_when_projected_below_required(self):
+        """Projected delta + current XP below the curve threshold → not satisfied."""
+        curve = SkillXpCurve(observed={1: 100})
+        goal = LevelSkillGoal("alchemy", target_level=2, xp_curve=curve)
+        state = make_state(
+            skills={"alchemy": 1},
+            skill_xp={"alchemy": 10},
+            projected_skill_xp_delta={"alchemy": 5},  # 15 < 100
+        )
+        assert goal.is_satisfied(state) is False
+
+    def test_unsatisfied_when_no_curve_and_level_below(self):
+        """Default empty curve → projection path disabled; only the skills
+        snapshot path can satisfy. Below-target stays unsatisfied even with a
+        huge projected delta."""
+        goal = LevelSkillGoal("alchemy", target_level=2)
+        state = make_state(
+            skills={"alchemy": 1},
+            skill_xp={"alchemy": 99999},
+            projected_skill_xp_delta={"alchemy": 99999},
+        )
+        assert goal.is_satisfied(state) is False
 
 
 class TestRelevantActions:

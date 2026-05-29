@@ -4,12 +4,13 @@ instrumental means. The only surviving priority ladder, scoped to guards.
 Pure: predicates read state/game_data/history + an explicit SelectionContext
 (player runtime flags). No Goal-class imports — the driver maps GuardKind to goals."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
+from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -28,6 +29,12 @@ class SelectionContext:
     initial_xp: int
     task_exchange_min_coins: int
     combat_monster: str | None
+    # Learned SkillXpCurve per skill, sourced from history. Used by
+    # LevelSkillGoal to convert `projected_skill_xp_delta` into a real
+    # "would cross the level threshold" satisfaction check; with an empty
+    # entry the projection-based satisfaction is inert and only the
+    # server-snapshot path applies.
+    skill_xp_curves: dict[str, SkillXpCurve] = field(default_factory=dict)
 
 
 class GuardKind(Enum):

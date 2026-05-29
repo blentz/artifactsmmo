@@ -64,13 +64,22 @@ class GatherAction(Action):
         # plan). Only TaskTradeAction increments task_progress.
         # skill_xp is a server-snapshot baseline field (see WorldState docstring);
         # the planner never simulates it locally — apply preserves it. The next
-        # real API call returns the updated server values.
+        # real API call returns the updated server values. We DO advance the
+        # separate `projected_skill_xp_delta` accumulator (outside the baseline
+        # contract) so LevelSkillGoal.is_satisfied can read planner-projected
+        # XP progress without polluting the server snapshot.
+        new_delta = dict(state.projected_skill_xp_delta)
+        skill_req = game_data.resource_skill_level(self.resource_code)
+        if skill_req is not None:
+            skill_name, _ = skill_req
+            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1
         return dataclasses.replace(
             state,
             x=dest[0],
             y=dest[1],
             inventory=new_inventory,
             cooldown_expires=None,
+            projected_skill_xp_delta=new_delta,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

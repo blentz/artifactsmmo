@@ -173,6 +173,24 @@ class TestArbiterSelection:
         assert ctx.combat_monster == "chicken"
         assert ctx.task_exchange_min_coins == player._task_exchange_min_coins
 
+    def test_selection_context_populates_skill_xp_curves_from_history(self, tmp_path):
+        """LevelSkillGoal needs the learned SkillXpCurve to use the
+        projection-based satisfaction path. _selection_context must build the
+        per-skill curves from the LearningStore's recorded observations."""
+        store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+        store.start_session()
+        store.record_skill_max_xp("alchemy", level=1, max_xp=100)
+        store.record_skill_max_xp("alchemy", level=2, max_xp=200)
+        player = self._with_strategy(make_game_data_mock(), level=3,
+                                     skills={"alchemy": 1, "mining": 0})
+        player.history = store
+        ctx = player._selection_context()
+        assert "alchemy" in ctx.skill_xp_curves
+        assert ctx.skill_xp_curves["alchemy"].observed == {1: 100, 2: 200}
+        # Skills with no observed data are not added (empty curve would be inert).
+        assert "mining" not in ctx.skill_xp_curves
+        store.close()
+
     def test_bag_full_selects_deposit_inventory(self):
         gd = make_game_data_mock()
         # copper_ore is a high-demand craft ingredient: its useful-quantity cap
