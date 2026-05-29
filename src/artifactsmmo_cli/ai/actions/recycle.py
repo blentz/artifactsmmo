@@ -32,7 +32,26 @@ class RecycleAction(Action):
             return False
         if state.inventory.get(self.code, 0) < self.quantity:
             return False
-        return game_data.crafting_recipe(self.code) is not None
+        recipe = game_data.crafting_recipe(self.code)
+        if recipe is None:
+            return False
+        # Server requires the crafting skill at the recipe's level to recycle
+        # (mirrors the CraftAction gate). Without this, the planner stages a
+        # recycle that the server rejects with HTTP 493 / 478.
+        stats = game_data.item_stats(self.code)
+        if stats is None or stats.crafting_skill is None:
+            return False
+        if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
+            return False
+        # `apply` mints recovered materials into the inventory. Without a
+        # slot-floor check, the post-state overflows inventory_max. Net delta
+        # = sum(max(1, mat_qty*qty // 2)) - quantity (the recycled item leaves
+        # the bag). When the net is positive we need that many free slots.
+        recovered = sum(max(1, (mat_qty * self.quantity) // 2) for mat_qty in recipe.values())
+        net = recovered - self.quantity
+        if net > 0 and state.inventory_free < net:
+            return False
+        return True
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         new_inventory = dict(state.inventory)

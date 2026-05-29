@@ -32,4 +32,5 @@ import Formal.ActionCostNonneg
 import Formal.RealizableLoadout
 import Formal.ApplyBaseline
 import Formal.Phase7Invariants
+import Formal.Phase8Invariants
 import Formal.StoreWarmup

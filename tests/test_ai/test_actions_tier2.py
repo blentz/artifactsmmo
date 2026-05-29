@@ -117,6 +117,34 @@ class TestRecycleAction:
         gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
         assert action.is_applicable(state, gd) is True
 
+    def test_not_applicable_when_stats_missing_crafting_skill(self):
+        # Phase 8: server requires the crafting skill metadata to recycle.
+        action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon")  # crafting_skill=None
+        state = make_state(inventory={"copper_dagger": 1})
+        gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
+        assert action.is_applicable(state, gd) is False
+
+    def test_not_applicable_when_skill_below_required_level(self):
+        # Phase 8: skill check mirrors CraftAction. Was missing pre-fix.
+        action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting", crafting_level=10)
+        state = make_state(inventory={"copper_dagger": 1})  # weaponcrafting=1 in default
+        gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
+        assert action.is_applicable(state, gd) is False
+
+    def test_not_applicable_when_inventory_full_for_recovered_materials(self):
+        # Phase 8: slot-floor check. Pre-fix, apply minted materials into a
+        # full bag and overflowed inventory_max (probe: used=22, max=20).
+        action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting", crafting_level=1)
+        # Recipe yields 3 ore (net = +2). Full bag has 0 free slots → must refuse.
+        state = make_state(inventory={"copper_dagger": 1, "pad": 19})  # used=20, free=0
+        gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
+        assert action.is_applicable(state, gd) is False
+
     def test_apply_removes_item_and_returns_materials(self):
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
