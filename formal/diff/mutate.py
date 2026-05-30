@@ -39,6 +39,9 @@ NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_b
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
 APPLY_EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.py"
+APPLY_REST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
+APPLY_FIGHT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "combat.py"
+APPLY_BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
@@ -899,6 +902,7 @@ _ALL_SRCS = [
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
+    APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     GAME_DATA_SRC,
@@ -1063,6 +1067,90 @@ APPLY_EQUIP_MUTATIONS = [
         "            task_progress=state.task_progress, task_total=state.task_total,\n"
         "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
         "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
+# Phase-14: per-family kill-witness mutations. Each resurrects REAL BUG #5 in
+# a structurally DISTINCT family (Family 6 misc — Rest; Family 7 Fight;
+# Family 6 misc — BuyBankExpansion with bank_capacity) to demonstrate the
+# extended ApplyBaseline Lean proofs match the Python differential test for
+# every modeled action — not just the original 3 representatives.
+APPLY_REST_MUTATIONS = [
+    (
+        "apply-baseline-rest: revert RestAction.apply to explicit WorldState(...) dropping baseline",
+        "    def apply(self, state: WorldState, game_data: GameData) -> WorldState:\n"
+        "        return dataclasses.replace(state, hp=state.max_hp, cooldown_expires=None)",
+        "    def apply(self, state: WorldState, game_data: GameData) -> WorldState:\n"
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.max_hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "            skills=state.skills, x=state.x, y=state.y,\n"
+        "            inventory=state.inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
+APPLY_FIGHT_MUTATIONS = [
+    (
+        "apply-baseline-fight: revert FightAction.apply to explicit WorldState(...) dropping baseline",
+        "        return dataclasses.replace(\n"
+        "            state,\n"
+        "            xp=state.xp + 10,\n"
+        "            hp=new_hp,\n"
+        "            x=dest[0],\n"
+        "            y=dest[1],\n"
+        "            cooldown_expires=None,\n"
+        "            task_progress=new_progress,\n"
+        "        )",
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp + 10, max_xp=state.max_xp,\n"
+        "            hp=new_hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "            skills=state.skills, x=dest[0], y=dest[1],\n"
+        "            inventory=state.inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=new_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
+APPLY_BANK_EXPANSION_MUTATIONS = [
+    (
+        "apply-baseline-bank-expansion: revert BuyBankExpansionAction.apply to explicit WorldState(...) dropping baseline",
+        "        return dataclasses.replace(\n"
+        "            state,\n"
+        "            gold=state.gold - game_data._next_expansion_cost,\n"
+        "            x=dest[0],\n"
+        "            y=dest[1],\n"
+        "            cooldown_expires=None,\n"
+        "            bank_capacity=pre_cap + BANK_EXPANSION_SLOTS,\n"
+        "        )",
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.hp, max_hp=state.max_hp,\n"
+        "            gold=state.gold - game_data._next_expansion_cost,\n"
+        "            skills=state.skills, x=dest[0], y=dest[1],\n"
+        "            inventory=state.inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "            bank_capacity=pre_cap + BANK_EXPANSION_SLOTS,\n"
         "        )",
     ),
 ]
@@ -1437,6 +1525,12 @@ def main() -> int:
     run_group(APPLY_EQUIP_SRC, APPLY_EQUIP_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_CLAIM_SRC, APPLY_CLAIM_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_REST_SRC, APPLY_REST_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_FIGHT_SRC, APPLY_FIGHT_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_BANK_EXPANSION_SRC, APPLY_BANK_EXPANSION_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)

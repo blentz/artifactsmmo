@@ -1324,33 +1324,72 @@ example : ∀ (t : Formal.ActionCostNonneg.ActionTag),
     0 ≤ Formal.ActionCostNonneg.evalCost t :=
   @Formal.ActionCostNonneg.all_actions_cost_nonneg
 
-/-! ### ApplyBaseline role contracts (REAL BUG #5 — silent stat-baseline drop). -/
+/-! ### ApplyBaseline role contracts (REAL BUG #5 — silent stat-baseline drop).
+
+    Phase-14: gap closed — all 24 concrete `Action.apply` methods modeled. -/
 
 -- apply-preserves-baseline-move: MoveAction.apply preserves all 8 baseline fields.
-example : ∀ (s : Formal.ApplyBaseline.WorldState) (newX newY : Int),
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (newX newY : Int),
     Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.moveApply s newX newY) :=
   @Formal.ApplyBaseline.moveApply_preserves_baseline
 -- apply-preserves-baseline-equip: EquipAction.apply preserves all 8 baseline fields.
-example : ∀ (s : Formal.ApplyBaseline.WorldState) (newInv : List (String × Nat)),
-    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.equipApply s newInv) :=
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
+    (e : List (String × Option String)),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.equipApply s i e) :=
   @Formal.ApplyBaseline.equipApply_preserves_baseline
 -- apply-preserves-baseline-claim: ClaimPendingItemAction.apply preserves all 8 baseline fields.
-example : ∀ (s : Formal.ApplyBaseline.WorldState) (newInv : List (String × Nat)),
-    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.claimApply s newInv) :=
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
+    (p : Option (List (String × String))),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.claimApply s i p) :=
   @Formal.ApplyBaseline.claimApply_preserves_baseline
 -- headline-preserves-baseline: every modeled apply preserves the 8 baseline fields.
-example : ∀ (s : Formal.ApplyBaseline.WorldState) (a : Formal.ApplyBaseline.ModeledApply),
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
     Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
   @Formal.ApplyBaseline.headline_preserves_baseline
+-- Phase-14 HEADLINE: all 24 modeled actions preserve the 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
+    Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
+  @Formal.ApplyBaseline.all_actions_preserve_baseline
 -- reflexivity: a state preserves its own baseline (identity apply / Transition).
-example : ∀ (s : Formal.ApplyBaseline.WorldState),
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean),
     Formal.ApplyBaseline.preservesBaseline s s :=
   @Formal.ApplyBaseline.preservesBaseline_refl
 -- transitivity: a chain of preserving applys still preserves (planner sim composition).
-example : ∀ {a b c : Formal.ApplyBaseline.WorldState},
+example : ∀ {a b c : Formal.ApplyBaseline.WorldStateLean},
     Formal.ApplyBaseline.preservesBaseline a b → Formal.ApplyBaseline.preservesBaseline b c →
     Formal.ApplyBaseline.preservesBaseline a c :=
   @Formal.ApplyBaseline.preservesBaseline_trans
+-- Phase-14: per-action preservation for the OTHER 21 modeled actions
+example := @Formal.ApplyBaseline.moveSemanticApply_preserves_baseline
+example := @Formal.ApplyBaseline.mapTransitionApply_preserves_baseline
+example := @Formal.ApplyBaseline.gatherApply_preserves_baseline
+example := @Formal.ApplyBaseline.npcBuyApply_preserves_baseline
+example := @Formal.ApplyBaseline.withdrawGoldApply_preserves_baseline
+example := @Formal.ApplyBaseline.withdrawItemApply_preserves_baseline
+example := @Formal.ApplyBaseline.craftApply_preserves_baseline
+example := @Formal.ApplyBaseline.recycleApply_preserves_baseline
+example := @Formal.ApplyBaseline.npcSellApply_preserves_baseline
+example := @Formal.ApplyBaseline.depositGoldApply_preserves_baseline
+example := @Formal.ApplyBaseline.depositAllApply_preserves_baseline
+example := @Formal.ApplyBaseline.useConsumableApply_preserves_baseline
+example := @Formal.ApplyBaseline.deleteApply_preserves_baseline
+example := @Formal.ApplyBaseline.unequipApply_preserves_baseline
+example := @Formal.ApplyBaseline.optimizeLoadoutApply_preserves_baseline
+example := @Formal.ApplyBaseline.acceptTaskApply_preserves_baseline
+example := @Formal.ApplyBaseline.completeTaskApply_preserves_baseline
+example := @Formal.ApplyBaseline.taskCancelApply_preserves_baseline
+example := @Formal.ApplyBaseline.taskExchangeApply_preserves_baseline
+example := @Formal.ApplyBaseline.taskTradeApply_preserves_baseline
+example := @Formal.ApplyBaseline.restApply_preserves_baseline
+example := @Formal.ApplyBaseline.buyBankExpansionApply_preserves_baseline
+example := @Formal.ApplyBaseline.fightApply_preserves_baseline
+-- Phase-14: per-action mutates-only-declared-fields contracts (representative)
+example := @Formal.ApplyBaseline.move_mutates_only_declared_fields
+example := @Formal.ApplyBaseline.rest_mutates_only_declared_fields
+example := @Formal.ApplyBaseline.buyBankExpansion_mutates_only_declared_fields
+example := @Formal.ApplyBaseline.equip_mutates_only_declared_fields
+example := @Formal.ApplyBaseline.claim_mutates_only_declared_fields
+example := @Formal.ApplyBaseline.fight_mutates_only_declared_fields
 
 /-! ### InventoryChainSafe role contracts (REAL BUGS #7-#10 inventory + #11 task-cancel coin). -/
 

@@ -367,13 +367,44 @@ open Formal.PriorityBand
 #check @Formal.StoreWarmup.warmupGatedSuccessRate_boundary_none_ok
 #check @Formal.StoreWarmup.warmupGatedSuccessRate_off_boundary_default
 #check @Formal.StoreWarmup.warmupGatedSuccessRate_empty_default
--- ApplyBaseline required roles (REAL BUG #5: silent stat-baseline drop in Action.apply):
-#check @Formal.ApplyBaseline.moveApply_preserves_baseline   -- apply-preserves-baseline-move
-#check @Formal.ApplyBaseline.equipApply_preserves_baseline  -- apply-preserves-baseline-equip
-#check @Formal.ApplyBaseline.claimApply_preserves_baseline  -- apply-preserves-baseline-claim
-#check @Formal.ApplyBaseline.headline_preserves_baseline    -- headline-preserves-baseline (∀ modeled action)
-#check @Formal.ApplyBaseline.preservesBaseline_refl         -- reflexivity (state preserves its own baseline)
-#check @Formal.ApplyBaseline.preservesBaseline_trans        -- transitivity (composition of preserving steps)
+-- ApplyBaseline required roles (REAL BUG #5: silent stat-baseline drop in Action.apply).
+-- Phase-14: disclosed gap closed — all 24 concrete Action.apply methods modeled.
+#check @Formal.ApplyBaseline.moveApply_preserves_baseline             -- Family 1: position-only
+#check @Formal.ApplyBaseline.moveSemanticApply_preserves_baseline
+#check @Formal.ApplyBaseline.mapTransitionApply_preserves_baseline
+#check @Formal.ApplyBaseline.gatherApply_preserves_baseline           -- Family 2: inventory-mint
+#check @Formal.ApplyBaseline.npcBuyApply_preserves_baseline
+#check @Formal.ApplyBaseline.withdrawGoldApply_preserves_baseline
+#check @Formal.ApplyBaseline.withdrawItemApply_preserves_baseline
+#check @Formal.ApplyBaseline.claimApply_preserves_baseline
+#check @Formal.ApplyBaseline.craftApply_preserves_baseline            -- Family 3: inventory-consume
+#check @Formal.ApplyBaseline.recycleApply_preserves_baseline
+#check @Formal.ApplyBaseline.npcSellApply_preserves_baseline
+#check @Formal.ApplyBaseline.depositGoldApply_preserves_baseline
+#check @Formal.ApplyBaseline.depositAllApply_preserves_baseline
+#check @Formal.ApplyBaseline.useConsumableApply_preserves_baseline
+#check @Formal.ApplyBaseline.deleteApply_preserves_baseline
+#check @Formal.ApplyBaseline.equipApply_preserves_baseline            -- Family 4: equipment-swap
+#check @Formal.ApplyBaseline.unequipApply_preserves_baseline
+#check @Formal.ApplyBaseline.optimizeLoadoutApply_preserves_baseline
+#check @Formal.ApplyBaseline.acceptTaskApply_preserves_baseline       -- Family 5: task transition
+#check @Formal.ApplyBaseline.completeTaskApply_preserves_baseline
+#check @Formal.ApplyBaseline.taskCancelApply_preserves_baseline
+#check @Formal.ApplyBaseline.taskExchangeApply_preserves_baseline
+#check @Formal.ApplyBaseline.taskTradeApply_preserves_baseline
+#check @Formal.ApplyBaseline.restApply_preserves_baseline             -- Family 6: misc
+#check @Formal.ApplyBaseline.buyBankExpansionApply_preserves_baseline
+#check @Formal.ApplyBaseline.fightApply_preserves_baseline            -- Family 7: fight
+#check @Formal.ApplyBaseline.all_actions_preserve_baseline  -- Phase-14 HEADLINE: ∀ 24 actions
+#check @Formal.ApplyBaseline.headline_preserves_baseline    -- backwards-compat alias
+#check @Formal.ApplyBaseline.preservesBaseline_refl         -- reflexivity
+#check @Formal.ApplyBaseline.preservesBaseline_trans        -- transitivity
+#check @Formal.ApplyBaseline.move_mutates_only_declared_fields           -- mutates-only contracts
+#check @Formal.ApplyBaseline.rest_mutates_only_declared_fields
+#check @Formal.ApplyBaseline.buyBankExpansion_mutates_only_declared_fields
+#check @Formal.ApplyBaseline.equip_mutates_only_declared_fields
+#check @Formal.ApplyBaseline.claim_mutates_only_declared_fields
+#check @Formal.ApplyBaseline.fight_mutates_only_declared_fields
 -- Phase8Invariants Target B — Bank expansion projection (REAL BUG #15):
 #check @Formal.Phase8Invariants.bank_expansion_apply_increments_capacity  -- apply +SLOTS
 #check @Formal.Phase8Invariants.buyBankExpansion_capacityN                -- N-step bookkeeping
