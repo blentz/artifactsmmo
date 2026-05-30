@@ -255,6 +255,17 @@ open Formal.WeightedRemaining in
 #print axioms Formal.RealizableLoadout.regression_buggy_output_not_realizable
 #print axioms Formal.RealizableLoadout.empty_loadout_realizable
 #print axioms Formal.RealizableLoadout.isRealizable_mono_inv
+-- Phase-15 disclosed-gap closure: full pick_loadout algorithm.
+#print axioms Formal.RealizableLoadout.pickLoadout_realizable
+#print axioms Formal.RealizableLoadout.pickSlotStep_no_downgrade
+#print axioms Formal.RealizableLoadout.pickSlotStep_optimal
+#print axioms Formal.RealizableLoadout.pickLoadout_deterministic
+#print axioms Formal.RealizableLoadout.pickLoadout_extensional
+#print axioms Formal.RealizableLoadout.pickLoadout_ring_pair_regression
+#print axioms Formal.RealizableLoadout.pickLoadout_cannot_produce_buggy_output
+#print axioms Formal.RealizableLoadout.pickLoadout_empty
+#print axioms Formal.RealizableLoadout.pickLoadoutAux_claimSafe
+#print axioms Formal.RealizableLoadout.pickSlotStep_demand_delta
 #print axioms Formal.ApplyBaseline.moveApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.moveSemanticApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.mapTransitionApply_preserves_baseline

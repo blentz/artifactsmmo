@@ -32,6 +32,7 @@ import Formal.Phase8Invariants
 import Formal.StoreWarmup
 import Formal.GameDataAccessors
 import Formal.WinnableCascade
+import Formal.RealizableLoadout
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1685,3 +1686,51 @@ example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     i.pickWinnable ≠ some p →
     i.pathWinnable = true :=
   @Formal.WinnableCascade.path_result_was_winnable
+
+/-! ### RealizableLoadout (Phase-15): full `pick_loadout` algorithm pins. -/
+
+/-- Property 1 — output realizability. -/
+example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+            (equip : Formal.RealizableLoadout.SlotList)
+            (slots : List Formal.RealizableLoadout.ScoredSlot),
+    Formal.RealizableLoadout.isRealizable
+      (Formal.RealizableLoadout.pickLoadout inv equip slots) inv equip :=
+  @Formal.RealizableLoadout.pickLoadout_realizable
+
+/-- Property 2 — per-slot no-downgrade (modulo stolen-current branch). -/
+example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+            (equip : Formal.RealizableLoadout.SlotList)
+            (rec : Formal.RealizableLoadout.SlotRecord)
+            (score : Formal.RealizableLoadout.Code → Int)
+            (claimed : Formal.RealizableLoadout.Code → Nat)
+            (cur r : Formal.RealizableLoadout.Code),
+    rec.current = some cur →
+    (Formal.RealizableLoadout.pickSlotStep inv equip rec score claimed).1 = some r →
+    cur ≠ r →
+    score cur ≤ score r ∨ ¬ (1 ≤ Formal.RealizableLoadout.effAvail cur inv equip claimed) :=
+  @Formal.RealizableLoadout.pickSlotStep_no_downgrade
+
+/-- Property 3 — per-slot optimality (argmax over post-claim feasible). -/
+example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+            (equip : Formal.RealizableLoadout.SlotList)
+            (rec : Formal.RealizableLoadout.SlotRecord)
+            (score : Formal.RealizableLoadout.Code → Int)
+            (claimed : Formal.RealizableLoadout.Code → Nat)
+            (f : Formal.RealizableLoadout.Code) (fs : List Formal.RealizableLoadout.Code),
+    rec.candidates.filter
+        (fun c => decide (1 ≤ Formal.RealizableLoadout.effAvail c inv equip claimed))
+      = f :: fs →
+    ∀ r,
+    (Formal.RealizableLoadout.pickSlotStep inv equip rec score claimed).1 = some r →
+    (∀ cur, rec.current = some cur → cur ≠ r) →
+    r = Formal.RealizableLoadout.argmaxByCode score f fs :=
+  @Formal.RealizableLoadout.pickSlotStep_optimal
+
+/-- Property 4 — determinism (pure function of inputs). -/
+example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+            (equip : Formal.RealizableLoadout.SlotList)
+            (slots₁ slots₂ : List Formal.RealizableLoadout.ScoredSlot),
+    slots₁ = slots₂ →
+    Formal.RealizableLoadout.pickLoadout inv equip slots₁ =
+      Formal.RealizableLoadout.pickLoadout inv equip slots₂ :=
+  @Formal.RealizableLoadout.pickLoadout_extensional

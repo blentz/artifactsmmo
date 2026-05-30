@@ -212,6 +212,46 @@ REALIZABLE_LOADOUT_MUTATIONS = [
      "        return ownership(code, state.inventory, state.equipment) - claimed_codes.get(code, 0)",
      "    def _effective_available(code: str) -> int:\n"
      "        return ownership(code, state.inventory, state.equipment)"),
+    # Phase-15 new mutation A: drop the no-downgrade strict-improvement check
+    # in pick_loadout. Swap to best regardless of whether it beats current,
+    # violating Property 2 (no-downgrade). The Lean theorem
+    # `pickSlotStep_no_downgrade` forbids this except via the stolen-current
+    # branch; an unconditional swap fires on plain ties / regressions.
+    ("realizable_loadout: drop no-downgrade strict-improvement check",
+     "        if slot == \"weapon_slot\":\n"
+     "            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)\n"
+     "        else:\n"
+     "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)\n"
+     "        if improves:",
+     "        if slot == \"weapon_slot\":\n"
+     "            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)\n"
+     "        else:\n"
+     "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)\n"
+     "        if True:"),
+    # Phase-15 new mutation B: drop the _claim(current_code) on the keep-current
+    # branch (when current ties or beats best and is still available). Peer
+    # slots then see the current code as physically unspoken-for and can
+    # duplicate it, violating Property 1 (output realizability).
+    ("realizable_loadout: drop _claim(current_code) on keep-current",
+     "        elif _effective_available(current_code) >= 1:\n"
+     "            _claim(current_code)",
+     "        elif _effective_available(current_code) >= 1:\n"
+     "            pass"),
+    # Phase-15 new mutation C: swap weapon_score and armor_score per slot.
+    # weapon_slot uses armor_score (defense-oriented) and the rest use
+    # weapon_score (offense-oriented). Violates Property 3 (per-slot
+    # argmax under the SLOT-CORRECT score function); the Lean `pickSlotStep_optimal`
+    # is parameterised by a score function, so this mutation flips the
+    # operational meaning of the choice on multi-element monsters.
+    ("realizable_loadout: swap weapon_score and armor_score per slot",
+     "        if slot == \"weapon_slot\":\n"
+     "            best = max(feasible, key=lambda s: weapon_score(s, monster_res))\n"
+     "        else:\n"
+     "            best = max(feasible, key=lambda s: armor_score(s, monster_atk))",
+     "        if slot == \"weapon_slot\":\n"
+     "            best = max(feasible, key=lambda s: armor_score(s, monster_atk))\n"
+     "        else:\n"
+     "            best = max(feasible, key=lambda s: weapon_score(s, monster_res))"),
 ]
 
 

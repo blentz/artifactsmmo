@@ -271,6 +271,17 @@ open Formal.PriorityBand
 #check @Formal.RealizableLoadout.regression_buggy_output_not_realizable -- anti-witness: pre-fix output (both rings = B) is NOT realizable
 #check @Formal.RealizableLoadout.empty_loadout_realizable               -- edge: empty loadout is vacuously realizable
 #check @Formal.RealizableLoadout.isRealizable_mono_inv                  -- monotone: more inventory preserves realizability
+-- Phase-15 disclosed-gap closure: full pick_loadout algorithm modeled.
+#check @Formal.RealizableLoadout.pickLoadout_realizable                  -- Property 1: every pickLoadout output is realizable
+#check @Formal.RealizableLoadout.pickSlotStep_no_downgrade               -- Property 2: per-slot swap never decreases score (modulo stolen-current branch)
+#check @Formal.RealizableLoadout.pickSlotStep_optimal                    -- Property 3: per-slot choice is argmax of post-claim feasible candidates
+#check @Formal.RealizableLoadout.pickLoadout_deterministic               -- Property 4: pure-function determinism (no dict iteration)
+#check @Formal.RealizableLoadout.pickLoadout_extensional                 -- determinism: equal inputs ⇒ equal outputs
+#check @Formal.RealizableLoadout.pickLoadout_ring_pair_regression        -- non-vacuity: literal ring-pair case yields realizable output
+#check @Formal.RealizableLoadout.pickLoadout_cannot_produce_buggy_output -- anti-regression: bug output unreachable from algorithm
+#check @Formal.RealizableLoadout.pickLoadout_empty                       -- edge: empty slots ⇒ empty loadout
+#check @Formal.RealizableLoadout.pickLoadoutAux_claimSafe                -- helper: fold preserves claim safety
+#check @Formal.RealizableLoadout.pickSlotStep_demand_delta               -- helper: each step claim delta is 0/1 per code
 -- InventoryChainSafe required roles (REAL BUGS #7-#11: four chain_safe instantiations + TaskCancel coin):
 #check @Formal.InventoryChainSafe.isApplicableK_imp_free_ge       -- template: passing precondition ⇒ k ≤ free
 #check @Formal.InventoryChainSafe.applyK_inventory_safe           -- template: per-step safety
