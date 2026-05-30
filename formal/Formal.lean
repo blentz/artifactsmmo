@@ -35,3 +35,4 @@ import Formal.Phase7Invariants
 import Formal.Phase8Invariants
 import Formal.StoreWarmup
 import Formal.GameDataAccessors
+import Formal.Phase10GoalLattices
