@@ -139,9 +139,10 @@ def _rand_graph(rng, allow_cycle, deep):
 @given(seed=st.integers(min_value=0, max_value=2**31 - 1))
 def test_reachable_implies_actionable_wellformed(seed):
     """THE INVARIANT on WELL-FORMED graphs (what the production code builds):
-    the real Python `is_reachable` (path set) returning True implies the real
-    Python `actionable_step` (shared visited set) returns a node — never None.
-    A failure here would be the production crash bug."""
+    the real Python `is_reachable` (per-DFS-path frozenset) returning True
+    implies the real Python `actionable_step` (also per-DFS-path frozenset,
+    post-Phase-13 refactor — byte-equivalent to the proved Lean `actStep`)
+    returns a node — never None. A failure here would be the production crash bug."""
     rng = random.Random(seed)
     allow_cycle = rng.random() < 0.5
     deep = rng.random() < 0.4
@@ -207,9 +208,9 @@ def test_two_tracker_match_oracle_arbitrary(seed):
 
 def test_diamond_shared_leaf_reachable_has_step():
     """Diamond: root 0 -> {1, 2}; both 1 and 2 -> {3}; 3 a producible obtain leaf.
-    is_reachable=True (3 grounds both branches). Despite the SHARED node 3 being
-    visited via branch 1 first, actionable_step returns a step (3 is actionable —
-    returned the first time reached). The shared-visited set does NOT crash."""
+    is_reachable=True (3 grounds both branches). actionable_step returns a step
+    (3 is actionable — returned on first reach via either branch under the
+    per-DFS-path frozenset tracker)."""
     g = _Graph(4, {0: KIND_OBTAIN, 1: KIND_OBTAIN, 2: KIND_OBTAIN, 3: KIND_OBTAIN},
                {0: False, 1: False, 2: False, 3: False},
                {0: True, 1: True, 2: True, 3: True},

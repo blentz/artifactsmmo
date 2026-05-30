@@ -95,6 +95,10 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.StrategyTraversal.actionable_step_reach
 #print axioms Formal.StrategyTraversal.rootCost_ge_one
 #print axioms Formal.StrategyTraversal.reachable_implies_actionable
+#print axioms Formal.StrategyTraversal.actStepShared_actionable_returns
+#print axioms Formal.StrategyTraversal.actStepShared_none_preserves_unvisited
+#print axioms Formal.StrategyTraversal.actStepShared_sound
+#print axioms Formal.StrategyTraversal.actionable_step_shared_sound
 #print axioms Formal.StrategyTraversal.grounded_unmet_has_actionable
 #print axioms Formal.BankSelection.deposits_exact
 #print axioms Formal.BankSelection.deposits_mem_iff
@@ -153,6 +157,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.PlannerAdmissibility.RHP_optimal_strictly_cheaper_than_rest
 #print axioms Formal.ArbiterSelect.select_pure_guard_wins
 #print axioms Formal.ArbiterSelect.select_pure_sticky_idempotent
+#print axioms Formal.ArbiterSelect.select_pure_any_plannable_guard_wins
+#print axioms Formal.ArbiterSelect.guard_precedes_means_in_guardsFirst
+#print axioms Formal.ArbiterSelect.walk_returns_guard_when_plannable_guard_exists
 #print axioms Formal.ArbiterSelect.select_pure_no_commitment_is_walk
 #print axioms Formal.ArbiterSelect.walk_returns_head
 #print axioms Formal.ArbiterSelect.guardPrecedes_of_head_guard

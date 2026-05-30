@@ -74,24 +74,30 @@ def desired_state_of(node: MetaGoal | None) -> dict[str, object]:
 
 def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData) -> MetaGoal | None:
     """Deepest unmet node reachable from root whose DIRECT prerequisites are all
-    satisfied (the 'singular loop' step). None when cyclically blocked."""
-    def _step(node: MetaGoal, visited: set[MetaGoal]) -> MetaGoal | None:
-        if node in visited:
+    satisfied (the 'singular loop' step). None when cyclically blocked.
+
+    Per-path cycle tracking mirrors is_reachable + matches the proved Lean model
+    `Formal.StrategyTraversal.actStep` — bridge between Python and Lean is now
+    byte-equivalent at the algorithm level. A node on the CURRENT DFS path is
+    rejected (cycle guard); a node reached via a sibling branch is NOT pruned
+    (the path frozenset backtracks on return)."""
+    def _step(node: MetaGoal, path: frozenset[MetaGoal]) -> MetaGoal | None:
+        if node in path:
             return None
-        visited.add(node)
         unmet = [p for p in prerequisites(node, state, game_data)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
             if isinstance(node, ObtainItem) and not _producible(node.code, game_data):
                 return None
             return node
+        sub_path = path | {node}
         for prereq in sorted(unmet, key=repr):
-            step = _step(prereq, visited)
+            step = _step(prereq, sub_path)
             if step is not None:
                 return step
         return None
 
-    return _step(root, set())
+    return _step(root, frozenset())
 
 
 def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData) -> int:

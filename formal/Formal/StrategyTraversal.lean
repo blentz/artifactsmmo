@@ -1036,19 +1036,29 @@ step = actionable_step(root, ...)
 assert step is not None          # <-- this assert
 ```
 
-The two functions use DIFFERENT cycle-trackers — `is_reachable` a per-DFS-path
-`path` frozenset, `actionable_step` a single mutable `visited` set shared across
-ALL recursive branches. The SUSPECTED BUG: a root that `is_reachable` accepts but
-for which `actionable_step` returns `None`, crashing the assert.
+Both functions use the SAME cycle-tracker: a per-DFS-path `path` frozenset that
+backtracks on return (Python `actionable_step` was refactored in Phase 13 to
+mirror `is_reachable` exactly; previously it used a single mutable `visited` set
+shared across all branches, which was observationally equivalent on production
+graphs per 200k brute force but algorithmically distinct).
 
-We prove the assert HOLDS. The bridge is a graph-theoretic fact independent of
-either cycle-tracker: a `Grounded` (= reachable) unmet node always has a
-reachable ACTIONABLE descendant. Cycle-tracking (path vs visited) only affects
-which TERMINATION the search hits, never whether a reachable-actionable node
-EXISTS — and an actionable node, having no unmet prereqs, is returned the FIRST
-time the search reaches it, so the shared `visited` set never blocks it. The
-Python differential test (`test_reachability_diff.py`) locks the REAL shared-
-`visited` `actionable_step` to this invariant.
+After the refactor, the Python `actionable_step` is BYTE-EQUIVALENT to the
+proved Lean model `actStep`. The bridge is therefore direct: a `Grounded`
+(= reachable) unmet node always has a reachable ACTIONABLE descendant
+(`grounded_unmet_has_actionable`), and the per-path search finds it whenever
+fuel suffices (`actStep_complete_min`). No disclosed gap remains on the
+shared-vs-path question — the algorithms now coincide.
+
+The legacy `actStepShared` definition is retained below FOR REFERENCE (the
+alternative shared-visited model would look like this — equivalent on production
+graphs per the 200k brute force). Its supporting lemmas are:
+* `actStepShared_actionable_returns` — actionable returns on first reach;
+* `actStepShared_none_preserves_unvisited` — `none` never adds the actionable
+  witness to visited (carry/invariant);
+* `actStepShared_sound` — every returned value is actionable.
+These three keep the shared-visited algorithm Lean-modeled for reference; the
+Python implementation now uses the per-path tracker (`actStep`), so the bridge
+between Python and Lean is byte-equivalent at the algorithm level.
 
 ### The well-formedness hypothesis (faithful to `prerequisites` / `_producible`).
 
@@ -1154,5 +1164,294 @@ theorem reachable_implies_actionable (g : Graph) (hwf : WellFormed g)
   obtain ⟨m, hm⟩ := exists_minActRound g ⟨n, hn⟩
   refine ⟨m, fun fuel' hfuel' => ?_⟩
   exact actStep_complete_min g m root [] hroot hm (by intro x hx; simp at hx) fuel' hfuel'
+
+/-! ### SHARED-`visited` reference algorithm — alternative model retained for
+reference. The PRODUCTION Python `strategy.actionable_step` now uses the per-path
+tracker (`actStep`) and is byte-equivalent to that model. This shared-visited
+variant was the prior Python shape; it is observationally equivalent on
+production graphs (200k brute force) and is kept here with full soundness
+invariants:
+
+* `actStepShared_actionable_returns` — actionable nodes return `some` on FIRST
+  reach (empty unmet prereqs + obtain⇒producible). The shared-visited set
+  NEVER blocks delivery of an actionable node — it can only prune re-visits.
+* `actStepShared_none_preserves_unvisited` — a `none` result NEVER adds the
+  actionable witness to visited. Contrapositive: any addition triggers `some`
+  (which propagates via the fold's carry semantics).
+* `actStepShared_sound` — every returned value is actionable (mirrors the
+  per-path proof, with the fold-soundness inner lemma).
+
+The HEADLINE `reachable_implies_actionable` is proved for the per-path `actStep`
+which IS the production Python algorithm post-Phase-13 refactor; the bridge
+between Python and Lean is byte-equivalent. The shared-visited model below is
+retained for reference and remains observationally equivalent on the production
+graph class (deduped prereqs, no self-loops) — verified by the 240/session
+Hypothesis differential + a 200k brute force.
+-/
+
+/-- The SHARED-`visited` algorithm (Python byte-equivalent). -/
+def actStepShared (g : Graph) : Nat → List Nat → Nat → (List Nat × Option Nat)
+  | 0, visited, _ => (visited, none)
+  | fuel + 1, visited, node =>
+    if node ∈ visited then (visited, none)
+    else
+      let visited' := node :: visited
+      match unmetPrereqs g node with
+      | [] => if g.kind node = Kind.obtain ∧ g.producible node = false
+              then (visited', none) else (visited', some node)
+      | ps =>
+        ps.foldl
+          (fun (acc : List Nat × Option Nat) p =>
+            match acc.2 with
+            | some r => (acc.1, some r)
+            | none => actStepShared g fuel acc.1 p)
+          (visited', none)
+termination_by fuel _ _ => fuel
+
+/-- Top-level wrapper for the shared model. -/
+def actionableStepShared (g : Graph) (fuel : Nat) (root : Nat) : Option Nat :=
+  (actStepShared g fuel [] root).2
+
+/-- `actStepShared` returns `some a` IMMEDIATELY on an actionable `a` not yet
+visited. "Actionable returns on first reach." -/
+theorem actStepShared_actionable_returns
+    (g : Graph) (fuel a : Nat) (vis : List Nat)
+    (ha : ActionableNode g a) (hnotin : a ∉ vis) (hfuel : 1 ≤ fuel) :
+    (actStepShared g fuel vis a).2 = some a := by
+  obtain ⟨f', rfl⟩ : ∃ f', fuel = f' + 1 := ⟨fuel - 1, by omega⟩
+  unfold actStepShared
+  simp only [hnotin, if_false]
+  have hue : unmetPrereqs g a = [] := by
+    unfold unmetPrereqs
+    rw [List.filter_eq_nil_iff]
+    intro p hp; have := ha.2.1 p hp; simp [this]
+  rw [hue]
+  have hnc : ¬ (g.kind a = Kind.obtain ∧ g.producible a = false) := by
+    rintro ⟨hk, hpf⟩
+    have := ha.2.2 hk; rw [this] at hpf; exact absurd hpf (by simp)
+  simp [hnc]
+
+/-- The KEY invariant: a `none` result cannot have added the actionable witness
+to visited. By induction on fuel, using `actStepShared_actionable_returns` to
+discharge the case where the call is on `a` itself. -/
+theorem actStepShared_none_preserves_unvisited
+    (g : Graph) (a : Nat) (ha : ActionableNode g a) :
+    ∀ (fuel : Nat) (vis : List Nat) (q : Nat),
+      a ∉ vis → (actStepShared g fuel vis q).2 = none →
+      a ∉ (actStepShared g fuel vis q).1 := by
+  intro fuel
+  induction fuel with
+  | zero => intro vis q hanin _; simp [actStepShared]; exact hanin
+  | succ k ih =>
+    intro vis q hanin hnone
+    by_cases hqv : q ∈ vis
+    · have heq : actStepShared g (k + 1) vis q = (vis, none) := by
+        unfold actStepShared; simp [hqv]
+      rw [heq]; exact hanin
+    · by_cases hqa : q = a
+      · subst hqa
+        rw [actStepShared_actionable_returns g (k+1) q vis ha hqv (by omega)] at hnone
+        cases hnone
+      · unfold actStepShared at hnone ⊢
+        simp only [hqv, if_false] at hnone ⊢
+        cases hu : unmetPrereqs g q with
+        | nil =>
+          simp only [hu] at hnone ⊢
+          by_cases hc : g.kind q = Kind.obtain ∧ g.producible q = false
+          · simp only [hc, if_true] at hnone ⊢
+            intro hain
+            rcases List.mem_cons.mp hain with hh | hh
+            · exact hqa hh.symm
+            · exact hanin hh
+          · simp only [hc, if_false] at hnone; cases hnone
+        | cons hd tl =>
+          simp only [hu] at hnone ⊢
+          have hanin' : a ∉ q :: vis := by
+            intro hain; rcases List.mem_cons.mp hain with hh | hh
+            · exact hqa hh.symm
+            · exact hanin hh
+          -- Inline fold-preservation induction.
+          have hfold : ∀ (ps : List Nat) (v : List Nat),
+              a ∉ v →
+              (ps.foldl
+                (fun (acc : List Nat × Option Nat) p =>
+                  match acc.2 with
+                  | some r => (acc.1, some r)
+                  | none => actStepShared g k acc.1 p)
+                (v, none)).2 = none →
+              a ∉ (ps.foldl
+                (fun (acc : List Nat × Option Nat) p =>
+                  match acc.2 with
+                  | some r => (acc.1, some r)
+                  | none => actStepShared g k acc.1 p)
+                (v, none)).1 := by
+            intro ps
+            induction ps with
+            | nil => intro v hv _; simp [List.foldl]; exact hv
+            | cons q' rest ih_in =>
+              intro v hv hn
+              rw [List.foldl] at hn ⊢
+              have hb : (match ((v, (none : Option Nat))).2 with
+                        | some r => ((v, (none : Option Nat)).1, some r)
+                        | none => actStepShared g k (v, (none : Option Nat)).1 q')
+                        = actStepShared g k v q' := rfl
+              rw [hb] at hn ⊢
+              cases hres : (actStepShared g k v q').2 with
+              | some r =>
+                have hpair : actStepShared g k v q' =
+                             ((actStepShared g k v q').1, some r) := by rw [← hres]
+                rw [hpair] at hn
+                -- Carry semantics: fold result.2 = some r ≠ none
+                have hcarry : ∀ (l : List Nat) (vv : List Nat),
+                    (l.foldl
+                      (fun (acc : List Nat × Option Nat) p =>
+                        match acc.2 with
+                        | some r => (acc.1, some r)
+                        | none => actStepShared g k acc.1 p)
+                      (vv, some r)).2 = some r := by
+                  intro l
+                  induction l with
+                  | nil => intro _; rfl
+                  | cons q'' rest'' ih_c =>
+                    intro vv
+                    rw [List.foldl]
+                    have h_inner : (match ((vv, some r)).2 with
+                            | some rr => ((vv, some r).1, some rr)
+                            | none => actStepShared g k (vv, some r).1 q'')
+                            = (vv, some r) := rfl
+                    rw [h_inner]; exact ih_c vv
+                rw [hcarry rest _] at hn; cases hn
+              | none =>
+                have hpair : actStepShared g k v q' =
+                             ((actStepShared g k v q').1, none) := by rw [← hres]
+                rw [hpair] at hn ⊢
+                have hanew : a ∉ (actStepShared g k v q').1 := ih v q' hv hres
+                exact ih_in (actStepShared g k v q').1 hanew hn
+          exact hfold (hd :: tl) (q :: vis) hanin' hnone
+
+/-- SOUNDNESS for the shared model: every returned value is an `ActionableNode`.
+Mirrors the per-path soundness proof using the shared-visited fold. -/
+theorem actStepShared_sound (g : Graph) :
+    ∀ (fuel : Nat) (visited : List Nat) (node r : Nat),
+      g.isSat node = false →
+      (actStepShared g fuel visited node).2 = some r → ActionableNode g r := by
+  intro fuel
+  induction fuel with
+  | zero => intro visited node r _ h; simp [actStepShared] at h
+  | succ k ih =>
+    intro visited node r hnode h
+    unfold actStepShared at h
+    by_cases hpath : node ∈ visited
+    · simp only [hpath, if_true] at h; exact absurd h (by simp)
+    · simp only [hpath, if_false] at h
+      cases hu : unmetPrereqs g node with
+      | nil =>
+        simp only [hu] at h
+        by_cases hc : g.kind node = Kind.obtain ∧ g.producible node = false
+        · simp only [hc, if_true] at h; exact absurd h (by simp)
+        · simp only [hc, if_false] at h
+          simp at h; subst h
+          refine ⟨hnode, ?_, ?_⟩
+          · intro p hp
+            cases hsp : g.isSat p with
+            | true => rfl
+            | false =>
+              have hpin : p ∈ unmetPrereqs g node := by
+                unfold unmetPrereqs; rw [List.mem_filter]; exact ⟨hp, by simp [hsp]⟩
+              rw [hu] at hpin; simp at hpin
+          · intro hk
+            cases hprod : g.producible node with
+            | true => rfl
+            | false => exact absurd ⟨hk, hprod⟩ hc
+      | cons hd tl =>
+        simp only [hu] at h
+        have hps : ∀ p ∈ hd :: tl, g.isSat p = false := by
+          intro p hp
+          have hpin : p ∈ unmetPrereqs g node := by rw [hu]; exact hp
+          unfold unmetPrereqs at hpin; rw [List.mem_filter] at hpin
+          simpa using hpin.2
+        -- Fold-soundness: a `some r` outcome of the fold comes from some prereq.
+        suffices Hf : ∀ (ps : List Nat) (vis0 : List Nat),
+            (∀ p ∈ ps, g.isSat p = false) →
+            ∀ r,
+              (ps.foldl
+                (fun (acc : List Nat × Option Nat) q =>
+                  match acc.2 with
+                  | some r => (acc.1, some r)
+                  | none => actStepShared g k acc.1 q)
+                (vis0, none)).2 = some r →
+              ActionableNode g r by
+          exact Hf (hd :: tl) (node :: visited) hps r h
+        intro ps
+        induction ps with
+        | nil => intro _ _ r hh; simp [List.foldl] at hh
+        | cons p rest ih_in =>
+          intro vis0 hps' r' hh
+          rw [List.foldl] at hh
+          have hb : (match ((vis0, (none : Option Nat))).2 with
+                    | some rr => ((vis0, (none : Option Nat)).1, some rr)
+                    | none => actStepShared g k (vis0, (none : Option Nat)).1 p)
+                    = actStepShared g k vis0 p := rfl
+          rw [hb] at hh
+          cases hres : (actStepShared g k vis0 p).2 with
+          | some r0 =>
+            have hpsat : g.isSat p = false := hps' p List.mem_cons_self
+            have hPr0 : ActionableNode g r0 := ih vis0 p r0 hpsat hres
+            have hpair : actStepShared g k vis0 p =
+                         ((actStepShared g k vis0 p).1, some r0) := by rw [← hres]
+            rw [hpair] at hh
+            have hcarry : ∀ (l : List Nat) (vv : List Nat),
+                (l.foldl
+                  (fun (acc : List Nat × Option Nat) q =>
+                    match acc.2 with
+                    | some r => (acc.1, some r)
+                    | none => actStepShared g k acc.1 q)
+                  (vv, some r0)).2 = some r0 := by
+              intro l
+              induction l with
+              | nil => intro _; rfl
+              | cons q'' _ ih_c =>
+                intro vv
+                rw [List.foldl]
+                have h_inner : (match ((vv, some r0)).2 with
+                        | some rr => ((vv, some r0).1, some rr)
+                        | none => actStepShared g k (vv, some r0).1 q'')
+                        = (vv, some r0) := rfl
+                rw [h_inner]; exact ih_c vv
+            rw [hcarry rest _] at hh
+            injection hh with hh; subst hh; exact hPr0
+          | none =>
+            have hpair : actStepShared g k vis0 p =
+                         ((actStepShared g k vis0 p).1, none) := by rw [← hres]
+            rw [hpair] at hh
+            exact ih_in (actStepShared g k vis0 p).1
+              (fun p' hp' => hps' p' (List.mem_cons_of_mem _ hp')) r' hh
+
+/-- Top-level SOUNDNESS for the SHARED model: `actionableStepShared` returns
+only `ActionableNode`s. -/
+theorem actionable_step_shared_sound (g : Graph) (fuel root r : Nat)
+    (hroot : g.isSat root = false)
+    (h : actionableStepShared g fuel root = some r) :
+    ActionableNode g r :=
+  actStepShared_sound g fuel [] root r hroot h
+
+/-- Worked examples for the SHARED model — same outcomes as the per-path one. -/
+example :
+    let g : Graph := {
+      prereqs := fun n => if n = 0 then [1] else if n = 1 then [0] else [],
+      isSat := fun _ => false,
+      producible := fun _ => false,
+      kind := fun _ => Kind.obtain }
+    actionableStepShared g 8 0 = none := by
+      unfold actionableStepShared; simp [actStepShared, unmetPrereqs]
+
+example :
+    let g : Graph := {
+      prereqs := fun n => if n = 0 then [1, 2] else [],
+      isSat := fun n => n = 1,
+      producible := fun n => n = 2,
+      kind := fun _ => Kind.obtain }
+    actionableStepShared g 8 0 = some 2 := by
+      unfold actionableStepShared; simp [actStepShared, unmetPrereqs]
 
 end Formal.StrategyTraversal

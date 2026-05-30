@@ -31,17 +31,23 @@ The Python `_precedes` compares by `repr`; production guards and means have
 distinct Goal classes, so their reprs never collide. We capture this as a
 WELL-FORMEDNESS precondition `idsDisjoint` on the candidate list.
 
-## Safety theorem (sticky-vs-guard) — THE bug-likely property
+## Safety theorems (sticky-vs-guard)
 
-`select_pure_guard_wins`: under id-disjointness, if the head of `cs` is a
-guard `g` that is plannable / not satisfied / not suppressed, `selectPure`
-returns `g` regardless of `committed`. Sticky cannot keep a means ahead of a
-plannable firing guard, because:
-  * `guardPrecedes` checks STRUCTURAL precedence including guards that may not
-    be plannable. ANY guard candidate forces `guardPrecedes = true` once the
-    committed means is at a later index — and in the production guards-first
-    list every means lives after every guard.
-  * Then the walk encounters the head guard first and returns it.
+* `select_pure_guard_wins` (HEAD specialisation): if the HEAD of `cs` is a
+  plannable / non-satisfied / non-suppressed guard, `selectPure` returns it.
+
+* `select_pure_any_plannable_guard_wins` (GENERAL — closes the prior
+  head-only caveat): under `guardsFirst` (every guard precedes every means —
+  the genuine production band ordering `guards ++ collect ++ step ++
+  discretionary`) and `idsDisjoint`, ANY plannable / non-satisfied /
+  non-suppressed guard `g ∈ cs` forces `selectPure` to return a guard
+  (`.isMeans = false`), regardless of `committed`. The proof routes through
+  a helper `guard_precedes_means_in_guardsFirst` that produces explicit
+  indices `i < j` for the guard/means pair, then concludes via a walk lemma
+  `walk_returns_guard_when_plannable_guard_exists` that the walk over `cs`
+  returns a guard whenever such a `g` exists. There is no longer a "head-
+  guard only" disclosed gap; the differential test's full coverage is now
+  matched by a Lean theorem with the same scope.
 
 Lean core only — no mathlib.
 -/
@@ -286,6 +292,283 @@ theorem select_pure_guard_wins
     hplan hnsat hnsup htried
   simp [hwalk]
 
+/-! ### Theorem (c'): GENERALISED guard-wins — any plannable firing guard in
+the list (not just the head) prevents a means from being returned.
+
+In production `candidates = guards ++ collect ++ (step?) ++ discretionary` so
+EVERY guard precedes EVERY means in the list. We capture this as the structural
+invariant `guardsFirst`. Then ANY plannable / non-satisfied / non-suppressed
+guard `g ∈ cs` forces `selectPure`'s returned candidate to itself be a guard
+(`.isMeans = false`), regardless of `committed`. This closes the gap that the
+head-only `select_pure_guard_wins` left as a differential-test caveat. -/
+
+/-- Structural invariant: every guard candidate precedes every means candidate
+in the list. (Genuine production invariant from the band ordering.) -/
+def guardsFirst : List Candidate → Prop
+  | [] => True
+  | c :: rest =>
+    (c.isMeans = true → ∀ x ∈ rest, x.isMeans = true) ∧ guardsFirst rest
+
+theorem guardsFirst_cons {c : Candidate} {rest : List Candidate}
+    (h : guardsFirst (c :: rest)) :
+    (c.isMeans = true → ∀ x ∈ rest, x.isMeans = true) ∧ guardsFirst rest := h
+
+/-- Under `guardsFirst`, once we see a means at the head, every following
+candidate is also a means. -/
+theorem guardsFirst_tail_all_means {c : Candidate} {rest : List Candidate}
+    (h : guardsFirst (c :: rest)) (hcm : c.isMeans = true) :
+    ∀ x ∈ rest, x.isMeans = true :=
+  (guardsFirst_cons h).1 hcm
+
+/-- If `guardsFirst cs` and `g ∈ cs` is a guard, no preceding cand in walk-order
+can be a means: equivalently, induction shows the guard is reached before any
+means in cs. We capture this via: if `c :: rest` is `guardsFirst` and some guard
+exists in `c :: rest`, then `c` itself is a guard OR the head-means case is empty.
+
+Sharper form: a `guardsFirst` list containing a guard has its head be a guard. -/
+theorem guardsFirst_head_guard_of_mem
+    (c : Candidate) (rest : List Candidate) (g : Candidate)
+    (hgf : guardsFirst (c :: rest)) (hg : g ∈ c :: rest) (hguard : g.isMeans = false) :
+    c.isMeans = false := by
+  rcases List.mem_cons.mp hg with rfl | hin
+  · exact hguard
+  · -- g ∈ rest with g.isMeans=false; if c.isMeans=true then guardsFirst forces
+    -- every x ∈ rest to be a means, contradicting g.
+    cases hcm : c.isMeans with
+    | false => rfl
+    | true =>
+      have := guardsFirst_tail_all_means hgf hcm g hin
+      rw [hguard] at this; exact Bool.noConfusion this
+
+/-- WALK lemma: if `cs` is `guardsFirst` and contains a plannable / non-satisfied
+/ non-suppressed guard whose id is not `tried`, then `walk` returns a candidate
+whose `isMeans = false` (a guard). -/
+theorem walk_returns_guard_when_plannable_guard_exists
+    (cs : List Candidate)
+    (plannable satisfied suppressed : Nat → Bool)
+    (tried : Option Nat)
+    (hgf : guardsFirst cs)
+    (g : Candidate) (hgmem : g ∈ cs) (hguard : g.isMeans = false)
+    (hplan : plannable g.id = true)
+    (hnsat : satisfied g.id = false)
+    (hnsup : suppressed g.id = false)
+    (htried : tried ≠ some g.id) :
+    ∃ r, walk plannable satisfied suppressed tried cs = some r ∧ r.isMeans = false := by
+  induction cs with
+  | nil => simp at hgmem
+  | cons c rest ih =>
+    -- The head of (c :: rest) must itself be a guard by guardsFirst.
+    have hch : c.isMeans = false := guardsFirst_head_guard_of_mem c rest g hgf hgmem hguard
+    -- Case split on whether the head is the witness g or a different guard.
+    by_cases heq : c = g
+    · -- Head is g itself: walk returns g (which is a guard).
+      subst heq
+      refine ⟨c, ?_, hch⟩
+      exact walk_returns_head c rest plannable satisfied suppressed tried hplan hnsat hnsup htried
+    · -- Head is a different guard. Walk either returns the head (if it is itself
+      -- plannable / not-skipped / not-tried), else recurses on `rest`.
+      have hgrest : g ∈ rest := by
+        rcases List.mem_cons.mp hgmem with hh | hh
+        · exact absurd hh.symm heq
+        · exact hh
+      have hrec : ∃ r, walk plannable satisfied suppressed tried rest = some r ∧
+                       r.isMeans = false := ih hgf.2 hgrest
+      obtain ⟨r, hwr, hrm⟩ := hrec
+      -- Concretely compute walk on (c :: rest) by cases on `tried`.
+      cases htr : tried with
+      | none =>
+        unfold walk
+        simp only [htr]
+        -- skip = false || suppressed c.id || satisfied c.id
+        by_cases hsk : (suppressed c.id || satisfied c.id) = true
+        · simp only [Bool.false_or, hsk, if_true]
+          rw [htr] at hwr
+          exact ⟨r, hwr, hrm⟩
+        · have hskf : (suppressed c.id || satisfied c.id) = false := by
+            cases hh : (suppressed c.id || satisfied c.id) with
+            | false => rfl
+            | true => exact absurd hh hsk
+          simp only [Bool.false_or, hskf, if_false]
+          by_cases hplc : plannable c.id = true
+          · simp only [hplc, if_true]
+            exact ⟨c, rfl, hch⟩
+          · have hplc' : plannable c.id = false := by
+              cases hpl : plannable c.id with
+              | false => rfl
+              | true => exact absurd hpl hplc
+            simp only [hplc', if_false]
+            rw [htr] at hwr
+            exact ⟨r, hwr, hrm⟩
+      | some t =>
+        unfold walk
+        simp only [htr]
+        -- skip evaluates to: decide (t = c.id) || suppressed c.id || satisfied c.id
+        by_cases htc : t = c.id
+        · -- walk skips head (skip is true via the tried branch), recurse on rest
+          have ht_dec : decide (t = c.id) = true := by simp [htc]
+          simp only [ht_dec, Bool.true_or, if_true]
+          rw [htr] at hwr
+          exact ⟨r, hwr, hrm⟩
+        · have ht_dec : decide (t = c.id) = false := by simp [htc]
+          by_cases hsk : (suppressed c.id || satisfied c.id) = true
+          · simp only [ht_dec, Bool.false_or, hsk, if_true]
+            rw [htr] at hwr
+            exact ⟨r, hwr, hrm⟩
+          · have hskf : (suppressed c.id || satisfied c.id) = false := by
+              cases hh : (suppressed c.id || satisfied c.id) with
+              | false => rfl
+              | true => exact absurd hh hsk
+            simp only [ht_dec, Bool.false_or, hskf, if_false]
+            by_cases hplc : plannable c.id = true
+            · simp only [hplc, if_true]
+              exact ⟨c, rfl, hch⟩
+            · have hplc' : plannable c.id = false := by
+                cases hpl : plannable c.id with
+                | false => rfl
+                | true => exact absurd hpl hplc
+              simp only [hplc', if_false]
+              rw [htr] at hwr
+              exact ⟨r, hwr, hrm⟩
+
+/-- A guard `g` in a `guardsFirst` list precedes any means `c` (with c.id = cid,
+g.id ≠ cid) in the same list — direct index existence. -/
+theorem guard_precedes_means_in_guardsFirst
+    (cs : List Candidate) (g c : Candidate) (cid : Nat)
+    (hgmem : g ∈ cs) (hguard : g.isMeans = false)
+    (hcmem : c ∈ cs) (hcm : c.isMeans = true) (hceq : c.id = cid)
+    (hne_cid : g.id ≠ cid)
+    (hgf : guardsFirst cs) (hdisj : idsDisjoint cs) :
+    ∃ i j, indexOf? cs g.id = some i ∧ indexOf? cs cid = some j ∧ i < j := by
+  induction cs with
+  | nil => simp at hgmem
+  | cons d ds ih =>
+    have hdh : d.isMeans = false :=
+      guardsFirst_head_guard_of_mem d ds g hgf hgmem hguard
+    by_cases hdg : d.id = g.id
+    · -- d is head with id = g.id. c is means (head is guard) so c ∈ ds.
+      have hcds : c ∈ ds := by
+        rcases List.mem_cons.mp hcmem with hh | hh
+        · -- hh : c = d. then c.isMeans = d.isMeans = false, contradicting hcm.
+          exfalso
+          have : c.isMeans = false := by rw [hh]; exact hdh
+          rw [this] at hcm; exact Bool.noConfusion hcm
+        · exact hh
+      have hsome : (indexOf? ds cid).isSome := by
+        have := indexOf?_isSome_of_mem ds c hcds; rw [hceq] at this; exact this
+      cases hres : indexOf? ds cid with
+      | none => rw [hres] at hsome; simp at hsome
+      | some kb =>
+        refine ⟨0, kb + 1, ?_, ?_, by omega⟩
+        · unfold indexOf?; simp [hdg]
+        · have hdnc : d.id ≠ cid := by rw [hdg]; exact hne_cid
+          rw [indexOf?_cons_ne d ds cid hdnc, hres]; rfl
+    · -- d.id ≠ g.id. g ∈ ds. Recurse.
+      have hgds : g ∈ ds := by
+        rcases List.mem_cons.mp hgmem with hh | hh
+        · exfalso; rw [hh] at hdg; exact hdg rfl
+        · exact hh
+      have hcds : c ∈ ds := by
+        rcases List.mem_cons.mp hcmem with hh | hh
+        · exfalso
+          have : c.isMeans = false := by rw [hh]; exact hdh
+          rw [this] at hcm; exact Bool.noConfusion hcm
+        · exact hh
+      have hgf' : guardsFirst ds := hgf.2
+      have hdisj' : idsDisjoint ds := by
+        intro a b ha hb hga hbm
+        exact hdisj a b (List.mem_cons_of_mem _ ha)
+          (List.mem_cons_of_mem _ hb) hga hbm
+      obtain ⟨i, j, hgi, hcj, hij⟩ := ih hgds hcds hgf' hdisj'
+      have hdnc : d.id ≠ cid := by
+        rw [← hceq]
+        exact hdisj d c (by simp) hcmem hdh hcm
+      refine ⟨i + 1, j + 1, ?_, ?_, by omega⟩
+      · rw [indexOf?_cons_ne d ds g.id hdg, hgi]; rfl
+      · rw [indexOf?_cons_ne d ds cid hdnc, hcj]; rfl
+
+/-- THE GENERALISED guard-safety theorem: under `guardsFirst` + `idsDisjoint`,
+ANY plannable / non-satisfied / non-suppressed guard `g ∈ cs` forces
+`selectPure` to return a guard — even if the committed means lies later in the
+list and even if `g` is not the head. -/
+theorem select_pure_any_plannable_guard_wins
+    (cs : List Candidate) (committed : Option Nat)
+    (plannable satisfied suppressed : Nat → Bool)
+    (g : Candidate) (hgmem : g ∈ cs) (hguard : g.isMeans = false)
+    (hplan : plannable g.id = true)
+    (hnsat : satisfied g.id = false)
+    (hnsup : suppressed g.id = false)
+    (hgf : guardsFirst cs)
+    (hdisj : idsDisjoint cs) :
+    ∃ r, (selectPure cs committed plannable satisfied suppressed).1 = some r ∧
+         r.isMeans = false := by
+  -- Sticky outcome: tried is never `some g.id` because any committed id either
+  -- mismatches g.id (disjointness) or doesn't bind a means at all.
+  have hkey :
+      ∃ tried, stickyOutcome cs committed plannable satisfied suppressed = (none, tried)
+        ∧ tried ≠ some g.id := by
+    unfold stickyOutcome
+    cases committed with
+    | none => exact ⟨none, rfl, by intro h; cases h⟩
+    | some cid =>
+      cases hfc : findCommitted cs cid with
+      | none => exact ⟨none, by simp [hfc], by intro h; cases h⟩
+      | some c =>
+        obtain ⟨hcm, hceq, hcmem⟩ := findCommitted_some_props _ _ _ hfc
+        -- c is a means with id=cid. By disjointness, g.id ≠ c.id.
+        have hne_id : g.id ≠ c.id := hdisj g c hgmem hcmem hguard hcm
+        have hne_cid : g.id ≠ cid := by rw [← hceq]; exact hne_id
+        -- guardPrecedes cs cid = true because g (a guard ∈ cs) precedes c.
+        -- We don't need to compute it explicitly; we just need to show tried ≠ some g.id.
+        -- Whichever branch stickyOutcome takes, tried ∈ {none, some cid}, and cid ≠ g.id.
+        by_cases hsk : satisfied c.id || suppressed c.id
+        · refine ⟨none, ?_, by intro h; cases h⟩
+          simp [hfc, hsk]
+        · by_cases hgp : guardPrecedes cs cid = true
+          · refine ⟨none, ?_, by intro h; cases h⟩
+            simp [hfc, hsk, hgp]
+          · have hgp' : guardPrecedes cs cid = false := by
+              cases hg' : guardPrecedes cs cid with
+              | false => rfl
+              | true => exact absurd hg' hgp
+            by_cases hplc : plannable c.id = true
+            · -- This branch returns (some c, some cid) — but THIS would crash
+              -- our walk-based reasoning. So we must show this branch is
+              -- impossible UNDER the guardsFirst hypothesis: if cs is guardsFirst
+              -- and contains a guard g, then ANY means in cs comes AFTER g,
+              -- making guardPrecedes cs cid = true. Contradiction with hgp'.
+              exfalso
+              -- Show guardPrecedes cs cid = true using g.
+              have hpr : precedes cs g.id cid = true := by
+                obtain ⟨i, j, hgi, hcj, hij⟩ :=
+                  guard_precedes_means_in_guardsFirst cs g c cid
+                    hgmem hguard hcmem hcm hceq hne_cid hgf hdisj
+                unfold precedes
+                rw [hgi, hcj]
+                simp [hij]
+              -- guardPrecedes via g (a guard in cs) precedes c
+              have hgin_filter : g ∈ cs.filter (fun c => !c.isMeans) := by
+                rw [List.mem_filter]; exact ⟨hgmem, by simp [hguard]⟩
+              have : guardPrecedes cs cid = true := by
+                unfold guardPrecedes
+                rw [List.any_eq_true]
+                exact ⟨g, hgin_filter, hpr⟩
+              exact absurd this hgp
+            · have hplc' : plannable c.id = false := by
+                cases hp : plannable c.id with
+                | false => rfl
+                | true => exact absurd hp hplc
+              refine ⟨some cid, ?_, ?_⟩
+              · simp [hfc, hsk, hgp', hplc']
+              · intro h; injection h with h; exact hne_cid h.symm
+  obtain ⟨tried, hso, htried⟩ := hkey
+  obtain ⟨r, hwalk, hrm⟩ :=
+    walk_returns_guard_when_plannable_guard_exists cs plannable satisfied suppressed tried
+      hgf g hgmem hguard hplan hnsat hnsup htried
+  refine ⟨r, ?_, hrm⟩
+  unfold selectPure
+  rw [hso]
+  simp [hwalk]
+
 /-! ### Theorem (d): Sticky idempotence. -/
 
 /-- When no guard candidate exists and `committed = some cid` matches a means
@@ -381,5 +664,52 @@ example :
   rw [select_pure_no_commitment_is_walk]
   unfold walk
   simp
+
+/-- Non-vacuity witness for the GENERALISED any-plannable-guard-wins theorem:
+a multi-guard input where the SECOND guard is the firing one (head guard is
+non-plannable). With `committed = some 2` (a means later in the list) the
+selector returns a guard (specifically the second guard, which is plannable). -/
+example :
+    let cs : List Candidate := [⟨0, false⟩, ⟨1, false⟩, ⟨2, true⟩]
+    let pl : Nat → Bool := fun n => decide (n = 1) || decide (n = 2)  -- guard 1 + means 2 plannable
+    let sat : Nat → Bool := fun _ => false
+    let sup : Nat → Bool := fun _ => false
+    ∃ r, (selectPure cs (some 2) pl sat sup).1 = some r ∧ r.isMeans = false := by
+  apply select_pure_any_plannable_guard_wins
+    [⟨0, false⟩, ⟨1, false⟩, ⟨2, true⟩] (some 2) _ _ _ ⟨1, false⟩
+  · simp
+  · rfl
+  · rfl
+  · rfl
+  · rfl
+  · -- guardsFirst: [⟨0,f⟩, ⟨1,f⟩, ⟨2,t⟩]. Each conjunct: head.isMeans=true → all tail are means.
+    -- For c0 (isMeans=false): premise false, trivial.
+    -- For c1 (isMeans=false): premise false, trivial.
+    -- For c2 (isMeans=true): tail is [], vacuous.
+    refine ⟨?_, ?_, ?_, trivial⟩
+    · intro h; exact Bool.noConfusion h
+    · intro h; exact Bool.noConfusion h
+    · intro _ x hx; simp at hx
+  · -- idsDisjoint: all means ids ≠ all guard ids
+    intro a b ha hb hga hbm
+    rcases List.mem_cons.mp ha with rfl | ha
+    · rcases List.mem_cons.mp hb with rfl | hb
+      · simp at hbm
+      · rcases List.mem_cons.mp hb with rfl | hb
+        · simp at hbm
+        · rcases List.mem_cons.mp hb with rfl | hb
+          · intro h; cases h
+          · simp at hb
+    · rcases List.mem_cons.mp ha with rfl | ha
+      · rcases List.mem_cons.mp hb with rfl | hb
+        · simp at hbm
+        · rcases List.mem_cons.mp hb with rfl | hb
+          · simp at hbm
+          · rcases List.mem_cons.mp hb with rfl | hb
+            · intro h; cases h
+            · simp at hb
+      · rcases List.mem_cons.mp ha with rfl | ha
+        · simp at hga
+        · simp at ha
 
 end Formal.ArbiterSelect
