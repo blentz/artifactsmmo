@@ -381,3 +381,24 @@ open Formal.PriorityBand
 #check @Formal.Phase8Invariants.bank_expansion_post_fix_witness           -- 30-cap witness (1 apply → satisfied)
 #check @Formal.Phase8Invariants.bank_expansion_pre_fix_projection_gap     -- regression anchor (pre-fix is the bug)
 #check @Formal.Phase8Invariants.bank_expansion_pre_fix_gap_witness        -- regression anchor (BLOCKED counterexample pinned)
+-- CheapestPath required roles (Phase 12 Target A — greedy contract, NOT-A-BUG):
+#check @Formal.CheapestPath.cheapest_target_met               -- target ≤ current ⇒ empty plan
+#check @Formal.CheapestPath.stepLevel_empty                    -- empty monsters ⇒ no step
+#check @Formal.CheapestPath.pickBest_nil                       -- pickBest on [] = none
+#check @Formal.CheapestPath.pickBest_mem                       -- returned monster is in input
+#check @Formal.CheapestPath.pickBest_beatable                  -- returned monster passes +1 gate
+#check @Formal.CheapestPath.pickBest_max                       -- greedy maximality (xpPerCycle)
+#check @Formal.CheapestPath.isBeatable_plus_one                -- +1 margin matches FightAction
+#check @Formal.CheapestPath.isBeatable_off_boundary            -- simLevel+2 NOT beatable
+#check @Formal.CheapestPath.isBeatable_level_zero              -- level-0 NOT beatable
+#check @Formal.CheapestPath.cheapest_empty_monsters_blocks     -- empty input ⇒ blocked
+#check @Formal.CheapestPath.stepLevel_all_zero_blocks          -- all-zero xpPerCycle ⇒ none
+#check @Formal.CheapestPath.foldMax_ge_init                    -- helper: result ≥ initial
+#check @Formal.CheapestPath.foldMax_ge_mem                     -- helper: result ≥ every member
+#check @Formal.CheapestPath.foldMax_mem                        -- helper: result ∈ list
+#check @Formal.CheapestPath.tie_break_first_wins_witness       -- tie ⇒ first picked
+#check @Formal.CheapestPath.strict_greater_replaces_witness    -- strict > ⇒ later replaces
+#check @Formal.CheapestPath.greedy_filters_unbeatable_witness  -- unbeatable filtered out
+#check @Formal.CheapestPath.single_step_witness                -- 1-level success
+#check @Formal.CheapestPath.two_step_witness                   -- 2-level chain
+#check @Formal.CheapestPath.greedy_pick_witness                -- picks higher xpPerCycle

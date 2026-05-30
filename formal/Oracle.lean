@@ -1169,6 +1169,32 @@ def runWinnableCascade (args : Array Json) : Json :=
       pickWinnable := codeToOptStr (intArg args 3) }
   Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
 
+/-- Run the cheapest-path greedy model.
+args layout:
+  [current, target, maxXp, xpInLevel, nMonsters,
+   m0.code, m0.level, m0.xpPerCycle,
+   m1.code, m1.level, m1.xpPerCycle, ...]
+Output: { blocked: bool, n_segments: int, monster_codes: [int] } -/
+def runCheapestPath (args : Array Json) : Json :=
+  let current := (intArg args 0).toNat
+  let target := (intArg args 1).toNat
+  let maxXp := (intArg args 2).toNat
+  let xpInLevel := (intArg args 3).toNat
+  let nMonsters := (intArg args 4).toNat
+  let monsters : List Formal.CheapestPath.Monster :=
+    (List.range nMonsters).map (fun k =>
+      { code := (intArg args (5 + 3 * k)).toNat
+        level := (intArg args (5 + 3 * k + 1)).toNat
+        xpPerCycle := (intArg args (5 + 3 * k + 2)).toNat })
+  let plan := Formal.CheapestPath.cheapestPath current target maxXp xpInLevel monsters
+  Json.mkObj
+    [ ("blocked", Json.bool plan.blocked)
+    , ("n_segments", Json.num (Int.ofNat plan.segments.length))
+    , ("monster_codes",
+        Json.arr ((plan.segments.map (fun s => Json.num (Int.ofNat s.monster.code))).toArray))
+    , ("total_cycles", Json.num (Int.ofNat plan.totalCycles))
+    ]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1257,6 +1283,8 @@ def runOne (item : Json) : Json :=
     runStoreWarmup args
   else if kind == "winnable_cascade" then
     runWinnableCascade args
+  else if kind == "cheapest_path" then
+    runCheapestPath args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

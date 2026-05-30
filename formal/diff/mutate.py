@@ -50,6 +50,7 @@ BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ban
 EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
 GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
+PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -890,6 +891,31 @@ _ALL_SRCS = [
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     GAME_DATA_SRC,
     WINNABLE_CASCADE_SRC,
+    PROJECTIONS_SRC,
+]
+
+
+# Phase 12 Target A: cheapest_path_to_level greedy contract. Mutants test
+# (a) the +1 beatability margin, (b) strict-> tie-break, (c) the
+# `best_xp_per_cycle <= 0` blocked branch. The diff test must kill all three.
+CHEAPEST_PATH_MUTATIONS = [
+    # Mutation 1: shrink the beatability bound from `lvl <= sim_level + 1` to
+    # `lvl <= sim_level`. test_plus_one_boundary_beatable now blocks (Python)
+    # but Lean still picks the +1 monster — divergence.
+    ("cheapest_path: drop the +1 beatability margin",
+     "            if 1 <= lvl <= sim_level + 1",
+     "            if 1 <= lvl <= sim_level"),
+    # Mutation 2: invert tie-break — use `>=` so the LAST tying monster wins.
+    # test_tie_first_wins flips (Python now picks beta, Lean still alpha).
+    ("cheapest_path: tie-break inversion (> -> >=)",
+     "            if xp_per_cycle > best_xp_per_cycle:",
+     "            if xp_per_cycle >= best_xp_per_cycle:"),
+    # Mutation 3: invert the comparison sign so the WORST monster wins
+    # (pick the minimum xp_per_cycle instead of maximum). Caught by
+    # test_strict_greater_replaces and test_greedy_picks_higher_xp_per_kill.
+    ("cheapest_path: invert greedy direction (> -> <)",
+     "            if xp_per_cycle > best_xp_per_cycle:",
+     "            if xp_per_cycle < best_xp_per_cycle:"),
 ]
 
 
@@ -1428,6 +1454,8 @@ def main() -> int:
               "formal/diff/test_game_data_accessors_diff.py", survivors)
     run_group(WINNABLE_CASCADE_SRC, WINNABLE_CASCADE_MUTATIONS,
               "formal/diff/test_winnable_cascade_diff.py", survivors)
+    run_group(PROJECTIONS_SRC, CHEAPEST_PATH_MUTATIONS,
+              "formal/diff/test_cheapest_path_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
