@@ -809,15 +809,15 @@ survival-floor safety property (a clamped discretionary priority is strictly
 below the survival floor for ANY bonus). -/
 
 -- band-lower: floor ≤ clampIntoBand floor ceiling bonus (given floor ≤ ceiling).
-example : ∀ (floor ceiling bonus : Int), floor ≤ ceiling →
+example : ∀ (floor ceiling bonus : Rat), floor ≤ ceiling →
     floor ≤ Formal.PriorityBand.clampIntoBand floor ceiling bonus :=
   @Formal.PriorityBand.clamp_lower_bound
 -- band-upper: clampIntoBand floor ceiling bonus ≤ ceiling (given floor ≤ ceiling).
-example : ∀ (floor ceiling bonus : Int), floor ≤ ceiling →
+example : ∀ (floor ceiling bonus : Rat), floor ≤ ceiling →
     Formal.PriorityBand.clampIntoBand floor ceiling bonus ≤ ceiling :=
   @Formal.PriorityBand.clamp_upper_bound
 -- survival-floor-safety: ceiling < survival ⇒ clamped result < survival (any bonus).
-example : ∀ (floor ceiling bonus survival : Int), floor ≤ ceiling → ceiling < survival →
+example : ∀ (floor ceiling bonus survival : Rat), floor ≤ ceiling → ceiling < survival →
     Formal.PriorityBand.clampIntoBand floor ceiling bonus < survival :=
   @Formal.PriorityBand.clamp_below_survival
 

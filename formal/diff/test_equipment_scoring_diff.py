@@ -7,10 +7,12 @@ argmax-score candidate, and swaps to it ONLY on a STRICT score improvement over 
 currently-equipped item (ties / downgrades keep the current item; an empty slot is
 filled by any feasible candidate; no candidates leaves the slot as-is).
 
-SURROGATE. Python scores are floats (`weapon_score = Σ atk*max(0,1-res/100)`,
-`armor_score = Σ mon_atk*armor_res/100`). The Lean oracle uses the ORDER-PRESERVING
-INTEGER surrogate (×100): `WScore = Σ atk*max(0,100-res)`, `AScore = Σ mon_atk*res`.
-Since pick_loadout only COMPARES scores, the surrogate preserves every decision.
+SURROGATE. Python scores are now EXACT integers, computed via the same surrogate
+the Lean oracle uses: `weapon_score = Σ atk * max(0, 100 - res)` and
+`armor_score = Σ mon_atk * armor_res`. Python and Lean compute IDENTICAL integers
+for every input — this differential test now asserts BIT-EQUIVALENCE on the score
+values themselves (no rescaling, no rounding). The old float-vs-Int order-preserving
+caveat is closed.
 
 TIE-BREAK NONDETERMINISM. Python `max(candidates, key=score)` over an unordered set
 breaks ties arbitrarily; the Lean argmax keeps the earliest. So we do NOT assert a
@@ -89,7 +91,7 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
             *_elem_block(stats, "resistance")]
 
 
-def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> float:
+def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
     return (weapon_score(stats, monster_res) if slot == _WEAPON_SLOT
             else armor_score(stats, monster_atk))
 
@@ -141,7 +143,8 @@ def _check(table, monster_atk, monster_res, level, inventory, equipment, slots):
         is_weapon = slot == _WEAPON_SLOT
         chosen_code = result.get(slot)
         chosen_stats = table.get(chosen_code) if chosen_code else None
-        py_chosen_score = (round(_py_score(chosen_stats, slot, monster_atk, monster_res) * 100)
+        # Python score is now the EXACT integer surrogate — same int as Lean.
+        py_chosen_score = (_py_score(chosen_stats, slot, monster_atk, monster_res)
                            if chosen_stats is not None else None)
 
         feasible_exists = any(

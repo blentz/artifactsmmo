@@ -11,24 +11,21 @@ The Python routine optimizes each equipment slot INDEPENDENTLY. For a slot it:
    item (`weapon_score(best) > weapon_score(current)` / armor analogue). Ties and
    downgrades keep the current item.
 
-SCORES. The Python scores are floats:
-  * weapon: `Σ_elem atk * max(0.0, 1 - res%/100)`
-  * armor:  `Σ_elem mon_atk * armor_res% / 100`
-`pick_loadout` only ever COMPARES two scores (argmax, and the strict-improvement
-test). So we use an ORDER-PRESERVING INTEGER SURROGATE — multiply each float by
-100 — which preserves every `<`/`=`/`>` comparison the Python makes:
-  * `WScore = Σ_elem atk * max(0, 100 - res)`   (= 100 × weapon_score; the inner
-    `max(0, 100-res)` mirrors the float `max(0.0, 1 - res/100)` clamp exactly:
-    `100 * max(0, 1 - res/100) = max(0, 100 - res)` for integer `res`)
-  * `AScore = Σ_elem mon_atk * armor_res`        (= 100 × armor_score; NO clamp —
-    the float armor_score has no `max`, and neither does the surrogate)
-Because `100 > 0`, `a < b ↔ 100a < 100b` etc., so the surrogate is order-equivalent
-to the float and `pick_loadout`'s behavior over the surrogate is identical to its
-behavior over the floats. We model `score` as a single abstract integer function on
-items, instantiated to `WScore`/`AScore` at the call site; the pick theorems hold
-for ANY integer score, and `weapon_score_nonneg` is the one theorem that EARNS the
-weapon clamp (`WScore ≥ 0`; a non-clamped surrogate could go negative when
-`res > 100`).
+SCORES. **Byte-equivalent integer model.** The Python `weapon_score` and
+`armor_score` now return EXACT integers computed via the same surrogate formula
+the Lean oracle uses:
+  * `WScore = Σ_elem atk * max(0, 100 - res)`   (Python `weapon_score` returns
+    this integer DIRECTLY; the inner `max(0, 100 - res)` is the integer clamp.)
+  * `AScore = Σ_elem mon_atk * armor_res`        (Python `armor_score` returns
+    this integer directly; NO clamp — armor scoring has none.)
+Production Python uses pure integer arithmetic — there is no floating-point step
+anywhere in the score computation, so the Python value is BIT-EQUAL to the Lean
+`WScore`/`AScore` for every input. The previous float surrogate caveat is closed:
+this is no longer "order-preserving over an abstraction" but bit-equality.
+We model `score` as a single abstract integer function on items, instantiated to
+`WScore`/`AScore` at the call site; the pick theorems hold for ANY integer score,
+and `weapon_score_nonneg` is the one theorem that EARNS the weapon clamp
+(`WScore ≥ 0`; a non-clamped surrogate could go negative when `res > 100`).
 
 Lean core only — no mathlib. Integer arithmetic via `omega`; argmax via `List.foldr`
 and induction.

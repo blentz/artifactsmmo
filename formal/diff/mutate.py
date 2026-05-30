@@ -171,12 +171,19 @@ SCORING_MUTATIONS = [
      "        else:\n"
      "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)",
      "        improves = True"),
-    # drop the weapon clamp: max(0.0, 1 - res/100) -> (1 - res/100), letting a
+    # drop the weapon clamp: max(0, 100 - res) -> (100 - res), letting a
     # high-resistance monster make a strong weapon score NEGATIVE (so a weak weapon
     # could be preferred / scores go below 0).
-    ("equipment_scoring: drop weapon clamp max(0.0, ...)",
-     "        score += atk * max(0.0, 1.0 - res_pct / 100.0)",
-     "        score += atk * (1.0 - res_pct / 100.0)"),
+    ("equipment_scoring: drop weapon clamp max(0, 100 - res_pct)",
+     "        score += atk * max(0, 100 - res_pct)",
+     "        score += atk * (100 - res_pct)"),
+    # Byte-equivalence kill: divide armor_score by 100, turning the exact integer
+    # surrogate into a float that no longer matches the Lean integer model
+    # byte-for-byte. The diff test asserts py_score == lean_score as integers;
+    # this mutation makes py a float and breaks the int identity.
+    ("equipment_scoring: armor_score float-rescale (breaks byte-equivalence)",
+     "        score += mon_atk * armor_res_pct",
+     "        score += mon_atk * armor_res_pct / 100.0"),
 ]
 
 
@@ -526,6 +533,14 @@ PRIORITY_BAND_MUTATIONS = [
     ("priority_band: drop outer min ceiling clamp",
      "    return min(ceiling, max(floor, floor + bonus))",
      "    return max(floor, floor + bonus)"),
+    # Byte-equivalence kill: coerce to float internally. Loses exactness on
+    # fractional inputs whose denominators are not powers of two (e.g. 1/3) —
+    # the differential test asserts the result is a Fraction equal bit-for-bit
+    # to the Lean Rat oracle, so a float result either fails the type check or
+    # disagrees bit-for-bit on at least one input.
+    ("priority_band: float coercion (breaks byte-equivalence)",
+     "    return min(ceiling, max(floor, floor + bonus))",
+     "    return min(float(ceiling), max(float(floor), float(floor) + float(bonus)))"),
 ]
 
 
@@ -597,6 +612,17 @@ SCALAR_CORE_MUTATIONS = [
     ("scalar_core: drop coin component (coin_value -> 0)",
      "    coin_component = tasks_coins * coin_value / gold_per_xp",
      "    coin_component = tasks_coins * 0 / gold_per_xp"),
+    # Byte-equivalence kill: seed the skill-xp accumulator with 0.0 instead of
+    # integer 0, forcing every subsequent term into float and breaking the
+    # exact-Fraction identity the diff test pins (Fraction + float -> TypeError
+    # under strict isinstance(val, Fraction) assertion, or a float result that
+    # disagrees bit-for-bit with the Lean Rat oracle on inputs with denominators
+    # that aren't powers of two).
+    ("scalar_core: float-seed skill_xp_component (breaks byte-equivalence on Fraction inputs)",
+     "    skill_xp_component = 0\n"
+     "    for skill_name, delta in skill_xp.items():",
+     "    skill_xp_component = 0.0\n"
+     "    for skill_name, delta in skill_xp.items():"),
 ]
 
 

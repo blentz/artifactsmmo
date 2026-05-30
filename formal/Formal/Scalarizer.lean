@@ -33,8 +33,19 @@ exact `fractions.Fraction` inputs (fractional char_xp, skill_xp, gold,
 tasks_coins, coin_value) and compares the Python pure core — invoked with
 `Fraction` weights so every operation stays exact — against this `Rat` oracle
 numerator/denominator EXACTLY. The fractional domain is thereby EXERCISED, not
-rejected. (Production still passes the float constants `0.2` etc.; the pure core
-is generic in its weight parameters, so production behavior is unchanged.)
+rejected. **No live production caller exists** for `scalar_yield` /
+`scalar_yield_pure` today (verified by `grep -rn 'scalar_yield' src/`: the only
+callers are the unit-test and differential-test suites). The differential test
+invokes the core with `Fraction` weights so every operation stays exact, and the
+unit tests feed integer Yield fields (also exact). Byte-equivalence to this `Rat`
+model therefore holds on every actual invocation. The pure core remains generic
+in its weight parameters, so if a future production caller wires it in with
+float constants, the float arithmetic for the production constants (0.2 = 1/5,
+2.0, 1.0, 100.0) over fractional-average inputs would deviate from this exact
+model only by IEEE 754 rounding; the proved order properties (monotonicities,
+weight dominance) still hold to float precision, but bit-equivalence would
+require lifting that caller to `Fraction` as well. The differential gap is
+therefore CLOSED at every present-day invocation.
 
 Every theorem below is a genuine order statement on the REAL fractional scalar
 the bot compares: the formula is linear with positive coefficients, so the

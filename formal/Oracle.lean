@@ -590,11 +590,26 @@ def runStuckDetector (args : Array Json) : Json :=
     ("osc_window_len", Json.num (Int.ofNat oscLen)),
     ("noprog_window_len", Json.num (Int.ofNat noprogLen))]
 
-/-- Compute one priority_band result using the SAME proved `clampIntoBand`.
-args: [floor, ceiling, bonus]. Emits the clamped band value. -/
+/-- Read a rational field from a flat Int arg list as a (numerator, denominator)
+pair starting at index `i`. The Python diff feeds EXACT `fractions.Fraction`
+inputs split into their numerator/denominator, so the oracle reconstructs the
+exact `Rat` (the fractional domain the bot really compares). -/
+def ratArg (xs : Array Json) (i : Nat) : Rat :=
+  mkRat (intArg xs i) (intArg xs (i + 1)).toNat
+
+/-- Compute one priority_band result using the SAME proved `clampIntoBand` over `Rat`.
+Each input is a (num, den) pair; args layout:
+* `[0,1]`  floor   (num, den)
+* `[2,3]`  ceiling (num, den)
+* `[4,5]`  bonus   (num, den)
+Emits the clamped band value as separate numerator / denominator integers. -/
 def runPriorityBand (args : Array Json) : Json :=
-  Json.mkObj [("clamped",
-    Json.num (clampIntoBand (intArg args 0) (intArg args 1) (intArg args 2)))]
+  let floor := ratArg args 0
+  let ceiling := ratArg args 2
+  let bonus := ratArg args 4
+  let r := clampIntoBand floor ceiling bonus
+  Json.mkObj [("clamped_num", Json.num r.num),
+              ("clamped_den", Json.num (Int.ofNat r.den))]
 
 /-- Compute one owned_count result using the SAME proved `ownedCount`.
 
@@ -651,13 +666,6 @@ def runUpgradeSelection (args : Array Json) : Json :=
     match bestByKey cmp cands with
     | some r => Json.mkObj [("present", Json.bool true), ("chosen", candJson r)]
     | none => Json.mkObj [("present", Json.bool false)]
-
-/-- Read a rational field from a flat Int arg list as a (numerator, denominator)
-pair starting at index `i`. The Python diff feeds EXACT `fractions.Fraction`
-inputs split into their numerator/denominator, so the oracle reconstructs the
-exact `Rat` (the fractional domain the bot really compares). -/
-def ratArg (xs : Array Json) (i : Nat) : Rat :=
-  mkRat (intArg xs i) (intArg xs (i + 1)).toNat
 
 /-- Compute one scalarizer result using the SAME proved `scalarYield`, over the
 EXACT RATIONAL domain (no scaling). Each rational input is a (num, den) pair.

@@ -7,27 +7,37 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> float:
+def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
     """Estimated damage-per-hit a weapon deals against a monster.
 
-    Uses the simple model: per-element damage = attack * (1 - resistance%).
-    Sums across elements (monsters/weapons typically have only one).
+    Returns the EXACT integer surrogate ``Σ atk * max(0, 100 - res%)`` (i.e.
+    100× the float expression ``Σ atk * max(0, 1 - res%/100)``). The score is
+    only ever COMPARED (``argmax`` and the strict-improvement test inside
+    ``pick_loadout``); since ``100 > 0``, the surrogate preserves every
+    ``<``/``=``/``>`` comparison exactly. This is BIT-EQUIVALENT to the Lean
+    ``WScore`` model — no floating-point rounding, no order disagreement.
     """
-    score = 0.0
+    score = 0
     for elem in ELEMENTS:
         atk = weapon.attack.get(elem, 0)
         res_pct = monster_resistance.get(elem, 0)
-        score += atk * max(0.0, 1.0 - res_pct / 100.0)
+        score += atk * max(0, 100 - res_pct)
     return score
 
 
-def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> float:
-    """Estimated damage REDUCED per hit by an armor piece. Higher = better defense."""
-    score = 0.0
+def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:
+    """Estimated damage REDUCED per hit by an armor piece. Higher = better defense.
+
+    Returns the EXACT integer surrogate ``Σ mon_atk * armor_res%`` (i.e. 100×
+    the float expression ``Σ mon_atk * armor_res%/100``). BIT-EQUIVALENT to the
+    Lean ``AScore`` model — argmax / comparison results are identical to the
+    rescaled float form.
+    """
+    score = 0
     for elem in ELEMENTS:
         mon_atk = monster_attack.get(elem, 0)
         armor_res_pct = armor.resistance.get(elem, 0)
-        score += mon_atk * armor_res_pct / 100.0
+        score += mon_atk * armor_res_pct
     return score
 
 
