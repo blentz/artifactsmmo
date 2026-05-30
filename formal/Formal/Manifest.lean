@@ -458,3 +458,50 @@ open Formal.PriorityBand
 #check @Formal.GoalValueBands.gatherMaterials_value_monotone_in_bonus -- ↑bonus ⇒ value no less
 #check @Formal.GoalValueBands.pursueTask_cold_eq_floor              -- cold (bonus=0) = floor (35)
 #check @Formal.GoalValueBands.gatherMaterials_cold_eq_floor         -- cold (bonus=0) = floor (1)
+-- Phase 18 GoalSystem required roles:
+#check @Formal.GoalSystem.acceptTask_value_in_range
+#check @Formal.GoalSystem.acceptTask_cold_returns_zero
+#check @Formal.GoalSystem.claimPending_value_in_range
+#check @Formal.GoalSystem.claimPending_cold_returns_zero
+#check @Formal.GoalSystem.taskExchange_value_in_range
+#check @Formal.GoalSystem.taskExchange_cold_returns_zero
+#check @Formal.GoalSystem.taskCancel_value_in_range
+#check @Formal.GoalSystem.taskCancel_cold_satisfied_zero
+#check @Formal.GoalSystem.taskCancel_cold_no_pivot_zero
+#check @Formal.GoalSystem.levelSkill_value_in_range
+#check @Formal.GoalSystem.levelSkill_cold_satisfied_zero
+#check @Formal.GoalSystem.levelSkill_cold_gap_too_big_zero
+#check @Formal.GoalSystem.levelSkill_cold_no_craftable_zero
+#check @Formal.GoalSystem.expandBank_value_in_range
+#check @Formal.GoalSystem.expandBank_cold_not_accessible_zero
+#check @Formal.GoalSystem.expandBank_cold_satisfied_zero
+#check @Formal.GoalSystem.completeTask_value_in_range
+#check @Formal.GoalSystem.completeTask_cold_satisfied_zero
+#check @Formal.GoalSystem.completeTask_cold_not_full_zero
+#check @Formal.GoalSystem.reachUnlockLevel_value_in_range
+#check @Formal.GoalSystem.reachUnlockLevel_cold_satisfied_zero
+#check @Formal.GoalSystem.reachUnlockLevel_cold_zero_target
+#check @Formal.GoalSystem.reachUnlockLevel_cold_gap_too_big
+#check @Formal.GoalSystem.lowYieldCancel_value_in_range
+#check @Formal.GoalSystem.lowYieldCancel_cold_returns_zero
+#check @Formal.GoalSystem.unlockBank_value_in_range
+#check @Formal.GoalSystem.unlockBank_cold_not_locked_zero
+#check @Formal.GoalSystem.unlockBank_cold_xp_exceeded_zero
+#check @Formal.GoalSystem.unlockBank_cold_unreachable_zero
+#check @Formal.GoalSystem.discardOverstock_value_in_range
+#check @Formal.GoalSystem.discardOverstock_cold_satisfied_zero
+#check @Formal.GoalSystem.discardOverstock_unsatisfied_at_least_40
+#check @Formal.GoalSystem.upgradeEquipment_value_in_range
+#check @Formal.GoalSystem.upgradeEquipment_cold_no_upgrade_zero
+#check @Formal.GoalSystem.upgradeEquipment_base_eq_35
+#check @Formal.GoalSystem.upgradeEquipment_relevant_eq_51
+#check @Formal.GoalSystem.restoreHp_value_in_range
+#check @Formal.GoalSystem.restoreHp_full_returns_zero
+#check @Formal.GoalSystem.restoreHp_critical_is_110
+#check @Formal.GoalSystem.depositInventory_value_in_range
+#check @Formal.GoalSystem.depositInventory_cold_inaccessible_zero
+#check @Formal.GoalSystem.depositInventory_cold_below_ramp_zero
+#check @Formal.GoalSystem.sellInventory_value_in_range
+#check @Formal.GoalSystem.sellInventory_cold_satisfied_zero
+#check @Formal.GoalSystem.sellInventory_cold_inv_max_zero
+#check @Formal.GoalSystem.sellInventory_cold_not_sellable_zero

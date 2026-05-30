@@ -56,6 +56,20 @@ EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "exp
 GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
 PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
+# Phase-18 — additional Goal sources.
+ACCEPT_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "accept_task_goal.py"
+CLAIM_PENDING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "claim_pending.py"
+TASK_EXCHANGE_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_exchange.py"
+TASK_CANCEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "task_cancel.py"
+COMPLETE_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "complete_task_goal.py"
+REACH_UNLOCK_LEVEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_unlock_level.py"
+LOW_YIELD_CANCEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "low_yield_cancel.py"
+UNLOCK_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "unlock_bank.py"
+DISCARD_OVERSTOCK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "discard_overstock.py"
+PROGRESSION_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "progression.py"
+RESTORE_HP_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
+DEPOSIT_INVENTORY_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "deposit_inventory.py"
+SELL_INVENTORY_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "sell_inventory.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -978,6 +992,12 @@ _ALL_SRCS = [
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
+    # Phase-18 — value-range theorems for the remaining goals.
+    ACCEPT_TASK_GOAL_SRC, CLAIM_PENDING_GOAL_SRC, TASK_EXCHANGE_GOAL_SRC,
+    TASK_CANCEL_GOAL_SRC, COMPLETE_TASK_GOAL_SRC, REACH_UNLOCK_LEVEL_GOAL_SRC,
+    LOW_YIELD_CANCEL_GOAL_SRC, UNLOCK_BANK_GOAL_SRC, DISCARD_OVERSTOCK_GOAL_SRC,
+    PROGRESSION_GOAL_SRC, RESTORE_HP_GOAL_SRC, DEPOSIT_INVENTORY_GOAL_SRC,
+    SELL_INVENTORY_GOAL_SRC,
 ]
 
 
@@ -1571,6 +1591,105 @@ def _assert_sources_clean() -> None:
         sys.exit(2)
 
 
+# Phase-18 mutations — each must be killed by formal/diff/test_goal_system_value_diff.py.
+
+ACCEPT_TASK_GOAL_MUTATIONS = [
+    # 20 -> 200 (breaks discretionary band claim — value would escape its band).
+    ("accept_task: return 20.0 -> 200.0",
+     "        return 20.0",
+     "        return 200.0"),
+]
+
+CLAIM_PENDING_GOAL_MUTATIONS = [
+    ("claim_pending: return 25.0 -> 250.0",
+     "        return 25.0",
+     "        return 250.0"),
+]
+
+TASK_EXCHANGE_GOAL_MUTATIONS = [
+    ("task_exchange: return 22.0 -> 220.0",
+     "        return 22.0",
+     "        return 220.0"),
+]
+
+TASK_CANCEL_GOAL_MUTATIONS = [
+    ("task_cancel: return 12.0 if PIVOT -> 120.0",
+     "        return 12.0 if task_decision(state, game_data, history) == PIVOT else 0.0",
+     "        return 120.0 if task_decision(state, game_data, history) == PIVOT else 0.0"),
+]
+
+COMPLETE_TASK_GOAL_MUTATIONS = [
+    ("complete_task: return 90.0 -> 900.0",
+     "        return 90.0",
+     "        return 900.0"),
+]
+
+REACH_UNLOCK_LEVEL_GOAL_MUTATIONS = [
+    # Drop the MAX_ACHIEVABLE_GAP unreachable-gap guard — goal fires on any gap.
+    ("reach_unlock_level: drop MAX_ACHIEVABLE_GAP guard",
+     "        if self._target_level - state.level > MAX_ACHIEVABLE_GAP:\n"
+     "            return 0.0\n",
+     ""),
+]
+
+LOW_YIELD_CANCEL_GOAL_MUTATIONS = [
+    # 70 -> 700: breaks the priority band claim.
+    ("low_yield_cancel: LOW_YIELD_CANCEL = 70.0 -> 700.0",
+     "LOW_YIELD_CANCEL = 70.0",
+     "LOW_YIELD_CANCEL = 700.0"),
+]
+
+UNLOCK_BANK_GOAL_MUTATIONS = [
+    # 90 -> 900 active-branch return.
+    ("unlock_bank: return 90.0 -> 900.0",
+     "        return 90.0",
+     "        return 900.0"),
+]
+
+DISCARD_OVERSTOCK_GOAL_MUTATIONS = [
+    # Swap CRITICAL and BASE constants (reorders pressure tiers).
+    ("discard_overstock: swap CRITICAL and BASE constants",
+     "_DISCARD_OVERSTOCK_BASE = 40.0\n"
+     "# High-pressure tier (inventory > 85%): above GATHER_MATERIALS so we preempt gather.\n"
+     "_DISCARD_OVERSTOCK_HIGH_PRESSURE = 55.0\n"
+     "# Critical tier (inventory > 95%): above DEPOSIT_FULL (80), below COMPLETE_TASK (90).\n"
+     "_DISCARD_OVERSTOCK_CRITICAL = 85.0",
+     "_DISCARD_OVERSTOCK_BASE = 85.0\n"
+     "# High-pressure tier (inventory > 85%): above GATHER_MATERIALS so we preempt gather.\n"
+     "_DISCARD_OVERSTOCK_HIGH_PRESSURE = 55.0\n"
+     "# Critical tier (inventory > 95%): above DEPOSIT_FULL (80), below COMPLETE_TASK (90).\n"
+     "_DISCARD_OVERSTOCK_CRITICAL = 40.0"),
+]
+
+PROGRESSION_GOAL_MUTATIONS = [
+    # Relevant-tool branch returns 500 (over-priority — breaks 51 band claim).
+    ("progression: _UPGRADE_EQUIPMENT_RELEVANT_TOOL = 51.0 -> 500.0",
+     "_UPGRADE_EQUIPMENT_RELEVANT_TOOL = 51.0",
+     "_UPGRADE_EQUIPMENT_RELEVANT_TOOL = 500.0"),
+]
+
+RESTORE_HP_GOAL_MUTATIONS = [
+    # Drop the (1 - hp_percent) translation: raw hp_percent * 100 — wrong direction.
+    ("restore_hp: drop (1 - hp_percent) translation",
+     "        return (1.0 - state.hp_percent) * 100.0",
+     "        return state.hp_percent * 100.0"),
+]
+
+DEPOSIT_INVENTORY_GOAL_MUTATIONS = [
+    # _MAX_VALUE 80 -> 800 (overshoots the [0,80] band).
+    ("deposit_inventory: _MAX_VALUE = 80.0 -> 800.0",
+     "    _MAX_VALUE = 80.0   # value at 100% used; outranks FarmItems(35) once near cap",
+     "    _MAX_VALUE = 800.0   # value at 100% used; outranks FarmItems(35) once near cap"),
+]
+
+SELL_INVENTORY_GOAL_MUTATIONS = [
+    # SEIZE_WINDOW_VALUE 60 -> 600 (breaks band claim).
+    ("sell_inventory: SEIZE_WINDOW_VALUE = 60.0 -> 600.0",
+     "SEIZE_WINDOW_VALUE = 60.0",
+     "SEIZE_WINDOW_VALUE = 600.0"),
+]
+
+
 def main() -> int:
     _assert_sources_clean()
     survivors: list = []
@@ -1683,6 +1802,33 @@ def main() -> int:
               "formal/diff/test_goal_value_band_safety_diff.py", survivors)
     run_group(SCALAR_PRIORITY_SRC, SCALAR_PRIORITY_MUTATIONS,
               "formal/diff/test_goal_value_band_safety_diff.py", survivors)
+    # Phase-18 mutation runs.
+    run_group(ACCEPT_TASK_GOAL_SRC, ACCEPT_TASK_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(CLAIM_PENDING_GOAL_SRC, CLAIM_PENDING_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(TASK_EXCHANGE_GOAL_SRC, TASK_EXCHANGE_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(REACH_UNLOCK_LEVEL_GOAL_SRC, REACH_UNLOCK_LEVEL_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(LOW_YIELD_CANCEL_GOAL_SRC, LOW_YIELD_CANCEL_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(UNLOCK_BANK_GOAL_SRC, UNLOCK_BANK_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(DISCARD_OVERSTOCK_GOAL_SRC, DISCARD_OVERSTOCK_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, PROGRESSION_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(RESTORE_HP_GOAL_SRC, RESTORE_HP_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(DEPOSIT_INVENTORY_GOAL_SRC, DEPOSIT_INVENTORY_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(SELL_INVENTORY_GOAL_SRC, SELL_INVENTORY_GOAL_MUTATIONS,
+              "formal/diff/test_goal_system_value_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

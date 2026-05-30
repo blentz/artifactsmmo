@@ -14,6 +14,7 @@ import Formal.BankSelection
 import Formal.StuckDetector
 import Formal.PriorityBand
 import Formal.GoalValueBands
+import Formal.GoalSystem
 import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
