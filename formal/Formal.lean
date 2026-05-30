@@ -38,3 +38,4 @@ import Formal.GameDataAccessors
 import Formal.Phase10GoalLattices
 import Formal.WinnableCascade
 import Formal.CheapestPath
+import Formal.GoalValueBands

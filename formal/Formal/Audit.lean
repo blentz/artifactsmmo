@@ -481,3 +481,16 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CheapestPath.single_step_witness
 #print axioms Formal.CheapestPath.two_step_witness
 #print axioms Formal.CheapestPath.greedy_pick_witness
+#print axioms Formal.GoalValueBands.pursueTask_floor_le_ceiling
+#print axioms Formal.GoalValueBands.gatherMaterials_floor_le_ceiling
+#print axioms Formal.GoalValueBands.pursueTask_ceiling_lt_survival
+#print axioms Formal.GoalValueBands.gatherMaterials_ceiling_lt_survival
+#print axioms Formal.GoalValueBands.pursueTask_value_below_survival_floor
+#print axioms Formal.GoalValueBands.gatherMaterials_value_below_survival_floor
+#print axioms Formal.GoalValueBands.pursueTask_value_in_band
+#print axioms Formal.GoalValueBands.gatherMaterials_value_in_band
+#print axioms Formal.GoalValueBands.clampIntoBand_mono_bonus
+#print axioms Formal.GoalValueBands.pursueTask_value_monotone_in_bonus
+#print axioms Formal.GoalValueBands.gatherMaterials_value_monotone_in_bonus
+#print axioms Formal.GoalValueBands.pursueTask_cold_eq_floor
+#print axioms Formal.GoalValueBands.gatherMaterials_cold_eq_floor

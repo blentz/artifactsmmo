@@ -6,6 +6,8 @@ moment progress advances or the task is full/gone, letting the arbiter re-decide
 against fresh API-observed state.
 """
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -13,13 +15,29 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Matches the retired FarmItems value (35) so task pursuit slots at the same
-# weight as the behavior it restores.
-PRIORITY_WHEN_FIRING = 35.0
-"""Priority when an items task is being pursued. Mirrors retired FarmItems(35)."""
+# weight as the behavior it restores. This is now the BAND FLOOR — the
+# learned-yield bonus can lift priority within [PRIORITY_FLOOR, PRIORITY_CEILING],
+# but never above PRIORITY_CEILING < SURVIVAL_FLOOR (70).
+PRIORITY_FLOOR = 35.0
+"""Priority floor when an items task is being pursued. Mirrors retired
+FarmItems(35) so a cold-start (history=None or zero samples) preserves the
+pre-Phase-17 priority exactly."""
+
+PRIORITY_CEILING = 50.0
+"""Upper bound on the learned-yield contribution. Strictly below the
+survival floor (70), preserving Phase-1's ban on unbounded additive priority
+bonuses: a discretionary goal can never be reordered above a survival goal."""
+
+# Backwards-compat alias for the original constant name (still re-exported so
+# existing callers/tests that import PRIORITY_WHEN_FIRING continue to read the
+# cold-start floor value).
+PRIORITY_WHEN_FIRING = PRIORITY_FLOOR
 
 
 class PursueTaskGoal(Goal):
@@ -34,7 +52,15 @@ class PursueTaskGoal(Goal):
               history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
-        return PRIORITY_WHEN_FIRING
+        if history is None:
+            return PRIORITY_FLOOR
+        # Phase-17: route the proved scalar_yield projection through the
+        # band-clamp. Cold goal (sample_count=0) yields Fraction(0) and the
+        # clamp returns exactly PRIORITY_FLOOR — matches the pre-Phase-17
+        # constant. EXACT-RATIONAL arithmetic mirrors the Lean Rat model.
+        bonus = yield_bonus_for_goal(repr(self), state, game_data, history)
+        clamped = clamp_into_band(Fraction(PRIORITY_FLOOR), Fraction(PRIORITY_CEILING), bonus)
+        return float(clamped)
 
     def is_satisfied(self, state: WorldState) -> bool:
         if not state.task_code or state.task_total == 0:

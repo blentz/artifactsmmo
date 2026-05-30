@@ -444,3 +444,17 @@ open Formal.PriorityBand
 #check @Formal.CheapestPath.single_step_witness                -- 1-level success
 #check @Formal.CheapestPath.two_step_witness                   -- 2-level chain
 #check @Formal.CheapestPath.greedy_pick_witness                -- picks higher xpPerCycle
+-- GoalValueBands required roles (Phase-17 — scalar_yield wired into discretionary goal value()):
+#check @Formal.GoalValueBands.pursueTask_floor_le_ceiling           -- band sanity: 35 ≤ 50
+#check @Formal.GoalValueBands.gatherMaterials_floor_le_ceiling      -- band sanity: 1 ≤ 50
+#check @Formal.GoalValueBands.pursueTask_ceiling_lt_survival        -- band sanity: 50 < 70
+#check @Formal.GoalValueBands.gatherMaterials_ceiling_lt_survival   -- band sanity: 50 < 70
+#check @Formal.GoalValueBands.pursueTask_value_below_survival_floor -- HEADLINE: PursueTask < 70 ∀ bonus
+#check @Formal.GoalValueBands.gatherMaterials_value_below_survival_floor -- HEADLINE: GatherMaterials < 70 ∀ bonus
+#check @Formal.GoalValueBands.pursueTask_value_in_band              -- floor ≤ result ≤ ceiling
+#check @Formal.GoalValueBands.gatherMaterials_value_in_band         -- floor ≤ result ≤ ceiling
+#check @Formal.GoalValueBands.clampIntoBand_mono_bonus              -- monotone in bonus (lemma)
+#check @Formal.GoalValueBands.pursueTask_value_monotone_in_bonus    -- ↑bonus ⇒ value no less
+#check @Formal.GoalValueBands.gatherMaterials_value_monotone_in_bonus -- ↑bonus ⇒ value no less
+#check @Formal.GoalValueBands.pursueTask_cold_eq_floor              -- cold (bonus=0) = floor (35)
+#check @Formal.GoalValueBands.gatherMaterials_cold_eq_floor         -- cold (bonus=0) = floor (1)

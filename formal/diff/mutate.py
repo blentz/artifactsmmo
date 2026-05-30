@@ -47,6 +47,8 @@ UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
 TASK_CANCEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_cancel.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
+PURSUE_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "pursue_task.py"
+SCALAR_PRIORITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "scalar_priority.py"
 EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 STORE_WARMUP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store_warmup_core.py"
 BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
@@ -974,6 +976,8 @@ _ALL_SRCS = [
     GAME_DATA_SRC,
     WINNABLE_CASCADE_SRC,
     PROJECTIONS_SRC,
+    # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
+    GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
 ]
 
 
@@ -1446,6 +1450,50 @@ TASK_CANCEL_MUTATIONS = [
 ]
 
 
+# Phase-17 mutations — scalar_yield wired through clamp_into_band.
+# Each mutant violates a band-safety property that test_goal_value_band_safety_diff
+# pins (survival-floor strict-below, band inclusion, or warm-path lift).
+PURSUE_TASK_MUTATIONS = [
+    # Removing clamp_into_band: returns floor + raw bonus (unclamped). Kills via
+    # `test_pursue_task_high_yield_clamps_at_ceiling` (bonus from char_xp=10000,
+    # level=40 lifts the result well above SURVIVAL_FLOOR=70).
+    ("pursue_task: drop clamp_into_band (returns raw floor + bonus)",
+     "        clamped = clamp_into_band(Fraction(PRIORITY_FLOOR), Fraction(PRIORITY_CEILING), bonus)\n"
+     "        return float(clamped)",
+     "        return float(Fraction(PRIORITY_FLOOR) + bonus)"),
+    # Lifting the ceiling above the survival floor — Phase-1 invariant violation.
+    # `test_pursue_task_constants_match_lean` asserts PRIORITY_CEILING == 50.0,
+    # which this mutation flips. Also caught by the high-yield survival test.
+    ("pursue_task: PRIORITY_CEILING = 100 (above survival floor 70)",
+     "PRIORITY_CEILING = 50.0",
+     "PRIORITY_CEILING = 100.0"),
+]
+GATHER_MATERIALS_BAND_MUTATIONS = [
+    # Removing clamp_into_band: returns the un-clamped bonus + floor, which at
+    # extreme yields exceeds the survival floor. Caught by
+    # `test_gather_materials_high_yield_clamps_below_survival`.
+    ("gathering: drop clamp_into_band on Phase-17 wiring",
+     "        clamped = clamp_into_band(\n"
+     "            Fraction(PRIORITY_FLOOR), Fraction(PRIORITY_CEILING), total_bonus,\n"
+     "        )\n"
+     "        return float(clamped)",
+     "        return float(Fraction(PRIORITY_FLOOR) + total_bonus)"),
+    # Lifting the ceiling above the survival floor — caught by the constants
+    # test and the extreme-yield test.
+    ("gathering: PRIORITY_CEILING = 100 (above survival floor 70)",
+     "PRIORITY_CEILING = 50.0",
+     "PRIORITY_CEILING = 100.0"),
+]
+SCALAR_PRIORITY_MUTATIONS = [
+    # Negating the bonus: a positive yield becomes a negative bonus, suppressing
+    # priority below the floor (and after clamp, glueing it to the floor). The
+    # warm-path-lift test (yield should lift above floor) kills this.
+    ("scalar_priority: negate the yield bonus (flip sign)",
+     "    return Fraction(lifted) * Fraction(BAND_GAIN)",
+     "    return -(Fraction(lifted) * Fraction(BAND_GAIN))"),
+]
+
+
 # Phase-7 mutations.
 # Target A: GatherMaterialsGoal._compute_base_value div-by-zero guard.
 GATHERING_GOAL_MUTATIONS = [
@@ -1628,6 +1676,13 @@ def main() -> int:
               "formal/diff/test_winnable_cascade_diff.py", survivors)
     run_group(PROJECTIONS_SRC, CHEAPEST_PATH_MUTATIONS,
               "formal/diff/test_cheapest_path_diff.py", survivors)
+    # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
+    run_group(PURSUE_TASK_GOAL_SRC, PURSUE_TASK_MUTATIONS,
+              "formal/diff/test_goal_value_band_safety_diff.py", survivors)
+    run_group(GATHERING_GOAL_SRC, GATHER_MATERIALS_BAND_MUTATIONS,
+              "formal/diff/test_goal_value_band_safety_diff.py", survivors)
+    run_group(SCALAR_PRIORITY_SRC, SCALAR_PRIORITY_MUTATIONS,
+              "formal/diff/test_goal_value_band_safety_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

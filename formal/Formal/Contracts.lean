@@ -13,6 +13,7 @@ import Formal.StrategyTraversal
 import Formal.BankSelection
 import Formal.StuckDetector
 import Formal.PriorityBand
+import Formal.GoalValueBands
 import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
@@ -1734,3 +1735,80 @@ example : ∀ (inv : Formal.RealizableLoadout.Inventory)
     Formal.RealizableLoadout.pickLoadout inv equip slots₁ =
       Formal.RealizableLoadout.pickLoadout inv equip slots₂ :=
   @Formal.RealizableLoadout.pickLoadout_extensional
+
+/-! ### GoalValueBands role contracts (Phase-17).
+
+PursueTaskGoal and GatherMaterialsGoal each route their discretionary
+priority through `clampIntoBand` with a per-goal band whose ceiling sits
+strictly below the survival floor (70). The contracts below pin:
+  (a) band sanity (floor ≤ ceiling, ceiling < 70),
+  (b) the HEADLINE survival-floor safety (value < 70 ∀ bonus),
+  (c) band inclusion (floor ≤ value ≤ ceiling),
+  (d) monotonicity in the learned-yield bonus,
+  (e) the cold-path identity (bonus=0 ⇒ value=floor) so a no-history call
+      reproduces the pre-Phase-17 priority bit-exactly. -/
+
+example : Formal.GoalValueBands.pursueTaskFloor
+    ≤ Formal.GoalValueBands.pursueTaskCeiling :=
+  @Formal.GoalValueBands.pursueTask_floor_le_ceiling
+
+example : Formal.GoalValueBands.gatherMaterialsFloor
+    ≤ Formal.GoalValueBands.gatherMaterialsCeiling :=
+  @Formal.GoalValueBands.gatherMaterials_floor_le_ceiling
+
+example : Formal.GoalValueBands.pursueTaskCeiling
+    < Formal.GoalValueBands.survivalFloor :=
+  @Formal.GoalValueBands.pursueTask_ceiling_lt_survival
+
+example : Formal.GoalValueBands.gatherMaterialsCeiling
+    < Formal.GoalValueBands.survivalFloor :=
+  @Formal.GoalValueBands.gatherMaterials_ceiling_lt_survival
+
+-- HEADLINE: PursueTaskGoal.value < survival floor for ANY bonus.
+example : ∀ (bonus : Rat),
+    Formal.GoalValueBands.pursueTaskValue bonus
+      < Formal.GoalValueBands.survivalFloor :=
+  @Formal.GoalValueBands.pursueTask_value_below_survival_floor
+
+-- HEADLINE: GatherMaterialsGoal.value < survival floor for ANY bonus.
+example : ∀ (bonus : Rat),
+    Formal.GoalValueBands.gatherMaterialsValue bonus
+      < Formal.GoalValueBands.survivalFloor :=
+  @Formal.GoalValueBands.gatherMaterials_value_below_survival_floor
+
+example : ∀ (bonus : Rat),
+    Formal.GoalValueBands.pursueTaskFloor
+      ≤ Formal.GoalValueBands.pursueTaskValue bonus ∧
+    Formal.GoalValueBands.pursueTaskValue bonus
+      ≤ Formal.GoalValueBands.pursueTaskCeiling :=
+  @Formal.GoalValueBands.pursueTask_value_in_band
+
+example : ∀ (bonus : Rat),
+    Formal.GoalValueBands.gatherMaterialsFloor
+      ≤ Formal.GoalValueBands.gatherMaterialsValue bonus ∧
+    Formal.GoalValueBands.gatherMaterialsValue bonus
+      ≤ Formal.GoalValueBands.gatherMaterialsCeiling :=
+  @Formal.GoalValueBands.gatherMaterials_value_in_band
+
+example : ∀ (floor ceiling b₁ b₂ : Rat), b₁ ≤ b₂ →
+    Formal.PriorityBand.clampIntoBand floor ceiling b₁
+      ≤ Formal.PriorityBand.clampIntoBand floor ceiling b₂ :=
+  @Formal.GoalValueBands.clampIntoBand_mono_bonus
+
+example : ∀ (b₁ b₂ : Rat), b₁ ≤ b₂ →
+    Formal.GoalValueBands.pursueTaskValue b₁
+      ≤ Formal.GoalValueBands.pursueTaskValue b₂ :=
+  @Formal.GoalValueBands.pursueTask_value_monotone_in_bonus
+
+example : ∀ (b₁ b₂ : Rat), b₁ ≤ b₂ →
+    Formal.GoalValueBands.gatherMaterialsValue b₁
+      ≤ Formal.GoalValueBands.gatherMaterialsValue b₂ :=
+  @Formal.GoalValueBands.gatherMaterials_value_monotone_in_bonus
+
+example : Formal.GoalValueBands.pursueTaskValue 0
+    = Formal.GoalValueBands.pursueTaskFloor :=
+  @Formal.GoalValueBands.pursueTask_cold_eq_floor
+
+example : Formal.GoalValueBands.gatherMaterialsValue 0
+    = Formal.GoalValueBands.gatherMaterialsFloor :=
+  @Formal.GoalValueBands.gatherMaterials_cold_eq_floor

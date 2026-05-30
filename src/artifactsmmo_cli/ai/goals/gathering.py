@@ -1,13 +1,29 @@
 """Gathering goal: accumulate materials needed to craft an upgrade."""
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.world_state import WorldState
+
+# Band constants — Phase-17 wiring of scalar_yield as a discretionary-band
+# priority signal. Ceiling stays strictly below the survival floor (70) so
+# the Phase-1 invariant (no learned bonus can reorder a discretionary goal
+# above a survival goal) is preserved by construction.
+PRIORITY_FLOOR = 1.0
+"""Band floor — matches the existing `max(1.0, ...)` lower bound on the base
+ramp so cold goals (history=None) preserve the pre-Phase-17 priority."""
+
+PRIORITY_CEILING = 50.0
+"""Band ceiling — strictly below SURVIVAL_FLOOR=70. Subsumes the existing
+ramp (which capped at 40.0) plus an above-baseline scalar bonus head-room."""
 
 
 class GatherMaterialsGoal(Goal):
@@ -22,11 +38,30 @@ class GatherMaterialsGoal(Goal):
         base = self._compute_base_value(state, game_data)
         if history is None:
             return base
+        # Existing efficiency multiplier — preserves the prior "slow goal gets
+        # de-ranked" behaviour.
         avg_cycles = history.goal_avg_cycles_to_satisfy(repr(self), window=20)
         if avg_cycles is None or avg_cycles == 0:
-            return base
-        efficiency = min(1.0, 5.0 / avg_cycles)
-        return base * efficiency
+            ramped = base
+        else:
+            efficiency = min(1.0, 5.0 / avg_cycles)
+            ramped = base * efficiency
+        if ramped <= 0.0:
+            # Satisfied / malformed needed — keep the original zero return.
+            return ramped
+        # Phase-17: route the proved scalar_yield projection through the
+        # band-clamp as an OPTIONAL bonus on top of the existing ramp.
+        # Total bonus = (ramped - PRIORITY_FLOOR) + scalar-derived bonus.
+        # clamp_into_band(floor, ceiling, bonus) returns
+        # `min(ceiling, max(floor, floor + bonus))`, so the result stays in
+        # [PRIORITY_FLOOR, PRIORITY_CEILING]; with PRIORITY_CEILING < 70 this
+        # preserves the Phase-1 survival-floor invariant for ANY scalar.
+        scalar_bonus = yield_bonus_for_goal(repr(self), state, game_data, history)
+        total_bonus = Fraction(ramped) - Fraction(PRIORITY_FLOOR) + scalar_bonus
+        clamped = clamp_into_band(
+            Fraction(PRIORITY_FLOOR), Fraction(PRIORITY_CEILING), total_bonus,
+        )
+        return float(clamped)
 
     def _compute_base_value(self, state: WorldState, game_data: GameData) -> float:
         if self.is_satisfied(state):
