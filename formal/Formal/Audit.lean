@@ -398,3 +398,10 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Phase10GoalLattices.taskExchange_split_fires
 #print axioms Formal.Phase10GoalLattices.taskExchange_bounded
 #print axioms Formal.Phase10GoalLattices.taskExchange_reachable_via_drain
+-- Phase-11 Target A: Player._winnable_farm_target cascade
+#print axioms Formal.WinnableCascade.task_wins
+#print axioms Formal.WinnableCascade.path_wins_when_winnable
+#print axioms Formal.WinnableCascade.pick_wins_when_no_path
+#print axioms Formal.WinnableCascade.pick_wins_when_path_not_winnable
+#print axioms Formal.WinnableCascade.totality
+#print axioms Formal.WinnableCascade.path_result_was_winnable

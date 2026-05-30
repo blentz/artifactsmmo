@@ -16,6 +16,7 @@ open Formal.ActionCostNonneg
 open Formal.InventoryChainSafe
 open Formal.Phase7Invariants
 open Formal.StoreWarmup
+open Formal.WinnableCascade
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1142,6 +1143,32 @@ def runStoreWarmup (args : Array Json) : Json :=
     Json.mkObj [("rate_num", Json.num r.num),
                 ("rate_den", Json.num (Int.ofNat r.den))]
 
+/-- Encode an `Option String` as JSON (None → null, Some s → string). -/
+def optStrToJson : Option String → Json
+  | none => Json.null
+  | some s => Json.str s
+
+/-- Decode a small-int code → `Option String` for the cascade diff.
+0 → none; 1 → "A"; 2 → "B"; 3 → "C"; any other → none. -/
+def codeToOptStr : Int → Option String
+  | 0 => none
+  | 1 => some "A"
+  | 2 => some "B"
+  | 3 => some "C"
+  | _ => none
+
+/-- Compute one winnable_cascade result via the SAME proved
+`winnableFarmTargetPure`.
+args: [taskCode, pathCode, pathWinnable(0/1), pickCode]
+    where *Code is the small-int encoding above. -/
+def runWinnableCascade (args : Array Json) : Json :=
+  let i : Formal.WinnableCascade.CascadeInputs :=
+    { taskMonster := codeToOptStr (intArg args 0)
+      pathMonster := codeToOptStr (intArg args 1)
+      pathWinnable := intArg args 2 != 0
+      pickWinnable := codeToOptStr (intArg args 3) }
+  Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1228,6 +1255,8 @@ def runOne (item : Json) : Json :=
     runPhase7Invariants args
   else if kind == "store_warmup" then
     runStoreWarmup args
+  else if kind == "winnable_cascade" then
+    runWinnableCascade args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

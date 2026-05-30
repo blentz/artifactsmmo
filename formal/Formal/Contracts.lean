@@ -31,6 +31,7 @@ import Formal.Phase7Invariants
 import Formal.Phase8Invariants
 import Formal.StoreWarmup
 import Formal.GameDataAccessors
+import Formal.WinnableCascade
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1603,3 +1604,45 @@ defaults make `predictWinLite_buggy` return True on an unknown monster. -/
 example : Formal.GameDataAccessors.predictWinLite_buggy [] [] "unknown_monster" 1
     = true :=
   Formal.GameDataAccessors.predictWinLite_buggy_unknown_returns_true
+
+/-! ### Phase-11 (Target A): Player._winnable_farm_target cascade -/
+
+/-- Statement-pin: task tier wins outright (winnable check bypassed). -/
+example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (t : String),
+    i.taskMonster = some t →
+    Formal.WinnableCascade.winnableFarmTargetPure i = some t :=
+  @Formal.WinnableCascade.task_wins
+
+/-- Statement-pin: path tier wins when task absent and path is winnable. -/
+example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
+    i.taskMonster = none →
+    i.pathMonster = some p →
+    i.pathWinnable = true →
+    Formal.WinnableCascade.winnableFarmTargetPure i = some p :=
+  @Formal.WinnableCascade.path_wins_when_winnable
+
+/-- Statement-pin: pick tier wins when path absent. -/
+example : ∀ (i : Formal.WinnableCascade.CascadeInputs),
+    i.taskMonster = none →
+    i.pathMonster = none →
+    Formal.WinnableCascade.winnableFarmTargetPure i = i.pickWinnable :=
+  @Formal.WinnableCascade.pick_wins_when_no_path
+
+/-- Statement-pin: pick tier wins when path is present but not winnable
+(safety: cascade never returns a non-winnable path monster). -/
+example : ∀ (i : Formal.WinnableCascade.CascadeInputs),
+    i.taskMonster = none →
+    i.pathWinnable = false →
+    Formal.WinnableCascade.winnableFarmTargetPure i = i.pickWinnable :=
+  @Formal.WinnableCascade.pick_wins_when_path_not_winnable
+
+/-- Statement-pin: contrapositive safety — if the cascade returns a path
+monster that is not in the pick fallback, the path must have been
+winnable. -/
+example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
+    i.taskMonster = none →
+    i.pathMonster = some p →
+    Formal.WinnableCascade.winnableFarmTargetPure i = some p →
+    i.pickWinnable ≠ some p →
+    i.pathWinnable = true :=
+  @Formal.WinnableCascade.path_result_was_winnable

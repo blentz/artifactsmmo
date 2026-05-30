@@ -49,6 +49,7 @@ STORE_WARMUP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "stor
 BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
 GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -826,6 +827,27 @@ EXPAND_BANK_GOAL_MUTATIONS = [
 ]
 
 
+# winnable_cascade mutations (Phase 11 Target A: 3-tier combat-target
+# precedence cascade extracted from Player._winnable_farm_target). The
+# differential test must kill every reordering of the tiers.
+WINNABLE_CASCADE_MUTATIONS = [
+    # Mutation 1: ignore task_monster (drop tier 1 entirely).
+    ("winnable_cascade: skip task tier (drop early-return)",
+     "    if inputs.task_monster is not None:\n        return inputs.task_monster\n",
+     ""),
+    # Mutation 2: invert the winnable check on the path tier so a NON-winnable
+    # path monster gets returned (the load-bearing safety violation).
+    ("winnable_cascade: invert path winnable check",
+     "    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n",
+     "    if inputs.path_monster is not None and not inputs.path_winnable:\n        return inputs.path_monster\n"),
+    # Mutation 3: swap tier 2 and tier 3 — return pick_winnable first,
+    # demoting the path projection. Violates the documented precedence.
+    ("winnable_cascade: swap path and pick tiers",
+     "    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n    return inputs.pick_winnable\n",
+     "    if inputs.pick_winnable is not None:\n        return inputs.pick_winnable\n    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n    return None\n"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -867,6 +889,7 @@ _ALL_SRCS = [
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     GAME_DATA_SRC,
+    WINNABLE_CASCADE_SRC,
 ]
 
 
@@ -1403,6 +1426,8 @@ def main() -> int:
               "tests/test_ai/test_goals_expand_bank.py", survivors)
     run_group(GAME_DATA_SRC, GAME_DATA_MUTATIONS,
               "formal/diff/test_game_data_accessors_diff.py", survivors)
+    run_group(WINNABLE_CASCADE_SRC, WINNABLE_CASCADE_MUTATIONS,
+              "formal/diff/test_winnable_cascade_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

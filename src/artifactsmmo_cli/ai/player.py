@@ -64,6 +64,7 @@ from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
+from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
     CharacterObjective,
@@ -1088,13 +1089,27 @@ class GamePlayer:
         return s.task_code
 
     def _winnable_farm_target(self) -> str | None:
+        # Lazy short-circuit preserved: task wins outright; otherwise we
+        # only consult the path projection / global winnable scan.
         task_monster = self._task_aligned_monster()
         if task_monster is not None:
-            return task_monster
-        target = self._path_aligned_monster()
-        if target is None or not self._is_winnable(target):
-            target = self._pick_winnable_monster()
-        return target
+            return winnable_farm_target_pure(CascadeInputs(
+                task_monster=task_monster,
+                path_monster=None,
+                path_winnable=False,
+                pick_winnable=None,
+            ))
+        path_monster = self._path_aligned_monster()
+        path_winnable = path_monster is not None and self._is_winnable(path_monster)
+        # `pick_winnable` is only consulted when the path tier fails — match
+        # the original eager-but-short-circuited evaluation.
+        pick = self._pick_winnable_monster() if not path_winnable else None
+        return winnable_farm_target_pure(CascadeInputs(
+            task_monster=None,
+            path_monster=path_monster,
+            path_winnable=path_winnable,
+            pick_winnable=pick,
+        ))
 
     def _maybe_retry_bank(self) -> None:
         """Periodically retry bank access after an achievement gate failure
