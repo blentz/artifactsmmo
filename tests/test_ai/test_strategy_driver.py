@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
@@ -230,6 +231,7 @@ def _make_planner_gd() -> GameData:
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     gd._resource_drops = {}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -268,6 +270,7 @@ def test_select_returns_objective_step_when_calm():
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     gd._resource_drops = {}
+    fill_monster_stat_defaults(gd)
     # Level 1 char with HP full, no task (so AcceptTask would fire as discretionary,
     # but chosen_step goal (GrindCharacterXP) appears before discretionary).
     # Use xp=0 and initial_xp=0 to make GrindXP not satisfied.
@@ -338,6 +341,7 @@ def test_select_never_suppresses_task_cancel(tmp_path):
     # TASK_CANCEL fires (requires a non-None history). No FightAction is given so
     # nothing else plans, forcing the walk to reach the (suppressed) TaskCancel.
     gd._monster_level["dragon"] = 50
+    fill_monster_stat_defaults(gd)
     store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
     try:
         state = make_state(level=5, hp=150, max_hp=150, task_code="dragon",

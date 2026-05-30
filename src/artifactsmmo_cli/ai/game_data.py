@@ -223,27 +223,43 @@ class GameData:
         return round(raw * penalty * multiplier * wisdom_bonus)
 
     def monster_attack(self, code: str) -> dict[str, int]:
-        """{element: attack_value} for the monster, or empty dict."""
-        return self._monster_attack.get(code, {})
+        """{element: attack_value} for the monster. Raises `KeyError` when the
+        monster is unknown — CLAUDE.md "use only API data or fail with an error":
+        silent zero-default would make `predict_win` say True for any unknown
+        monster (zero-attack, zero-hp ⇒ player_first ∧ monster_hit=0 ⇒ True).
+        Single locus: callers iterate over `_monster_level` (the known set);
+        no try/except needed."""
+        return self._monster_attack[code]
 
     def monster_resistance(self, code: str) -> dict[str, int]:
-        """{element: resistance_pct} for the monster, or empty dict."""
-        return self._monster_resistance.get(code, {})
+        """{element: resistance_pct} for the monster. Raises `KeyError` when
+        unknown — see `monster_attack` for rationale."""
+        return self._monster_resistance[code]
 
     def monster_hp(self, code: str) -> int:
-        """Max HP of a monster, or 0 when unknown."""
-        return self._monster_hp.get(code, 0)
+        """Max HP of a monster. Raises `KeyError` when unknown — silent zero
+        would make `rounds_to_kill = ceil(0 / player_hit) = 0`, defeating the
+        beatability verdict."""
+        return self._monster_hp[code]
 
     def monster_critical_strike(self, code: str) -> int:
-        """Critical-strike chance % of a monster, or 0 when unknown."""
-        return self._monster_critical_strike.get(code, 0)
+        """Critical-strike chance % of a monster. Raises `KeyError` when
+        unknown — see `monster_attack`."""
+        return self._monster_critical_strike[code]
 
     def monster_initiative(self, code: str) -> int:
-        """Initiative (turn-order) stat of a monster, or 0 when unknown."""
-        return self._monster_initiative.get(code, 0)
+        """Initiative (turn-order) stat of a monster. Raises `KeyError` when
+        unknown — see `monster_attack`."""
+        return self._monster_initiative[code]
 
     def monster_level(self, code: str) -> int:
-        """Level of a monster."""
+        """Level of a monster, or 0 when unknown.
+
+        Invariant-OK silent default: every caller (FightAction.is_applicable,
+        task_feasibility, unlock_bank, reach_unlock_level, tiers/guards) treats
+        `0` as a documented "not a known monster" probe. Changing this to
+        raise would force adding try/except in 5 places (multiple-error-handling
+        antipattern). The probe semantics is the contract."""
         return self._monster_level.get(code, 0)
 
     def best_consumable(self, inventory: dict[str, int]) -> tuple[str, int] | None:

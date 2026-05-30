@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     root_cost,
     unmet_closure_size,
 )
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -47,6 +48,7 @@ def _gd() -> GameData:
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -110,6 +112,7 @@ def test_personality_reweighting_changes_choice():
     # SkillFirst (10x weight): weaponcrafting=0.6*0.2*1.5*10=1.8 > 1.0 → skill wins.
     gd = GameData()
     gd._monster_level = {"chicken": 1}  # char level reachable (combat-capable)
+    fill_monster_stat_defaults(gd)
     obj = CharacterObjective.from_game_data(gd)
     skill_levels = {s: 1 for s in obj.target_skill_levels}
     skill_levels["alchemy"] = 5  # make alchemy the leader so others are laggards
@@ -148,6 +151,7 @@ def test_decide_skips_blocked_unmet_root():
     # but has no actionable step, so decide skips it (the `step is None` path).
     gd = GameData()
     gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
     gd._item_stats = {"cursed_blade": ItemStats(code="cursed_blade", level=1, type_="weapon", attack={"f": 5})}
     gd._crafting_recipes = {"cursed_blade": {"cursed_blade": 1}}
     obj = CharacterObjective.from_game_data(gd)
@@ -203,6 +207,7 @@ def _reach_gd():
     gd._resource_drops = {"iron_rocks": "iron_ore"}
     gd._resource_skill = {"iron_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -241,6 +246,7 @@ def test_is_reachable_skill_and_char_level():
 def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon():
     gd = GameData()
     gd._monster_level = {"dragon": 40}
+    fill_monster_stat_defaults(gd)
     gd._item_stats = {"drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 9})}
     assert is_reachable(ReachCharLevel(50), make_state(level=1), gd) is False
 
@@ -268,6 +274,7 @@ def test_decide_skips_root_unreachable_in_current_game_data():
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
     gd_empty = GameData()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
+    fill_monster_stat_defaults(gd_empty)
     d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd_empty)
     assert all("iron_helm" not in rs.root_repr for rs in d.ranking)
 

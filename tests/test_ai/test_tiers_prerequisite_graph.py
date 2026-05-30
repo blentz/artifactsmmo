@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     prerequisites,
 )
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -24,6 +25,7 @@ def _gd() -> GameData:
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1, "dragon": 40}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -59,6 +61,7 @@ def test_reach_char_level_leaf_when_combat_capable():
 def test_reach_char_level_needs_weapon_when_underequipped():
     gd = GameData()
     gd._monster_level = {"dragon": 40}  # nothing beatable at level 1
+    fill_monster_stat_defaults(gd)
     gd._item_stats = {"iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon", attack={"fire": 30})}
     prereqs = prerequisites(ReachCharLevel(50), make_state(level=1), gd)
     assert prereqs == [ObtainItem("iron_sword")]
@@ -67,6 +70,7 @@ def test_reach_char_level_needs_weapon_when_underequipped():
 def test_reach_char_level_leaf_when_no_weapon_exists():
     gd = GameData()
     gd._monster_level = {"dragon": 40}
+    fill_monster_stat_defaults(gd)
     assert prerequisites(ReachCharLevel(50), make_state(level=1), gd) == []
 
 

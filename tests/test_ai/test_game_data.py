@@ -773,8 +773,24 @@ def test_monster_combat_getters_return_stored_values():
     assert gd.monster_initiative("chicken") == 100
 
 
-def test_monster_combat_getters_default_zero_when_unknown():
+def test_monster_combat_getters_raise_when_unknown():
+    """Phase-9 REAL BUG #16 fix: silent zero defaults masked
+    `predict_win` saying True for any unknown monster (zero-attack,
+    zero-hp ⇒ player_first ∧ monster_hit=0 ⇒ True). Accessors now raise
+    KeyError instead of silently returning 0/{} — the single-locus
+    enforcement of "use only API data or fail with an error"."""
     gd = GameData()
-    assert gd.monster_hp("missing") == 0
-    assert gd.monster_critical_strike("missing") == 0
-    assert gd.monster_initiative("missing") == 0
+    with pytest.raises(KeyError):
+        gd.monster_hp("missing")
+    with pytest.raises(KeyError):
+        gd.monster_critical_strike("missing")
+    with pytest.raises(KeyError):
+        gd.monster_initiative("missing")
+    with pytest.raises(KeyError):
+        gd.monster_attack("missing")
+    with pytest.raises(KeyError):
+        gd.monster_resistance("missing")
+    # monster_level KEEPS the silent zero default — it's a documented probe
+    # used by consumers as the "is this code a known monster?" gate, NOT a
+    # value-bearing accessor. See game_data.py:monster_level docstring.
+    assert gd.monster_level("missing") == 0

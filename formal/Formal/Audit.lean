@@ -346,3 +346,16 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Phase8Invariants.accept_pending_refused
 #print axioms Formal.Phase8Invariants.claim_value_pos_iff_pending
 #print axioms Formal.Phase8Invariants.claim_value_pos_with_full_bag_witness
+#print axioms Formal.GameDataAccessors.accessor_some_iff_present
+#print axioms Formal.GameDataAccessors.accessor_none_iff_absent
+#print axioms Formal.GameDataAccessors.accessor_some_value
+#print axioms Formal.GameDataAccessors.silentDefault_absent_returns_default
+#print axioms Formal.GameDataAccessors.silentDefault_present_returns_value
+#print axioms Formal.GameDataAccessors.predictWinLite_buggy_unknown_returns_true
+#print axioms Formal.GameDataAccessors.accessor_unknown_returns_none
+#print axioms Formal.GameDataAccessors.accessor_present_witness
+#print axioms Formal.GameDataAccessors.accessor_absent_witness
+#print axioms Formal.GameDataAccessors.silentDefault_absent_witness
+#print axioms Formal.GameDataAccessors.silentDefault_present_witness
+#print axioms Formal.GameDataAccessors.monsterLevelProbe_absent_returns_zero
+#print axioms Formal.GameDataAccessors.monsterLevelProbe_present_returns_value

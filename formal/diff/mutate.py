@@ -48,6 +48,7 @@ EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 STORE_WARMUP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store_warmup_core.py"
 BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
+GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -865,6 +866,7 @@ _ALL_SRCS = [
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
+    GAME_DATA_SRC,
 ]
 
 
@@ -1271,6 +1273,25 @@ STORE_WARMUP_MUTATIONS = [
 ]
 
 
+# game_data accessor mutations -- REAL BUG #16. Each resurrects the
+# silent-default pattern on one of the five raise-accessors, or inverts the
+# raise/return logic. Killed by formal/diff/test_game_data_accessors_diff.py.
+GAME_DATA_MUTATIONS = [
+    # Mutation 1: resurrect silent {} default on monster_attack.
+    ("game_data: monster_attack silent {} default resurrected",
+     "        return self._monster_attack[code]",
+     "        return self._monster_attack.get(code, {})"),
+    # Mutation 2: resurrect silent 0 default on monster_hp.
+    ("game_data: monster_hp silent 0 default resurrected",
+     "        return self._monster_hp[code]",
+     "        return self._monster_hp.get(code, 0)"),
+    # Mutation 3: invert monster_initiative — silently return absent codes as 9999.
+    ("game_data: monster_initiative inverted (silent 9999 default)",
+     "        return self._monster_initiative[code]",
+     "        return self._monster_initiative.get(code, 9999)"),
+]
+
+
 def _assert_sources_clean() -> None:
     """Abort if any mutation target is already dirty in git. The runner mutates
     production source in place and restores it in `finally`; a previous run killed
@@ -1380,6 +1401,8 @@ def main() -> int:
               "formal/diff/test_bank_expansion_diff.py", survivors)
     run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_GOAL_MUTATIONS,
               "tests/test_ai/test_goals_expand_bank.py", survivors)
+    run_group(GAME_DATA_SRC, GAME_DATA_MUTATIONS,
+              "formal/diff/test_game_data_accessors_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

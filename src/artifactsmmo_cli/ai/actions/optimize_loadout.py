@@ -33,7 +33,14 @@ class OptimizeLoadoutAction(Action):
     game_data: GameData | None = field(default=None, repr=False, compare=False)
 
     def _swap_plan(self, state: WorldState, game_data: GameData) -> dict[str, str | None]:
-        """Slots that would change in the optimal loadout. Empty when nothing to do."""
+        """Slots that would change in the optimal loadout. Empty when nothing to do.
+
+        Empty `target_monster_code` is the documented "no target" sentinel — no
+        swap is computed (would raise from the post-Phase-9 monster_attack
+        accessor, which only knows real monster codes). This single-locus check
+        is the action's precondition, not multi-level error handling."""
+        if not self.target_monster_code:
+            return {}
         optimal = pick_loadout(self.target_monster_code, state, game_data)
         return {
             slot: new_code

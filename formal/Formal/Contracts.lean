@@ -30,6 +30,7 @@ import Formal.ApplyBaseline
 import Formal.Phase7Invariants
 import Formal.Phase8Invariants
 import Formal.StoreWarmup
+import Formal.GameDataAccessors
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -1575,3 +1576,30 @@ example : ∀ (b : Formal.Phase8Invariants.BankProj) (n : Nat),
     Formal.Phase8Invariants.expandBankIsSatisfied
       (Formal.Phase8Invariants.buyBankExpansionApplyPreFixN b n) = false :=
   @Formal.Phase8Invariants.bank_expansion_pre_fix_projection_gap
+
+/-! ### Phase-9 (REAL BUG #16): GameDataAccessors -/
+
+/-- Statement-pin: post-fix accessor returns `some` iff key is present. -/
+example : ∀ {α : Type} (m : Formal.GameDataAccessors.Lookup α) (k : String),
+    (Formal.GameDataAccessors.accessor m k).isSome ↔
+      Formal.GameDataAccessors.present m k :=
+  @Formal.GameDataAccessors.accessor_some_iff_present
+
+/-- Statement-pin: post-fix accessor returns `none` iff key is absent
+(modelling the Python `KeyError` raise). -/
+example : ∀ {α : Type} (m : Formal.GameDataAccessors.Lookup α) (k : String),
+    Formal.GameDataAccessors.accessor m k = none ↔
+      ¬ Formal.GameDataAccessors.present m k :=
+  @Formal.GameDataAccessors.accessor_none_iff_absent
+
+/-- Statement-pin: pre-fix bug pattern: absent key ⇒ returns the default. -/
+example : ∀ {α : Type} (m : Formal.GameDataAccessors.Lookup α) (k : String)
+    (default : α), ¬ Formal.GameDataAccessors.present m k →
+      Formal.GameDataAccessors.silentDefaultAccessor m k default = default :=
+  @Formal.GameDataAccessors.silentDefault_absent_returns_default
+
+/-- Statement-pin: load-bearing bug counterexample. The pre-fix silent-zero
+defaults make `predictWinLite_buggy` return True on an unknown monster. -/
+example : Formal.GameDataAccessors.predictWinLite_buggy [] [] "unknown_monster" 1
+    = true :=
+  Formal.GameDataAccessors.predictWinLite_buggy_unknown_returns_true

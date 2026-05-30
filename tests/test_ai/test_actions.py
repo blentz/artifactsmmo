@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import _delete_cost
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -50,6 +51,7 @@ def make_game_data(
     gd._crafting_recipes = recipes or {}
     gd._resource_skill = resource_skills or {}
     gd._monster_level = monster_levels or {}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -893,6 +895,8 @@ def test_fight_action_cost_uses_history_when_provided():
         action = FightAction(monster_code="yellow_slime", locations=frozenset({(1, 1)}))
         state = make_state(x=1, y=1, hp=100, max_hp=100)
         gd = GameData()
+        gd._monster_level = {"yellow_slime": 2}
+        fill_monster_stat_defaults(gd)
         assert repr(action) == "Fight(yellow_slime)"
         assert action.cost(state, gd, history=store) == 25.0
         static_cost = action.cost(state, gd, history=None)
@@ -924,10 +928,13 @@ def test_fight_action_cost_penalises_low_success_rate():
             ))
         action = FightAction(monster_code="z", locations=frozenset({(1, 1)}))
         state = make_state(x=1, y=1, hp=100, max_hp=100)
+        gd = GameData()
+        gd._monster_level = {"z": 1}
+        fill_monster_stat_defaults(gd)
         # learned cost = 10.0 (only ok cycles counted in action_cost)
         # success_rate = 0.5 (5 ok / 10 total)
         # cost = 10.0 / 0.5 = 20.0
-        assert action.cost(state, GameData(), history=store) == 20.0
+        assert action.cost(state, gd, history=store) == 20.0
         store.close()
     finally:
         if os.path.exists(path):

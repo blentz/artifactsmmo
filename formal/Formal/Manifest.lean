@@ -340,6 +340,20 @@ open Formal.PriorityBand
 #check @Formal.Phase7Invariants.inventoryFree_empty
 #check @Formal.Phase7Invariants.inventoryFree_at_full_is_zero
 #check @Formal.Phase7Invariants.hpPercent_max_hp_zero_witness
+-- GameDataAccessors required roles (Phase-9 REAL BUG #16: silent monster-stat defaults):
+#check @Formal.GameDataAccessors.accessor_some_iff_present       -- post-fix contract: present ↔ some
+#check @Formal.GameDataAccessors.accessor_none_iff_absent        -- post-fix contract: absent ↔ none
+#check @Formal.GameDataAccessors.accessor_some_value             -- post-fix: returned value is the stored value
+#check @Formal.GameDataAccessors.silentDefault_absent_returns_default -- pre-fix bug: absent ⇒ default (masks raise)
+#check @Formal.GameDataAccessors.silentDefault_present_returns_value  -- pre-fix bug: present ⇒ value (bug latent)
+#check @Formal.GameDataAccessors.predictWinLite_buggy_unknown_returns_true -- LOAD-BEARING bug counterexample
+#check @Formal.GameDataAccessors.accessor_unknown_returns_none   -- post-fix anchors the bug fix
+#check @Formal.GameDataAccessors.accessor_present_witness        -- boundary: present returns value
+#check @Formal.GameDataAccessors.accessor_absent_witness         -- boundary: absent returns none
+#check @Formal.GameDataAccessors.silentDefault_absent_witness    -- boundary: silent default = default on absent
+#check @Formal.GameDataAccessors.silentDefault_present_witness   -- boundary: silent default = value on present
+#check @Formal.GameDataAccessors.monsterLevelProbe_absent_returns_zero -- monster_level retains silent zero (probe)
+#check @Formal.GameDataAccessors.monsterLevelProbe_present_returns_value -- monster_level retains stored value
 -- StoreWarmup required roles (Phase-7 Target F: LearningStore warmup gates):
 #check @Formal.StoreWarmup.warmupGatedMedian_below_gate
 #check @Formal.StoreWarmup.warmupGatedMedian_at_or_above_gate

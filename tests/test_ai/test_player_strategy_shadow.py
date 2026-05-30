@@ -4,6 +4,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.tracer import Tracer
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -21,6 +22,7 @@ class _CaptureTracer(Tracer):
 def _gd() -> GameData:
     gd = GameData()
     gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
