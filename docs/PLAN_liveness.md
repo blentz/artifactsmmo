@@ -224,7 +224,9 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 20b-v2 | Per-MeansKind firing lemma (16/17 in `Formal/Liveness/MeansFiring.lean`; objectiveStep gap turned out load-bearing — see 20d-v2 finding). | DONE_WITH_GAPS | 311c1d8 |
 | 20c-v2 | Headline `productionLadder_total_under_invariants` over `LadderTotalInvariants` (taskValid + pursueFiresWhenInProgress). Invariant 2 FALSIFIED by 20d-v2 differential. | RETRACTED-pending-fix | e4f0a7c |
 | 20d-v2 | Python adversarial differential FOUND THE BUG: pursueFiresWhenInProgress false in 351/400 items-task-in-progress samples; production survives via OBJECTIVE_STEP (the very opaque Bool I deferred). | DONE | fb20ade |
-| 20e-v2 | **Bug-fix work, structural**: model `objectiveStepFires` non-opaquely (from StrategyEngine `chosen_step` derivation); restate Phase 20c-v2 headline as `pursueOrObjectiveFiresWhenInProgress`; characterize when `chosen_step = None` AND no other tier fires (potential REAL production deadlock window); fix production if such window exists. | TODO | — |
+| 20e-v2 step 1 | Adversarial Python differential FOUND real production deadlock (items-task + history=None + no-winnable-monster). FIXED in production: empty-store default + WaitGoal fallback in DISCRETIONARY_ORDER. + pre-existing `FightAction.cost` LOADOUT_PENALTY shape-mismatch bug fixed. | DONE | 3a01ca2 + d9918db |
+| 20e-v2 step 2 | Lean unconditional headline `productionLadder_total : ∀ s, productionLadder s ≠ none` mirrors WaitGoal fix; LadderTotalInvariants deleted; 18-constructor MeansKind. | DONE | 2c0edb0 |
+| 20 (closed) | **Tier 2 done.** Production: never deadlocks (WaitGoal sentinel). Lean: unconditional theorem proves it. Structural mirror at 18 constructors. | DONE | 2c0edb0 |
 | 21  | Tier 3 — plan exists per firing goal | TODO | — |
 | 22  | Cycle loop in Lean | TODO | — |
 | 23  | Tier 4 — cumulative progress | TODO | — |
