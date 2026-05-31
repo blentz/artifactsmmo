@@ -30,22 +30,33 @@ class TestPlayCommandWiring:
     """Test that the play command wires its collaborators correctly."""
 
     def test_plain_run_uses_null_tracer_no_store(self, runner):
-        """Without --trace/--learn the player gets a NullTracer and no history."""
+        """Without --trace/--learn the player gets a NullTracer and an
+        in-memory LearningStore (Phase 20e-v2 prodfix: history is always
+        present so history-gated tier predicates can evaluate; with
+        ``--learn`` absent the store is ephemeral so no disk persistence)."""
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
             mock_player = Mock()
             mock_player_cls.return_value = mock_player
+            with patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls:
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
 
-            result = runner.invoke(app, ["hero"])
+                result = runner.invoke(app, ["hero"])
 
-            assert result.exit_code == 0
-            mock_player.run.assert_called_once_with()
-            # GamePlayer constructed with NullTracer and no history store.
-            kwargs = mock_player_cls.call_args.kwargs
-            assert kwargs["character"] == "hero"
-            assert isinstance(kwargs["tracer"], NullTracer)
-            assert kwargs["history"] is None
-            assert kwargs["verbose"] is False
-            assert kwargs["dry_run"] is False
+                assert result.exit_code == 0
+                mock_player.run.assert_called_once_with()
+                # GamePlayer constructed with NullTracer and an in-memory store.
+                kwargs = mock_player_cls.call_args.kwargs
+                assert kwargs["character"] == "hero"
+                assert isinstance(kwargs["tracer"], NullTracer)
+                assert kwargs["history"] is mock_store
+                assert kwargs["verbose"] is False
+                assert kwargs["dry_run"] is False
+                mock_store_cls.assert_called_once_with(
+                    db_path=":memory:", character="hero")
+                mock_store.start_session.assert_called_once_with()
+                mock_store.end_session.assert_called_once_with(exit_reason="normal")
+                mock_store.close.assert_called_once_with()
 
     def test_verbose_and_dry_run_flags_forwarded(self, runner):
         """--verbose and --dry-run are passed through to the GamePlayer."""

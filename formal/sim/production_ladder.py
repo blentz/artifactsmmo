@@ -56,6 +56,7 @@ class LadderMeans(Enum):
     TASK_EXCHANGE = "task_exchange"
     SELL_IDLE = "sell_idle"
     BANK_EXPAND = "bank_expand"
+    WAIT = "wait"
 
 
 ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
@@ -76,6 +77,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.TASK_EXCHANGE,
     LadderMeans.SELL_IDLE,
     LadderMeans.BANK_EXPAND,
+    LadderMeans.WAIT,
 )
 
 
@@ -99,6 +101,7 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.TASK_EXCHANGE: MeansKind.TASK_EXCHANGE,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.BANK_EXPAND: MeansKind.BANK_EXPAND,
+    LadderMeans.WAIT: MeansKind.WAIT,
 }
 
 # Sanity: GUARD_ORDER and COLLECT/DISCRETIONARY ORDER align with the
@@ -126,6 +129,7 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.TASK_EXCHANGE,
     MeansKind.SELL_IDLE,
     MeansKind.BANK_EXPAND,
+    MeansKind.WAIT,
 ), "DISCRETIONARY_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 

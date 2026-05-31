@@ -29,6 +29,7 @@ class MeansKind(Enum):
     TASK_EXCHANGE = "task_exchange"
     SELL_IDLE = "sell_idle"
     BANK_EXPAND = "bank_expand"
+    WAIT = "wait"
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -44,6 +45,7 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.TASK_EXCHANGE,
     MeansKind.SELL_IDLE,
     MeansKind.BANK_EXPAND,
+    MeansKind.WAIT,
 )
 
 
@@ -109,6 +111,12 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         if fill < BANK_EXPAND_FILL:
             return False
         return state.gold >= game_data._next_expansion_cost
+
+    if kind is MeansKind.WAIT:
+        # Always-firing last-resort. Position-last in DISCRETIONARY_ORDER
+        # ensures every other means gets a chance before this candidate is
+        # considered by select_pure's positional walk.
+        return True
 
     return False  # pragma: no cover — exhaustive over MeansKind enum
 

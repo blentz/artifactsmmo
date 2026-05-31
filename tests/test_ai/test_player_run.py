@@ -162,8 +162,14 @@ class TestPlayerRun:
         assert player.state is not None
 
     def test_run_no_plan_sleeps(self):
-        """When no plan is found, run() sleeps for 5s."""
+        """When no plan is found, run() sleeps for 5s.
+
+        WaitGoal is the always-firing last-resort means; this test
+        suppresses it (via _suppressed_goals) so the no-plan path
+        downstream of an empty actions list is still reachable.
+        """
         player = GamePlayer(character="hero")
+        player._suppressed_goals["Wait"] = 999
         client = MagicMock()
 
         call_count = [0]
@@ -191,8 +197,11 @@ class TestPlayerRun:
         mock_sleep.assert_called_with(5)
 
     def test_run_verbose_logs_no_plan(self, capsys):
-        """run() logs 'No plan found' when no goal can be planned (empty actions)."""
+        """run() logs 'No plan found' when no goal can be planned (empty actions).
+
+        WaitGoal suppressed so the no-plan branch remains reachable."""
         player = GamePlayer(character="hero", verbose=True)
+        player._suppressed_goals["Wait"] = 999
         client = MagicMock()
 
         call_count = [0]
@@ -338,6 +347,9 @@ def test_run_calls_handle_stuck_in_no_plan_path():
     in the no-plan branch fires NO_PROGRESS → calls _handle_stuck → increments the level.
     """
     player = GamePlayer(character="hero")
+    # Suppress WaitGoal so the no-plan branch remains reachable; without
+    # this the always-firing WaitGoal would short-circuit the path under test.
+    player._suppressed_goals["Wait"] = 999
     client = MagicMock()
 
     # Pre-seed detector with 3 no-plan records (one short of the NO_PROGRESS threshold of 4)

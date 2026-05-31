@@ -434,9 +434,16 @@ def test_productionLadder_falsifiable_without_objective_step(
 # Sanity / mirror tests
 # ---------------------------------------------------------------------------
 
-def test_ladder_has_17_entries() -> None:
-    """Mirror sanity: the Python ladder matches the Lean 17-element list."""
-    assert len(ALL_IN_LADDER_ORDER) == 17
+def test_ladder_has_18_entries() -> None:
+    """Mirror sanity: Python ladder matches the Lean 17-element list plus
+    the new WAIT last-resort fallback (Phase 20e-v2 prodfix).
+
+    Lean side still has 17 entries; the WAIT extension is production-only
+    until the Lean ladder catches up. The diff tests treat WAIT as
+    end-of-ladder so the Lean disjunctive headline (any of the 17 fires
+    OR objective step) is unaffected — WAIT is below objective in
+    discretionary order and only fires when nothing else does."""
+    assert len(ALL_IN_LADDER_ORDER) == 18
 
 
 def test_no_task_state_acceptTask_fires() -> None:
@@ -509,6 +516,28 @@ def test_history_None_makes_pursue_inert() -> None:
         "Production should NOT fire PURSUE_TASK when history is None — "
         "if this assert flips, the Lean invariant pursueFiresWhenInProgress "
         "got cheaper to discharge."
+    )
+
+
+@settings(max_examples=800, suppress_health_check=[HealthCheck.too_slow])
+@given(state=_arbitrary_states(), ctx=_ctx())
+def test_productionLadder_unconditionally_total(
+    state: WorldState, ctx: SelectionContext
+) -> None:
+    """Phase 20e-v2 prodfix headline: with the WAIT last-resort means in
+    DISCRETIONARY_ORDER, `productionLadder` is total — it ALWAYS returns
+    SOME LadderMeans, irrespective of `objective_step_fires`, history
+    presence, or task state. This is the production guarantee that backs
+    "the bot never stalls on No plan found".
+
+    A failure here means the WAIT means did not fire (means.py:_fires WAIT
+    branch regressed) or production_ladder lost its WAIT entry."""
+    gd = _empty_gd()
+    history = None
+    result = production_ladder(state, gd, history, ctx, objective_step_fires=False)
+    assert result is not None, (
+        "WAIT last-resort means did NOT fire — productionLadder regressed. "
+        f"state={state}"
     )
 
 

@@ -46,12 +46,21 @@ def play(
         tracer = FileTracer(path)
         print(f"Tracing to {path}")
 
-    store: LearningStore | None = None
+    # An in-memory LearningStore is always constructed when --learn is absent so
+    # that history-gated tier predicates (PURSUE_TASK, TASK_CANCEL,
+    # LOW_YIELD_CANCEL) remain evaluable. With history=None they short-circuit
+    # to False; an items task + no winnable monster then leaves the discretionary
+    # tier empty and the bot stalls indefinitely on "No plan found — waiting 5s".
+    # The ephemeral SQLite store has zero observations, so history-gated
+    # predicates still behave conservatively, but tier dispatch can run.
+    store: LearningStore
     if learn:
         db_path = learn_db or default_learn_db_path()
         store = LearningStore(db_path=db_path, character=character)
-        store.start_session()
         print(f"Learning enabled - DB at {db_path}")
+    else:
+        store = LearningStore(db_path=":memory:", character=character)
+    store.start_session()
 
     player = GamePlayer(
         character=character, verbose=verbose, dry_run=dry_run,
@@ -68,9 +77,8 @@ def play(
         exit_reason = "keyboard_interrupt"
         raise
     finally:
-        if store is not None:
-            store.end_session(exit_reason=exit_reason)
-            store.close()
+        store.end_session(exit_reason=exit_reason)
+        store.close()
 
 
 def _run_with_tui(player: GamePlayer, character: str) -> None:

@@ -26,6 +26,8 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.task_batch import task_batch_size
@@ -101,6 +103,8 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         return TaskExchangeGoal(min_coins=ctx.task_exchange_min_coins)
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(bank_accessible=ctx.bank_accessible, game_data=game_data)
+    if kind is MeansKind.WAIT:
+        return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")
 
 
@@ -160,7 +164,24 @@ class StrategyArbiter:
         game_data: GameData,
         actions: list[Action],
     ) -> list[Action]:
-        """Attempt to plan goal; record attempt in goals_tried; return plan ([] = failed)."""
+        """Attempt to plan goal; record attempt in goals_tried; return plan ([] = failed).
+
+        WaitGoal is special-cased: it is never satisfiable (is_satisfied always
+        False) and its only action (WaitAction) is a no-op on WorldState, so
+        A* would never terminate via the planner. Short-circuit to a
+        single-step [WaitAction()] plan so the last-resort fallback always
+        provides a firing candidate to select_pure.
+        """
+        if isinstance(goal, WaitGoal):
+            wait_plan: list[Action] = [WaitAction()]
+            self.goals_tried.append({
+                "goal": repr(goal),
+                "nodes": 0,
+                "depth": 1,
+                "timed_out": False,
+                "plan_len": 1,
+            })
+            return wait_plan
         plan = self._planner.plan(state, goal, actions, game_data, self._history)
         stats = self._planner.last_stats
         self.goals_tried.append({

@@ -303,7 +303,12 @@ def test_select_falls_through_unplannable_to_next():
 
 
 def test_select_returns_none_when_nothing_plans():
-    """No plannable goal → (None, [], goals_tried)."""
+    """No plannable goal → (None, [], goals_tried).
+
+    WaitGoal is suppressed because it is the always-firing last-resort
+    means added in Phase 20e-v2; without suppression it would always
+    short-circuit this path.
+    """
     planner = GOAPPlanner()
     gd = _make_planner_gd()
     state = make_state(hp=150, max_hp=150, task_code="chicken", task_type="monster",
@@ -312,7 +317,8 @@ def test_select_returns_none_when_nothing_plans():
     ctx = _ctx()
     arbiter = StrategyArbiter(planner, history=None)
     decision = _FakeDecision(chosen_step=None)
-    goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, ctx)
+    goal, plan, goals_tried = arbiter.select(
+        decision, state, gd, actions, ctx, suppressed={"Wait"})
     assert goal is None
     assert plan == []
 
@@ -395,8 +401,11 @@ def test_select_no_double_count_when_committed_becomes_unplannable():
     assert arbiter._committed_repr is not None
 
     # Cycle 2: remove AcceptTaskAction so the committed goal can't plan;
-    # provide no other plannable action either → expect (None, [])
-    goal2, plan2, tried2 = arbiter.select(decision, state, gd, [], ctx)
+    # provide no other plannable action either → expect (None, []).
+    # WaitGoal suppressed: it is the always-firing last-resort means and
+    # would otherwise short-circuit the (None, []) outcome under test.
+    goal2, plan2, tried2 = arbiter.select(
+        decision, state, gd, [], ctx, suppressed={"Wait"})
     assert goal2 is None
 
     # AcceptTask repr must appear at most once in goals_tried (not double-counted)
