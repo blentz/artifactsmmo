@@ -181,6 +181,11 @@ def sellIdleFires (s : State) : Bool :=
                < SELL_PRESSURE_NUM * s.inventoryMax))
   && s.sellableInventoryNonempty
 
+/-- WAIT. Mirrors `means.py:115-119`: the last-resort fallback fires
+    unconditionally. Position-last in `allInLadderOrder` ensures every
+    other means is tried first. -/
+def waitFires (_s : State) : Bool := true
+
 /-- BANK_EXPAND. Mirrors `means.py:101-111`:
       bank_accessible
       ∧ bank_items is not None
@@ -215,6 +220,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .taskExchange     => taskExchangeFires s
   | .sellIdle         => sellIdleFires s
   | .bankExpand       => bankExpandFires s
+  | .wait             => waitFires s
 
 /-! ## Ladder walk -/
 

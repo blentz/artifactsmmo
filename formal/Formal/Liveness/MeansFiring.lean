@@ -433,6 +433,22 @@ theorem _fires_sellIdle_implies_sellInventory_positive (s : State) :
   unfold sellInventoryValue sellSeizeWindowValue
   simp
 
+/-! ### Last-resort — `wait` -/
+
+/-- Production-shape `WaitGoal.value` (Phase-18 "Bool → Rat" wrapper).
+    `WaitGoal.value()` is the constant `WAIT_GOAL_VALUE = 0.5` regardless
+    of state (see `src/artifactsmmo_cli/ai/goals/wait.py:21`). Sub-floor on
+    purpose: WaitGoal is the strict last-resort. -/
+def waitGoalValue : Rat := 1 / 2
+
+/-- WAIT: `_fires .wait s = true` ⇒ `waitGoalValue > 0`. Unconditional. -/
+theorem _fires_wait_implies_wait_positive (s : State) :
+    fires .wait s = true →
+    waitGoalValue > 0 := by
+  intro _
+  unfold waitGoalValue
+  norm_num
+
 /-- BANK_EXPAND: `_fires .bankExpand s` ⇒ `expandBankValue = 40 > 0`. -/
 theorem _fires_bankExpand_implies_expandBank_positive (s : State) :
     fires .bankExpand s = true →

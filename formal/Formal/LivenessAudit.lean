@@ -75,9 +75,12 @@ open Formal.Liveness.NoDeadlockV2
 #print axioms _fires_taskExchange_implies_taskExchange_positive
 #print axioms _fires_sellIdle_implies_sellInventory_positive
 #print axioms _fires_bankExpand_implies_expandBank_positive
+#print axioms _fires_wait_implies_wait_positive
 #print axioms pursueTaskValueModel_positive_when_unsatisfied
 
--- Phase 20c-v2: no-deadlock headline.
+-- Phase 20e-v2 step 2: unconditional no-deadlock headline (replaces the
+-- retracted Phase 20c-v2 conditional `productionLadder_total_under_invariants`
+-- now that production has WaitGoal as a last-resort, always-firing means).
 #print axioms productionLadder_ne_none_of_fires
-#print axioms productionLadder_total_under_invariants
-#print axioms exists_firing_means_under_invariants
+#print axioms productionLadder_total
+#print axioms exists_firing_means
