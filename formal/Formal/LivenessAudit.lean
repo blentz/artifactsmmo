@@ -108,3 +108,11 @@ open Formal.Liveness.PlanExists
 #print axioms plan_exists_for_sellPressured
 #print axioms plan_exists_for_sellIdle
 #print axioms plan_exists_for_lowYieldCancel
+
+-- Phase 21c: Fight-based plan-existence lemmas. Both extend
+-- `applyActionKind .fight` to model (a) bank-unlock achievement flip
+-- and (b) xp/level rollover (the latter making `applyActionKind` and
+-- `applyPlan` noncomputable via dependency on the axiomatic
+-- `Formal.Liveness.Measure.xpToNextLevel`, AXIOM-ID LIV-001).
+#print axioms plan_exists_for_bankUnlock
+#print axioms plan_exists_for_reachUnlockLevel

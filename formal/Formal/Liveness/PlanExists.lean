@@ -47,6 +47,8 @@ import Formal.Liveness.MeansKind
 import Formal.Liveness.ProductionLadder
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanAction
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.Set
 
 set_option linter.dupNamespace false
 set_option linter.unusedVariables false
@@ -258,18 +260,384 @@ theorem plan_exists_for_wait :
   intro s _
   exact ⟨[.wait], by simp [applyActionKind]⟩
 
-/-! ## Deferred lemmas — Phase 21c/d
+/-! ## Phase 21c — Fight-based plan-existence lemmas
 
-  After Phase 21b, 4 firing means remain deferred. Plan construction
-  for each requires multi-step machinery (combat loops, recipe chains,
-  or arbiter-internal lifting) beyond single-action semantics. No
-  theorem is declared for any of them in this phase (per phase plan:
-  "no sorry, no axioms, comment block only").
-
-  -- Deferred to Phase 21c: bankUnlock        -- requires Fight outcome to satisfy achievement; lift FightProgress.
-  -- Deferred to Phase 21c: reachUnlockLevel  -- requires Fight loop to gain levels; lift FightProgress.
-  -- Deferred to Phase 21d: pursueTask        -- requires multi-step TaskTrade/Gather recipe-chain plan construction.
-  -- Deferred to Phase 21d: objectiveStep     -- requires lifting the StrategyArbiter objective tier (varies by chosen step shape).
+  Phase 21c covers the two firing means resolved by `FightAction`:
+  `bankUnlock` and `reachUnlockLevel`. Both witnesses are sequences of
+  `.fight` actions. The Plan.lean extension of `applyActionKind .fight`
+  (a) flips `bankAccessible := true` when the pre-state satisfies the
+  bank-unlock firing conditions, and (b) handles xp/level rollover so
+  that bounded fight sequences advance `level` (capped at 50). See
+  `Plan.lean::applyActionKind` for the honest-disclosure block on each
+  extension.
 -/
+
+/-- `[.fight]` clears `bankUnlock`. The pre-state satisfies the
+    `bankUnlockFires` predicate; the Phase 21c `.fight` apply detects
+    this exact predicate and flips `bankAccessible := true`. The
+    post-state then has `bankAccessible = true`, killing the
+    firing-predicate conjunct `!bankAccessible`. -/
+theorem plan_exists_for_bankUnlock :
+    ∀ s, fires .bankUnlock s = true →
+      ∃ p : Plan, planAchieves p s .bankUnlock := by
+  intro s h
+  refine ⟨[.fight], ?_⟩
+  -- The fight apply's `unlockMonsterReady` guard equals
+  -- `bankUnlockFires` exactly. Pre-state has it true, so the post-state
+  -- has bankAccessible = true, killing the `!bankAccessible` conjunct.
+  -- Unfold planAchieves / applyPlan and the apply.
+  unfold planAchieves
+  rw [applyPlan_singleton]
+  -- Goal: fires .bankUnlock (applyActionKind .fight s) = false.
+  -- The fight apply on bankUnlock-firing pre-state sets bankAccessible = true.
+  have hReady :
+      (s.bankUnlockMonsterPresent
+        && !s.bankAccessible
+        && decide (s.xp ≤ s.initialXp)
+        && (decide (s.unlockMonsterLevel = 0)
+            || decide (s.level + 1 ≥ s.unlockMonsterLevel))) = true := by
+    -- This IS the bankUnlockFires predicate from production.
+    have := h
+    unfold fires ProductionLadder.bankUnlockFires at this
+    exact this
+  -- Now compute (applyActionKind .fight s).bankAccessible = true.
+  have hbank : (applyActionKind .fight s).bankAccessible = true := by
+    simp only [applyActionKind]
+    -- The let-binding for unlockMonsterReady evaluates to hReady = true,
+    -- so newBankAccessible = true.
+    simp [hReady]
+  -- Show fires .bankUnlock (applyActionKind .fight s) = false.
+  unfold fires ProductionLadder.bankUnlockFires
+  rw [hbank]
+  simp
+
+/-! ### Auxiliary lemmas for reachUnlockLevel plan construction
+
+The `.fight` apply either bumps `xp += 10` (when `xp + 10 < xpToNextLevel
+level`) or rolls over (`level += 1`, `xp := 0`). To show plan-existence
+for `reachUnlockLevel`, we need: from any state with `level < target ≤
+50`, repeated fights eventually push `level ≥ target`.
+
+Strategy:
+  1. `applyFightN`: n-fight projection.
+  2. `fight_level_monotone`: per-fight level never decreases.
+  3. `applyFightN_no_levelup_xp`: if `n` fights kept level constant,
+     then xp grew by exactly `10 * n`. (Induction on n with the bound
+     on the LAST step derived inside.)
+  4. `bound_fights_advance_level`: `n := xpToNextLevel s.level` fights
+     strictly advance level (provided `level < 50`). Contradiction
+     using (3): if level stayed constant, then xp = s.xp + 10*n, but
+     this requires (from no-rollover invariant) `s.xp + 10*n <
+     xpToNextLevel = n`, contradicting `10n ≥ n` for `n ≥ 1`
+     (LIV-001).
+  5. `exists_fights_reach_level`: induction on `target - level` using
+     (4) per step.
+-/
+
+/-- `applyFightN n s = applyPlan (List.replicate n .fight) s`. -/
+noncomputable def applyFightN (n : Nat) (s : State) : State :=
+  applyPlan (List.replicate n .fight) s
+
+@[simp] theorem applyFightN_zero (s : State) : applyFightN 0 s = s := by
+  simp [applyFightN, applyPlan]
+
+theorem applyFightN_succ_left (n : Nat) (s : State) :
+    applyFightN (n+1) s = applyFightN n (applyActionKind .fight s) := by
+  simp [applyFightN, applyPlan, List.replicate_succ, List.foldl]
+
+/-- Per-fight level monotonicity. -/
+theorem fight_level_monotone (s : State) :
+    s.level ≤ (applyActionKind .fight s).level := by
+  simp only [applyActionKind]
+  split <;> omega
+
+/-- Per-fight no-rollover characterisation: when `xp + 10 <
+    xpToNextLevel level`, the apply keeps level constant and bumps xp
+    by 10. -/
+theorem fight_no_rollover
+    (s : State) (h : s.xp + 10 < xpToNextLevel s.level) :
+    (applyActionKind .fight s).level = s.level
+    ∧ (applyActionKind .fight s).xp = s.xp + 10 := by
+  simp only [applyActionKind]
+  have hwill :
+      (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+        && decide (s.level < 50)) = false := by
+    have hnot : ¬ s.xp + 10 ≥ xpToNextLevel s.level := Nat.not_le.mpr h
+    simp [hnot]
+  simp [hwill]
+
+/-- If `n` fights from `s` leave `level` unchanged, then `xp` grew by
+    exactly `10*n`. The "level unchanged" assumption is the hypothesis. -/
+theorem applyFightN_no_levelup_xp
+    (n : Nat) (s : State)
+    (hlvl : (applyFightN n s).level = s.level) :
+    (applyFightN n s).xp = s.xp + 10 * n := by
+  induction n generalizing s with
+  | zero => simp
+  | succ k ih =>
+    rw [applyFightN_succ_left] at hlvl ⊢
+    -- The first fight either rolled over (level := s.level + 1) or didn't.
+    -- Goal: extract that it didn't roll over.
+    have hmono1 := fight_level_monotone s
+    have hmono_k :
+        (applyActionKind .fight s).level ≤
+          (applyFightN k (applyActionKind .fight s)).level := by
+      -- General monotonicity of applyFightN.
+      clear ih hlvl
+      generalize (applyActionKind .fight s) = s'
+      induction k generalizing s' with
+      | zero => simp
+      | succ j ih2 =>
+        rw [applyFightN_succ_left]
+        exact Nat.le_trans (fight_level_monotone s') (ih2 _)
+    -- From hlvl: (applyFightN k (applyActionKind .fight s)).level = s.level.
+    -- Combine with mono: (applyActionKind .fight s).level = s.level.
+    have hstep_lvl_eq : (applyActionKind .fight s).level = s.level := by
+      have h1 : (applyActionKind .fight s).level ≤ s.level := by
+        calc (applyActionKind .fight s).level
+            ≤ (applyFightN k (applyActionKind .fight s)).level := hmono_k
+          _ = s.level := hlvl
+      exact Nat.le_antisymm h1 hmono1
+    -- Now extract that the first fight didn't trigger rollover.
+    have hno_roll : ¬ (s.xp + 10 ≥ xpToNextLevel s.level ∧ s.level < 50) := by
+      intro ⟨hxp, hlt50⟩
+      -- Then apply gives level := s.level + 1, contradicting hstep_lvl_eq.
+      have : (applyActionKind .fight s).level = s.level + 1 := by
+        simp only [applyActionKind]
+        have hwill :
+            (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+              && decide (s.level < 50)) = true := by simp [hxp, hlt50]
+        simp [hwill]
+      omega
+    -- So either xp + 10 < xpToNextLevel level OR level ≥ 50.
+    -- Case split: if level ≥ 50, the apply keeps state unchanged in level
+    -- (the willLevel guard fails on the second conjunct), and xp += 10.
+    by_cases hlt50 : s.level < 50
+    · have hxp1 : s.xp + 10 < xpToNextLevel s.level := by
+        by_contra hge
+        have hge : s.xp + 10 ≥ xpToNextLevel s.level := Nat.le_of_not_lt hge
+        exact hno_roll ⟨hge, hlt50⟩
+      have ⟨hsl, hsx⟩ := fight_no_rollover s hxp1
+      -- Recurse on ih.
+      have hlvl' : (applyFightN k (applyActionKind .fight s)).level
+                     = (applyActionKind .fight s).level := by
+        rw [hsl]; exact hlvl
+      have := ih _ hlvl'
+      rw [this, hsx]
+      ring
+    · -- level ≥ 50: apply keeps level (willLevel false on second conjunct)
+      -- but still bumps xp.
+      have hsl : (applyActionKind .fight s).level = s.level := by
+        simp only [applyActionKind]
+        have hwill :
+            (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+              && decide (s.level < 50)) = false := by
+          have : ¬ s.level < 50 := hlt50
+          simp [this]
+        simp [hwill]
+      have hsx : (applyActionKind .fight s).xp = s.xp + 10 := by
+        simp only [applyActionKind]
+        have hwill :
+            (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+              && decide (s.level < 50)) = false := by
+          have : ¬ s.level < 50 := hlt50
+          simp [this]
+        simp [hwill]
+      have hlvl' : (applyFightN k (applyActionKind .fight s)).level
+                     = (applyActionKind .fight s).level := by
+        rw [hsl]; exact hlvl
+      have := ih _ hlvl'
+      rw [this, hsx]
+      ring
+
+/-- `n := xpToNextLevel s.level` fights strictly advance level (when
+    `s.level < 50`). Proof: if not, then level stayed constant, which
+    by `applyFightN_no_levelup_xp` gives xp = s.xp + 10*n, but then
+    after n-1 fights the pre-state of step n had xp = s.xp + 10*(n-1),
+    and the level-guard `xp + 10 ≥ xpToNextLevel level` becomes
+    `s.xp + 10*n ≥ n`, which IS true (10n ≥ n for n ≥ 1, LIV-001),
+    so the level WOULD have rolled over, contradiction. -/
+theorem bound_fights_advance_level
+    (s : State) (hlvl : s.level < 50) :
+    s.level < (applyFightN (xpToNextLevel s.level) s).level := by
+  set n := xpToNextLevel s.level with hn_def
+  by_contra hle
+  have hle : (applyFightN n s).level ≤ s.level := Nat.le_of_not_lt hle
+  -- General mono.
+  have hmono : ∀ k s', s'.level ≤ (applyFightN k s').level := by
+    intro k
+    induction k with
+    | zero => intro s'; simp
+    | succ j ih =>
+      intro s'
+      rw [applyFightN_succ_left]
+      exact Nat.le_trans (fight_level_monotone s') (ih _)
+  have hmn := hmono n s
+  have heq : (applyFightN n s).level = s.level := Nat.le_antisymm hle hmn
+  have hxp_eq : (applyFightN n s).xp = s.xp + 10 * n :=
+    applyFightN_no_levelup_xp n s heq
+  -- We need a contradiction. Use the n-th step decomposition.
+  have hn_pos : 0 < n := xpToNextLevel_pos s.level hlvl
+  -- n = (n-1) + 1. Decompose applyFightN n s = applyActionKind .fight (applyFightN (n-1) s).
+  -- We need a right-step lemma.
+  have hsucc_right : ∀ m s', applyFightN (m+1) s' =
+      applyActionKind .fight (applyFightN m s') := by
+    intro m
+    induction m with
+    | zero =>
+      intro s'
+      rw [applyFightN_succ_left, applyFightN_zero, applyFightN_zero]
+    | succ j ih =>
+      intro s'
+      rw [applyFightN_succ_left, ih (applyActionKind .fight s'),
+          ← applyFightN_succ_left]
+  obtain ⟨m, hm_eq⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+  rw [hm_eq] at heq hxp_eq
+  rw [hsucc_right m s] at heq hxp_eq
+  -- Let t := applyFightN m s. We have:
+  --   heq    : (applyActionKind .fight t).level = s.level
+  --   hxp_eq : (applyActionKind .fight t).xp    = s.xp + 10 * (m + 1)
+  -- Also, by mono and equality chain, t.level = s.level.
+  have htmid_lvl_eq : (applyFightN m s).level = s.level := by
+    -- (applyFightN m s).level ≤ (applyActionKind .fight (applyFightN m s)).level (mono)
+    --                       = s.level (from heq).
+    have h1 : (applyFightN m s).level ≤ s.level := by
+      have hstep := fight_level_monotone (applyFightN m s)
+      -- hstep : (applyFightN m s).level ≤ (applyActionKind .fight (applyFightN m s)).level
+      rw [heq] at hstep
+      exact hstep
+    have h2 := hmono m s
+    omega
+  have htmid_xp_eq : (applyFightN m s).xp = s.xp + 10 * m :=
+    applyFightN_no_levelup_xp m s htmid_lvl_eq
+  -- Now examine the (m+1)-th fight applied to t := applyFightN m s.
+  set t := applyFightN m s
+  -- Step apply: if t.xp + 10 ≥ xpToNextLevel t.level AND t.level < 50,
+  -- then level := t.level + 1. We have t.level = s.level, t.xp = s.xp + 10*m,
+  -- t.level < 50 (= s.level), and t.xp + 10 = s.xp + 10*(m+1) = s.xp + 10n ≥ n
+  -- = xpToNextLevel s.level = xpToNextLevel t.level (since t.level = s.level).
+  -- That triggers rollover, but heq says level stays = s.level.
+  have hge : t.xp + 10 ≥ xpToNextLevel t.level := by
+    rw [htmid_xp_eq, htmid_lvl_eq]
+    -- Goal: s.xp + 10*m + 10 ≥ xpToNextLevel s.level.
+    -- xpToNextLevel s.level = n, and n = m + 1, so RHS = m + 1.
+    -- LHS = s.xp + 10*m + 10 ≥ 10*m + 10 = 10*(m+1) ≥ m+1.
+    have hxptn : xpToNextLevel s.level = m + 1 := by rw [← hn_def, hm_eq]
+    rw [hxptn]
+    have h10m : 10 * m + 10 ≥ m + 1 := by
+      have : 10 * m ≥ m := Nat.le_mul_of_pos_left m (by norm_num)
+      omega
+    omega
+  have hlt : t.level < 50 := by rw [htmid_lvl_eq]; exact hlvl
+  have hroll : (applyActionKind .fight t).level = t.level + 1 := by
+    simp only [applyActionKind]
+    have hwill :
+        (decide (t.xp + 10 ≥ xpToNextLevel t.level)
+          && decide (t.level < 50)) = true := by simp [hge, hlt]
+    simp [hwill]
+  rw [hroll, htmid_lvl_eq] at heq
+  omega
+
+/-- Additivity of `applyFightN`. -/
+theorem applyFightN_add (a b : Nat) (s : State) :
+    applyFightN (a + b) s = applyFightN b (applyFightN a s) := by
+  induction a generalizing s with
+  | zero => simp
+  | succ k ih =>
+    rw [show k + 1 + b = (k + b) + 1 from by ring,
+        applyFightN_succ_left, ih, applyFightN_succ_left]
+
+/-- Iterated form: for every target ≤ 50, there exists `N` such that
+    `N` fights from `s` push `level ≥ target`. Strong induction on
+    `target - s.level` (which strictly decreases on each level-up). -/
+theorem exists_fights_reach_target :
+    ∀ (gap : Nat) (target : Nat) (s : State),
+      target ≤ 50 →
+      target - s.level ≤ gap →
+      ∃ N, (applyFightN N s).level ≥ target := by
+  intro gap
+  induction gap with
+  | zero =>
+    intro target s _ hgap
+    -- target - s.level = 0 ⇒ s.level ≥ target.
+    refine ⟨0, ?_⟩
+    simp
+    omega
+  | succ k ih =>
+    intro target s htarget hgap
+    by_cases hreached : s.level ≥ target
+    · exact ⟨0, by simp; exact hreached⟩
+    · -- s.level < target ≤ 50.
+      have hslt : s.level < 50 := by omega
+      have hadv := bound_fights_advance_level s hslt
+      -- After N1 = xpToNextLevel s.level fights, level strictly advances.
+      set N1 := xpToNextLevel s.level with hN1
+      set s1 := applyFightN N1 s with hs1
+      -- s1.level > s.level, so target - s1.level < target - s.level ≤ k+1,
+      -- i.e. target - s1.level ≤ k.
+      have hgap' : target - s1.level ≤ k := by
+        have : s1.level ≥ s.level + 1 := hadv
+        omega
+      obtain ⟨N2, h2⟩ := ih target s1 htarget hgap'
+      refine ⟨N1 + N2, ?_⟩
+      rw [applyFightN_add]
+      exact h2
+
+/-- `applyFightN` preserves `bankRequiredLevel` (ctx field unaffected by
+    any of the in-scope ActionKind apply branches). -/
+theorem fight_preserves_bankRequiredLevel (N : Nat) (s : State) :
+    (applyFightN N s).bankRequiredLevel = s.bankRequiredLevel := by
+  induction N generalizing s with
+  | zero => simp
+  | succ k ih =>
+    rw [applyFightN_succ_left, ih (applyActionKind .fight s)]
+    simp [applyActionKind]
+
+/-- `[.fight]^N` for sufficiently-large `N` clears `reachUnlockLevel`.
+
+    Precondition `s.bankRequiredLevel ≤ 50` is a server bound (the
+    bank-required level is one of the server's monster levels, all
+    ≤ 50 per `/v3/server/details`). Without it, `level` cannot reach
+    `bankRequiredLevel` via fights because the apply caps level at 50.
+
+    The plan-length bound is `N = Σ_{i=0}^{gap-1} xpToNextLevel
+    (s.level + i)` in closed form, where `gap = bankRequiredLevel -
+    s.level ≤ 5` (`MAX_ACHIEVABLE_GAP_LV2`). This proof EXHIBITS the
+    existence via `exists_fights_reach_level` without computing N in
+    closed form (Phase 23 will pin it down). The witness's length is
+    bounded by `Σ xpToNextLevel`, finite per LIV-001.
+-/
+theorem plan_exists_for_reachUnlockLevel :
+    ∀ s, fires .reachUnlockLevel s = true →
+      s.bankRequiredLevel ≤ 50 →
+      ∃ p : Plan, planAchieves p s .reachUnlockLevel := by
+  intro s h hbound
+  -- Decompose firing hypothesis.
+  simp only [fires, ProductionLadder.reachUnlockLevelFires,
+             Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨⟨hbr_pos, hlt⟩, _hgap⟩ := h
+  -- Use exists_fights_reach_target with target := bankRequiredLevel
+  -- and gap := bankRequiredLevel - s.level.
+  obtain ⟨N, hN⟩ := exists_fights_reach_target
+    (s.bankRequiredLevel - s.level) s.bankRequiredLevel s hbound (le_refl _)
+  -- The plan is List.replicate N .fight; planAchieves means
+  -- fires .reachUnlockLevel (applyPlan ... s) = false.
+  refine ⟨List.replicate N .fight, ?_⟩
+  -- bankRequiredLevel field is preserved by .fight. Use the file-scope
+  -- helper to keep the IH free of extraneous hypotheses.
+  have hbr_preserved : (applyFightN N s).bankRequiredLevel = s.bankRequiredLevel :=
+    fight_preserves_bankRequiredLevel N s
+  -- The plan equals applyFightN N s on the projection side.
+  show fires .reachUnlockLevel (applyPlan (List.replicate N .fight) s) = false
+  have hplan_eq : applyPlan (List.replicate N .fight) s = applyFightN N s := rfl
+  rw [hplan_eq]
+  -- Now: fires .reachUnlockLevel s' = false where s' = applyFightN N s.
+  unfold fires ProductionLadder.reachUnlockLevelFires
+  -- s'.level ≥ s.bankRequiredLevel = s'.bankRequiredLevel, so the
+  -- second conjunct (decide (level < bankRequiredLevel)) is false.
+  have hsl_not_lt :
+      ¬ (applyFightN N s).level < (applyFightN N s).bankRequiredLevel := by
+    rw [hbr_preserved]; omega
+  simp [hsl_not_lt]
 
 end Formal.Liveness.PlanExists

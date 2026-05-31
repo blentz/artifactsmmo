@@ -90,8 +90,11 @@ def bankExpansionSlots : Nat := 20
 
 /-- Single-step state transition for an `ActionKind`. Phase 21a defines
     semantics for the 8 trivial-firing kinds; all other kinds fall through
-    to a no-op (see module docstring for rationale and Phase 21b/c plan). -/
-def applyActionKind : ActionKind → State → State
+    to a no-op (see module docstring for rationale and Phase 21b/c plan).
+
+    `noncomputable` because Phase 21c's `.fight` branch references the
+    axiomatic `xpToNextLevel` (AXIOM-ID LIV-001) for level rollover. -/
+noncomputable def applyActionKind : ActionKind → State → State
   -- RestAction.apply (rest.py:23-24): hp := max_hp, cooldown reset (not modelled).
   | .rest, s => { s with hp := s.maxHp }
   -- WaitAction.apply (wait.py:34): identity.
@@ -163,12 +166,62 @@ def applyActionKind : ActionKind → State → State
   -- decrement, NPC stock) deferred — see module "Honest disclosure:
   -- minimal-modeling" note.
   | .npcSell, s => { s with sellableInventoryNonempty := false }
-  -- All other 15 kinds: no-op (see module docstring; Phase 21c/d will
+  -- FightAction.apply (combat.py:apply): xp += 10, hp damage (irrelevant
+  -- to firing predicates), task_progress += 1 if matches monster-task.
+  -- Phase 21c adds two extensions for the two Fight-firing means
+  -- (`bankUnlock`, `reachUnlockLevel`):
+  --
+  --   (a) BANK-UNLOCK FLIP: when the pre-state satisfies the production
+  --       `bankUnlockFires` predicate (bank-unlock monster present, bank
+  --       not yet accessible, xp under initial-xp budget, character level
+  --       sufficient for the unlock monster), the fight resolves the
+  --       achievement and the server flips `bank_accessible := True`.
+  --       In production the perception layer integrates this on the next
+  --       refresh; here we model it as a single-step effect of `.fight`,
+  --       guarded by the firing-predicate conditions so non-unlock fights
+  --       (regular monster grinds) DO NOT flip bank access.
+  --
+  --   (b) LEVEL ROLLOVER: when the +10 xp grant would cross the
+  --       `xpToNextLevel s.level` threshold (and the level cap of 50 has
+  --       not been hit), the level advances and xp resets to 0. This
+  --       mirrors what the perception layer would integrate from the
+  --       server's `/v3/my/{name}/action/fight` response. Phase 19b's
+  --       `fightApply` deliberately omits this (its scope was the
+  --       perception-invariant strict-progress lemma); Phase 21c's
+  --       `applyActionKind .fight` adds it because plan-existence for
+  --       `reachUnlockLevel` requires the planner-side projection to
+  --       reach `bankRequiredLevel` after a bounded fight sequence.
+  --
+  -- Honest disclosure: this `.fight` apply does NOT model loot,
+  -- inventory deltas, cooldown, or position — none enter the firing
+  -- predicates targeted in Phase 21c. The bank-unlock flip is also a
+  -- model commitment that production's server-side achievement WILL
+  -- flip `bank_accessible` on a single successful unlock fight (true
+  -- per the game's documented mechanic; the perception layer's
+  -- subsequent refresh observes the flipped flag).
+  | .fight, s =>
+      let unlockMonsterReady : Bool :=
+        s.bankUnlockMonsterPresent
+        && !s.bankAccessible
+        && decide (s.xp ≤ s.initialXp)
+        && (decide (s.unlockMonsterLevel = 0)
+            || decide (s.level + 1 ≥ s.unlockMonsterLevel))
+      let newBankAccessible : Bool :=
+        if unlockMonsterReady then true else s.bankAccessible
+      let willLevel : Bool :=
+        decide (s.xp + 10 ≥ xpToNextLevel s.level) && decide (s.level < 50)
+      let newLevel : Nat := if willLevel then s.level + 1 else s.level
+      let newXp    : Nat := if willLevel then 0 else s.xp + 10
+      { s with level := newLevel,
+               xp := newXp,
+               bankAccessible := newBankAccessible }
+  -- All other 14 kinds: no-op (see module docstring; Phase 21d will
   -- replace each with its specific semantics).
   | _, s => s
 
-/-- Fold `applyActionKind` over a plan. -/
-def applyPlan (p : Plan) (s : State) : State :=
+/-- Fold `applyActionKind` over a plan. `noncomputable` for the same
+    reason as `applyActionKind` (Phase 21c xp/level axiom). -/
+noncomputable def applyPlan (p : Plan) (s : State) : State :=
   p.foldl (fun s a => applyActionKind a s) s
 
 @[simp] theorem applyPlan_nil (s : State) : applyPlan [] s = s := rfl
