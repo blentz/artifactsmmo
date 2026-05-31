@@ -209,3 +209,20 @@ theorem ai_reaches_level_fifty :
 …with axioms ⊆ `{propext, Classical.choice, Quot.sound, server_axioms}`, where `server_axioms` is an explicit, openapi-backed, user-approved list and every axiom has a passing replay-based conformance test.
 
 If we ship this, we will have proven what the meta-goal stated: **"given the openapi.spec and our project design specs as inputs, we have built an AI bot capable of interfacing with the APIs in provably valid ways for all possible encounterable scenarios"** — to the precise extent that the server-axiom set is honest.
+
+## Phasing status
+
+| Phase | Scope | Status | Commit |
+| --- | --- | --- | --- |
+| 19a | Infrastructure: Mathlib pin, `Formal/Liveness/` namespace, split axiom gate | DONE | `{19a-sha}` |
+| 19b | `Measure.lean` + per-action progress lemmas (subset) | TODO | — |
+| 19c | `LocalProgress.lean` headline + FakeServer scaffolding | TODO | — |
+| 19d | Mutations + adversarial review for 19b/c | TODO | — |
+| 20  | Tier 2 — no-deadlock | TODO | — |
+| 21  | Tier 3 — plan exists per firing goal | TODO | — |
+| 22  | Cycle loop in Lean | TODO | — |
+| 23  | Tier 4 — cumulative progress | TODO | — |
+| 24  | Game-data fixture + openapi conformance harness | TODO | — |
+| 25  | Tier 5 — level-50 reachability (capstone) | TODO | — |
+
+Phase 19a notes: Mathlib pinned to **v4.30.0** (matching `formal/lean-toolchain`'s Lean 4.30.0). At this pin the foundational Mathlib axiom set coincides with the safety set `{propext, Classical.choice, Quot.sound}`, so the liveness allow-list does not need to grow beyond the kernel three. The split gate (`check_axioms_safety.sh` + `check_axioms_liveness.sh`) and the cross-namespace leak check are wired into `gate.sh` via the existing `check_axioms.sh` entry point.
