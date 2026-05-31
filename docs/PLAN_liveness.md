@@ -227,7 +227,10 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 20e-v2 step 1 | Adversarial Python differential FOUND real production deadlock (items-task + history=None + no-winnable-monster). FIXED in production: empty-store default + WaitGoal fallback in DISCRETIONARY_ORDER. + pre-existing `FightAction.cost` LOADOUT_PENALTY shape-mismatch bug fixed. | DONE | 3a01ca2 + d9918db |
 | 20e-v2 step 2 | Lean unconditional headline `productionLadder_total : ∀ s, productionLadder s ≠ none` mirrors WaitGoal fix; LadderTotalInvariants deleted; 18-constructor MeansKind. | DONE | 2c0edb0 |
 | 20 (closed) | **Tier 2 done.** Production: never deadlocks (WaitGoal sentinel). Lean: unconditional theorem proves it. Structural mirror at 18 constructors. | DONE | 2c0edb0 |
-| 21  | Tier 3 — plan exists per firing goal | TODO | — |
+| 21a | PlanAction enum (26 production-mirror) + Plan/applyPlan + 8 trivial single-action plan-exists lemmas | DONE | 61305ff |
+| 21b | Multi-step plan-exists lemmas: restoreHp(MoveTo+Rest), depositFull(MoveTo+DepositAll), discard*(DeleteItem/NpcSell), sell*(NpcSell), bankUnlock(Fight) | TODO | — |
+| 21c | Hard plan-exists: reachUnlockLevel (Fight loop), pursueTask (TaskTrade/Gather chain), objectiveStep (chosen_step shape varies) | TODO | — |
+| 21d | Python plan-exists mirror + adversarial differential + mutations | TODO | — |
 | 22  | Cycle loop in Lean | TODO | — |
 | 23  | Tier 4 — cumulative progress | TODO | — |
 | 24  | Game-data fixture + openapi conformance harness | TODO | — |
