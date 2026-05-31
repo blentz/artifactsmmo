@@ -70,6 +70,9 @@ PROGRESSION_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "pro
 RESTORE_HP_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 DEPOSIT_INVENTORY_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "deposit_inventory.py"
 SELL_INVENTORY_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "sell_inventory.py"
+# Phase-19d — Tier-1 liveness measure (Python port of Formal.Liveness.Measure).
+# Production sources reuse GATHERING_APPLY_SRC / APPLY_REST_SRC defined above.
+MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -998,6 +1001,8 @@ _ALL_SRCS = [
     LOW_YIELD_CANCEL_GOAL_SRC, UNLOCK_BANK_GOAL_SRC, DISCARD_OVERSTOCK_GOAL_SRC,
     PROGRESSION_GOAL_SRC, RESTORE_HP_GOAL_SRC, DEPOSIT_INVENTORY_GOAL_SRC,
     SELL_INVENTORY_GOAL_SRC,
+    # Phase-19d — Tier-1 liveness measure port.
+    MEASURE_SRC,
 ]
 
 
@@ -1690,6 +1695,45 @@ SELL_INVENTORY_GOAL_MUTATIONS = [
 ]
 
 
+LIVENESS_MEASURE_MUTATIONS = [
+    # Drop the hpDeficit slot from the lex tuple — slot 6 vanishes, so Rest
+    # (which only moves slot 6) is no longer detectable as a strict decrease,
+    # and the Rest-after-Fight cycles in the differential surface as "equal"
+    # (regression: a Rest cycle that should decrease no longer does).
+    ("liveness measure: drop hpDeficit slot from lex tuple",
+     "        return (self.level_deficit, self.xp_deficit, self.task_cycles,\n"
+     "                self.skill_xp_deficit_projected, self.bank_pressure,\n"
+     "                self.hp_deficit)",
+     "        return (self.level_deficit, self.xp_deficit, self.task_cycles,\n"
+     "                self.skill_xp_deficit_projected, self.bank_pressure)"),
+    # Invert lex direction — `<` becomes `>`. Every productive cycle then
+    # registers as a REGRESSION because the comparator is reversed.
+    ("liveness measure: invert lex direction (< -> >)",
+     "    return a.as_tuple() < b.as_tuple()",
+     "    return a.as_tuple() > b.as_tuple()"),
+]
+
+LIVENESS_GATHERING_MUTATIONS = [
+    # Negate the projected_skill_xp_delta increment: +1 -> 0. Gather no
+    # longer advances slot 4, so a productive Gather cycle (when no other
+    # slot moves) registers as "equal", and the planner-side state diverges
+    # from FakeServer's measure tuple — the differential fires twice.
+    ("liveness gathering: skill-delta +1 -> +0",
+     "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1",
+     "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 0"),
+]
+
+LIVENESS_REST_MUTATIONS = [
+    # Drop the HP restoration entirely: `hp=state.max_hp` -> `hp=state.hp`.
+    # Rest is then a no-op on slot 6; Fight cycles drain HP without it ever
+    # being restored, and FakeServer's `rest` still heals to max — the
+    # differential sees the measure mismatch + lex non-decrease.
+    ("liveness rest: drop hp restoration (max_hp -> hp)",
+     "        return dataclasses.replace(state, hp=state.max_hp, cooldown_expires=None)",
+     "        return dataclasses.replace(state, hp=state.hp, cooldown_expires=None)"),
+]
+
+
 def main() -> int:
     _assert_sources_clean()
     survivors: list = []
@@ -1829,6 +1873,13 @@ def main() -> int:
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(SELL_INVENTORY_GOAL_SRC, SELL_INVENTORY_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
+    # Phase-19d — Tier-1 liveness differential.
+    run_group(MEASURE_SRC, LIVENESS_MEASURE_MUTATIONS,
+              "formal/diff/test_local_progress_diff.py", survivors)
+    run_group(GATHERING_APPLY_SRC, LIVENESS_GATHERING_MUTATIONS,
+              "formal/diff/test_local_progress_diff.py", survivors)
+    run_group(APPLY_REST_SRC, LIVENESS_REST_MUTATIONS,
+              "formal/diff/test_local_progress_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
