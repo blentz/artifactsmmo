@@ -214,10 +214,10 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 
 | Phase | Scope | Status | Commit |
 | --- | --- | --- | --- |
-| 19a | Infrastructure: Mathlib pin, `Formal/Liveness/` namespace, split axiom gate | DONE | `{19a-sha}` |
-| 19b | `Measure.lean` + per-action progress lemmas (subset) | TODO | — |
-| 19c | `LocalProgress.lean` headline + FakeServer scaffolding | TODO | — |
-| 19d | Mutations + adversarial review for 19b/c | TODO | — |
+| 19a | Infrastructure: Mathlib pin, `Formal/Liveness/` namespace, split axiom gate | DONE | f6edd18 |
+| 19b | `Measure.lean` (5-tuple) + Fight progress lemma + LIV-001 axiom | DONE | f9a91d1 |
+| 19c | Gather/Deposit/Rest lemmas + headline + measure expanded to 6-tuple | DONE | 4f04fe9 |
+| 19d | FakeServer + 1000-cycle differential + LIV-001 replay + 4 mutations | DONE | 77c8748 |
 | 20  | Tier 2 — no-deadlock | TODO | — |
 | 21  | Tier 3 — plan exists per firing goal | TODO | — |
 | 22  | Cycle loop in Lean | TODO | — |
