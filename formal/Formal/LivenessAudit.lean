@@ -116,3 +116,10 @@ open Formal.Liveness.PlanExists
 -- `Formal.Liveness.Measure.xpToNextLevel`, AXIOM-ID LIV-001).
 #print axioms plan_exists_for_bankUnlock
 #print axioms plan_exists_for_reachUnlockLevel
+
+-- Phase 21d-1: final Tier-3 plan-existence lemmas. `.taskTrade` collapses
+-- multi-trade delivery into one step (pursueTask). `.objectiveStep` is a
+-- synthetic placeholder ActionKind (NOT a production Action subclass) —
+-- see PlanAction.lean docstring for the honest disclosure.
+#print axioms plan_exists_for_pursueTask
+#print axioms plan_exists_for_objectiveStep

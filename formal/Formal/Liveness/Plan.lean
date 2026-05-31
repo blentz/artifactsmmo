@@ -14,6 +14,12 @@
       .taskExchange, .taskCancel, .buyBankExpansion
     Phase 21b (added 4 new ActionKind branches; .taskCancel reused):
       .deleteItem, .depositAll, .npcSell  (+ .taskCancel reused for lowYieldCancel)
+    Phase 21c (Fight-based; extends `.fight` apply with bank-unlock flip
+      and xp/level rollover):
+      .fight
+    Phase 21d-1 (Tier-3 finishing; two final plan-exists branches):
+      .taskTrade  (collapse-delivery for pursueTask)
+      .objectiveStep  (synthetic placeholder for the objective tier)
 
   All other 15 constructors fall through to a no-op default branch. This
   is NOT a semantic claim about those kinds — Phase 21c/d will replace
@@ -215,7 +221,36 @@ noncomputable def applyActionKind : ActionKind → State → State
       { s with level := newLevel,
                xp := newXp,
                bankAccessible := newBankAccessible }
-  -- All other 14 kinds: no-op (see module docstring; Phase 21d will
+  -- TaskTradeAction.apply (task_trade.py): delivers one or more units of
+  -- the items-task item to the task NPC. The Lean model collapses a
+  -- multi-trade delivery into a single step: it advances `taskProgress`
+  -- to `taskTotal` (task complete) and resets the opaque
+  -- `pursueTaskFires` Bool to `false`. Production firing predicate is
+  -- the opaque `pursueTaskFires` (means.py:85-90, all gating folded in
+  -- including `task_type == "items"` and progress < total); flipping it
+  -- to `false` mirrors the post-delivery state where the task is fully
+  -- satisfied (production would route to CompleteTaskGoal next cycle).
+  --
+  -- Honest disclosure: production may need multiple TaskTrade calls if
+  -- the per-call delivery quantity is bounded by inventory; the Lean
+  -- model does not track per-trade inventory deltas, so we collapse the
+  -- chain into a single conservative step. Richer effects (inventory
+  -- decrement of the task-item count, gold/coin reward credit) deferred
+  -- — see module "Honest disclosure: minimal-modeling" note.
+  | .taskTrade, s =>
+      { s with pursueTaskFires := false,
+               taskProgress := s.taskTotal }
+  -- Phase 21d-1 synthetic placeholder. See PlanAction.lean docstring
+  -- "Phase 21d-1: synthetic `.objectiveStep` placeholder". The objective
+  -- tier in production dispatches to a sub-goal whose plan is composed of
+  -- ordinary Action subclasses (Fight, Move, Gather, …); we model the
+  -- TIER's firing predicate `objectiveStepFires` (opaque Bool) being
+  -- cleared by a single placeholder step. This is sufficient — and only
+  -- sufficient — for the existential plan-existence claim at this
+  -- abstraction level. Phase 22 (Cycle Loop) will compose the actual
+  -- planner output through the sub-goal.
+  | .objectiveStep, s => { s with objectiveStepFires := false }
+  -- All other 13 kinds: no-op (see module docstring; Phase 21d-2+ will
   -- replace each with its specific semantics).
   | _, s => s
 

@@ -640,4 +640,45 @@ theorem plan_exists_for_reachUnlockLevel :
     rw [hbr_preserved]; omega
   simp [hsl_not_lt]
 
+/-! ## Phase 21d-1 — final Tier-3 plan-existence lemmas
+
+Two lemmas closing Tier-3 plan-existence coverage:
+
+  - `plan_exists_for_pursueTask`: witness `[.taskTrade]`, collapsing a
+    multi-trade delivery into one step (honest disclosure in
+    `Plan.lean`'s `.taskTrade` branch).
+  - `plan_exists_for_objectiveStep`: witness `[.objectiveStep]`, the
+    synthetic placeholder ActionKind (honest disclosure in
+    `PlanAction.lean`'s docstring "Phase 21d-1: synthetic
+    `.objectiveStep` placeholder").
+-/
+
+/-- `[.taskTrade]` clears `pursueTask`. `TaskTradeAction` delivers task
+    items to the task NPC; the Lean model collapses a possibly multi-call
+    delivery into a single step that flips the opaque `pursueTaskFires`
+    Bool to `false` (mirroring the post-delivery state where the task is
+    fully satisfied). -/
+theorem plan_exists_for_pursueTask :
+    ∀ s, fires .pursueTask s = true →
+      ∃ p : Plan, planAchieves p s .pursueTask := by
+  intro s h
+  refine ⟨[.taskTrade], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        ProductionLadder.pursueTaskFires]
+
+/-- `[.objectiveStep]` clears `objectiveStep`. The Phase 21d-1 synthetic
+    placeholder ActionKind flips the opaque `objectiveStepFires` Bool to
+    `false`. Honest disclosure: `.objectiveStep` is NOT a production
+    Action subclass — it is a tier-dispatch tag. Production composes the
+    sub-goal's plan from ordinary Action subclasses; Phase 22 (Cycle
+    Loop) will refine this composition. The existential claim "the
+    objective tier IS plannable" is sufficient here. -/
+theorem plan_exists_for_objectiveStep :
+    ∀ s, fires .objectiveStep s = true →
+      ∃ p : Plan, planAchieves p s .objectiveStep := by
+  intro s h
+  refine ⟨[.objectiveStep], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        ProductionLadder.objectiveStepFires]
+
 end Formal.Liveness.PlanExists

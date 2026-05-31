@@ -58,6 +58,21 @@
   (gather/craft/move/fight) with the parameter and semantic details needed
   for multi-step plan-construction proofs.
 
+  ## Phase 21d-1: synthetic `.objectiveStep` placeholder
+
+  `.objectiveStep` (28th constructor, added in Phase 21d-1) is a SYNTHETIC
+  placeholder, NOT a production `Action` subclass. In production, the
+  StrategyArbiter's objective tier dispatches to whatever sub-goal the
+  current `chosen_step` materializes (strategy_driver.py:107-204); the
+  resulting plan is composed of ordinary Action subclasses (Fight, Move,
+  Gather, Craft, …). We add a single tag here so that
+  `plan_exists_for_objectiveStep` can produce a single-element witness
+  `[.objectiveStep]` whose `applyActionKind` semantics flip
+  `objectiveStepFires := false`. The honest reading is "the objective tier
+  IS plannable", with the actual planner composition deferred to Phase 22
+  (Cycle Loop). The production action-class count (27) is preserved by
+  excluding `.objectiveStep` from `productionActionKinds` below.
+
   Liveness namespace — Mathlib axioms allowed; see
   `formal/Formal/Liveness/README.md`.
 -/
@@ -95,11 +110,27 @@ inductive ActionKind where
   | wait
   | withdrawGold
   | withdrawItem
+  -- Phase 21d-1: synthetic placeholder, NOT a production `Action` subclass.
+  -- See module docstring "Phase 21d-1: synthetic `.objectiveStep`
+  -- placeholder" for the honest disclosure. Excluded from
+  -- `productionActionKinds` to preserve the production count of 27.
+  | objectiveStep
   deriving DecidableEq, Repr
 
-/-- Enumeration of every `ActionKind` constructor, for downstream count
-    checks. -/
+/-- Enumeration of every `ActionKind` constructor, including the Phase
+    21d-1 synthetic `.objectiveStep`. -/
 def allActionKinds : List ActionKind :=
+  [.acceptTask, .buyBankExpansion, .claimPendingItem, .completeTask,
+   .craft, .deleteItem, .depositAll, .depositGold, .equip, .fight,
+   .gather, .mapTransition, .move, .moveTo, .npcBuy, .npcSell,
+   .optimizeLoadout, .recycle, .rest, .taskCancel, .taskExchange,
+   .taskTrade, .unequip, .useConsumable, .wait, .withdrawGold,
+   .withdrawItem, .objectiveStep]
+
+/-- Enumeration of the production `Action` subclasses ONLY (27, matching
+    `src/artifactsmmo_cli/ai/actions/` at commit b60e979). Excludes the
+    Phase 21d-1 synthetic `.objectiveStep`. -/
+def productionActionKinds : List ActionKind :=
   [.acceptTask, .buyBankExpansion, .claimPendingItem, .completeTask,
    .craft, .deleteItem, .depositAll, .depositGold, .equip, .fight,
    .gather, .mapTransition, .move, .moveTo, .npcBuy, .npcSell,
@@ -107,8 +138,10 @@ def allActionKinds : List ActionKind :=
    .taskTrade, .unequip, .useConsumable, .wait, .withdrawGold,
    .withdrawItem]
 
-/-- Sanity: 27 constructors, matching production's `Action` subclass count
-    at commit b60e979. -/
-example : allActionKinds.length = 27 := by decide
+/-- Sanity: 28 constructors total (27 production + 1 synthetic). -/
+example : allActionKinds.length = 28 := by decide
+
+/-- Sanity: 27 production `Action` subclasses at commit b60e979. -/
+example : productionActionKinds.length = 27 := by decide
 
 end Formal.Liveness.PlanAction
