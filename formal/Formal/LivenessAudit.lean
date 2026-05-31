@@ -24,6 +24,9 @@ import Formal.Liveness.RestProgress
 import Formal.Liveness.ProgressAction
 import Formal.Liveness.MeansFiring
 import Formal.Liveness.NoDeadlockV2
+import Formal.Liveness.PlanAction
+import Formal.Liveness.Plan
+import Formal.Liveness.PlanExists
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -34,6 +37,7 @@ open Formal.Liveness.RestProgress
 open Formal.Liveness.ProgressAction
 open Formal.Liveness.MeansFiring
 open Formal.Liveness.NoDeadlockV2
+open Formal.Liveness.PlanExists
 
 -- Phase 19a sanity.
 #print axioms mathlib_works
@@ -84,3 +88,13 @@ open Formal.Liveness.NoDeadlockV2
 #print axioms productionLadder_ne_none_of_fires
 #print axioms productionLadder_total
 #print axioms exists_firing_means
+
+-- Phase 21a: plan-existence lemmas for trivial firing means.
+#print axioms plan_exists_for_hpCritical
+#print axioms plan_exists_for_claimPending
+#print axioms plan_exists_for_completeTask
+#print axioms plan_exists_for_acceptTask
+#print axioms plan_exists_for_taskExchange
+#print axioms plan_exists_for_taskCancel
+#print axioms plan_exists_for_bankExpand
+#print axioms plan_exists_for_wait
