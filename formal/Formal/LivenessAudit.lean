@@ -14,6 +14,9 @@
   Phase 19c expands the measure to 6 components and adds per-action
   progress lemmas for Gather / Deposit / Rest plus the `ProgressAction`
   headline. No new axioms beyond LIV-001.
+
+  Phase 20a adds Reachable, StateRegions, and RegionFiring modules.
+  No new axioms beyond LIV-001 are introduced.
 -/
 import Formal.Liveness.Placeholder
 import Formal.Liveness.Measure
@@ -22,6 +25,9 @@ import Formal.Liveness.GatherProgress
 import Formal.Liveness.DepositProgress
 import Formal.Liveness.RestProgress
 import Formal.Liveness.ProgressAction
+import Formal.Liveness.Reachable
+import Formal.Liveness.StateRegions
+import Formal.Liveness.RegionFiring
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -30,6 +36,9 @@ open Formal.Liveness.GatherProgress
 open Formal.Liveness.DepositProgress
 open Formal.Liveness.RestProgress
 open Formal.Liveness.ProgressAction
+open Formal.Liveness.Reachable
+open Formal.Liveness.StateRegions
+open Formal.Liveness.RegionFiring
 
 -- Phase 19a sanity.
 #print axioms mathlib_works
@@ -53,3 +62,26 @@ open Formal.Liveness.ProgressAction
 
 -- Phase 19c: ProgressAction headline.
 #print axioms step_decreases_measure
+
+-- Phase 20a: Reachable closure.
+#print axioms spawn_reachable
+
+-- Phase 20a: StateRegions exhaustiveness and per-region characterisation.
+#print axioms regions_exhaustive
+#print axioms regionOf_criticalHP
+#print axioms regionOf_pendingItems
+#print axioms regionOf_taskComplete
+#print axioms regionOf_noTask
+#print axioms regionOf_inventoryFull
+#print axioms regionOf_levelBlocker
+#print axioms regionOf_bankLockedFightable
+
+-- Phase 20a: Per-region firing-goal witnesses.
+#print axioms region_criticalHP_fires_restoreHP
+#print axioms region_pendingItemsWaiting_fires_claimPending
+#print axioms region_taskComplete_fires_completeTask
+#print axioms region_noTask_fires_acceptTask
+#print axioms region_inventoryFull_fires_discardOverstock
+#print axioms region_levelBlocker_fires_reachUnlockLevel
+#print axioms region_bankLockedFightable_fires_unlockBank
+#print axioms region_progressNeeded_fires_pursueTask
