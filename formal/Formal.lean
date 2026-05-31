@@ -43,3 +43,7 @@ import Formal.GoalSystem
 import Formal.Liveness.Placeholder
 import Formal.Liveness.Measure
 import Formal.Liveness.FightProgress
+import Formal.Liveness.GatherProgress
+import Formal.Liveness.DepositProgress
+import Formal.Liveness.RestProgress
+import Formal.Liveness.ProgressAction
