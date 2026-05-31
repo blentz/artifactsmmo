@@ -14,6 +14,7 @@ GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ga
 LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
+PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
@@ -1003,6 +1004,8 @@ _ALL_SRCS = [
     SELL_INVENTORY_GOAL_SRC,
     # Phase-19d — Tier-1 liveness measure port.
     MEASURE_SRC,
+    # Phase 21d-2 — Tier-3 plan-exists differential against real planner.
+    PLAYER_SRC,
 ]
 
 
@@ -1723,6 +1726,42 @@ LIVENESS_GATHERING_MUTATIONS = [
      "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 0"),
 ]
 
+# Phase 21d-2 — `_build_actions` mutations. Each drops a specific Action
+# class from the canonical action menu. The plan-exists differential
+# (formal/diff/test_plan_exists_diff.py) must kill each by reporting a
+# real production bug (planner returns empty plan for a firing means).
+PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
+    # Drop RestAction from the menu — HP_CRITICAL case loses its single-step
+    # witness; planner returns []; test_planner_finds_plan_for_firing_means[
+    # HP_CRITICAL] fires.
+    ("plan_exists: drop RestAction from _build_actions",
+     "        actions: list[Action] = [\n"
+     "            RestAction(),",
+     "        actions: list[Action] = [\n"
+     "            # RestAction(),  # mutation: dropped",),
+    # Drop DepositAllAction — DEPOSIT_FULL case has no actuator; planner
+    # returns []; test_planner_finds_plan_for_firing_means[DEPOSIT_FULL] fires.
+    ("plan_exists: drop DepositAllAction from _build_actions",
+     "            DepositAllAction(bank_location=bank, accessible=self._bank_accessible, game_data=self.game_data),",
+     "            # DepositAllAction(...),  # mutation: dropped"),
+    # Drop FightAction construction — BANK_UNLOCK case has no combat
+    # actuator; planner returns []; test_planner_finds_plan_for_firing_means[
+    # BANK_UNLOCK] fires (the only fight-rooted in-scope means).
+    ("plan_exists: drop FightAction from _build_actions",
+     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))",
+     "            pass  # mutation: dropped FightAction append"),
+    # Disable the items-task TaskTradeAction insertion block (BOTH the
+    # quantity=k primary and the quantity=1 fallback). PURSUE_TASK then has
+    # no trade actuator; planner returns []; test_planner_finds_plan_for_firing_means[
+    # PURSUE_TASK] fires. The shorter mutation (dropping only the quantity=k
+    # line) was a SURVIVOR — the quantity=1 fallback alone is enough for the
+    # planner to find a TaskTrade plan, so the mutation must remove both.
+    ("plan_exists: disable items-task TaskTradeAction block",
+     '        if self.state is not None and self.state.task_type == "items" and self.state.task_code:',
+     '        if False and self.state is not None and self.state.task_type == "items" and self.state.task_code:'),
+]
+
+
 LIVENESS_REST_MUTATIONS = [
     # Drop the HP restoration entirely: `hp=state.max_hp` -> `hp=state.hp`.
     # Rest is then a no-op on slot 6; Fight cycles drain HP without it ever
@@ -1880,6 +1919,9 @@ def main() -> int:
               "formal/diff/test_local_progress_diff.py", survivors)
     run_group(APPLY_REST_SRC, LIVENESS_REST_MUTATIONS,
               "formal/diff/test_local_progress_diff.py", survivors)
+    # Phase 21d-2 — Tier-3 plan-exists differential.
+    run_group(PLAYER_SRC, PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS,
+              "formal/diff/test_plan_exists_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
