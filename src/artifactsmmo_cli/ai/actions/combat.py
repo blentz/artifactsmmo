@@ -92,7 +92,13 @@ class FightAction(Action):
             learned = history.action_cost(repr(self), default=static, window=50)
             rate = history.success_rate(repr(self), window=50)
             base = learned_cost_pure(static, learned, rate, has_history=True)
-        if pick_loadout(self.monster_code, state, game_data) != state.equipment:
+        # Per-slot comparison: pick_loadout returns every slot (including None
+        # placeholders), state.equipment only carries filled slots. Direct
+        # dict-equality always disagrees on shape. Match the per-slot pattern
+        # used in GrindCharacterXPGoal._loadout_optimal and
+        # OptimizeLoadoutAction._swap_plan.
+        optimal = pick_loadout(self.monster_code, state, game_data)
+        if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
             base += LOADOUT_PENALTY
         return base
 
