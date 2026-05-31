@@ -218,7 +218,13 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 19b | `Measure.lean` (5-tuple) + Fight progress lemma + LIV-001 axiom | DONE | f9a91d1 |
 | 19c | Gather/Deposit/Rest lemmas + headline + measure expanded to 6-tuple | DONE | 4f04fe9 |
 | 19d | FakeServer + 1000-cycle differential + LIV-001 replay + 4 mutations | DONE | 77c8748 |
-| 20  | Tier 2 — no-deadlock | TODO | — |
+| 20-retracted | Phase 20a (abea964) + Phase 20b (aacbc6d) RETRACTED 2026-05-31. Coarse 8-region `FiringGoal` aggregated production's 17-means ladder; `goalValueOf` was constant-per-constructor; drop/reorder mutations survived because the model wasn't a structural mirror. User-approved Option C: restart Tier 2 at production granularity. Reverts: 6a01... + 3529945. | RETRACTED | — |
+| 20-redesign | Tier 2 v2 (production-granularity from day 1) | TODO | — |
+| 20a-v2 | `Formal/Liveness/MeansKind.lean`: enum mirroring production GUARD_ORDER+COLLECT_REWARD_ORDER+step+DISCRETIONARY_ORDER (17 constructors); `productionLadder : State → Option MeansKind` mirroring `_fires` predicates from `tiers/guards.py` + `tiers/means.py`. | TODO | — |
+| 20b-v2 | Per-MeansKind firing lemma: each constructor of `MeansKind` has a State predicate (the production `_fires` mirror) such that when true, the production goal's value > 0 (cite Phase-18 GoalSystem.lean). | TODO | — |
+| 20c-v2 | Headline: `∀ s, productionLadder s ≠ none` (no-deadlock at production granularity). Proven by case-split on State; falls through to DISCRETIONARY tier (PursueTask/AcceptTask cover task axis with `taskValid`). | TODO | — |
+| 20d-v2 | Python mirror `formal/sim/production_ladder.py` calling real `select_pure` against real candidate list; differential equivalence Hypothesis test. | TODO | — |
+| 20e-v2 | Mutations targeting GUARD_ORDER / COLLECT_REWARD_ORDER / DISCRETIONARY_ORDER tuple reorderings + per-`_fires` predicate flips. Drop/reorder mutations now killable because the Lean model is a structural mirror. | TODO | — |
 | 21  | Tier 3 — plan exists per firing goal | TODO | — |
 | 22  | Cycle loop in Lean | TODO | — |
 | 23  | Tier 4 — cumulative progress | TODO | — |
