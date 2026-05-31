@@ -91,26 +91,6 @@ structure State where
   /-- Active `LevelSkillGoal`'s target xp for the tracked skill. Pass `0`
       when no such goal is active (slot becomes a no-op). -/
   targetSkillXp : Nat
-  /-- Phase-20a addition: there are server-claimed task rewards waiting.
-      Mirrors `WorldState.has_pending_items` (claim-pending guard input).
-      Default `false`. Read by `claimPendingValue`. -/
-  pendingItems : Bool
-  /-- Phase-20a addition: the bank tier is locked behind an unlock guardian.
-      Mirrors `WorldState.bank_locked`. Default `false`. Read by
-      `unlockBankValue`. -/
-  bankLocked : Bool
-  /-- Phase-20a addition: cached "the character's level already exceeds the
-      bank's xp threshold, so the unlock is irrelevant" branch of
-      `UnlockBankGoal.value`. Default `false`. -/
-  bankXpExceeded : Bool
-  /-- Phase-20a addition: cached "the bank's unlock monster is unreachable
-      at the current level/gear" (from `_target_monster_is_unreachable`).
-      Default `false`. -/
-  bankUnreachable : Bool
-  /-- Phase-20a addition: active `ReachUnlockLevelGoal` target level (`0` if
-      no such goal is active). Mirrors the `target_level` argument of
-      `reachUnlockLevelValue`. Default `0`. -/
-  unlockTargetLevel : Nat
   deriving Repr
 
 namespace State
