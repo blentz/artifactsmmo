@@ -98,3 +98,13 @@ open Formal.Liveness.PlanExists
 #print axioms plan_exists_for_taskCancel
 #print axioms plan_exists_for_bankExpand
 #print axioms plan_exists_for_wait
+
+-- Phase 21b: plan-existence lemmas for the moderate-difficulty single-step
+-- firing means (state model collapses MoveTo prefix into the trailing
+-- action's effects on the firing-predicate-visible fields).
+#print axioms plan_exists_for_discardCritical
+#print axioms plan_exists_for_discardHigh
+#print axioms plan_exists_for_depositFull
+#print axioms plan_exists_for_sellPressured
+#print axioms plan_exists_for_sellIdle
+#print axioms plan_exists_for_lowYieldCancel

@@ -1,25 +1,38 @@
 /-
   Formal.Liveness.Plan
 
-  Phase 21a deliverable #2. Plans as lists of `ActionKind` tags plus a
+  Phase 21a/b deliverable #2. Plans as lists of `ActionKind` tags plus a
   partial single-step semantics `applyActionKind`.
 
   ## Scope
 
-  Per-kind semantics are defined ONLY for the 8 "trivial" firing means
-  whose plan-existence lemma is in scope for Phase 21a:
+  Per-kind semantics are defined for the 12 single-step firing means
+  whose plan-existence lemma is in scope for Phases 21a + 21b:
 
-    .rest, .wait, .claimPendingItem, .completeTask, .acceptTask,
-    .taskExchange, .taskCancel, .buyBankExpansion
+    Phase 21a (8):
+      .rest, .wait, .claimPendingItem, .completeTask, .acceptTask,
+      .taskExchange, .taskCancel, .buyBankExpansion
+    Phase 21b (added 4 new ActionKind branches; .taskCancel reused):
+      .deleteItem, .depositAll, .npcSell  (+ .taskCancel reused for lowYieldCancel)
 
-  All other 19 constructors fall through to a no-op default branch. This
-  is NOT a semantic claim about those kinds — Phase 21b/c will replace
+  All other 15 constructors fall through to a no-op default branch. This
+  is NOT a semantic claim about those kinds — Phase 21c/d will replace
   the default with kind-specific semantics derived from the corresponding
   Phase-19 progress lemmas (e.g. `FightProgress.applyFightAction`,
   `GatherProgress.applyGatherAction`, etc., which already exist in
   `Formal/Liveness/{Fight,Gather,Deposit,Rest}Progress.lean`). Until
   then, the default no-op is correct EXACTLY for the in-scope lemmas,
-  which only ever pattern-match on the 8 named kinds.
+  which only ever pattern-match on the 12 named kinds.
+
+  ## Honest disclosure: minimal-modeling for Phase 21b kinds
+
+  The four new branches (`.deleteItem`, `.depositAll`, `.npcSell`, plus
+  reuse of `.taskCancel`) update ONLY the fields the corresponding firing
+  predicate reads. Richer effects (inventory composition, NPC stock
+  ledger, bank ledger updates, gold credited from sell) are deferred to
+  later phases or out of Tier 3 scope. This is sufficient — and only
+  sufficient — to flip the firing predicate of the targeted means to
+  `false` in a single step.
 
   ## Production source citations
 
@@ -105,11 +118,16 @@ def applyActionKind : ActionKind → State → State
   | .taskExchange, s =>
       { s with taskCoinsTotal := s.taskCoinsTotal - s.taskExchangeMinCoins }
   -- TaskCancelAction.apply (task_cancel.py:35+): clears task; consumes
-  -- one task coin. The Lean model has an OPAQUE Bool `taskCancelFires`
-  -- which production resets after the cancel — the conservative
-  -- single-action semantics flips it to `false`.
+  -- one task coin. The Lean model has OPAQUE Bools `taskCancelFires`,
+  -- `lowYieldCancelFires`, and `pursueTaskFires` which production resets
+  -- after the cancel (no task ⇒ none of these can fire) — the
+  -- conservative single-action semantics flips all three to `false`.
+  -- Phase 21b: also covers `.lowYieldCancel` whose firing predicate
+  -- reads `s.lowYieldCancelFires`.
   | .taskCancel, s =>
       { s with taskCancelFires := false,
+               lowYieldCancelFires := false,
+               pursueTaskFires := false,
                taskCode := none,
                taskTotal := 0,
                taskProgress := 0 }
@@ -118,7 +136,34 @@ def applyActionKind : ActionKind → State → State
   | .buyBankExpansion, s =>
       { s with bankCapacity := s.bankCapacity + bankExpansionSlots,
                gold := s.gold - s.nextExpansionCost }
-  -- All other 19 kinds: no-op (see module docstring; Phase 21b/c will
+  -- DeleteItemAction.apply (delete.py): removes an overstock item from
+  -- inventory. The Lean model abstracts inventory composition via the
+  -- Bool `hasOverstockItems`; the conservative single-action semantics
+  -- flips it to `false` (the deleted item WAS the overstock, so after
+  -- delete the overstock is gone). Sufficient to clear
+  -- `discardCriticalFires` and `discardHighFires`. Richer effects (item
+  -- composition, inventoryUsed decrement) deferred — see module
+  -- "Honest disclosure: minimal-modeling" note.
+  | .deleteItem, s => { s with hasOverstockItems := false }
+  -- DepositAllAction.apply (deposit_all.py): deposits the curated
+  -- non-keep-set into the bank. The Lean model abstracts the selection
+  -- via the Bool `selectBankDepositsNonempty`; the conservative
+  -- single-action semantics flips it to `false` (everything that would
+  -- have been deposited has been). Sufficient to clear
+  -- `depositFullFires`. Richer effects (bank ledger, inventoryUsed
+  -- update for the deposited subset) deferred — see module
+  -- "Honest disclosure: minimal-modeling" note.
+  | .depositAll, s => { s with selectBankDepositsNonempty := false }
+  -- NpcSellAction.apply (npc_sell.py): sells the curated sellable
+  -- inventory subset to an NPC merchant. The Lean model abstracts the
+  -- selection via the Bool `sellableInventoryNonempty`; the conservative
+  -- single-action semantics flips it to `false` (post-sell nothing
+  -- sellable remains). Sufficient to clear `sellPressuredFires` and
+  -- `sellIdleFires`. Richer effects (gold credit, inventoryUsed
+  -- decrement, NPC stock) deferred — see module "Honest disclosure:
+  -- minimal-modeling" note.
+  | .npcSell, s => { s with sellableInventoryNonempty := false }
+  -- All other 15 kinds: no-op (see module docstring; Phase 21c/d will
   -- replace each with its specific semantics).
   | _, s => s
 

@@ -171,6 +171,81 @@ theorem plan_exists_for_bankExpand :
   -- `henough` together with the surviving conjuncts in `hfire`.
   omega
 
+/-! ## Phase 21b — additional single-step plan-existence lemmas
+
+  The state model has no position/coordinates, so MoveTo collapses out at
+  this granularity — plans remain single-action even for means whose
+  production execution involves a prior move (DepositFull, SellPressured,
+  SellIdle, DiscardCritical, DiscardHigh, LowYieldCancel). Phase 21b adds
+  6 lemmas covering these means. See `Plan.lean::applyActionKind` for the
+  honest minimal-modeling disclosure (state effects updated only for the
+  fields the firing predicate reads). -/
+
+/-- `[.deleteItem]` clears `discardCritical`. `DeleteItemAction` removes
+    the overstock item; the post-state has `hasOverstockItems = false`,
+    which makes the firing predicate's first conjunct false. -/
+theorem plan_exists_for_discardCritical :
+    ∀ s, fires .discardCritical s = true →
+      ∃ p : Plan, planAchieves p s .discardCritical := by
+  intro s h
+  refine ⟨[.deleteItem], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        discardCriticalFires]
+
+/-- `[.deleteItem]` clears `discardHigh`. Same reasoning as
+    `discardCritical`: post-state has `hasOverstockItems = false`. -/
+theorem plan_exists_for_discardHigh :
+    ∀ s, fires .discardHigh s = true →
+      ∃ p : Plan, planAchieves p s .discardHigh := by
+  intro s h
+  refine ⟨[.deleteItem], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        discardHighFires]
+
+/-- `[.depositAll]` clears `depositFull`. `DepositAllAction` deposits the
+    curated subset; the post-state has `selectBankDepositsNonempty =
+    false`, killing the firing predicate's final conjunct. -/
+theorem plan_exists_for_depositFull :
+    ∀ s, fires .depositFull s = true →
+      ∃ p : Plan, planAchieves p s .depositFull := by
+  intro s h
+  refine ⟨[.depositAll], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        depositFullFires]
+
+/-- `[.npcSell]` clears `sellPressured`. `NpcSellAction` sells the
+    curated subset; the post-state has `sellableInventoryNonempty =
+    false`, killing the firing predicate's final conjunct. -/
+theorem plan_exists_for_sellPressured :
+    ∀ s, fires .sellPressured s = true →
+      ∃ p : Plan, planAchieves p s .sellPressured := by
+  intro s h
+  refine ⟨[.npcSell], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        sellPressuredFires]
+
+/-- `[.npcSell]` clears `sellIdle`. Same reasoning as `sellPressured`:
+    post-state has `sellableInventoryNonempty = false`. -/
+theorem plan_exists_for_sellIdle :
+    ∀ s, fires .sellIdle s = true →
+      ∃ p : Plan, planAchieves p s .sellIdle := by
+  intro s h
+  refine ⟨[.npcSell], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        sellIdleFires]
+
+/-- `[.taskCancel]` clears `lowYieldCancel`. The opaque Bool
+    `lowYieldCancelFires` is reset to `false` by the apply — production's
+    cancel clears the active task, so no low-yield cancellation can fire
+    on the post-state. -/
+theorem plan_exists_for_lowYieldCancel :
+    ∀ s, fires .lowYieldCancel s = true →
+      ∃ p : Plan, planAchieves p s .lowYieldCancel := by
+  intro s h
+  refine ⟨[.taskCancel], ?_⟩
+  simp [planAchieves, applyActionKind, fires,
+        lowYieldCancelFires]
+
 /-! ## Wait — honest weaker statement -/
 
 /-- `WaitGoal` is unsatisfiable by waiting (the action is a no-op and
@@ -183,23 +258,18 @@ theorem plan_exists_for_wait :
   intro s _
   exact ⟨[.wait], by simp [applyActionKind]⟩
 
-/-! ## Deferred lemmas — Phase 21b/c
+/-! ## Deferred lemmas — Phase 21c/d
 
-  For the following 10 firing means, plan construction requires
-  multi-step machinery beyond Phase 21a's scope. No theorem is declared
-  for any of them in this phase (per phase plan: "no sorry, no axioms,
-  comment block only").
+  After Phase 21b, 4 firing means remain deferred. Plan construction
+  for each requires multi-step machinery (combat loops, recipe chains,
+  or arbiter-internal lifting) beyond single-action semantics. No
+  theorem is declared for any of them in this phase (per phase plan:
+  "no sorry, no axioms, comment block only").
 
-  -- Deferred to Phase 21b: bankUnlock        -- requires Fight+Move plan; lift FightProgress.
-  -- Deferred to Phase 21b: reachUnlockLevel  -- requires Fight loop to gain levels; lift FightProgress.
-  -- Deferred to Phase 21b: discardCritical   -- requires DeleteItem+selection logic; new applyActionKind branch.
-  -- Deferred to Phase 21b: depositFull       -- requires MoveTo(bank)+DepositAll; lift DepositProgress.
-  -- Deferred to Phase 21b: discardHigh       -- requires DeleteItem+selection logic; new applyActionKind branch.
-  -- Deferred to Phase 21b: sellPressured     -- requires MoveTo(npc)+NpcSell; new applyActionKind branches.
-  -- Deferred to Phase 21b: lowYieldCancel    -- requires TaskCancel under different opaque-Bool semantics.
-  -- Deferred to Phase 21c: objectiveStep     -- requires lifting the StrategyArbiter objective tier.
-  -- Deferred to Phase 21c: pursueTask        -- requires multi-step recipe-chain plan construction.
-  -- Deferred to Phase 21b: sellIdle          -- requires MoveTo(npc)+NpcSell; new applyActionKind branches.
+  -- Deferred to Phase 21c: bankUnlock        -- requires Fight outcome to satisfy achievement; lift FightProgress.
+  -- Deferred to Phase 21c: reachUnlockLevel  -- requires Fight loop to gain levels; lift FightProgress.
+  -- Deferred to Phase 21d: pursueTask        -- requires multi-step TaskTrade/Gather recipe-chain plan construction.
+  -- Deferred to Phase 21d: objectiveStep     -- requires lifting the StrategyArbiter objective tier (varies by chosen step shape).
 -/
 
 end Formal.Liveness.PlanExists
