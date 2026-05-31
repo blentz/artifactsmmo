@@ -220,7 +220,7 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 19d | FakeServer + 1000-cycle differential + LIV-001 replay + 4 mutations | DONE | 77c8748 |
 | 20-retracted | Phase 20a (abea964) + Phase 20b (aacbc6d) RETRACTED 2026-05-31. Coarse 8-region `FiringGoal` aggregated production's 17-means ladder; `goalValueOf` was constant-per-constructor; drop/reorder mutations survived because the model wasn't a structural mirror. User-approved Option C: restart Tier 2 at production granularity. Reverts: 6a01... + 3529945. | RETRACTED | — |
 | 20-redesign | Tier 2 v2 (production-granularity from day 1) | TODO | — |
-| 20a-v2 | `Formal/Liveness/MeansKind.lean`: enum mirroring production GUARD_ORDER+COLLECT_REWARD_ORDER+step+DISCRETIONARY_ORDER (17 constructors); `productionLadder : State → Option MeansKind` mirroring `_fires` predicates from `tiers/guards.py` + `tiers/means.py`. | TODO | — |
+| 20a-v2 | `Formal/Liveness/{MeansKind,ProductionLadder}.lean` + State extended with 18 production-cited fields (6 opaque). Phase-19 lemmas unchanged. | DONE | 5add4a0 |
 | 20b-v2 | Per-MeansKind firing lemma: each constructor of `MeansKind` has a State predicate (the production `_fires` mirror) such that when true, the production goal's value > 0 (cite Phase-18 GoalSystem.lean). | TODO | — |
 | 20c-v2 | Headline: `∀ s, productionLadder s ≠ none` (no-deadlock at production granularity). Proven by case-split on State; falls through to DISCRETIONARY tier (PursueTask/AcceptTask cover task axis with `taskValid`). | TODO | — |
 | 20d-v2 | Python mirror `formal/sim/production_ladder.py` calling real `select_pure` against real candidate list; differential equivalence Hypothesis test. | TODO | — |
