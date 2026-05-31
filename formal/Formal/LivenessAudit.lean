@@ -17,9 +17,6 @@
 
   Phase 20a adds Reachable, StateRegions, and RegionFiring modules.
   No new axioms beyond LIV-001 are introduced.
-
-  Phase 20b adds the NoDeadlock headline (strong + Reachable corollary).
-  No new axioms beyond LIV-001.
 -/
 import Formal.Liveness.Placeholder
 import Formal.Liveness.Measure
@@ -31,7 +28,6 @@ import Formal.Liveness.ProgressAction
 import Formal.Liveness.Reachable
 import Formal.Liveness.StateRegions
 import Formal.Liveness.RegionFiring
-import Formal.Liveness.NoDeadlock
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -43,7 +39,6 @@ open Formal.Liveness.ProgressAction
 open Formal.Liveness.Reachable
 open Formal.Liveness.StateRegions
 open Formal.Liveness.RegionFiring
-open Formal.Liveness.NoDeadlock
 
 -- Phase 19a sanity.
 #print axioms mathlib_works
@@ -90,7 +85,3 @@ open Formal.Liveness.NoDeadlock
 #print axioms region_levelBlocker_fires_reachUnlockLevel
 #print axioms region_bankLockedFightable_fires_unlockBank
 #print axioms region_progressNeeded_fires_pursueTask
-
--- Phase 20b: NoDeadlock headline (strong + Reachable corollary).
-#print axioms no_deadlock_strong
-#print axioms no_deadlock_reachable

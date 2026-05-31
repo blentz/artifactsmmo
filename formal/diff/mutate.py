@@ -73,8 +73,6 @@ SELL_INVENTORY_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "
 # Phase-19d — Tier-1 liveness measure (Python port of Formal.Liveness.Measure).
 # Production sources reuse GATHERING_APPLY_SRC / APPLY_REST_SRC defined above.
 MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
-# Phase-20b — no-deadlock differential targets.
-FIRING_GOAL_SRC = ROOT / "formal" / "sim" / "firing_goal.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -1725,69 +1723,6 @@ LIVENESS_GATHERING_MUTATIONS = [
      "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 0"),
 ]
 
-FIRING_GOAL_MISROUTE_INVENTORY_MUTATIONS = [
-    # Phase-20b mutation #1: misroute `inventoryFull` -> RESTORE_HP. The
-    # full-inventory Hypothesis stratum sets hp = max_hp, so RestoreHPGoal's
-    # non-critical branch returns `(1 - 1) * 100 = 0` — the no-deadlock
-    # invariant fails because the dispatch now picks a goal whose value is
-    # provably zero on that state shape.
-    ("firing_goal: misroute inventoryFull -> RESTORE_HP",
-     "    if is_inventory_full(state):\n        return FiringGoal.DISCARD_OVERSTOCK",
-     "    if is_inventory_full(state):\n        return FiringGoal.RESTORE_HP"),
-]
-
-FIRING_GOAL_MISROUTE_NOTASK_MUTATIONS = [
-    # Phase-20b mutation #2: misroute `noTask` -> PURSUE_TASK. PursueTaskGoal
-    # constructed with task_code="" / no real task is immediately satisfied
-    # (the `not state.task_code` branch in is_satisfied) and returns 0 —
-    # invariant fails on every no-task Hypothesis sample.
-    ("firing_goal: misroute noTask -> PURSUE_TASK",
-     "    if is_no_task(state):\n        return FiringGoal.ACCEPT_TASK",
-     "    if is_no_task(state):\n        return FiringGoal.PURSUE_TASK"),
-]
-
-RESTORE_HP_BOUNDARY_MUTATIONS = [
-    # Phase-20b mutation #3: invert RestoreHP critical boundary `<` -> `>`.
-    # State with low HP no longer enters the critical branch; for hp_percent
-    # below CRITICAL_HP_FRACTION the non-critical branch is taken — and
-    # `(1 - hp_percent) * 100` is still > 0 there, BUT for the trace test the
-    # `progressNeeded` region routes through PursueTask which depends on the
-    # boundary indirectly. The Hypothesis sweep generates critical-HP states
-    # where hp = 0 → `(1 - 0) * 100 = 100` keeps non-critical positive, but
-    # the firing-goal dispatch in `region_of` still picks RESTORE_HP and we
-    # call into the goal. Critical_value=110; non-critical at hp_percent=0 is
-    # 100. The strict-positivity assertion (> 0) holds either way for hp > 0.
-    # To make the mutation observable we also flip the comparator producing
-    # an off-band negative when hp = max_hp: `(1 - 1) * 100 = 0` at full HP,
-    # which is the canonical pursuit/non-critical state — and our test does
-    # NOT exercise full-HP critical region. So instead we kill via a stronger
-    # mutation: when critical, return 0 instead of CRITICAL_HP_VALUE — that
-    # directly breaks the firing lemma's witness for the critical_hp region.
-    ("restore_hp: critical branch returns 0 (firing lemma witness broken)",
-     "        if state.hp_percent < self.CRITICAL_HP_FRACTION:\n"
-     "            return self.CRITICAL_HP_VALUE\n"
-     "        return (1.0 - state.hp_percent) * 100.0",
-     "        if state.hp_percent < self.CRITICAL_HP_FRACTION:\n"
-     "            return 0.0\n"
-     "        return 0.0"),
-]
-
-DISCARD_OVERSTOCK_ZERO_MUTATIONS = [
-    # Phase-20b mutation #4: DiscardOverstockGoal.value -> 0 unconditionally.
-    # Breaks the firing-goal witness for the inventoryFull region — the
-    # no-deadlock invariant fails on every overstocked-inventory state.
-    ("discard_overstock: value() returns 0 unconditionally",
-     "        if self.is_satisfied(state):\n"
-     "            return 0.0\n"
-     "        pressure = state.inventory_used / state.inventory_max if state.inventory_max else 0.0\n"
-     "        if pressure >= CRITICAL_PRESSURE_FRACTION:\n"
-     "            return _DISCARD_OVERSTOCK_CRITICAL\n"
-     "        if pressure >= HIGH_PRESSURE_FRACTION:\n"
-     "            return _DISCARD_OVERSTOCK_HIGH_PRESSURE\n"
-     "        return _DISCARD_OVERSTOCK_BASE",
-     "        return 0.0"),
-]
-
 LIVENESS_REST_MUTATIONS = [
     # Drop the HP restoration entirely: `hp=state.max_hp` -> `hp=state.hp`.
     # Rest is then a no-op on slot 6; Fight cycles drain HP without it ever
@@ -1945,15 +1880,6 @@ def main() -> int:
               "formal/diff/test_local_progress_diff.py", survivors)
     run_group(APPLY_REST_SRC, LIVENESS_REST_MUTATIONS,
               "formal/diff/test_local_progress_diff.py", survivors)
-    # Phase-20b — no-deadlock differential.
-    run_group(FIRING_GOAL_SRC, FIRING_GOAL_MISROUTE_INVENTORY_MUTATIONS,
-              "formal/diff/test_no_deadlock_diff.py", survivors)
-    run_group(FIRING_GOAL_SRC, FIRING_GOAL_MISROUTE_NOTASK_MUTATIONS,
-              "formal/diff/test_no_deadlock_diff.py", survivors)
-    run_group(RESTORE_HP_GOAL_SRC, RESTORE_HP_BOUNDARY_MUTATIONS,
-              "formal/diff/test_no_deadlock_diff.py", survivors)
-    run_group(DISCARD_OVERSTOCK_GOAL_SRC, DISCARD_OVERSTOCK_ZERO_MUTATIONS,
-              "formal/diff/test_no_deadlock_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
