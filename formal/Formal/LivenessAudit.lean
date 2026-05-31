@@ -22,6 +22,7 @@ import Formal.Liveness.GatherProgress
 import Formal.Liveness.DepositProgress
 import Formal.Liveness.RestProgress
 import Formal.Liveness.ProgressAction
+import Formal.Liveness.MeansFiring
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -30,6 +31,7 @@ open Formal.Liveness.GatherProgress
 open Formal.Liveness.DepositProgress
 open Formal.Liveness.RestProgress
 open Formal.Liveness.ProgressAction
+open Formal.Liveness.MeansFiring
 
 -- Phase 19a sanity.
 #print axioms mathlib_works
@@ -53,3 +55,22 @@ open Formal.Liveness.ProgressAction
 
 -- Phase 19c: ProgressAction headline.
 #print axioms step_decreases_measure
+
+-- Phase 20b-v2: per-MeansKind firing → Phase-18 value > 0 lemmas.
+#print axioms _fires_hpCritical_implies_restoreHp_positive
+#print axioms _fires_bankUnlock_implies_unlockBank_positive
+#print axioms _fires_reachUnlockLevel_implies_value_positive
+#print axioms _fires_discardCritical_implies_discardOverstock_positive
+#print axioms _fires_depositFull_implies_depositInventory_positive
+#print axioms _fires_discardHigh_implies_discardOverstock_positive
+#print axioms _fires_claimPending_implies_claimPending_positive
+#print axioms _fires_completeTask_implies_completeTask_positive
+#print axioms _fires_sellPressured_implies_sellInventory_positive
+#print axioms _fires_lowYieldCancel_implies_lowYieldCancel_positive
+#print axioms _fires_taskCancel_implies_taskCancel_positive
+#print axioms _fires_pursueTask_implies_pursueTask_positive
+#print axioms _fires_acceptTask_implies_acceptTask_positive
+#print axioms _fires_taskExchange_implies_taskExchange_positive
+#print axioms _fires_sellIdle_implies_sellInventory_positive
+#print axioms _fires_bankExpand_implies_expandBank_positive
+#print axioms pursueTaskValueModel_positive_when_unsatisfied
