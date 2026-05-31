@@ -91,6 +91,67 @@ structure State where
   /-- Active `LevelSkillGoal`'s target xp for the tracked skill. Pass `0`
       when no such goal is active (slot becomes a no-op). -/
   targetSkillXp : Nat
+  -- Phase 20a-v2 extensions — fields read by the production ladder.
+  -- These fields exist solely to let `Formal.Liveness.ProductionLadder.fires`
+  -- mirror the production `_fires_*` predicates in `tiers/guards.py` /
+  -- `tiers/means.py`. Tier-1 apply functions (Fight/Gather/Deposit/Rest)
+  -- PRESERVE every one of these fields via `{ s with ... }` — none are
+  -- mutated by Phase-19 progress actions.
+  --
+  -- Several fields are OPAQUE Bools — they carry production's observed
+  -- answer for a predicate the Lean model can't readily reproduce (e.g.
+  -- `task_decision == PIVOT`, `low_yield_cancel_fires`). They are NOT
+  -- axioms; they are state-carried observations. A later diff harness
+  -- must assert the Bool matches the production computation.
+  /-- `WorldState.gold`. Read by BANK_EXPAND. -/
+  gold : Nat
+  /-- ctx flag `SelectionContext.bank_accessible` (guards.py:26). -/
+  bankAccessible : Bool
+  /-- ctx flag — `ctx.bank_unlock_monster is not None` (guards.py:28). -/
+  bankUnlockMonsterPresent : Bool
+  /-- ctx — `SelectionContext.initial_xp` (guards.py:29). -/
+  initialXp : Nat
+  /-- `game_data.monster_level(ctx.bank_unlock_monster)`; `0` if unknown
+      (guards.py:74). -/
+  unlockMonsterLevel : Nat
+  /-- ctx — `SelectionContext.bank_required_level` (guards.py:27). -/
+  bankRequiredLevel : Nat
+  /-- `bool(overstocked_items(state, game_data))` (guards.py:82, 87). -/
+  hasOverstockItems : Bool
+  /-- `bool(select_bank_deposits(state, game_data))` — opaque
+      (guards.py:85). -/
+  selectBankDepositsNonempty : Bool
+  /-- `bool(state.pending_items)` (means.py:68). -/
+  pendingItemsNonempty : Bool
+  /-- `_has_sellable(state, game_data)` (means.py:54-58). -/
+  sellableInventoryNonempty : Bool
+  /-- `_tasks_coin_total(state)` (means.py:61-62): inventory + bank. -/
+  taskCoinsTotal : Nat
+  /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/
+  taskExchangeMinCoins : Nat
+  /-- OPAQUE: `low_yield_cancel_fires(state, history)` (means.py:78). -/
+  lowYieldCancelFires : Bool
+  /-- OPAQUE: `task_decision(state, game_data, history) == PIVOT`, with
+      gating `bool(state.task_code) and history is not None` already
+      folded in (means.py:80-83). -/
+  taskCancelFires : Bool
+  /-- OPAQUE: production's PURSUE_TASK predicate (means.py:85-90), with
+      all gating folded in (`task_type == "items"`, `task_code`,
+      `task_progress < task_total`, `history is not None`,
+      `task_decision == PURSUE`). -/
+  pursueTaskFires : Bool
+  /-- OPAQUE: production's objective-step firing predicate (the
+      StrategyArbiter inserts the StepGoal candidate iff the objective
+      tier yields a plannable step). -/
+  objectiveStepFires : Bool
+  /-- `state.bank_items is not None` (means.py:104). -/
+  bankItemsKnown : Bool
+  /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/
+  bankItemsCount : Nat
+  /-- `game_data._bank_capacity` (means.py:106, 108). -/
+  bankCapacity : Nat
+  /-- `game_data._next_expansion_cost` (means.py:111). -/
+  nextExpansionCost : Nat
   deriving Repr
 
 namespace State
