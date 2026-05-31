@@ -23,6 +23,7 @@ import Formal.Liveness.DepositProgress
 import Formal.Liveness.RestProgress
 import Formal.Liveness.ProgressAction
 import Formal.Liveness.MeansFiring
+import Formal.Liveness.NoDeadlockV2
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -32,6 +33,7 @@ open Formal.Liveness.DepositProgress
 open Formal.Liveness.RestProgress
 open Formal.Liveness.ProgressAction
 open Formal.Liveness.MeansFiring
+open Formal.Liveness.NoDeadlockV2
 
 -- Phase 19a sanity.
 #print axioms mathlib_works
@@ -74,3 +76,8 @@ open Formal.Liveness.MeansFiring
 #print axioms _fires_sellIdle_implies_sellInventory_positive
 #print axioms _fires_bankExpand_implies_expandBank_positive
 #print axioms pursueTaskValueModel_positive_when_unsatisfied
+
+-- Phase 20c-v2: no-deadlock headline.
+#print axioms productionLadder_ne_none_of_fires
+#print axioms productionLadder_total_under_invariants
+#print axioms exists_firing_means_under_invariants
