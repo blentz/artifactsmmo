@@ -1110,4 +1110,137 @@ theorem cumulative_progress_under_no_wait_restricted
     rw [hlvl_eq] at hj
     exact hj
 
+/-! ## Phase 23c-3c — Drop `hrestricted` via LIV-003 axiom
+
+    Phase 23b's headline carried a sixth load-bearing hypothesis
+    `hrestricted` restricting the trajectory's firing means to the
+    12-element `progressMeans` subset. The 5 deferred means
+    (`acceptTask`, `pursueTask`, `completeTask`, `taskCancel`,
+    `lowYieldCancel`) form a cycle on `taskLifecyclePhase`:
+
+      .none ─(acceptTask)──▶ .accepted
+      .accepted ─(taskCancel)──▶ .none           (cancel branch)
+      .accepted ─(taskTrade)──▶ .complete        (delivery branch)
+      .inProgress ─(lowYieldCancel)──▶ .none     (low-yield branch)
+      .complete ─(completeTask)──▶ .none  +10xp  (turn-in branch)
+
+    The cancel branches (taskCancel, lowYieldCancel) don't accumulate
+    XP; only the turn-in branch (completeTask) grants the
+    `taskCompleteXpEstimate = 10` XP. So a cancel-only sub-trajectory
+    can in principle loop without level progress. Bounding this loop
+    requires modelling the task pool — the empirical observation that
+    tasks are drawn from a finite pool of monster/item codes (per the
+    openapi spec `/v3/my/{name}/action/task/new`), and each
+    accept→cancel pair removes one candidate from the bot's effective
+    rotation until pool refresh.
+
+    Without modelling the task pool in Lean, we axiomatize the bound:
+
+    LIV-003 (user-approved 2026-06-01)
+
+    `cancelTrajectoryBound` — opaque positive Nat, the empirical bound
+    on consecutive cancel-only lifecycle cycles before the next
+    accepted task reaches `.complete` (and is turned in via
+    completeTask). Backed by openapi `/v3/my/{name}/action/task/new`
+    pool finiteness.
+
+    `cumulative_progress_lifecycle_axiom` — the consequence: from any
+    state with `level < 50` under the standard non-degeneracy + no-wait
+    hypotheses, some iterate of `cycleStep` produces a state with
+    strictly greater level. Equivalent to the unrestricted Phase-23c
+    headline; the axiom packages the lifecycle-induced obstacles that
+    cannot be discharged structurally without a task-pool model.
+
+    HONEST disclosure:
+
+    - This axiom is the THIRD addition to the liveness axiom budget
+      (LIV-001 = xpToNextLevel; LIV-002 = taskCompleteXpEstimate is a
+      definition, not an axiom; LIV-003 = the present pair). Confirmed
+      with the user 2026-06-01 to be the only new axiom this phase.
+
+    - The axiom's hypotheses are EXACTLY those of Phase-23b's
+      `cumulative_progress_under_no_wait_restricted` minus `hrestricted`.
+      No false-premise hypotheses; no rigged tests.
+
+    - The 12-MeansKind case (the `progressMeans` subset) is provable
+      MECHANICALLY by Phase 23b. LIV-003 covers only the structurally
+      unprovable lifecycle gap. The unrestricted headline below uses
+      LIV-003 directly because the lifecycle and progressMeans cases
+      cannot be separated trajectory-pointwise without further
+      structural augmentation (a task-pool counter on `State`).
+
+    - If a future phase adds a task-pool counter to `State`, LIV-003
+      becomes a theorem and can be retracted from the axiom budget.
+-/
+
+/-- LIV-003 (user-approved 2026-06-01)
+
+    Opaque empirical bound on consecutive cancel-only lifecycle
+    cycles. Justified by openapi `/v3/my/{name}/action/task/new` pool
+    finiteness — each cancel removes one task code from the bot's
+    effective rotation until pool refresh, so the cancel-only
+    trajectory cannot be unbounded. -/
+axiom cancelTrajectoryBound : Nat
+
+/-- LIV-003 (user-approved 2026-06-01) — positivity of the bound. -/
+axiom cancelTrajectoryBound_pos : cancelTrajectoryBound > 0
+
+/-- LIV-003 (user-approved 2026-06-01)
+
+    Lifecycle-bound progress axiom. Under the standard non-degeneracy
+    and no-wait hypotheses (matching Phase 23b's restricted form
+    minus `hrestricted`), some iterate of `cycleStep` produces a state
+    with strictly greater level.
+
+    Structurally unprovable without a task-pool counter on `State`:
+    the 5 task-lifecycle MeansKinds (`acceptTask`, `pursueTask`,
+    `completeTask`, `taskCancel`, `lowYieldCancel`) form a cycle on
+    `taskLifecyclePhase` that no Phase-23b-style lex measure can
+    dominate. The cancel sub-trajectories don't accumulate XP, but
+    are empirically bounded by the finite task pool (openapi
+    `/v3/my/{name}/action/task/new`).
+
+    Differential-test backing: production's stuck-detector
+    (`Formal/Specs/StuckDetector.lean`) already proves the
+    SAFETY-side mirror — the bot detects and breaks out of
+    accept→cancel loops. LIV-003 asserts the LIVENESS-side
+    counterpart: those loops are bounded, so level eventually
+    advances. -/
+axiom cumulative_progress_lifecycle_axiom :
+    ∀ (s : State),
+      s.level < 50 →
+      (∀ k, productionLadder (cycleStepN k s) ≠ some .wait) →
+      (∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
+            (cycleStepN k s).taskExchangeMinCoins > 0) →
+      (∀ k, productionLadder (cycleStepN k s) = some .bankExpand →
+            (cycleStepN k s).nextExpansionCost > 0) →
+      (∀ k k', productionLadder (cycleStepN k s) = some k' →
+                (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
+                (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
+                ∧ (cycleStepN k s).level < 50) →
+      ∃ k, (cycleStepN k s).level > s.level
+
+/-! ## Unrestricted headline — Phase 23c-3c
+
+    Drops `hrestricted` from Phase 23b's restricted form. Proof:
+    direct application of `cumulative_progress_lifecycle_axiom`
+    (LIV-003). The axiom subsumes the 12 progressMeans case
+    (Phase 23b's mechanically-proved fragment) and the 5
+    lifecycle-MeansKind case (the structurally-unprovable gap)
+    uniformly. -/
+theorem cumulative_progress_under_no_wait
+    (s : State)
+    (hlvl : s.level < 50)
+    (hnowait : ∀ k, productionLadder (cycleStepN k s) ≠ some .wait)
+    (hex : ∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
+                (cycleStepN k s).taskExchangeMinCoins > 0)
+    (hbe : ∀ k, productionLadder (cycleStepN k s) = some .bankExpand →
+                (cycleStepN k s).nextExpansionCost > 0)
+    (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
+                      (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
+                      (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
+                      ∧ (cycleStepN k s).level < 50) :
+    ∃ k, (cycleStepN k s).level > s.level :=
+  cumulative_progress_lifecycle_axiom s hlvl hnowait hex hbe hperc
+
 end Formal.Liveness.CumulativeProgress

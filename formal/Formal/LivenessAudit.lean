@@ -150,3 +150,14 @@ open Formal.Liveness.CumulativeProgress
 #print axioms cycleStep_level_ge
 #print axioms progressMeans_decreases_extMeasure_or_advances_level
 #print axioms cumulative_progress_under_no_wait_restricted
+
+-- Phase 23c-3c — Tier 4 UNRESTRICTED form. Drops the `hrestricted`
+-- hypothesis from 23b by axiomatizing the task-lifecycle bound
+-- (LIV-003, bounded cancel-trajectory). See
+-- `Formal/Liveness/CumulativeProgress.lean`'s "Phase 23c-3c"
+-- section for the LIV-003 docstring, the openapi citation, and
+-- the user approval date.
+#print axioms cancelTrajectoryBound
+#print axioms cancelTrajectoryBound_pos
+#print axioms cumulative_progress_lifecycle_axiom
+#print axioms cumulative_progress_under_no_wait
