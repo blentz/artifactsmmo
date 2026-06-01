@@ -74,6 +74,7 @@
 -/
 import Formal.Liveness.Measure
 import Formal.Liveness.PlanAction
+import Formal.Liveness.TaskLifecyclePhase
 
 set_option linter.dupNamespace false
 set_option linter.unusedVariables false
@@ -82,6 +83,7 @@ namespace Formal.Liveness.Plan
 
 open Formal.Liveness.Measure
 open Formal.Liveness.PlanAction
+open Formal.Liveness.TaskLifecyclePhase
 
 /-- A plan is an ordered list of action kinds the planner emits. -/
 abbrev Plan : Type := List ActionKind
@@ -110,16 +112,26 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- collapses the list to a Bool `pendingItemsNonempty`; the conservative
   -- single-action semantics flips it to `false`.
   | .claimPendingItem, s => { s with pendingItemsNonempty := false }
-  -- CompleteTaskAction.apply (complete_task.py:30-41): clears
-  -- task_code / task_type / task_progress / task_total. The Lean model
-  -- represents an absent task by `taskCode := none`.
-  | .completeTask, s => { s with taskCode := none, taskTotal := 0, taskProgress := 0 }
+  -- CompleteTaskAction.apply (complete_task.py:46-59, see also
+  -- TASK_COMPLETE_XP_ESTIMATE = 10 in complete_task.py:20): clears
+  -- task_code / task_type / task_progress / task_total AND grants
+  -- `taskCompleteXpEstimate = 10` xp (Phase 23c-3b, LIV-002). Lifecycle
+  -- phase resets to `.none`.
+  | .completeTask, s =>
+      { s with taskCode := none,
+               taskTotal := 0,
+               taskProgress := 0,
+               taskLifecyclePhase := .none,
+               xp := s.xp + taskCompleteXpEstimate }
   -- AcceptTaskAction.apply (accept_task.py:32-42): assigns placeholder
   -- task. See "Honest disclosure: acceptTask" in the module docstring.
+  -- Phase 23c-3b: also sets `taskLifecyclePhase := .accepted` to match
+  -- `deriveTaskLifecyclePhase (some "__pending__") 0 1 = .accepted`.
   | .acceptTask, s =>
       { s with taskCode := some acceptTaskPlaceholderCode,
                taskTotal := 1,
-               taskProgress := 0 }
+               taskProgress := 0,
+               taskLifecyclePhase := .accepted }
   -- TaskExchangeAction.apply (task_exchange.py:44+): consumes `min_coins`
   -- task coins from inventory, grants reward. The Lean model abstracts the
   -- coin counter via `taskCoinsTotal`; the conservative single-action
@@ -139,7 +151,8 @@ noncomputable def applyActionKind : ActionKind → State → State
                pursueTaskFires := false,
                taskCode := none,
                taskTotal := 0,
-               taskProgress := 0 }
+               taskProgress := 0,
+               taskLifecyclePhase := .none }
   -- BuyBankExpansionAction.apply (bank_expansion.py:39-54): adds 20 slots
   -- to bank_capacity, deducts gold cost.
   | .buyBankExpansion, s =>
@@ -239,7 +252,8 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- — see module "Honest disclosure: minimal-modeling" note.
   | .taskTrade, s =>
       { s with pursueTaskFires := false,
-               taskProgress := s.taskTotal }
+               taskProgress := s.taskTotal,
+               taskLifecyclePhase := .complete }
   -- Phase 21d-1 synthetic placeholder. See PlanAction.lean docstring
   -- "Phase 21d-1: synthetic `.objectiveStep` placeholder". The objective
   -- tier in production dispatches to a sub-goal whose plan is composed of

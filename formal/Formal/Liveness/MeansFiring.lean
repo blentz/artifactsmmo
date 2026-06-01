@@ -129,21 +129,16 @@ theorem pursueTaskValueModel_positive_when_unsatisfied :
 
 /-! ## ProductionInvariants — load-bearing opaque-Bool connections. -/
 
-/-- Bundled invariants for opaque-gated MeansKinds. Each is a load-bearing
-    modeling commitment; Phase 20d-v2's differential must exercise it
-    against production. -/
+/-- Phase 23c-3b: `ProductionInvariants` was previously a load-bearing
+    bundle of opaque-Bool implications. With the faithful phase-based
+    fires predicates introduced in 23c-3b, the lifecycle-MeansKind
+    lemmas no longer need these invariants — they are provable directly
+    from phase-equality.
+
+    The structure is kept (empty) so existing call sites that mention
+    `ProductionInvariants s` as a hypothesis continue to typecheck;
+    any such site is now a free hypothesis. -/
 structure ProductionInvariants (s : State) : Prop where
-  /-- `lowYieldCancelFires` opaque truth ⇒ the goal would compute > 0.
-      This holds tautologically by `lowYieldCancelGoalValue`'s
-      definition (= 70 when fires, 0 otherwise) — the invariant simply
-      asserts the opaque Bool agrees with production. -/
-  lowYieldCancelInvariant :
-    s.lowYieldCancelFires = true →
-    lowYieldCancelGoalValue s.lowYieldCancelFires > 0
-  /-- `pursueTaskFires` ⇒ PursueTaskGoal not satisfied (production's
-      pursue decision implies the goal would compute a positive value). -/
-  pursueTaskFiresImpliesUnsatisfied :
-    s.pursueTaskFires = true → pursueTaskSatisfied s = false
 
 /-! ## Per-MeansKind firing lemmas -/
 
@@ -305,29 +300,55 @@ theorem _fires_claimPending_implies_claimPending_positive (s : State) :
   rw [h]
   simp
 
-/-- COMPLETE_TASK: `_fires .completeTask s` ⇒
-    `completeTaskValue (false) (true) = 90 > 0`. -/
-theorem _fires_completeTask_implies_completeTask_positive (s : State) :
+/-- COMPLETE_TASK: Phase 23c-3b phase-based form. `_fires .completeTask s`
+    means `taskLifecyclePhase = .complete`. Under the consistency
+    predicate `taskPhaseConsistent`, this back-implies the original
+    `(taskCode set, taskTotal > 0, taskProgress ≥ taskTotal)` conditions
+    necessary for `completeTaskValue` to be 90.
+
+    The proof now takes `taskPhaseConsistent s` as an extra hypothesis
+    (the structural consistency invariant on canonical-constructor
+    states; see Measure.lean). -/
+theorem _fires_completeTask_implies_completeTask_positive (s : State)
+    (hcons : taskPhaseConsistent s) :
     fires .completeTask s = true →
     completeTaskValue (completeTaskSatisfied s) (completeTaskProgressFull s) > 0 := by
   intro h
   unfold fires completeTaskFires at h
-  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨hcode, htot_pos⟩, hprog⟩ := h
-  unfold completeTaskValue completeTaskSatisfied completeTaskProgressFull
-  have htot_ne : ¬ s.taskTotal = 0 := Nat.pos_iff_ne_zero.mp htot_pos
-  have hcode_isNone : s.taskCode.isNone = false := by
-    cases hc : s.taskCode with
-    | none => simp [hc] at hcode
-    | some _ => rfl
-  have hsat_false :
-      (s.taskCode.isNone || decide (s.taskTotal = 0)) = false := by
-    simp [hcode_isNone, htot_ne]
-  rw [hsat_false]
-  simp
-  -- Goal after simp: 0 < if s.taskProgress < s.taskTotal then 0 else 90.
-  have hprog_not_lt : ¬ s.taskProgress < s.taskTotal := Nat.not_lt.mpr hprog
-  simp [hprog_not_lt]
+  simp only [decide_eq_true_eq] at h
+  -- h : s.taskLifecyclePhase = .complete
+  obtain ⟨hderive, _hnonemp, _htotpos⟩ := hcons
+  rw [h] at hderive
+  unfold Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase at hderive
+  -- Case on taskCode.
+  cases hc : s.taskCode with
+  | none => rw [hc] at hderive; cases hderive
+  | some code =>
+    rw [hc] at hderive
+    by_cases hemp : code = ""
+    · simp [hemp] at hderive
+    · simp [hemp] at hderive
+      by_cases htot0 : s.taskTotal = 0
+      · simp [htot0] at hderive
+      · simp [htot0] at hderive
+        by_cases hprog : s.taskProgress ≥ s.taskTotal
+        · -- complete branch matches; we get hprog
+          unfold completeTaskValue completeTaskSatisfied completeTaskProgressFull
+          have htot_ne : ¬ s.taskTotal = 0 := htot0
+          have hcode_isNone : s.taskCode.isNone = false := by rw [hc]; rfl
+          have hsat_false :
+              (s.taskCode.isNone || decide (s.taskTotal = 0)) = false := by
+            simp [hcode_isNone, htot_ne]
+          rw [hsat_false]
+          have hprog_not_lt : ¬ s.taskProgress < s.taskTotal := Nat.not_lt.mpr hprog
+          simp [hprog_not_lt]
+        · -- hprog : ¬ taskProgress ≥ taskTotal. The derive yields accepted/inProgress,
+          -- contradicting hderive saying .complete.
+          have hlt : s.taskProgress < s.taskTotal := Nat.lt_of_not_le hprog
+          have hderive' := hderive hlt
+          by_cases hp0 : s.taskProgress = 0
+          · simp [hp0] at hderive'
+          · simp [hp0] at hderive'
 
 /-- SELL_PRESSURED: `_fires .sellPressured s` ⇒
     `sellInventoryValue > 0` (bankAccessible=false, activeWindow=false
@@ -359,14 +380,19 @@ theorem _fires_sellPressured_implies_sellInventory_positive (s : State) :
   have : usedFractionRat s * 100 ≥ 85 := by linarith
   linarith
 
-/-- LOW_YIELD_CANCEL: opaque-gated. Uses invariant. -/
+/-- LOW_YIELD_CANCEL: Phase 23c-3b phase-based form.
+    `_fires .lowYieldCancel s` means `taskLifecyclePhase = .inProgress`.
+    `lowYieldCancelGoalValue true = 70 > 0` (Phase-18 GoalSystem).
+    The lemma asserts the goal-value form is positive under the
+    constant input `true`, which corresponds to "goal fires" in the
+    Phase-18 wrapper. -/
 theorem _fires_lowYieldCancel_implies_lowYieldCancel_positive
-    (s : State) (inv : ProductionInvariants s) :
+    (s : State) :
     fires .lowYieldCancel s = true →
-    lowYieldCancelGoalValue s.lowYieldCancelFires > 0 := by
-  intro h
-  unfold fires lowYieldCancelFires at h
-  exact inv.lowYieldCancelInvariant h
+    lowYieldCancelGoalValue true > 0 := by
+  intro _
+  unfold lowYieldCancelGoalValue lowYieldCancelValue
+  norm_num
 
 /-- TASK_CANCEL: opaque-gated; the Phase-18 value at
     `satisfied=false, pivots=true` is unconditionally 12 > 0. -/
@@ -382,33 +408,89 @@ theorem _fires_taskCancel_implies_taskCancel_positive
 
 /-! ### Discretionary tier -/
 
-/-- PURSUE_TASK: opaque-gated. Uses local `pursueTaskValueModel` —
-    Phase-18 GoalSystem doesn't expose pursueTaskValue in this exact
-    "Bool → Rat" shape (see file header). -/
+/-- PURSUE_TASK: Phase 23c-3b phase-based form. `_fires .pursueTask s`
+    means `taskLifecyclePhase ∈ {.accepted, .inProgress}`. Under the
+    consistency predicate, the phase determines `taskCode.isSome` and
+    `taskProgress < taskTotal`, so `pursueTaskSatisfied s = false` and
+    `pursueTaskValueModel false = 35 > 0`. -/
 theorem _fires_pursueTask_implies_pursueTask_positive
-    (s : State) (inv : ProductionInvariants s) :
+    (s : State) (hcons : taskPhaseConsistent s) :
     fires .pursueTask s = true →
     pursueTaskValueModel (pursueTaskSatisfied s) > 0 := by
   intro h
   unfold fires pursueTaskFires at h
-  have hsat := inv.pursueTaskFiresImpliesUnsatisfied h
-  rw [hsat]
-  exact pursueTaskValueModel_positive_when_unsatisfied
+  simp only [Bool.or_eq_true, decide_eq_true_eq] at h
+  obtain ⟨hderive, _hnonemp, _htotpos⟩ := hcons
+  unfold Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase at hderive
+  unfold pursueTaskSatisfied
+  cases hc : s.taskCode with
+  | none =>
+    rw [hc] at hderive
+    cases h with
+    | inl heq => rw [heq] at hderive; cases hderive
+    | inr heq => rw [heq] at hderive; cases hderive
+  | some code =>
+    rw [hc] at hderive
+    by_cases hemp : code = ""
+    · simp [hemp] at hderive
+      cases h with
+      | inl heq => rw [heq] at hderive; cases hderive
+      | inr heq => rw [heq] at hderive; cases hderive
+    · simp [hemp] at hderive
+      by_cases htot0 : s.taskTotal = 0
+      · simp [htot0] at hderive
+        cases h with
+        | inl heq => rw [heq] at hderive; cases hderive
+        | inr heq => rw [heq] at hderive; cases hderive
+      · simp [htot0] at hderive
+        by_cases hge : s.taskProgress ≥ s.taskTotal
+        · simp [hge] at hderive
+          cases h with
+          | inl heq => rw [heq] at hderive; cases hderive
+          | inr heq => rw [heq] at hderive; cases hderive
+        · have htot_ne : ¬ s.taskTotal = 0 := htot0
+          have hprog_lt : s.taskProgress < s.taskTotal := Nat.lt_of_not_le hge
+          have hsat_false :
+              ((some code).isNone || decide (s.taskTotal = 0)
+                || decide (s.taskProgress ≥ s.taskTotal)) = false := by
+            simp [htot_ne, Nat.not_le_of_lt hprog_lt]
+          rw [hsat_false]
+          exact pursueTaskValueModel_positive_when_unsatisfied
 
-/-- ACCEPT_TASK: `_fires .acceptTask s` ⇒ `acceptTaskValue (false) = 20 > 0`. -/
-theorem _fires_acceptTask_implies_acceptTask_positive (s : State) :
+/-- ACCEPT_TASK: Phase 23c-3b phase-based form. `_fires .acceptTask s`
+    means `taskLifecyclePhase = .none`. Under `taskPhaseConsistent`
+    (which bundles the production normalization invariant
+    `taskCode ≠ some ""`), this gives `taskCode = none`, so
+    `acceptTaskSatisfied s = false` and `acceptTaskValue false = 20 > 0`. -/
+theorem _fires_acceptTask_implies_acceptTask_positive
+    (s : State) (hcons : taskPhaseConsistent s) :
     fires .acceptTask s = true →
     acceptTaskValue (acceptTaskSatisfied s) > 0 := by
   intro h
   unfold fires acceptTaskFires at h
-  -- h : taskCode.isNone = true
+  simp only [decide_eq_true_eq] at h
+  -- h : s.taskLifecyclePhase = .none
+  obtain ⟨hderive, hnonemp, htotpos⟩ := hcons
+  rw [h] at hderive
+  unfold Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase at hderive
   unfold acceptTaskValue acceptTaskSatisfied
-  have : s.taskCode.isSome = false := by
-    cases hc : s.taskCode with
-    | none => rfl
-    | some _ => simp [hc] at h
-  rw [this]
-  simp
+  cases hc : s.taskCode with
+  | none =>
+    simp
+  | some code =>
+    rw [hc] at hderive hnonemp htotpos
+    have hemp_ne : code ≠ "" := fun heq => hnonemp (by rw [heq])
+    have htot_pos : s.taskTotal > 0 := htotpos (by rfl)
+    have htot_ne : ¬ s.taskTotal = 0 := Nat.pos_iff_ne_zero.mp htot_pos
+    simp [hemp_ne, htot_ne] at hderive
+    -- Now hderive: .none = (if progress ≥ total then complete else
+    --                       if progress = 0 then accepted else inProgress)
+    by_cases hge : s.taskProgress ≥ s.taskTotal
+    · simp [hge] at hderive
+    · simp [hge] at hderive
+      by_cases hp0 : s.taskProgress = 0
+      · simp [hp0] at hderive
+      · simp [hp0] at hderive
 
 /-- TASK_EXCHANGE: `_fires .taskExchange s` ⇒
     `taskExchangeValue (false) = 22 > 0`. Production `_fires` is the

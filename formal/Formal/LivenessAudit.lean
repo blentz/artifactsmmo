@@ -16,6 +16,7 @@
   headline. No new axioms beyond LIV-001.
 -/
 import Formal.Liveness.Placeholder
+import Formal.Liveness.TaskLifecyclePhase
 import Formal.Liveness.Measure
 import Formal.Liveness.FightProgress
 import Formal.Liveness.GatherProgress

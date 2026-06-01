@@ -35,10 +35,13 @@
 -/
 import Mathlib.Order.WellFounded
 import Mathlib.Data.Prod.Lex
+import Formal.Liveness.TaskLifecyclePhase
 
 set_option linter.dupNamespace false
 
 namespace Formal.Liveness.Measure
+
+open Formal.Liveness.TaskLifecyclePhase
 
 /-! ## Planner-side state model
 
@@ -152,6 +155,17 @@ structure State where
   bankCapacity : Nat
   /-- `game_data._next_expansion_cost` (means.py:111). -/
   nextExpansionCost : Nat
+  /-- Phase 23c-3b: lifecycle phase mirror of
+      `WorldState.task_lifecycle_phase` (production:
+      `src/artifactsmmo_cli/ai/task_lifecycle.py`). The phase is
+      INTENDED to satisfy
+        `taskLifecyclePhase = deriveTaskLifecyclePhase taskCode taskProgress taskTotal`
+      for every state produced via the canonical constructors;
+      `taskPhase_consistent` documents this as a separate hypothesis
+      (NOT a Prop field on the structure, per Phase 23b's cascade
+      lesson). Callers constructing `State` directly bear the obligation
+      to set `taskLifecyclePhase` consistently. -/
+  taskLifecyclePhase : TaskLifecyclePhase
   deriving Repr
 
 namespace State
@@ -192,6 +206,57 @@ axiom xpToNextLevel : Nat → Nat
 /-- For every level strictly below the cap (50), the xp budget remaining
     is positive. See AXIOM-ID LIV-001 above for openapi citation. -/
 axiom xpToNextLevel_pos : ∀ L, L < 50 → xpToNextLevel L > 0
+
+/-! ## LIV-002 — CompleteTask planner-side XP grant
+
+  LIV-002 (user-approved 2026-06-01)
+
+  Planner-side projection: `CompleteTaskAction.apply` grants
+  `TASK_COMPLETE_XP_ESTIMATE = 10` xp per completion. This is a
+  STRUCTURAL planner-side constant (not an empirical server claim),
+  provable from
+    `src/artifactsmmo_cli/ai/actions/complete_task.py:20`
+    (`TASK_COMPLETE_XP_ESTIMATE: int = 10`) and `apply` line 58
+    (`xp=state.xp + TASK_COMPLETE_XP_ESTIMATE`).
+  Production reference: 3c9a0e7 + cf43b35.
+
+  NOT openapi-grounded: `rewards_schema.py` has no XP field. The
+  server's actual XP delta comes via `CharacterSchema`; the planner
+  estimate is conservative. This `def` captures the planner's
+  deterministic projection. NO `axiom` keyword introduced — the
+  "axiom-feeling" is the empirical commitment that the Lean constant
+  `10` matches `TASK_COMPLETE_XP_ESTIMATE` in production. A later diff
+  harness must assert the Python constant equals 10. -/
+def taskCompleteXpEstimate : Nat := 10
+
+/-! ## Task lifecycle phase consistency
+
+The `taskLifecyclePhase` field on `State` is intended to be derivable
+from `taskCode`, `taskProgress`, `taskTotal`. The intent is documented
+here as a Prop, NOT enforced as a Prop field on `State` (per Phase 23b's
+cascade lesson). Callers using the canonical constructors are responsible
+for maintaining the predicate. -/
+
+/-- Consistency predicate. Bundles three production invariants:
+
+    1. `taskLifecyclePhase` matches `deriveTaskLifecyclePhase` over the
+       raw task fields. Mirrors `WorldState.__post_init__`'s assertion.
+
+    2. `taskCode ≠ some ""`. Production's `WorldState` normalizes empty
+       task codes to `None` (see `world_state.py` post-init); only
+       `none` or a non-empty `some _` ever occur in reached states.
+       CompleteTaskAction transiently sets `task_code=""` but the
+       perception layer normalizes that before the next cycle.
+
+    3. `taskCode.isSome → taskTotal > 0`. Production: a real task always
+       has positive total; the API never returns `task_code` set with
+       `task_total = 0`. -/
+def taskPhaseConsistent (s : State) : Prop :=
+  s.taskLifecyclePhase =
+    Formal.Liveness.TaskLifecyclePhase.deriveTaskLifecyclePhase
+      s.taskCode s.taskProgress s.taskTotal
+  ∧ s.taskCode ≠ some ""
+  ∧ (s.taskCode.isSome → s.taskTotal > 0)
 
 /-! ## Measure tuple -/
 

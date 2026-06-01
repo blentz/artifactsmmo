@@ -85,6 +85,7 @@ import Formal.Liveness.ProductionLadder
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanAction
 import Formal.Liveness.NoDeadlockV2
+import Formal.Liveness.TaskLifecyclePhase
 
 set_option linter.dupNamespace false
 set_option linter.unusedVariables false
@@ -97,6 +98,7 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.Plan
 open Formal.Liveness.PlanAction
 open Formal.Liveness.NoDeadlockV2
+open Formal.Liveness.TaskLifecyclePhase
 
 /-! ## planFor — witness plan per MeansKind
 
@@ -317,16 +319,16 @@ theorem cycleStep_progress_or_waits
     have hcs : cycleStep s = applyActionKind .completeTask s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, completeTaskFires, Bool.and_eq_true,
-               decide_eq_true_eq] at hfires
-    have hpre : s.taskCode.isSome = true := hfires.1.1
+    simp only [fires, completeTaskFires, decide_eq_true_eq] at hfires
+    -- hfires : s.taskLifecyclePhase = .complete
     intro heq
-    have hpost : ({s with taskCode := none, taskTotal := 0, taskProgress := 0}
-                    : State).taskCode = none := rfl
-    have hpc : s.taskCode = none := by
-      have : (applyActionKind .completeTask s).taskCode = none := hpost
-      rw [heq] at this; exact this
-    rw [hpc] at hpre; simp at hpre
+    have hpost : (applyActionKind .completeTask s).taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+      simp [applyActionKind]
+    have hpre' : s.taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+      rw [heq] at hpost; exact hpost
+    rw [hfires] at hpre'; cases hpre'
   | sellPressured =>
     left
     have hcs : cycleStep s = applyActionKind .npcSell s := by
@@ -346,37 +348,34 @@ theorem cycleStep_progress_or_waits
     have hcs : cycleStep s = applyActionKind .taskCancel s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, lowYieldCancelFires] at hfires
+    simp only [fires, lowYieldCancelFires, decide_eq_true_eq] at hfires
+    -- hfires : s.taskLifecyclePhase = .inProgress
     intro heq
-    have hpost_eq : (applyActionKind .taskCancel s).lowYieldCancelFires = false := by
-      show ({s with taskCancelFires := false,
-                    lowYieldCancelFires := false,
-                    pursueTaskFires := false,
-                    taskCode := none,
-                    taskTotal := 0,
-                    taskProgress := 0} : State).lowYieldCancelFires = false
-      rfl
-    have hpre' : s.lowYieldCancelFires = false := by
-      rw [heq] at hpost_eq; exact hpost_eq
+    have hpost : (applyActionKind .taskCancel s).taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+      simp [applyActionKind]
+    have hpre' : s.taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+      rw [heq] at hpost; exact hpost
     rw [hfires] at hpre'; cases hpre'
   | taskCancel =>
     left
     have hcs : cycleStep s = applyActionKind .taskCancel s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, ProductionLadder.taskCancelFires] at hfires
+    simp only [fires, ProductionLadder.taskCancelFires, Bool.or_eq_true,
+               decide_eq_true_eq] at hfires
+    -- hfires : phase = .accepted ∨ phase = .inProgress
     intro heq
-    have hpost_eq : (applyActionKind .taskCancel s).taskCancelFires = false := by
-      show ({s with taskCancelFires := false,
-                    lowYieldCancelFires := false,
-                    pursueTaskFires := false,
-                    taskCode := none,
-                    taskTotal := 0,
-                    taskProgress := 0} : State).taskCancelFires = false
-      rfl
-    have hpre' : s.taskCancelFires = false := by
-      rw [heq] at hpost_eq; exact hpost_eq
-    rw [hfires] at hpre'; cases hpre'
+    have hpost : (applyActionKind .taskCancel s).taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+      simp [applyActionKind]
+    have hpre' : s.taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.none := by
+      rw [heq] at hpost; exact hpost
+    cases hfires with
+    | inl h => rw [h] at hpre'; cases hpre'
+    | inr h => rw [h] at hpre'; cases hpre'
   | objectiveStep =>
     left
     have hcs : cycleStep s = applyActionKind .objectiveStep s := by
@@ -394,32 +393,34 @@ theorem cycleStep_progress_or_waits
     have hcs : cycleStep s = applyActionKind .taskTrade s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, ProductionLadder.pursueTaskFires] at hfires
+    simp only [fires, ProductionLadder.pursueTaskFires, Bool.or_eq_true,
+               decide_eq_true_eq] at hfires
+    -- hfires : phase = .accepted ∨ phase = .inProgress
     intro heq
-    have hpost_eq : (applyActionKind .taskTrade s).pursueTaskFires = false := by
-      show ({s with pursueTaskFires := false,
-                    taskProgress := s.taskTotal} : State).pursueTaskFires = false
-      rfl
-    have hpre' : s.pursueTaskFires = false := by
-      rw [heq] at hpost_eq; exact hpost_eq
-    rw [hfires] at hpre'; cases hpre'
+    have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.complete := by
+      simp [applyActionKind]
+    have hpre' : s.taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.complete := by
+      rw [heq] at hpost; exact hpost
+    cases hfires with
+    | inl h => rw [h] at hpre'; cases hpre'
+    | inr h => rw [h] at hpre'; cases hpre'
   | acceptTask =>
     left
     have hcs : cycleStep s = applyActionKind .acceptTask s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, acceptTaskFires] at hfires
-    have hpre : s.taskCode = none := Option.isNone_iff_eq_none.mp hfires
+    simp only [fires, acceptTaskFires, decide_eq_true_eq] at hfires
+    -- hfires : s.taskLifecyclePhase = .none
     intro heq
-    have hpost_eq : (applyActionKind .acceptTask s).taskCode
-                    = some acceptTaskPlaceholderCode := by
-      show ({s with taskCode := some acceptTaskPlaceholderCode,
-                    taskTotal := 1,
-                    taskProgress := 0} : State).taskCode = some acceptTaskPlaceholderCode
-      rfl
-    have hpre' : s.taskCode = some acceptTaskPlaceholderCode := by
-      rw [heq] at hpost_eq; exact hpost_eq
-    rw [hpre] at hpre'; cases hpre'
+    have hpost : (applyActionKind .acceptTask s).taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.accepted := by
+      simp [applyActionKind]
+    have hpre' : s.taskLifecyclePhase
+                  = TaskLifecyclePhase.TaskLifecyclePhase.accepted := by
+      rw [heq] at hpost; exact hpost
+    rw [hfires] at hpre'; cases hpre'
   | taskExchange =>
     left
     have hcs : cycleStep s = applyActionKind .taskExchange s := by
