@@ -55,3 +55,4 @@ import Formal.Liveness.PlanAction
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanExists
 import Formal.Liveness.CycleStep
+import Formal.Liveness.CumulativeProgress

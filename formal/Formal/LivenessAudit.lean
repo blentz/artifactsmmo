@@ -28,6 +28,7 @@ import Formal.Liveness.PlanAction
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanExists
 import Formal.Liveness.CycleStep
+import Formal.Liveness.CumulativeProgress
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -133,3 +134,8 @@ open Formal.Liveness.CycleStep
 #print axioms planFor_ne_nil
 #print axioms cycleStep_total
 #print axioms cycleStep_progress_or_waits
+
+-- Phase 23a — Tier 4 cumulative progress (weaker form).
+open Formal.Liveness.CumulativeProgress
+#print axioms cycleStepN_succ
+#print axioms cumulative_state_change_under_no_wait
