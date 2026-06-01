@@ -27,6 +27,7 @@ import Formal.Liveness.NoDeadlockV2
 import Formal.Liveness.PlanAction
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanExists
+import Formal.Liveness.CycleStep
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -38,6 +39,7 @@ open Formal.Liveness.ProgressAction
 open Formal.Liveness.MeansFiring
 open Formal.Liveness.NoDeadlockV2
 open Formal.Liveness.PlanExists
+open Formal.Liveness.CycleStep
 
 -- Phase 19a sanity.
 #print axioms mathlib_works
@@ -123,3 +125,11 @@ open Formal.Liveness.PlanExists
 -- see PlanAction.lean docstring for the honest disclosure.
 #print axioms plan_exists_for_pursueTask
 #print axioms plan_exists_for_objectiveStep
+
+-- Phase 22a: cycle-loop infrastructure (Tier 4 scaffold). `cycleStep`
+-- composes productionLadder + planFor + applyActionKind into one cycle's
+-- pure transition; `cycleStep_progress_or_waits` is the progress-or-wait
+-- headline connecting Phase 20's no-deadlock with Phase 21's plan-exists.
+#print axioms planFor_ne_nil
+#print axioms cycleStep_total
+#print axioms cycleStep_progress_or_waits
