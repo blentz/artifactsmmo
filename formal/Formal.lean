@@ -56,4 +56,5 @@ import Formal.Liveness.PlanAction
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanExists
 import Formal.Liveness.CycleStep
+import Formal.Liveness.LIV003Decomposition
 import Formal.Liveness.CumulativeProgress

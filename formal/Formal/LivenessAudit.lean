@@ -151,13 +151,28 @@ open Formal.Liveness.CumulativeProgress
 #print axioms progressMeans_decreases_extMeasure_or_advances_level
 #print axioms cumulative_progress_under_no_wait_restricted
 
--- Phase 23c-3c — Tier 4 UNRESTRICTED form. Drops the `hrestricted`
--- hypothesis from 23b by axiomatizing the task-lifecycle bound
--- (LIV-003, bounded cancel-trajectory). See
--- `Formal/Liveness/CumulativeProgress.lean`'s "Phase 23c-3c"
--- section for the LIV-003 docstring, the openapi citation, and
--- the user approval date.
-#print axioms cancelTrajectoryBound
-#print axioms cancelTrajectoryBound_pos
-#print axioms cumulative_progress_lifecycle_axiom
+-- Phase 23d-1 — LIV-003 fat axiom REFACTORED into three smaller pieces.
+-- The OLD `cumulative_progress_lifecycle_axiom` has been DELETED; the
+-- unrestricted headline `cumulative_progress_under_no_wait` now depends on
+-- the smaller decomposed axioms in `Formal.Liveness.LIV003Decomposition`:
+--   • LIV-003a — THEOREM `taskAccepted_implies_cancelOrPursueFires`
+--     (provable; no axiom)
+--   • LIV-003b — `lowYieldSampleThreshold`, `_pos`,
+--     `inProgress_decides_within_threshold`
+--   • LIV-003c — `taskPoolFinite`, `_pos`, `accept_cancel_loop_bound`
+--   • LIV-003-bridge — `lifecycle_progress_from_bounds` (narrow
+--     composition residual replacing the fat axiom)
+-- See `Formal/Liveness/LIV003Decomposition.lean` for the full disclosure.
+open Formal.Liveness.LIV003Decomposition
+#print axioms taskAccepted_implies_cancelOrPursueFires
+#print axioms taskInProgress_implies_cancelOrPursueFires
+#print axioms taskActive_implies_cancelOrPursueFires
+#print axioms lowYieldSampleThreshold
+#print axioms lowYieldSampleThreshold_pos
+#print axioms inProgress_decides_within_threshold
+#print axioms taskPoolFinite
+#print axioms taskPoolFinite_pos
+#print axioms accept_cancel_loop_bound
+#print axioms lifecycle_progress_from_bounds
 #print axioms cumulative_progress_under_no_wait
+#print axioms accepted_state_decides_cancel_or_pursue

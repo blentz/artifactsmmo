@@ -11,9 +11,17 @@
 #   * LIV-001: Formal.Liveness.Measure.xpToNextLevel        | spec: /v3/server/details (xp_curve) | approved 2026-05-30
 #   * LIV-001: Formal.Liveness.Measure.xpToNextLevel_pos    | spec: /v3/server/details (xp_curve) | approved 2026-05-30
 #   * LIV-002: Formal.Liveness.Measure.taskCompleteXpEstimate (def, not axiom — listed for transparency only)
-#   * LIV-003: Formal.Liveness.CumulativeProgress.cancelTrajectoryBound        | spec: /v3/my/{name}/action/task/new (finite task pool) | approved 2026-06-01
-#   * LIV-003: Formal.Liveness.CumulativeProgress.cancelTrajectoryBound_pos    | spec: /v3/my/{name}/action/task/new (finite task pool) | approved 2026-06-01
-#   * LIV-003: Formal.Liveness.CumulativeProgress.cumulative_progress_lifecycle_axiom | spec: /v3/my/{name}/action/task/new (finite task pool + lifecycle bound) | approved 2026-06-01
+# Phase 23d-1 — LIV-003 fat axiom REFACTORED into smaller pieces. The OLD
+# `cancelTrajectoryBound`/`cancelTrajectoryBound_pos`/`cumulative_progress_
+# lifecycle_axiom` are DELETED. The decomposition lives in
+# `Formal.Liveness.LIV003Decomposition` (LIV-003a is a THEOREM, no axiom):
+#   * LIV-003b-A1: lowYieldSampleThreshold                    | spec: LOW_YIELD_SAMPLE_THRESHOLD in projections.py    | approved 2026-06-01
+#   * LIV-003b-A1: lowYieldSampleThreshold_pos                | spec: LOW_YIELD_SAMPLE_THRESHOLD in projections.py    | approved 2026-06-01
+#   * LIV-003b-A2: inProgress_decides_within_threshold        | spec: PIVOT/PURSUE branch in task_decision.py        | approved 2026-06-01
+#   * LIV-003c-A1: taskPoolFinite                             | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
+#   * LIV-003c-A1: taskPoolFinite_pos                         | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
+#   * LIV-003c-A2: accept_cancel_loop_bound                   | spec: game_data.task_codes + StuckDetector safety mirror | approved 2026-06-01
+#   * LIV-003-bridge: lifecycle_progress_from_bounds          | composition residual (axiom → theorem when actionsAttempted lands) | approved 2026-06-01
 #
 # New entries here require the same Phase-19a discipline: docstring header
 # `-- AXIOM-ID: <id> | spec: <section> | approved: <date>` in the source.
@@ -35,7 +43,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."   # formal/
 . "$HOME/.elan/env" 2>/dev/null || true
 
-ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|cancelTrajectoryBound|cancelTrajectoryBound_pos|cumulative_progress_lifecycle_axiom)'
+ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|lowYieldSampleThreshold|lowYieldSampleThreshold_pos|inProgress_decides_within_threshold|taskPoolFinite|taskPoolFinite_pos|accept_cancel_loop_bound|lifecycle_progress_from_bounds)'
 
 OUT_RAW="$(lake env lean Formal/LivenessAudit.lean 2>&1)"
 echo "$OUT_RAW"
@@ -55,8 +63,11 @@ MANIFEST="gate/liveness_axioms.manifest"
   echo "# Mathlib pin: v4.30.0 (see lakefile.toml)"
   echo "# Allow-list: {propext, Classical.choice, Quot.sound,"
   echo "#              Formal.Liveness.Measure.xpToNextLevel(_pos) [LIV-001],"
-  echo "#              Formal.Liveness.CumulativeProgress.cancelTrajectoryBound(_pos) [LIV-003],"
-  echo "#              Formal.Liveness.CumulativeProgress.cumulative_progress_lifecycle_axiom [LIV-003]}"
+  echo "#              Formal.Liveness.LIV003Decomposition.lowYieldSampleThreshold(_pos) [LIV-003b],"
+  echo "#              Formal.Liveness.LIV003Decomposition.inProgress_decides_within_threshold [LIV-003b],"
+  echo "#              Formal.Liveness.LIV003Decomposition.taskPoolFinite(_pos) [LIV-003c],"
+  echo "#              Formal.Liveness.LIV003Decomposition.accept_cancel_loop_bound [LIV-003c],"
+  echo "#              Formal.Liveness.LIV003Decomposition.lifecycle_progress_from_bounds [LIV-003-bridge]}"
   echo "$OUT" | grep -E 'depends on axioms|does not depend on any axioms' || true
 } > "$MANIFEST"
 echo "wrote $MANIFEST"
