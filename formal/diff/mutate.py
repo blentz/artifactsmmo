@@ -74,6 +74,8 @@ SELL_INVENTORY_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "
 # Phase-19d — Tier-1 liveness measure (Python port of Formal.Liveness.Measure).
 # Production sources reuse GATHERING_APPLY_SRC / APPLY_REST_SRC defined above.
 MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
+# Phase-22b — cycle-loop mirror (Python port of Formal.Liveness.CycleStep).
+CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -1006,6 +1008,8 @@ _ALL_SRCS = [
     MEASURE_SRC,
     # Phase 21d-2 — Tier-3 plan-exists differential against real planner.
     PLAYER_SRC,
+    # Phase-22b — cycle-loop mirror.
+    CYCLE_STEP_SRC,
 ]
 
 
@@ -1762,6 +1766,42 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
 ]
 
 
+CYCLE_STEP_MUTATIONS = [
+    # M1: swap .rest for .fight in planFor for HP_CRITICAL.
+    # The mirror would now apply FightAction's projection (xp +=10) where
+    # production correctly applies RestAction (hp := max_hp). The projection
+    # differential on HP_CRITICAL diverges on `xp` AND on `hp` (we don't
+    # track hp; xp suffices). test_cycle_step_projection_matches_production[
+    # HP_CRITICAL] fires.
+    ("cycle_step: swap .rest for .fight in planFor[HP_CRITICAL]",
+     '    LadderMeans.HP_CRITICAL:        "rest",',
+     '    LadderMeans.HP_CRITICAL:        "fight",'),
+    # M2: drop the WAIT handling in apply_action_kind_mirror — make wait
+    # advance xp by 10 (steal the .fight branch's xp grant). On WAIT, the
+    # mirror now thinks xp went up; production WaitAction.apply is identity.
+    # test_hypothesis_wait_cycle_byte_equivalent fires (300 Hypothesis-
+    # sampled WAIT states see mirror_proj.xp = prod_proj.xp + 10).
+    ("cycle_step: wait advances xp (mirror drops WAIT identity)",
+     '    if action == "wait":\n        return s\n',
+     '    if action == "wait":\n        return dataclasses.replace(s, xp=s.xp + 10)\n'),
+    # M3: skip a tier in MIRROR_LADDER_ORDER — drop HP_CRITICAL. On the
+    # HP_CRITICAL fixture the mirror now falls through to ACCEPT_TASK
+    # (no task in fixture) instead of HP_CRITICAL. Production still picks
+    # HP_CRITICAL. test_mirror_picks_same_means_as_production[HP_CRITICAL]
+    # fires.
+    ("cycle_step: skip HP_CRITICAL in MIRROR_LADDER_ORDER",
+     "    LadderMeans.HP_CRITICAL,\n    LadderMeans.BANK_UNLOCK,",
+     "    # LadderMeans.HP_CRITICAL,  # mutation: skipped tier\n    LadderMeans.BANK_UNLOCK,"),
+    # M4: reverse MIRROR_LADDER_ORDER — WAIT now fires first on every state.
+    # On HP_CRITICAL (and every other in-scope fixture) the mirror picks
+    # WAIT; production picks the expected tier. The `is` check fires on
+    # the very first fixture (HP_CRITICAL).
+    ("cycle_step: reverse MIRROR_LADDER_ORDER (WAIT fires first)",
+     "    for k in MIRROR_LADDER_ORDER:",
+     "    for k in tuple(reversed(MIRROR_LADDER_ORDER)):"),
+]
+
+
 LIVENESS_REST_MUTATIONS = [
     # Drop the HP restoration entirely: `hp=state.max_hp` -> `hp=state.hp`.
     # Rest is then a no-op on slot 6; Fight cycles drain HP without it ever
@@ -1922,6 +1962,9 @@ def main() -> int:
     # Phase 21d-2 — Tier-3 plan-exists differential.
     run_group(PLAYER_SRC, PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS,
               "formal/diff/test_plan_exists_diff.py", survivors)
+    # Phase-22b — cycle-loop differential.
+    run_group(CYCLE_STEP_SRC, CYCLE_STEP_MUTATIONS,
+              "formal/diff/test_cycle_step_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

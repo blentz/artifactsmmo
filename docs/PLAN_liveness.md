@@ -233,7 +233,9 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 21d-1 | pursueTask + objectiveStep plan-exists (synthetic .objectiveStep ActionKind, .taskTrade collapse) | DONE | 44a0e91 |
 | 21d-2 | Python plan-exists differential vs real GOAPPlanner + 4 mutations; 9/11 means empirically validated, 0 production bugs found | DONE | ba50267 |
 | 21 (closed) | **Tier 3 done.** All 18 MeansKind have Lean plan-exists; 9 also empirically validated vs production planner. | DONE | ba50267 |
-| 22  | Cycle loop in Lean | TODO | — |
+| 22a | `Formal/Liveness/CycleStep.lean` — `planFor`, `cycleStep`, `cycleStep_total`, `cycleStep_progress_or_waits` (17-way case split) | DONE | 81a4fc5 |
+| 22b | `formal/sim/cycle_step.py` mirror + `formal/diff/test_cycle_step_diff.py` cycle-loop differential (8 fixtures + Hypothesis WAIT-state strategy) + 4 mutations all killed. Scope reduction: `production_ladder + action.apply`, not full perceive→arbiter→execute loop. TRACKED_FIELDS = {level, xp, task_code, task_total, task_progress, gold}. | DONE | — |
+| 22  | Cycle loop in Lean — closed via 22a + 22b. | DONE | — |
 | 23  | Tier 4 — cumulative progress | TODO | — |
 | 24  | Game-data fixture + openapi conformance harness | TODO | — |
 | 25  | Tier 5 — level-50 reachability (capstone) | TODO | — |
