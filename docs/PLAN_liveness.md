@@ -236,7 +236,11 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 22a | `Formal/Liveness/CycleStep.lean` — `planFor`, `cycleStep`, `cycleStep_total`, `cycleStep_progress_or_waits` (17-way case split) | DONE | 81a4fc5 |
 | 22b | `formal/sim/cycle_step.py` mirror + `formal/diff/test_cycle_step_diff.py` cycle-loop differential (8 fixtures + Hypothesis WAIT-state strategy) + 4 mutations all killed. Scope reduction: `production_ladder + action.apply`, not full perceive→arbiter→execute loop. TRACKED_FIELDS = {level, xp, task_code, task_total, task_progress, gold}. | DONE | — |
 | 22  | Cycle loop in Lean — closed via 22a + 22b. | DONE | — |
-| 23  | Tier 4 — cumulative progress | TODO | — |
+| 23a | Weak headline (cumulative_state_change_under_no_wait) | DONE | — |
+| 23b | Strong headline RESTRICTED (cumulative_progress_under_no_wait_restricted) via ExtMeasure 14-tuple; hrestricted to 12-MeansKind progressMeans set | DONE | — |
+| 23c-3b | TaskLifecyclePhase enum + LIV-002 def + phase-based faithful fires + planner +10 XP on completeTask | DONE | 02d7f5a |
+| 23c-3c | Unrestricted headline `cumulative_progress_under_no_wait` via LIV-003 axiom (cancelTrajectoryBound + cumulative_progress_lifecycle_axiom, openapi /v3/my/{name}/action/task/new pool finiteness; user-approved 2026-06-01); drops `hrestricted` | DONE | — |
+| 23  | Tier 4 — cumulative progress | DONE | — |
 | 24  | Game-data fixture + openapi conformance harness | TODO | — |
 | 25  | Tier 5 — level-50 reachability (capstone) | TODO | — |
 
