@@ -596,6 +596,7 @@ class GamePlayer:
             bank_capacity=bank_capacity,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            task_lifecycle_phase=state.task_lifecycle_phase,
         )
 
     def _sync_pending(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
@@ -635,6 +636,7 @@ class GamePlayer:
             bank_capacity=state.bank_capacity,
             pending_items=pending,
             active_events=state.active_events,
+            task_lifecycle_phase=state.task_lifecycle_phase,
         )
 
     def _full_refresh(self, client: AuthenticatedClient) -> None:

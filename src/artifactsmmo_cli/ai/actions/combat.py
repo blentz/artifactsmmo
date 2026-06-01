@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _MIN_FIGHT_HP_FRACTION = 0.3
@@ -79,6 +80,9 @@ class FightAction(Action):
             y=dest[1],
             cooldown_expires=None,
             task_progress=new_progress,
+            task_lifecycle_phase=derive_task_lifecycle_phase(
+                state.task_code, new_progress, state.task_total
+            ),
         )
 
     def cost(self, state: WorldState, game_data: GameData,

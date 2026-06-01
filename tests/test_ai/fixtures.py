@@ -1,10 +1,18 @@
 """Shared test fixtures for AI module tests."""
 
+from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def make_state(**overrides) -> WorldState:
-    """Build a minimal WorldState for testing, with safe defaults."""
+    """Build a minimal WorldState for testing, with safe defaults.
+
+    Auto-derives ``task_lifecycle_phase`` from ``task_code``/``task_progress``/
+    ``task_total`` so existing call-sites (which only set the raw fields) keep
+    constructing valid WorldStates after Phase 23c-1. Tests that need to
+    construct invariant-violating states should call ``WorldState(...)``
+    directly rather than going through this fixture.
+    """
     defaults = dict(
         character="testchar",
         level=5,
@@ -37,4 +45,8 @@ def make_state(**overrides) -> WorldState:
         pending_items=None,
     )
     defaults.update(overrides)
+    if "task_lifecycle_phase" not in defaults:
+        defaults["task_lifecycle_phase"] = derive_task_lifecycle_phase(
+            defaults["task_code"], defaults["task_progress"], defaults["task_total"]
+        )
     return WorldState(**defaults)

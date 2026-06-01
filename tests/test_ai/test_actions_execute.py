@@ -58,6 +58,19 @@ def make_api_result(char):
     return result
 
 
+def make_get_character_result(char):
+    """Wrap a mock CharacterSchema as a get_character API response.
+
+    The get_character endpoint returns ``data: CharacterSchema`` directly
+    (no ``.character`` indirection), so ``WorldState.from_character_schema``
+    needs the raw char on ``result.data``. Used by tests that patch
+    ``artifactsmmo_cli.ai.player.get_character``.
+    """
+    result = MagicMock()
+    result.data = char
+    return result
+
+
 def make_fight_api_result(char):
     result = MagicMock()
     result.data = MagicMock()

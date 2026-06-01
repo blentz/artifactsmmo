@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -38,6 +39,7 @@ class CompleteTaskAction(Action):
             task_type="",
             task_progress=0,
             task_total=0,
+            task_lifecycle_phase=TaskLifecyclePhase.NONE,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

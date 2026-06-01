@@ -8,6 +8,10 @@ from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.missing_api_data import MissingApiData
+from artifactsmmo_cli.ai.task_lifecycle import (
+    TaskLifecyclePhase,
+    derive_task_lifecycle_phase,
+)
 
 _MISSING = object()
 
@@ -131,6 +135,37 @@ class WorldState:
     """Critical-strike chance %. From `critical_strike`."""
     initiative: int = 0
     """Turn-order stat (higher acts first). From `initiative`."""
+    task_lifecycle_phase: TaskLifecyclePhase = TaskLifecyclePhase.NONE
+    """Phase of the taskmaster task pipeline (Phase 23c-1).
+
+    DERIVED from (task_code, task_progress, task_total) via
+    :func:`derive_task_lifecycle_phase` but STORED so it is a first-class
+    field of State (Phase 23c-2 Lean will reference it). The invariant is
+    enforced by :meth:`__post_init__` — direct construction with a phase
+    that disagrees with the raw fields raises ``AssertionError``. Action
+    ``apply`` methods that mutate task_code/task_progress/task_total MUST
+    also pass an appropriate ``task_lifecycle_phase`` to
+    ``dataclasses.replace`` (or it will keep the stale phase and trip the
+    invariant on next replace through ``__post_init__``)."""
+
+    def __post_init__(self) -> None:
+        """Enforce phase ↔ raw-fields invariant.
+
+        The stored ``task_lifecycle_phase`` must match
+        :func:`derive_task_lifecycle_phase` over the raw task fields.
+        This is the SINGLE SOURCE OF TRUTH check: tests and call-sites
+        cannot construct a WorldState where the phase disagrees with
+        (task_code, task_progress, task_total).
+        """
+        expected = derive_task_lifecycle_phase(
+            self.task_code, self.task_progress, self.task_total
+        )
+        assert self.task_lifecycle_phase == expected, (
+            f"WorldState task_lifecycle_phase invariant violation: "
+            f"stored={self.task_lifecycle_phase}, expected={expected} "
+            f"for task_code={self.task_code!r}, "
+            f"task_progress={self.task_progress}, task_total={self.task_total}"
+        )
 
     @property
     def inventory_used(self) -> int:
@@ -195,6 +230,7 @@ class WorldState:
         if not isinstance(char.cooldown_expiration, Unset) and char.cooldown_expiration:
             cooldown_expires = char.cooldown_expiration
 
+        task_code_norm = char.task if char.task else None
         return cls(
             character=char.name,
             level=char.level,
@@ -212,7 +248,7 @@ class WorldState:
             inventory_max=char.inventory_max_items,
             equipment=equipment,
             cooldown_expires=cooldown_expires,
-            task_code=char.task if char.task else None,
+            task_code=task_code_norm,
             task_type=char.task_type if char.task_type else None,
             task_progress=char.task_progress,
             task_total=char.task_total,
@@ -227,4 +263,7 @@ class WorldState:
             resistance=resistance,
             critical_strike=_require(char, "critical_strike"),
             initiative=_require(char, "initiative"),
+            task_lifecycle_phase=derive_task_lifecycle_phase(
+                task_code_norm, char.task_progress, char.task_total
+            ),
         )

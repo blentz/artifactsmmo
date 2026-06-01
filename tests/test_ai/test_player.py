@@ -26,7 +26,7 @@ from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
 
 def make_game_data_mock() -> GameData:
@@ -409,7 +409,7 @@ class TestFetchWorldState:
         client = MagicMock()
         empty_events = MagicMock()
         empty_events.data = []
-        with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+        with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                 state = player._fetch_world_state(client)
         assert isinstance(state, WorldState)
@@ -421,7 +421,7 @@ class TestFetchWorldState:
         client = MagicMock()
         empty_events = MagicMock()
         empty_events.data = []
-        with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+        with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                 state = player._fetch_world_state(client)
         assert state.bank_items == {"gold": 100}
@@ -508,7 +508,7 @@ class TestExecute:
         empty_events.data = []
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("fail")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     new_state, outcome = player._execute(action, client)
 
@@ -533,7 +533,7 @@ class TestExecute:
         with redirect_stdout(buf):
             with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                        side_effect=ApiActionError(499, "Character in cooldown")):
-                with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+                with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                         new_state, outcome = player._execute(action, client)
 
@@ -558,7 +558,7 @@ class TestExecute:
         empty_events.data = []
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=net_err):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     new_state, outcome = player._execute(action, client)
 
@@ -605,7 +605,7 @@ class TestExecute:
         empty_events.data = []
 
         with patch.object(action, "execute", side_effect=RuntimeError("fight_lost: yellow_slime (turns=3)")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     new_state, outcome = player._execute(action, client)
 
@@ -812,7 +812,7 @@ class TestExecuteHttp496BankLock:
 
         with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=ApiActionError(496, "(locked bank_deposit achievement_unlocked)")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                         player._execute(action, client)
@@ -835,7 +835,7 @@ class TestExecuteHttp496BankLock:
         # No achievement code in error message — no match for the regex
         with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=ApiActionError(496, "bank access denied")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)
 
@@ -857,7 +857,7 @@ class TestExecuteHttp496BankLock:
         # HTTP 496 on a non-bank action — bank_accessible must NOT be changed
         with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                    side_effect=ApiActionError(496, "some unrelated error")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)
 
@@ -886,7 +886,7 @@ class TestExecuteHttp496BankLock:
 
         with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=ApiActionError(496, "(myach achievement_unlocked)")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)
 
@@ -917,7 +917,7 @@ class TestExecuteHttp496BankLock:
 
         with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                    side_effect=RuntimeError("HTTP 496 (newach achievement_unlocked)")):
-            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_api_result(char)):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     player._execute(action, client)
 
