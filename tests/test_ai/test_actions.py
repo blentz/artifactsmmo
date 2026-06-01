@@ -10,7 +10,10 @@ import pytest
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
+from artifactsmmo_cli.ai.actions.complete_task import (
+    TASK_COMPLETE_XP_ESTIMATE,
+    CompleteTaskAction,
+)
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -725,6 +728,19 @@ class TestCompleteTaskAction:
         assert new_state.task_total == 0
         assert new_state.task_progress == 0
         assert (new_state.x, new_state.y) == (1, 2)
+        # Planner-side XP projection: conservative +TASK_COMPLETE_XP_ESTIMATE.
+        assert new_state.xp == state.xp + TASK_COMPLETE_XP_ESTIMATE
+
+    def test_apply_grants_exact_xp_estimate(self):
+        """Phase 23c-2a: CompleteTaskAction.apply must add exactly
+        TASK_COMPLETE_XP_ESTIMATE to xp (mirrors FightAction +10) so the
+        Lean LIV-002 lifecycle axiom has a concrete production witness."""
+        action = CompleteTaskAction(taskmaster_location=(1, 2))
+        state = make_state(
+            x=0, y=0, xp=12345, task_code="chicken", task_total=10, task_progress=10
+        )
+        new_state = action.apply(state, make_game_data())
+        assert new_state.xp - state.xp == TASK_COMPLETE_XP_ESTIMATE
 
     def test_cost_includes_distance(self):
         action = CompleteTaskAction(taskmaster_location=(1, 2))
