@@ -35,6 +35,7 @@ import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.GameDataFixture
+import Formal.Liveness.LevelFiftyReachable
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -236,3 +237,14 @@ open Formal.Liveness.GameDataFixture
 #print axioms ironSwordRecipe_craftCount
 #print axioms ironSword_task_completable
 #print axioms ironSword_task_completable_explicit
+
+-- Phase 25: LevelFiftyReachable — TIER 5 CAPSTONE. Iterates Phase 23c-3c's
+-- cumulative_progress_under_no_wait 49 times to prove level-50 reachability
+-- from any state with GlobalInvariants.
+open Formal.Liveness.LevelFiftyReachable
+#print axioms cycleStepN_add
+#print axioms globalInvariants_step
+#print axioms level_advances_once
+#print axioms ai_reaches_level_fifty_aux
+#print axioms ai_reaches_level_fifty
+#print axioms ai_reaches_level_fifty_from_spawn
