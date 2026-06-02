@@ -30,6 +30,7 @@ import Formal.Liveness.Plan
 import Formal.Liveness.PlanExists
 import Formal.Liveness.CycleStep
 import Formal.Liveness.CumulativeProgress
+import Formal.Liveness.TaskInfeasibility
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -176,3 +177,18 @@ open Formal.Liveness.LIV003Decomposition
 #print axioms lifecycle_progress_from_bounds
 #print axioms cumulative_progress_under_no_wait
 #print axioms accepted_state_decides_cancel_or_pursue
+
+-- Phase 23d-3 — LIV-003a STRONG FORM: feasibility-grounded bridge.
+-- `taskInfeasible` packages a Phase-13 feasibility witness with the
+-- gating phase condition; the structural bridge to `taskCancelFires`
+-- requires NO new axioms. The decision-level companions compose
+-- Phase-13 `TaskDecision.combat_or_no_history_pivots` at the Liveness
+-- abstraction. See `Formal/Liveness/TaskInfeasibility.lean` for the
+-- full disclosure.
+open Formal.Liveness.TaskInfeasibility
+#print axioms taskInfeasible_implies_taskCancelFires
+#print axioms taskInfeasible_implies_taskCancelFires_headline
+#print axioms taskInfeasible_implies_pursueTaskFires
+#print axioms combatGate_implies_pivot_decision
+#print axioms noHistory_implies_pivot_decision
+#print axioms vpc_below_threshold_implies_pivot
