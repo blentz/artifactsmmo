@@ -60,3 +60,4 @@ import Formal.Liveness.LIV003Decomposition
 import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.TaskCompleteReachable
+import Formal.Liveness.SkillGapClosure

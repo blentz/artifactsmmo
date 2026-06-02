@@ -319,7 +319,17 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- abstraction level. Phase 22 (Cycle Loop) will compose the actual
   -- planner output through the sub-goal.
   | .objectiveStep, s => { s with objectiveStepFires := false }
-  -- All other 13 kinds: no-op (see module docstring; Phase 21d-2+ will
+  -- Phase 23d-7: .gather advances the projected skill-xp counter by 1.
+  -- Mirrors production GatherAction.apply (gathering.py:52-83) which
+  -- updates state.projected_skill_xp_delta[skill] += 1 when the gathered
+  -- resource has a skill requirement. The Lean model carries a single
+  -- scalar (projectedSkillXpDelta) per Phase-19c's design; advancing
+  -- it by 1 per .gather suffices for the skill-gap closure proof
+  -- (Phase 23d-7). All task fields are preserved (gather is task-
+  -- agnostic; it never touches taskCode/Progress/Total or phase).
+  | .gather, s =>
+      { s with projectedSkillXpDelta := s.projectedSkillXpDelta + 1 }
+  -- All other 12 kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 

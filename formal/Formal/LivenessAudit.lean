@@ -32,6 +32,7 @@ import Formal.Liveness.CycleStep
 import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.TaskCompleteReachable
+import Formal.Liveness.SkillGapClosure
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -206,3 +207,11 @@ open Formal.Liveness.TaskCompleteReachable
 #print axioms taskTrade_step_reaches_complete
 #print axioms taskComplete_reachable
 #print axioms taskComplete_reachable_exists
+
+-- Phase 23d-7: SkillGapClosure — chain .gather to satisfy skill prerequisite,
+-- then .taskTrade to reach .complete. Closes Part C of Phase 23d-6.
+open Formal.Liveness.SkillGapClosure
+#print axioms gather_skill_succ
+#print axioms replicate_gather_skill_progress
+#print axioms skill_prerequisite_reachable
+#print axioms skill_gap_then_complete_reachable
