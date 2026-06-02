@@ -31,6 +31,7 @@ import Formal.Liveness.PlanExists
 import Formal.Liveness.CycleStep
 import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.TaskInfeasibility
+import Formal.Liveness.TaskCompleteReachable
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -195,3 +196,13 @@ open Formal.Liveness.TaskInfeasibility
 #print axioms combatGate_implies_pivot_decision
 #print axioms noHistory_implies_pivot_decision
 #print axioms vpc_below_threshold_implies_pivot
+
+-- Phase 23d-6b: TaskComplete reachability via .taskTrade replication.
+open Formal.Liveness.TaskCompleteReachable
+#print axioms taskTrade_progress_succ
+#print axioms taskTrade_total_preserved
+#print axioms replicate_taskTrade_progress
+#print axioms replicate_taskTrade_total
+#print axioms taskTrade_step_reaches_complete
+#print axioms taskComplete_reachable
+#print axioms taskComplete_reachable_exists
