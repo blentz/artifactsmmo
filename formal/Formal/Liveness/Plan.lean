@@ -96,6 +96,35 @@ def acceptTaskPlaceholderCode : String := "__pending__"
     `BANK_EXPANSION_SLOTS`). -/
 def bankExpansionSlots : Nat := 20
 
+/-- Phase 23d-4 — whether an `ActionKind` counts as a "progress-attempting"
+    action that, when applied while a task is active (phase ∈ {.accepted,
+    .inProgress}), should bump the `actionsAttempted` counter on `State`.
+
+    These are the production actions that, per `_fires_pursueTask` /
+    `_fires_lowYieldCancel` semantics, would advance the FarmItems
+    sample_count in `LearningStore.farm_items_yield`. The Lean model
+    abstracts the per-action-attempt sample-count update via this flag.
+
+    Honest disclosure: `.fight` and `.taskTrade` are the two branches
+    with non-trivial semantics in this module that ALSO appear in
+    production's progress-attempting set. `.gather` is currently a
+    no-op default branch (no specific semantics yet — see module
+    docstring); we therefore conservatively EXCLUDE `.gather` from the
+    counter increment here, because its no-op apply would otherwise
+    advance the counter without modelling the corresponding state
+    effect. -/
+def attemptsTaskProgress : ActionKind → Bool
+  | .fight     => true
+  | .taskTrade => true
+  | _          => false
+
+/-- Phase 23d-4 — whether the pre-state phase is task-active, i.e. the
+    `actionsAttempted` counter should bump when a progress-attempting
+    action is applied. -/
+def phaseActive (s : State) : Bool :=
+  decide (s.taskLifecyclePhase = .accepted)
+  || decide (s.taskLifecyclePhase = .inProgress)
+
 /-- Single-step state transition for an `ActionKind`. Phase 21a defines
     semantics for the 8 trivial-firing kinds; all other kinds fall through
     to a no-op (see module docstring for rationale and Phase 21b/c plan).
@@ -122,7 +151,9 @@ noncomputable def applyActionKind : ActionKind → State → State
                taskTotal := 0,
                taskProgress := 0,
                taskLifecyclePhase := .none,
-               xp := s.xp + taskCompleteXpEstimate }
+               xp := s.xp + taskCompleteXpEstimate,
+               -- Phase 23d-4: phase transitions to `.none` — reset counter.
+               actionsAttempted := 0 }
   -- AcceptTaskAction.apply (accept_task.py:32-42): assigns placeholder
   -- task. See "Honest disclosure: acceptTask" in the module docstring.
   -- Phase 23c-3b: also sets `taskLifecyclePhase := .accepted` to match
@@ -152,7 +183,9 @@ noncomputable def applyActionKind : ActionKind → State → State
                taskCode := none,
                taskTotal := 0,
                taskProgress := 0,
-               taskLifecyclePhase := .none }
+               taskLifecyclePhase := .none,
+               -- Phase 23d-4: phase transitions to `.none` — reset counter.
+               actionsAttempted := 0 }
   -- BuyBankExpansionAction.apply (bank_expansion.py:39-54): adds 20 slots
   -- to bank_capacity, deducts gold cost.
   | .buyBankExpansion, s =>
@@ -231,9 +264,13 @@ noncomputable def applyActionKind : ActionKind → State → State
         decide (s.xp + 10 ≥ xpToNextLevel s.level) && decide (s.level < 50)
       let newLevel : Nat := if willLevel then s.level + 1 else s.level
       let newXp    : Nat := if willLevel then 0 else s.xp + 10
+      -- Phase 23d-4: bump actionsAttempted on a task-active state.
+      let newAttempts : Nat :=
+        if phaseActive s then s.actionsAttempted + 1 else s.actionsAttempted
       { s with level := newLevel,
                xp := newXp,
-               bankAccessible := newBankAccessible }
+               bankAccessible := newBankAccessible,
+               actionsAttempted := newAttempts }
   -- TaskTradeAction.apply (task_trade.py): delivers one or more units of
   -- the items-task item to the task NPC. The Lean model collapses a
   -- multi-trade delivery into a single step: it advances `taskProgress`
@@ -251,9 +288,13 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- decrement of the task-item count, gold/coin reward credit) deferred
   -- — see module "Honest disclosure: minimal-modeling" note.
   | .taskTrade, s =>
+      -- Phase 23d-4: bump actionsAttempted on a task-active state.
+      let newAttempts : Nat :=
+        if phaseActive s then s.actionsAttempted + 1 else s.actionsAttempted
       { s with pursueTaskFires := false,
                taskProgress := s.taskTotal,
-               taskLifecyclePhase := .complete }
+               taskLifecyclePhase := .complete,
+               actionsAttempted := newAttempts }
   -- Phase 21d-1 synthetic placeholder. See PlanAction.lean docstring
   -- "Phase 21d-1: synthetic `.objectiveStep` placeholder". The objective
   -- tier in production dispatches to a sub-goal whose plan is composed of

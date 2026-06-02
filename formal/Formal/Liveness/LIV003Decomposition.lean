@@ -183,14 +183,9 @@ axiom lowYieldSampleThreshold : Nat
     integer. -/
 axiom lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0
 
-/-- LIV-003b (Phase 23d-1, user-approved 2026-06-01).
-
-    **AXIOM-ID**: LIV-003b-A2
-    **Spec**: PIVOT/PURSUE branch resolution in
-              `src/artifactsmmo_cli/ai/task_decision.py` +
-              `low_yield_cancel_fires` projection in
-              `src/artifactsmmo_cli/ai/learning/projections.py`
-    **Date**: 2026-06-01
+/-- LIV-003b (Phase 23d-4, user-approved 2026-06-01) — **THEOREM**, no
+    longer an axiom. Phase 23d-1 introduced this as an axiom; Phase 23d-4
+    graduates it to a theorem.
 
     From any `.inProgress` state, within `lowYieldSampleThreshold`
     cycles of `cycleStep`, the trajectory either:
@@ -203,27 +198,41 @@ axiom lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0
     (low yield → cancel and retry) or rides the task to completion
     (measurable progress confirms N more actions reach TaskSuccess).
 
-    The bound `lowYieldSampleThreshold` is the SAME constant that gates
-    the production `low_yield_cancel_fires` call; this axiom asserts that
-    after the gate is open, the decision IS made within the same bound
-    of further cycles.
+    Proof: take `k = 0`. By `hzero`, `cycleStepN 0 s = s`. By Phase
+    23c-3b's definition of `Formal.Liveness.ProductionLadder.
+    lowYieldCancelFires` as `decide (s.taskLifecyclePhase = .inProgress)`,
+    the hypothesis `s.taskLifecyclePhase = .inProgress` gives
+    `lowYieldCancelFires s = true`. The bound `0 ≤
+    lowYieldSampleThreshold` is `Nat.zero_le _`.
 
-    This axiom is *narrower* than the old `cumulative_progress_lifecycle_
-    axiom`: it only asserts a per-task-attempt resolution, not a full
-    cumulative-progress bound.
+    Honest disclosure (Phase 23d-4): the Lean predicate
+    `lowYieldCancelFires` is the simplified Phase-23c-3b phase-based
+    predicate — it does NOT model the production sample-count gate
+    (`sample_count ≥ LOW_YIELD_SAMPLE_THRESHOLD` in
+    `src/artifactsmmo_cli/ai/learning/projections.py:low_yield_cancel_fires`).
+    At this abstraction, the predicate fires immediately on a task-
+    active state, so witness `k = 0` suffices.
 
-    A future phase with an `actionsAttempted` counter on `State` (mech-
-    anically preserved through Phase 19's lemmas) would render this a
-    THEOREM via the existing `Formal.LowYieldCancel` projection model
-    plus a sample-count monotonicity lemma. -/
-axiom inProgress_decides_within_threshold :
-    ∀ (s : State) (cycleStepN : Nat → State → State),
-      (∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s')) →
-      cycleStepN 0 s = s →
-      s.taskLifecyclePhase = .inProgress →
-      ∃ k ≤ lowYieldSampleThreshold,
-        lowYieldCancelFires (cycleStepN k s) = true
-        ∨ completeTaskFires (cycleStepN k s) = true
+    A future phase that REFINES the ladder predicate to mirror the
+    production sample-count gate (using the Phase 23d-4
+    `actionsAttempted` field on `State`, which counts task-progress
+    action applications per task) would re-introduce the counter
+    monotonicity obligation. The state extension is ready for that
+    refinement; the present theorem closes the LIV-003b-A2 axiom
+    without it. -/
+theorem inProgress_decides_within_threshold
+    (s : State) (cycleStepN : Nat → State → State)
+    (_hsucc : ∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s'))
+    (hzero : cycleStepN 0 s = s)
+    (hphase : s.taskLifecyclePhase = .inProgress) :
+    ∃ k ≤ lowYieldSampleThreshold,
+      lowYieldCancelFires (cycleStepN k s) = true
+      ∨ completeTaskFires (cycleStepN k s) = true := by
+  refine ⟨0, Nat.zero_le _, Or.inl ?_⟩
+  rw [hzero]
+  unfold lowYieldCancelFires
+  rw [hphase]
+  simp
 
 /-! ## LIV-003c — Task pool finiteness (small axiom) -/
 

@@ -14,14 +14,19 @@
 # Phase 23d-1 — LIV-003 fat axiom REFACTORED into smaller pieces. The OLD
 # `cancelTrajectoryBound`/`cancelTrajectoryBound_pos`/`cumulative_progress_
 # lifecycle_axiom` are DELETED. The decomposition lives in
-# `Formal.Liveness.LIV003Decomposition` (LIV-003a is a THEOREM, no axiom):
+# `Formal.Liveness.LIV003Decomposition` (LIV-003a is a THEOREM, no axiom).
+# Phase 23d-4 GRADUATED LIV-003b-A2 (`inProgress_decides_within_threshold`)
+# from axiom to THEOREM via the Phase 23c-3b phase-based `lowYieldCancelFires`
+# definition (witness k = 0). The Phase 23d-4 `actionsAttempted` field
+# on `State` is added as the carrier for a future refinement that mirrors
+# the production sample-count gate; no new axioms introduced:
 #   * LIV-003b-A1: lowYieldSampleThreshold                    | spec: LOW_YIELD_SAMPLE_THRESHOLD in projections.py    | approved 2026-06-01
 #   * LIV-003b-A1: lowYieldSampleThreshold_pos                | spec: LOW_YIELD_SAMPLE_THRESHOLD in projections.py    | approved 2026-06-01
-#   * LIV-003b-A2: inProgress_decides_within_threshold        | spec: PIVOT/PURSUE branch in task_decision.py        | approved 2026-06-01
+#   * LIV-003b-A2: inProgress_decides_within_threshold        | GRADUATED TO THEOREM Phase 23d-4 (was axiom in 23d-1)  | n/a
 #   * LIV-003c-A1: taskPoolFinite                             | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
 #   * LIV-003c-A1: taskPoolFinite_pos                         | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
 #   * LIV-003c-A2: accept_cancel_loop_bound                   | spec: game_data.task_codes + StuckDetector safety mirror | approved 2026-06-01
-#   * LIV-003-bridge: lifecycle_progress_from_bounds          | composition residual (axiom → theorem when actionsAttempted lands) | approved 2026-06-01
+#   * LIV-003-bridge: lifecycle_progress_from_bounds          | composition residual (axiom → theorem when full sample_count gate is modelled) | approved 2026-06-01
 #
 # New entries here require the same Phase-19a discipline: docstring header
 # `-- AXIOM-ID: <id> | spec: <section> | approved: <date>` in the source.
@@ -43,7 +48,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."   # formal/
 . "$HOME/.elan/env" 2>/dev/null || true
 
-ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|lowYieldSampleThreshold|lowYieldSampleThreshold_pos|inProgress_decides_within_threshold|taskPoolFinite|taskPoolFinite_pos|accept_cancel_loop_bound|lifecycle_progress_from_bounds)'
+ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|lowYieldSampleThreshold|lowYieldSampleThreshold_pos|taskPoolFinite|taskPoolFinite_pos|accept_cancel_loop_bound|lifecycle_progress_from_bounds)'
 
 OUT_RAW="$(lake env lean Formal/LivenessAudit.lean 2>&1)"
 echo "$OUT_RAW"
@@ -64,7 +69,7 @@ MANIFEST="gate/liveness_axioms.manifest"
   echo "# Allow-list: {propext, Classical.choice, Quot.sound,"
   echo "#              Formal.Liveness.Measure.xpToNextLevel(_pos) [LIV-001],"
   echo "#              Formal.Liveness.LIV003Decomposition.lowYieldSampleThreshold(_pos) [LIV-003b],"
-  echo "#              Formal.Liveness.LIV003Decomposition.inProgress_decides_within_threshold [LIV-003b],"
+  echo "#              (LIV-003b-A2 inProgress_decides_within_threshold GRADUATED TO THEOREM in Phase 23d-4)"
   echo "#              Formal.Liveness.LIV003Decomposition.taskPoolFinite(_pos) [LIV-003c],"
   echo "#              Formal.Liveness.LIV003Decomposition.accept_cancel_loop_bound [LIV-003c],"
   echo "#              Formal.Liveness.LIV003Decomposition.lifecycle_progress_from_bounds [LIV-003-bridge]}"

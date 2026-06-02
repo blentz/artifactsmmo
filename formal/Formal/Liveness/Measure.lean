@@ -166,6 +166,29 @@ structure State where
       lesson). Callers constructing `State` directly bear the obligation
       to set `taskLifecyclePhase` consistently. -/
   taskLifecyclePhase : TaskLifecyclePhase
+  /-- Phase 23d-4: cumulative count of action attempts on the current
+      task. Incremented by `applyActionKind` on every progress-attempting
+      action (`.fight`, `.taskTrade`) while the pre-state phase is
+      `.accepted` or `.inProgress`. Reset to `0` on transitions to
+      `.none` (via `.completeTask` and `.taskCancel`). Other action
+      kinds preserve the counter (via `{s with ...}`).
+
+      Honest disclosure: production's `low_yield_cancel_fires` reads
+      `sample_count` from `LearningStore.farm_items_yield`, which is
+      recorded per completed cycle of FarmItems-like behaviour (see
+      `src/artifactsmmo_cli/ai/learning/projections.py`). This counter
+      is a simpler abstraction — it increments per any progress-
+      attempting action while a task is active. A future differential
+      harness must assert that production's `sample_count` tracks this
+      Lean field within model fidelity. The production constant
+      `LOW_YIELD_SAMPLE_THRESHOLD` maps to `lowYieldSampleThreshold`
+      in `Formal.Liveness.LIV003Decomposition`.
+
+      The counter is NOT part of the lex `Measure` tuple — keeping it
+      out of `Measure`/`ExtMeasure` preserves Phase-19 lemmas
+      mechanically (they `{s with ...}` over State, so the new field
+      is automatically threaded through). -/
+  actionsAttempted : Nat
   deriving Repr
 
 namespace State
