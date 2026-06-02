@@ -59,7 +59,16 @@ def task_decision(state: WorldState, game_data: GameData,
             confidence_margin=LOW_CONFIDENCE_MARGIN, confidence=0.0)
     curve = SkillXpCurve(observed=history.skill_max_xp_observations(req.skill))
     rate = history.skill_xp_per_cycle(req.skill) or DEFAULT_SKILL_XP_PER_CYCLE
-    skill_cycles = curve.cycles_to_level(req.current_level, req.required_level, rate)
+    # cycles_to_level can return 0 when the curve has no observations anchoring
+    # the gap (required_xp returns 0 for unanchored levels). That treats an
+    # unknown cost as a free cost, which lets one cheap reward justify an
+    # arbitrarily large gap (e.g. weaponcrafting 1→50 with empty observations).
+    # A skill level is gained by completing at least one cycle, so the gap size
+    # is a hard lower bound on cycles regardless of XP-curve knowledge.
+    gap = max(0, req.required_level - req.current_level)
+    skill_cycles = max(
+        curve.cycles_to_level(req.current_level, req.required_level, rate),
+        float(gap))
     # task_requirement returns None when task_total == 0, so total_cycles >= 1 here
     # (skill_cycles >= 0 + task_total >= 1) — no divide-by-zero guard needed.
     total_cycles = skill_cycles + float(state.task_total)
