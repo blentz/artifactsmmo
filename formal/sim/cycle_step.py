@@ -285,7 +285,12 @@ def apply_action_kind_mirror(action: str, s: CycleState) -> CycleState:
     if action == "claimPendingItem":
         return dataclasses.replace(s, pending_items_nonempty=False)
     if action == "completeTask":
-        return dataclasses.replace(s, task_code=None, task_total=0, task_progress=0)
+        # Phase 23c-2a: CompleteTask grants TASK_COMPLETE_XP_ESTIMATE = 10
+        # XP per planner-side apply. Mirror the production constant.
+        return dataclasses.replace(
+            s, task_code=None, task_total=0, task_progress=0,
+            xp=s.xp + 10,
+        )
     if action == "acceptTask":
         return dataclasses.replace(
             s, task_code=ACCEPT_TASK_PLACEHOLDER_CODE, task_total=1, task_progress=0,

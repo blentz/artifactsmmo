@@ -132,6 +132,7 @@ _MEANS_INDEX = {
     MeansKind.TASK_EXCHANGE: 7,
     MeansKind.SELL_IDLE: 8,
     MeansKind.BANK_EXPAND: 9,
+    MeansKind.WAIT: 10,  # Phase 20e-v2 step 1: always-firing sentinel.
 }
 
 

@@ -77,39 +77,47 @@ class TestWorldStatePhaseInvariant:
         state = make_state(task_code="monsters_chicken", task_progress=10, task_total=10)
         assert state.task_lifecycle_phase is TaskLifecyclePhase.COMPLETE
 
-    def test_direct_construction_with_mismatched_phase_raises(self):
+    def test_direct_construction_with_mismatched_phase_is_corrected(self):
         """Constructing WorldState directly with a phase that disagrees with
-        (task_code, task_progress, task_total) must trip the __post_init__
-        assertion. This is the integrity guarantee Phase 23c-2 Lean relies on.
+        (task_code, task_progress, task_total) gets the phase CORRECTED via
+        derive_task_lifecycle_phase in __post_init__. The stored value
+        always matches the derive function — SINGLE SOURCE OF TRUTH at
+        construction time.
+
+        Perimeter fix (post-Phase-24): the original Phase-23c-1 design
+        asserted equality and tripped AssertionError on mismatch. That
+        broke formal/diff tests that default-pass NONE. Deriving instead
+        of asserting keeps the invariant (stored == derived ∀ State)
+        without forcing every callsite to thread the phase through.
         """
         base = make_state(task_code="monsters_chicken", task_progress=4, task_total=10)
-        # base has phase IN_PROGRESS. Try to replace with ACCEPTED (mismatch).
-        with pytest.raises(AssertionError, match="task_lifecycle_phase invariant violation"):
-            # Use dataclasses.replace via __init__ — manually rebuild with a wrong phase.
-            WorldState(
-                character=base.character,
-                level=base.level,
-                xp=base.xp,
-                max_xp=base.max_xp,
-                hp=base.hp,
-                max_hp=base.max_hp,
-                gold=base.gold,
-                skills=base.skills,
-                x=base.x,
-                y=base.y,
-                inventory=base.inventory,
-                inventory_max=base.inventory_max,
-                equipment=base.equipment,
-                cooldown_expires=base.cooldown_expires,
-                task_code=base.task_code,
-                task_type=base.task_type,
-                task_progress=base.task_progress,
-                task_total=base.task_total,
-                bank_items=base.bank_items,
-                bank_gold=base.bank_gold,
-                pending_items=base.pending_items,
-                task_lifecycle_phase=TaskLifecyclePhase.ACCEPTED,  # WRONG (should be IN_PROGRESS)
-            )
+        # base has phase IN_PROGRESS. Try to construct with ACCEPTED.
+        constructed = WorldState(
+            character=base.character,
+            level=base.level,
+            xp=base.xp,
+            max_xp=base.max_xp,
+            hp=base.hp,
+            max_hp=base.max_hp,
+            gold=base.gold,
+            skills=base.skills,
+            x=base.x,
+            y=base.y,
+            inventory=base.inventory,
+            inventory_max=base.inventory_max,
+            equipment=base.equipment,
+            cooldown_expires=base.cooldown_expires,
+            task_code=base.task_code,
+            task_type=base.task_type,
+            task_progress=base.task_progress,
+            task_total=base.task_total,
+            bank_items=base.bank_items,
+            bank_gold=base.bank_gold,
+            pending_items=base.pending_items,
+            task_lifecycle_phase=TaskLifecyclePhase.ACCEPTED,  # WRONG (should be IN_PROGRESS)
+        )
+        # __post_init__ corrected the phase to match raw fields.
+        assert constructed.task_lifecycle_phase == TaskLifecyclePhase.IN_PROGRESS
 
 
 class TestApplyTransitions:

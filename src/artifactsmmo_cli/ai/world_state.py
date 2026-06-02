@@ -149,23 +149,29 @@ class WorldState:
     invariant on next replace through ``__post_init__``)."""
 
     def __post_init__(self) -> None:
-        """Enforce phase ↔ raw-fields invariant.
+        """Derive ``task_lifecycle_phase`` from raw task fields.
 
-        The stored ``task_lifecycle_phase`` must match
-        :func:`derive_task_lifecycle_phase` over the raw task fields.
-        This is the SINGLE SOURCE OF TRUTH check: tests and call-sites
-        cannot construct a WorldState where the phase disagrees with
-        (task_code, task_progress, task_total).
+        The stored phase is a CACHE of
+        :func:`derive_task_lifecycle_phase` over (task_code, task_progress,
+        task_total). It is RECOMPUTED on every construction — including
+        via ``dataclasses.replace`` — so a caller that mutates the raw
+        fields without passing a matching phase still ends up with a
+        consistent State.
+
+        Perimeter fix (post-Phase-24): the original Phase-23c-1 design
+        asserted equality between the passed-in phase and the derived
+        one. That broke direct-construction call sites (formal/diff
+        tests + test fixtures) that always default-pass ``NONE`` even
+        when raw fields imply ACCEPTED/IN_PROGRESS/COMPLETE. Deriving
+        instead of asserting keeps the invariant enforced (stored value
+        ALWAYS matches derive output) without forcing every callsite to
+        thread the phase through.
         """
-        expected = derive_task_lifecycle_phase(
+        derived = derive_task_lifecycle_phase(
             self.task_code, self.task_progress, self.task_total
         )
-        assert self.task_lifecycle_phase == expected, (
-            f"WorldState task_lifecycle_phase invariant violation: "
-            f"stored={self.task_lifecycle_phase}, expected={expected} "
-            f"for task_code={self.task_code!r}, "
-            f"task_progress={self.task_progress}, task_total={self.task_total}"
-        )
+        if self.task_lifecycle_phase != derived:
+            object.__setattr__(self, "task_lifecycle_phase", derived)
 
     @property
     def inventory_used(self) -> int:

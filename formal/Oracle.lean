@@ -899,7 +899,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 6 => .acceptTask
       | 7 => .taskExchange
       | 8 => .sellIdle
-      | _ => .bankExpand
+      | 9 => .bankExpand
+      | _ => .wait
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- Compute one cycles_for_progress result using the SAME proved

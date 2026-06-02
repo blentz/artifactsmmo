@@ -175,6 +175,9 @@ inductive MeansKind where
   | taskExchange
   | sellIdle
   | bankExpand
+  | wait  -- Phase 20e-v2: always-firing sentinel sentinel (production fix
+          -- src/.../tiers/means.py:WAIT). Closes the StrategyArbiter
+          -- deadlock window when no other means fires.
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -201,6 +204,7 @@ def goalReprOfMeans : MeansKind → String
   | .acceptTask      => "AcceptTask"
   | .taskExchange    => "TaskExchange"
   | .bankExpand      => "ExpandBank"
+  | .wait            => "Wait"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 
