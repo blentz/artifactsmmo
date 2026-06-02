@@ -241,7 +241,10 @@ If we ship this, we will have proven what the meta-goal stated: **"given the ope
 | 23c-3b | TaskLifecyclePhase enum + LIV-002 def + phase-based faithful fires + planner +10 XP on completeTask | DONE | 02d7f5a |
 | 23c-3c | Unrestricted headline `cumulative_progress_under_no_wait` via LIV-003 axiom (cancelTrajectoryBound + cumulative_progress_lifecycle_axiom, openapi /v3/my/{name}/action/task/new pool finiteness; user-approved 2026-06-01); drops `hrestricted` | DONE | — |
 | 23  | Tier 4 — cumulative progress | DONE | — |
-| 24  | Game-data fixture + openapi conformance harness | TODO | — |
+| 23d-6b | `taskComplete_reachable` hand-written: K = taskTotal - taskProgress | DONE | f06fccb |
+| 23d-7 | `skill_gap_then_complete_reachable`: .gather chain closes skill gap | DONE | 04f4bd8 |
+| 23d-8 | `recipe_then_complete_reachable`: .gather + .craft + .taskTrade closes recipe-chain | DONE | 1adb0d4 |
+| 24  | GameDataFixture: 3-recipe iron_sword chain instantiating Phase 23d-8 universal. fixture_dag_acyclic + ironSword_task_completable proven. MOCK data (server snapshot deferred — server unreachable this session). | DONE | 0373536 |
 | 25  | Tier 5 — level-50 reachability (capstone) | TODO | — |
 
 Phase 19a notes: Mathlib pinned to **v4.30.0** (matching `formal/lean-toolchain`'s Lean 4.30.0). At this pin the foundational Mathlib axiom set coincides with the safety set `{propext, Classical.choice, Quot.sound}`, so the liveness allow-list does not need to grow beyond the kernel three. The split gate (`check_axioms_safety.sh` + `check_axioms_liveness.sh`) and the cross-namespace leak check are wired into `gate.sh` via the existing `check_axioms.sh` entry point.
