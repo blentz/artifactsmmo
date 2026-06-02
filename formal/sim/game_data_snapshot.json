@@ -1,0 +1,5604 @@
+{
+  "api_base_url": "https://api.artifactsmmo.com",
+  "captured_at": "2026-06-02T19:54:09.159314+00:00",
+  "crafting_recipes": {
+    "adamantite_axe": {
+      "adamantite_bar": 10,
+      "adventurer_skull": 3,
+      "astralyte_crystal": 2,
+      "cursed_flask": 3,
+      "golden_dust": 4,
+      "lava_bucket": 4
+    },
+    "adamantite_bar": {
+      "adamantite_ore": 10
+    },
+    "adamantite_boots": {
+      "adamantite_bar": 12,
+      "diamond": 1,
+      "dusk_beetle_shell": 4,
+      "enchanted_fabric": 2,
+      "golden_dust": 3,
+      "wolfrider_hair": 4
+    },
+    "adamantite_fishing_rod": {
+      "adamantite_bar": 5,
+      "astralyte_crystal": 2,
+      "cursed_flask": 3,
+      "cursed_plank": 3,
+      "desert_scorpion_carapace": 4,
+      "lava_bucket": 4,
+      "palm_plank": 5
+    },
+    "adamantite_gloves": {
+      "adamantite_bar": 10,
+      "astralyte_crystal": 3,
+      "desert_scorpion_carapace": 4,
+      "efreet_cloth": 4,
+      "goblin_guard_foot": 4,
+      "rosenblood_elixir": 1
+    },
+    "adamantite_mask": {
+      "adamantite_bar": 12,
+      "alexandrite": 1,
+      "cursed_book": 5,
+      "duskworm_skin": 3,
+      "hellhound_collar": 3,
+      "jasper_crystal": 2
+    },
+    "adamantite_pickaxe": {
+      "adamantite_bar": 10,
+      "astralyte_crystal": 2,
+      "broken_sword": 2,
+      "dark_essence": 4,
+      "efreet_cloth": 4,
+      "sand_snake_poison": 4
+    },
+    "adamantite_platebody": {
+      "adamantite_bar": 12,
+      "adventurer_skull": 3,
+      "desert_scorpion_carapace": 3,
+      "enchanted_fabric": 2,
+      "golden_dust": 4,
+      "malefic_cloth": 3
+    },
+    "adamantite_platelegs": {
+      "adamantite_bar": 12,
+      "duskworm_skin": 3,
+      "enchanted_fabric": 2,
+      "golden_dust": 3,
+      "marauder_hand": 3,
+      "sand_snakeskin": 3
+    },
+    "adamantite_ring": {
+      "adamantite_bar": 12,
+      "corrupted_stone": 3,
+      "desert_scorpion_carapace": 2,
+      "duskworm_skin": 3,
+      "golden_dust": 3,
+      "sand_snakeskin": 3
+    },
+    "adamantite_shield": {
+      "adamantite_bar": 12,
+      "adventurer_skull": 3,
+      "bat_wing": 3,
+      "dusk_beetle_shell": 3,
+      "hellhound_collar": 3,
+      "jasper_crystal": 2
+    },
+    "adamantite_sword": {
+      "adamantite_bar": 12,
+      "adventurer_skull": 3,
+      "bat_wing": 3,
+      "broken_sword": 2,
+      "dusk_beetle_shell": 3,
+      "marauder_hand": 3
+    },
+    "adventurer_boots": {
+      "mushroom": 5,
+      "spruce_plank": 5,
+      "wolf_hair": 5
+    },
+    "adventurer_helmet": {
+      "cowhide": 3,
+      "feather": 4,
+      "mushroom": 4,
+      "spruce_plank": 3
+    },
+    "adventurer_pants": {
+      "ash_plank": 7,
+      "cloth": 2,
+      "green_cloth": 3,
+      "hard_leather": 3
+    },
+    "adventurer_vest": {
+      "cowhide": 6,
+      "spruce_plank": 4,
+      "wool": 2,
+      "yellow_slimeball": 4
+    },
+    "air_and_water_amulet": {
+      "blue_slimeball": 2,
+      "green_slimeball": 2,
+      "iron_bar": 4
+    },
+    "air_boost_potion": {
+      "algae": 1,
+      "green_slimeball": 1,
+      "sunflower": 1
+    },
+    "air_res_potion": {
+      "glowstem_leaf": 1,
+      "green_slimeball": 2,
+      "maple_sap": 1
+    },
+    "air_ring": {
+      "flying_wing": 3,
+      "green_slimeball": 4,
+      "iron_bar": 5
+    },
+    "air_shield": {
+      "emerald": 1,
+      "green_slimeball": 20,
+      "rosenblood_elixir": 1,
+      "strangold_bar": 6,
+      "wolfrider_ponytail": 5
+    },
+    "alexandrite": {
+      "alexandrite_stone": 24
+    },
+    "ancestral_talisman": {
+      "cursed_book": 4,
+      "diamond": 1,
+      "goblin_tooth": 5,
+      "magical_plank": 8,
+      "priestess_orb": 2
+    },
+    "ancient_jean": {
+      "goblin_guard_foot": 3,
+      "lizard_skin": 5,
+      "magical_cure": 2,
+      "magical_plank": 6,
+      "obsidian_bar": 4
+    },
+    "antidote": {
+      "glowstem_leaf": 1,
+      "maple_sap": 1,
+      "strangold_bar": 2
+    },
+    "apple_pie": {
+      "apple": 2,
+      "egg": 1
+    },
+    "apprentice_gloves": {
+      "feather": 6
+    },
+    "ash_plank": {
+      "ash_wood": 10
+    },
+    "battlestaff": {
+      "blue_slimeball": 5,
+      "hardwood_plank": 6,
+      "steel_bar": 4,
+      "wolf_bone": 3
+    },
+    "batwing_helmet": {
+      "bat_wing": 5,
+      "cursed_flask": 5,
+      "enchanted_fabric": 2,
+      "rosenblood_elixir": 1,
+      "strangold_bar": 6,
+      "topaz": 1
+    },
+    "blade_of_hell": {
+      "book_from_hell": 1,
+      "broken_sword": 2,
+      "lava_bucket": 4,
+      "orc_bone": 6,
+      "strangold_bar": 11
+    },
+    "bloodblade": {
+      "astralyte_crystal": 2,
+      "broken_sword": 1,
+      "goblin_tooth": 5,
+      "mithril_bar": 8,
+      "wolfrider_hair": 4
+    },
+    "bow_from_hell": {
+      "book_from_hell": 1,
+      "demon_horn": 4,
+      "efreet_cloth": 3,
+      "imp_tail": 5,
+      "magical_plank": 10
+    },
+    "celest_ring": {
+      "astralyte_crystal": 2,
+      "rosenblood_elixir": 1,
+      "ruby": 2,
+      "sapphire": 2,
+      "strangold_bar": 9,
+      "wolfrider_hair": 3
+    },
+    "cheese": {
+      "milk_bucket": 1
+    },
+    "conjurer_cloak": {
+      "cyclops_eye": 5,
+      "demon_horn": 4,
+      "enchanted_fabric": 1,
+      "obsidian_bar": 6,
+      "owlbear_hair": 4
+    },
+    "conjurer_skirt": {
+      "lizard_eye": 4,
+      "obsidian_bar": 6,
+      "owlbear_claw": 3,
+      "vampire_tooth": 4,
+      "vermin_leather": 3
+    },
+    "cooked_bass": {
+      "bass": 1
+    },
+    "cooked_beef": {
+      "raw_beef": 1
+    },
+    "cooked_chicken": {
+      "raw_chicken": 1
+    },
+    "cooked_desert_scorpion_meat": {
+      "desert_scorpion_meat": 1
+    },
+    "cooked_gudgeon": {
+      "gudgeon": 1
+    },
+    "cooked_hellhound_meat": {
+      "raw_hellhound_meat": 1
+    },
+    "cooked_rat_meat": {
+      "raw_rat_meat": 1
+    },
+    "cooked_salmon": {
+      "salmon": 1
+    },
+    "cooked_shrimp": {
+      "shrimp": 1
+    },
+    "cooked_swordfish": {
+      "swordfish": 1
+    },
+    "cooked_trout": {
+      "trout": 1
+    },
+    "cooked_wolf_meat": {
+      "raw_wolf_meat": 1
+    },
+    "copper_armor": {
+      "copper_bar": 5,
+      "wool": 2
+    },
+    "copper_axe": {
+      "copper_bar": 6
+    },
+    "copper_bar": {
+      "copper_ore": 10
+    },
+    "copper_boots": {
+      "copper_bar": 8
+    },
+    "copper_dagger": {
+      "copper_bar": 6
+    },
+    "copper_helmet": {
+      "copper_bar": 6
+    },
+    "copper_legs_armor": {
+      "copper_bar": 5,
+      "feather": 2
+    },
+    "copper_pickaxe": {
+      "copper_bar": 6
+    },
+    "copper_ring": {
+      "copper_bar": 6
+    },
+    "corrupted_stone_amulet": {
+      "corrupted_stone": 5,
+      "magical_cure": 2,
+      "malefic_cloth": 2,
+      "orc_bone": 5,
+      "strangold_bar": 6
+    },
+    "cultist_boots": {
+      "enchanted_fabric": 2,
+      "hellhound_hair": 4,
+      "malefic_cloth": 2,
+      "maple_plank": 7,
+      "orc_bone": 5
+    },
+    "cultist_cloak": {
+      "astralyte_crystal": 2,
+      "hellhound_collar": 4,
+      "malefic_cloth": 2,
+      "maple_plank": 8,
+      "red_cloth": 3
+    },
+    "cultist_hat": {
+      "astralyte_crystal": 2,
+      "hellhound_hair": 5,
+      "malefic_cloth": 1,
+      "maple_plank": 8,
+      "orc_skin": 4
+    },
+    "cultist_pants": {
+      "cursed_plank": 8,
+      "hellhound_hair": 3,
+      "magical_cure": 4,
+      "malefic_cloth": 2,
+      "wolfrider_ponytail": 3
+    },
+    "cursed_hat": {
+      "cursed_book": 4,
+      "cursed_plank": 8,
+      "diamond": 1,
+      "enchanted_fabric": 1,
+      "malefic_cloth": 2,
+      "owlbear_hair": 4
+    },
+    "cursed_plank": {
+      "cursed_wood": 10
+    },
+    "cursed_sceptre": {
+      "corrupted_stone": 3,
+      "cursed_book": 3,
+      "diamond": 1,
+      "magical_cure": 2,
+      "magical_plank": 8,
+      "malefic_cloth": 3
+    },
+    "dark_horned_helmet": {
+      "duskworm_skin": 4,
+      "hellhound_collar": 4,
+      "jasper_crystal": 3,
+      "palm_plank": 10,
+      "sand_snake_poison": 3,
+      "topaz": 2
+    },
+    "darkforged_boots": {
+      "astralyte_crystal": 3,
+      "dark_essence": 5,
+      "lava_bucket": 4,
+      "maple_plank": 10,
+      "sand_snakeskin": 2
+    },
+    "darkforged_helmet": {
+      "dark_essence": 5,
+      "enchanted_fabric": 3,
+      "grimlet_bone": 4,
+      "marauder_hand": 2,
+      "mithril_bar": 10
+    },
+    "darkforged_plate": {
+      "cursed_plank": 10,
+      "efreet_cloth": 5,
+      "grimlet_bone": 4,
+      "rosenblood_elixir": 1,
+      "sand_snake_poison": 4
+    },
+    "darkforged_shield": {
+      "bat_wing": 4,
+      "cursed_plank": 10,
+      "dark_essence": 5,
+      "diamond": 1,
+      "marauder_hand": 4
+    },
+    "dead_wood_plank": {
+      "dead_wood": 10
+    },
+    "demoniac_dagger": {
+      "book_from_hell": 1,
+      "cursed_book": 5,
+      "efreet_cloth": 3,
+      "obsidian_bar": 5,
+      "strangold_bar": 10
+    },
+    "demoniac_shield": {
+      "bat_wing": 4,
+      "book_from_hell": 1,
+      "cursed_plank": 10,
+      "goblin_tooth": 6,
+      "grimlet_bone": 3
+    },
+    "desert_whip": {
+      "cursed_flask": 2,
+      "desert_scorpion_carapace": 3,
+      "duskworm_skin": 3,
+      "efreet_cloth": 3,
+      "palm_plank": 12,
+      "sand_snake_poison": 3
+    },
+    "diamond": {
+      "diamond_stone": 24
+    },
+    "diamond_amulet": {
+      "cursed_book": 4,
+      "diamond": 1,
+      "magical_cure": 2,
+      "magical_plank": 8,
+      "obsidian_bar": 5
+    },
+    "diamond_sword": {
+      "corrupted_stone": 3,
+      "diamond": 1,
+      "goblin_eye": 3,
+      "magical_cure": 2,
+      "magical_plank": 7,
+      "spider_leg": 3
+    },
+    "divinity_ring": {
+      "astralyte_crystal": 2,
+      "hellhound_collar": 4,
+      "rosenblood_elixir": 1,
+      "sapphire": 2,
+      "strangold_bar": 9,
+      "topaz": 2
+    },
+    "dreadful_amulet": {
+      "hard_leather": 2,
+      "hardwood_plank": 6,
+      "king_slimeball": 2,
+      "ogre_eye": 4
+    },
+    "dreadful_armor": {
+      "enchanted_fabric": 1,
+      "goblin_guard_foot": 4,
+      "obsidian_bar": 8,
+      "ogre_eye": 5,
+      "priestess_orb": 2
+    },
+    "dreadful_battleaxe": {
+      "goblin_eye": 3,
+      "goblin_guard_foot": 3,
+      "jasper_crystal": 3,
+      "lizard_eye": 4,
+      "magical_plank": 7
+    },
+    "dreadful_ring": {
+      "cyclops_eye": 3,
+      "jasper_crystal": 1,
+      "ogre_eye": 4,
+      "steel_bar": 7
+    },
+    "dreadful_shield": {
+      "astralyte_crystal": 1,
+      "cursed_book": 5,
+      "imp_tail": 5,
+      "obsidian_bar": 8,
+      "ruby": 1
+    },
+    "dreadful_staff": {
+      "cyclops_eye": 4,
+      "hardwood_plank": 6,
+      "jasper_crystal": 1,
+      "vampire_blood": 5
+    },
+    "duskarmor": {
+      "adamantite_bar": 10,
+      "dusk_beetle_shell": 3,
+      "duskworm_skin": 4,
+      "enchanted_fabric": 3,
+      "orc_skin": 4,
+      "sapphire": 2
+    },
+    "duskpants": {
+      "dusk_beetle_shell": 3,
+      "duskworm_skin": 4,
+      "enchanted_fabric": 3,
+      "goblin_guard_foot": 4,
+      "palm_plank": 10,
+      "priestess_orb": 2
+    },
+    "dust_amulet": {
+      "adamantite_bar": 10,
+      "alexandrite": 1,
+      "dark_essence": 4,
+      "demoniac_dust": 3,
+      "duskworm_skin": 4,
+      "golden_dust": 4
+    },
+    "dust_helmet": {
+      "adventurer_skull": 3,
+      "astralyte_crystal": 2,
+      "corrupted_stone": 3,
+      "desert_scorpion_carapace": 4,
+      "golden_dust": 4,
+      "palm_plank": 10
+    },
+    "dust_sword": {
+      "adamantite_bar": 10,
+      "adventurer_skull": 3,
+      "broken_sword": 2,
+      "cursed_flask": 3,
+      "golden_dust": 4,
+      "marauder_hand": 4
+    },
+    "earth_boost_potion": {
+      "algae": 1,
+      "sunflower": 1,
+      "yellow_slimeball": 1
+    },
+    "earth_res_potion": {
+      "glowstem_leaf": 1,
+      "maple_sap": 1,
+      "yellow_slimeball": 2
+    },
+    "earth_ring": {
+      "flying_wing": 3,
+      "iron_bar": 5,
+      "yellow_slimeball": 4
+    },
+    "earth_shield": {
+      "bat_wing": 3,
+      "rosenblood_elixir": 1,
+      "strangold_bar": 6,
+      "topaz": 1,
+      "yellow_slimeball": 20
+    },
+    "elderwood_staff": {
+      "cyclops_eye": 5,
+      "dead_wood_plank": 5,
+      "lizard_skin": 4,
+      "red_cloth": 3,
+      "skeleton_skull": 3
+    },
+    "emerald": {
+      "emerald_stone": 24
+    },
+    "emerald_amulet": {
+      "emerald": 1,
+      "hardwood_plank": 8,
+      "jasper_crystal": 2,
+      "wolf_hair": 5
+    },
+    "emerald_ring": {
+      "emerald": 1,
+      "gold_bar": 8,
+      "magical_cure": 2,
+      "obsidian_bar": 4,
+      "vampire_blood": 5
+    },
+    "enchanted_antidote": {
+      "magic_sap": 1,
+      "strangold_bar": 2,
+      "torch_cactus_flower": 1
+    },
+    "enchanted_boost_potion": {
+      "bat_wing": 1,
+      "glowstem_leaf": 2,
+      "magic_sap": 1
+    },
+    "enchanted_bow": {
+      "demon_horn": 2,
+      "gold_bar": 8,
+      "ogre_eye": 4,
+      "red_cloth": 3,
+      "spider_leg": 3
+    },
+    "enchanted_health_potion": {
+      "glowstem_leaf": 2,
+      "magic_sap": 1,
+      "sunflower": 1
+    },
+    "enchanted_health_splash_potion": {
+      "coconut": 1,
+      "magic_sap": 1,
+      "torch_cactus_flower": 2
+    },
+    "enchanter_boots": {
+      "enchanted_fabric": 1,
+      "lizard_eye": 4,
+      "magical_plank": 8,
+      "priestess_orb": 2,
+      "vermin_leather": 5
+    },
+    "enchanter_pants": {
+      "cursed_book": 3,
+      "demon_horn": 2,
+      "enchanted_fabric": 1,
+      "magical_plank": 8,
+      "owlbear_claw": 4,
+      "spider_leg": 2
+    },
+    "eternal_red_ring": {
+      "adamantite_bar": 12,
+      "alexandrite": 1,
+      "desert_scorpion_carapace": 2,
+      "duskworm_skin": 4,
+      "golden_dust": 4,
+      "sand_snake_poison": 4
+    },
+    "eternity_ring": {
+      "astralyte_crystal": 2,
+      "emerald": 2,
+      "rosenblood_elixir": 1,
+      "strangold_bar": 9,
+      "topaz": 2,
+      "wolfrider_ponytail": 3
+    },
+    "feather_coat": {
+      "ash_plank": 2,
+      "feather": 5
+    },
+    "fire_and_earth_amulet": {
+      "iron_bar": 4,
+      "red_slimeball": 2,
+      "yellow_slimeball": 2
+    },
+    "fire_boost_potion": {
+      "algae": 1,
+      "red_slimeball": 1,
+      "sunflower": 1
+    },
+    "fire_bow": {
+      "red_slimeball": 2,
+      "spruce_plank": 6
+    },
+    "fire_res_potion": {
+      "glowstem_leaf": 1,
+      "maple_sap": 1,
+      "red_slimeball": 2
+    },
+    "fire_ring": {
+      "flying_wing": 3,
+      "iron_bar": 5,
+      "red_slimeball": 4
+    },
+    "fire_shield": {
+      "orc_skin": 5,
+      "red_slimeball": 20,
+      "rosenblood_elixir": 1,
+      "ruby": 1,
+      "strangold_bar": 6
+    },
+    "fire_staff": {
+      "ash_plank": 5,
+      "red_slimeball": 2
+    },
+    "fish_soup": {
+      "milk_bucket": 1,
+      "salmon": 1,
+      "trout": 1
+    },
+    "fishing_net": {
+      "ash_plank": 6
+    },
+    "flying_boots": {
+      "dead_wood_plank": 8,
+      "demoniac_dust": 5,
+      "hard_leather": 3,
+      "magical_cure": 1,
+      "owlbear_hair": 3
+    },
+    "forest_whip": {
+      "hardwood_plank": 4,
+      "king_slimeball": 2,
+      "ogre_eye": 4,
+      "wolf_hair": 5
+    },
+    "fried_eggs": {
+      "egg": 2
+    },
+    "gold_axe": {
+      "dead_wood_plank": 2,
+      "gold_bar": 7,
+      "magical_cure": 2,
+      "red_cloth": 3,
+      "ruby": 1
+    },
+    "gold_bar": {
+      "gold_ore": 10
+    },
+    "gold_boots": {
+      "gold_bar": 8,
+      "lizard_eye": 3,
+      "magical_cure": 1,
+      "owlbear_hair": 4,
+      "vampire_blood": 4
+    },
+    "gold_fishing_rod": {
+      "dead_wood_plank": 2,
+      "gold_bar": 7,
+      "magical_cure": 2,
+      "owlbear_claw": 3,
+      "sapphire": 1
+    },
+    "gold_helm": {
+      "demon_horn": 2,
+      "gold_bar": 8,
+      "imp_tail": 3,
+      "owlbear_hair": 4,
+      "vampire_tooth": 3
+    },
+    "gold_mask": {
+      "demon_horn": 2,
+      "gold_bar": 8,
+      "owlbear_claw": 4,
+      "red_cloth": 2,
+      "skeleton_skull": 4
+    },
+    "gold_pickaxe": {
+      "dead_wood_plank": 2,
+      "demon_horn": 2,
+      "gold_bar": 7,
+      "magical_cure": 2,
+      "topaz": 1
+    },
+    "gold_platebody": {
+      "demon_horn": 2,
+      "demoniac_dust": 4,
+      "gold_bar": 8,
+      "owlbear_hair": 3,
+      "red_cloth": 3
+    },
+    "gold_platelegs": {
+      "gold_bar": 8,
+      "lizard_eye": 3,
+      "ogre_skin": 2,
+      "vampire_tooth": 4,
+      "vermin_leather": 3
+    },
+    "gold_ring": {
+      "dead_wood_plank": 3,
+      "gold_bar": 8,
+      "skeleton_bone": 3,
+      "vampire_blood": 3,
+      "wolf_bone": 3
+    },
+    "gold_shield": {
+      "dead_wood_plank": 7,
+      "demon_horn": 4,
+      "gold_bar": 7,
+      "magical_cure": 1,
+      "sapphire": 1
+    },
+    "gold_sword": {
+      "dead_wood_plank": 3,
+      "demon_horn": 2,
+      "gold_bar": 8,
+      "imp_tail": 4,
+      "red_cloth": 3
+    },
+    "golden_gloves": {
+      "dead_wood_plank": 7,
+      "demoniac_dust": 3,
+      "emerald": 1,
+      "magical_cure": 2,
+      "obsidian_bar": 2
+    },
+    "greater_dreadful_amulet": {
+      "cyclops_eye": 4,
+      "dreadful_amulet": 1,
+      "gold_bar": 8,
+      "ogre_eye": 4,
+      "red_cloth": 3
+    },
+    "greater_dreadful_staff": {
+      "cyclops_eye": 5,
+      "dead_wood_plank": 5,
+      "dreadful_staff": 1,
+      "ogre_eye": 4,
+      "red_cloth": 3
+    },
+    "greater_emerald_amulet": {
+      "astralyte_crystal": 2,
+      "cursed_flask": 6,
+      "emerald": 2,
+      "emerald_amulet": 1,
+      "maple_plank": 8
+    },
+    "greater_health_potion": {
+      "algae": 1,
+      "egg": 1,
+      "glowstem_leaf": 2
+    },
+    "greater_ruby_amulet": {
+      "astralyte_crystal": 2,
+      "hellhound_collar": 6,
+      "maple_plank": 8,
+      "ruby": 2,
+      "ruby_amulet": 1
+    },
+    "greater_sapphire_amulet": {
+      "astralyte_crystal": 2,
+      "cursed_flask": 6,
+      "maple_plank": 8,
+      "sapphire": 2,
+      "sapphire_amulet": 1
+    },
+    "greater_topaz_amulet": {
+      "astralyte_crystal": 2,
+      "hellhound_collar": 6,
+      "maple_plank": 8,
+      "topaz": 2,
+      "topaz_amulet": 1
+    },
+    "greater_wooden_staff": {
+      "blue_slimeball": 2,
+      "spruce_plank": 6
+    },
+    "hard_leather_armor": {
+      "hard_leather": 6,
+      "pig_skin": 2,
+      "spider_leg": 3,
+      "steel_bar": 4
+    },
+    "hard_leather_boots": {
+      "green_cloth": 2,
+      "hard_leather": 3,
+      "hardwood_plank": 5,
+      "pig_skin": 5
+    },
+    "hard_leather_helmet": {
+      "astralyte_crystal": 1,
+      "hard_leather": 4,
+      "hardwood_plank": 7,
+      "wolf_bone": 2
+    },
+    "hard_leather_pants": {
+      "green_cloth": 2,
+      "hard_leather": 5,
+      "skeleton_skull": 2,
+      "steel_bar": 6
+    },
+    "hardwood_plank": {
+      "ash_wood": 4,
+      "birch_wood": 6
+    },
+    "health_boost_potion": {
+      "nettle_leaf": 2,
+      "sap": 1,
+      "shrimp": 1
+    },
+    "health_potion": {
+      "nettle_leaf": 2,
+      "sap": 1,
+      "sunflower": 1
+    },
+    "health_splash_potion": {
+      "algae": 1,
+      "nettle_leaf": 2,
+      "sunflower": 1
+    },
+    "heart_amulet": {
+      "corrupted_stone": 3,
+      "duskworm_skin": 3,
+      "goblin_eye": 2,
+      "golden_dust": 3,
+      "grimlet_bone": 3,
+      "palm_plank": 12
+    },
+    "hell_armor": {
+      "cursed_plank": 10,
+      "demon_horn": 5,
+      "efreet_cloth": 5,
+      "grimlet_bone": 3,
+      "rosenblood_elixir": 1
+    },
+    "hell_helmet": {
+      "enchanted_fabric": 3,
+      "lava_bucket": 5,
+      "maple_plank": 10,
+      "orc_skin": 4,
+      "wolfrider_ponytail": 3
+    },
+    "hell_legs_armor": {
+      "grimlet_bone": 4,
+      "hellhound_collar": 4,
+      "lava_bucket": 4,
+      "malefic_cloth": 2,
+      "maple_plank": 10
+    },
+    "hell_reaper": {
+      "book_from_hell": 1,
+      "broken_sword": 3,
+      "efreet_cloth": 4,
+      "grimlet_bone": 5,
+      "mithril_bar": 11
+    },
+    "hell_ring": {
+      "diamond": 2,
+      "efreet_cloth": 3,
+      "goblin_eye": 5,
+      "grimlet_bone": 4,
+      "strangold_bar": 10
+    },
+    "hell_staff": {
+      "book_from_hell": 1,
+      "cursed_plank": 10,
+      "efreet_cloth": 3,
+      "imp_tail": 5,
+      "obsidian_bar": 5
+    },
+    "hork_helmet": {
+      "bat_wing": 3,
+      "dark_essence": 3,
+      "orc_skin": 4,
+      "owlbear_claw": 3,
+      "strangold_bar": 7
+    },
+    "hunting_bow": {
+      "green_cloth": 4,
+      "hardwood_plank": 5,
+      "ogre_skin": 3,
+      "pig_skin": 3
+    },
+    "iron_armor": {
+      "cowhide": 3,
+      "iron_bar": 5
+    },
+    "iron_axe": {
+      "iron_bar": 8,
+      "jasper_crystal": 1,
+      "spruce_plank": 2
+    },
+    "iron_bar": {
+      "iron_ore": 10
+    },
+    "iron_boots": {
+      "feather": 3,
+      "iron_bar": 5
+    },
+    "iron_dagger": {
+      "feather": 2,
+      "iron_bar": 6
+    },
+    "iron_helm": {
+      "iron_bar": 5,
+      "wool": 3
+    },
+    "iron_legs_armor": {
+      "cowhide": 3,
+      "iron_bar": 5
+    },
+    "iron_pickaxe": {
+      "iron_bar": 8,
+      "jasper_crystal": 1,
+      "spruce_plank": 2
+    },
+    "iron_ring": {
+      "iron_bar": 6,
+      "wool": 2
+    },
+    "iron_shield": {
+      "iron_bar": 5,
+      "wool": 3
+    },
+    "iron_sword": {
+      "feather": 2,
+      "iron_bar": 6
+    },
+    "jester_hat": {
+      "cursed_book": 3,
+      "cursed_plank": 8,
+      "enchanted_fabric": 1,
+      "goblin_guard_foot": 3,
+      "owlbear_hair": 3,
+      "vampire_tooth": 2
+    },
+    "king_slime_sword": {
+      "iron_bar": 8,
+      "jasper_crystal": 1,
+      "king_slimeball": 6
+    },
+    "leather_armor": {
+      "cowhide": 4,
+      "spruce_plank": 4
+    },
+    "leather_boots": {
+      "ash_plank": 4,
+      "cowhide": 4
+    },
+    "leather_gloves": {
+      "ash_plank": 2,
+      "cowhide": 8,
+      "jasper_crystal": 1
+    },
+    "leather_hat": {
+      "cowhide": 5,
+      "yellow_slimeball": 3
+    },
+    "leather_legs_armor": {
+      "cowhide": 3,
+      "spruce_plank": 5
+    },
+    "life_amulet": {
+      "feather": 4,
+      "red_slimeball": 2
+    },
+    "life_ring": {
+      "cloth": 2,
+      "iron_bar": 8,
+      "mushroom": 5
+    },
+    "lightning_sword": {
+      "broken_sword": 1,
+      "goblin_eye": 5,
+      "hellhound_hair": 4,
+      "magical_cure": 3,
+      "maple_plank": 7
+    },
+    "lizard_boots": {
+      "dead_wood_plank": 8,
+      "imp_tail": 4,
+      "lizard_skin": 4,
+      "magical_cure": 1,
+      "vermin_leather": 3
+    },
+    "lizard_skin_armor": {
+      "dead_wood_plank": 5,
+      "jasper_crystal": 2,
+      "lizard_skin": 5,
+      "vampire_tooth": 4
+    },
+    "lizard_skin_legs_armor": {
+      "jasper_crystal": 2,
+      "lizard_skin": 5,
+      "ogre_eye": 4,
+      "vermin_leather": 5
+    },
+    "lost_amulet": {
+      "cyclops_eye": 4,
+      "gold_bar": 8,
+      "imp_tail": 3,
+      "obsidian_bar": 4,
+      "red_cloth": 3
+    },
+    "lucky_wizard_hat": {
+      "flying_wing": 6,
+      "green_cloth": 6,
+      "snakeskin": 3
+    },
+    "magic_bow": {
+      "corrupted_stone": 3,
+      "lizard_skin": 3,
+      "magical_cure": 2,
+      "magical_plank": 7,
+      "sapphire": 1,
+      "wolf_hair": 3
+    },
+    "magic_sap": {
+      "magic_wood": 15
+    },
+    "magic_shield": {
+      "alexandrite": 1,
+      "desert_scorpion_carapace": 5,
+      "grimlet_bone": 4,
+      "marauder_hand": 4,
+      "palm_plank": 10
+    },
+    "magic_wizard_hat": {
+      "blue_slimeball": 10,
+      "hardwood_plank": 2,
+      "ogre_skin": 2,
+      "wolf_hair": 4
+    },
+    "magical_plank": {
+      "dead_wood": 4,
+      "magic_wood": 6
+    },
+    "malefic_armor": {
+      "corrupted_stone": 3,
+      "magical_cure": 2,
+      "magical_plank": 8,
+      "malefic_cloth": 2,
+      "owlbear_hair": 4
+    },
+    "malefic_ring": {
+      "astralyte_crystal": 2,
+      "cursed_plank": 4,
+      "lizard_eye": 2,
+      "owlbear_claw": 2,
+      "ruby": 2,
+      "strangold_bar": 8
+    },
+    "maple_plank": {
+      "maple_wood": 10
+    },
+    "maple_sap": {
+      "maple_wood": 15
+    },
+    "maple_syrup": {
+      "maple_sap": 2
+    },
+    "masterful_necklace": {
+      "astralyte_crystal": 2,
+      "corrupted_stone": 5,
+      "goblin_tooth": 5,
+      "priestess_orb": 2,
+      "strangold_bar": 6
+    },
+    "mesh_armor": {
+      "efreet_cloth": 5,
+      "grimlet_bone": 3,
+      "hellhound_hair": 5,
+      "mithril_bar": 10,
+      "rosenblood_elixir": 1
+    },
+    "mesh_legs_armor": {
+      "dark_essence": 4,
+      "efreet_cloth": 5,
+      "mithril_bar": 10,
+      "orc_skin": 4,
+      "rosenblood_elixir": 1
+    },
+    "minor_health_potion": {
+      "algae": 1,
+      "nettle_leaf": 2
+    },
+    "mithril_axe": {
+      "dark_essence": 3,
+      "mithril_bar": 8,
+      "owlbear_claw": 3,
+      "vampire_tooth": 3,
+      "wolfrider_ponytail": 3
+    },
+    "mithril_bar": {
+      "mithril_ore": 10
+    },
+    "mithril_boots": {
+      "diamond": 1,
+      "enchanted_fabric": 2,
+      "goblin_eye": 5,
+      "hellhound_hair": 5,
+      "mithril_bar": 7
+    },
+    "mithril_fishing_rod": {
+      "cursed_flask": 3,
+      "cursed_plank": 3,
+      "goblin_guard_foot": 3,
+      "hellhound_hair": 3,
+      "mithril_bar": 8
+    },
+    "mithril_gloves": {
+      "cursed_book": 3,
+      "cursed_flask": 3,
+      "hellhound_collar": 3,
+      "imp_tail": 3,
+      "mithril_bar": 8
+    },
+    "mithril_helm": {
+      "diamond": 1,
+      "goblin_tooth": 3,
+      "jasper_crystal": 5,
+      "mithril_bar": 8,
+      "wolfrider_ponytail": 3
+    },
+    "mithril_pickaxe": {
+      "broken_sword": 1,
+      "dark_essence": 3,
+      "mithril_bar": 8,
+      "owlbear_claw": 3,
+      "vampire_blood": 5
+    },
+    "mithril_platebody": {
+      "bat_wing": 3,
+      "enchanted_fabric": 2,
+      "goblin_guard_foot": 3,
+      "goblin_tooth": 4,
+      "mithril_bar": 8
+    },
+    "mithril_platelegs": {
+      "demoniac_dust": 3,
+      "lizard_eye": 2,
+      "mithril_bar": 8,
+      "owlbear_hair": 4,
+      "vampire_tooth": 3
+    },
+    "mithril_ring": {
+      "dark_essence": 3,
+      "hellhound_hair": 4,
+      "lizard_eye": 2,
+      "mithril_bar": 8,
+      "wolfrider_hair": 3
+    },
+    "mithril_shield": {
+      "cyclops_eye": 3,
+      "goblin_eye": 4,
+      "hellhound_hair": 3,
+      "lizard_skin": 3,
+      "mithril_bar": 7
+    },
+    "mithril_sword": {
+      "astralyte_crystal": 2,
+      "broken_sword": 1,
+      "corrupted_stone": 3,
+      "goblin_guard_foot": 4,
+      "mithril_bar": 7,
+      "wolfrider_hair": 3
+    },
+    "moonlight_staff": {
+      "alexandrite": 1,
+      "dusk_beetle_shell": 5,
+      "marauder_hand": 4,
+      "orc_bone": 4,
+      "palm_plank": 10,
+      "priestess_orb": 2
+    },
+    "mushmush_bow": {
+      "jasper_crystal": 1,
+      "mushroom": 4,
+      "spruce_plank": 5,
+      "wolf_hair": 2
+    },
+    "mushmush_jacket": {
+      "flying_wing": 6,
+      "hard_leather": 3,
+      "mushroom": 6
+    },
+    "mushmush_wizard_hat": {
+      "cowhide": 4,
+      "mushroom": 6,
+      "wolf_hair": 4
+    },
+    "mushroom_soup": {
+      "mushroom": 2
+    },
+    "mushstaff": {
+      "green_cloth": 2,
+      "jasper_crystal": 1,
+      "mushroom": 4,
+      "spruce_plank": 5
+    },
+    "obsidian_armor": {
+      "demon_horn": 4,
+      "demoniac_dust": 4,
+      "obsidian_bar": 6,
+      "ruby": 1,
+      "spider_leg": 5
+    },
+    "obsidian_bar": {
+      "piece_of_obsidian": 4
+    },
+    "obsidian_battleaxe": {
+      "cyclops_eye": 3,
+      "dead_wood_plank": 4,
+      "imp_tail": 3,
+      "lizard_skin": 3,
+      "obsidian_bar": 7
+    },
+    "obsidian_helmet": {
+      "emerald": 1,
+      "lizard_skin": 5,
+      "obsidian_bar": 6,
+      "owlbear_hair": 3,
+      "vampire_tooth": 5
+    },
+    "obsidian_legs_armor": {
+      "lizard_eye": 5,
+      "obsidian_bar": 6,
+      "owlbear_claw": 3,
+      "red_cloth": 5,
+      "sapphire": 1
+    },
+    "palm_plank": {
+      "palm_wood": 10
+    },
+    "piggy_armor": {
+      "dead_wood_plank": 5,
+      "jasper_crystal": 2,
+      "ogre_skin": 4,
+      "pig_skin": 5
+    },
+    "piggy_helmet": {
+      "cyclops_eye": 2,
+      "pig_skin": 6,
+      "steel_bar": 6,
+      "vampire_blood": 2
+    },
+    "piggy_pants": {
+      "hardwood_plank": 5,
+      "jasper_crystal": 2,
+      "pig_skin": 5,
+      "snakeskin": 3
+    },
+    "prospecting_amulet": {
+      "dead_wood_plank": 4,
+      "magical_cure": 1,
+      "ogre_skin": 6,
+      "owlbear_hair": 4,
+      "spider_leg": 3
+    },
+    "ring_of_chance": {
+      "jasper_crystal": 1,
+      "king_slimeball": 4,
+      "pig_skin": 4,
+      "steel_bar": 6
+    },
+    "royal_skeleton_armor": {
+      "demoniac_dust": 3,
+      "gold_bar": 8,
+      "red_cloth": 3,
+      "skeleton_armor": 1
+    },
+    "royal_skeleton_helmet": {
+      "gold_bar": 8,
+      "owlbear_claw": 4,
+      "skeleton_helmet": 1,
+      "vermin_leather": 4
+    },
+    "royal_skeleton_pants": {
+      "gold_bar": 8,
+      "owlbear_hair": 3,
+      "skeleton_pants": 1,
+      "vampire_blood": 3
+    },
+    "royal_skeleton_ring": {
+      "gold_bar": 8,
+      "ogre_skin": 4,
+      "owlbear_claw": 3,
+      "spider_leg": 2,
+      "vampire_tooth": 3
+    },
+    "ruby": {
+      "ruby_stone": 24
+    },
+    "ruby_amulet": {
+      "hardwood_plank": 8,
+      "jasper_crystal": 2,
+      "ruby": 1,
+      "wolf_hair": 5
+    },
+    "ruby_ring": {
+      "gold_bar": 8,
+      "magical_cure": 2,
+      "obsidian_bar": 4,
+      "ruby": 1,
+      "vampire_blood": 5
+    },
+    "sacred_ring": {
+      "astralyte_crystal": 2,
+      "emerald": 2,
+      "hellhound_collar": 4,
+      "rosenblood_elixir": 1,
+      "ruby": 2,
+      "strangold_bar": 9
+    },
+    "sand_snakeskin_armor": {
+      "cursed_flask": 3,
+      "enchanted_fabric": 2,
+      "maple_plank": 10,
+      "sand_snakeskin": 5,
+      "wolfrider_ponytail": 4
+    },
+    "sand_snakeskin_bandana": {
+      "enchanted_fabric": 2,
+      "grimlet_bone": 3,
+      "maple_plank": 10,
+      "marauder_hand": 4,
+      "sand_snakeskin": 5
+    },
+    "sand_snakeskin_boots": {
+      "astralyte_crystal": 3,
+      "bat_wing": 4,
+      "dark_essence": 2,
+      "maple_plank": 10,
+      "sand_snakeskin": 5
+    },
+    "sand_snakeskin_pants": {
+      "grimlet_bone": 3,
+      "maple_plank": 10,
+      "marauder_hand": 2,
+      "sand_snakeskin": 5,
+      "wolfrider_hair": 4
+    },
+    "sap": {
+      "ash_wood": 5,
+      "dead_wood": 5,
+      "spruce_wood": 5
+    },
+    "sapphire": {
+      "sapphire_stone": 24
+    },
+    "sapphire_amulet": {
+      "hardwood_plank": 8,
+      "jasper_crystal": 2,
+      "sapphire": 1,
+      "wolf_hair": 5
+    },
+    "sapphire_ring": {
+      "gold_bar": 8,
+      "magical_cure": 2,
+      "obsidian_bar": 4,
+      "sapphire": 1,
+      "vampire_blood": 5
+    },
+    "satchel": {
+      "cowhide": 5,
+      "feather": 2,
+      "jasper_crystal": 1
+    },
+    "shuriken": {
+      "flying_wing": 3,
+      "ogre_skin": 3,
+      "steel_bar": 5,
+      "wolf_bone": 4
+    },
+    "skeleton_armor": {
+      "pig_skin": 2,
+      "skeleton_bone": 6,
+      "steel_bar": 4,
+      "wolf_bone": 3
+    },
+    "skeleton_helmet": {
+      "iron_bar": 7,
+      "skeleton_bone": 3,
+      "skeleton_skull": 1,
+      "wolf_bone": 2
+    },
+    "skeleton_pants": {
+      "ash_plank": 7,
+      "skeleton_bone": 3,
+      "wolf_bone": 3,
+      "wolf_hair": 2
+    },
+    "skull_amulet": {
+      "hardwood_plank": 7,
+      "king_slimeball": 2,
+      "skeleton_skull": 3,
+      "snake_hide": 3
+    },
+    "skull_ring": {
+      "jasper_crystal": 2,
+      "skeleton_skull": 1,
+      "steel_bar": 4,
+      "wolf_bone": 4
+    },
+    "skull_staff": {
+      "hardwood_plank": 5,
+      "skeleton_bone": 4,
+      "skeleton_skull": 1,
+      "steel_bar": 5
+    },
+    "skull_wand": {
+      "hardwood_plank": 4,
+      "jasper_crystal": 1,
+      "skeleton_skull": 3,
+      "spider_leg": 3,
+      "vampire_tooth": 2
+    },
+    "skullforged_armor": {
+      "adventurer_skull": 4,
+      "astralyte_crystal": 2,
+      "corrupted_stone": 3,
+      "desert_scorpion_carapace": 4,
+      "lava_bucket": 3,
+      "palm_plank": 10
+    },
+    "skullforged_pants": {
+      "adventurer_skull": 3,
+      "astralyte_crystal": 2,
+      "demon_horn": 4,
+      "desert_scorpion_carapace": 4,
+      "dusk_beetle_shell": 3,
+      "palm_plank": 10
+    },
+    "skullforged_ring": {
+      "adamantite_bar": 10,
+      "adventurer_skull": 4,
+      "alexandrite": 1,
+      "dusk_beetle_shell": 3,
+      "jasper_crystal": 4,
+      "lava_bucket": 4
+    },
+    "slime_shield": {
+      "cloth": 3,
+      "hardwood_plank": 6,
+      "king_slimeball": 6
+    },
+    "small_antidote": {
+      "milk_bucket": 1,
+      "nettle_leaf": 1,
+      "sap": 1
+    },
+    "small_health_potion": {
+      "sunflower": 3
+    },
+    "snakeskin_armor": {
+      "jasper_crystal": 1,
+      "skeleton_bone": 5,
+      "snakeskin": 2,
+      "vampire_blood": 4
+    },
+    "snakeskin_boots": {
+      "green_cloth": 2,
+      "hardwood_plank": 5,
+      "snakeskin": 2,
+      "spider_leg": 2
+    },
+    "snakeskin_legs_armor": {
+      "hard_leather": 3,
+      "snakeskin": 2,
+      "wolf_bone": 5
+    },
+    "spruce_fishing_rod": {
+      "iron_bar": 2,
+      "jasper_crystal": 1,
+      "spruce_plank": 8
+    },
+    "spruce_plank": {
+      "spruce_wood": 10
+    },
+    "steel_armor": {
+      "cloth": 3,
+      "green_cloth": 2,
+      "spider_leg": 3,
+      "steel_bar": 7
+    },
+    "steel_axe": {
+      "astralyte_crystal": 2,
+      "flying_wing": 2,
+      "ogre_eye": 4,
+      "steel_bar": 7
+    },
+    "steel_bar": {
+      "coal": 7,
+      "iron_ore": 3
+    },
+    "steel_battleaxe": {
+      "hardwood_plank": 4,
+      "skeleton_bone": 4,
+      "steel_bar": 4,
+      "wolf_hair": 4
+    },
+    "steel_boots": {
+      "hardwood_plank": 5,
+      "ogre_skin": 3,
+      "snakeskin": 2,
+      "steel_bar": 5
+    },
+    "steel_fishing_rod": {
+      "astralyte_crystal": 2,
+      "green_cloth": 3,
+      "ogre_skin": 3,
+      "steel_bar": 7
+    },
+    "steel_gloves": {
+      "astralyte_crystal": 2,
+      "pig_skin": 3,
+      "skeleton_bone": 3,
+      "steel_bar": 7
+    },
+    "steel_helm": {
+      "cloth": 3,
+      "ogre_skin": 3,
+      "steel_bar": 8,
+      "wolf_bone": 2
+    },
+    "steel_legs_armor": {
+      "cloth": 3,
+      "king_slimeball": 3,
+      "skeleton_skull": 2,
+      "steel_bar": 7
+    },
+    "steel_pickaxe": {
+      "astralyte_crystal": 2,
+      "pig_skin": 3,
+      "spider_leg": 3,
+      "steel_bar": 7
+    },
+    "steel_ring": {
+      "hard_leather": 2,
+      "skeleton_bone": 3,
+      "snake_hide": 3,
+      "steel_bar": 7
+    },
+    "sticky_dagger": {
+      "copper_bar": 5,
+      "green_slimeball": 2
+    },
+    "sticky_sword": {
+      "copper_bar": 5,
+      "yellow_slimeball": 2
+    },
+    "stormforged_armor": {
+      "dead_wood_plank": 5,
+      "jasper_crystal": 2,
+      "lizard_skin": 5,
+      "ogre_eye": 4
+    },
+    "stormforged_pants": {
+      "jasper_crystal": 2,
+      "lizard_eye": 4,
+      "ogre_skin": 6,
+      "vermin_leather": 4
+    },
+    "strangold_armor": {
+      "corrupted_stone": 3,
+      "demon_horn": 4,
+      "magical_cure": 2,
+      "owlbear_hair": 3,
+      "strangold_bar": 8
+    },
+    "strangold_bar": {
+      "gold_ore": 4,
+      "strange_ore": 6
+    },
+    "strangold_helmet": {
+      "corrupted_stone": 3,
+      "demoniac_dust": 4,
+      "diamond": 1,
+      "lizard_skin": 4,
+      "magical_cure": 1,
+      "strangold_bar": 7
+    },
+    "strangold_legs_armor": {
+      "cursed_book": 3,
+      "magical_cure": 2,
+      "red_cloth": 3,
+      "strangold_bar": 8,
+      "vermin_leather": 4
+    },
+    "strangold_sword": {
+      "corrupted_stone": 4,
+      "goblin_guard_foot": 3,
+      "goblin_tooth": 3,
+      "magical_cure": 2,
+      "strangold_bar": 7
+    },
+    "topaz": {
+      "topaz_stone": 24
+    },
+    "topaz_amulet": {
+      "hardwood_plank": 8,
+      "jasper_crystal": 2,
+      "topaz": 1,
+      "wolf_hair": 5
+    },
+    "topaz_ring": {
+      "gold_bar": 8,
+      "magical_cure": 2,
+      "obsidian_bar": 4,
+      "topaz": 1,
+      "vampire_blood": 5
+    },
+    "tromatising_mask": {
+      "cloth": 2,
+      "pig_skin": 3,
+      "skeleton_bone": 3,
+      "steel_bar": 7
+    },
+    "vampire_bow": {
+      "magical_cure": 1,
+      "spider_leg": 4,
+      "steel_bar": 4,
+      "vampire_blood": 4,
+      "vermin_leather": 2
+    },
+    "vital_armor": {
+      "duskworm_skin": 4,
+      "enchanted_fabric": 3,
+      "lava_bucket": 4,
+      "palm_plank": 10,
+      "ruby": 2,
+      "sand_snake_poison": 4
+    },
+    "vital_boots": {
+      "desert_scorpion_carapace": 3,
+      "duskworm_skin": 3,
+      "efreet_cloth": 3,
+      "enchanted_fabric": 2,
+      "palm_plank": 12,
+      "sand_snake_poison": 3
+    },
+    "water_boost_potion": {
+      "algae": 1,
+      "blue_slimeball": 1,
+      "sunflower": 1
+    },
+    "water_bow": {
+      "ash_plank": 5,
+      "blue_slimeball": 2
+    },
+    "water_res_potion": {
+      "blue_slimeball": 2,
+      "glowstem_leaf": 1,
+      "maple_sap": 1
+    },
+    "water_ring": {
+      "blue_slimeball": 4,
+      "flying_wing": 3,
+      "iron_bar": 5
+    },
+    "water_shield": {
+      "blue_slimeball": 20,
+      "hellhound_collar": 3,
+      "rosenblood_elixir": 1,
+      "sapphire": 1,
+      "strangold_bar": 6
+    },
+    "white_knight_armor": {
+      "corrupted_stone": 3,
+      "enchanted_fabric": 2,
+      "hellhound_hair": 3,
+      "mithril_bar": 8,
+      "wolfrider_ponytail": 4
+    },
+    "white_knight_helmet": {
+      "diamond": 1,
+      "hellhound_collar": 4,
+      "mithril_bar": 8,
+      "orc_bone": 3,
+      "owlbear_claw": 4
+    },
+    "white_knight_pants": {
+      "astralyte_crystal": 2,
+      "goblin_tooth": 4,
+      "hellhound_hair": 3,
+      "mithril_bar": 8,
+      "wolfrider_hair": 3
+    },
+    "white_knight_shield": {
+      "goblin_eye": 4,
+      "hellhound_hair": 3,
+      "lizard_eye": 3,
+      "maple_plank": 7,
+      "wolfrider_hair": 3
+    },
+    "wisdom_amulet": {
+      "green_cloth": 3,
+      "jasper_crystal": 1,
+      "snake_hide": 3,
+      "spruce_plank": 4
+    },
+    "wooden_shield": {
+      "ash_plank": 6
+    },
+    "wooden_staff": {
+      "ash_wood": 4,
+      "wooden_stick": 1
+    },
+    "wratharmor": {
+      "enchanted_fabric": 2,
+      "goblin_eye": 4,
+      "hellhound_collar": 5,
+      "mithril_bar": 8,
+      "rosenblood_elixir": 1
+    },
+    "wrathelmet": {
+      "astralyte_crystal": 2,
+      "cursed_book": 5,
+      "mithril_bar": 8,
+      "rosenblood_elixir": 1,
+      "wolfrider_hair": 4
+    },
+    "wrathpants": {
+      "enchanted_fabric": 2,
+      "goblin_tooth": 5,
+      "hellhound_collar": 3,
+      "mithril_bar": 8,
+      "priestess_orb": 2
+    },
+    "wrathsword": {
+      "bat_wing": 4,
+      "broken_sword": 1,
+      "magical_cure": 3,
+      "mithril_bar": 7,
+      "orc_bone": 5
+    }
+  },
+  "item_stats": {
+    "adamantite_axe": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "adamantite_bar": {
+      "crafting_level": 50,
+      "crafting_skill": "mining",
+      "level": 50,
+      "type": "resource"
+    },
+    "adamantite_boots": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "boots"
+    },
+    "adamantite_fishing_rod": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "adamantite_gloves": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "adamantite_mask": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "helmet"
+    },
+    "adamantite_ore": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "adamantite_pickaxe": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "adamantite_platebody": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "body_armor"
+    },
+    "adamantite_platelegs": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "leg_armor"
+    },
+    "adamantite_ring": {
+      "crafting_level": 50,
+      "crafting_skill": "jewelrycrafting",
+      "level": 50,
+      "type": "ring"
+    },
+    "adamantite_shield": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "shield"
+    },
+    "adamantite_sword": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "adventurer_boots": {
+      "crafting_level": 15,
+      "crafting_skill": "gearcrafting",
+      "level": 15,
+      "type": "boots"
+    },
+    "adventurer_helmet": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "helmet"
+    },
+    "adventurer_pants": {
+      "crafting_level": 15,
+      "crafting_skill": "gearcrafting",
+      "level": 15,
+      "type": "leg_armor"
+    },
+    "adventurer_skull": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "adventurer_vest": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "body_armor"
+    },
+    "air_and_water_amulet": {
+      "crafting_level": 10,
+      "crafting_skill": "jewelrycrafting",
+      "level": 10,
+      "type": "amulet"
+    },
+    "air_boost_potion": {
+      "crafting_level": 10,
+      "crafting_skill": "alchemy",
+      "level": 10,
+      "type": "utility"
+    },
+    "air_res_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "air_ring": {
+      "crafting_level": 15,
+      "crafting_skill": "jewelrycrafting",
+      "level": 15,
+      "type": "ring"
+    },
+    "air_shield": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "shield"
+    },
+    "alexandrite": {
+      "crafting_level": 50,
+      "crafting_skill": "mining",
+      "level": 50,
+      "type": "resource"
+    },
+    "alexandrite_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "algae": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "amulet_of_the_grand_master": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "amulet"
+    },
+    "ancestral_talisman": {
+      "crafting_level": 35,
+      "crafting_skill": "jewelrycrafting",
+      "level": 35,
+      "type": "amulet"
+    },
+    "ancient_jean": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "leg_armor"
+    },
+    "antidote": {
+      "crafting_level": 30,
+      "crafting_skill": "alchemy",
+      "level": 30,
+      "type": "utility"
+    },
+    "apple": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "consumable"
+    },
+    "apple_pie": {
+      "crafting_level": 20,
+      "crafting_skill": "cooking",
+      "level": 20,
+      "type": "consumable"
+    },
+    "apprentice_gloves": {
+      "crafting_level": 1,
+      "crafting_skill": "weaponcrafting",
+      "level": 1,
+      "type": "weapon"
+    },
+    "ash_plank": {
+      "crafting_level": 1,
+      "crafting_skill": "woodcutting",
+      "level": 1,
+      "type": "resource"
+    },
+    "ash_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "astralyte_crystal": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "backpack": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "bag"
+    },
+    "bag_of_gold": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "consumable"
+    },
+    "bandit_armor": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "body_armor"
+    },
+    "bass": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "bat_wing": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 38,
+      "type": "resource"
+    },
+    "battlestaff": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "batwing_helmet": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "helmet"
+    },
+    "birch_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "blade_of_hell": {
+      "crafting_level": 45,
+      "crafting_skill": "weaponcrafting",
+      "level": 45,
+      "type": "weapon"
+    },
+    "bloodblade": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "blue_slimeball": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 6,
+      "type": "resource"
+    },
+    "book_from_hell": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "bow_from_hell": {
+      "crafting_level": 45,
+      "crafting_skill": "weaponcrafting",
+      "level": 45,
+      "type": "weapon"
+    },
+    "broken_sword": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "burn_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "rune"
+    },
+    "celest_ring": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "ring"
+    },
+    "cheese": {
+      "crafting_level": 10,
+      "crafting_skill": "cooking",
+      "level": 10,
+      "type": "consumable"
+    },
+    "cloth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 5,
+      "type": "resource"
+    },
+    "coal": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "coconut": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "consumable"
+    },
+    "codex_page": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "conjurer_cloak": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "body_armor"
+    },
+    "conjurer_skirt": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "leg_armor"
+    },
+    "cooked_bass": {
+      "crafting_level": 30,
+      "crafting_skill": "cooking",
+      "level": 30,
+      "type": "consumable"
+    },
+    "cooked_beef": {
+      "crafting_level": 5,
+      "crafting_skill": "cooking",
+      "level": 5,
+      "type": "consumable"
+    },
+    "cooked_chicken": {
+      "crafting_level": 1,
+      "crafting_skill": "cooking",
+      "level": 1,
+      "type": "consumable"
+    },
+    "cooked_desert_scorpion_meat": {
+      "crafting_level": 50,
+      "crafting_skill": "cooking",
+      "level": 50,
+      "type": "consumable"
+    },
+    "cooked_gudgeon": {
+      "crafting_level": 1,
+      "crafting_skill": "cooking",
+      "level": 1,
+      "type": "consumable"
+    },
+    "cooked_hellhound_meat": {
+      "crafting_level": 40,
+      "crafting_skill": "cooking",
+      "level": 40,
+      "type": "consumable"
+    },
+    "cooked_rat_meat": {
+      "crafting_level": 30,
+      "crafting_skill": "cooking",
+      "level": 30,
+      "type": "consumable"
+    },
+    "cooked_salmon": {
+      "crafting_level": 40,
+      "crafting_skill": "cooking",
+      "level": 40,
+      "type": "consumable"
+    },
+    "cooked_shrimp": {
+      "crafting_level": 10,
+      "crafting_skill": "cooking",
+      "level": 10,
+      "type": "consumable"
+    },
+    "cooked_swordfish": {
+      "crafting_level": 50,
+      "crafting_skill": "cooking",
+      "level": 50,
+      "type": "consumable"
+    },
+    "cooked_trout": {
+      "crafting_level": 20,
+      "crafting_skill": "cooking",
+      "level": 20,
+      "type": "consumable"
+    },
+    "cooked_wolf_meat": {
+      "crafting_level": 15,
+      "crafting_skill": "cooking",
+      "level": 15,
+      "type": "consumable"
+    },
+    "cookie": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "consumable"
+    },
+    "copper_armor": {
+      "crafting_level": 5,
+      "crafting_skill": "gearcrafting",
+      "level": 5,
+      "type": "body_armor"
+    },
+    "copper_axe": {
+      "crafting_level": 1,
+      "crafting_skill": "weaponcrafting",
+      "level": 1,
+      "type": "weapon"
+    },
+    "copper_bar": {
+      "crafting_level": 1,
+      "crafting_skill": "mining",
+      "level": 1,
+      "type": "resource"
+    },
+    "copper_boots": {
+      "crafting_level": 1,
+      "crafting_skill": "gearcrafting",
+      "level": 1,
+      "type": "boots"
+    },
+    "copper_dagger": {
+      "crafting_level": 1,
+      "crafting_skill": "weaponcrafting",
+      "level": 1,
+      "type": "weapon"
+    },
+    "copper_helmet": {
+      "crafting_level": 1,
+      "crafting_skill": "gearcrafting",
+      "level": 1,
+      "type": "helmet"
+    },
+    "copper_legs_armor": {
+      "crafting_level": 5,
+      "crafting_skill": "gearcrafting",
+      "level": 5,
+      "type": "leg_armor"
+    },
+    "copper_ore": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "copper_pickaxe": {
+      "crafting_level": 1,
+      "crafting_skill": "weaponcrafting",
+      "level": 1,
+      "type": "weapon"
+    },
+    "copper_ring": {
+      "crafting_level": 1,
+      "crafting_skill": "jewelrycrafting",
+      "level": 1,
+      "type": "ring"
+    },
+    "corrupted_crown": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 45,
+      "type": "helmet"
+    },
+    "corrupted_fruit": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "consumable"
+    },
+    "corrupted_gem": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "currency"
+    },
+    "corrupted_skull": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "artifact"
+    },
+    "corrupted_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 33,
+      "type": "resource"
+    },
+    "corrupted_stone_amulet": {
+      "crafting_level": 35,
+      "crafting_skill": "jewelrycrafting",
+      "level": 35,
+      "type": "amulet"
+    },
+    "cowhide": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 8,
+      "type": "resource"
+    },
+    "cultist_boots": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "boots"
+    },
+    "cultist_cloak": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "body_armor"
+    },
+    "cultist_hat": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "helmet"
+    },
+    "cultist_pants": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "leg_armor"
+    },
+    "cursed_book": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 33,
+      "type": "resource"
+    },
+    "cursed_flask": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "cursed_hat": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "helmet"
+    },
+    "cursed_plank": {
+      "crafting_level": 35,
+      "crafting_skill": "woodcutting",
+      "level": 35,
+      "type": "resource"
+    },
+    "cursed_sceptre": {
+      "crafting_level": 35,
+      "crafting_skill": "weaponcrafting",
+      "level": 35,
+      "type": "weapon"
+    },
+    "cursed_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "cyclops_eye": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "resource"
+    },
+    "dark_essence": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "dark_horned_helmet": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "helmet"
+    },
+    "darkforged_boots": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "boots"
+    },
+    "darkforged_helmet": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "helmet"
+    },
+    "darkforged_plate": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "body_armor"
+    },
+    "darkforged_shield": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "shield"
+    },
+    "dead_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "dead_wood_plank": {
+      "crafting_level": 30,
+      "crafting_skill": "woodcutting",
+      "level": 30,
+      "type": "resource"
+    },
+    "death_knight_sword": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "weapon"
+    },
+    "demon_horn": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "demoniac_dagger": {
+      "crafting_level": 45,
+      "crafting_skill": "weaponcrafting",
+      "level": 45,
+      "type": "weapon"
+    },
+    "demoniac_dust": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 28,
+      "type": "resource"
+    },
+    "demoniac_shield": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "shield"
+    },
+    "desert_scorpion_carapace": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "desert_scorpion_meat": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "desert_whip": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "desert_wrap": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "helmet"
+    },
+    "diabolic_elixir": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 45,
+      "type": "utility"
+    },
+    "diamond": {
+      "crafting_level": 35,
+      "crafting_skill": "mining",
+      "level": 35,
+      "type": "resource"
+    },
+    "diamond_amulet": {
+      "crafting_level": 35,
+      "crafting_skill": "jewelrycrafting",
+      "level": 35,
+      "type": "amulet"
+    },
+    "diamond_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "diamond_sword": {
+      "crafting_level": 35,
+      "crafting_skill": "weaponcrafting",
+      "level": 35,
+      "type": "weapon"
+    },
+    "divinity_ring": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "ring"
+    },
+    "dreadful_amulet": {
+      "crafting_level": 20,
+      "crafting_skill": "jewelrycrafting",
+      "level": 20,
+      "type": "amulet"
+    },
+    "dreadful_armor": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "body_armor"
+    },
+    "dreadful_battleaxe": {
+      "crafting_level": 35,
+      "crafting_skill": "weaponcrafting",
+      "level": 35,
+      "type": "weapon"
+    },
+    "dreadful_ring": {
+      "crafting_level": 20,
+      "crafting_skill": "jewelrycrafting",
+      "level": 20,
+      "type": "ring"
+    },
+    "dreadful_shield": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "shield"
+    },
+    "dreadful_staff": {
+      "crafting_level": 25,
+      "crafting_skill": "weaponcrafting",
+      "level": 25,
+      "type": "weapon"
+    },
+    "dusk_beetle_shell": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 47,
+      "type": "resource"
+    },
+    "duskarmor": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "body_armor"
+    },
+    "duskpants": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "leg_armor"
+    },
+    "duskworm_skin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 48,
+      "type": "resource"
+    },
+    "dust_amulet": {
+      "crafting_level": 50,
+      "crafting_skill": "jewelrycrafting",
+      "level": 50,
+      "type": "amulet"
+    },
+    "dust_helmet": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "helmet"
+    },
+    "dust_sword": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "earth_boost_potion": {
+      "crafting_level": 10,
+      "crafting_skill": "alchemy",
+      "level": 10,
+      "type": "utility"
+    },
+    "earth_res_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "earth_ring": {
+      "crafting_level": 15,
+      "crafting_skill": "jewelrycrafting",
+      "level": 15,
+      "type": "ring"
+    },
+    "earth_shield": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "shield"
+    },
+    "efreet_cloth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "egg": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "elderwood_staff": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "elemental_page": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "emerald": {
+      "crafting_level": 20,
+      "crafting_skill": "mining",
+      "level": 20,
+      "type": "resource"
+    },
+    "emerald_amulet": {
+      "crafting_level": 25,
+      "crafting_skill": "jewelrycrafting",
+      "level": 25,
+      "type": "amulet"
+    },
+    "emerald_book": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "artifact"
+    },
+    "emerald_ring": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "ring"
+    },
+    "emerald_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "enchanted_antidote": {
+      "crafting_level": 45,
+      "crafting_skill": "alchemy",
+      "level": 45,
+      "type": "utility"
+    },
+    "enchanted_boost_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "enchanted_bow": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "enchanted_fabric": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "enchanted_health_potion": {
+      "crafting_level": 45,
+      "crafting_skill": "alchemy",
+      "level": 45,
+      "type": "utility"
+    },
+    "enchanted_health_splash_potion": {
+      "crafting_level": 50,
+      "crafting_skill": "alchemy",
+      "level": 50,
+      "type": "utility"
+    },
+    "enchanter_boots": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "boots"
+    },
+    "enchanter_pants": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "leg_armor"
+    },
+    "eternal_red_ring": {
+      "crafting_level": 50,
+      "crafting_skill": "jewelrycrafting",
+      "level": 50,
+      "type": "ring"
+    },
+    "eternity_ring": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "ring"
+    },
+    "event_ticket": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "currency"
+    },
+    "feather": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "feather_coat": {
+      "crafting_level": 5,
+      "crafting_skill": "gearcrafting",
+      "level": 5,
+      "type": "body_armor"
+    },
+    "fire_and_earth_amulet": {
+      "crafting_level": 10,
+      "crafting_skill": "jewelrycrafting",
+      "level": 10,
+      "type": "amulet"
+    },
+    "fire_boost_potion": {
+      "crafting_level": 10,
+      "crafting_skill": "alchemy",
+      "level": 10,
+      "type": "utility"
+    },
+    "fire_bow": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "fire_res_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "fire_ring": {
+      "crafting_level": 15,
+      "crafting_skill": "jewelrycrafting",
+      "level": 15,
+      "type": "ring"
+    },
+    "fire_shield": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "shield"
+    },
+    "fire_staff": {
+      "crafting_level": 5,
+      "crafting_skill": "weaponcrafting",
+      "level": 5,
+      "type": "weapon"
+    },
+    "fish_soup": {
+      "crafting_level": 40,
+      "crafting_skill": "cooking",
+      "level": 40,
+      "type": "consumable"
+    },
+    "fishing_net": {
+      "crafting_level": 1,
+      "crafting_skill": "weaponcrafting",
+      "level": 1,
+      "type": "weapon"
+    },
+    "flying_boots": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "boots"
+    },
+    "flying_wing": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 12,
+      "type": "resource"
+    },
+    "forest_bank_potion": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "consumable"
+    },
+    "forest_ring": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "ring"
+    },
+    "forest_whip": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "fried_eggs": {
+      "crafting_level": 5,
+      "crafting_skill": "cooking",
+      "level": 5,
+      "type": "consumable"
+    },
+    "glowstem_leaf": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "goblin_eye": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 33,
+      "type": "resource"
+    },
+    "goblin_guard_foot": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "goblin_guard_shield": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "shield"
+    },
+    "goblin_tooth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 33,
+      "type": "resource"
+    },
+    "gold_axe": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "gold_bar": {
+      "crafting_level": 30,
+      "crafting_skill": "mining",
+      "level": 30,
+      "type": "resource"
+    },
+    "gold_boots": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "boots"
+    },
+    "gold_fishing_rod": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "gold_helm": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "helmet"
+    },
+    "gold_mask": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "helmet"
+    },
+    "gold_ore": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "gold_pickaxe": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "gold_platebody": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "body_armor"
+    },
+    "gold_platelegs": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "leg_armor"
+    },
+    "gold_ring": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "ring"
+    },
+    "gold_shield": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "shield"
+    },
+    "gold_sword": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "golden_dust": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "golden_egg": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "golden_gloves": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "golden_shrimp": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "greater_dreadful_amulet": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "amulet"
+    },
+    "greater_dreadful_staff": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "greater_emerald_amulet": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "amulet"
+    },
+    "greater_healing_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "rune"
+    },
+    "greater_health_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "greater_lifesteal_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "rune"
+    },
+    "greater_protection_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "rune"
+    },
+    "greater_ruby_amulet": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "amulet"
+    },
+    "greater_sapphire_amulet": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "amulet"
+    },
+    "greater_topaz_amulet": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "amulet"
+    },
+    "greater_wooden_staff": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "green_cloth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "resource"
+    },
+    "green_slimeball": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 4,
+      "type": "resource"
+    },
+    "grimlet_bone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 42,
+      "type": "resource"
+    },
+    "gudgeon": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "hard_leather": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 8,
+      "type": "resource"
+    },
+    "hard_leather_armor": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "body_armor"
+    },
+    "hard_leather_boots": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "boots"
+    },
+    "hard_leather_helmet": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "helmet"
+    },
+    "hard_leather_pants": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "leg_armor"
+    },
+    "hardwood_plank": {
+      "crafting_level": 20,
+      "crafting_skill": "woodcutting",
+      "level": 20,
+      "type": "resource"
+    },
+    "healing_aura_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "rune"
+    },
+    "healing_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "rune"
+    },
+    "health_boost_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "health_potion": {
+      "crafting_level": 30,
+      "crafting_skill": "alchemy",
+      "level": 30,
+      "type": "utility"
+    },
+    "health_splash_potion": {
+      "crafting_level": 30,
+      "crafting_skill": "alchemy",
+      "level": 30,
+      "type": "utility"
+    },
+    "heart_amulet": {
+      "crafting_level": 50,
+      "crafting_skill": "jewelrycrafting",
+      "level": 50,
+      "type": "amulet"
+    },
+    "hell_armor": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "body_armor"
+    },
+    "hell_helmet": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "helmet"
+    },
+    "hell_legs_armor": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "leg_armor"
+    },
+    "hell_reaper": {
+      "crafting_level": 45,
+      "crafting_skill": "weaponcrafting",
+      "level": 45,
+      "type": "weapon"
+    },
+    "hell_ring": {
+      "crafting_level": 45,
+      "crafting_skill": "jewelrycrafting",
+      "level": 45,
+      "type": "ring"
+    },
+    "hell_staff": {
+      "crafting_level": 45,
+      "crafting_skill": "weaponcrafting",
+      "level": 45,
+      "type": "weapon"
+    },
+    "hellhound_collar": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "hellhound_hair": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "highwayman_dagger": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "weapon"
+    },
+    "holey_boot": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "hork_helmet": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "helmet"
+    },
+    "hunting_bow": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "imp_tail": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 28,
+      "type": "resource"
+    },
+    "iron_armor": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "body_armor"
+    },
+    "iron_axe": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "iron_bar": {
+      "crafting_level": 10,
+      "crafting_skill": "mining",
+      "level": 10,
+      "type": "resource"
+    },
+    "iron_boots": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "boots"
+    },
+    "iron_dagger": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "iron_helm": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "helmet"
+    },
+    "iron_legs_armor": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "leg_armor"
+    },
+    "iron_ore": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "iron_pickaxe": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "iron_ring": {
+      "crafting_level": 10,
+      "crafting_skill": "jewelrycrafting",
+      "level": 10,
+      "type": "ring"
+    },
+    "iron_shield": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "shield"
+    },
+    "iron_sword": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "jasper_crystal": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "jester_hat": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "helmet"
+    },
+    "king_slime_sword": {
+      "crafting_level": 15,
+      "crafting_skill": "weaponcrafting",
+      "level": 15,
+      "type": "weapon"
+    },
+    "king_slimeball": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "resource"
+    },
+    "lava_bucket": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 42,
+      "type": "resource"
+    },
+    "leather_armor": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "body_armor"
+    },
+    "leather_boots": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "boots"
+    },
+    "leather_gloves": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "leather_hat": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "helmet"
+    },
+    "leather_legs_armor": {
+      "crafting_level": 10,
+      "crafting_skill": "gearcrafting",
+      "level": 10,
+      "type": "leg_armor"
+    },
+    "lich_crown": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "helmet"
+    },
+    "lich_tomb_key": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "life_amulet": {
+      "crafting_level": 5,
+      "crafting_skill": "jewelrycrafting",
+      "level": 5,
+      "type": "amulet"
+    },
+    "life_crystal": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "artifact"
+    },
+    "life_crystal_shard": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "life_ring": {
+      "crafting_level": 15,
+      "crafting_skill": "jewelrycrafting",
+      "level": 15,
+      "type": "ring"
+    },
+    "lifesteal_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "rune"
+    },
+    "lightning_sword": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "lizard_boots": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "boots"
+    },
+    "lizard_eye": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "resource"
+    },
+    "lizard_skin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "resource"
+    },
+    "lizard_skin_armor": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "body_armor"
+    },
+    "lizard_skin_legs_armor": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "leg_armor"
+    },
+    "lost_amulet": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "amulet"
+    },
+    "lost_world_map": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "artifact"
+    },
+    "lucky_wizard_hat": {
+      "crafting_level": 15,
+      "crafting_skill": "gearcrafting",
+      "level": 15,
+      "type": "helmet"
+    },
+    "magic_bow": {
+      "crafting_level": 35,
+      "crafting_skill": "weaponcrafting",
+      "level": 35,
+      "type": "weapon"
+    },
+    "magic_sap": {
+      "crafting_level": 35,
+      "crafting_skill": "woodcutting",
+      "level": 35,
+      "type": "resource"
+    },
+    "magic_shield": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "shield"
+    },
+    "magic_wizard_hat": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "helmet"
+    },
+    "magic_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "magical_cure": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "magical_plank": {
+      "crafting_level": 35,
+      "crafting_skill": "woodcutting",
+      "level": 35,
+      "type": "resource"
+    },
+    "malefic_armor": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "body_armor"
+    },
+    "malefic_cloth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "malefic_crystal": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "artifact"
+    },
+    "malefic_ring": {
+      "crafting_level": 35,
+      "crafting_skill": "jewelrycrafting",
+      "level": 35,
+      "type": "ring"
+    },
+    "malefic_shard": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "maple_plank": {
+      "crafting_level": 40,
+      "crafting_skill": "woodcutting",
+      "level": 40,
+      "type": "resource"
+    },
+    "maple_sap": {
+      "crafting_level": 40,
+      "crafting_skill": "woodcutting",
+      "level": 40,
+      "type": "resource"
+    },
+    "maple_syrup": {
+      "crafting_level": 40,
+      "crafting_skill": "cooking",
+      "level": 40,
+      "type": "consumable"
+    },
+    "maple_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "marauder_hand": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 45,
+      "type": "resource"
+    },
+    "masterful_necklace": {
+      "crafting_level": 35,
+      "crafting_skill": "jewelrycrafting",
+      "level": 35,
+      "type": "amulet"
+    },
+    "mesh_armor": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "body_armor"
+    },
+    "mesh_legs_armor": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "leg_armor"
+    },
+    "milk_bucket": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 5,
+      "type": "resource"
+    },
+    "minor_health_potion": {
+      "crafting_level": 20,
+      "crafting_skill": "alchemy",
+      "level": 20,
+      "type": "utility"
+    },
+    "mithril_axe": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "mithril_bar": {
+      "crafting_level": 40,
+      "crafting_skill": "mining",
+      "level": 40,
+      "type": "resource"
+    },
+    "mithril_boots": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "boots"
+    },
+    "mithril_fishing_rod": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "mithril_gloves": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "mithril_helm": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "helmet"
+    },
+    "mithril_ore": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "mithril_pickaxe": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "mithril_platebody": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "body_armor"
+    },
+    "mithril_platelegs": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "leg_armor"
+    },
+    "mithril_ring": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "ring"
+    },
+    "mithril_shield": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "shield"
+    },
+    "mithril_sword": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "moonlight_staff": {
+      "crafting_level": 50,
+      "crafting_skill": "weaponcrafting",
+      "level": 50,
+      "type": "weapon"
+    },
+    "mushmush_bow": {
+      "crafting_level": 15,
+      "crafting_skill": "weaponcrafting",
+      "level": 15,
+      "type": "weapon"
+    },
+    "mushmush_jacket": {
+      "crafting_level": 15,
+      "crafting_skill": "gearcrafting",
+      "level": 15,
+      "type": "body_armor"
+    },
+    "mushmush_wizard_hat": {
+      "crafting_level": 15,
+      "crafting_skill": "gearcrafting",
+      "level": 15,
+      "type": "helmet"
+    },
+    "mushroom": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "mushroom_soup": {
+      "crafting_level": 15,
+      "crafting_skill": "cooking",
+      "level": 15,
+      "type": "consumable"
+    },
+    "mushstaff": {
+      "crafting_level": 15,
+      "crafting_skill": "weaponcrafting",
+      "level": 15,
+      "type": "weapon"
+    },
+    "nettle_leaf": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "novice_guide": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "artifact"
+    },
+    "obsidian_armor": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "body_armor"
+    },
+    "obsidian_bar": {
+      "crafting_level": 30,
+      "crafting_skill": "mining",
+      "level": 30,
+      "type": "resource"
+    },
+    "obsidian_battleaxe": {
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "level": 30,
+      "type": "weapon"
+    },
+    "obsidian_helmet": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "helmet"
+    },
+    "obsidian_legs_armor": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "leg_armor"
+    },
+    "ogre_eye": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "ogre_skin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "old_boots": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "boots"
+    },
+    "orc_bone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 38,
+      "type": "resource"
+    },
+    "orc_skin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 38,
+      "type": "resource"
+    },
+    "owlbear_claw": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "owlbear_hair": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "page_from_hell": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "palm_plank": {
+      "crafting_level": 50,
+      "crafting_skill": "woodcutting",
+      "level": 50,
+      "type": "resource"
+    },
+    "palm_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "perfect_pearl": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "artifact"
+    },
+    "piece_of_obsidian": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "pig_skin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "piggy_armor": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "body_armor"
+    },
+    "piggy_helmet": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "helmet"
+    },
+    "piggy_pants": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "leg_armor"
+    },
+    "priestess_hideout_key": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "priestess_orb": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "prospecting_amulet": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "amulet"
+    },
+    "protection_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "rune"
+    },
+    "rat_hide": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "resource"
+    },
+    "raw_beef": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 5,
+      "type": "resource"
+    },
+    "raw_chicken": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "raw_hellhound_meat": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "raw_rat_meat": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 30,
+      "type": "resource"
+    },
+    "raw_wolf_meat": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "resource"
+    },
+    "recall_potion": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "consumable"
+    },
+    "red_cloth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 28,
+      "type": "resource"
+    },
+    "red_slimeball": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 7,
+      "type": "resource"
+    },
+    "ring_of_chance": {
+      "crafting_level": 20,
+      "crafting_skill": "jewelrycrafting",
+      "level": 20,
+      "type": "ring"
+    },
+    "ring_of_the_adept": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "ring"
+    },
+    "rosenblood_elixir": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "royal_skeleton_armor": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "body_armor"
+    },
+    "royal_skeleton_helmet": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "helmet"
+    },
+    "royal_skeleton_pants": {
+      "crafting_level": 30,
+      "crafting_skill": "gearcrafting",
+      "level": 30,
+      "type": "leg_armor"
+    },
+    "royal_skeleton_ring": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "ring"
+    },
+    "ruby": {
+      "crafting_level": 20,
+      "crafting_skill": "mining",
+      "level": 20,
+      "type": "resource"
+    },
+    "ruby_amulet": {
+      "crafting_level": 25,
+      "crafting_skill": "jewelrycrafting",
+      "level": 25,
+      "type": "amulet"
+    },
+    "ruby_book": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "artifact"
+    },
+    "ruby_ring": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "ring"
+    },
+    "ruby_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "sacred_ring": {
+      "crafting_level": 40,
+      "crafting_skill": "jewelrycrafting",
+      "level": 40,
+      "type": "ring"
+    },
+    "salmon": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "sand_snake_hide": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 44,
+      "type": "resource"
+    },
+    "sand_snake_poison": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "sand_snakeskin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 44,
+      "type": "resource"
+    },
+    "sand_snakeskin_armor": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "body_armor"
+    },
+    "sand_snakeskin_bandana": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "helmet"
+    },
+    "sand_snakeskin_boots": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "boots"
+    },
+    "sand_snakeskin_pants": {
+      "crafting_level": 45,
+      "crafting_skill": "gearcrafting",
+      "level": 45,
+      "type": "leg_armor"
+    },
+    "sandwhisper_bag": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "bag"
+    },
+    "sandwhisper_codex": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "artifact"
+    },
+    "sandwhisper_coin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 45,
+      "type": "currency"
+    },
+    "sandwhisper_key": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "sanguine_edge_of_rosen": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "weapon"
+    },
+    "sap": {
+      "crafting_level": 30,
+      "crafting_skill": "woodcutting",
+      "level": 30,
+      "type": "resource"
+    },
+    "sapphire": {
+      "crafting_level": 20,
+      "crafting_skill": "mining",
+      "level": 20,
+      "type": "resource"
+    },
+    "sapphire_amulet": {
+      "crafting_level": 25,
+      "crafting_skill": "jewelrycrafting",
+      "level": 25,
+      "type": "amulet"
+    },
+    "sapphire_book": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "artifact"
+    },
+    "sapphire_ring": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "ring"
+    },
+    "sapphire_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "satchel": {
+      "crafting_level": 5,
+      "crafting_skill": "gearcrafting",
+      "level": 5,
+      "type": "bag"
+    },
+    "shell": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "shrimp": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "shuriken": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "skeleton_armor": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "body_armor"
+    },
+    "skeleton_bone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 18,
+      "type": "resource"
+    },
+    "skeleton_helmet": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "helmet"
+    },
+    "skeleton_pants": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "leg_armor"
+    },
+    "skeleton_skull": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 18,
+      "type": "resource"
+    },
+    "skull_amulet": {
+      "crafting_level": 20,
+      "crafting_skill": "jewelrycrafting",
+      "level": 20,
+      "type": "amulet"
+    },
+    "skull_ring": {
+      "crafting_level": 20,
+      "crafting_skill": "jewelrycrafting",
+      "level": 20,
+      "type": "ring"
+    },
+    "skull_staff": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "skull_wand": {
+      "crafting_level": 25,
+      "crafting_skill": "weaponcrafting",
+      "level": 25,
+      "type": "weapon"
+    },
+    "skullforged_armor": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "body_armor"
+    },
+    "skullforged_pants": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "leg_armor"
+    },
+    "skullforged_ring": {
+      "crafting_level": 50,
+      "crafting_skill": "jewelrycrafting",
+      "level": 50,
+      "type": "ring"
+    },
+    "slime_shield": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "shield"
+    },
+    "small_antidote": {
+      "crafting_level": 20,
+      "crafting_skill": "alchemy",
+      "level": 20,
+      "type": "utility"
+    },
+    "small_bag_of_gold": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "consumable"
+    },
+    "small_health_potion": {
+      "crafting_level": 5,
+      "crafting_skill": "alchemy",
+      "level": 5,
+      "type": "utility"
+    },
+    "small_pearls": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "snake_hide": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 12,
+      "type": "resource"
+    },
+    "snakeskin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 12,
+      "type": "resource"
+    },
+    "snakeskin_armor": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "body_armor"
+    },
+    "snakeskin_boots": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "boots"
+    },
+    "snakeskin_legs_armor": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "leg_armor"
+    },
+    "spider_leg": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "spruce_fishing_rod": {
+      "crafting_level": 10,
+      "crafting_skill": "weaponcrafting",
+      "level": 10,
+      "type": "weapon"
+    },
+    "spruce_plank": {
+      "crafting_level": 10,
+      "crafting_skill": "woodcutting",
+      "level": 10,
+      "type": "resource"
+    },
+    "spruce_wood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 10,
+      "type": "resource"
+    },
+    "steel_armor": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "body_armor"
+    },
+    "steel_axe": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "steel_bar": {
+      "crafting_level": 20,
+      "crafting_skill": "mining",
+      "level": 20,
+      "type": "resource"
+    },
+    "steel_battleaxe": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "steel_boots": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "boots"
+    },
+    "steel_fishing_rod": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "steel_gloves": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "steel_helm": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "helmet"
+    },
+    "steel_legs_armor": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "leg_armor"
+    },
+    "steel_pickaxe": {
+      "crafting_level": 20,
+      "crafting_skill": "weaponcrafting",
+      "level": 20,
+      "type": "weapon"
+    },
+    "steel_ring": {
+      "crafting_level": 20,
+      "crafting_skill": "jewelrycrafting",
+      "level": 20,
+      "type": "ring"
+    },
+    "sticky_dagger": {
+      "crafting_level": 5,
+      "crafting_skill": "weaponcrafting",
+      "level": 5,
+      "type": "weapon"
+    },
+    "sticky_sword": {
+      "crafting_level": 5,
+      "crafting_skill": "weaponcrafting",
+      "level": 5,
+      "type": "weapon"
+    },
+    "stormforged_armor": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "body_armor"
+    },
+    "stormforged_pants": {
+      "crafting_level": 25,
+      "crafting_skill": "gearcrafting",
+      "level": 25,
+      "type": "leg_armor"
+    },
+    "strange_ore": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "strangold_armor": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "body_armor"
+    },
+    "strangold_bar": {
+      "crafting_level": 35,
+      "crafting_skill": "mining",
+      "level": 35,
+      "type": "resource"
+    },
+    "strangold_helmet": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "helmet"
+    },
+    "strangold_legs_armor": {
+      "crafting_level": 35,
+      "crafting_skill": "gearcrafting",
+      "level": 35,
+      "type": "leg_armor"
+    },
+    "strangold_sword": {
+      "crafting_level": 35,
+      "crafting_skill": "weaponcrafting",
+      "level": 35,
+      "type": "weapon"
+    },
+    "sunflower": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "resource"
+    },
+    "swordfish": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "tasks_coin": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "currency"
+    },
+    "topaz": {
+      "crafting_level": 20,
+      "crafting_skill": "mining",
+      "level": 20,
+      "type": "resource"
+    },
+    "topaz_amulet": {
+      "crafting_level": 25,
+      "crafting_skill": "jewelrycrafting",
+      "level": 25,
+      "type": "amulet"
+    },
+    "topaz_book": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "artifact"
+    },
+    "topaz_ring": {
+      "crafting_level": 30,
+      "crafting_skill": "jewelrycrafting",
+      "level": 30,
+      "type": "ring"
+    },
+    "topaz_stone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "torch_cactus_flower": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "resource"
+    },
+    "tromatising_mask": {
+      "crafting_level": 20,
+      "crafting_skill": "gearcrafting",
+      "level": 20,
+      "type": "helmet"
+    },
+    "trout": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 20,
+      "type": "resource"
+    },
+    "vampire_blood": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 24,
+      "type": "resource"
+    },
+    "vampire_bow": {
+      "crafting_level": 25,
+      "crafting_skill": "weaponcrafting",
+      "level": 25,
+      "type": "weapon"
+    },
+    "vampire_tooth": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 24,
+      "type": "resource"
+    },
+    "vampiric_rune": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "rune"
+    },
+    "vermin_leather": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "resource"
+    },
+    "vital_armor": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "body_armor"
+    },
+    "vital_boots": {
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "level": 50,
+      "type": "boots"
+    },
+    "voidstone_axe": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "weapon"
+    },
+    "voidstone_fishing_rod": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "weapon"
+    },
+    "voidstone_gloves": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "weapon"
+    },
+    "voidstone_pickaxe": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 50,
+      "type": "weapon"
+    },
+    "water_boost_potion": {
+      "crafting_level": 10,
+      "crafting_skill": "alchemy",
+      "level": 10,
+      "type": "utility"
+    },
+    "water_bow": {
+      "crafting_level": 5,
+      "crafting_skill": "weaponcrafting",
+      "level": 5,
+      "type": "weapon"
+    },
+    "water_res_potion": {
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "level": 40,
+      "type": "utility"
+    },
+    "water_ring": {
+      "crafting_level": 15,
+      "crafting_skill": "jewelrycrafting",
+      "level": 15,
+      "type": "ring"
+    },
+    "water_shield": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "shield"
+    },
+    "white_knight_armor": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "body_armor"
+    },
+    "white_knight_helmet": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "helmet"
+    },
+    "white_knight_pants": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "leg_armor"
+    },
+    "white_knight_shield": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "shield"
+    },
+    "wisdom_amulet": {
+      "crafting_level": 15,
+      "crafting_skill": "jewelrycrafting",
+      "level": 15,
+      "type": "amulet"
+    },
+    "wolf_bone": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "resource"
+    },
+    "wolf_ears": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "helmet"
+    },
+    "wolf_hair": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 15,
+      "type": "resource"
+    },
+    "wolfrider_hair": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 40,
+      "type": "resource"
+    },
+    "wolfrider_ponytail": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 35,
+      "type": "resource"
+    },
+    "wooden_club": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 25,
+      "type": "weapon"
+    },
+    "wooden_shield": {
+      "crafting_level": 1,
+      "crafting_skill": "gearcrafting",
+      "level": 1,
+      "type": "shield"
+    },
+    "wooden_staff": {
+      "crafting_level": 1,
+      "crafting_skill": "weaponcrafting",
+      "level": 1,
+      "type": "weapon"
+    },
+    "wooden_stick": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 1,
+      "type": "weapon"
+    },
+    "wool": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 5,
+      "type": "resource"
+    },
+    "wratharmor": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "body_armor"
+    },
+    "wrathelmet": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "helmet"
+    },
+    "wrathpants": {
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "level": 40,
+      "type": "leg_armor"
+    },
+    "wrathsword": {
+      "crafting_level": 40,
+      "crafting_skill": "weaponcrafting",
+      "level": 40,
+      "type": "weapon"
+    },
+    "yellow_slimeball": {
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "level": 2,
+      "type": "resource"
+    }
+  },
+  "monster_attack": {
+    "bandit_lizard": {
+      "air": 0,
+      "earth": 0,
+      "fire": 40,
+      "water": 40
+    },
+    "bat": {
+      "air": 80,
+      "earth": 0,
+      "fire": 0,
+      "water": 80
+    },
+    "blue_slime": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 15
+    },
+    "chicken": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 4
+    },
+    "corrupted_ogre": {
+      "air": 0,
+      "earth": 80,
+      "fire": 0,
+      "water": 0
+    },
+    "corrupted_owlbear": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 100
+    },
+    "cow": {
+      "air": 21,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "cultist_acolyte": {
+      "air": 65,
+      "earth": 65,
+      "fire": 0,
+      "water": 0
+    },
+    "cultist_alchemist": {
+      "air": 100,
+      "earth": 0,
+      "fire": 0,
+      "water": 50
+    },
+    "cultist_emperor": {
+      "air": 90,
+      "earth": 40,
+      "fire": 0,
+      "water": 40
+    },
+    "cursed_tree": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 130
+    },
+    "cyclops": {
+      "air": 20,
+      "earth": 90,
+      "fire": 0,
+      "water": 0
+    },
+    "death_knight": {
+      "air": 28,
+      "earth": 28,
+      "fire": 28,
+      "water": 28
+    },
+    "demon": {
+      "air": 0,
+      "earth": 0,
+      "fire": 90,
+      "water": 0
+    },
+    "desert_scorpion": {
+      "air": 0,
+      "earth": 350,
+      "fire": 0,
+      "water": 0
+    },
+    "dusk_beetle": {
+      "air": 0,
+      "earth": 120,
+      "fire": 120,
+      "water": 0
+    },
+    "duskworm": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 550
+    },
+    "efreet_sultan": {
+      "air": 100,
+      "earth": 0,
+      "fire": 100,
+      "water": 0
+    },
+    "flying_snake": {
+      "air": 34,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "goblin": {
+      "air": 170,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "goblin_guard": {
+      "air": 0,
+      "earth": 120,
+      "fire": 0,
+      "water": 0
+    },
+    "goblin_priestess": {
+      "air": 75,
+      "earth": 75,
+      "fire": 75,
+      "water": 75
+    },
+    "goblin_wolfrider": {
+      "air": 0,
+      "earth": 145,
+      "fire": 0,
+      "water": 0
+    },
+    "green_slime": {
+      "air": 12,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "grimlet": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 150
+    },
+    "hellhound": {
+      "air": 0,
+      "earth": 50,
+      "fire": 90,
+      "water": 0
+    },
+    "highwayman": {
+      "air": 25,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "imp": {
+      "air": 0,
+      "earth": 45,
+      "fire": 0,
+      "water": 0
+    },
+    "king_slime": {
+      "air": 14,
+      "earth": 14,
+      "fire": 14,
+      "water": 14
+    },
+    "lich": {
+      "air": 0,
+      "earth": 140,
+      "fire": 140,
+      "water": 0
+    },
+    "mushmush": {
+      "air": 0,
+      "earth": 0,
+      "fire": 16,
+      "water": 16
+    },
+    "ogre": {
+      "air": 0,
+      "earth": 80,
+      "fire": 0,
+      "water": 0
+    },
+    "orc": {
+      "air": 100,
+      "earth": 0,
+      "fire": 100,
+      "water": 0
+    },
+    "owlbear": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 80
+    },
+    "pig": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 30
+    },
+    "rat": {
+      "air": 0,
+      "earth": 0,
+      "fire": 50,
+      "water": 0
+    },
+    "red_slime": {
+      "air": 0,
+      "earth": 0,
+      "fire": 18,
+      "water": 0
+    },
+    "rosenblood": {
+      "air": 0,
+      "earth": 0,
+      "fire": 400,
+      "water": 0
+    },
+    "sand_snake": {
+      "air": 180,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "sandwarden": {
+      "air": 220,
+      "earth": 0,
+      "fire": 220,
+      "water": 0
+    },
+    "sandwhisper_empress": {
+      "air": 400,
+      "earth": 0,
+      "fire": 400,
+      "water": 0
+    },
+    "sea_marauder": {
+      "air": 190,
+      "earth": 0,
+      "fire": 190,
+      "water": 0
+    },
+    "sheep": {
+      "air": 0,
+      "earth": 14,
+      "fire": 0,
+      "water": 0
+    },
+    "skeleton": {
+      "air": 0,
+      "earth": 18,
+      "fire": 26,
+      "water": 0
+    },
+    "spider": {
+      "air": 0,
+      "earth": 0,
+      "fire": 40,
+      "water": 40
+    },
+    "vampire": {
+      "air": 50,
+      "earth": 0,
+      "fire": 20,
+      "water": 0
+    },
+    "wolf": {
+      "air": 12,
+      "earth": 0,
+      "fire": 0,
+      "water": 12
+    },
+    "yellow_slime": {
+      "air": 0,
+      "earth": 8,
+      "fire": 0,
+      "water": 0
+    }
+  },
+  "monster_critical_strike": {
+    "bandit_lizard": 5,
+    "bat": 5,
+    "blue_slime": 0,
+    "chicken": 0,
+    "corrupted_ogre": 5,
+    "corrupted_owlbear": 5,
+    "cow": 0,
+    "cultist_acolyte": 5,
+    "cultist_alchemist": 5,
+    "cultist_emperor": 5,
+    "cursed_tree": 20,
+    "cyclops": 5,
+    "death_knight": 5,
+    "demon": 5,
+    "desert_scorpion": 50,
+    "dusk_beetle": 5,
+    "duskworm": 20,
+    "efreet_sultan": 5,
+    "flying_snake": 5,
+    "goblin": 5,
+    "goblin_guard": 5,
+    "goblin_priestess": 20,
+    "goblin_wolfrider": 5,
+    "green_slime": 0,
+    "grimlet": 5,
+    "hellhound": 5,
+    "highwayman": 35,
+    "imp": 5,
+    "king_slime": 20,
+    "lich": 5,
+    "mushmush": 5,
+    "ogre": 5,
+    "orc": 10,
+    "owlbear": 5,
+    "pig": 30,
+    "rat": 50,
+    "red_slime": 0,
+    "rosenblood": 30,
+    "sand_snake": 5,
+    "sandwarden": 5,
+    "sandwhisper_empress": 5,
+    "sea_marauder": 5,
+    "sheep": 0,
+    "skeleton": 5,
+    "spider": 5,
+    "vampire": 35,
+    "wolf": 50,
+    "yellow_slime": 0
+  },
+  "monster_hp": {
+    "bandit_lizard": 780,
+    "bat": 2000,
+    "blue_slime": 120,
+    "chicken": 60,
+    "corrupted_ogre": 850,
+    "corrupted_owlbear": 1100,
+    "cow": 280,
+    "cultist_acolyte": 1500,
+    "cultist_alchemist": 3000,
+    "cultist_emperor": 1750,
+    "cursed_tree": 1550,
+    "cyclops": 630,
+    "death_knight": 820,
+    "demon": 900,
+    "desert_scorpion": 4250,
+    "dusk_beetle": 3500,
+    "duskworm": 25000,
+    "efreet_sultan": 3600,
+    "flying_snake": 360,
+    "goblin": 1550,
+    "goblin_guard": 2000,
+    "goblin_priestess": 6750,
+    "goblin_wolfrider": 2650,
+    "green_slime": 80,
+    "grimlet": 7000,
+    "hellhound": 3250,
+    "highwayman": 380,
+    "imp": 1750,
+    "king_slime": 1000,
+    "lich": 6600,
+    "mushmush": 350,
+    "ogre": 650,
+    "orc": 1600,
+    "owlbear": 1100,
+    "pig": 480,
+    "rat": 800,
+    "red_slime": 120,
+    "rosenblood": 8000,
+    "sand_snake": 3200,
+    "sandwarden": 4500,
+    "sandwhisper_empress": 13500,
+    "sea_marauder": 2900,
+    "sheep": 120,
+    "skeleton": 480,
+    "spider": 550,
+    "vampire": 680,
+    "wolf": 400,
+    "yellow_slime": 70
+  },
+  "monster_initiative": {
+    "bandit_lizard": 200,
+    "bat": 200,
+    "blue_slime": 100,
+    "chicken": 50,
+    "corrupted_ogre": 150,
+    "corrupted_owlbear": 250,
+    "cow": 100,
+    "cultist_acolyte": 200,
+    "cultist_alchemist": 300,
+    "cultist_emperor": 300,
+    "cursed_tree": 250,
+    "cyclops": 175,
+    "death_knight": 150,
+    "demon": 250,
+    "desert_scorpion": 600,
+    "dusk_beetle": 250,
+    "duskworm": 600,
+    "efreet_sultan": 400,
+    "flying_snake": 125,
+    "goblin": 200,
+    "goblin_guard": 250,
+    "goblin_priestess": 400,
+    "goblin_wolfrider": 300,
+    "green_slime": 50,
+    "grimlet": 500,
+    "hellhound": 300,
+    "highwayman": 125,
+    "imp": 175,
+    "king_slime": 150,
+    "lich": 350,
+    "mushmush": 100,
+    "ogre": 150,
+    "orc": 250,
+    "owlbear": 250,
+    "pig": 100,
+    "rat": 175,
+    "red_slime": 100,
+    "rosenblood": 400,
+    "sand_snake": 250,
+    "sandwarden": 600,
+    "sandwhisper_empress": 700,
+    "sea_marauder": 500,
+    "sheep": 50,
+    "skeleton": 150,
+    "spider": 100,
+    "vampire": 150,
+    "wolf": 125,
+    "yellow_slime": 50
+  },
+  "monster_level": {
+    "bandit_lizard": 25,
+    "bat": 38,
+    "blue_slime": 6,
+    "chicken": 1,
+    "corrupted_ogre": 20,
+    "corrupted_owlbear": 30,
+    "cow": 8,
+    "cultist_acolyte": 33,
+    "cultist_alchemist": 40,
+    "cultist_emperor": 35,
+    "cursed_tree": 34,
+    "cyclops": 25,
+    "death_knight": 28,
+    "demon": 30,
+    "desert_scorpion": 50,
+    "dusk_beetle": 47,
+    "duskworm": 48,
+    "efreet_sultan": 42,
+    "flying_snake": 12,
+    "goblin": 33,
+    "goblin_guard": 35,
+    "goblin_priestess": 35,
+    "goblin_wolfrider": 40,
+    "green_slime": 4,
+    "grimlet": 45,
+    "hellhound": 40,
+    "highwayman": 15,
+    "imp": 28,
+    "king_slime": 15,
+    "lich": 30,
+    "mushmush": 10,
+    "ogre": 20,
+    "orc": 38,
+    "owlbear": 30,
+    "pig": 19,
+    "rat": 25,
+    "red_slime": 7,
+    "rosenblood": 40,
+    "sand_snake": 44,
+    "sandwarden": 50,
+    "sandwhisper_empress": 55,
+    "sea_marauder": 45,
+    "sheep": 5,
+    "skeleton": 18,
+    "spider": 20,
+    "vampire": 24,
+    "wolf": 15,
+    "yellow_slime": 2
+  },
+  "monster_resistance": {
+    "bandit_lizard": {
+      "air": 25,
+      "earth": 25,
+      "fire": -5,
+      "water": -5
+    },
+    "bat": {
+      "air": -20,
+      "earth": 5,
+      "fire": 5,
+      "water": 5
+    },
+    "blue_slime": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 25
+    },
+    "chicken": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "corrupted_ogre": {
+      "air": 50,
+      "earth": 100,
+      "fire": 50,
+      "water": 70
+    },
+    "corrupted_owlbear": {
+      "air": 70,
+      "earth": 50,
+      "fire": 70,
+      "water": 115
+    },
+    "cow": {
+      "air": 0,
+      "earth": -30,
+      "fire": 0,
+      "water": 30
+    },
+    "cultist_acolyte": {
+      "air": 40,
+      "earth": 10,
+      "fire": -10,
+      "water": -10
+    },
+    "cultist_alchemist": {
+      "air": -30,
+      "earth": -10,
+      "fire": 5,
+      "water": 5
+    },
+    "cultist_emperor": {
+      "air": -10,
+      "earth": 10,
+      "fire": 20,
+      "water": 0
+    },
+    "cursed_tree": {
+      "air": 5,
+      "earth": -5,
+      "fire": 5,
+      "water": -5
+    },
+    "cyclops": {
+      "air": 0,
+      "earth": 20,
+      "fire": -20,
+      "water": 10
+    },
+    "death_knight": {
+      "air": -5,
+      "earth": -5,
+      "fire": -5,
+      "water": -5
+    },
+    "demon": {
+      "air": 0,
+      "earth": 0,
+      "fire": 20,
+      "water": -10
+    },
+    "desert_scorpion": {
+      "air": 0,
+      "earth": 0,
+      "fire": -10,
+      "water": -10
+    },
+    "dusk_beetle": {
+      "air": -10,
+      "earth": -10,
+      "fire": 20,
+      "water": 20
+    },
+    "duskworm": {
+      "air": -80,
+      "earth": -80,
+      "fire": -80,
+      "water": -80
+    },
+    "efreet_sultan": {
+      "air": 0,
+      "earth": 0,
+      "fire": 50,
+      "water": 50
+    },
+    "flying_snake": {
+      "air": 40,
+      "earth": 0,
+      "fire": -20,
+      "water": -20
+    },
+    "goblin": {
+      "air": -20,
+      "earth": 30,
+      "fire": 10,
+      "water": -20
+    },
+    "goblin_guard": {
+      "air": 20,
+      "earth": -20,
+      "fire": -20,
+      "water": 30
+    },
+    "goblin_priestess": {
+      "air": 20,
+      "earth": 20,
+      "fire": 20,
+      "water": 20
+    },
+    "goblin_wolfrider": {
+      "air": 10,
+      "earth": -5,
+      "fire": 10,
+      "water": 10
+    },
+    "green_slime": {
+      "air": 25,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "grimlet": {
+      "air": 50,
+      "earth": 70,
+      "fire": 90,
+      "water": 90
+    },
+    "hellhound": {
+      "air": 10,
+      "earth": 10,
+      "fire": -20,
+      "water": -20
+    },
+    "highwayman": {
+      "air": -10,
+      "earth": 10,
+      "fire": 10,
+      "water": -10
+    },
+    "imp": {
+      "air": 10,
+      "earth": 60,
+      "fire": 10,
+      "water": 10
+    },
+    "king_slime": {
+      "air": 20,
+      "earth": 20,
+      "fire": 20,
+      "water": 20
+    },
+    "lich": {
+      "air": 18,
+      "earth": 24,
+      "fire": 24,
+      "water": 18
+    },
+    "mushmush": {
+      "air": -30,
+      "earth": 20,
+      "fire": 20,
+      "water": 0
+    },
+    "ogre": {
+      "air": 0,
+      "earth": 30,
+      "fire": -20,
+      "water": 0
+    },
+    "orc": {
+      "air": 20,
+      "earth": 20,
+      "fire": -20,
+      "water": -20
+    },
+    "owlbear": {
+      "air": 0,
+      "earth": -20,
+      "fire": 0,
+      "water": 45
+    },
+    "pig": {
+      "air": 0,
+      "earth": -10,
+      "fire": 0,
+      "water": 40
+    },
+    "rat": {
+      "air": 5,
+      "earth": -10,
+      "fire": 40,
+      "water": 5
+    },
+    "red_slime": {
+      "air": 0,
+      "earth": 0,
+      "fire": 25,
+      "water": 0
+    },
+    "rosenblood": {
+      "air": 10,
+      "earth": 10,
+      "fire": 10,
+      "water": 10
+    },
+    "sand_snake": {
+      "air": 10,
+      "earth": 0,
+      "fire": 5,
+      "water": 5
+    },
+    "sandwarden": {
+      "air": 0,
+      "earth": -20,
+      "fire": 0,
+      "water": 0
+    },
+    "sandwhisper_empress": {
+      "air": 5,
+      "earth": 10,
+      "fire": 5,
+      "water": 10
+    },
+    "sea_marauder": {
+      "air": 10,
+      "earth": 10,
+      "fire": 10,
+      "water": 10
+    },
+    "sheep": {
+      "air": 10,
+      "earth": 10,
+      "fire": 10,
+      "water": 10
+    },
+    "skeleton": {
+      "air": -10,
+      "earth": 0,
+      "fire": 30,
+      "water": -10
+    },
+    "spider": {
+      "air": 5,
+      "earth": 5,
+      "fire": 0,
+      "water": -30
+    },
+    "vampire": {
+      "air": 30,
+      "earth": -15,
+      "fire": 0,
+      "water": -15
+    },
+    "wolf": {
+      "air": 10,
+      "earth": -10,
+      "fire": -10,
+      "water": 10
+    },
+    "yellow_slime": {
+      "air": 0,
+      "earth": 25,
+      "fire": 0,
+      "water": 0
+    }
+  },
+  "resource_drops": {
+    "adamantite_rocks": "adamantite_ore",
+    "ash_tree": "ash_wood",
+    "bass_spot": "bass",
+    "birch_tree": "birch_wood",
+    "coal_rocks": "coal",
+    "copper_rocks": "copper_ore",
+    "dead_tree": "dead_wood",
+    "glowstem": "glowstem_leaf",
+    "gold_rocks": "gold_ore",
+    "gudgeon_spot": "gudgeon",
+    "iron_rocks": "iron_ore",
+    "magic_tree": "magic_wood",
+    "maple_tree": "maple_wood",
+    "mithril_rocks": "mithril_ore",
+    "nettle": "nettle_leaf",
+    "palm_tree": "palm_wood",
+    "salmon_spot": "salmon",
+    "shrimp_spot": "shrimp",
+    "spruce_tree": "spruce_wood",
+    "strange_rocks": "strange_ore",
+    "sunflower_field": "sunflower",
+    "swordfish_spot": "swordfish",
+    "torch_cactus": "torch_cactus_flower",
+    "trout_spot": "trout"
+  },
+  "resource_skill": {
+    "adamantite_rocks": [
+      "mining",
+      50
+    ],
+    "ash_tree": [
+      "woodcutting",
+      1
+    ],
+    "bass_spot": [
+      "fishing",
+      30
+    ],
+    "birch_tree": [
+      "woodcutting",
+      20
+    ],
+    "coal_rocks": [
+      "mining",
+      20
+    ],
+    "copper_rocks": [
+      "mining",
+      1
+    ],
+    "dead_tree": [
+      "woodcutting",
+      30
+    ],
+    "glowstem": [
+      "alchemy",
+      40
+    ],
+    "gold_rocks": [
+      "mining",
+      30
+    ],
+    "gudgeon_spot": [
+      "fishing",
+      1
+    ],
+    "iron_rocks": [
+      "mining",
+      10
+    ],
+    "magic_tree": [
+      "woodcutting",
+      35
+    ],
+    "maple_tree": [
+      "woodcutting",
+      40
+    ],
+    "mithril_rocks": [
+      "mining",
+      40
+    ],
+    "nettle": [
+      "alchemy",
+      20
+    ],
+    "palm_tree": [
+      "woodcutting",
+      50
+    ],
+    "salmon_spot": [
+      "fishing",
+      40
+    ],
+    "shrimp_spot": [
+      "fishing",
+      10
+    ],
+    "spruce_tree": [
+      "woodcutting",
+      10
+    ],
+    "strange_rocks": [
+      "mining",
+      35
+    ],
+    "sunflower_field": [
+      "alchemy",
+      1
+    ],
+    "swordfish_spot": [
+      "fishing",
+      50
+    ],
+    "torch_cactus": [
+      "alchemy",
+      50
+    ],
+    "trout_spot": [
+      "fishing",
+      20
+    ]
+  }
+}

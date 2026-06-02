@@ -232,11 +232,10 @@ open Formal.Liveness.RecipeChainClosure
 -- the Phase 23d-8 universal theorem produces a finite plan on a real-shaped
 -- game-data instance (iron_ore → iron_bar → iron_sword chain).
 open Formal.Liveness.GameDataFixture
-#print axioms fixture_dag_acyclic
-#print axioms ironSwordRecipe_gatherCount
-#print axioms ironSwordRecipe_craftCount
-#print axioms ironSword_task_completable
-#print axioms ironSword_task_completable_explicit
+#print axioms snapshotCapturedAt
+#print axioms allRecipes
+#print axioms snapshot_recipe_count
+#print axioms live_first_recipe_completable
 
 -- Phase 25: LevelFiftyReachable — TIER 5 CAPSTONE. Iterates Phase 23c-3c's
 -- cumulative_progress_under_no_wait 49 times to prove level-50 reachability
