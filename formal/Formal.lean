@@ -61,3 +61,4 @@ import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
+import Formal.Liveness.RecipeChainClosure

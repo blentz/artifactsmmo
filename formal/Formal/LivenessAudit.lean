@@ -33,6 +33,7 @@ import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
+import Formal.Liveness.RecipeChainClosure
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -215,3 +216,12 @@ open Formal.Liveness.SkillGapClosure
 #print axioms replicate_gather_skill_progress
 #print axioms skill_prerequisite_reachable
 #print axioms skill_gap_then_complete_reachable
+
+-- Phase 23d-8: RecipeChainClosure — chain .gather + .craft + .taskTrade
+-- reaches .complete for items tasks needing crafted output. Closes the
+-- recipe-chain gap deferred in Phase 23d-7.
+open Formal.Liveness.RecipeChainClosure
+#print axioms craft_advances_slots_succ
+#print axioms replicate_craft_slots
+#print axioms recipe_produces_item
+#print axioms recipe_then_complete_reachable

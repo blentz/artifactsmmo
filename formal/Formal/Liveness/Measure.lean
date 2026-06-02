@@ -189,6 +189,12 @@ structure State where
       mechanically (they `{s with ...}` over State, so the new field
       is automatically threaded through). -/
   actionsAttempted : Nat
+  /-- Phase 23d-8: counter of completed `.craft` applies. Abstract
+      counter for recipe-chain closure proofs. Production's
+      `CraftAction.apply` composes inventory updates + skill XP delta +
+      task progress; the Lean model abstracts these to a single
+      counter advance per `.craft` step. -/
+  craftableSlots : Nat
   deriving Repr
 
 namespace State

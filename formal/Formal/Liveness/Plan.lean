@@ -329,7 +329,16 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- agnostic; it never touches taskCode/Progress/Total or phase).
   | .gather, s =>
       { s with projectedSkillXpDelta := s.projectedSkillXpDelta + 1 }
-  -- All other 12 kinds: no-op (see module docstring; future phases will
+  -- Phase 23d-8: .craft advances the abstract craftableSlots counter
+  -- by 1. Mirrors production CraftAction.apply (crafting.py:39+) which
+  -- composes inventory updates (consume ingredients + produce output)
+  -- + skill XP delta + task_progress for crafting tasks. The Lean
+  -- abstraction collapses these to a single counter advance per .craft
+  -- step (sufficient for recipe-chain closure proofs). All task fields
+  -- are preserved.
+  | .craft, s =>
+      { s with craftableSlots := s.craftableSlots + 1 }
+  -- All other 11 kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 
