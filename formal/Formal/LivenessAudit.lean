@@ -34,6 +34,7 @@ import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
+import Formal.Liveness.GameDataFixture
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -225,3 +226,13 @@ open Formal.Liveness.RecipeChainClosure
 #print axioms replicate_craft_slots
 #print axioms recipe_produces_item
 #print axioms recipe_then_complete_reachable
+
+-- Phase 24: GameDataFixture — concrete recipe-chain instance demonstrating
+-- the Phase 23d-8 universal theorem produces a finite plan on a real-shaped
+-- game-data instance (iron_ore → iron_bar → iron_sword chain).
+open Formal.Liveness.GameDataFixture
+#print axioms fixture_dag_acyclic
+#print axioms ironSwordRecipe_gatherCount
+#print axioms ironSwordRecipe_craftCount
+#print axioms ironSword_task_completable
+#print axioms ironSword_task_completable_explicit
