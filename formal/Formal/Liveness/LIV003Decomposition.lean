@@ -101,6 +101,9 @@ import Formal.Liveness.CycleStep
 import Formal.Liveness.ProductionLadder
 import Formal.Liveness.Measure
 import Formal.Liveness.TaskLifecyclePhase
+import Formal.Liveness.Plan
+import Formal.Liveness.PlanAction
+import Mathlib.Tactic
 
 set_option linter.dupNamespace false
 set_option linter.unusedVariables false
@@ -112,6 +115,8 @@ open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.TaskLifecyclePhase
+open Formal.Liveness.Plan
+open Formal.Liveness.PlanAction
 
 /-! ## LIV-003a — Cancel-vs-Pursue determinism (THEOREM) -/
 
@@ -166,73 +171,246 @@ theorem taskActive_implies_cancelOrPursueFires
 
 /-! ## LIV-003b — Low-yield sample threshold (small axiom + theorem) -/
 
-/-- LIV-003b (Phase 23d-1, user-approved 2026-06-01).
+/-!
+  LIV-003b (Phase 23d-5, relocated): the opaque positive `Nat`
+  `lowYieldSampleThreshold` and its positivity now live in
+  `Formal.Liveness.ProductionLadder` so that the production firing
+  predicate `lowYieldCancelFires` and the abstract theorem below
+  reference the SAME constant — preventing axiom drift. The two
+  axioms `ProductionLadder.lowYieldSampleThreshold` and
+  `ProductionLadder.lowYieldSampleThreshold_pos` are unchanged in
+  semantic content; just structurally moved.
+-/
 
-    **AXIOM-ID**: LIV-003b-A1
-    **Spec**: `LOW_YIELD_SAMPLE_THRESHOLD` constant in
-              `src/artifactsmmo_cli/ai/learning/projections.py`
-    **Date**: 2026-06-01
+/-! ### Helper: `.taskTrade` apply on .inProgress preserves field semantics
 
-    The opaque positive Nat representing the production constant
-    `LOW_YIELD_SAMPLE_THRESHOLD`. After threshold-many in-progress action
-    attempts on a single task, the low-yield-cancel predicate is
-    decidable (either fires, or the projected yield meets target). -/
-axiom lowYieldSampleThreshold : Nat
+  Phase 23d-5 substantive theorem support. The .taskTrade apply on an
+  `.inProgress` pre-state:
 
-/-- LIV-003b positivity — production sets the threshold to a positive
-    integer. -/
-axiom lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0
+    • bumps `actionsAttempted` by +1 (phaseActive holds)
+    • bumps `taskProgress` by +1
+    • phase becomes `.complete` if `taskProgress + 1 ≥ taskTotal`,
+      `.inProgress` otherwise (taskTotal > 0 because phase is .inProgress)
 
-/-- LIV-003b (Phase 23d-4, user-approved 2026-06-01) — **THEOREM**, no
-    longer an axiom. Phase 23d-1 introduced this as an axiom; Phase 23d-4
-    graduates it to a theorem.
+  These three facts drive the K-cycle induction below. -/
 
-    From any `.inProgress` state, within `lowYieldSampleThreshold`
-    cycles of `cycleStep`, the trajectory either:
-      (i) reaches a state where `lowYieldCancelFires` returns `true`
-          (the PIVOT branch — yield too low; cancel and retry), OR
-      (ii) reaches a state where `completeTaskFires` returns `true`
-           (the PURSUE branch carried to success; task ready for turn-in).
+private theorem actionsAttempted_taskTrade_inProgress
+    (s : State) (h : s.taskLifecyclePhase = .inProgress) :
+    (applyActionKind .taskTrade s).actionsAttempted = s.actionsAttempted + 1 := by
+  simp only [applyActionKind, phaseActive, h]
+  simp
 
-    Captures user mandate clauses (b) and (c): the bot either pivots
-    (low yield → cancel and retry) or rides the task to completion
-    (measurable progress confirms N more actions reach TaskSuccess).
+private theorem taskProgress_taskTrade
+    (s : State) :
+    (applyActionKind .taskTrade s).taskProgress = s.taskProgress + 1 := by
+  simp [applyActionKind]
 
-    Proof: take `k = 0`. By `hzero`, `cycleStepN 0 s = s`. By Phase
-    23c-3b's definition of `Formal.Liveness.ProductionLadder.
-    lowYieldCancelFires` as `decide (s.taskLifecyclePhase = .inProgress)`,
-    the hypothesis `s.taskLifecyclePhase = .inProgress` gives
-    `lowYieldCancelFires s = true`. The bound `0 ≤
-    lowYieldSampleThreshold` is `Nat.zero_le _`.
+private theorem taskTotal_taskTrade
+    (s : State) :
+    (applyActionKind .taskTrade s).taskTotal = s.taskTotal := by
+  simp [applyActionKind]
 
-    Honest disclosure (Phase 23d-4): the Lean predicate
-    `lowYieldCancelFires` is the simplified Phase-23c-3b phase-based
-    predicate — it does NOT model the production sample-count gate
-    (`sample_count ≥ LOW_YIELD_SAMPLE_THRESHOLD` in
-    `src/artifactsmmo_cli/ai/learning/projections.py:low_yield_cancel_fires`).
-    At this abstraction, the predicate fires immediately on a task-
-    active state, so witness `k = 0` suffices.
+/-- After applying `.taskTrade` from an `.inProgress` state where
+    `taskProgress + 1 < taskTotal`, the post-phase is `.inProgress`. -/
+private theorem phase_taskTrade_inProgress_continues
+    (s : State) (hphase : s.taskLifecyclePhase = .inProgress)
+    (hlt : s.taskProgress + 1 < s.taskTotal) :
+    (applyActionKind .taskTrade s).taskLifecyclePhase = .inProgress := by
+  have htot : s.taskTotal ≠ 0 := by
+    intro h0; rw [h0] at hlt; exact (Nat.not_lt_zero _ hlt)
+  have hge : ¬ (s.taskProgress + 1 ≥ s.taskTotal) := Nat.not_le.mpr hlt
+  simp only [applyActionKind, phaseActive, hphase]
+  simp [htot, hge]
 
-    A future phase that REFINES the ladder predicate to mirror the
-    production sample-count gate (using the Phase 23d-4
-    `actionsAttempted` field on `State`, which counts task-progress
-    action applications per task) would re-introduce the counter
-    monotonicity obligation. The state extension is ready for that
-    refinement; the present theorem closes the LIV-003b-A2 axiom
-    without it. -/
+/-- After applying `.taskTrade` from an `.inProgress` state where
+    `taskProgress + 1 ≥ taskTotal` (and `taskTotal > 0`, which holds
+    because the pre-phase is .inProgress), the post-phase is `.complete`. -/
+private theorem phase_taskTrade_inProgress_completes
+    (s : State) (hphase : s.taskLifecyclePhase = .inProgress)
+    (hge : s.taskProgress + 1 ≥ s.taskTotal)
+    (htot : s.taskTotal > 0) :
+    (applyActionKind .taskTrade s).taskLifecyclePhase = .complete := by
+  have htot_ne : s.taskTotal ≠ 0 := Nat.pos_iff_ne_zero.mp htot
+  simp only [applyActionKind, phaseActive, hphase]
+  simp [htot_ne, hge]
+
+/-!
+  ### LIV-003b (Phase 23d-5) — substantive K-cycle measure decrease.
+
+  Replaces Phase 23d-4's trivial-witness (k=0) graduation. With the
+  Phase 23d-5 refined `lowYieldCancelFires := decide (phase =
+  .inProgress) ∧ decide (actionsAttempted ≥ lowYieldSampleThreshold)`,
+  the predicate no longer fires immediately on .inProgress — it
+  requires `lowYieldSampleThreshold` accumulated action attempts.
+
+  Statement: from any `.inProgress` state where the trajectory follows
+  `.taskTrade` for up to K = `lowYieldSampleThreshold` cycles (the
+  `pursue` hypothesis), within K cycles either:
+    (i) the post-state's `lowYieldCancelFires` returns `true`
+        (actionsAttempted has reached threshold, phase still
+        .inProgress — the PIVOT branch decision point), OR
+    (ii) the post-state's phase is `.complete` (the task completed
+         before threshold-many attempts — the PURSUE branch carried
+         to success).
+
+  Captures user mandate clauses (b) and (c) substantively: the bot
+  either pivots after threshold-many low-yield attempts, or rides
+  the task to completion in fewer attempts.
+
+  #### Hypotheses, surfaced honestly
+
+    • `hsucc` / `hzero`: cycleStepN is the standard cycle-step
+      iteration (k+1 cycles = k cycles then one cycle).
+
+    • `hphase`: the start state is in `.inProgress`.
+
+    • `hpursue`: at any `.inProgress` state, the cycleStep applies
+      `.taskTrade` (i.e. `productionLadder` selects `.pursueTask`).
+      This is the WEAKEST honest hypothesis: in production, while
+      no higher-priority means fires (no HP_CRITICAL, no
+      DEPOSIT_FULL, no overstock, no claim, no completeTask, etc.),
+      the ladder DOES select .pursueTask on .inProgress states (per
+      `pursueTaskFires := decide (phase ∈ {.accepted, .inProgress})`
+      in Phase 23c-3b's ladder). We surface this as an explicit
+      trajectory hypothesis rather than re-proving the ladder
+      selection 17-ways at every step.
+
+    • `hattempts_init`: `s.actionsAttempted ≤ lowYieldSampleThreshold`
+      — the counter starts within budget. Phase 23d-4 resets it on
+      `.acceptTask`-equivalent transitions; here we expose the
+      bound directly because the theorem speaks only about the
+      single in-progress sub-trajectory.
+
+  #### Witness positivity
+
+  The witness `k` is positive whenever `s.actionsAttempted <
+  lowYieldSampleThreshold` (the common case at task acceptance).
+  With `lowYieldSampleThreshold_pos`, the maximum bound
+  `lowYieldSampleThreshold` is itself positive — so the existential
+  is NOT trivially satisfied at k=0 (unlike Phase 23d-4's k=0
+  witness, which exploited the unrefined predicate).
+
+  #### Proof structure
+
+  Strong induction on the budget `b := T - s.actionsAttempted` via
+  `inProgress_decides_within_threshold_aux`:
+
+    • If `s.actionsAttempted ≥ lowYieldSampleThreshold` already
+      (b = 0): witness k = 0. `lowYieldCancelFires s` fires
+      immediately (phase = .inProgress and counter at threshold).
+
+    • Otherwise (b > 0): one cycle of `.taskTrade` either completes
+      the task (witness k = 1 takes the `.complete` disjunct) or
+      keeps phase = .inProgress with `actionsAttempted += 1`. The
+      induction step applies to the post-state (b decreased by 1)
+      and yields a witness k'; total witness is `k' + 1`.
+-/
+
+/-- Helper for `inProgress_decides_within_threshold`. Strong induction on
+    the remaining budget `b = T - s.actionsAttempted` where T is the
+    threshold. The witness is bounded by `b`. -/
+private theorem inProgress_decides_within_threshold_aux
+    (cycleStepN : Nat → State → State)
+    (hsucc : ∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s'))
+    (hzero : ∀ s', cycleStepN 0 s' = s')
+    (hpursue : ∀ (s' : State), s'.taskLifecyclePhase = .inProgress →
+                cycleStep s' = applyActionKind .taskTrade s') :
+    ∀ (b : Nat) (s : State),
+      s.taskLifecyclePhase = .inProgress →
+      s.actionsAttempted + b ≥ lowYieldSampleThreshold →
+      ∃ k ≤ b,
+        ProductionLadder.lowYieldCancelFires (cycleStepN k s) = true
+        ∨ (cycleStepN k s).taskLifecyclePhase = .complete := by
+  intro b
+  induction b with
+  | zero =>
+      intro s hphase hge
+      -- b = 0: actionsAttempted ≥ threshold already; k=0 fires lowYieldCancel.
+      refine ⟨0, Nat.le.refl, Or.inl ?_⟩
+      rw [hzero]
+      unfold ProductionLadder.lowYieldCancelFires
+      rw [hphase]
+      simp
+      simpa using hge
+  | succ b' ih =>
+      intro s hphase hge
+      -- b = b' + 1. Either we're already at threshold, or we step.
+      by_cases hat : s.actionsAttempted ≥ lowYieldSampleThreshold
+      · refine ⟨0, Nat.zero_le _, Or.inl ?_⟩
+        rw [hzero]
+        unfold ProductionLadder.lowYieldCancelFires
+        rw [hphase]
+        simp
+        exact hat
+      · -- Not yet at threshold. Step once via .taskTrade.
+        -- Check if this step completes the task (taskTotal > 0 ∧ taskProgress+1 ≥ taskTotal).
+        by_cases htot : s.taskTotal > 0
+        · by_cases hcomplete : s.taskProgress + 1 ≥ s.taskTotal
+          · refine ⟨1, Nat.succ_le_succ (Nat.zero_le _), Or.inr ?_⟩
+            rw [hsucc, hzero, hpursue s hphase]
+            exact phase_taskTrade_inProgress_completes s hphase hcomplete htot
+          · -- Continue (taskTotal > 0, but +1 < taskTotal): phase stays .inProgress.
+            have hlt : s.taskProgress + 1 < s.taskTotal := Nat.lt_of_not_le hcomplete
+            let s' := applyActionKind .taskTrade s
+            have hs' : s' = applyActionKind .taskTrade s := rfl
+            have hs'_phase : s'.taskLifecyclePhase = .inProgress :=
+              phase_taskTrade_inProgress_continues s hphase hlt
+            have hs'_attempts :
+                s'.actionsAttempted = s.actionsAttempted + 1 :=
+              actionsAttempted_taskTrade_inProgress s hphase
+            have hge' : s'.actionsAttempted + b' ≥ lowYieldSampleThreshold := by
+              rw [hs'_attempts]
+              have heq : s.actionsAttempted + 1 + b' = s.actionsAttempted + (b' + 1) := by ring
+              rw [heq]; exact hge
+            obtain ⟨k, hk_le, hk_disj⟩ := ih s' hs'_phase hge'
+            refine ⟨k + 1, Nat.succ_le_succ hk_le, ?_⟩
+            rw [hsucc, hpursue s hphase, ← hs']
+            exact hk_disj
+        · -- taskTotal = 0; applyActionKind .taskTrade falls through to s.phase.
+          have htot_eq : s.taskTotal = 0 := Nat.eq_zero_of_not_pos htot
+          let s' := applyActionKind .taskTrade s
+          have hs' : s' = applyActionKind .taskTrade s := rfl
+          have hs'_phase : s'.taskLifecyclePhase = .inProgress := by
+            show (applyActionKind .taskTrade s).taskLifecyclePhase = .inProgress
+            simp only [applyActionKind, phaseActive, hphase]
+            simp [htot_eq]
+          have hs'_attempts :
+              s'.actionsAttempted = s.actionsAttempted + 1 :=
+            actionsAttempted_taskTrade_inProgress s hphase
+          have hge' : s'.actionsAttempted + b' ≥ lowYieldSampleThreshold := by
+            rw [hs'_attempts]
+            have heq : s.actionsAttempted + 1 + b' = s.actionsAttempted + (b' + 1) := by ring
+            rw [heq]; exact hge
+          obtain ⟨k, hk_le, hk_disj⟩ := ih s' hs'_phase hge'
+          refine ⟨k + 1, Nat.succ_le_succ hk_le, ?_⟩
+          rw [hsucc, hpursue s hphase, ← hs']
+          exact hk_disj
+
 theorem inProgress_decides_within_threshold
     (s : State) (cycleStepN : Nat → State → State)
-    (_hsucc : ∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s'))
-    (hzero : cycleStepN 0 s = s)
-    (hphase : s.taskLifecyclePhase = .inProgress) :
+    (hsucc : ∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s'))
+    (hzero : ∀ s', cycleStepN 0 s' = s')
+    (hphase : s.taskLifecyclePhase = .inProgress)
+    (hpursue : ∀ (s' : State), s'.taskLifecyclePhase = .inProgress →
+                cycleStep s' = applyActionKind .taskTrade s')
+    (hattempts_init :
+      s.actionsAttempted ≤ lowYieldSampleThreshold) :
     ∃ k ≤ lowYieldSampleThreshold,
-      lowYieldCancelFires (cycleStepN k s) = true
-      ∨ completeTaskFires (cycleStepN k s) = true := by
-  refine ⟨0, Nat.zero_le _, Or.inl ?_⟩
-  rw [hzero]
-  unfold lowYieldCancelFires
-  rw [hphase]
-  simp
+      ProductionLadder.lowYieldCancelFires (cycleStepN k s) = true
+      ∨ (cycleStepN k s).taskLifecyclePhase = .complete := by
+  -- Apply the helper with budget b = lowYieldSampleThreshold - s.actionsAttempted.
+  -- Then s.attempts + b = lowYieldSampleThreshold ≥ lowYieldSampleThreshold.
+  -- The witness k ≤ b ≤ lowYieldSampleThreshold.
+  set T := lowYieldSampleThreshold with hT_def
+  have hb_eq : s.actionsAttempted + (T - s.actionsAttempted) = T :=
+    Nat.add_sub_cancel' hattempts_init
+  have hge : s.actionsAttempted + (T - s.actionsAttempted) ≥ T := by
+    rw [hb_eq]
+  obtain ⟨k, hk_le, hk_disj⟩ :=
+    inProgress_decides_within_threshold_aux cycleStepN hsucc hzero hpursue
+      (T - s.actionsAttempted) s hphase hge
+  refine ⟨k, ?_, hk_disj⟩
+  exact Nat.le_trans hk_le (Nat.sub_le _ _)
 
 /-! ## LIV-003c — Task pool finiteness (small axiom) -/
 

@@ -288,12 +288,26 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- decrement of the task-item count, gold/coin reward credit) deferred
   -- — see module "Honest disclosure: minimal-modeling" note.
   | .taskTrade, s =>
+      -- Phase 23d-5: advance taskProgress by 1 (NOT to taskTotal). Mirrors
+      -- production `TaskTradeAction.apply` (task_trade.py:38-57) which advances
+      -- `task_progress += quantity`; the Lean +1 collapse is a CONSERVATIVE
+      -- under-step (production may deliver multiple units per call, so the
+      -- Lean model requires ≥ taskTotal cycles to complete — an UPPER bound
+      -- on what production needs). The phase recomputes from the new progress
+      -- via `deriveTaskLifecyclePhase`:
+      --   • if `taskProgress + 1 < taskTotal`: phase = .inProgress
+      --   • if `taskProgress + 1 ≥ taskTotal` (and taskTotal > 0): phase = .complete
       -- Phase 23d-4: bump actionsAttempted on a task-active state.
       let newAttempts : Nat :=
         if phaseActive s then s.actionsAttempted + 1 else s.actionsAttempted
+      let newProgress : Nat := s.taskProgress + 1
+      let newPhase : TaskLifecyclePhase :=
+        if s.taskTotal = 0 then s.taskLifecyclePhase
+        else if newProgress ≥ s.taskTotal then .complete
+        else .inProgress
       { s with pursueTaskFires := false,
-               taskProgress := s.taskTotal,
-               taskLifecyclePhase := .complete,
+               taskProgress := newProgress,
+               taskLifecyclePhase := newPhase,
                actionsAttempted := newAttempts }
   -- Phase 21d-1 synthetic placeholder. See PlanAction.lean docstring
   -- "Phase 21d-1: synthetic `.objectiveStep` placeholder". The objective

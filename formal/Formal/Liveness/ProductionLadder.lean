@@ -51,6 +51,23 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.TaskLifecyclePhase
 
+/-- Phase 23d-5: the opaque positive `Nat` that gates the
+    `lowYieldCancelFires` firing predicate by the `actionsAttempted`
+    counter. Production references `farm_samples > 0` (≥ 1 attempt) in
+    `src/artifactsmmo_cli/ai/learning/low_yield_boundary.py:60`; we
+    abstract that production constant as an opaque `Nat` here so the
+    Lean model can be REFINED upward without touching the firing
+    predicate's structural shape.
+
+    **AXIOM-ID**: LIV-003b-A1 (relocated from LIV003Decomposition.lean
+    in Phase 23d-5 so the production firing predicate and the abstract
+    theorem reference the SAME opaque constant — they must not drift). -/
+axiom lowYieldSampleThreshold : Nat
+
+/-- LIV-003b positivity — production sets the threshold to a positive
+    integer (≥ 1; current production is exactly 1). -/
+axiom lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0
+
 /-! ## Numeric thresholds (mirror production constants) -/
 
 /-- `CRITICAL_HP_FRACTION = 0.25` (guards.py:17). -/
@@ -160,13 +177,18 @@ def sellPressuredFires (s : State) : Bool :=
               ≥ SELL_PRESSURE_NUM * s.inventoryMax)
   && s.sellableInventoryNonempty
 
-/-- LOW_YIELD_CANCEL. Phase 23c-3b: faithful phase-based predicate.
-    Production: `low_yield_cancel_fires` requires ≥1 sample (a
-    post-action-attempt), so fires only on `TaskLifecyclePhase.inProgress`
-    (progress > 0). This is a SIMPLIFICATION of production's PIVOT
-    decision — it's the strictest sufficient condition. -/
-def lowYieldCancelFires (s : State) : Bool :=
+/-- LOW_YIELD_CANCEL. Phase 23d-5 — substantive sample-count gate.
+    Production: `low_yield_fires_pure` (low_yield_boundary.py:60) requires
+    `farm_samples ≥ LOW_YIELD_SAMPLE_THRESHOLD` (production = 1) before
+    firing. The Lean model gates on `actionsAttempted ≥
+    lowYieldSampleThreshold`, where `actionsAttempted` is the per-task
+    counter bumped by progress-attempting applies (Phase 23d-4) and
+    `lowYieldSampleThreshold` is the opaque positive `Nat` declared above.
+    Restricted to in-progress phase (the only phase where farm samples
+    accrue against an active task). -/
+noncomputable def lowYieldCancelFires (s : State) : Bool :=
   decide (s.taskLifecyclePhase = .inProgress)
+  && decide (s.actionsAttempted ≥ lowYieldSampleThreshold)
 
 /-- TASK_CANCEL. Phase 23c-3b: faithful phase-based predicate.
     Production: `means.py:80-83` requires a task exists (accepted or
@@ -231,8 +253,10 @@ def bankExpandFires (s : State) : Bool :=
               ≥ BANK_EXPAND_FILL_NUM * s.bankCapacity)
   && decide (s.gold ≥ s.nextExpansionCost)
 
-/-- Dispatch: per-MeansKind firing predicate. -/
-def fires (k : MeansKind) (s : State) : Bool :=
+/-- Dispatch: per-MeansKind firing predicate.
+    `noncomputable` because `lowYieldCancelFires` references the opaque
+    axiom `lowYieldSampleThreshold` (Phase 23d-5). -/
+noncomputable def fires (k : MeansKind) (s : State) : Bool :=
   match k with
   | .hpCritical       => hpCriticalFires s
   | .bankUnlock       => bankUnlockFires s
@@ -257,7 +281,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
 
 /-- `productionLadder s` = first `MeansKind` in `allInLadderOrder` whose
     `fires` predicate holds on `s`; `none` if none fire. -/
-def productionLadder (s : State) : Option MeansKind :=
+noncomputable def productionLadder (s : State) : Option MeansKind :=
   allInLadderOrder.findSome? (fun k => if fires k s then some k else none)
 
 end Formal.Liveness.ProductionLadder

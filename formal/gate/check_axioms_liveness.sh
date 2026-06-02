@@ -48,7 +48,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."   # formal/
 . "$HOME/.elan/env" 2>/dev/null || true
 
-ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|lowYieldSampleThreshold|lowYieldSampleThreshold_pos|taskPoolFinite|taskPoolFinite_pos|accept_cancel_loop_bound|lifecycle_progress_from_bounds)'
+ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|lowYieldSampleThreshold|lowYieldSampleThreshold_pos|Formal\.Liveness\.ProductionLadder\.lowYieldSampleThreshold|Formal\.Liveness\.ProductionLadder\.lowYieldSampleThreshold_pos|taskPoolFinite|taskPoolFinite_pos|accept_cancel_loop_bound|lifecycle_progress_from_bounds)'
 
 OUT_RAW="$(lake env lean Formal/LivenessAudit.lean 2>&1)"
 echo "$OUT_RAW"

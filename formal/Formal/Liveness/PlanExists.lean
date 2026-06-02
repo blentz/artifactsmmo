@@ -653,18 +653,33 @@ Two lemmas closing Tier-3 plan-existence coverage:
     `.objectiveStep` placeholder").
 -/
 
-/-- `[.taskTrade]` clears `pursueTask`. `TaskTradeAction` delivers task
-    items to the task NPC; the Lean model collapses a possibly multi-call
-    delivery into a single step that flips the opaque `pursueTaskFires`
-    Bool to `false` (mirroring the post-delivery state where the task is
-    fully satisfied). -/
+/-- `[.taskTrade, .completeTask]` clears `pursueTask`.
+
+    Phase 23d-5 update: with the refined `.taskTrade` semantics
+    (taskProgress += 1, NOT taskProgress := taskTotal), one `.taskTrade`
+    step may leave the phase at `.inProgress` if `taskProgress + 1 <
+    taskTotal`. To guarantee clearing of `pursueTaskFires` (which
+    requires `phase ∉ {.accepted, .inProgress}`), we follow with a
+    `.completeTask` step. The `.completeTask` apply (Plan.lean line 149)
+    unconditionally clears `taskCode`, `taskProgress`, `taskTotal`, and
+    sets `taskLifecyclePhase := .none` — regardless of whether the task
+    is structurally ready for completion. This is a planner-side
+    projection; production would never sequence these two without an
+    intervening progress check, but the existential plan-existence claim
+    is about model-side state transitions, not production sequencing.
+
+    Honest disclosure: the witness `[.taskTrade, .completeTask]` is a
+    two-step plan that the planner WOULD NOT actually emit in production
+    (the strategy arbiter sequences them via the ladder, one at a time).
+    The plan-existence claim is purely about the Lean state-machine: a
+    plan EXISTS that flips the post-state's firing predicate to false. -/
 theorem plan_exists_for_pursueTask :
     ∀ s, fires .pursueTask s = true →
       ∃ p : Plan, planAchieves p s .pursueTask := by
   intro s h
-  refine ⟨[.taskTrade], ?_⟩
+  refine ⟨[.taskTrade, .completeTask], ?_⟩
   simp [planAchieves, applyActionKind, fires,
-        ProductionLadder.pursueTaskFires]
+        ProductionLadder.pursueTaskFires, applyPlan]
 
 /-- `[.objectiveStep]` clears `objectiveStep`. The Phase 21d-1 synthetic
     placeholder ActionKind flips the opaque `objectiveStepFires` Bool to

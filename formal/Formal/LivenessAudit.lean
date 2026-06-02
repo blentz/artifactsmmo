@@ -168,8 +168,11 @@ open Formal.Liveness.LIV003Decomposition
 #print axioms taskAccepted_implies_cancelOrPursueFires
 #print axioms taskInProgress_implies_cancelOrPursueFires
 #print axioms taskActive_implies_cancelOrPursueFires
-#print axioms lowYieldSampleThreshold
-#print axioms lowYieldSampleThreshold_pos
+-- Phase 23d-5: `lowYieldSampleThreshold(_pos)` relocated to
+-- `Formal.Liveness.ProductionLadder` so the production firing predicate
+-- and the abstract theorem share the SAME opaque constant.
+#print axioms Formal.Liveness.ProductionLadder.lowYieldSampleThreshold
+#print axioms Formal.Liveness.ProductionLadder.lowYieldSampleThreshold_pos
 #print axioms inProgress_decides_within_threshold
 #print axioms taskPoolFinite
 #print axioms taskPoolFinite_pos

@@ -348,8 +348,9 @@ theorem cycleStep_progress_or_waits
     have hcs : cycleStep s = applyActionKind .taskCancel s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, lowYieldCancelFires, decide_eq_true_eq] at hfires
-    -- hfires : s.taskLifecyclePhase = .inProgress
+    -- Phase 23d-5: hfires = (decide phase=.inProgress) && (decide attempts ≥ T)
+    simp only [fires, lowYieldCancelFires, Bool.and_eq_true, decide_eq_true_eq] at hfires
+    -- hfires : phase = .inProgress ∧ actionsAttempted ≥ T
     intro heq
     have hpost : (applyActionKind .taskCancel s).taskLifecyclePhase
                   = TaskLifecyclePhase.TaskLifecyclePhase.none := by
@@ -357,7 +358,7 @@ theorem cycleStep_progress_or_waits
     have hpre' : s.taskLifecyclePhase
                   = TaskLifecyclePhase.TaskLifecyclePhase.none := by
       rw [heq] at hpost; exact hpost
-    rw [hfires] at hpre'; cases hpre'
+    rw [hfires.1] at hpre'; cases hpre'
   | taskCancel =>
     left
     have hcs : cycleStep s = applyActionKind .taskCancel s := by
@@ -393,19 +394,16 @@ theorem cycleStep_progress_or_waits
     have hcs : cycleStep s = applyActionKind .taskTrade s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, ProductionLadder.pursueTaskFires, Bool.or_eq_true,
-               decide_eq_true_eq] at hfires
-    -- hfires : phase = .accepted ∨ phase = .inProgress
+    -- Phase 23d-5: applyActionKind .taskTrade advances taskProgress by +1.
+    -- So the post-state's taskProgress differs from the pre-state's,
+    -- hence the post-state is not s.
     intro heq
-    have hpost : (applyActionKind .taskTrade s).taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.complete := by
+    have hpost : (applyActionKind .taskTrade s).taskProgress
+                  = s.taskProgress + 1 := by
       simp [applyActionKind]
-    have hpre' : s.taskLifecyclePhase
-                  = TaskLifecyclePhase.TaskLifecyclePhase.complete := by
+    have hpre' : s.taskProgress = s.taskProgress + 1 := by
       rw [heq] at hpost; exact hpost
-    cases hfires with
-    | inl h => rw [h] at hpre'; cases hpre'
-    | inr h => rw [h] at hpre'; cases hpre'
+    exact Nat.succ_ne_self _ hpre'.symm
   | acceptTask =>
     left
     have hcs : cycleStep s = applyActionKind .acceptTask s := by
