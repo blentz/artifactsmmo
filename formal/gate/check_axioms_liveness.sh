@@ -25,8 +25,8 @@
 #   * LIV-003b-A2: inProgress_decides_within_threshold        | GRADUATED TO THEOREM Phase 23d-4 (was axiom in 23d-1)  | n/a
 #   * LIV-003c-A1: taskPoolFinite                             | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
 #   * LIV-003c-A1: taskPoolFinite_pos                         | spec: /v3/my/{name}/action/task/new (finite pool)    | approved 2026-06-01
-#   * LIV-003c-A2: accept_cancel_loop_bound                   | spec: game_data.task_codes + StuckDetector safety mirror | approved 2026-06-01
-#   * LIV-003-bridge: lifecycle_progress_from_bounds          | composition residual (axiom → theorem when full sample_count gate is modelled) | approved 2026-06-01
+#   * LIV-003c-A2: accept_cancel_loop_bound                   | DELETED 2026-06-03 (Item 1g-C) — unused in any proof
+#   * LIV-003-bridge: lifecycle_progress_from_bounds          | DISCHARGED 2026-06-03 (Item 1g-B2) — now THEOREM lifecycle_progress_from_bounds_proven in LifecycleBound7
 #
 # New entries here require the same Phase-19a discipline: docstring header
 # `-- AXIOM-ID: <id> | spec: <section> | approved: <date>` in the source.
@@ -48,7 +48,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."   # formal/
 . "$HOME/.elan/env" 2>/dev/null || true
 
-ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos|accept_cancel_loop_bound|lifecycle_progress_from_bounds)'
+ALLOWED_RE='(propext|Classical\.choice|Quot\.sound|xpToNextLevel|xpToNextLevel_pos)'
 
 OUT_RAW="$(lake env lean Formal/LivenessAudit.lean 2>&1)"
 echo "$OUT_RAW"
@@ -71,8 +71,8 @@ MANIFEST="gate/liveness_axioms.manifest"
   echo "#              Formal.Liveness.LIV003Decomposition.lowYieldSampleThreshold(_pos) [LIV-003b],"
   echo "#              (LIV-003b-A2 inProgress_decides_within_threshold GRADUATED TO THEOREM in Phase 23d-4)"
   echo "#              Formal.Liveness.LIV003Decomposition.taskPoolFinite(_pos) [LIV-003c],"
-  echo "#              Formal.Liveness.LIV003Decomposition.accept_cancel_loop_bound [LIV-003c],"
-  echo "#              Formal.Liveness.LIV003Decomposition.lifecycle_progress_from_bounds [LIV-003-bridge]}"
+  echo "#              (LIV-003c-A2 accept_cancel_loop_bound DELETED in Item 1g-C)"
+  echo "#              (LIV-003-bridge lifecycle_progress_from_bounds DISCHARGED as THEOREM in Item 1g-B2)}"
   echo "$OUT" | grep -E 'depends on axioms|does not depend on any axioms' || true
 } > "$MANIFEST"
 echo "wrote $MANIFEST"

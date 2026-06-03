@@ -1,5 +1,6 @@
 import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.LIV003Decomposition
+import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.CycleStep
 import Formal.Liveness.Measure
 import Formal.Liveness.ProductionLadder
@@ -72,24 +73,6 @@ structure GlobalInvariants (s : State) : Prop where
       productionLadder (cycleStepN k s) = some .bankUnlock
       ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel
 
-/-! ## cycleStepN composition -/
-
-/-- Composition law for `cycleStepN`. Induction on `m` with `s` generalized
-    is the natural direction for `cycleStepN_succ` (which unfolds from
-    the outside). -/
-theorem cycleStepN_add (m n : Nat) (s : State) :
-    cycleStepN (m + n) s = cycleStepN n (cycleStepN m s) := by
-  induction m generalizing s with
-  | zero =>
-    show cycleStepN (0 + n) s = cycleStepN n (cycleStepN 0 s)
-    rw [cycleStepN_zero, Nat.zero_add]
-  | succ j ih =>
-    show cycleStepN ((j + 1) + n) s = cycleStepN n (cycleStepN (j + 1) s)
-    rw [show (j + 1) + n = (j + n) + 1 from by omega]
-    rw [cycleStepN_succ (j + n) s]
-    rw [cycleStepN_succ j s]
-    exact ih (cycleStep s)
-
 /-! ## GlobalInvariants preservation -/
 
 /-- If `GlobalInvariants` holds at `s`, it also holds at `cycleStepN k s`
@@ -134,7 +117,19 @@ theorem globalInvariants_step (s : State) (m : Nat)
 theorem level_advances_once (s : State)
     (hlvl : s.level < 50) (h : GlobalInvariants s) :
     ∃ k, (cycleStepN k s).level > s.level := by
-  exact cumulative_progress_under_no_wait s hlvl h.hnowait h.hex h.hbe h.hperc h.hfightFires
+  -- Item 1g-C: route through the PROVEN theorem in LifecycleBound7,
+  -- bypassing the (now-deletable) cumulative_progress_under_no_wait
+  -- wrapper that referenced the lifecycle_progress_from_bounds axiom.
+  apply Formal.Liveness.LifecycleBound7.lifecycle_progress_from_bounds_proven
+        s cycleStepN
+  · intro n s'; exact cycleStepN_succ n s'
+  · intro s'; exact cycleStepN_zero s'
+  · exact hlvl
+  · exact h.hnowait
+  · exact h.hex
+  · exact h.hbe
+  · exact h.hperc
+  · exact h.hfightFires
 
 /-! ## Level-50 reachability -/
 
