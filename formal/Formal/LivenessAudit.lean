@@ -38,6 +38,7 @@ import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
+import Formal.Liveness.LifecycleBound3
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -266,3 +267,11 @@ open Formal.Liveness.LifecycleBound2
 #print axioms bounded_plan_reaches_complete
 #print axioms bounded_plan_within_pool
 #print axioms recipe_chain_bounded
+
+-- Item 1e: LifecycleBound3 — K+1-step plan grants +10 xp via completeTask.
+-- Structural composition piece for level-advance argument.
+open Formal.Liveness.LifecycleBound3
+#print axioms bounded_plan_plus_complete_grants_xp
+#print axioms feasible_task_grants_xp
+open Formal.Liveness.LIV003Decomposition
+#print axioms lifecycle_progress_from_bounds_step
