@@ -527,6 +527,17 @@ axiom lifecycle_progress_from_bounds :
                 (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
                 (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
                 ∧ (cycleStepN k s).level < 50) →
+      -- Item 1g-B cascade (post-XP=0 fix 7ad19e5): without this
+      -- hypothesis the axiom is UNSOUND (see
+      -- docs/PLAN_item_1g_b_unsoundness.md for the concrete
+      -- counter-state). Under XP=0 only .fight rollover can advance
+      -- level, so the trajectory must contain unbounded .fight
+      -- firings. Production loops fire .fight whenever a bank-unlock
+      -- or reach-unlock goal is active; formal mirror requires this
+      -- directly.
+      (∀ N, ∃ k ≥ N,
+        productionLadder (cycleStepN k s) = some .bankUnlock
+        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) →
       ∃ k, (cycleStepN k s).level > s.level
 
 end Formal.Liveness.LIV003Decomposition

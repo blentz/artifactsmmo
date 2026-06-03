@@ -63,6 +63,14 @@ structure GlobalInvariants (s : State) : Prop where
                     (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
                     (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
                     ∧ (cycleStepN k s).level < 50
+  -- Item 1g-B cascade: post-XP=0 fix, trajectory must contain
+  -- unbounded .fight firings (via .bankUnlock or .reachUnlockLevel)
+  -- for level advance to be possible at all. Production observes
+  -- this: the planner ALWAYS pursues bank-unlock and skill-level
+  -- goals when active.
+  hfightFires : ∀ N, ∃ k ≥ N,
+      productionLadder (cycleStepN k s) = some .bankUnlock
+      ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel
 
 /-! ## cycleStepN composition -/
 
@@ -89,7 +97,7 @@ theorem cycleStepN_add (m n : Nat) (s : State) :
 theorem globalInvariants_step (s : State) (m : Nat)
     (h : GlobalInvariants s) :
     GlobalInvariants (cycleStepN m s) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · intro k
     -- productionLadder (cycleStepN k (cycleStepN m s)) ≠ some .wait
     rw [← cycleStepN_add m k s]
@@ -106,6 +114,18 @@ theorem globalInvariants_step (s : State) (m : Nat)
     rw [← cycleStepN_add m k s] at hk
     rw [← cycleStepN_add m k s]
     exact h.hperc (m + k) k' hk hk'
+  · -- Item 1g-B cascade: re-establish hfightFires via prefix shift.
+    -- ∀ N, ∃ k ≥ N, fight fires at cycleStepN k (cycleStepN m s).
+    -- Use h.hfightFires (N + m) to get j ≥ N+m. Set k := j - m.
+    intro N
+    obtain ⟨j, hjN, hjFire⟩ := h.hfightFires (N + m)
+    refine ⟨j - m, by omega, ?_⟩
+    have hreindex : cycleStepN (j - m) (cycleStepN m s) = cycleStepN j s := by
+      rw [← cycleStepN_add m (j - m) s]
+      congr 1
+      omega
+    rw [hreindex]
+    exact hjFire
 
 /-! ## Single-step level advance -/
 
@@ -114,7 +134,7 @@ theorem globalInvariants_step (s : State) (m : Nat)
 theorem level_advances_once (s : State)
     (hlvl : s.level < 50) (h : GlobalInvariants s) :
     ∃ k, (cycleStepN k s).level > s.level := by
-  exact cumulative_progress_under_no_wait s hlvl h.hnowait h.hex h.hbe h.hperc
+  exact cumulative_progress_under_no_wait s hlvl h.hnowait h.hex h.hbe h.hperc h.hfightFires
 
 /-! ## Level-50 reachability -/
 
