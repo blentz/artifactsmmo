@@ -192,9 +192,10 @@ open Formal.Liveness.LIV003Decomposition
 #print axioms inProgress_decides_within_threshold
 #print axioms taskPoolFinite
 #print axioms taskPoolFinite_pos
-#print axioms accept_cancel_loop_bound
-#print axioms lifecycle_progress_from_bounds
-#print axioms cumulative_progress_under_no_wait
+-- Item 1g-C: accept_cancel_loop_bound + lifecycle_progress_from_bounds
+-- axioms DELETED; the bridge axiom discharged as
+-- lifecycle_progress_from_bounds_proven (LifecycleBound7).
+-- cumulative_progress_under_no_wait also deleted (axiom-using wrapper).
 #print axioms accepted_state_decides_cancel_or_pursue
 
 -- Phase 23d-3 — LIV-003a STRONG FORM: feasibility-grounded bridge.

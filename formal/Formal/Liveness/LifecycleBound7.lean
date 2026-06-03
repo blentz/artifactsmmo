@@ -1,6 +1,5 @@
 import Formal.Liveness.LIV003Decomposition
 import Formal.Liveness.LifecycleBound6
-import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.Plan
 import Formal.Liveness.PlanAction
 import Formal.Liveness.Measure
@@ -45,7 +44,6 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
 open Formal.Liveness.LifecycleBound6
-open Formal.Liveness.LevelFiftyReachable
 open Formal.Liveness.ApplyXpLevelPreservation
 open Formal.Liveness.CycleStepCharacterization
 open Formal.Liveness.XpMonotonicity

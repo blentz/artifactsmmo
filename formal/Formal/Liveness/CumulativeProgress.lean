@@ -114,6 +114,22 @@ noncomputable def cycleStepN : Nat → State → State
 theorem cycleStepN_succ (n : Nat) (s : State) :
     cycleStepN (n+1) s = cycleStepN n (cycleStep s) := rfl
 
+/-- Composition law for `cycleStepN`. Moved here (Item 1g-C) from
+    `LevelFiftyReachable` to let `XpMonotonicity`/`LifecycleBound7`
+    consume it without pulling in the rest of LevelFifty. -/
+theorem cycleStepN_add (m n : Nat) (s : State) :
+    cycleStepN (m + n) s = cycleStepN n (cycleStepN m s) := by
+  induction m generalizing s with
+  | zero =>
+    show cycleStepN (0 + n) s = cycleStepN n (cycleStepN 0 s)
+    rw [cycleStepN_zero, Nat.zero_add]
+  | succ j ih =>
+    show cycleStepN ((j + 1) + n) s = cycleStepN n (cycleStepN (j + 1) s)
+    rw [show (j + 1) + n = (j + n) + 1 from by omega]
+    rw [cycleStepN_succ (j + n) s]
+    rw [cycleStepN_succ j s]
+    exact ih (cycleStep s)
+
 /-! ## Weaker headline — Phase 23a, kept intact -/
 
 /-- WEAKER Tier-4 headline shipped in Phase 23a.
@@ -1198,39 +1214,10 @@ theorem accepted_state_decides_cancel_or_pursue (s : State)
     taskCancelFires s = true ∨ pursueTaskFires s = true :=
   taskAccepted_implies_cancelOrPursueFires s h
 
-theorem cumulative_progress_under_no_wait
-    (s : State)
-    (hlvl : s.level < 50)
-    (hnowait : ∀ k, productionLadder (cycleStepN k s) ≠ some .wait)
-    (hex : ∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
-                (cycleStepN k s).taskExchangeMinCoins > 0)
-    (hbe : ∀ k, productionLadder (cycleStepN k s) = some .bankExpand →
-                (cycleStepN k s).nextExpansionCost > 0)
-    (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
-                      (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
-                      (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
-                      ∧ (cycleStepN k s).level < 50)
-    -- Item 1g-B cascade: post-XP=0 fix, lifecycle means cannot grant
-    -- level — only .fight rollover can. Trajectory must contain
-    -- unbounded .fight firings. See docs/PLAN_item_1g_b_unsoundness.md.
-    (hfightFires : ∀ N, ∃ k ≥ N,
-        productionLadder (cycleStepN k s) = some .bankUnlock
-        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) :
-    ∃ k, (cycleStepN k s).level > s.level := by
-  -- Phase 23d-1: invoke the decomposed bridge axiom
-  -- (`lifecycle_progress_from_bounds`) instead of the deleted fat axiom.
-  -- Item 1g-B2: the axiom is now PROVEN as
-  -- `Formal.Liveness.LifecycleBound7.lifecycle_progress_from_bounds_proven`.
-  -- Consumer migration deferred to 1g-C (requires import cycle avoidance —
-  -- this theorem moves to LifecycleBound7 alongside the proof).
-  apply lifecycle_progress_from_bounds s cycleStepN
-  · intro n s'; exact cycleStepN_succ n s'
-  · intro s'; exact cycleStepN_zero s'
-  · exact hlvl
-  · exact hnowait
-  · exact hex
-  · exact hbe
-  · exact hperc
-  · exact hfightFires
+-- Item 1g-C: cumulative_progress_under_no_wait DELETED. Its body
+-- depended on the now-deleted lifecycle_progress_from_bounds AXIOM.
+-- Downstream consumers (LevelFiftyReachable.level_advances_once)
+-- now call Formal.Liveness.LifecycleBound7.lifecycle_progress_from_bounds_proven
+-- directly.
 
 end Formal.Liveness.CumulativeProgress

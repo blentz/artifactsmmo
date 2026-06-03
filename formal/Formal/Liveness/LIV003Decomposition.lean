@@ -429,32 +429,10 @@ def taskPoolFinite : Nat := 1000
 /-- LIV-003c positivity — THEOREM (was axiom). Trivial by `decide`. -/
 theorem taskPoolFinite_pos : taskPoolFinite > 0 := by decide
 
-/-- LIV-003c (Phase 23d-1, user-approved 2026-06-01).
-
-    **AXIOM-ID**: LIV-003c-A2
-    **Spec**: `game_data.task_codes` pool finiteness + the
-              static-stuck-detector accept→cancel loop guard in
-              `Formal.StuckDetector` (already proven SAFETY-side)
-    **Date**: 2026-06-01
-
-    Along any trajectory of `cycleStep`, the number of consecutive
-    accept→cancel pairs is at most `taskPoolFinite`. Captures the
-    production observation that each cancel removes one task code from
-    the bot's effective rotation until pool refresh; after at most
-    `taskPoolFinite` pairs, the bot accepts a task it does NOT cancel
-    (the task either rides to `.complete` or, if structurally
-    infeasible, is detected by `Formal.StuckDetector`'s safety mirror).
-
-    This axiom is *narrower* than the old `cumulative_progress_
-    lifecycle_axiom`: it only asserts a count bound on cancel pairs,
-    not a structural level-progress claim. -/
-axiom accept_cancel_loop_bound :
-    ∀ (s : State) (cycleStepN : Nat → State → State),
-      (∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s')) →
-      cycleStepN 0 s = s →
-      ∃ K ≤ taskPoolFinite,
-        ∃ j ≤ (K + 1) * (lowYieldSampleThreshold + 1),
-          (cycleStepN j s).taskLifecyclePhase = .complete
+-- Item 1g-C: accept_cancel_loop_bound axiom DELETED.
+-- Was only referenced in docstrings; no proof depended on it. The
+-- now-discharged lifecycle_progress_from_bounds_proven
+-- (LifecycleBound7.lean) supersedes the structural intent.
 
 /-! ## Composition residual — bridge to Phase-23b restricted form
 
@@ -499,49 +477,11 @@ theorem lifecycle_progress_from_bounds_step
   · right
     rw [if_neg h]
 
-/-- LIV-003-bridge (Phase 23d-1, Item 1e: STILL AXIOM but with
-    structural building blocks now available).
-
-    The full level-advance composition is provable via:
-      1. `accept_cancel_loop_bound` → ∃ j, phase(cycleStepN j) = .complete.
-      2. `lifecycle_progress_from_bounds_step` → +10 xp per .complete.
-      3. Inductive xp accumulation until xp ≥ xpToNextLevel level.
-      4. Phase 21c .fight xp/level rollover (in applyActionKind .fight).
-
-    Closing this fully requires a multi-step xp accumulation lemma
-    that's intricate to inline cleanly. Item 1e ships the step lemma
-    (lifecycle_progress_from_bounds_step above) which is the
-    non-trivial structural piece; the axiom-shape preserved for now
-    is the residual COMPOSITION, not the underlying claim. -/
-axiom lifecycle_progress_from_bounds :
-    ∀ (s : State) (cycleStepN : Nat → State → State),
-      (∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s')) →
-      -- Item 1g-B2 strengthening: base condition at EVERY state, not
-      -- just `s`. Required to inductively pin down `cycleStepN n s` via
-      -- the recurrence. Every concrete consumer satisfies this (the
-      -- canonical iterator has `cycleStepN 0 = id`).
-      (∀ s', cycleStepN 0 s' = s') →
-      s.level < 50 →
-      (∀ k, productionLadder (cycleStepN k s) ≠ some .wait) →
-      (∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
-            (cycleStepN k s).taskExchangeMinCoins > 0) →
-      (∀ k, productionLadder (cycleStepN k s) = some .bankExpand →
-            (cycleStepN k s).nextExpansionCost > 0) →
-      (∀ k k', productionLadder (cycleStepN k s) = some k' →
-                (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
-                (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
-                ∧ (cycleStepN k s).level < 50) →
-      -- Item 1g-B cascade (post-XP=0 fix 7ad19e5): without this
-      -- hypothesis the axiom is UNSOUND (see
-      -- docs/PLAN_item_1g_b_unsoundness.md for the concrete
-      -- counter-state). Under XP=0 only .fight rollover can advance
-      -- level, so the trajectory must contain unbounded .fight
-      -- firings. Production loops fire .fight whenever a bank-unlock
-      -- or reach-unlock goal is active; formal mirror requires this
-      -- directly.
-      (∀ N, ∃ k ≥ N,
-        productionLadder (cycleStepN k s) = some .bankUnlock
-        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) →
-      ∃ k, (cycleStepN k s).level > s.level
+-- Item 1g-C: lifecycle_progress_from_bounds axiom DELETED.
+-- Discharged as THEOREM in
+-- `Formal.Liveness.LifecycleBound7.lifecycle_progress_from_bounds_proven`
+-- under LIV-001 + Classical.choice. The hypothesis strengthening
+-- introduced in 1g-B (hfightFires forcing unbounded .fight events)
+-- is preserved by the proven theorem's signature.
 
 end Formal.Liveness.LIV003Decomposition

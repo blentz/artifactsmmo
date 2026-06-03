@@ -5,7 +5,6 @@ import Formal.Liveness.CycleStep
 import Formal.Liveness.ApplyXpLevelPreservation
 import Formal.Liveness.CycleStepCharacterization
 import Formal.Liveness.LifecycleBound6
-import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.PlanExists
 import Formal.Liveness.CumulativeProgress
 import Mathlib.Tactic
@@ -35,7 +34,6 @@ open Formal.Liveness.CycleStep
 open Formal.Liveness.ApplyXpLevelPreservation
 open Formal.Liveness.CycleStepCharacterization
 open Formal.Liveness.LifecycleBound6
-open Formal.Liveness.LevelFiftyReachable
 open Formal.Liveness.PlanExists
 open Formal.Liveness.CumulativeProgress
 
