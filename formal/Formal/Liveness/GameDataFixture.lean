@@ -2239,6 +2239,10 @@ noncomputable def fixtureFreshState : State where
   actionsAttempted := 0
   craftableSlots := 0
   taskFeasibleProjected := true
+  -- Item 1g-A1: task pool tracking. Default empty for legacy fixtures
+  -- (no pool-depletion reasoning); 1g-A2 populates from allRecipes.
+  taskPool := []
+  taskCodesSeen := []
 
 /-- **Live-fixture items-task completable**.
 

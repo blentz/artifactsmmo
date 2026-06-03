@@ -206,6 +206,23 @@ structure State where
       when this is true; otherwise taskCancelFires would trigger early
       and re-enter the .none → .accepted cycle indefinitely. -/
   taskFeasibleProjected : Bool
+  /-- Item 1g-A1: model the API's task-code pool. The server's
+      `/v3/my/tasks/new` endpoint draws from a finite pool of distinct
+      codes (game_data.task_codes). `taskPool` records that pool's
+      contents from the Lean side.
+
+      Defaults to the empty list in legacy fixtures — existing
+      proofs that don't reason about pool depletion remain green.
+      The discharge of `accept_cancel_loop_bound` (Item 1g-A2) requires
+      callers to populate `taskPool` from `GameDataFixture`. -/
+  taskPool : List String
+  /-- Item 1g-A1: codes the bot has already cancelled. Each
+      `.taskCancel` apply pushes the current `taskCode` onto this list
+      (subject to extension in Item 1g-A2). Pigeonhole: when
+      `taskCodesSeen.length ≥ taskPool.length`, the next `.acceptTask`
+      cannot pick a fresh code and either rides to `.complete` or the
+      pool refresh applies. -/
+  taskCodesSeen : List String
   deriving Repr
 
 namespace State
