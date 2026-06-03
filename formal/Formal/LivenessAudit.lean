@@ -40,6 +40,7 @@ import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
 import Formal.Liveness.LifecycleBound4
+import Formal.Liveness.LifecycleBound6
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -311,3 +312,7 @@ open Formal.Liveness.TaskPoolTrajectory
 #print axioms cycleStep_seen_length_le_succ
 #print axioms cycleStepN_pool_invariant
 #print axioms cycleStepN_seen_length_le_add
+
+-- Item 1g-B2: level monotonicity across iterated cycleStep.
+open Formal.Liveness.LifecycleBound6
+#print axioms cycleStepN_level_ge
