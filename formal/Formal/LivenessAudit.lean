@@ -42,6 +42,7 @@ import Formal.Liveness.LifecycleBound3
 import Formal.Liveness.LifecycleBound4
 import Formal.Liveness.LifecycleBound6
 import Formal.Liveness.ApplyXpLevelPreservation
+import Formal.Liveness.CycleStepCharacterization
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -324,3 +325,10 @@ open Formal.Liveness.ApplyXpLevelPreservation
 #print axioms applyActionKind_xp_preserved_except_fight_completeTask
 #print axioms completeTask_level_preserved_when_no_rollover
 #print axioms completeTask_xp_preserved_when_no_rollover
+
+-- Item 1g-B2 step2: cycleStep characterization per ladder slot.
+open Formal.Liveness.CycleStepCharacterization
+#print axioms cycleStep_eq_fight_when_bankUnlock
+#print axioms cycleStep_eq_fight_when_reachUnlockLevel
+#print axioms cycleStep_eq_fight_when_fightFires
+#print axioms cycleStep_xp_level_preserved_when_no_fight_no_complete
