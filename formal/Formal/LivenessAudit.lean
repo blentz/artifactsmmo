@@ -40,6 +40,7 @@ import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
 import Formal.Liveness.LifecycleBound4
+import Formal.Liveness.TaskPoolSemantics
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -284,3 +285,16 @@ open Formal.Liveness.LifecycleBound4
 #print axioms lifecycle_progress_strong
 #print axioms bounded_plan_grants_level_when_threshold
 #print axioms level_advance_plan_exists_when_xp_threshold_met
+
+-- Item 1g-A2: TaskPoolSemantics local lemmas. Behavioural basis for the
+-- pigeonhole bound on accept-cancel cycles (∀ trajectory, cancel count
+-- bounded by |taskPool|). The trajectory-level theorem ships in a
+-- follow-up sub-item.
+open Formal.Liveness.TaskPoolSemantics
+#print axioms acceptTask_preserves_seen
+#print axioms acceptTask_preserves_pool
+#print axioms acceptTask_taskCode_eq
+#print axioms taskCancel_seen_cons
+#print axioms taskCancel_seen_none
+#print axioms taskCancel_preserves_pool
+#print axioms taskCancel_seen_length_le_succ
