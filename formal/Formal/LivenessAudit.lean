@@ -43,6 +43,7 @@ import Formal.Liveness.LifecycleBound4
 import Formal.Liveness.LifecycleBound6
 import Formal.Liveness.ApplyXpLevelPreservation
 import Formal.Liveness.CycleStepCharacterization
+import Formal.Liveness.XpMonotonicity
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -332,3 +333,12 @@ open Formal.Liveness.CycleStepCharacterization
 #print axioms cycleStep_eq_fight_when_reachUnlockLevel
 #print axioms cycleStep_eq_fight_when_fightFires
 #print axioms cycleStep_xp_level_preserved_when_no_fight_no_complete
+
+-- Item 1g-B2 step3: xp monotonicity under constant level.
+open Formal.Liveness.XpMonotonicity
+#print axioms fight_xp_eq_add_ten_when_level_eq
+#print axioms completeTask_xp_eq_when_level_eq
+#print axioms applyActionKind_xp_ge_when_level_eq
+#print axioms cycleStep_xp_ge_when_level_eq
+#print axioms cycleStepN_xp_ge_when_level_eq_throughout
+#print axioms cycleStepN_succ_outer

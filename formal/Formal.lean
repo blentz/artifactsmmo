@@ -73,3 +73,4 @@ import Formal.Liveness.TaskPoolTrajectory
 import Formal.Liveness.LifecycleBound6
 import Formal.Liveness.ApplyXpLevelPreservation
 import Formal.Liveness.CycleStepCharacterization
+import Formal.Liveness.XpMonotonicity
