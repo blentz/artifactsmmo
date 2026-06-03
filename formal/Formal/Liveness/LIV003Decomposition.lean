@@ -140,8 +140,11 @@ open Formal.Liveness.PlanAction
 theorem taskAccepted_implies_cancelOrPursueFires
     (s : State) (h : s.taskLifecyclePhase = .accepted) :
     taskCancelFires s = true ∨ pursueTaskFires s = true := by
-  left
-  unfold taskCancelFires
+  -- Item 1d: refined taskCancelFires needs !taskFeasibleProjected too,
+  -- which isn't guaranteed here. pursueTaskFires has no such gate, so
+  -- choose the right disjunct.
+  right
+  unfold pursueTaskFires
   rw [h]
   simp
 
@@ -152,8 +155,8 @@ theorem taskAccepted_implies_cancelOrPursueFires
 theorem taskInProgress_implies_cancelOrPursueFires
     (s : State) (h : s.taskLifecyclePhase = .inProgress) :
     taskCancelFires s = true ∨ pursueTaskFires s = true := by
-  left
-  unfold taskCancelFires
+  right
+  unfold pursueTaskFires
   rw [h]
   simp
 

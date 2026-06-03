@@ -191,8 +191,11 @@ noncomputable def lowYieldCancelFires (s : State) : Bool :=
     condition. Lifecycle-phase mutual exclusion with `acceptTask`
     (which requires `.none`) is preserved by construction. -/
 def taskCancelFires (s : State) : Bool :=
-  decide (s.taskLifecyclePhase = .accepted)
-  || decide (s.taskLifecyclePhase = .inProgress)
+  (decide (s.taskLifecyclePhase = .accepted)
+   || decide (s.taskLifecyclePhase = .inProgress))
+  && !s.taskFeasibleProjected
+  -- Item 1d: refined to gate on `taskFeasibleProjected`. Mirrors
+  -- production task_decision == PIVOT semantics.
 
 /-- OBJECTIVE_STEP. Opaque Bool — the StrategyArbiter's objective tier
     yields a plannable StepGoal iff this is true. -/

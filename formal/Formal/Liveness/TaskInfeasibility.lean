@@ -174,6 +174,11 @@ inductive TaskInfeasibilityWitness where
 def taskInfeasible (s : State) : Prop :=
   (∃ _w : TaskInfeasibilityWitness, True)
   ∧ (s.taskLifecyclePhase = .accepted ∨ s.taskLifecyclePhase = .inProgress)
+  ∧ s.taskFeasibleProjected = false
+  -- Item 1d: refined definition includes the feasibility flag. An
+  -- infeasible task IS one whose taskFeasibleProjected is false
+  -- (production: task_decision == PIVOT). Mirrors the refined
+  -- taskCancelFires definition.
 
 /-! ## Theorem A — Structural bridge to `taskCancelFires` -/
 
@@ -202,11 +207,11 @@ def taskInfeasible (s : State) : Prop :=
 theorem taskInfeasible_implies_taskCancelFires
     (s : State) (h : taskInfeasible s) :
     taskCancelFires s = true := by
-  obtain ⟨_, hPhase⟩ := h
+  obtain ⟨_, hPhase, hFeas⟩ := h
   unfold taskCancelFires
   cases hPhase with
-  | inl ha => rw [ha]; simp
-  | inr hi => rw [hi]; simp
+  | inl ha => rw [ha, hFeas]; simp
+  | inr hi => rw [hi, hFeas]; simp
 
 /-! ## Theorem B — Decision-level bridge
 
@@ -345,7 +350,7 @@ theorem taskInfeasible_implies_taskCancelFires_headline
 theorem taskInfeasible_implies_pursueTaskFires
     (s : State) (h : taskInfeasible s) :
     pursueTaskFires s = true := by
-  obtain ⟨_, hPhase⟩ := h
+  obtain ⟨_, hPhase, _⟩ := h
   unfold pursueTaskFires
   cases hPhase with
   | inl ha => rw [ha]; simp
