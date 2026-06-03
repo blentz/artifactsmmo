@@ -41,6 +41,7 @@ import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
 import Formal.Liveness.LifecycleBound4
 import Formal.Liveness.TaskPoolSemantics
+import Formal.Liveness.TaskPoolTrajectory
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -298,3 +299,15 @@ open Formal.Liveness.TaskPoolSemantics
 #print axioms taskCancel_seen_none
 #print axioms taskCancel_preserves_pool
 #print axioms taskCancel_seen_length_le_succ
+
+-- Item 1g-A3: trajectory-level pool/seen lemmas. Per-action + cycleStep
+-- monotonicity and length bounds; iterated bounds on cycleStepN.
+open Formal.Liveness.TaskPoolTrajectory
+#print axioms applyActionKind_pool_invariant
+#print axioms applyActionKind_seen_length_monotone
+#print axioms applyActionKind_seen_length_le_succ
+#print axioms cycleStep_pool_invariant
+#print axioms cycleStep_seen_length_monotone
+#print axioms cycleStep_seen_length_le_succ
+#print axioms cycleStepN_pool_invariant
+#print axioms cycleStepN_seen_length_le_add
