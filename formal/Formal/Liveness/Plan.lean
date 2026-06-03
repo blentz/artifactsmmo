@@ -170,7 +170,12 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- Phase 23c-3b: also sets `taskLifecyclePhase := .accepted` to match
   -- `deriveTaskLifecyclePhase (some "__pending__") 0 1 = .accepted`.
   | .acceptTask, s =>
-      { s with taskCode := some acceptTaskPlaceholderCode,
+      -- Item 1g-A2: pick the first code in `taskPool` not in
+      -- `taskCodesSeen`; fall back to the placeholder when none fresh
+      -- (legacy fixtures with empty pool keep the placeholder).
+      let fresh : Option String := s.taskPool.find? (fun c => decide (¬ (c ∈ s.taskCodesSeen)))
+      let newCode : String := fresh.getD acceptTaskPlaceholderCode
+      { s with taskCode := some newCode,
                taskTotal := 1,
                taskProgress := 0,
                taskLifecyclePhase := .accepted }
@@ -188,6 +193,14 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- Phase 21b: also covers `.lowYieldCancel` whose firing predicate
   -- reads `s.lowYieldCancelFires`.
   | .taskCancel, s =>
+      -- Item 1g-A2: push the cancelled code onto `taskCodesSeen` so the
+      -- pigeonhole bound (cancels ≤ |taskPool|) holds along any cycleStep
+      -- trajectory. When `taskCode = none` (cancel of an unaccepted task —
+      -- shouldn't happen via productionLadder but defensively handled),
+      -- leave the list unchanged.
+      let newSeen : List String := match s.taskCode with
+        | some c => c :: s.taskCodesSeen
+        | none => s.taskCodesSeen
       { s with taskCancelFires := false,
                lowYieldCancelFires := false,
                pursueTaskFires := false,
@@ -196,7 +209,8 @@ noncomputable def applyActionKind : ActionKind → State → State
                taskProgress := 0,
                taskLifecyclePhase := .none,
                -- Phase 23d-4: phase transitions to `.none` — reset counter.
-               actionsAttempted := 0 }
+               actionsAttempted := 0,
+               taskCodesSeen := newSeen }
   -- BuyBankExpansionAction.apply (bank_expansion.py:39-54): adds 20 slots
   -- to bank_capacity, deducts gold cost.
   | .buyBankExpansion, s =>
