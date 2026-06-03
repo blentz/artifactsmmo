@@ -266,25 +266,31 @@ axiom xpToNextLevel_pos : ∀ L, L < 50 → xpToNextLevel L > 0
 
 /-! ## LIV-002 — CompleteTask planner-side XP grant
 
-  LIV-002 (user-approved 2026-06-01)
+  LIV-002 (user-approved 2026-06-03 — value revised from 10 → 0)
 
   Planner-side projection: `CompleteTaskAction.apply` grants
-  `TASK_COMPLETE_XP_ESTIMATE = 10` xp per completion. This is a
-  STRUCTURAL planner-side constant (not an empirical server claim),
-  provable from
-    `src/artifactsmmo_cli/ai/actions/complete_task.py:20`
-    (`TASK_COMPLETE_XP_ESTIMATE: int = 10`) and `apply` line 58
-    (`xp=state.xp + TASK_COMPLETE_XP_ESTIMATE`).
-  Production reference: 3c9a0e7 + cf43b35.
+  `TASK_COMPLETE_XP_ESTIMATE = 0` xp per completion. The server
+  endpoint `/action/task/complete` returns a `RewardsSchema` whose
+  fields are `items` and `gold` only — there is NO XP field. Character
+  XP changes during the per-cycle progress actions (fight/gather),
+  not at turn-in. The 2026-06-01 value (10) was an empirical guess
+  that has since been falsified by direct observation; this `def` is
+  the corrected planner constant.
 
-  NOT openapi-grounded: `rewards_schema.py` has no XP field. The
-  server's actual XP delta comes via `CharacterSchema`; the planner
-  estimate is conservative. This `def` captures the planner's
-  deterministic projection. NO `axiom` keyword introduced — the
-  "axiom-feeling" is the empirical commitment that the Lean constant
-  `10` matches `TASK_COMPLETE_XP_ESTIMATE` in production. A later diff
-  harness must assert the Python constant equals 10. -/
-def taskCompleteXpEstimate : Nat := 10
+  OpenAPI citation:
+    `artifactsmmo-api-client/artifactsmmo_api_client/models/rewards_schema.py`
+    — `RewardsSchema.{items: list[SimpleItemSchema], gold: int}`.
+  Production reference:
+    `src/artifactsmmo_cli/ai/actions/complete_task.py` —
+    `TASK_COMPLETE_XP_ESTIMATE: int = 0`.
+
+  Downstream proofs (`LIV003Decomposition.lifecycle_progress_from_bounds_step`,
+  `LifecycleBound3/4`) remain structurally correct: the xp-grant
+  disjunct now witnesses `xp = s.xp + 0`, and the rollover branch in
+  `Plan.applyActionKind .completeTask` becomes dead under LIV-001
+  (`xpToNextLevel L > 0` at `L < 50`, so `s.xp + 0 ≥ xpToNextLevel s.level`
+  cannot hold under the invariant `s.xp < xpToNextLevel s.level`). -/
+def taskCompleteXpEstimate : Nat := 0
 
 /-! ## Task lifecycle phase consistency
 

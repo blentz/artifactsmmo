@@ -285,11 +285,12 @@ def apply_action_kind_mirror(action: str, s: CycleState) -> CycleState:
     if action == "claimPendingItem":
         return dataclasses.replace(s, pending_items_nonempty=False)
     if action == "completeTask":
-        # Phase 23c-2a: CompleteTask grants TASK_COMPLETE_XP_ESTIMATE = 10
-        # XP per planner-side apply. Mirror the production constant.
+        # 2026-06-03: TASK_COMPLETE_XP_ESTIMATE revised 10 → 0. Server
+        # RewardsSchema = {items, gold} only; no XP field. XP unchanged
+        # on turn-in. Mirrors production complete_task.py.
         return dataclasses.replace(
             s, task_code=None, task_total=0, task_progress=0,
-            xp=s.xp + 10,
+            xp=s.xp,
         )
     if action == "acceptTask":
         return dataclasses.replace(

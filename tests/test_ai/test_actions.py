@@ -728,19 +728,21 @@ class TestCompleteTaskAction:
         assert new_state.task_total == 0
         assert new_state.task_progress == 0
         assert (new_state.x, new_state.y) == (1, 2)
-        # Planner-side XP projection: conservative +TASK_COMPLETE_XP_ESTIMATE.
+        # Server reward is items + gold only (RewardsSchema has no XP field);
+        # planner XP projection is 0 (TASK_COMPLETE_XP_ESTIMATE).
         assert new_state.xp == state.xp + TASK_COMPLETE_XP_ESTIMATE
+        assert TASK_COMPLETE_XP_ESTIMATE == 0
 
-    def test_apply_grants_exact_xp_estimate(self):
-        """Phase 23c-2a: CompleteTaskAction.apply must add exactly
-        TASK_COMPLETE_XP_ESTIMATE to xp (mirrors FightAction +10) so the
-        Lean LIV-002 lifecycle axiom has a concrete production witness."""
+    def test_apply_does_not_grant_xp(self):
+        """Server task completion grants items+gold only (RewardsSchema has
+        no XP field). The planner-side apply must mirror this — XP unchanged
+        on CompleteTaskAction. Lean ``taskCompleteXpEstimate`` def matches."""
         action = CompleteTaskAction(taskmaster_location=(1, 2))
         state = make_state(
             x=0, y=0, xp=12345, task_code="chicken", task_total=10, task_progress=10
         )
         new_state = action.apply(state, make_game_data())
-        assert new_state.xp - state.xp == TASK_COMPLETE_XP_ESTIMATE
+        assert new_state.xp == state.xp
 
     def test_cost_includes_distance(self):
         action = CompleteTaskAction(taskmaster_location=(1, 2))

@@ -17,18 +17,19 @@ from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-TASK_COMPLETE_XP_ESTIMATE: int = 10
-"""Conservative planner-side XP projection for CompleteTaskAction.
+TASK_COMPLETE_XP_ESTIMATE: int = 0
+"""Planner-side XP projection for CompleteTaskAction.
 
-The actual server reward is variable (depends on task type/difficulty/
-learning-store observations via :meth:`LearningStore.mean_task_reward_value`).
-This constant mirrors :class:`FightAction`'s ``+10`` per-action estimate so
-the planner can cost-balance task completion against grinding. The Lean
-LIV-002 axiom (Phase 23c-2b) formalises the empirical claim that turning in
-a finished task grants a strictly positive XP delta; this constant is the
-conservative lower bound that justifies the axiom on the production side.
-Real production behaviour (server-granted reward) is unaffected — only the
-planner-side projection in :meth:`CompleteTaskAction.apply` uses this value.
+Empirical observation (user-confirmed 2026-06-03): the server's
+``/action/task/complete`` endpoint rewards items + gold only (see
+``RewardsSchema`` in artifactsmmo-api-client/models/rewards_schema.py —
+fields are ``items`` and ``gold``, no XP field). Character XP is granted
+during the per-cycle progress actions (fight/gather/craft), not at
+turn-in. The planner-side projection is therefore 0.
+
+Kept as a named constant (rather than inlined) so the Lean
+``taskCompleteXpEstimate`` def in ``formal/Formal/Liveness/Measure.lean``
+retains a single citation point.
 """
 
 
