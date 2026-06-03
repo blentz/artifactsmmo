@@ -39,6 +39,7 @@ import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
+import Formal.Liveness.LifecycleBound4
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -271,7 +272,15 @@ open Formal.Liveness.LifecycleBound2
 -- Item 1e: LifecycleBound3 — K+1-step plan grants +10 xp via completeTask.
 -- Structural composition piece for level-advance argument.
 open Formal.Liveness.LifecycleBound3
-#print axioms bounded_plan_plus_complete_grants_xp
-#print axioms feasible_task_grants_xp
+#print axioms bounded_plan_plus_complete_grants_progress
+#print axioms feasible_task_grants_progress
 open Formal.Liveness.LIV003Decomposition
 #print axioms lifecycle_progress_from_bounds_step
+
+-- Item 1f: LifecycleBound4 — bounded plan grants level advance when xp
+-- threshold met. Composes Item 1c bounded plan + Item 1f rollover step.
+open Formal.Liveness.LifecycleBound4
+#print axioms completeTask_advances_level_when_threshold_met
+#print axioms lifecycle_progress_strong
+#print axioms bounded_plan_grants_level_when_threshold
+#print axioms level_advance_plan_exists_when_xp_threshold_met

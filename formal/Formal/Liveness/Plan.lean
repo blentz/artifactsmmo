@@ -147,11 +147,22 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- `taskCompleteXpEstimate = 10` xp (Phase 23c-3b, LIV-002). Lifecycle
   -- phase resets to `.none`.
   | .completeTask, s =>
+      -- Item 1f: production server rolls level on completeTask reward
+      -- (CompleteTaskAction.execute reads updated character schema with
+      -- post-reward level). Lean model now mirrors this with the same
+      -- rollover branch shape as .fight (Phase 21c).
+      let willLevel : Bool :=
+        decide (s.xp + taskCompleteXpEstimate ≥ xpToNextLevel s.level)
+        && decide (s.level < 50)
+      let newLevel : Nat := if willLevel then s.level + 1 else s.level
+      let newXp    : Nat := if willLevel then 0
+                            else s.xp + taskCompleteXpEstimate
       { s with taskCode := none,
                taskTotal := 0,
                taskProgress := 0,
                taskLifecyclePhase := .none,
-               xp := s.xp + taskCompleteXpEstimate,
+               level := newLevel,
+               xp := newXp,
                -- Phase 23d-4: phase transitions to `.none` — reset counter.
                actionsAttempted := 0 }
   -- AcceptTaskAction.apply (accept_task.py:32-42): assigns placeholder

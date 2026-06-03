@@ -50,23 +50,24 @@ open Formal.Liveness.LIV003Decomposition
 /-- For any state with feasible task in progress, the
     K+1 = (taskTotal - taskProgress) + 1 step plan (K `.taskTrade` +
     1 `.completeTask`) reaches a state with xp = s.xp + 10. -/
-theorem bounded_plan_plus_complete_grants_xp (s : State)
+theorem bounded_plan_plus_complete_grants_progress (s : State)
     (hCode : s.taskCode.isSome = true)
     (hTot : s.taskTotal > 0)
     (hLT : s.taskProgress < s.taskTotal)
-    (hFeas : s.taskFeasibleProjected = true) :
+    (_hFeas : s.taskFeasibleProjected = true) :
+    -- Item 1f: completeTask now rolls level under rollover threshold.
+    -- The K+1-step plan grants EITHER a level advance OR +10 xp.
     let K := s.taskTotal - s.taskProgress
     let plan : Plan := List.replicate K .taskTrade ++ [.completeTask]
-    (applyPlan plan s).xp = s.xp + taskCompleteXpEstimate := by
-  -- Step 1: apply K .taskTrade reaches phase = .complete.
+    (applyPlan plan s).level > s.level
+    ∨ (applyPlan plan s).xp = s.xp + taskCompleteXpEstimate := by
   set K := s.taskTotal - s.taskProgress with hKDef
   set tradePlan : Plan := List.replicate K .taskTrade with htDef
   have hTradePhase :
       (applyPlan tradePlan s).taskLifecyclePhase = TaskLifecyclePhase.complete :=
     Formal.Liveness.TaskCompleteReachable.taskComplete_reachable s hCode hTot hLT
-  -- Step 2: the trade chain preserves xp (taskTrade doesn't grant xp).
+  -- .taskTrade preserves xp.
   have hTradeXp : (applyPlan tradePlan s).xp = s.xp := by
-    -- Prove via induction: each .taskTrade preserves xp.
     have aux : ∀ n t, (applyPlan (List.replicate n .taskTrade) t).xp = t.xp := by
       intro n
       induction n with
@@ -77,30 +78,57 @@ theorem bounded_plan_plus_complete_grants_xp (s : State)
         rw [applyPlan_cons, ih]
         rfl
     rw [htDef, aux]
-  -- Step 3: apply .completeTask grants +10 xp (Item 1e step lemma).
+  -- .taskTrade preserves level.
+  have hTradeLevel : (applyPlan tradePlan s).level = s.level := by
+    have aux : ∀ n t, (applyPlan (List.replicate n .taskTrade) t).level = t.level := by
+      intro n
+      induction n with
+      | zero => intro t; simp [applyPlan]
+      | succ k ih =>
+        intro t
+        show (applyPlan (.taskTrade :: List.replicate k .taskTrade) t).level = t.level
+        rw [applyPlan_cons, ih]
+        rfl
+    rw [htDef, aux]
+  -- Append split.
   have hSplit : applyPlan (tradePlan ++ [.completeTask]) s
               = applyActionKind .completeTask (applyPlan tradePlan s) := by
     simp [applyPlan, List.foldl_append]
-  show (applyPlan (tradePlan ++ [.completeTask]) s).xp
-        = s.xp + taskCompleteXpEstimate
+  show (applyPlan (tradePlan ++ [.completeTask]) s).level > s.level
+       ∨ (applyPlan (tradePlan ++ [.completeTask]) s).xp
+          = s.xp + taskCompleteXpEstimate
   rw [hSplit]
-  rw [lifecycle_progress_from_bounds_step (applyPlan tradePlan s) hTradePhase]
-  rw [hTradeXp]
+  -- Use Item 1f step lemma (disjunction form).
+  have hStep := lifecycle_progress_from_bounds_step
+                  (applyPlan tradePlan s) hTradePhase
+  cases hStep with
+  | inl hLvl =>
+    left
+    rw [hTradeLevel] at hLvl
+    exact hLvl
+  | inr hXp =>
+    right
+    rw [hTradeXp] at hXp
+    exact hXp
 
 /-! ## Existential level-advance witness -/
 
 /-- Existence of a plan that grants xp. The follow-up xp/level rollover
     composition (via .fight rollover or cumulative completeTask grants
     until xp ≥ xpToNextLevel level) is left for Item 1f. -/
-theorem feasible_task_grants_xp (s : State)
+theorem feasible_task_grants_progress (s : State)
     (hCode : s.taskCode.isSome = true)
     (hTot : s.taskTotal > 0)
     (hLT : s.taskProgress < s.taskTotal)
     (hFeas : s.taskFeasibleProjected = true) :
     ∃ plan : Plan,
-      (applyPlan plan s).xp ≥ s.xp + taskCompleteXpEstimate := by
+      (applyPlan plan s).level > s.level
+      ∨ (applyPlan plan s).xp ≥ s.xp + taskCompleteXpEstimate := by
   refine ⟨List.replicate (s.taskTotal - s.taskProgress) .taskTrade
             ++ [.completeTask], ?_⟩
-  rw [bounded_plan_plus_complete_grants_xp s hCode hTot hLT hFeas]
+  have h := bounded_plan_plus_complete_grants_progress s hCode hTot hLT hFeas
+  cases h with
+  | inl hLvl => left; exact hLvl
+  | inr hXp => right; rw [hXp]
 
 end Formal.Liveness.LifecycleBound3

@@ -472,9 +472,32 @@ axiom accept_cancel_loop_bound :
 theorem lifecycle_progress_from_bounds_step
     (s : State)
     (_hCompletePhase : s.taskLifecyclePhase = .complete) :
-    (Formal.Liveness.Plan.applyActionKind .completeTask s).xp
-      = s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate := by
-  rfl
+    -- Item 1f: under the level-rollover semantics, completeTask either
+    -- advances xp by 10 (no rollover) OR advances level by 1 (xp reset
+    -- to 0). Both branches make "progress" in the lex (level, xp) sense.
+    (Formal.Liveness.Plan.applyActionKind .completeTask s).level > s.level
+    ∨ (Formal.Liveness.Plan.applyActionKind .completeTask s).xp
+        = s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate := by
+  -- Unfold the apply and case-split on willLevel.
+  show ((if (decide (s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate
+                       ≥ xpToNextLevel s.level)
+              && decide (s.level < 50))
+            then s.level + 1
+            else s.level) > s.level)
+       ∨ ((if (decide (s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate
+                       ≥ xpToNextLevel s.level)
+              && decide (s.level < 50))
+            then 0
+            else s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate)
+          = s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate)
+  by_cases h : (decide (s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate
+                          ≥ xpToNextLevel s.level)
+                && decide (s.level < 50)) = true
+  · left
+    rw [if_pos h]
+    omega
+  · right
+    rw [if_neg h]
 
 /-- LIV-003-bridge (Phase 23d-1, Item 1e: STILL AXIOM but with
     structural building blocks now available).
