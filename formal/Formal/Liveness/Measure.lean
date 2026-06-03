@@ -195,6 +195,17 @@ structure State where
       task progress; the Lean model abstracts these to a single
       counter advance per `.craft` step. -/
   craftableSlots : Nat
+  /-- Perimeter Item 1a: production's `task_decision == PIVOT` reads
+      LearningStore observations + skill XP curve confidence to decide
+      whether the current task is worth pursuing. The Lean model
+      abstracts this to a single Bool: `true` when production would
+      decide PURSUE (lifecycle progresses toward `.complete`), `false`
+      when production would decide PIVOT (lifecycle exits via cancel).
+      Required to prove `accept_cancel_loop_bound` structurally — the
+      .accepted → cycleStep transition only proceeds toward .complete
+      when this is true; otherwise taskCancelFires would trigger early
+      and re-enter the .none → .accepted cycle indefinitely. -/
+  taskFeasibleProjected : Bool
   deriving Repr
 
 namespace State

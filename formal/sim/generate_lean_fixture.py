@@ -195,6 +195,7 @@ def generate_lean(snapshot: dict) -> str:
         "  taskLifecyclePhase := .accepted",
         "  actionsAttempted := 0",
         "  craftableSlots := 0",
+        "  taskFeasibleProjected := true",
         "",
         "/-- **Live-fixture items-task completable**.",
         "",

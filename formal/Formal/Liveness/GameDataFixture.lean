@@ -2238,6 +2238,7 @@ noncomputable def fixtureFreshState : State where
   taskLifecyclePhase := .accepted
   actionsAttempted := 0
   craftableSlots := 0
+  taskFeasibleProjected := true
 
 /-- **Live-fixture items-task completable**.
 

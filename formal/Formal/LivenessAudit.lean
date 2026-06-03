@@ -36,6 +36,7 @@ import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
+import Formal.Liveness.LifecycleBound
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -247,3 +248,12 @@ open Formal.Liveness.LevelFiftyReachable
 #print axioms ai_reaches_level_fifty_aux
 #print axioms ai_reaches_level_fifty
 #print axioms ai_reaches_level_fifty_from_spawn
+
+-- Item 1a: LifecycleBound — refined taskCancelFires gated on
+-- taskFeasibleProjected. Lifecycle reaches .complete under feasibility.
+open Formal.Liveness.LifecycleBound
+#print axioms taskCancelFiresRefined_inactive_when_feasible
+#print axioms taskCancelFiresRefined_inactive_when_feasible_inProgress
+#print axioms taskTrade_preserves_feasible
+#print axioms replicate_taskTrade_preserves_feasible
+#print axioms lifecycle_reaches_complete_when_feasible

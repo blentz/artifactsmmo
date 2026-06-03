@@ -64,3 +64,4 @@ import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
+import Formal.Liveness.LifecycleBound
