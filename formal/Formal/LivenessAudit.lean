@@ -37,6 +37,7 @@ import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
+import Formal.Liveness.LifecycleBound2
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -257,3 +258,11 @@ open Formal.Liveness.LifecycleBound
 #print axioms taskTrade_preserves_feasible
 #print axioms replicate_taskTrade_preserves_feasible
 #print axioms lifecycle_reaches_complete_when_feasible
+
+-- Item 1c: LifecycleBound2 — bounded plan reaches .complete under
+-- feasibility. Structural witness for the original
+-- accept_cancel_loop_bound axiom's existential.
+open Formal.Liveness.LifecycleBound2
+#print axioms bounded_plan_reaches_complete
+#print axioms bounded_plan_within_pool
+#print axioms recipe_chain_bounded
