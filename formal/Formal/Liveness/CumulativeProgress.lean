@@ -1209,7 +1209,13 @@ theorem cumulative_progress_under_no_wait
     (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
                       (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
                       (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
-                      ∧ (cycleStepN k s).level < 50) :
+                      ∧ (cycleStepN k s).level < 50)
+    -- Item 1g-B cascade: post-XP=0 fix, lifecycle means cannot grant
+    -- level — only .fight rollover can. Trajectory must contain
+    -- unbounded .fight firings. See docs/PLAN_item_1g_b_unsoundness.md.
+    (hfightFires : ∀ N, ∃ k ≥ N,
+        productionLadder (cycleStepN k s) = some .bankUnlock
+        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) :
     ∃ k, (cycleStepN k s).level > s.level := by
   -- Phase 23d-1: invoke the decomposed bridge axiom
   -- (`lifecycle_progress_from_bounds`) instead of the deleted fat axiom.
@@ -1221,5 +1227,6 @@ theorem cumulative_progress_under_no_wait
   · exact hex
   · exact hbe
   · exact hperc
+  · exact hfightFires
 
 end Formal.Liveness.CumulativeProgress
