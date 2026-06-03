@@ -69,3 +69,4 @@ import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
 import Formal.Liveness.LifecycleBound4
 import Formal.Liveness.TaskPoolSemantics
+import Formal.Liveness.TaskPoolTrajectory
