@@ -51,22 +51,16 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.TaskLifecyclePhase
 
-/-- Phase 23d-5: the opaque positive `Nat` that gates the
-    `lowYieldCancelFires` firing predicate by the `actionsAttempted`
-    counter. Production references `farm_samples > 0` (≥ 1 attempt) in
-    `src/artifactsmmo_cli/ai/learning/low_yield_boundary.py:60`; we
-    abstract that production constant as an opaque `Nat` here so the
-    Lean model can be REFINED upward without touching the firing
-    predicate's structural shape.
+/-- Phase 23d-5 / Perimeter-hardening (post-Phase-24): graduated from
+    AXIOM to DEF. Production's `low_yield_cancel_fires`
+    (src/.../learning/projections.py:384) short-circuits to False when
+    `sample_count == 0`. So the empirical threshold is exactly 1 —
+    after the first sample the boundary check can trigger. Hard-coded
+    literal mirrors production. -/
+def lowYieldSampleThreshold : Nat := 1
 
-    **AXIOM-ID**: LIV-003b-A1 (relocated from LIV003Decomposition.lean
-    in Phase 23d-5 so the production firing predicate and the abstract
-    theorem reference the SAME opaque constant — they must not drift). -/
-axiom lowYieldSampleThreshold : Nat
-
-/-- LIV-003b positivity — production sets the threshold to a positive
-    integer (≥ 1; current production is exactly 1). -/
-axiom lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0
+/-- LIV-003b positivity — THEOREM (was axiom). Trivial by `decide`. -/
+theorem lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0 := by decide
 
 /-! ## Numeric thresholds (mirror production constants) -/
 

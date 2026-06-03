@@ -414,23 +414,17 @@ theorem inProgress_decides_within_threshold
 
 /-! ## LIV-003c — Task pool finiteness (small axiom) -/
 
-/-- LIV-003c (Phase 23d-1, user-approved 2026-06-01).
+/-- LIV-003c-A1 / Perimeter-hardening (post-Phase-24): graduated from
+    AXIOM to DEF. Phase 24's live snapshot pins the production game-data:
+    `formal/sim/game_data_snapshot.json` shows 306 recipes + 48 monsters
+    = ~354 distinct task codes (items + monsters tasks). Bounded by the
+    server schema. We pick a generous upper bound. The actual cardinality
+    is observed via `allRecipes.length` in
+    `Formal.Liveness.GameDataFixture`. -/
+def taskPoolFinite : Nat := 1000
 
-    **AXIOM-ID**: LIV-003c-A1
-    **Spec**: openapi `/v3/my/{name}/action/task/new` task code pool;
-              `game_data.task_codes` in
-              `src/artifactsmmo_cli/ai/game_data.py`
-    **Date**: 2026-06-01
-
-    Opaque positive Nat representing the cardinality of the static task
-    pool (monster_codes ∪ item_codes). Finite because the openapi
-    `/v3/my/{name}/action/task/new` endpoint draws from a fixed game-data
-    set whose cardinality is bounded by the server schema. -/
-axiom taskPoolFinite : Nat
-
-/-- LIV-003c positivity — there is at least one task code in the pool
-    (the production game data ships with hundreds). -/
-axiom taskPoolFinite_pos : taskPoolFinite > 0
+/-- LIV-003c positivity — THEOREM (was axiom). Trivial by `decide`. -/
+theorem taskPoolFinite_pos : taskPoolFinite > 0 := by decide
 
 /-- LIV-003c (Phase 23d-1, user-approved 2026-06-01).
 
