@@ -1219,9 +1219,13 @@ theorem cumulative_progress_under_no_wait
     ∃ k, (cycleStepN k s).level > s.level := by
   -- Phase 23d-1: invoke the decomposed bridge axiom
   -- (`lifecycle_progress_from_bounds`) instead of the deleted fat axiom.
+  -- Item 1g-B2: the axiom is now PROVEN as
+  -- `Formal.Liveness.LifecycleBound7.lifecycle_progress_from_bounds_proven`.
+  -- Consumer migration deferred to 1g-C (requires import cycle avoidance —
+  -- this theorem moves to LifecycleBound7 alongside the proof).
   apply lifecycle_progress_from_bounds s cycleStepN
   · intro n s'; exact cycleStepN_succ n s'
-  · exact cycleStepN_zero s
+  · intro s'; exact cycleStepN_zero s'
   · exact hlvl
   · exact hnowait
   · exact hex

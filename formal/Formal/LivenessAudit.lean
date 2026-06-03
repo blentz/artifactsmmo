@@ -44,6 +44,7 @@ import Formal.Liveness.LifecycleBound6
 import Formal.Liveness.ApplyXpLevelPreservation
 import Formal.Liveness.CycleStepCharacterization
 import Formal.Liveness.XpMonotonicity
+import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -342,3 +343,8 @@ open Formal.Liveness.XpMonotonicity
 #print axioms cycleStep_xp_ge_when_level_eq
 #print axioms cycleStepN_xp_ge_when_level_eq_throughout
 #print axioms cycleStepN_succ_outer
+
+-- Item 1g-B2 core: lifecycle_progress_from_bounds discharged as THEOREM.
+open Formal.Liveness.LifecycleBound7
+#print axioms xp_accumulates_when_level_constant
+#print axioms lifecycle_progress_from_bounds_proven

@@ -516,7 +516,11 @@ theorem lifecycle_progress_from_bounds_step
 axiom lifecycle_progress_from_bounds :
     ∀ (s : State) (cycleStepN : Nat → State → State),
       (∀ n s', cycleStepN (n+1) s' = cycleStepN n (cycleStep s')) →
-      cycleStepN 0 s = s →
+      -- Item 1g-B2 strengthening: base condition at EVERY state, not
+      -- just `s`. Required to inductively pin down `cycleStepN n s` via
+      -- the recurrence. Every concrete consumer satisfies this (the
+      -- canonical iterator has `cycleStepN 0 = id`).
+      (∀ s', cycleStepN 0 s' = s') →
       s.level < 50 →
       (∀ k, productionLadder (cycleStepN k s) ≠ some .wait) →
       (∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
