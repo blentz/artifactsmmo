@@ -41,6 +41,7 @@ import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
 import Formal.Liveness.LifecycleBound4
 import Formal.Liveness.LifecycleBound6
+import Formal.Liveness.ApplyXpLevelPreservation
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -316,3 +317,10 @@ open Formal.Liveness.TaskPoolTrajectory
 -- Item 1g-B2: level monotonicity across iterated cycleStep.
 open Formal.Liveness.LifecycleBound6
 #print axioms cycleStepN_level_ge
+
+-- Item 1g-B2: per-action xp/level preservation under XP=0 fix.
+open Formal.Liveness.ApplyXpLevelPreservation
+#print axioms applyActionKind_level_preserved_except_fight_completeTask
+#print axioms applyActionKind_xp_preserved_except_fight_completeTask
+#print axioms completeTask_level_preserved_when_no_rollover
+#print axioms completeTask_xp_preserved_when_no_rollover
