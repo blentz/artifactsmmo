@@ -571,8 +571,16 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       show (applyActionKind .claimPendingItem s).level ≥ s.level
       simp [applyActionKind]
     | completeTask =>
+      -- Item 1f: completeTask now has level rollover. New level is
+      -- either s.level (no rollover) or s.level + 1 (rollover). Either
+      -- way, ≥ s.level.
       show (applyActionKind .completeTask s).level ≥ s.level
-      simp [applyActionKind]
+      show ((if (decide (s.xp + Formal.Liveness.Measure.taskCompleteXpEstimate
+                          ≥ xpToNextLevel s.level)
+                  && decide (s.level < 50))
+              then s.level + 1
+              else s.level) ≥ s.level)
+      split <;> omega
     | sellPressured =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
