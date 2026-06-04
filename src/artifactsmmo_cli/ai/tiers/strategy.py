@@ -43,6 +43,16 @@ BALANCE_THRESHOLD = 2
 BALANCE_MIN = 0.5
 BALANCE_MAX = 2.0
 STICKY_DOMINANCE_RATIO = 1.5
+PRIOR_RELEVANT_TOOL = 1.1
+"""Active-task tool boost: a target_tools item whose skill_effects match
+the bot's currently-active gathering skill (state.task_code resolved via
+`game_data.active_gathering_skills`) gets this prior, BEATING
+PRIOR_CHAR_LEVEL=1.0 so the bot crafts the tool before continuing the
+grind. Without this boost, target_tools items scored at static
+PRIOR_UTILITY_GEAR=0.4 * marginal=0=0 (or PRIOR_UTILITY_GEAR*0.25
+fallback=0.1) and the bot never crafted any tool despite hours of
+gathering. Fix shipped after trace cycle 760 evidence of static
+0.1 tool scoring."""
 """Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
 kept unless a new top candidate's score strictly exceeds
 `STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
@@ -242,8 +252,35 @@ class StrategyEngine:
         current = state.skills.get(root.skill, 0)
         return _balancing_pure(leader, current)
 
+    def _relevant_tool_value(self, root: MetaGoal, state: WorldState,
+                             game_data: GameData) -> float:
+        """Active-task tool boost. Returns PRIOR_RELEVANT_TOOL when the
+        root is a target_tools item whose skill matches the current
+        task's active gathering skill; else 0. Combined with `_value`
+        via max so the boost can't accidentally suppress a higher-scored
+        baseline."""
+        if not isinstance(root, ObtainItem):
+            return 0.0
+        # Find the gathering skill this tool would boost (the target_tools
+        # entry maps skill → code; reverse the lookup).
+        skill_for_tool = next(
+            (s for s, c in self.objective.target_tools.items() if c == root.code),
+            None,
+        )
+        if skill_for_tool is None:
+            return 0.0
+        active = game_data.active_gathering_skills(
+            state.task_code, state.crafting_target,
+        )
+        if skill_for_tool not in active:
+            return 0.0
+        category = root_category(root)
+        weight = self.personality.category_weight(category)
+        return PRIOR_RELEVANT_TOOL * weight
+
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
-        return self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
+        base = self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
+        return max(base, self._relevant_tool_value(root, state, game_data))
 
     def _learned_blend(self, root: MetaGoal, value: float,
                        history: LearningStore | None, combat_monster: str | None) -> float:
