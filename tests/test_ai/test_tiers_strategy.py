@@ -594,3 +594,64 @@ class TestStickyCommitment:
         # last_chosen_root is the dominated one → top still wins.
         d = eng.decide(state, gd, last_chosen_root=dominated[0])
         assert repr(d.chosen_root) == top_root
+
+
+class TestRelevantToolBoost:
+    """Active-task tool boost: when a target_tools item's skill matches
+    the bot's active gathering skill, its score beats ReachCharLevel so
+    the bot crafts the tool first instead of grinding bare-handed."""
+
+    def _gd_with_tool(self):
+        """Fixture: mining task + copper_pickaxe with mining skill_effect."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                                       skill_effects={"mining": -1}),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {
+            "copper_pickaxe": {"copper_bar": 6},
+            "copper_bar": {"copper_ore": 8},
+        }
+        # copper_rocks resource drops copper_ore (matches production data).
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        gd._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(gd)
+        return gd
+
+    def test_tool_boost_active_task_beats_char_level(self):
+        """When active task is mining-related, copper_pickaxe's score
+        EXCEEDS ReachCharLevel's. Pre-fix: pickaxe scored 0.1 forever."""
+        gd = self._gd_with_tool()
+        obj = CharacterObjective.from_game_data(gd)
+        # Sanity: pickaxe is in target_tools.
+        assert obj.target_tools.get("mining") == "copper_pickaxe"
+        eng = StrategyEngine(obj, BalancedPersonality())
+        # task_code is a copper_ore (gather copper_rocks → copper_bar).
+        state = make_state(level=5, task_code="copper_ore", task_progress=10, task_total=100)
+        d = eng.decide(state, gd)
+        # The pickaxe ObtainItem must beat ReachCharLevel.
+        ranking = {r.root_repr: r.score for r in d.ranking}
+        pickaxe_score = ranking.get("ObtainItem(code='copper_pickaxe', quantity=1)", 0)
+        char_score = ranking.get("ReachCharLevel(level=50)", 0)
+        assert pickaxe_score > char_score, (
+            f"pickaxe={pickaxe_score} should beat char_level={char_score}"
+        )
+
+    def test_no_boost_when_task_skill_mismatched(self):
+        """copper_pickaxe should NOT be boosted when active task is a
+        fishing task (no mining skill in active set)."""
+        gd = self._gd_with_tool()
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        # No task → no active gathering skill → no boost.
+        state = make_state(level=5, task_code=None)
+        d = eng.decide(state, gd)
+        ranking = {r.root_repr: r.score for r in d.ranking}
+        pickaxe_score = ranking.get("ObtainItem(code='copper_pickaxe', quantity=1)", 0)
+        char_score = ranking.get("ReachCharLevel(level=50)", 0)
+        assert pickaxe_score <= char_score, (
+            f"no boost expected: pickaxe={pickaxe_score} char={char_score}"
+        )
