@@ -1,0 +1,16 @@
+# Item 13 — Server-axiom replay harness report
+
+Trace: traces.jsonl
+Total cycles: 1903
+Runs detected: 13
+
+## Fight events captured: 31
+## CompleteTask events captured: 5
+
+✓ completeTask xp axiom honored (no non-zero deltas without level advance).
+
+## Honest disclosure
+Current traces.jsonl does NOT record state.xp directly. The xp delta
+checks degrade to 'no violation observed' when xp is absent. Once a
+trace schema upgrade includes character xp per cycle, this harness
+becomes a hard gate on LIV-001 curve consistency.
