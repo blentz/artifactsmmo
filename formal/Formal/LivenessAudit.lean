@@ -52,6 +52,7 @@ import Formal.Liveness.InProgressDecidesWithSelection
 import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.PositionSemantics
+import Formal.Liveness.GoldSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -415,3 +416,11 @@ open Formal.Liveness.PositionSemantics
 #print axioms move_pos_when_some
 #print axioms mapTransition_pos_when_none
 #print axioms mapTransition_pos_when_some
+
+-- Item 4d: gold reward semantics.
+open Formal.Liveness.GoldSemantics
+#print axioms completeTask_gold_credited
+#print axioms npcSell_gold_credited
+#print axioms completeTask_gold_monotone
+#print axioms npcSell_gold_monotone
+#print axioms buyBankExpansion_gold_debited

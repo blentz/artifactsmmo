@@ -336,6 +336,28 @@ axiom xpToNextLevel_pos : ∀ L, L < 50 → xpToNextLevel L > 0
   cannot hold under the invariant `s.xp < xpToNextLevel s.level`). -/
 def taskCompleteXpEstimate : Nat := 0
 
+/-! ## Item 4d: gold reward estimates
+
+Production task completion rewards `RewardsSchema = {items, gold}`
+(no XP). The actual gold amount per task varies per server's task
+schema; the Lean model carries placeholder estimates that mirror the
+production observation. Future differential phase can pin these from
+`game_data.task_rewards`. -/
+
+/-- Gold credit per `.completeTask`. Production server returns the
+    exact amount in `RewardsSchema.gold`; placeholder `1` keeps the
+    Lean side monotone (every completion grants ≥ 1 gold). -/
+def taskCompleteGoldEstimate : Nat := 1
+
+/-- Gold credit per `.npcSell`. Production sums per-item NPC sell
+    prices; placeholder `1` keeps the apply monotone. -/
+def npcSellGoldEstimate : Nat := 1
+
+/-- Gold credit per `.taskExchange` reward. Production grants a
+    task-master coin item (not gold directly); placeholder `0` keeps
+    the conservative non-mutation. -/
+def taskExchangeGoldEstimate : Nat := 0
+
 /-! ## Task lifecycle phase consistency
 
 The `taskLifecyclePhase` field on `State` is intended to be derivable
