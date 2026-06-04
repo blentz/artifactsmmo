@@ -48,6 +48,7 @@ import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.CategoryBBridge
 import Formal.Liveness.PursueTaskSelection
+import Formal.Liveness.InProgressDecidesWithSelection
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -375,3 +376,7 @@ open Formal.Liveness.PursueTaskSelection
 #print axioms cycleStep_eq_taskTrade
 #print axioms pursueTaskFires_when_inProgress
 #print axioms hpursue_under_conditions
+
+-- Item 3c: bundle-form headline.
+open Formal.Liveness.InProgressDecidesWithSelection
+#print axioms inProgress_decides_within_threshold_with_selection_conditions
