@@ -62,7 +62,7 @@ def inventory_key(c: UpgradeCandidate) -> tuple[int, float, int, str]:
 
 
 def best_by_key(cands: list[UpgradeCandidate],
-                key: Callable[[UpgradeCandidate], tuple]) -> UpgradeCandidate | None:
+                key: Callable[[UpgradeCandidate], tuple[object, ...]]) -> UpgradeCandidate | None:
     """Deterministic argmax: the candidate whose `key` is greatest, scanning in
     list order. Matches the original `if key > best_key` loop — the FIRST
     candidate to strictly exceed the running best is taken, and a later equal key
@@ -70,7 +70,7 @@ def best_by_key(cands: list[UpgradeCandidate],
     max-key item; same-code candidates (one item, multiple slots) tie and the
     FIRST in list order wins (first-wins)."""
     best: UpgradeCandidate | None = None
-    best_key: tuple | None = None
+    best_key: tuple[object, ...] | None = None
     for c in cands:
         k = key(c)
         if best_key is None or k > best_key:

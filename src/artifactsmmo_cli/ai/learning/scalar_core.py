@@ -11,6 +11,7 @@ Spec: docs/superpowers/specs/2026-05-18-strategic-reasoning-design.md §3.
 """
 
 from collections.abc import Collection, Mapping
+from typing import Any
 
 
 def scalar_yield_pure(
@@ -42,11 +43,11 @@ def scalar_yield_pure(
     """
     char_xp_component = char_xp * char_scalar * (level + 1)
 
-    # Start the accumulator at integer 0 (not 0.0) so the core stays type-generic:
-    # with float inputs the sum is float (production, unchanged); with exact
-    # `fractions.Fraction` inputs/weights every term stays an exact Fraction, which
-    # the differential test relies on to compare against the Lean `Rat` oracle.
-    skill_xp_component = 0
+    # Accumulator typed `Any` so the core stays type-generic: float inputs
+    # produce float, `fractions.Fraction` inputs/weights produce exact
+    # Fractions. mypy strict rejects `int = 0` then `int += float`; `Any`
+    # carries the runtime type through.
+    skill_xp_component: Any = 0
     for skill_name, delta in skill_xp.items():
         weight = relevant_w if skill_name in active_skills else baseline_w
         skill_xp_component += delta * weight
@@ -54,7 +55,8 @@ def scalar_yield_pure(
     gold_component = gold / gold_per_xp
     coin_component = tasks_coins * coin_value / gold_per_xp
 
-    return char_xp_component + skill_xp_component + gold_component + coin_component
+    total: Any = char_xp_component + skill_xp_component + gold_component + coin_component
+    return total  # type: ignore[no-any-return]
 
 
 def coins_spent_from_delta(received: int, delta_inv_used: int) -> int:
