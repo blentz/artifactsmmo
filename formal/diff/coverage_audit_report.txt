@@ -1,0 +1,117 @@
+# Item 9 — Differential coverage audit
+
+Source root: src/artifactsmmo_cli/ai/
+Diff tests: formal/diff/test_*_diff.py
+Modules with functions: 102
+Total functions: 1007
+Existing diff tests: 47
+
+## Covered modules (20)
+
+  - actions/bank_expansion.py
+  - arbiter_select.py
+  - bank_selection.py
+  - equipment/realizable_loadout.py
+  - goals/low_yield_cancel.py
+  - goals/upgrade_selection.py
+  - inventory_caps.py
+  - learning/scalarizer.py
+  - learning/skill_xp_curve.py
+  - priority_band.py
+  - recipe_closure.py
+  - task_batch.py
+  - task_decision.py
+  - task_feasibility.py
+  - tiers/decide_key.py
+  - tiers/objective.py
+  - tiers/owned_count.py
+  - tiers/prerequisite_graph.py
+  - tiers/strategy_blend.py
+  - winnable_cascade.py
+
+## Uncovered modules (82)
+
+  - actions/accept_task.py (10 functions)
+  - actions/api_action_error.py (2 functions)
+  - actions/base.py (12 functions)
+  - actions/claim.py (10 functions)
+  - actions/combat.py (11 functions)
+  - actions/complete_task.py (10 functions)
+  - actions/consumable.py (11 functions)
+  - actions/cost_core.py (3 functions)
+  - actions/crafting.py (10 functions)
+  - actions/delete.py (10 functions)
+  - actions/deposit_all.py (12 functions)
+  - actions/deposit_gold.py (11 functions)
+  - actions/equip.py (10 functions)
+  - actions/gather_apply_core.py (2 functions)
+  - actions/gathering.py (11 functions)
+  - actions/movement.py (10 functions)
+  - actions/movement_semantic.py (10 functions)
+  - actions/npc.py (10 functions)
+  - actions/npc_buy_core.py (2 functions)
+  - actions/npc_sell.py (10 functions)
+  - actions/optimize_loadout.py (12 functions)
+  - actions/recycle.py (10 functions)
+  - actions/rest.py (10 functions)
+  - actions/task_cancel.py (10 functions)
+  - actions/task_exchange.py (10 functions)
+  - actions/task_trade.py (10 functions)
+  - actions/transition.py (10 functions)
+  - actions/unequip.py (10 functions)
+  - actions/wait.py (10 functions)
+  - actions/withdraw_gold.py (10 functions)
+  - actions/withdraw_item.py (10 functions)
+  - blockers/documented.py (2 functions)
+  - blockers/registry.py (10 functions)
+  - combat.py (5 functions)
+  - equipment/projection.py (2 functions)
+  - equipment/scoring.py (7 functions)
+  - event_availability.py (1 functions)
+  - file_tracer.py (6 functions)
+  - game_data.py (81 functions)
+  - goals/accept_task_goal.py (8 functions)
+  - goals/base.py (14 functions)
+  - goals/claim_pending.py (8 functions)
+  - goals/complete_task_goal.py (8 functions)
+  - goals/deposit_inventory.py (10 functions)
+  - goals/discard_overstock.py (14 functions)
+  - goals/expand_bank.py (11 functions)
+  - goals/gathering.py (16 functions)
+  - goals/grind_character_xp.py (14 functions)
+  - goals/level_skill.py (16 functions)
+  - goals/progression.py (40 functions)
+  - goals/pursue_task.py (14 functions)
+  - goals/reach_unlock_level.py (12 functions)
+  - goals/restore_hp.py (8 functions)
+  - goals/sell_inventory.py (14 functions)
+  - goals/task_cancel.py (8 functions)
+  - goals/task_exchange.py (10 functions)
+  - goals/unlock_bank.py (14 functions)
+  - goals/wait.py (10 functions)
+  - learning/cycles_for_progress_core.py (1 functions)
+  - learning/low_yield_boundary.py (1 functions)
+  - learning/projections.py (10 functions)
+  - learning/scalar_core.py (2 functions)
+  - learning/store.py (59 functions)
+  - learning/store_warmup_core.py (2 functions)
+  - null_tracer.py (4 functions)
+  - planner.py (5 functions)
+  - player.py (88 functions)
+  - player_helpers.py (2 functions)
+  - recovery.py (16 functions)
+  - scalar_priority.py (2 functions)
+  - strategy_driver.py (12 functions)
+  - task_decision_core.py (2 functions)
+  - task_lifecycle.py (1 functions)
+  - tiers/equip_value.py (2 functions)
+  - tiers/guards.py (3 functions)
+  - tiers/means.py (5 functions)
+  - tiers/meta_goal.py (9 functions)
+  - tiers/objective_completion.py (2 functions)
+  - tiers/personality.py (5 functions)
+  - tiers/strategy.py (24 functions)
+  - tracer.py (4 functions)
+  - world_state.py (11 functions)
+
+## Coverage: 19.6% modules
