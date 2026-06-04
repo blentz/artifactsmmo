@@ -75,9 +75,14 @@ def task_decision(state: WorldState, game_data: GameData,
     skill_cycles = max(
         curve.cycles_to_level(req.current_level, req.required_level, rate),
         float(gap))
-    # task_requirement returns None when task_total == 0, so total_cycles >= 1 here
-    # (skill_cycles >= 0 + task_total >= 1) — no divide-by-zero guard needed.
+    # task_requirement returns None when task_total == 0, so total_cycles >= 1
+    # here (skill_cycles >= 0 + task_total >= 1). Defensive assert so the
+    # invariant break is loud instead of a divide-by-zero deep in the call.
     total_cycles = skill_cycles + float(state.task_total)
+    assert total_cycles >= 1, (
+        f"task_decision invariant: total_cycles must be >= 1 "
+        f"(skill_cycles={skill_cycles}, task_total={state.task_total})"
+    )
     reward = history.mean_task_reward_value(default=DEFAULT_TASK_REWARD_VALUE)
     skill_up_vpc = reward / total_cycles
     confidence = curve.confidence(req.current_level, req.required_level)
