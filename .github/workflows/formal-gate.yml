@@ -1,10 +1,19 @@
 name: formal-gate
 on:
   pull_request:
-    paths: ["formal/**", "src/artifactsmmo_cli/utils/pathfinding.py", ".github/workflows/formal-gate.yml"]
+    paths:
+      - "formal/**"
+      - "src/artifactsmmo_cli/utils/pathfinding.py"
+      - "src/artifactsmmo_cli/ai/game_data.py"
+      - "openapi.json"
+      - ".github/workflows/formal-gate.yml"
   push:
     branches: [main]
-    paths: ["formal/**", "src/artifactsmmo_cli/utils/pathfinding.py"]
+    paths:
+      - "formal/**"
+      - "src/artifactsmmo_cli/utils/pathfinding.py"
+      - "src/artifactsmmo_cli/ai/game_data.py"
+      - "openapi.json"
 jobs:
   gate:
     runs-on: ubuntu-latest
@@ -22,3 +31,5 @@ jobs:
         run: uv sync --dev
       - name: Run the formal gate
         run: ./formal/gate.sh
+      - name: OpenAPI conformance (strict)
+        run: uv run python formal/diff/openapi_conformance.py --strict
