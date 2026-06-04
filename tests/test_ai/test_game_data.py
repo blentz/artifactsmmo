@@ -918,3 +918,84 @@ def test_item_stats_tradeable_default_true():
     assert s.tradeable is True
     assert s.conditions == []
     assert s.subtype == ""
+
+
+def test_monster_load_unset_min_max_gold(monkeypatch):
+    """OpenAPI conformance: when API client returns UNSET for
+    min_gold/max_gold (older client), loader treats as 0."""
+
+    class FakeMonster:
+        def __init__(self):
+            self.code = "phantom"
+            self.level = 1
+            self.hp = 10
+            self.type_ = "normal"
+            self.attack_fire = 0
+            self.attack_earth = 0
+            self.attack_water = 0
+            self.attack_air = 1
+            self.res_fire = 0
+            self.res_earth = 0
+            self.res_water = 0
+            self.res_air = 0
+            self.critical_strike = 0
+            self.initiative = 50
+            self.min_gold = UNSET
+            self.max_gold = UNSET
+            self.drops = None
+
+    class FakeResult:
+        def __init__(self):
+            self.data = [FakeMonster()]
+
+    def fake_get(client, page, size):
+        return FakeResult() if page == 1 else None
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.game_data.get_all_monsters", fake_get
+    )
+    gd = GameData()
+    gd._load_monsters(client=None)
+    assert gd.monster_min_gold("phantom") == 0
+    assert gd.monster_max_gold("phantom") == 0
+    assert gd.monster_drops("phantom") == []
+
+
+def test_item_load_conditions_and_unset_subtype(monkeypatch):
+    """OpenAPI conformance: item.conditions list parsed; subtype UNSET → ''."""
+
+    class FakeCondition:
+        def __init__(self, code, value):
+            self.code = code
+            self.value = value
+
+    class FakeItem:
+        def __init__(self):
+            self.code = "trinket"
+            self.level = 1
+            self.type_ = "ring"
+            self.tradeable = True
+            self.subtype = UNSET
+            self.conditions = [
+                FakeCondition("character_level", 10),
+                FakeCondition("mining_level", 5),
+            ]
+            self.effects = UNSET
+            self.craft = UNSET
+
+    class FakeResult:
+        def __init__(self):
+            self.data = [FakeItem()]
+
+    def fake_get(client, page, size):
+        return FakeResult() if page == 1 else None
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.game_data.get_all_items", fake_get
+    )
+    gd = GameData()
+    gd._load_items(client=None)
+    stats = gd._item_stats["trinket"]
+    assert stats.subtype == ""
+    assert stats.conditions == [("character_level", 10), ("mining_level", 5)]
+    assert stats.tradeable is True

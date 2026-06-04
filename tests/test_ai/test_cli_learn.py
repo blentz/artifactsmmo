@@ -1,6 +1,7 @@
 """End-to-end smoke for --learn flag plumbing."""
 
 import subprocess
+import sys
 
 
 def test_default_learn_db_path_format():
@@ -11,11 +12,21 @@ def test_default_learn_db_path_format():
 
 
 def test_play_help_shows_learn_flags():
+    """Invoke the CLI via the active Python interpreter rather than `uv run`
+    so the test works inside any pytest environment (the prior
+    `subprocess.run(['uv', 'run', ...])` form failed when uv wasn't on the
+    test subprocess PATH — e.g. inside a pre-commit hook)."""
+    # Run the typer app directly via -c so the test doesn't depend on
+    # an installed entry-point script or a uv binary on PATH.
     result = subprocess.run(
-        ["uv", "run", "artifactsmmo", "play", "play", "--help"],
+        [
+            sys.executable, "-c",
+            "from artifactsmmo_cli.main import app; app()",
+            "play", "play", "--help",
+        ],
         capture_output=True, text=True, timeout=30,
     )
-    assert "--learn" in result.stdout
+    assert "--learn" in result.stdout, result.stdout + result.stderr
     assert "--learn-db" in result.stdout
 
 
