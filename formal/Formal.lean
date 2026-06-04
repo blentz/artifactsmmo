@@ -85,3 +85,4 @@ import Formal.Liveness.PositionSemantics
 import Formal.Liveness.GoldSemantics
 import Formal.Liveness.Skill
 import Formal.Liveness.SkillXpSemantics
+import Formal.Liveness.RichApplyConsistency

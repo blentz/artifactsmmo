@@ -54,6 +54,7 @@ import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.PositionSemantics
 import Formal.Liveness.GoldSemantics
 import Formal.Liveness.SkillXpSemantics
+import Formal.Liveness.RichApplyConsistency
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -438,3 +439,15 @@ open Formal.Liveness.SkillXpSemantics
 #print axioms craft_skillXp_when_none
 #print axioms craft_skillXp_when_some
 #print axioms craft_skillXp_increments_target
+
+-- Item 4f: scalar↔rich consistency preservation.
+open Formal.Liveness.RichApplyConsistency
+#print axioms gather_inventoryUsed_invariant
+#print axioms gather_inventoryMax_invariant
+#print axioms craft_inventoryUsed_invariant
+#print axioms equip_inventoryUsed_invariant
+#print axioms unequip_inventoryUsed_invariant
+#print axioms move_inventoryUsed_invariant
+#print axioms gather_projectedSkillXpDelta_advances
+#print axioms completeTask_inventoryUsed_invariant
+#print axioms npcSell_inventoryUsed_invariant
