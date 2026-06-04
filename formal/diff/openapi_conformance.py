@@ -141,6 +141,10 @@ def main(argv: list[str]) -> int:
     text = report(spec)
     REPORT.write_text(text)
     print(text)
+    strict = "--strict" in argv
+    if strict and "⚠" in text:
+        print("ERROR: OpenAPI drift detected; --strict mode failing.", file=sys.stderr)
+        return 2
     return 0
 
 
