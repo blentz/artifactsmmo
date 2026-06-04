@@ -49,6 +49,7 @@ import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.CategoryBBridge
 import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.InProgressDecidesWithSelection
+import Formal.Liveness.InventorySemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -380,3 +381,14 @@ open Formal.Liveness.PursueTaskSelection
 -- Item 3c: bundle-form headline.
 open Formal.Liveness.InProgressDecidesWithSelection
 #print axioms inProgress_decides_within_threshold_with_selection_conditions
+
+-- Item 4a: inventory composition semantics.
+open Formal.Liveness.InventorySemantics
+#print axioms invCount_nil
+#print axioms invCount_cons_match
+#print axioms invCount_cons_mismatch
+#print axioms applyActionKind_inventory_invariant_except_gather
+#print axioms gather_inventory_when_none
+#print axioms gather_inventory_when_some
+#print axioms gather_invCount_increments_target
+#print axioms gather_invCount_unchanged_for_other_codes

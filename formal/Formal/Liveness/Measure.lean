@@ -223,6 +223,23 @@ structure State where
       cannot pick a fresh code and either rides to `.complete` or the
       pool refresh applies. -/
   taskCodesSeen : List String
+  /-- Item 4a: per-item inventory composition. Mirrors production's
+      `WorldState.inventory : dict[str, int]`. List-of-pairs representation
+      avoids decidability issues with `String → Nat` function fields.
+      `(code, count)` pairs; lookup via `invCount`. Multiple entries for
+      same code are summed (canonical form has at most one entry per code,
+      but proofs don't require it).
+
+      Defaults to empty in legacy fixtures — existing proofs reasoning over
+      scalar `inventoryUsed` remain green. `.gather` (Item 4a) increments
+      the gatherTarget entry by 1; `.craft` and `.taskTrade` mutation is
+      deferred to later sub-items. -/
+  inventoryItems : List (String × Nat)
+  /-- Item 4a: the resource code the bot is currently gathering. Mirrors
+      production's per-cycle `WorldState.gather_target` (perception layer
+      derives this from the current goal). `.gather` reads this to know
+      which inventory entry to bump. `none` when no gather is active. -/
+  gatherTarget : Option String
   deriving Repr
 
 namespace State

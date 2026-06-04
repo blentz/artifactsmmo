@@ -79,3 +79,4 @@ import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.CategoryBBridge
 import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.InProgressDecidesWithSelection
+import Formal.Liveness.InventorySemantics
