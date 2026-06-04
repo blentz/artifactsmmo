@@ -55,6 +55,7 @@ import Formal.Liveness.PositionSemantics
 import Formal.Liveness.GoldSemantics
 import Formal.Liveness.SkillXpSemantics
 import Formal.Liveness.RichApplyConsistency
+import Formal.Liveness.LearningStoreBridge
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -451,3 +452,10 @@ open Formal.Liveness.RichApplyConsistency
 #print axioms gather_projectedSkillXpDelta_advances
 #print axioms completeTask_inventoryUsed_invariant
 #print axioms npcSell_inventoryUsed_invariant
+
+-- Item 6a/6b: LearningStore bridge to TaskDecision.
+open Formal.Liveness.LearningStoreBridge
+#print axioms taskCancelFires_when_PIVOT
+#print axioms taskCancelFires_false_when_PURSUE
+#print axioms ls_pivots_on_combat_or_no_history
+#print axioms ls_pursues_on_req_none
