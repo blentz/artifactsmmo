@@ -1,7 +1,4 @@
 name: lint-gate
-# Runs ruff (bug-finder ruleset) on src/. Catches new regressions
-# in B/SIM/RUF/F/I/UP/E/W families.
-
 on:
   pull_request:
     paths:
@@ -15,6 +12,8 @@ on:
       - "src/**/*.py"
       - "pyproject.toml"
       - "openapi.json"
+      - ".github/workflows/lint-gate.yml"
+  workflow_dispatch: {}
 
 jobs:
   ruff:

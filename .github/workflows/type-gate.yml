@@ -1,7 +1,6 @@
 name: type-gate
 # Runs mypy strict on every push + PR. CLAUDE.md mandates 0 errors,
-# 0 warnings; this workflow enforces it. A new strict-mode regression
-# fails the PR before it can merge.
+# 0 warnings; this workflow enforces it.
 
 on:
   pull_request:
@@ -16,6 +15,8 @@ on:
       - "src/**/*.py"
       - "pyproject.toml"
       - "openapi.json"
+      - ".github/workflows/type-gate.yml"
+  workflow_dispatch: {}
 
 jobs:
   mypy:
@@ -30,8 +31,6 @@ jobs:
       - name: Generate artifactsmmo-api-client
         run: |
           set -euxo pipefail
-          # openapi-python-client is a uv dep but uv sync needs the
-          # generated client present first. Bootstrap via pip.
           pip install openapi-python-client
           bash generate_openapi_client.sh
       - name: Sync deps

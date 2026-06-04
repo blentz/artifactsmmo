@@ -14,6 +14,8 @@ on:
       - "src/artifactsmmo_cli/utils/pathfinding.py"
       - "src/artifactsmmo_cli/ai/game_data.py"
       - "openapi.json"
+      - ".github/workflows/formal-gate.yml"
+  workflow_dispatch: {}
 jobs:
   gate:
     runs-on: ubuntu-latest
