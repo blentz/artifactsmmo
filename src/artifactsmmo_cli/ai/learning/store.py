@@ -387,8 +387,8 @@ class LearningStore:
                         discovered_at=datetime.now(tz=timezone.utc).isoformat(),
                     ))
                 s.commit()
-        except SQLAlchemyError:
-            pass
+        except SQLAlchemyError as e:
+            print(f"[learning] set_blocker failed: {e}")
 
     def get_blocker(self, blocker_code: str) -> Blocker | None:
         """Return the persisted blocker for this character, or None."""
@@ -410,8 +410,8 @@ class LearningStore:
                 if b is not None and b.character == self._character:
                     s.delete(b)
                     s.commit()
-        except SQLAlchemyError:
-            pass
+        except SQLAlchemyError as e:
+            print(f"[learning] delete_blocker failed: {e}")
 
     def record_skill_max_xp(self, skill: str, level: int, max_xp: int) -> None:
         """Upsert observed max_xp for (self._character, skill, level). Last write wins."""
@@ -434,8 +434,8 @@ class LearningStore:
                         max_xp=max_xp,
                     ))
                 s.commit()
-        except SQLAlchemyError:
-            pass
+        except SQLAlchemyError as e:
+            print(f"[learning] record_skill_max_xp failed: {e}")
 
     def skill_max_xp_observations(self, skill: str) -> dict[int, int]:
         """Return {level: max_xp} for all observed (self._character, skill) rows."""
@@ -456,8 +456,8 @@ class LearningStore:
             with SqlSession(self._engine) as s:
                 s.add(TaskRewardObservation(character=self._character, value=value))
                 s.commit()
-        except SQLAlchemyError:
-            pass
+        except SQLAlchemyError as e:
+            print(f"[learning] record_task_reward_value failed: {e}")
 
     def _task_reward_values(self) -> list[float]:
         """Return all recorded task reward values for this character."""
