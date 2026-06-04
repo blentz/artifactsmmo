@@ -64,7 +64,7 @@ def main(
         console.print(format_error_message(str(e)))
         raise typer.Exit(1)
     except (httpx.HTTPError, UnexpectedStatus) as e:
-        console.print(format_error_message(f"Failed to initialize CLI: {str(e)}"))
+        console.print(format_error_message(f"Failed to initialize CLI: {e!s}"))
         raise typer.Exit(1)
 
 
@@ -98,7 +98,7 @@ def status() -> None:
             raise typer.Exit(1)
 
     except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-        console.print(format_error_message(f"API connection failed: {str(e)}"))
+        console.print(format_error_message(f"API connection failed: {e!s}"))
         raise typer.Exit(1)
 
 

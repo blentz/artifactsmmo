@@ -23,8 +23,14 @@ from artifactsmmo_cli.ai.task_decision_labels import PIVOT, PURSUE
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.world_state import WorldState
 
-__all__ = ["PIVOT", "PURSUE", "DEFAULT_SKILL_XP_PER_CYCLE",
-           "DEFAULT_TASK_REWARD_VALUE", "LOW_CONFIDENCE_MARGIN", "task_decision"]
+__all__ = [
+    "DEFAULT_SKILL_XP_PER_CYCLE",
+    "DEFAULT_TASK_REWARD_VALUE",
+    "LOW_CONFIDENCE_MARGIN",
+    "PIVOT",
+    "PURSUE",
+    "task_decision",
+]
 
 DEFAULT_SKILL_XP_PER_CYCLE = 10.0
 """Fallback skill-XP gain rate per cycle before a rate has been learned."""

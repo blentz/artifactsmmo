@@ -94,13 +94,7 @@ class GatherMaterialsGoal(Goal):
 
         result: list[Action] = []
         for action in actions:
-            if "recovery" in action.tags:
-                result.append(action)
-            elif "deposit" in action.tags:
-                result.append(action)
-            elif isinstance(action, GatherAction) and action.resource_code in needed_resources:
-                result.append(action)
-            elif isinstance(action, CraftAction) and action.code in craftable_mats:
+            if "recovery" in action.tags or "deposit" in action.tags or (isinstance(action, GatherAction) and action.resource_code in needed_resources) or (isinstance(action, CraftAction) and action.code in craftable_mats):
                 result.append(action)
         return result
 

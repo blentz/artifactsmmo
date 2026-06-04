@@ -64,7 +64,6 @@ from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
-from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
     CharacterObjective,
@@ -74,6 +73,7 @@ from artifactsmmo_cli.ai.tiers import (
 )
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tracer import Tracer
+from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 
@@ -878,7 +878,7 @@ class GamePlayer:
             actions.append(UnequipAction(slot=slot))
 
         # Recycle actions: one per craftable equippable item
-        for item_code, recipe in self.game_data._crafting_recipes.items():
+        for item_code in self.game_data._crafting_recipes:
             stats = self.game_data.item_stats(item_code)
             if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
                 continue

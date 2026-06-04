@@ -85,12 +85,7 @@ class GrindCharacterXPGoal(Goal):
         """Fight the target monster + HP recovery only — no diversions."""
         result: list[Action] = []
         for action in actions:
-            if isinstance(action, FightAction) and action.monster_code == self._target_monster:
-                result.append(action)
-            elif "recovery" in action.tags:
-                result.append(action)
-            # OptimizeLoadoutAction for this target (bare Equip/Unequip lack target_monster_code)
-            elif "equip" in action.tags and getattr(action, "target_monster_code", None) == self._target_monster:
+            if (isinstance(action, FightAction) and action.monster_code == self._target_monster) or "recovery" in action.tags or ("equip" in action.tags and getattr(action, "target_monster_code", None) == self._target_monster):
                 result.append(action)
         return result
 

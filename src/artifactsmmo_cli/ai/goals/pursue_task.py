@@ -81,13 +81,7 @@ class PursueTaskGoal(Goal):
         needed_resources, craftable_mats = recipe_closure(game_data, [self._task_code])
         result: list[Action] = []
         for action in actions:
-            if "recovery" in action.tags or "deposit" in action.tags:
-                result.append(action)
-            elif isinstance(action, GatherAction) and action.resource_code in needed_resources:
-                result.append(action)
-            elif isinstance(action, CraftAction) and action.code in craftable_mats:
-                result.append(action)
-            elif isinstance(action, TaskTradeAction) and action.code == self._task_code:
+            if "recovery" in action.tags or "deposit" in action.tags or (isinstance(action, GatherAction) and action.resource_code in needed_resources) or (isinstance(action, CraftAction) and action.code in craftable_mats) or (isinstance(action, TaskTradeAction) and action.code == self._task_code):
                 result.append(action)
         return result
 

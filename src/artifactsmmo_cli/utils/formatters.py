@@ -204,7 +204,7 @@ def format_combat_result(fight_data: dict[str, Any]) -> Text:
             result_parts.append(f"Gold gained: {gold}")
 
     # Add items dropped if available
-    if "drops" in fight_data and fight_data["drops"]:
+    if fight_data.get("drops"):
         drops = fight_data["drops"]
         if isinstance(drops, list) and drops:
             drop_strs = []
@@ -242,7 +242,7 @@ def format_gathering_result(gather_data: dict[str, Any]) -> Text:
         result_parts.append(f"XP gained: {xp}")
 
     # Add items gathered if available
-    if "items" in gather_data and gather_data["items"]:
+    if gather_data.get("items"):
         items = gather_data["items"]
         if isinstance(items, list) and items:
             item_strs = []

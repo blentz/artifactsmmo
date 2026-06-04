@@ -42,7 +42,7 @@ class ClaimPendingItemAction(Action):
             f"ClaimPendingItemAction.apply requires inventory_free >= 1 "
             f"({state.inventory_free} < 1)"
         )
-        item_id, item_code = state.pending_items[0]
+        _item_id, item_code = state.pending_items[0]
         remaining = state.pending_items[1:]
         new_inventory = dict(state.inventory)
         new_inventory[item_code] = new_inventory.get(item_code, 0) + 1
