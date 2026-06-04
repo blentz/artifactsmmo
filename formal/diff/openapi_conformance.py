@@ -32,14 +32,19 @@ REPORT = REPO_ROOT / "formal" / "diff" / "openapi_conformance_report.txt"
 # the audit surfaces it as "new" so a human review can decide whether
 # GameData should ingest it.
 TRACKED_SCHEMAS: dict[str, set[str]] = {
-    "BankSchema": {"slots", "next_expansion_cost", "gold"},
-    "ItemSchema": {"code", "type", "level", "craft", "effects"},
-    "MonsterSchema": {
-        "code", "level", "hp", "attack_fire", "attack_earth",
-        "attack_water", "attack_air", "res_fire", "res_earth",
-        "res_water", "res_air", "critical_strike", "initiative",
+    "BankSchema": {"slots", "expansions", "next_expansion_cost", "gold"},
+    "ItemSchema": {
+        "code", "name", "type", "subtype", "description", "level",
+        "conditions", "effects", "craft", "tradeable",
     },
-    "RecipeSchema": {"items", "skill", "level"},
+    "MonsterSchema": {
+        "code", "name", "type", "level", "hp",
+        "attack_fire", "attack_earth", "attack_water", "attack_air",
+        "res_fire", "res_earth", "res_water", "res_air",
+        "critical_strike", "initiative", "effects",
+        "min_gold", "max_gold", "drops",
+    },
+    "CraftSchema": {"items", "skill", "level", "quantity"},
 }
 
 

@@ -54,10 +54,20 @@ def _used_fraction(state: WorldState) -> float:
 
 
 def _has_sellable(state: WorldState, game_data: GameData) -> bool:
-    return any(
-        qty > 0 and game_data.npcs_buying_item(code)
-        for code, qty in state.inventory.items()
-    )
+    """An item counts as sellable only when it has a buyer NPC AND the
+    server-side `tradeable` flag is true (OpenAPI Item 14 remediation).
+    Untradeable items would fail at the NpcSell action; gating here keeps
+    the means tier from selecting a sell that's destined to error out."""
+    for code, qty in state.inventory.items():
+        if qty <= 0:
+            continue
+        if not game_data.npcs_buying_item(code):
+            continue
+        stats = game_data.item_stats(code)
+        if stats is not None and not stats.tradeable:
+            continue
+        return True
+    return False
 
 
 def _tasks_coin_total(state: WorldState) -> int:
