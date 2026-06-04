@@ -240,6 +240,20 @@ structure State where
       derives this from the current goal). `.gather` reads this to know
       which inventory entry to bump. `none` when no gather is active. -/
   gatherTarget : Option String
+  /-- Item 4b: equipment composition. Mirrors production's
+      `WorldState.equipment : dict[str, Optional[str]]` (slot → item code).
+      List-of-pairs representation; missing slot means nothing equipped.
+      `.equip` cons-prepends (slot, code); `.unequip` filters out the
+      slot; `.optimizeLoadout` mutates per equipTarget. -/
+  equipment : List (String × String)
+  /-- Item 4b: pending equip target. Mirrors production's per-cycle
+      committed equip-action target — the perception/strategy layer sets
+      `(slot, item_code)` before `.equip` fires. `none` when no equip
+      is pending; `.equip` is a no-op in that case. -/
+  equipTarget : Option (String × String)
+  /-- Item 4b: pending unequip slot. `.unequip` reads this to know which
+      slot to clear. `none` when no unequip is pending. -/
+  unequipTarget : Option String
   deriving Repr
 
 namespace State

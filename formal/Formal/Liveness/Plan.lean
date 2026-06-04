@@ -372,7 +372,38 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- are preserved.
   | .craft, s =>
       { s with craftableSlots := s.craftableSlots + 1 }
-  -- All other 11 kinds: no-op (see module docstring; future phases will
+  -- Item 4b: .equip cons-prepends (slot, code) per equipTarget; no-op
+  -- when equipTarget is none. Mirrors EquipAction.apply (equip.py:50+).
+  | .equip, s =>
+      let newEquip : List (String × String) :=
+        match s.equipTarget with
+        | some (slot, code) => (slot, code) :: s.equipment
+        | none => s.equipment
+      { s with equipment := newEquip }
+  -- Item 4b: .unequip filters out the unequipTarget slot from equipment;
+  -- no-op when unequipTarget is none. Mirrors UnequipAction.apply.
+  | .unequip, s =>
+      let newEquip : List (String × String) :=
+        match s.unequipTarget with
+        | some slot => s.equipment.filter (fun p => p.1 ≠ slot)
+        | none => s.equipment
+      { s with equipment := newEquip }
+  -- Item 4b: .optimizeLoadout — production-side this runs a multi-step
+  -- swap-in/swap-out for combat optimization. The single-step Lean
+  -- mirror: when equipTarget = some (slot, code), apply equip semantics
+  -- (cons-prepend). When unequipTarget = some slot, also filter. The
+  -- result composes the swap.
+  | .optimizeLoadout, s =>
+      let afterUnequip : List (String × String) :=
+        match s.unequipTarget with
+        | some slot => s.equipment.filter (fun p => p.1 ≠ slot)
+        | none => s.equipment
+      let newEquip : List (String × String) :=
+        match s.equipTarget with
+        | some (slot, code) => (slot, code) :: afterUnequip
+        | none => afterUnequip
+      { s with equipment := newEquip }
+  -- All other 8 kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 
