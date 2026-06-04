@@ -5,6 +5,7 @@ Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle.""
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -27,7 +28,6 @@ from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
-from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.task_batch import task_batch_size

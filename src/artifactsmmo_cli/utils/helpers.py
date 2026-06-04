@@ -128,7 +128,7 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
 
             return CLIResponse.error_response(error_message)
         else:
-            return CLIResponse.error_response(f"Unexpected error: {str(error)}")
+            return CLIResponse.error_response(f"Unexpected error: {error!s}")
 
     if isinstance(error, UnexpectedStatus):
         # The _parse_* / _extract_* helpers below each swallow their own parse
@@ -174,7 +174,7 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
         return CLIResponse.error_response(error_message)
 
     else:
-        return CLIResponse.error_response(f"Unexpected error: {str(error)}")
+        return CLIResponse.error_response(f"Unexpected error: {error!s}")
 
 
 def _extract_error_code(error: UnexpectedStatus) -> int | None:
@@ -266,17 +266,17 @@ def _parse_api_error_response(error: UnexpectedStatus, fallback_message: str) ->
         message = None
 
         # Check for detail field first
-        if "detail" in error_data and error_data["detail"]:
+        if error_data.get("detail"):
             message = error_data["detail"]
         # Check for message field
-        elif "message" in error_data and error_data["message"]:
+        elif error_data.get("message"):
             message = error_data["message"]
         # Check for nested error message
         elif "error" in error_data and isinstance(error_data["error"], dict):
             if "message" in error_data["error"]:
                 message = error_data["error"]["message"]
         # Check for error as string
-        elif "error" in error_data and error_data["error"]:
+        elif error_data.get("error"):
             message = str(error_data["error"])
 
         # Use fallback if no message found

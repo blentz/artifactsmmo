@@ -41,8 +41,17 @@ line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["F", "I", "UP", "E", "W"]
-ignore = ["UP017"]  # repo convention: timezone.utc (not datetime.UTC)
+# F = pyflakes, I = isort, UP = pyupgrade, E/W = pycodestyle,
+# B = flake8-bugbear (likely-bug patterns), SIM = simplifications,
+# RUF = ruff-native diagnostics. Adding the bug-finder families surfaces
+# common runtime hazards (mutable defaults, bare exceptions, etc.).
+select = ["F", "I", "UP", "E", "W", "B", "SIM", "RUF"]
+ignore = [
+    "UP017",  # repo convention: timezone.utc (not datetime.UTC).
+    "SIM108", # ternary-vs-if-else is style not bug.
+    "SIM117", # nested-with is stylistic.
+    "RUF012", # mutable class attrs (defaults to dict; tests use this).
+]
 
 [tool.mypy]
 python_version = "3.13"

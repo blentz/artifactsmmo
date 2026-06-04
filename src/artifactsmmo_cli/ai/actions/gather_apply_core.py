@@ -22,8 +22,8 @@ a plan ALWAYS see a fresh applicability check at each step. The safety theorem
 applies per step; the chain safety is therefore a corollary of `is_applicable`
 being a slot-floor.
 """
-from dataclasses import dataclass, replace
 from collections.abc import Mapping
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)

@@ -16,7 +16,6 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.world_state import WorldState
 
-
 TASK_COMPLETE_XP_ESTIMATE: int = 0
 """Planner-side XP projection for CompleteTaskAction.
 

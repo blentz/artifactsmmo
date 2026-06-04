@@ -94,9 +94,7 @@ class LevelSkillGoal(Goal):
         """Craft anything in this skill family + supporting Gather/Rest/Deposit."""
         result: list[Action] = []
         for action in actions:
-            if "recovery" in action.tags:
-                result.append(action)
-            elif "deposit" in action.tags:
+            if "recovery" in action.tags or "deposit" in action.tags:
                 result.append(action)
             elif isinstance(action, GatherAction):
                 # All gathers are fair game; they replenish materials for crafting.

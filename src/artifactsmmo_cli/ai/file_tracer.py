@@ -11,7 +11,8 @@ class FileTracer(Tracer):
 
     def __init__(self, path: str) -> None:
         self._path = path
-        self._fp: IO[str] | None = open(path, "a", encoding="utf-8")
+        # SIM115 suppressed: long-lived append handle, closed in `close()`.
+        self._fp: IO[str] | None = open(path, "a", encoding="utf-8")  # noqa: SIM115
 
     def write_cycle(self, record: dict[str, object]) -> None:
         if self._fp is None:

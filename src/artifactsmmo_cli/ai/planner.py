@@ -134,7 +134,7 @@ class GOAPPlanner:
                             f_score=g + h,
                             depth=node.depth + 1,
                             state=next_state,
-                            plan=node.plan + [action],
+                            plan=[*node.plan, action],
                             g_score=g,
                         ),
                     )

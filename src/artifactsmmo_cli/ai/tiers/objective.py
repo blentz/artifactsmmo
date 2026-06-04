@@ -82,7 +82,7 @@ class CharacterObjective:
             ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
             attainable = [(value, code) for (value, code) in ranked
                           if is_attainable(code, game_data)]
-            for slot, (_value, code) in zip(slots, attainable):
+            for slot, (_value, code) in zip(slots, attainable, strict=False):
                 target_gear[slot] = code
         # Tools: best per gathering skill by tool_value (skill_effects magnitude).
         # Tie-break by item code for determinism. Filter to attainable items.

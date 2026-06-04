@@ -442,7 +442,7 @@ def goto_location(
         try:
             start_x, start_y = get_character_position(character)
         except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-            console.print(format_error_message(f"Could not get character position: {str(e)}"))
+            console.print(format_error_message(f"Could not get character position: {e!s}"))
             raise typer.Exit(1)
 
         # Parse destination - handle both "X Y" format and separate X Y arguments
@@ -468,7 +468,7 @@ def goto_location(
                 try:
                     end_x, end_y = resolve_named_location(parsed_dest, start_x, start_y)
                 except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-                    console.print(format_error_message(f"Could not find location '{parsed_dest}': {str(e)}"))
+                    console.print(format_error_message(f"Could not find location '{parsed_dest}': {e!s}"))
                     raise typer.Exit(1)
 
         # Show current position and destination
@@ -524,7 +524,7 @@ def goto_location(
             console.print(format_error_message(cli_response.error or "Move failed"))
 
     except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-        console.print(format_error_message(f"Navigation failed: {str(e)}"))
+        console.print(format_error_message(f"Navigation failed: {e!s}"))
         raise typer.Exit(1)
 
 
@@ -552,7 +552,7 @@ def show_path_command(
         try:
             start_x, start_y = get_character_position(character)
         except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-            console.print(format_error_message(f"Could not get character position: {str(e)}"))
+            console.print(format_error_message(f"Could not get character position: {e!s}"))
             raise typer.Exit(1)
 
         # Parse destination - handle both "X Y" format and separate X Y arguments
@@ -578,7 +578,7 @@ def show_path_command(
                 try:
                     end_x, end_y = resolve_named_location(parsed_dest, start_x, start_y)
                 except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-                    console.print(format_error_message(f"Could not find location '{parsed_dest}': {str(e)}"))
+                    console.print(format_error_message(f"Could not find location '{parsed_dest}': {e!s}"))
                     raise typer.Exit(1)
 
         # Calculate path
@@ -603,7 +603,7 @@ def show_path_command(
             console.print(f"[cyan]Estimated time: ~{path_result.estimated_time} seconds[/cyan]")
 
     except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-        console.print(format_error_message(f"Path calculation failed: {str(e)}"))
+        console.print(format_error_message(f"Path calculation failed: {e!s}"))
         raise typer.Exit(1)
 
 
@@ -770,5 +770,5 @@ def batch_action(
             raise typer.Exit(1)
 
     except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
-        console.print(format_error_message(f"Batch operation failed: {str(e)}"))
+        console.print(format_error_message(f"Batch operation failed: {e!s}"))
         raise typer.Exit(1)

@@ -46,7 +46,7 @@ def is_realizable(loadout: Mapping[str, str | None],
         if code is None:
             continue
         demand[code] = demand.get(code, 0) + 1
-    for code, count in demand.items():
-        if count > ownership(code, inventory, current_equipment):
-            return False
-    return True
+    return all(
+        count <= ownership(code, inventory, current_equipment)
+        for code, count in demand.items()
+    )

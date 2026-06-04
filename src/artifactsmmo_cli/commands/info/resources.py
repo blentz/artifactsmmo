@@ -143,7 +143,7 @@ def list_resources(
 
                     # Get location information if needed
                     resource_locations = {}
-                    if char_x is not None and char_y is not None or center_x is not None:
+                    if (char_x is not None and char_y is not None) or center_x is not None:
                         try:
                             for resource in filtered_resources:
                                 resource_code_val = getattr(resource, "code", "")
