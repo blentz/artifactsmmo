@@ -164,7 +164,9 @@ noncomputable def applyActionKind : ActionKind → State → State
                level := newLevel,
                xp := newXp,
                -- Phase 23d-4: phase transitions to `.none` — reset counter.
-               actionsAttempted := 0 }
+               actionsAttempted := 0,
+               -- Item 4d: credit task-completion gold reward.
+               gold := s.gold + taskCompleteGoldEstimate }
   -- AcceptTaskAction.apply (accept_task.py:32-42): assigns placeholder
   -- task. See "Honest disclosure: acceptTask" in the module docstring.
   -- Phase 23c-3b: also sets `taskLifecyclePhase := .accepted` to match
@@ -242,7 +244,10 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- `sellIdleFires`. Richer effects (gold credit, inventoryUsed
   -- decrement, NPC stock) deferred — see module "Honest disclosure:
   -- minimal-modeling" note.
-  | .npcSell, s => { s with sellableInventoryNonempty := false }
+  | .npcSell, s =>
+      -- Item 4d: credit sell-price gold; clear sellable flag.
+      { s with sellableInventoryNonempty := false,
+               gold := s.gold + npcSellGoldEstimate }
   -- FightAction.apply (combat.py:apply): xp += 10, hp damage (irrelevant
   -- to firing predicates), task_progress += 1 if matches monster-task.
   -- Phase 21c adds two extensions for the two Fight-firing means
