@@ -57,6 +57,7 @@ import Formal.Liveness.SkillXpSemantics
 import Formal.Liveness.RichApplyConsistency
 import Formal.Liveness.LearningStoreBridge
 import Formal.Liveness.MetaGoalDispatch
+import Formal.Liveness.StateFieldGapSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -469,3 +470,12 @@ open Formal.Liveness.MetaGoalDispatch
 #print axioms applyDispatch_reachCharLevel
 #print axioms applyDispatch_reachSkillLevel
 #print axioms applyDispatch_obtainItem
+
+-- Item 8: state field gap closure invariance.
+open Formal.Liveness.StateFieldGapSemantics
+#print axioms applyActionKind_skillLevels_invariant
+#print axioms applyActionKind_bankItemsCatalog_invariant
+#print axioms applyActionKind_bankGold_invariant
+#print axioms applyActionKind_pendingItemCodes_invariant
+#print axioms applyActionKind_npcStock_invariant
+#print axioms applyActionKind_eventSpawns_invariant
