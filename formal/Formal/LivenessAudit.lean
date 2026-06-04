@@ -50,6 +50,7 @@ import Formal.Liveness.CategoryBBridge
 import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.InProgressDecidesWithSelection
 import Formal.Liveness.InventorySemantics
+import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -392,3 +393,15 @@ open Formal.Liveness.InventorySemantics
 #print axioms gather_inventory_when_some
 #print axioms gather_invCount_increments_target
 #print axioms gather_invCount_unchanged_for_other_codes
+
+-- Item 4b: equipment composition semantics.
+open Formal.Liveness.EquipmentSemantics
+#print axioms equipAt_nil
+#print axioms equipAt_cons_match
+#print axioms equipAt_cons_mismatch
+#print axioms applyActionKind_equipment_invariant_except_equipment_actions
+#print axioms equip_equipment_when_none
+#print axioms equip_equipment_when_some
+#print axioms equip_equipAt_target
+#print axioms unequip_equipment_when_none
+#print axioms unequip_equipment_when_some

@@ -2247,6 +2247,11 @@ noncomputable def fixtureFreshState : State where
   -- defaults to empty + none.
   inventoryItems := []
   gatherTarget := none
+  -- Item 4b: equipment composition. Legacy fixture: nothing equipped,
+  -- no pending equip/unequip.
+  equipment := []
+  equipTarget := none
+  unequipTarget := none
 
 /-- **Live-fixture items-task completable**.
 
