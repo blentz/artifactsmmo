@@ -71,10 +71,18 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_initiative(self, c):
             return m_init
 
+    # Stub state object the test reuses. Lean oracle assumes full HP
+    # (no current-hp dimension); the Python predict_win added a
+    # state.hp gate after the trace-cycle-63 fix, so the stub must
+    # report hp = max_hp to keep the formula equivalent.
+    class _FakeState:
+        hp = p_max_hp
+        max_hp = p_max_hp
+
     with MonkeyPatch.context() as mp:
         mp.setattr(combat_mod, "pick_loadout", lambda code, state, gd: object())
         mp.setattr(combat_mod, "project_loadout_stats", lambda state, loadout, gd: stats)
-        py = combat_mod.predict_win(object(), _FakeGameData(), MONSTER)
+        py = combat_mod.predict_win(_FakeState(), _FakeGameData(), MONSTER)
 
     # monster attack uses dmg_global=0, dmg_elements={} vs player resistance.
     args = (
