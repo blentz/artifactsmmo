@@ -844,3 +844,77 @@ def test_category_a_hex_invariant_task_exchange_min_coins_positive():
     bot = GamePlayer.__new__(GamePlayer)
     bot._task_exchange_min_coins = 1
     assert bot._task_exchange_min_coins > 0  # Lean hex invariant.
+
+
+# Item 14 OpenAPI conformance — newly-ingested fields.
+
+
+def test_monster_drops_default_empty_when_unknown():
+    """OpenAPI conformance: monster_drops returns [] for unknown monster
+    (legacy code expected no drops table; defensive default keeps the
+    callers safe before the API populates the field)."""
+    gd = GameData()
+    assert gd.monster_drops("nonexistent_monster") == []
+
+
+def test_monster_min_max_gold_default_zero_when_unknown():
+    """OpenAPI conformance: min/max gold accessors return 0 for unknown
+    monster. Legacy code didn't carry gold rewards."""
+    gd = GameData()
+    assert gd.monster_min_gold("nonexistent_monster") == 0
+    assert gd.monster_max_gold("nonexistent_monster") == 0
+
+
+def test_monster_drops_populated_after_load(monkeypatch):
+    """OpenAPI conformance: monster.drops list survives _load_monsters."""
+
+    class FakeDrop:
+        def __init__(self, code, rate, max_quantity):
+            self.code = code
+            self.rate = rate
+            self.max_quantity = max_quantity
+
+    class FakeMonster:
+        def __init__(self):
+            self.code = "chicken"
+            self.level = 1
+            self.hp = 60
+            self.type_ = "normal"
+            self.attack_fire = 0
+            self.attack_earth = 0
+            self.attack_water = 0
+            self.attack_air = 3
+            self.res_fire = 0
+            self.res_earth = 0
+            self.res_water = 0
+            self.res_air = 0
+            self.critical_strike = 5
+            self.initiative = 100
+            self.min_gold = 1
+            self.max_gold = 3
+            self.drops = [FakeDrop("egg", 5, 1), FakeDrop("feather", 10, 1)]
+
+    class FakeResult:
+        def __init__(self):
+            self.data = [FakeMonster()]
+
+    def fake_get(client, page, size):
+        return FakeResult() if page == 1 else None
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.game_data.get_all_monsters", fake_get
+    )
+    gd = GameData()
+    gd._load_monsters(client=None)
+    assert gd.monster_drops("chicken") == [("egg", 5, 1), ("feather", 10, 1)]
+    assert gd.monster_min_gold("chicken") == 1
+    assert gd.monster_max_gold("chicken") == 3
+
+
+def test_item_stats_tradeable_default_true():
+    """OpenAPI conformance: ItemStats.tradeable defaults to True for
+    backward-compat with legacy fixtures."""
+    s = ItemStats(code="copper_ore", level=1, type_="resource")
+    assert s.tradeable is True
+    assert s.conditions == []
+    assert s.subtype == ""

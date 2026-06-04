@@ -6,13 +6,15 @@ Tracked schemas: 4
 ## 14a — Schema property drift per tracked schema
 
 ### BankSchema
-  ⚠ fields in spec but NOT tracked: ['expansions']
+  ✓ schema in sync (4 fields)
 ### ItemSchema
-  ⚠ fields in spec but NOT tracked: ['conditions', 'description', 'name', 'subtype', 'tradeable']
+  ✓ schema in sync (10 fields)
 ### MonsterSchema
-  ⚠ fields in spec but NOT tracked: ['drops', 'effects', 'max_gold', 'min_gold', 'name', 'type']
-### RecipeSchema
-  ⚠ schema not found in openapi.json
+  ✓ schema in sync (19 fields)
+### CraftSchema
+  ✓ schema in sync (4 fields)
+
+✓ no drift detected across tracked schemas.
 
 ## 14b — GameData.load schema imports
 

@@ -36,6 +36,20 @@ class ItemStats:
     critical_strike: int = 0                                     # crit chance % bonus
     initiative: int = 0                                          # initiative bonus
     hp_bonus: int = 0                                            # flat max-HP bonus (gear)
+    # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
+    # field the bot's decision-making logic touches must round-trip
+    # from /v3/items so the planner sees what the server sees.
+    tradeable: bool = True
+    """`item.tradeable`. False → NpcSell rejects this item. Default True
+    matches the legacy bot's assumption; populated from API in
+    `_load_items`."""
+    conditions: list[tuple[str, int]] = field(default_factory=list)
+    """`item.conditions`: list of (condition_code, value) equip/use
+    prerequisites. E.g. [("character_level", 10)]. Defaults to empty
+    list; populated from API."""
+    subtype: str = ""
+    """`item.subtype` (e.g. weapon → 'sword'). Display + future
+    subtype-aware gear scoring."""
 
 
 @dataclass
@@ -60,6 +74,15 @@ class GameData:
     _monster_resistance: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: pct}
     _monster_critical_strike: dict[str, int] = field(default_factory=dict)  # code -> crit %
     _monster_initiative: dict[str, int] = field(default_factory=dict)  # code -> initiative
+    # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
+    _monster_drops: dict[str, list[tuple[str, int, int]]] = field(default_factory=dict)
+    """code -> [(item_code, rate, max_quantity), ...]. Drop rate is 1-in-N
+    (smaller = more common per server convention). Loot prediction relies
+    on this; was previously dropped at parse time."""
+    _monster_min_gold: dict[str, int] = field(default_factory=dict)
+    """code -> min gold reward per fight win."""
+    _monster_max_gold: dict[str, int] = field(default_factory=dict)
+    """code -> max gold reward per fight win."""
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
@@ -251,6 +274,23 @@ class GameData:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
         unknown — see `monster_attack`."""
         return self._monster_initiative[code]
+
+    def monster_drops(self, code: str) -> list[tuple[str, int, int]]:
+        """OpenAPI conformance (Item 14): drop table from a monster fight.
+        Returns [(item_code, rate, max_quantity), ...]; empty list if no
+        drops known or monster missing. Rate is 1-in-N (smaller = more
+        common per server convention)."""
+        return self._monster_drops.get(code, [])
+
+    def monster_min_gold(self, code: str) -> int:
+        """OpenAPI conformance (Item 14): minimum gold reward per fight win.
+        Returns 0 if unknown."""
+        return self._monster_min_gold.get(code, 0)
+
+    def monster_max_gold(self, code: str) -> int:
+        """OpenAPI conformance (Item 14): maximum gold reward per fight win.
+        Returns 0 if unknown."""
+        return self._monster_max_gold.get(code, 0)
 
     def monster_level(self, code: str) -> int:
         """Level of a monster, or 0 when unknown.
@@ -445,6 +485,22 @@ class GameData:
             for item in result.data:
                 stats = ItemStats(code=item.code, level=item.level, type_=item.type_)
                 self._item_stats[item.code] = stats
+                # OpenAPI conformance fields (Item 14 remediation).
+                # tradeable: server is authoritative; defensive
+                # `getattr` with default True preserves legacy behavior
+                # when an older client lacks the field.
+                stats.tradeable = bool(getattr(item, "tradeable", True))
+                subtype = getattr(item, "subtype", "")
+                if isinstance(subtype, Unset):
+                    subtype = ""
+                stats.subtype = str(subtype or "")
+                raw_conditions = getattr(item, "conditions", None)
+                if raw_conditions is not None and not isinstance(raw_conditions, Unset):
+                    for cond in raw_conditions:
+                        code = getattr(cond, "code", None)
+                        value = getattr(cond, "value", None)
+                        if code is not None and value is not None:
+                            stats.conditions.append((str(code), int(value)))
 
                 if not isinstance(item.effects, Unset) and item.effects:
                     for effect in item.effects:
@@ -571,6 +627,29 @@ class GameData:
                 }
                 self._monster_critical_strike[mon.code] = mon.critical_strike
                 self._monster_initiative[mon.code] = mon.initiative
+                # OpenAPI conformance fields (Item 14 remediation).
+                # Defensive getattr keeps older API clients green.
+                min_gold = getattr(mon, "min_gold", 0)
+                max_gold = getattr(mon, "max_gold", 0)
+                if isinstance(min_gold, Unset):
+                    min_gold = 0
+                if isinstance(max_gold, Unset):
+                    max_gold = 0
+                self._monster_min_gold[mon.code] = int(min_gold or 0)
+                self._monster_max_gold[mon.code] = int(max_gold or 0)
+                raw_drops = getattr(mon, "drops", None)
+                if raw_drops is not None and not isinstance(raw_drops, Unset):
+                    drops: list[tuple[str, int, int]] = []
+                    for d in raw_drops:
+                        drop_code = getattr(d, "code", None)
+                        rate = getattr(d, "rate", None)
+                        max_q = getattr(d, "max_quantity", None)
+                        if drop_code is not None and rate is not None:
+                            drops.append((
+                                str(drop_code), int(rate),
+                                int(max_q if max_q is not None else 1),
+                            ))
+                    self._monster_drops[mon.code] = drops
 
             if len(result.data) < 100:
                 break
