@@ -46,6 +46,7 @@ import Formal.Liveness.CycleStepCharacterization
 import Formal.Liveness.XpMonotonicity
 import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.GameDataInvariance
+import Formal.Liveness.CategoryBBridge
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -361,3 +362,8 @@ open Formal.Liveness.GameDataInvariance
 #print axioms cycleStepN_nextExpansionCost_invariant
 #print axioms hex_propagation
 #print axioms hbe_propagation
+
+-- Item 2c: Category B safety bridge anchors.
+open Formal.Liveness.CategoryBBridge
+#print axioms hnowait_safety_anchor
+#print axioms hfightFires_safety_anchor
