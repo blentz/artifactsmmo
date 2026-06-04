@@ -126,3 +126,62 @@ def test_gear_fraction_zero_and_complete_when_no_gear_targeted():
     g = obj.gap(make_state(level=50, skills={s: 50 for s in SKILL_NAMES}))
     assert g.gear_fraction == 0.0
     assert g.is_complete is True
+
+
+def _gd_with_tools() -> GameData:
+    """Fixture with combat weapons + skill tools sharing weapon_slot."""
+    gd = GameData()
+    gd._item_stats = {
+        # Combat weapon: high attack, no skill_effects.
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                  attack={"earth": 5}),
+        # Mining tool: 0 attack, mining cooldown reduction.
+        "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                                   skill_effects={"mining": -1}),
+        # Woodcutting tool.
+        "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
+                               skill_effects={"woodcutting": -1}),
+        # Stronger mining tool: cooldown reduction 2.
+        "iron_pickaxe": ItemStats(code="iron_pickaxe", level=5, type_="weapon",
+                                 skill_effects={"mining": -2}),
+    }
+    gd._crafting_recipes = {
+        c: {"bar": 1}
+        for c in ("copper_dagger", "copper_pickaxe", "copper_axe", "iron_pickaxe")
+    }
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    return gd
+
+
+def test_target_tools_picks_best_per_gathering_skill():
+    """CharacterObjective.target_tools must include the highest-magnitude
+    tool per gathering skill. iron_pickaxe beats copper_pickaxe for mining
+    (effect -2 vs -1); copper_axe wins woodcutting unopposed."""
+    obj = CharacterObjective.from_game_data(_gd_with_tools())
+    assert obj.target_tools.get("mining") == "iron_pickaxe"
+    assert obj.target_tools.get("woodcutting") == "copper_axe"
+    # No fishing or alchemy tool → omitted.
+    assert "fishing" not in obj.target_tools
+    assert "alchemy" not in obj.target_tools
+
+
+def test_target_gear_weapon_slot_unaffected_by_tools():
+    """The combat-weapon target stays the highest-attack weapon. Tools
+    score 0 on the combat axis so they never compete with copper_dagger
+    for the weapon_slot gear pick."""
+    obj = CharacterObjective.from_game_data(_gd_with_tools())
+    assert obj.target_gear.get("weapon_slot") == "copper_dagger"
+
+
+def test_tools_default_empty_for_backward_compat_constructor():
+    """Direct constructor (legacy test fixtures) defaults target_tools to
+    empty dict so existing call sites stay green."""
+    gd = GameData()
+    obj = CharacterObjective(
+        target_char_level=50,
+        target_skill_levels={s: 50 for s in SKILL_NAMES},
+        target_gear={},
+        _game_data=gd,
+    )
+    assert obj.target_tools == {}

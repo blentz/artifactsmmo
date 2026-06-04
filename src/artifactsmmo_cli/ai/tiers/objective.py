@@ -7,8 +7,8 @@ precedent."""
 from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
+from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
@@ -47,12 +47,26 @@ class ObjectiveGap:
 @dataclass(frozen=True)
 class CharacterObjective:
     """The maxed character sheet: char level 50, every skill 50, best-value
-    item per equipment slot. Built once from game data."""
+    item per equipment slot, best tool per gathering skill. Built once from
+    game data.
+
+    `target_tools` was added to fix a slow-mining bug: the API encodes tools
+    as `type_="weapon"` so they competed with combat weapons in `target_gear`
+    by `equip_value` (attack + resistance + hp_restore) and always lost.
+    Tools are now picked on a separate `tool_value` axis (per-skill effect
+    magnitude), pursued as independent objective roots, and swapped in by
+    OptimizeLoadout when the active task needs the matching gathering skill.
+    """
 
     target_char_level: int
     target_skill_levels: dict[str, int]
     target_gear: dict[str, str]  # slot -> best item code
     _game_data: GameData = field(repr=False, compare=False)
+    # Defaults to empty for backward compat with constructors that predate
+    # the tool axis (legacy tests). Production callers go through
+    # from_game_data which populates this. kw_only so it doesn't collide
+    # with positional _game_data.
+    target_tools: dict[str, str] = field(default_factory=dict, kw_only=True)
 
     @classmethod
     def from_game_data(cls, game_data: GameData) -> "CharacterObjective":
@@ -70,10 +84,23 @@ class CharacterObjective:
                           if is_attainable(code, game_data)]
             for slot, (_value, code) in zip(slots, attainable):
                 target_gear[slot] = code
+        # Tools: best per gathering skill by tool_value (skill_effects magnitude).
+        # Tie-break by item code for determinism. Filter to attainable items.
+        target_tools: dict[str, str] = {}
+        for skill in _GATHERING_SKILLS:
+            scored = [(tool_value(stats, skill), code)
+                      for code, stats in game_data._item_stats.items()
+                      if tool_value(stats, skill) > 0
+                      and stats.type_ in ITEM_TYPE_TO_SLOTS
+                      and is_attainable(code, game_data)]
+            if scored:
+                scored.sort(key=lambda vc: (-vc[0], vc[1]))
+                target_tools[skill] = scored[0][1]
         return cls(
             target_char_level=game_data.max_character_level,
             target_skill_levels=target_skill_levels,
             target_gear=target_gear,
+            target_tools=target_tools,
             _game_data=game_data,
         )
 
