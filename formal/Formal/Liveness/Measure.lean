@@ -254,6 +254,19 @@ structure State where
   /-- Item 4b: pending unequip slot. `.unequip` reads this to know which
       slot to clear. `none` when no unequip is pending. -/
   unequipTarget : Option String
+  /-- Item 4c: character map position. Mirrors `WorldState.x` and
+      `WorldState.y` (server returns non-negative grid coords; Nat
+      keeps arithmetic clean). `.move` writes `moveTarget`; other
+      actions preserve. -/
+  posX : Nat
+  posY : Nat
+  /-- Item 4c: pending move destination. Mirrors the per-cycle target
+      tile committed by the path planner (player.py builds a PathPlan
+      and the MoveAction reads its head). `.move` reads this to know
+      where to teleport (single-step abstraction). `.mapTransition`
+      reads the same field for cross-map teleports. `none` = no move
+      pending; the apply is a no-op. -/
+  moveTarget : Option (Nat × Nat)
   deriving Repr
 
 namespace State

@@ -58,6 +58,16 @@ theorem applyActionKind_equipment_invariant_except_equipment_actions
   | equip => exact absurd rfl hne_eq
   | unequip => exact absurd rfl hne_un
   | optimizeLoadout => exact absurd rfl hne_opt
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).equipment = s.equipment
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).equipment = s.equipment
+    cases s.moveTarget <;> rfl
   | _ => rfl
 
 /-- `.equip` with no equipTarget preserves equipment. -/

@@ -81,3 +81,4 @@ import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.InProgressDecidesWithSelection
 import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
+import Formal.Liveness.PositionSemantics
