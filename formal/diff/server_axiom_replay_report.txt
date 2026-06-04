@@ -1,16 +1,19 @@
 # Item 13 — Server-axiom replay harness report
 
 Trace: traces.jsonl
-Total cycles: 1903
-Runs detected: 13
+Total cycles: 2145
+Runs detected: 16
 
 ## Fight events captured: 31
 ## CompleteTask events captured: 5
 
 ✓ completeTask xp axiom honored (no non-zero deltas without level advance).
 
+## ⚠ Trace schema gap: state.xp missing in this trace
+  Newer bot runs (after trace-xp commit) will populate it.
+
 ## Honest disclosure
-Current traces.jsonl does NOT record state.xp directly. The xp delta
-checks degrade to 'no violation observed' when xp is absent. Once a
-trace schema upgrade includes character xp per cycle, this harness
-becomes a hard gate on LIV-001 curve consistency.
+Trace schema now records state.xp + state.skill_xp + state.max_xp
+via player.py:_emit_trace. The xp-delta checks above run honestly
+on every new trace. Older traces (pre-trace-xp commit) degrade to
+'no violation observed' for the xp dimension.

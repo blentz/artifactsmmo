@@ -128,12 +128,22 @@ def main(argv: list[str]) -> int:
     else:
         lines.append("✓ completeTask xp axiom honored (no non-zero deltas without level advance).")
 
+    has_xp_field = any(
+        "state" in r and "xp" in r["state"] for r in records[:50]
+    )
+    if has_xp_field:
+        lines.append("\n## Trace schema: ✓ state.xp/max_xp/skill_xp present")
+        lines.append("  LIV-001 curve consistency is hard-gated on this run.")
+    else:
+        lines.append("\n## ⚠ Trace schema gap: state.xp missing in this trace")
+        lines.append("  Newer bot runs (after trace-xp commit) will populate it.")
+
     lines.append("\n## Honest disclosure")
     lines.append(
-        "Current traces.jsonl does NOT record state.xp directly. The xp delta\n"
-        "checks degrade to 'no violation observed' when xp is absent. Once a\n"
-        "trace schema upgrade includes character xp per cycle, this harness\n"
-        "becomes a hard gate on LIV-001 curve consistency."
+        "Trace schema now records state.xp + state.skill_xp + state.max_xp\n"
+        "via player.py:_emit_trace. The xp-delta checks above run honestly\n"
+        "on every new trace. Older traces (pre-trace-xp commit) degrade to\n"
+        "'no violation observed' for the xp dimension."
     )
 
     text = "\n".join(lines) + "\n"

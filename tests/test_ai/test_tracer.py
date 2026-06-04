@@ -101,3 +101,39 @@ class TestPlayerTracer:
         """GamePlayer() without a tracer arg should use NullTracer (no-op)."""
         player = GamePlayer(character="testchar")
         assert isinstance(player.tracer, NullTracer)
+
+    def test_trace_state_includes_xp_skill_xp_max_xp(self):
+        """Item 13 / server-axiom replay needs xp + skill_xp + max_xp on
+        every cycle. Without these, predict_win / xp-curve validation
+        degrades to no-violation-observed (the report from the initial
+        Item 13 harness)."""
+        captured: list[dict] = []
+
+        class CapturingTracer(Tracer):
+            def write_cycle(self, record: dict) -> None:
+                captured.append(record)
+
+            def close(self) -> None:
+                pass
+
+        player = GamePlayer(character="testchar", tracer=CapturingTracer())
+        player.game_data = GameData()
+        player.game_data._monster_level = {"chicken": 1}
+        player.state = make_state(xp=42, max_xp=100,
+                                  skills={"mining": 3, "woodcutting": 2,
+                                          "fishing": 1, "weaponcrafting": 1,
+                                          "gearcrafting": 1, "jewelrycrafting": 1,
+                                          "cooking": 1, "alchemy": 1},
+                                  skill_xp={"mining": 50, "woodcutting": 10})
+
+        player._emit_trace(
+            action_name="Fight(chicken)",
+            goal_name="FarmMonster(chicken)",
+            outcome="ok",
+            planner_stats={"nodes": 5, "depth": 2, "timed_out": False, "plan_len": 1},
+        )
+        assert len(captured) == 1
+        state = captured[0]["state"]
+        assert state["xp"] == 42
+        assert state["max_xp"] == 100
+        assert state["skill_xp"] == {"mining": 50, "woodcutting": 10}

@@ -735,6 +735,10 @@ class GamePlayer:
                 "x": self.state.x, "y": self.state.y,
                 "hp": self.state.hp, "max_hp": self.state.max_hp,
                 "gold": self.state.gold, "level": self.state.level,
+                # Item 13 prep: xp/max_xp + per-skill xp enable server-axiom
+                # replay to gate on LIV-001 (xpToNextLevel curve consistency).
+                "xp": self.state.xp, "max_xp": self.state.max_xp,
+                "skill_xp": dict(self.state.skill_xp),
                 "inventory_used": self.state.inventory_used,
                 "inventory_max": self.state.inventory_max,
                 "bank_accessible": self._bank_accessible,
