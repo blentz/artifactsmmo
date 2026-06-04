@@ -2261,6 +2261,14 @@ noncomputable def fixtureFreshState : State where
   skillXpDelta := []
   gatherSkill := none
   craftSkill := none
+  -- Item 8: state field gap closure. Legacy fixture defaults to empty
+  -- maps + zero bank gold.
+  skillLevels := []
+  bankItemsCatalog := []
+  bankGold := 0
+  pendingItemCodes := []
+  npcStock := []
+  eventSpawns := []
 
 /-- **Live-fixture items-task completable**.
 

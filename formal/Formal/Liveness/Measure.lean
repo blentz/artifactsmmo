@@ -281,6 +281,31 @@ structure State where
   gatherSkill : Option Skill
   /-- Item 4e: skill associated with the current `.craft` action. -/
   craftSkill : Option Skill
+  /-- Item 8: per-skill level. Mirrors production's
+      `state.skills : dict[Skill, int]` (current level per skill).
+      Distinct from `skillXpDelta` which tracks projected XP since
+      the last perception refresh. -/
+  skillLevels : List (Skill × Nat)
+  /-- Item 8: bank inventory. Mirrors `state.bank_items :
+      Optional[dict[str, int]]` flattened — list of (code, qty).
+      Empty list means bank known to be empty; combined with
+      `bankItemsKnown` distinguishes "unknown" from "known-empty". -/
+  bankItemsCatalog : List (String × Nat)
+  /-- Item 8: gold deposited in bank (separate from carried `gold`).
+      Production tracks via `/v3/my/bank` endpoint. -/
+  bankGold : Nat
+  /-- Item 8: pending claimable items (e.g. unredeemed task rewards,
+      mailbox-style queue). Production: `state.pending_items :
+      List[str]`. `.claimPendingItem` clears one entry per apply. -/
+  pendingItemCodes : List String
+  /-- Item 8: NPC inventory listing. Mirrors `npc_stock_for(npc_code,
+      game_data)`: list of (npc_code, item_code, quantity).
+      `.npcBuy` consumes; `.npcSell` produces. -/
+  npcStock : List (String × String × Nat)
+  /-- Item 8: active event spawns. Mirrors `state.event_spawns :
+      dict[EventCode, Position]`. Used by `.event_*` gated actions.
+      For now: list of (event_code, posX, posY). -/
+  eventSpawns : List (String × Nat × Nat)
   deriving Repr
 
 namespace State
