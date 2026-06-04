@@ -45,6 +45,7 @@ import Formal.Liveness.ApplyXpLevelPreservation
 import Formal.Liveness.CycleStepCharacterization
 import Formal.Liveness.XpMonotonicity
 import Formal.Liveness.LifecycleBound7
+import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -349,3 +350,14 @@ open Formal.Liveness.XpMonotonicity
 open Formal.Liveness.LifecycleBound7
 #print axioms xp_accumulates_when_level_constant
 #print axioms lifecycle_progress_from_bounds_proven
+
+-- Item 2b: GlobalInvariants Category A propagation.
+open Formal.Liveness.GameDataInvariance
+#print axioms applyActionKind_taskExchangeMinCoins_invariant
+#print axioms applyActionKind_nextExpansionCost_invariant
+#print axioms cycleStep_taskExchangeMinCoins_invariant
+#print axioms cycleStep_nextExpansionCost_invariant
+#print axioms cycleStepN_taskExchangeMinCoins_invariant
+#print axioms cycleStepN_nextExpansionCost_invariant
+#print axioms hex_propagation
+#print axioms hbe_propagation
