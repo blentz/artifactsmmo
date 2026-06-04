@@ -47,6 +47,7 @@ import Formal.Liveness.XpMonotonicity
 import Formal.Liveness.LifecycleBound7
 import Formal.Liveness.GameDataInvariance
 import Formal.Liveness.CategoryBBridge
+import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -367,3 +368,10 @@ open Formal.Liveness.GameDataInvariance
 open Formal.Liveness.CategoryBBridge
 #print axioms hnowait_safety_anchor
 #print axioms hfightFires_safety_anchor
+
+-- Item 3a/3b: pursueTask ladder selection conditions + headline.
+open Formal.Liveness.PursueTaskSelection
+#print axioms productionLadder_eq_pursueTask
+#print axioms cycleStep_eq_taskTrade
+#print axioms pursueTaskFires_when_inProgress
+#print axioms hpursue_under_conditions
