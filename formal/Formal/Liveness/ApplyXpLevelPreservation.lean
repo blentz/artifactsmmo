@@ -29,6 +29,17 @@ theorem applyActionKind_level_preserved_except_fight_completeTask
   cases k with
   | fight => exact absurd rfl hne_fight
   | completeTask => exact absurd rfl hne_ct
+  | move =>
+    -- Item 4c: .move match-splits on moveTarget; both branches preserve level.
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).level = s.level
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).level = s.level
+    cases s.moveTarget <;> rfl
   | _ => rfl
 
 /-- Every action EXCEPT `.fight` and `.completeTask` preserves `xp`. -/
@@ -39,6 +50,16 @@ theorem applyActionKind_xp_preserved_except_fight_completeTask
   cases k with
   | fight => exact absurd rfl hne_fight
   | completeTask => exact absurd rfl hne_ct
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).xp = s.xp
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).xp = s.xp
+    cases s.moveTarget <;> rfl
   | _ => rfl
 
 /-- `.completeTask` preserves `level` AND `xp` when xp threshold isn't

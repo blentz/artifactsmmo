@@ -36,7 +36,18 @@ open Formal.Liveness.TaskPoolSemantics
 /-- Every `applyActionKind` action preserves `taskPool`. -/
 theorem applyActionKind_pool_invariant (k : ActionKind) (s : State) :
     (applyActionKind k s).taskPool = s.taskPool := by
-  cases k <;> rfl
+  cases k with
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).taskPool = s.taskPool
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).taskPool = s.taskPool
+    cases s.moveTarget <;> rfl
+  | _ => rfl
 
 /-- `taskCodesSeen.length` is non-decreasing across any action. -/
 theorem applyActionKind_seen_length_monotone (k : ActionKind) (s : State) :
@@ -51,6 +62,18 @@ theorem applyActionKind_seen_length_monotone (k : ActionKind) (s : State) :
     cases hc : s.taskCode with
     | none => simp
     | some c => simp
+  | move =>
+    show s.taskCodesSeen.length
+          ≤ (match s.moveTarget with
+             | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+             | none => s).taskCodesSeen.length
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show s.taskCodesSeen.length
+          ≤ (match s.moveTarget with
+             | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+             | none => s).taskCodesSeen.length
+    cases s.moveTarget <;> rfl
   | _ => rfl
 
 /-- `taskCodesSeen.length` grows by at most 1 per action. -/
@@ -58,6 +81,16 @@ theorem applyActionKind_seen_length_le_succ (k : ActionKind) (s : State) :
     (applyActionKind k s).taskCodesSeen.length ≤ s.taskCodesSeen.length + 1 := by
   cases k with
   | taskCancel => exact taskCancel_seen_length_le_succ s
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).taskCodesSeen.length ≤ s.taskCodesSeen.length + 1
+    cases s.moveTarget <;> (show s.taskCodesSeen.length ≤ s.taskCodesSeen.length + 1; omega)
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).taskCodesSeen.length ≤ s.taskCodesSeen.length + 1
+    cases s.moveTarget <;> (show s.taskCodesSeen.length ≤ s.taskCodesSeen.length + 1; omega)
   | _ =>
     -- All other actions preserve seen exactly.
     show s.taskCodesSeen.length ≤ s.taskCodesSeen.length + 1

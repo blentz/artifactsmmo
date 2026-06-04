@@ -2252,6 +2252,10 @@ noncomputable def fixtureFreshState : State where
   equipment := []
   equipTarget := none
   unequipTarget := none
+  -- Item 4c: position. Legacy fixture spawns at (0, 0); no pending move.
+  posX := 0
+  posY := 0
+  moveTarget := none
 
 /-- **Live-fixture items-task completable**.
 

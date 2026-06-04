@@ -30,13 +30,35 @@ open Formal.Liveness.CumulativeProgress
 theorem applyActionKind_taskExchangeMinCoins_invariant
     (k : ActionKind) (s : State) :
     (applyActionKind k s).taskExchangeMinCoins = s.taskExchangeMinCoins := by
-  cases k <;> rfl
+  cases k with
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).taskExchangeMinCoins = s.taskExchangeMinCoins
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).taskExchangeMinCoins = s.taskExchangeMinCoins
+    cases s.moveTarget <;> rfl
+  | _ => rfl
 
 /-- Every action preserves `nextExpansionCost`. -/
 theorem applyActionKind_nextExpansionCost_invariant
     (k : ActionKind) (s : State) :
     (applyActionKind k s).nextExpansionCost = s.nextExpansionCost := by
-  cases k <;> rfl
+  cases k with
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).nextExpansionCost = s.nextExpansionCost
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).nextExpansionCost = s.nextExpansionCost
+    cases s.moveTarget <;> rfl
+  | _ => rfl
 
 /-- `cycleStep` preserves `taskExchangeMinCoins`. -/
 theorem cycleStep_taskExchangeMinCoins_invariant (s : State) :

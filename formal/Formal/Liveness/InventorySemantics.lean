@@ -56,6 +56,16 @@ theorem applyActionKind_inventory_invariant_except_gather
     (applyActionKind k s).inventoryItems = s.inventoryItems := by
   cases k with
   | gather => exact absurd rfl hne
+  | move =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).inventoryItems = s.inventoryItems
+    cases s.moveTarget <;> rfl
+  | mapTransition =>
+    show (match s.moveTarget with
+          | some (tx, ty) => ({s with posX := tx, posY := ty} : State)
+          | none => s).inventoryItems = s.inventoryItems
+    cases s.moveTarget <;> rfl
   | _ => rfl
 
 /-- `.gather` with no gatherTarget preserves inventory. -/

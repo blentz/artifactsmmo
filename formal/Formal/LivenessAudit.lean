@@ -51,6 +51,7 @@ import Formal.Liveness.PursueTaskSelection
 import Formal.Liveness.InProgressDecidesWithSelection
 import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
+import Formal.Liveness.PositionSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -405,3 +406,12 @@ open Formal.Liveness.EquipmentSemantics
 #print axioms equip_equipAt_target
 #print axioms unequip_equipment_when_none
 #print axioms unequip_equipment_when_some
+
+-- Item 4c: position semantics.
+open Formal.Liveness.PositionSemantics
+#print axioms applyActionKind_posX_invariant_except_move_actions
+#print axioms applyActionKind_posY_invariant_except_move_actions
+#print axioms move_pos_when_none
+#print axioms move_pos_when_some
+#print axioms mapTransition_pos_when_none
+#print axioms mapTransition_pos_when_some

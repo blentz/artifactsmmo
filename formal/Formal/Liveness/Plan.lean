@@ -403,7 +403,23 @@ noncomputable def applyActionKind : ActionKind → State → State
         | some (slot, code) => (slot, code) :: afterUnequip
         | none => afterUnequip
       { s with equipment := newEquip }
-  -- All other 8 kinds: no-op (see module docstring; future phases will
+  -- Item 4c: .move teleports to moveTarget (single-step abstraction of
+  -- production's multi-tile pathing). No-op when moveTarget is none.
+  -- Mirrors MoveAction.apply (move.py:30+) at the post-step state.
+  | .move, s =>
+      match s.moveTarget with
+      | some (tx, ty) => { s with posX := tx, posY := ty }
+      | none => s
+  -- Item 4c: .mapTransition uses the same moveTarget convention — the
+  -- perception layer pre-resolves cross-map teleports into a (tx, ty)
+  -- destination. Production's MapTransitionAction differs in side
+  -- effects (cooldown, map id update) but Lean's abstract state only
+  -- needs the position.
+  | .mapTransition, s =>
+      match s.moveTarget with
+      | some (tx, ty) => { s with posX := tx, posY := ty }
+      | none => s
+  -- All other 6 kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 
