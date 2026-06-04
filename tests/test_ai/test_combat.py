@@ -172,3 +172,36 @@ def test_predict_win_identity_when_no_inventory_upgrade():
     state = make_state(max_hp=100, attack={"fire": 50}, initiative=50, level=1,
                        equipment={"weapon_slot": "twig"}, inventory={})
     assert predict_win(state, gd, "mob") is True
+
+
+def test_predict_win_false_when_current_hp_low_despite_max_hp():
+    """Regression: trace cycle 63 (run 9, 2026-06-03) had bot at HP=49/125
+    (39%) predicted to win a chicken fight, fought, lost. The pre-fix code
+    used p.max_hp (125) for rounds_to_die instead of current state.hp (49).
+    Bot survived ⌈125/30⌉=5 rounds against chicken_attack=30 in the
+    predictor's view, but only ⌈49/30⌉=2 actually.
+    """
+    # Player has enough attack to win at full HP but not at 49 HP.
+    state = make_state(max_hp=100, hp=10, attack={"fire": 10}, initiative=50)
+    # Monster: 30 HP (3 rounds to kill at 10 dmg) AND 20 attack (low HP
+    # player dies in 1 round).
+    gd = _gd(hp=30, attack={"fire": 20}, initiative=0)
+    # At max_hp=100, rounds_to_die=5, player wins (3<5).
+    # At hp=10 (current), rounds_to_die=1, player loses (3 rounds to kill).
+    assert predict_win(state, gd, "mob") is False, (
+        "Should refuse fight when current HP can't survive"
+    )
+
+
+def test_predict_win_true_when_current_hp_full():
+    """Sanity check: with full HP, predict_win still wins as before."""
+    state = make_state(max_hp=100, hp=100, attack={"fire": 10}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 20}, initiative=0)
+    assert predict_win(state, gd, "mob") is True
+
+
+def test_predict_win_false_when_zero_hp():
+    """Defensive: predict_win returns False when state.hp = 0."""
+    state = make_state(max_hp=100, hp=0, attack={"fire": 10}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 1}, initiative=0)
+    assert predict_win(state, gd, "mob") is False

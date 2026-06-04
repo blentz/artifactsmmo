@@ -56,7 +56,14 @@ def _expected_hit(
 
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
     """True if the documented formula says the player beats the monster using the
-    best on-hand loadout (inventory + equipped) for it."""
+    best on-hand loadout (inventory + equipped) for it.
+
+    Uses CURRENT hp (state.hp), not projected max_hp. Prior version used
+    p.max_hp which over-predicted wins when the player was already damaged
+    — trace cycle 63 (run 9, 2026-06-03): bot at HP=49/125 (39%) was
+    predicted to win a chicken fight, fought, lost. The fight starts at
+    state.hp, not max_hp; project_loadout_stats may raise max_hp via
+    equipment but doesn't refill current hp."""
     loadout = pick_loadout(monster_code, state, game_data)
     p = project_loadout_stats(state, loadout, game_data)
     player_hit = _expected_hit(
@@ -74,7 +81,10 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     )
     if monster_hit <= 0:
         return True
-    rounds_to_die = math.ceil(p.max_hp / monster_hit)
+    effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0
+    if effective_hp <= 0:
+        return False
+    rounds_to_die = math.ceil(effective_hp / monster_hit)
     player_first = p.initiative >= game_data.monster_initiative(monster_code)
     return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die
 
