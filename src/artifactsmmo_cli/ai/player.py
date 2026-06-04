@@ -117,6 +117,11 @@ class GamePlayer:
         # shadow — its decision is traced each cycle but does not drive the bot.
         self._objective: CharacterObjective | None = None
         self._strategy: StrategyEngine | None = None
+        # Tier-2 sticky commitment: previous cycle's chosen_root repr.
+        # Threaded into StrategyEngine.decide so a transient flip in
+        # is_reachable (e.g. combat_capable=False for one cycle from a
+        # pick_loadout shift) doesn't demote the active objective.
+        self._last_strategy_root: str | None = None
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
@@ -250,7 +255,14 @@ class GamePlayer:
                 assert self._strategy is not None
                 combat_monster = self._winnable_farm_target()
                 ctx = self._selection_context(combat_monster)
-                decision = self._strategy.decide(state, game_data, history=self.history, combat_monster=combat_monster)
+                decision = self._strategy.decide(
+                    state, game_data,
+                    history=self.history,
+                    combat_monster=combat_monster,
+                    last_chosen_root=self._last_strategy_root,
+                )
+                if decision.chosen_root is not None:
+                    self._last_strategy_root = repr(decision.chosen_root)
                 self._last_decision = decision
                 step = decision.chosen_step
                 crafting_target = step.code if isinstance(step, ObtainItem) else None

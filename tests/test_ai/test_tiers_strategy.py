@@ -505,3 +505,92 @@ class TestGearGatedSkillInheritsValue:
         assert gear_rs.step_repr == "ReachSkillLevel(skill='weaponcrafting', level=3)"
         # value inherited from the gear root, not the skill's standalone 0.2 prior
         assert gear_rs.score == eng._value(ObtainItem("copper_dagger"), state, gd)
+
+
+class TestStickyCommitment:
+    """Tier-2 sticky commitment: previous chosen_root is kept when it
+    survives the cycle's filters and the new top doesn't dominate."""
+
+    def _two_root_gd(self):
+        """Fixture with two craftable items so two roots compete."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                       attack={"fire": 6}, crafting_skill="weaponcrafting",
+                                       crafting_level=1),
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                       resistance={"fire": 4}, crafting_skill="gearcrafting",
+                                       crafting_level=1),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {
+            "copper_dagger": {"copper_bar": 6},
+            "wooden_shield": {"ash_wood": 4},
+        }
+        gd._resource_drops = {"rocks": "copper_bar", "tree": "ash_wood"}
+        gd._resource_skill = {"rocks": ("mining", 1), "tree": ("woodcutting", 1)}
+        gd._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(gd)
+        return gd
+
+    def test_sticky_kept_when_within_dominance_ratio(self):
+        """When last_chosen_root has score >= top/1.5, sticky wins."""
+        gd = self._two_root_gd()
+        eng = _eng(gd)
+        state = make_state(level=5)
+        # First cycle: no sticky → pick natural top.
+        d1 = eng.decide(state, gd)
+        first_root = repr(d1.chosen_root)
+        # Find a non-top candidate within dominance ratio.
+        ranking = [(r.root_repr, r.score) for r in d1.ranking]
+        # Use the SECOND-ranked root as the prior commitment.
+        if len(ranking) < 2:
+            pytest.skip("Need 2+ roots to test sticky")
+        candidate = ranking[1][0]
+        top_score = ranking[0][1]
+        cand_score = ranking[1][1]
+        # If second's score is within dominance threshold, sticky should win.
+        if top_score <= 1.5 * cand_score and cand_score > 0:
+            d2 = eng.decide(state, gd, last_chosen_root=candidate)
+            assert repr(d2.chosen_root) == candidate, (
+                f"sticky should have won: top={top_score} sticky={cand_score} "
+                f"ratio={top_score/cand_score:.3f} (1.5 threshold)"
+            )
+        else:
+            # Otherwise the top dominates → sticky correctly loses.
+            d2 = eng.decide(state, gd, last_chosen_root=candidate)
+            assert repr(d2.chosen_root) == first_root
+
+    def test_sticky_dropped_when_unreachable(self):
+        """When last_chosen_root vanishes from candidates (e.g., satisfied or
+        unreachable), sticky doesn't apply and the new top wins."""
+        gd = self._two_root_gd()
+        eng = _eng(gd)
+        state = make_state(level=5)
+        # last_chosen_root that doesn't exist in objective_roots.
+        d = eng.decide(state, gd, last_chosen_root="ObtainItem(code='nonexistent', quantity=1)")
+        # The decide() picks the natural top (sticky candidate not found).
+        d_baseline = eng.decide(state, gd)
+        assert repr(d.chosen_root) == repr(d_baseline.chosen_root)
+
+    def test_sticky_dropped_when_new_top_dominates(self):
+        """When the new top's score strictly exceeds 1.5x sticky's score,
+        sticky correctly loses."""
+        gd = self._two_root_gd()
+        eng = _eng(gd)
+        state = make_state(level=5)
+        d_baseline = eng.decide(state, gd)
+        ranking = [(r.root_repr, r.score) for r in d_baseline.ranking]
+        # Find a candidate whose score is < top / 1.5 (dominated).
+        top_root, top_score = ranking[0]
+        dominated = next(
+            ((repr_, score) for repr_, score in ranking[1:]
+             if score > 0 and top_score > 1.5 * score),
+            None,
+        )
+        if dominated is None:
+            pytest.skip("No dominated candidate available in fixture")
+        # last_chosen_root is the dominated one → top still wins.
+        d = eng.decide(state, gd, last_chosen_root=dominated[0])
+        assert repr(d.chosen_root) == top_root
