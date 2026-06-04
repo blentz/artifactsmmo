@@ -1,22 +1,14 @@
 name: mutation-gate
-# Item 10: scheduled mutation-kill-rate gate.
-#
-# Runs formal/diff/mutate.py to drive each mutator against the diff
-# tests. A surviving mutation fails the workflow. Plus a leak-fail-fast
-# post-run check: if `git diff src/` is non-empty, mutate.py leaked a
-# mutation into production source (memory feedback_serialize_gate_runs
-# documents the race that caused this historically).
-
 on:
   schedule:
-    - cron: '0 8 * * *'  # daily at 08:00 UTC
-  workflow_dispatch: {}  # manual trigger
+    - cron: '0 8 * * *'
+  workflow_dispatch: {}
   pull_request:
     paths:
       - "src/artifactsmmo_cli/ai/**"
       - "formal/diff/**"
+      - "openapi.json"
       - ".github/workflows/mutation-gate.yml"
-
 jobs:
   mutate:
     runs-on: ubuntu-latest
@@ -25,31 +17,30 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
+      - name: Generate artifactsmmo-api-client
+        run: |
+          set -euxo pipefail
+          pip install openapi-python-client
+          bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
-
       - name: Snapshot src/ baseline
         run: |
           git diff --quiet src/ || (echo "src/ dirty before mutation run — aborting" && exit 1)
-
       - name: Run mutation gate
         run: |
           set -euxo pipefail
           uv run python formal/diff/mutate.py
-
       - name: Leak fail-fast — src/ must be clean after run
         run: |
           if ! git diff --quiet src/; then
-            echo "::error::mutate.py leaked a mutation into src/. Reverting and failing."
+            echo "::error::mutate.py leaked a mutation into src/."
             git diff src/ | head -200
             git checkout -- src/
             exit 1
           fi
-
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v4

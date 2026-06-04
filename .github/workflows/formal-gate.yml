@@ -27,6 +27,11 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+      - name: Generate artifactsmmo-api-client
+        run: |
+          set -euxo pipefail
+          pip install openapi-python-client
+          bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
       - name: Run the formal gate
