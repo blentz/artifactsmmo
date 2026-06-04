@@ -53,6 +53,7 @@ import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.PositionSemantics
 import Formal.Liveness.GoldSemantics
+import Formal.Liveness.SkillXpSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -424,3 +425,16 @@ open Formal.Liveness.GoldSemantics
 #print axioms completeTask_gold_monotone
 #print axioms npcSell_gold_monotone
 #print axioms buyBankExpansion_gold_debited
+
+-- Item 4e/5: per-skill XP semantics.
+open Formal.Liveness.SkillXpSemantics
+#print axioms skillXp_nil
+#print axioms skillXp_cons_match
+#print axioms skillXp_cons_mismatch
+#print axioms applyActionKind_skillXp_invariant_except_gather_craft
+#print axioms gather_skillXp_when_none
+#print axioms gather_skillXp_when_some
+#print axioms gather_skillXp_increments_target
+#print axioms craft_skillXp_when_none
+#print axioms craft_skillXp_when_some
+#print axioms craft_skillXp_increments_target

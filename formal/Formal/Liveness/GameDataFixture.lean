@@ -2256,6 +2256,11 @@ noncomputable def fixtureFreshState : State where
   posX := 0
   posY := 0
   moveTarget := none
+  -- Item 4e: per-skill XP map + skill targets. Legacy fixture: empty
+  -- map, no pending gather/craft skill.
+  skillXpDelta := []
+  gatherSkill := none
+  craftSkill := none
 
 /-- **Live-fixture items-task completable**.
 
