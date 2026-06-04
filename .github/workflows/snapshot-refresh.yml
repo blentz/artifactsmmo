@@ -1,0 +1,84 @@
+name: snapshot-refresh
+# Item 11: scheduled snapshot refresh + auto-PR when game data differs.
+#
+# 11a — daily run of snapshot_game_data.py.
+# 11b — auto-open PR when the snapshot (and dependent Lean fixture) differs.
+# 11c — Lean build runs in the same PR so reviewers see green-or-red
+#       before merging.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      ARTIFACTSMMO_TOKEN: ${{ secrets.ARTIFACTSMMO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan (Lean)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync deps
+        run: uv sync --dev
+
+      - name: Refresh game-data snapshot
+        run: |
+          set -euxo pipefail
+          uv run python formal/sim/snapshot_game_data.py
+
+      - name: Regenerate Lean fixture
+        run: |
+          set -euxo pipefail
+          uv run python formal/sim/generate_lean_fixture.py
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if git diff --quiet formal/sim/ formal/Formal/Liveness/GameDataFixture.lean; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify Lean build green on refreshed fixture
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euxo pipefail
+          cd formal
+          lake build
+          bash gate/check_axioms_liveness.sh
+
+      - name: Open PR for snapshot refresh
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: |
+            chore(formal): refresh game-data snapshot
+
+            Daily snapshot-refresh workflow detected upstream API changes.
+            Lean build + axiom-liveness gate verified green pre-PR.
+          title: "chore(formal): refresh game-data snapshot"
+          body: |
+            Automated daily snapshot refresh from
+            `formal/sim/snapshot_game_data.py` +
+            `formal/sim/generate_lean_fixture.py`.
+
+            Lean build and axiom-liveness gate passed in the workflow.
+            Review the diff before merging.
+          branch: chore/snapshot-refresh
+          delete-branch: true
