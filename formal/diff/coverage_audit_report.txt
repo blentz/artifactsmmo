@@ -1,117 +1,118 @@
-# Item 9 — Differential coverage audit
+# Item 9 — Differential coverage audit (v3: imports + mutate)
 
 Source root: src/artifactsmmo_cli/ai/
-Diff tests: formal/diff/test_*_diff.py
+Diff tests: formal/diff/test_*_diff.py + mutate.py path refs
 Modules with functions: 102
 Total functions: 1007
-Existing diff tests: 47
+Diff test files: 49
+mutate.py SRC references: 62
 
-## Covered modules (20)
+## Covered modules (93)
 
-  - actions/bank_expansion.py
-  - arbiter_select.py
-  - bank_selection.py
-  - equipment/realizable_loadout.py
-  - goals/low_yield_cancel.py
-  - goals/upgrade_selection.py
-  - inventory_caps.py
-  - learning/scalarizer.py
-  - learning/skill_xp_curve.py
-  - priority_band.py
-  - recipe_closure.py
-  - task_batch.py
-  - task_decision.py
-  - task_feasibility.py
-  - tiers/decide_key.py
-  - tiers/objective.py
-  - tiers/owned_count.py
-  - tiers/prerequisite_graph.py
-  - tiers/strategy_blend.py
-  - winnable_cascade.py
+  - actions/accept_task.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_plan_exists_diff.py
+  - actions/bank_expansion.py [name-match, mutate.py]  ←  test_apply_baseline_diff.py, test_bank_expansion_diff.py, test_cycle_step_diff.py
+  - actions/base.py  ←  test_arbiter_select_diff.py
+  - actions/claim.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_inventory_chain_safe_diff.py, test_plan_exists_diff.py
+  - actions/combat.py [mutate.py]  ←  test_apply_baseline_diff.py, test_cycle_step_diff.py, test_local_progress_diff.py, test_plan_exists_diff.py
+  - actions/complete_task.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_plan_exists_diff.py
+  - actions/consumable.py  ←  test_apply_baseline_diff.py, test_planner_admissibility_diff.py
+  - actions/cost_core.py [mutate.py]  ←  test_action_cost_nonneg_diff.py
+  - actions/crafting.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py
+  - actions/delete.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py
+  - actions/deposit_all.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_local_progress_diff.py, test_plan_exists_diff.py
+  - actions/deposit_gold.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py
+  - actions/equip.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_equipment_scoring_diff.py, test_phase7_invariants_diff.py, test_realizable_loadout_diff.py
+  - actions/gather_apply_core.py [mutate.py]  ←  test_gather_apply_diff.py
+  - actions/gathering.py [mutate.py]  ←  test_apply_baseline_diff.py, test_local_progress_diff.py
+  - actions/movement.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_planner_admissibility_diff.py
+  - actions/movement_semantic.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py
+  - actions/npc.py  ←  test_apply_baseline_diff.py
+  - actions/npc_buy_core.py [mutate.py]  ←  test_npc_buy_inventory_diff.py
+  - actions/npc_sell.py  ←  test_apply_baseline_diff.py, test_cycle_step_diff.py
+  - actions/optimize_loadout.py  ←  test_apply_baseline_diff.py, test_realizable_loadout_diff.py
+  - actions/recycle.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py
+  - actions/rest.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_local_progress_diff.py, test_plan_exists_diff.py, test_planner_admissibility_diff.py
+  - actions/task_cancel.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_inventory_chain_safe_diff.py
+  - actions/task_exchange.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_inventory_chain_safe_diff.py, test_plan_exists_diff.py
+  - actions/task_trade.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_cycle_step_diff.py, test_plan_exists_diff.py
+  - actions/transition.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py
+  - actions/unequip.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_inventory_chain_safe_diff.py
+  - actions/wait.py  ←  test_cycle_step_diff.py, test_plan_exists_diff.py
+  - actions/withdraw_gold.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py
+  - actions/withdraw_item.py [mutate.py]  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_inventory_chain_safe_diff.py
+  - arbiter_select.py [name-match, mutate.py]  ←  test_arbiter_select_diff.py
+  - bank_selection.py [name-match, mutate.py]  ←  test_bank_selection_diff.py
+  - combat.py [mutate.py]  ←  test_game_data_accessors_diff.py
+  - equipment/projection.py [mutate.py]  ←  test_loadout_projection_diff.py, test_predict_win_diff.py
+  - equipment/realizable_loadout.py [name-match]  ←  test_realizable_loadout_diff.py
+  - equipment/scoring.py [mutate.py]  ←  test_equipment_scoring_diff.py, test_realizable_loadout_diff.py
+  - event_availability.py [name-match]  ←  test_event_availability_diff.py
+  - game_data.py [mutate.py]  ←  test_apply_baseline_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_cheapest_path_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_event_availability_diff.py, test_game_data_accessors_diff.py, test_game_data_fixture_diff.py, test_goal_system_value_diff.py, test_goal_value_band_safety_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_planner_admissibility_diff.py, test_realizable_loadout_diff.py, test_task_feasibility_diff.py
+  - goals/accept_task_goal.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/base.py  ←  test_arbiter_select_diff.py
+  - goals/claim_pending.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/complete_task_goal.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/deposit_inventory.py [mutate.py]  ←  test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py
+  - goals/discard_overstock.py [mutate.py]  ←  test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py
+  - goals/expand_bank.py [mutate.py]  ←  test_bank_expansion_diff.py, test_goal_system_value_diff.py
+  - goals/gathering.py [mutate.py]  ←  test_goal_value_band_safety_diff.py, test_phase7_invariants_diff.py
+  - goals/level_skill.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/low_yield_cancel.py [name-match, mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/progression.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/pursue_task.py [mutate.py]  ←  test_goal_value_band_safety_diff.py, test_phase10_goal_lattices_diff.py
+  - goals/reach_unlock_level.py [mutate.py]  ←  test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py
+  - goals/restore_hp.py [mutate.py]  ←  test_goal_system_value_diff.py, test_planner_admissibility_diff.py
+  - goals/sell_inventory.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/task_cancel.py [mutate.py]  ←  test_goal_system_value_diff.py
+  - goals/task_exchange.py [mutate.py]  ←  test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py
+  - goals/unlock_bank.py [mutate.py]  ←  test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py
+  - goals/upgrade_selection.py [name-match, mutate.py]  ←  test_upgrade_selection_diff.py
+  - goals/wait.py  ←  test_plan_exists_diff.py
+  - inventory_caps.py [name-match, mutate.py]
+  - learning/cycles_for_progress_core.py [mutate.py]  ←  test_cycles_for_progress_diff.py
+  - learning/low_yield_boundary.py [mutate.py]  ←  test_low_yield_cancel_diff.py
+  - learning/projections.py [mutate.py]  ←  test_cheapest_path_diff.py
+  - learning/scalar_core.py [mutate.py]  ←  test_scalarizer_diff.py
+  - learning/scalarizer.py [name-match]
+  - learning/skill_xp_curve.py [name-match, mutate.py]  ←  test_skill_xp_curve_diff.py
+  - learning/store.py  ←  test_cheapest_path_diff.py, test_goal_value_band_safety_diff.py, test_plan_exists_diff.py
+  - learning/store_warmup_core.py [mutate.py]  ←  test_store_warmup_diff.py
+  - planner.py [mutate.py]  ←  test_plan_exists_diff.py, test_planner_admissibility_diff.py
+  - player.py [mutate.py]  ←  test_plan_exists_diff.py
+  - priority_band.py [name-match, mutate.py]  ←  test_priority_band_diff.py
+  - recipe_closure.py [name-match, mutate.py]  ←  test_recipe_closure_diff.py
+  - recovery.py [mutate.py]  ←  test_stuck_detector_diff.py
+  - scalar_priority.py [mutate.py]
+  - strategy_driver.py  ←  test_plan_exists_diff.py
+  - task_batch.py [name-match, mutate.py]
+  - task_decision.py [name-match]
+  - task_decision_core.py [mutate.py]  ←  test_task_decision_diff.py
+  - task_feasibility.py [name-match, mutate.py]  ←  test_task_feasibility_diff.py
+  - task_lifecycle.py [name-match]  ←  test_task_lifecycle_diff.py
+  - tiers/decide_key.py [name-match, mutate.py]  ←  test_decide_key_diff.py
+  - tiers/equip_value.py  ←  test_objective_diff.py
+  - tiers/guards.py  ←  test_cycle_step_diff.py, test_decide_key_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
+  - tiers/means.py  ←  test_decide_key_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
+  - tiers/meta_goal.py  ←  test_prerequisite_graph_diff.py, test_reachability_diff.py, test_strategy_traversal_diff.py
+  - tiers/objective.py [name-match, mutate.py]  ←  test_objective_diff.py
+  - tiers/objective_completion.py [mutate.py]  ←  test_weighted_remaining_diff.py
+  - tiers/owned_count.py [name-match, mutate.py]  ←  test_owned_count_diff.py
+  - tiers/prerequisite_graph.py [name-match, mutate.py]  ←  test_prerequisite_graph_diff.py
+  - tiers/strategy.py [mutate.py]
+  - tiers/strategy_blend.py [name-match, mutate.py]  ←  test_strategy_blend_diff.py
+  - winnable_cascade.py [name-match, mutate.py]  ←  test_winnable_cascade_diff.py
+  - world_state.py  ←  test_action_cost_nonneg_diff.py, test_apply_baseline_diff.py, test_arbiter_select_diff.py, test_bank_expansion_diff.py, test_bank_selection_diff.py, test_cycle_step_diff.py, test_equipment_scoring_diff.py, test_game_data_accessors_diff.py, test_goal_system_value_diff.py, test_inventory_caps_diff.py, test_inventory_chain_safe_diff.py, test_loadout_projection_diff.py, test_local_progress_diff.py, test_no_deadlock_v2_diff.py, test_objective_diff.py, test_phase10_goal_lattices_diff.py, test_phase7_invariants_diff.py, test_plan_exists_diff.py, test_predict_win_diff.py, test_realizable_loadout_diff.py, test_task_batch_diff.py, test_task_feasibility_diff.py
 
-## Uncovered modules (82)
+## Uncovered modules (9)
 
-  - actions/accept_task.py (10 functions)
   - actions/api_action_error.py (2 functions)
-  - actions/base.py (12 functions)
-  - actions/claim.py (10 functions)
-  - actions/combat.py (11 functions)
-  - actions/complete_task.py (10 functions)
-  - actions/consumable.py (11 functions)
-  - actions/cost_core.py (3 functions)
-  - actions/crafting.py (10 functions)
-  - actions/delete.py (10 functions)
-  - actions/deposit_all.py (12 functions)
-  - actions/deposit_gold.py (11 functions)
-  - actions/equip.py (10 functions)
-  - actions/gather_apply_core.py (2 functions)
-  - actions/gathering.py (11 functions)
-  - actions/movement.py (10 functions)
-  - actions/movement_semantic.py (10 functions)
-  - actions/npc.py (10 functions)
-  - actions/npc_buy_core.py (2 functions)
-  - actions/npc_sell.py (10 functions)
-  - actions/optimize_loadout.py (12 functions)
-  - actions/recycle.py (10 functions)
-  - actions/rest.py (10 functions)
-  - actions/task_cancel.py (10 functions)
-  - actions/task_exchange.py (10 functions)
-  - actions/task_trade.py (10 functions)
-  - actions/transition.py (10 functions)
-  - actions/unequip.py (10 functions)
-  - actions/wait.py (10 functions)
-  - actions/withdraw_gold.py (10 functions)
-  - actions/withdraw_item.py (10 functions)
   - blockers/documented.py (2 functions)
   - blockers/registry.py (10 functions)
-  - combat.py (5 functions)
-  - equipment/projection.py (2 functions)
-  - equipment/scoring.py (7 functions)
-  - event_availability.py (1 functions)
   - file_tracer.py (6 functions)
-  - game_data.py (81 functions)
-  - goals/accept_task_goal.py (8 functions)
-  - goals/base.py (14 functions)
-  - goals/claim_pending.py (8 functions)
-  - goals/complete_task_goal.py (8 functions)
-  - goals/deposit_inventory.py (10 functions)
-  - goals/discard_overstock.py (14 functions)
-  - goals/expand_bank.py (11 functions)
-  - goals/gathering.py (16 functions)
   - goals/grind_character_xp.py (14 functions)
-  - goals/level_skill.py (16 functions)
-  - goals/progression.py (40 functions)
-  - goals/pursue_task.py (14 functions)
-  - goals/reach_unlock_level.py (12 functions)
-  - goals/restore_hp.py (8 functions)
-  - goals/sell_inventory.py (14 functions)
-  - goals/task_cancel.py (8 functions)
-  - goals/task_exchange.py (10 functions)
-  - goals/unlock_bank.py (14 functions)
-  - goals/wait.py (10 functions)
-  - learning/cycles_for_progress_core.py (1 functions)
-  - learning/low_yield_boundary.py (1 functions)
-  - learning/projections.py (10 functions)
-  - learning/scalar_core.py (2 functions)
-  - learning/store.py (59 functions)
-  - learning/store_warmup_core.py (2 functions)
   - null_tracer.py (4 functions)
-  - planner.py (5 functions)
-  - player.py (88 functions)
   - player_helpers.py (2 functions)
-  - recovery.py (16 functions)
-  - scalar_priority.py (2 functions)
-  - strategy_driver.py (12 functions)
-  - task_decision_core.py (2 functions)
-  - task_lifecycle.py (1 functions)
-  - tiers/equip_value.py (2 functions)
-  - tiers/guards.py (3 functions)
-  - tiers/means.py (5 functions)
-  - tiers/meta_goal.py (9 functions)
-  - tiers/objective_completion.py (2 functions)
   - tiers/personality.py (5 functions)
-  - tiers/strategy.py (24 functions)
   - tracer.py (4 functions)
-  - world_state.py (11 functions)
 
-## Coverage: 19.6% modules
+## Coverage: 91.2% modules (93/102)
