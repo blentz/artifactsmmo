@@ -11,14 +11,17 @@ that already performed the gating inline.
 """
 
 import statistics
+from collections.abc import Sequence
 
 WARMUP_MIN_SAMPLES = 5
 """Number of recent samples required before a learned estimate is trusted."""
 
 
-def warmup_gated_median(samples: list[float]) -> float | None:
+def warmup_gated_median(samples: Sequence[float]) -> float | None:
     """Return median of `samples` when at least WARMUP_MIN_SAMPLES are present;
-    otherwise return None (the documented warm-up default)."""
+    otherwise return None (the documented warm-up default). `Sequence[float]`
+    is covariant in element type; callers passing `list[int]` (SQLAlchemy
+    row results) typecheck cleanly under mypy strict."""
     if len(samples) < WARMUP_MIN_SAMPLES:
         return None
     return statistics.median(samples)

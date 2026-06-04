@@ -159,7 +159,7 @@ def pick_loadout(
         if improves:
             result[slot] = best.code
             _claim(best.code)
-        elif _effective_available(current_code) >= 1:
+        elif current_code is not None and _effective_available(current_code) >= 1:
             _claim(current_code)
         else:
             # Current code was stolen by a peer slot's swap. We can't keep it.
