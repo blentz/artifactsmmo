@@ -127,3 +127,26 @@ def test_cyclic_recipe_traversal_terminates():
         seen.add(node)
         frontier.extend(prerequisites(node, make_state(), gd))
     assert ObtainItem("a", 1) in seen and ObtainItem("b", 1) in seen
+
+
+def test_objective_roots_emits_tool_obtainitem_alongside_gear():
+    """objective_roots must emit ObtainItem for every target_tools entry so
+    the planner pursues skill tools (e.g. copper_pickaxe) the same way it
+    pursues combat gear. Pre-fix: target_tools was empty and the bot mined
+    forever without crafting a pickaxe (equip_value scored tools at 0)."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                  attack={"earth": 5}),
+        "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                                   skill_effects={"mining": -1}),
+    }
+    gd._crafting_recipes = {c: {"bar": 1} for c in ("copper_dagger", "copper_pickaxe")}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    roots = objective_roots(obj)
+    # Combat target.
+    assert ObtainItem("copper_dagger") in roots
+    # Tool target — the fix.
+    assert ObtainItem("copper_pickaxe") in roots

@@ -66,9 +66,16 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
 
 
 def objective_roots(objective: CharacterObjective) -> list[MetaGoal]:
-    """The Tier-1 objective expressed as root meta-goals for P3's search."""
+    """The Tier-1 objective expressed as root meta-goals for P3's search.
+
+    Tools (target_tools) are emitted alongside combat gear (target_gear).
+    Both compete for the weapon_slot in the equipment layer; the planner
+    pursues whichever currently scores higher in the Tier-2 ranking,
+    and OptimizeLoadout swaps the active item per the current task's
+    gathering-skill needs."""
     roots: list[MetaGoal] = [ReachCharLevel(objective.target_char_level)]
     roots.extend(ReachSkillLevel(skill, level)
                  for skill, level in objective.target_skill_levels.items())
     roots.extend(ObtainItem(code) for code in objective.target_gear.values())
+    roots.extend(ObtainItem(code) for code in objective.target_tools.values())
     return roots
