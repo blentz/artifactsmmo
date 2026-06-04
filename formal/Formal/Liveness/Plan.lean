@@ -75,6 +75,7 @@
 import Formal.Liveness.Measure
 import Formal.Liveness.PlanAction
 import Formal.Liveness.TaskLifecyclePhase
+import Formal.Liveness.Skill
 
 set_option linter.dupNamespace false
 set_option linter.unusedVariables false
@@ -84,6 +85,7 @@ namespace Formal.Liveness.Plan
 open Formal.Liveness.Measure
 open Formal.Liveness.PlanAction
 open Formal.Liveness.TaskLifecyclePhase
+open Formal.Liveness
 
 /-- A plan is an ordered list of action kinds the planner emits. -/
 abbrev Plan : Type := List ActionKind
@@ -366,8 +368,15 @@ noncomputable def applyActionKind : ActionKind → State → State
         match s.gatherTarget with
         | some code => (code, 1) :: s.inventoryItems
         | none => s.inventoryItems
+      -- Item 4e: bump per-skill XP delta for gatherSkill. Legacy
+      -- scalar projectedSkillXpDelta still advances for backward-compat.
+      let newSkillXp : List (Skill × Nat) :=
+        match s.gatherSkill with
+        | some sk => (sk, 1) :: s.skillXpDelta
+        | none => s.skillXpDelta
       { s with projectedSkillXpDelta := s.projectedSkillXpDelta + 1,
-               inventoryItems := newInv }
+               inventoryItems := newInv,
+               skillXpDelta := newSkillXp }
   -- Phase 23d-8: .craft advances the abstract craftableSlots counter
   -- by 1. Mirrors production CraftAction.apply (crafting.py:39+) which
   -- composes inventory updates (consume ingredients + produce output)
@@ -376,7 +385,13 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- step (sufficient for recipe-chain closure proofs). All task fields
   -- are preserved.
   | .craft, s =>
-      { s with craftableSlots := s.craftableSlots + 1 }
+      -- Item 4e: also bump per-skill XP delta for craftSkill.
+      let newSkillXp : List (Skill × Nat) :=
+        match s.craftSkill with
+        | some sk => (sk, 1) :: s.skillXpDelta
+        | none => s.skillXpDelta
+      { s with craftableSlots := s.craftableSlots + 1,
+               skillXpDelta := newSkillXp }
   -- Item 4b: .equip cons-prepends (slot, code) per equipTarget; no-op
   -- when equipTarget is none. Mirrors EquipAction.apply (equip.py:50+).
   | .equip, s =>

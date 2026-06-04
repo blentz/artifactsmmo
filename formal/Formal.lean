@@ -83,3 +83,5 @@ import Formal.Liveness.InventorySemantics
 import Formal.Liveness.EquipmentSemantics
 import Formal.Liveness.PositionSemantics
 import Formal.Liveness.GoldSemantics
+import Formal.Liveness.Skill
+import Formal.Liveness.SkillXpSemantics

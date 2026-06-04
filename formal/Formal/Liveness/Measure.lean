@@ -36,6 +36,7 @@
 import Mathlib.Order.WellFounded
 import Mathlib.Data.Prod.Lex
 import Formal.Liveness.TaskLifecyclePhase
+import Formal.Liveness.Skill
 
 set_option linter.dupNamespace false
 
@@ -267,6 +268,19 @@ structure State where
       reads the same field for cross-map teleports. `none` = no move
       pending; the apply is a no-op. -/
   moveTarget : Option (Nat × Nat)
+  /-- Item 4e/5b: per-skill XP delta map. Mirrors production's
+      `state.skill_xp_delta : dict[Skill, int]`. List-of-pairs
+      representation; missing skill means 0. `.gather` reads
+      `gatherSkill` and bumps the corresponding entry; `.craft`
+      reads `craftSkill` similarly. The legacy scalar
+      `projectedSkillXpDelta` is retained for backward-compat with
+      Phase 19 measure lemmas; the per-skill map is the structural
+      successor. -/
+  skillXpDelta : List (Skill × Nat)
+  /-- Item 4e: skill associated with the current `.gather` action. -/
+  gatherSkill : Option Skill
+  /-- Item 4e: skill associated with the current `.craft` action. -/
+  craftSkill : Option Skill
   deriving Repr
 
 namespace State
