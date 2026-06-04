@@ -2243,6 +2243,10 @@ noncomputable def fixtureFreshState : State where
   -- (no pool-depletion reasoning); 1g-A2 populates from allRecipes.
   taskPool := []
   taskCodesSeen := []
+  -- Item 4a: inventory composition + gather target. Legacy fixture
+  -- defaults to empty + none.
+  inventoryItems := []
+  gatherTarget := none
 
 /-- **Live-fixture items-task completable**.
 

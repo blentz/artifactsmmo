@@ -353,7 +353,16 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- (Phase 23d-7). All task fields are preserved (gather is task-
   -- agnostic; it never touches taskCode/Progress/Total or phase).
   | .gather, s =>
-      { s with projectedSkillXpDelta := s.projectedSkillXpDelta + 1 }
+      -- Item 4a: also bump the inventory entry for the current gather
+      -- target by 1. When gatherTarget is none, leave inventory unchanged
+      -- (legacy fixtures default to none; only state populated by the
+      -- perception layer carries the resource code).
+      let newInv : List (String × Nat) :=
+        match s.gatherTarget with
+        | some code => (code, 1) :: s.inventoryItems
+        | none => s.inventoryItems
+      { s with projectedSkillXpDelta := s.projectedSkillXpDelta + 1,
+               inventoryItems := newInv }
   -- Phase 23d-8: .craft advances the abstract craftableSlots counter
   -- by 1. Mirrors production CraftAction.apply (crafting.py:39+) which
   -- composes inventory updates (consume ingredients + produce output)
