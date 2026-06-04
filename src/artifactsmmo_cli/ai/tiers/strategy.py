@@ -42,6 +42,14 @@ BALANCE_K = 0.25
 BALANCE_THRESHOLD = 2
 BALANCE_MIN = 0.5
 BALANCE_MAX = 2.0
+STICKY_DOMINANCE_RATIO = 1.5
+"""Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
+kept unless a new top candidate's score strictly exceeds
+`STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
+commitment: only switch when the new winner dominates by 50%+. Prevents
+single-cycle objective flap from transient predicate flips (e.g.
+combat_capable=False momentarily because pick_loadout's inventory
+projection changes when inventory composition shifts)."""
 _COMBAT_GEAR_SLOTS = frozenset({"weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
                                 "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot", "amulet_slot"})
 _COMBAT_CRAFT_SKILLS = frozenset({"weaponcrafting", "gearcrafting", "jewelrycrafting"})
@@ -250,7 +258,18 @@ class StrategyEngine:
 
     def decide(self, state: WorldState, game_data: GameData,
                history: LearningStore | None = None,
-               combat_monster: str | None = None) -> StrategyDecision:
+               combat_monster: str | None = None,
+               last_chosen_root: str | None = None) -> StrategyDecision:
+        """Pick the top-ranked objective root with Tier-2 sticky commitment.
+
+        `last_chosen_root` is the previous cycle's chosen_root repr (None on
+        first cycle). When supplied AND the matching candidate survives this
+        cycle's is_satisfied + is_reachable filters AND its score is at least
+        `STICKY_RATIO` (2/3) of the winner's score, prefer it. Eliminates
+        single-cycle objective flap (e.g. transient combat_capable=False
+        flips that would otherwise demote ReachCharLevel for one cycle while
+        an inferior gear objective momentarily wins).
+        """
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
         candidates: list[tuple[MetaGoal, MetaGoal, float, int, float]] = []   # root, step, final, effort, pre
         for root in objective_roots(self.objective):
@@ -270,8 +289,25 @@ class StrategyEngine:
             for (r, s, final, effort, pre) in candidates
         ]
         if candidates:
-            chosen_root: MetaGoal | None = candidates[0][0]
-            chosen_step: MetaGoal | None = candidates[0][1]
+            top_root, top_step, top_final, _top_effort, _top_pre = candidates[0]
+            chosen_root: MetaGoal | None = top_root
+            chosen_step: MetaGoal | None = top_step
+            # Tier-2 sticky commitment: keep the previous cycle's chosen root
+            # when it survives this cycle's filters AND its score is within
+            # the dominance threshold of the new winner. Prevents single-cycle
+            # objective flap from transient combat_capable flips.
+            if last_chosen_root is not None and last_chosen_root != repr(top_root):
+                sticky_candidate = next(
+                    (c for c in candidates if repr(c[0]) == last_chosen_root),
+                    None,
+                )
+                if sticky_candidate is not None:
+                    sticky_final = sticky_candidate[2]
+                    # Sticky wins unless top is strictly dominant
+                    # (top_final > STICKY_DOMINANCE_RATIO * sticky_final).
+                    if top_final <= STICKY_DOMINANCE_RATIO * sticky_final:
+                        chosen_root = sticky_candidate[0]
+                        chosen_step = sticky_candidate[1]
         else:
             chosen_root = chosen_step = None
         return StrategyDecision(
